@@ -4,6 +4,8 @@ import { mergeJob, type Job } from './api';
 const running: Job = {
   id: 'job',
   position_uuid: 'position',
+  completed_games: 0,
+  total_games: 0,
   kind: 'analysis',
   plies: 0,
   status: 'running',

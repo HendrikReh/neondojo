@@ -84,6 +84,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/jobs/{id}/moves": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["move_analyses"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matches": {
         parameters: {
             query?: never;
@@ -110,6 +126,22 @@ export interface paths {
         get: operations["get_match"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matches/{id}/analysis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["latest_match_analysis"];
+        put?: never;
+        post: operations["create_match_analysis"];
         delete?: never;
         options?: never;
         head?: never;
@@ -186,6 +218,55 @@ export interface components {
             /** Format: int32 */
             rank: number;
         };
+        Decision: {
+            /** @description Best checker notation or cube action under the native evaluation. */
+            best: string;
+            /**
+             * Format: double
+             * @description Best normalized cubeful equity from this player's perspective, in the same units.
+             */
+            best_equity?: number | null;
+            /**
+             * Format: int32
+             * @description One-based imported checker position; also links its preceding no-double decision.
+             *     Actual double/take/drop decisions have no checker number.
+             */
+            checker_no?: number | null;
+            /**
+             * Format: int32
+             * @description One-based sequence of all checker and cube decisions within this game.
+             */
+            decision_no: number;
+            /** @description The original imported dice for checker decisions; absent for cube decisions. */
+            dice?: number[] | null;
+            /**
+             * Format: double
+             * @description Nonnegative best-minus-played equity, rounded to GNUbg's six exported decimals.
+             */
+            equity_loss: number;
+            /**
+             * @description "evaluated" or "forced". A forced dance has null equities and zero loss;
+             *     missing analysis for any evaluable decision fails the game analysis.
+             */
+            evaluation_status: string;
+            /** @description Decision kind: "checker" or "cube". */
+            kind: string;
+            /** @description Actual GNUbg checker notation, or "no double", "double", "take", "drop". */
+            played: string;
+            /**
+             * Format: double
+             * @description Normalized cubeful equity of the actual decision, from this player's perspective.
+             *     Cube equities use the cube value before an offer, including for its response.
+             */
+            played_equity?: number | null;
+            /**
+             * Format: int32
+             * @description Absolute color: 0 is White, 1 is Black.
+             */
+            player: number;
+            /** @description "none", "doubtful" (>= 0.04), "bad" (>= 0.08), or "very_bad" (>= 0.16). */
+            severity: string;
+        };
         DiceCount: {
             /** Format: int64 */
             count: number;
@@ -229,20 +310,26 @@ export interface components {
         Job: {
             /** Format: int32 */
             attempts: number;
+            /** Format: int32 */
+            completed_games: number;
             /** Format: date-time */
             created_at: string;
             error?: string | null;
             /** Format: uuid */
             id: string;
             kind: components["schemas"]["JobKind"];
+            /** Format: uuid */
+            match_uuid?: string | null;
             /** Format: int32 */
             plies: number;
             /** Format: uuid */
-            position_uuid: string;
+            position_uuid?: string | null;
             /** Format: int32 */
             progress: number;
             result?: null | components["schemas"]["JobResult"];
             status: components["schemas"]["JobStatus"];
+            /** Format: int32 */
+            total_games: number;
             /** Format: date-time */
             updated_at: string;
         };
@@ -257,19 +344,23 @@ export interface components {
             job_id: string;
         };
         /** @enum {string} */
-        JobKind: "analysis" | "dice";
+        JobKind: "analysis" | "dice" | "match";
         /** @description JSON encoded in the `data:` line of each job SSE message. */
         JobProgress: {
             /** Format: int32 */
             attempt?: number | null;
+            /** Format: int32 */
+            completed_games?: number | null;
             error?: string | null;
             /** Format: int32 */
             progress: number;
             status: components["schemas"]["JobStatus"];
+            /** Format: int32 */
+            total_games?: number | null;
         };
         JobRequest: {
             /** @description analysis: five candidate moves; dice: 21 weighted rolls. */
-            kind: components["schemas"]["JobKind"];
+            kind: components["schemas"]["PositionJobKind"];
             /**
              * Format: int32
              * @description GNUbg search depth, 0 to 2. Defaults to 0.
@@ -281,9 +372,30 @@ export interface components {
              */
             position_id: string;
         };
-        JobResult: components["schemas"]["Analysis"] | components["schemas"]["Distribution"];
+        JobResult: components["schemas"]["Analysis"] | components["schemas"]["Distribution"] | components["schemas"]["MatchAnalysisSummary"];
         /** @enum {string} */
         JobStatus: "queued" | "running" | "completed" | "failed";
+        MatchAnalysisRequest: {
+            /**
+             * Format: int32
+             * @description Native GNUbg checker and cube search depth. Defaults to 0.
+             */
+            plies?: number;
+        };
+        MatchAnalysisSummary: {
+            /** Format: int32 */
+            analyzed_moves: number;
+            /** Format: int32 */
+            completed_games: number;
+            engine: string;
+            players: components["schemas"]["PlayerAnalysisSummary"][];
+            /** Format: int32 */
+            plies: number;
+            /** Format: int32 */
+            total_games: number;
+            /** Format: int32 */
+            total_moves: number;
+        };
         MatchPage: {
             items: components["schemas"]["MatchSummary"][];
             /** Format: uuid */
@@ -302,6 +414,47 @@ export interface components {
             /** Format: int32 */
             position_count: number;
             white: string;
+        };
+        MoveAnalysis: components["schemas"]["Decision"] & {
+            /** Format: int32 */
+            game_no: number;
+            /** Format: int64 */
+            id: number;
+            /**
+             * Format: uuid
+             * @description Imported board before this checker move; cube-only decisions have no checker board.
+             */
+            position_uuid?: string | null;
+        };
+        MoveAnalysisPage: {
+            items: components["schemas"]["MoveAnalysis"][];
+            /** Format: int64 */
+            next_cursor?: number | null;
+        };
+        PlayerAnalysisSummary: {
+            /** Format: int32 */
+            bad: number;
+            /** Format: int32 */
+            checker_decisions: number;
+            /**
+             * Format: double
+             * @description Sum of normalized equity losses, not a performance rating (PR).
+             */
+            checker_equity_loss: number;
+            /** Format: int32 */
+            cube_decisions: number;
+            /** Format: double */
+            cube_equity_loss: number;
+            /** Format: int32 */
+            doubtful: number;
+            /** Format: int32 */
+            forced_moves: number;
+            /** Format: int32 */
+            player: number;
+            /** Format: int32 */
+            unavailable: number;
+            /** Format: int32 */
+            very_bad: number;
         };
         Position: {
             board: number[];
@@ -322,6 +475,8 @@ export interface components {
             ply: number;
             position_id: string;
         };
+        /** @enum {string} */
+        PositionJobKind: "analysis" | "dice";
         PositionPage: {
             items: components["schemas"]["Position"][];
             /**
@@ -537,6 +692,53 @@ export interface operations {
             };
         };
     };
+    move_analyses: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                /** @description Continue after a move-analysis row ID, keeping the same filters. */
+                after: number | null;
+                /** @description Page size 1–100, defaults to 50. */
+                limit: number | null;
+                /** @description Only decisions losing at least 0.04 normalized equity. */
+                errors_only: boolean;
+                /** @description 0 = White, 1 = Black. */
+                player: number | null;
+                /** @description checker or cube; omitted means both. */
+                kind: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoveAnalysisPage"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     matches: {
         parameters: {
             query?: {
@@ -588,6 +790,77 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    latest_match_analysis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Latest match analysis job, or null if none has been submitted. Includes persisted partial summary during execution. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": null | components["schemas"]["Job"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_match_analysis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MatchAnalysisRequest"];
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

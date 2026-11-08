@@ -8,6 +8,7 @@ import {
 } from './api';
 import Board, { themes, type Theme } from './Board';
 import AnalysisPanel from './AnalysisPanel';
+import MatchAnalysisPanel from './MatchAnalysisPanel';
 import { useJobs } from './useJobs';
 
 export default function App() {
@@ -39,6 +40,7 @@ export default function App() {
   const uploadInput = useRef<HTMLInputElement>(null);
   const selection = useRef<string | undefined>(undefined);
   const searchVersion = useRef(0);
+  const navigationVersion = useRef(0);
   const desiredPosition = useRef<string | undefined>(undefined);
   const position = positions[index];
   const jobs = useJobs(position?.id);
@@ -90,6 +92,7 @@ export default function App() {
   useEffect(() => {
     const abort = new AbortController();
     selection.current = selectedMatch?.id;
+    navigationVersion.current++;
     setPositions([]);
     setIndex(0);
     setPositionCursor(null);
@@ -229,6 +232,8 @@ export default function App() {
     }
   }
   async function openFound(p: Position) {
+    navigationVersion.current++;
+    setLoadingPositions(false);
     try {
       if (
         selectedMatch?.id === p.match_uuid &&
@@ -242,6 +247,55 @@ export default function App() {
       setSelectedMatch(match);
     } catch (error) {
       setError(String(error));
+    }
+  }
+
+  async function openAnalyzedPosition(id: string) {
+    if (!selectedMatch) return;
+    const matchId = selectedMatch.id;
+    const version = ++navigationVersion.current;
+    setLoadingPositions(true);
+    try {
+      const all = [...positions];
+      let cursor = positionCursor;
+      while (!all.some((p) => p.id === id) && cursor) {
+        const next: Page<Position> = await request(
+          `/positions?match_id=${matchId}&limit=100&after=${cursor}`,
+        );
+        if (
+          selection.current !== matchId ||
+          navigationVersion.current !== version
+        )
+          return;
+        all.push(...next.items);
+        cursor = next.next_cursor;
+      }
+      if (
+        selection.current !== matchId ||
+        navigationVersion.current !== version
+      )
+        return;
+      const target = all.findIndex((p) => p.id === id);
+      if (target < 0)
+        throw new Error('Die analysierte Position wurde nicht gefunden.');
+      setPositions(all);
+      setPositionCursor(cursor);
+      setIndex(target);
+      document
+        .querySelector('.board-panel')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (error) {
+      if (
+        selection.current === matchId &&
+        navigationVersion.current === version
+      )
+        setError(String(error));
+    } finally {
+      if (
+        selection.current === matchId &&
+        navigationVersion.current === version
+      )
+        setLoadingPositions(false);
     }
   }
 
@@ -610,7 +664,11 @@ export default function App() {
                       <button
                         key={p.id}
                         className={i === index ? 'current' : ''}
-                        onClick={() => setIndex(i)}
+                        onClick={() => {
+                          navigationVersion.current++;
+                          setLoadingPositions(false);
+                          setIndex(i);
+                        }}
                       >
                         <span className="move-no">
                           {p.game_no}.{p.ply}
@@ -633,6 +691,11 @@ export default function App() {
                   )}
                 </aside>
               </div>
+              <MatchAnalysisPanel
+                key={selectedMatch.id}
+                match={selectedMatch}
+                onPosition={(id) => void openAnalyzedPosition(id)}
+              />
               {jobs.error && (
                 <div className="error" role="alert">
                   {jobs.error}

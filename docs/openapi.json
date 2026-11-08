@@ -257,6 +257,117 @@
         }
       }
     },
+    "/api/jobs/{id}/moves": {
+      "get": {
+        "tags": [
+          "Match analysis"
+        ],
+        "operationId": "move_analyses",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "after",
+            "in": "path",
+            "description": "Continue after a move-analysis row ID, keeping the same filters.",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "path",
+            "description": "Page size 1–100, defaults to 50.",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "errors_only",
+            "in": "path",
+            "description": "Only decisions losing at least 0.04 normalized equity.",
+            "required": true,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "player",
+            "in": "path",
+            "description": "0 = White, 1 = Black.",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "path",
+            "description": "checker or cube; omitted means both.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoveAnalysisPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/matches": {
       "get": {
         "tags": [
@@ -353,6 +464,113 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/matches/{id}/analysis": {
+      "get": {
+        "tags": [
+          "Match analysis"
+        ],
+        "operationId": "latest_match_analysis",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Latest match analysis job, or null if none has been submitted. Includes persisted partial summary during execution.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Job"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Match analysis"
+        ],
+        "operationId": "create_match_analysis",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MatchAnalysisRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "",
             "content": {
               "application/json": {
@@ -582,6 +800,91 @@
           }
         }
       },
+      "Decision": {
+        "type": "object",
+        "required": [
+          "decision_no",
+          "player",
+          "kind",
+          "played",
+          "best",
+          "equity_loss",
+          "severity",
+          "evaluation_status"
+        ],
+        "properties": {
+          "best": {
+            "type": "string",
+            "description": "Best checker notation or cube action under the native evaluation."
+          },
+          "best_equity": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Best normalized cubeful equity from this player's perspective, in the same units."
+          },
+          "checker_no": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "One-based imported checker position; also links its preceding no-double decision.\nActual double/take/drop decisions have no checker number."
+          },
+          "decision_no": {
+            "type": "integer",
+            "format": "int32",
+            "description": "One-based sequence of all checker and cube decisions within this game."
+          },
+          "dice": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "description": "The original imported dice for checker decisions; absent for cube decisions."
+          },
+          "equity_loss": {
+            "type": "number",
+            "format": "double",
+            "description": "Nonnegative best-minus-played equity, rounded to GNUbg's six exported decimals."
+          },
+          "evaluation_status": {
+            "type": "string",
+            "description": "\"evaluated\" or \"forced\". A forced dance has null equities and zero loss;\nmissing analysis for any evaluable decision fails the game analysis."
+          },
+          "kind": {
+            "type": "string",
+            "description": "Decision kind: \"checker\" or \"cube\"."
+          },
+          "played": {
+            "type": "string",
+            "description": "Actual GNUbg checker notation, or \"no double\", \"double\", \"take\", \"drop\"."
+          },
+          "played_equity": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Normalized cubeful equity of the actual decision, from this player's perspective.\nCube equities use the cube value before an offer, including for its response."
+          },
+          "player": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Absolute color: 0 is White, 1 is Black."
+          },
+          "severity": {
+            "type": "string",
+            "description": "\"none\", \"doubtful\" (>= 0.04), \"bad\" (>= 0.08), or \"very_bad\" (>= 0.16)."
+          }
+        }
+      },
       "DiceCount": {
         "type": "object",
         "required": [
@@ -734,7 +1037,8 @@
         "type": "object",
         "required": [
           "id",
-          "position_uuid",
+          "total_games",
+          "completed_games",
           "kind",
           "plies",
           "status",
@@ -745,6 +1049,10 @@
         ],
         "properties": {
           "attempts": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "completed_games": {
             "type": "integer",
             "format": "int32"
           },
@@ -765,6 +1073,13 @@
           "kind": {
             "$ref": "#/components/schemas/JobKind"
           },
+          "match_uuid": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
           "plies": {
             "type": "integer",
             "format": "int32",
@@ -772,7 +1087,10 @@
             "minimum": 0
           },
           "position_uuid": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "uuid"
           },
           "progress": {
@@ -793,6 +1111,10 @@
           },
           "status": {
             "$ref": "#/components/schemas/JobStatus"
+          },
+          "total_games": {
+            "type": "integer",
+            "format": "int32"
           },
           "updated_at": {
             "type": "string",
@@ -832,7 +1154,8 @@
         "type": "string",
         "enum": [
           "analysis",
-          "dice"
+          "dice",
+          "match"
         ]
       },
       "JobProgress": {
@@ -844,6 +1167,13 @@
         ],
         "properties": {
           "attempt": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "completed_games": {
             "type": [
               "integer",
               "null"
@@ -864,6 +1194,13 @@
           },
           "status": {
             "$ref": "#/components/schemas/JobStatus"
+          },
+          "total_games": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -875,7 +1212,7 @@
         ],
         "properties": {
           "kind": {
-            "$ref": "#/components/schemas/JobKind",
+            "$ref": "#/components/schemas/PositionJobKind",
             "description": "analysis: five candidate moves; dice: 21 weighted rolls."
           },
           "plies": {
@@ -899,6 +1236,9 @@
           },
           {
             "$ref": "#/components/schemas/Distribution"
+          },
+          {
+            "$ref": "#/components/schemas/MatchAnalysisSummary"
           }
         ]
       },
@@ -910,6 +1250,61 @@
           "completed",
           "failed"
         ]
+      },
+      "MatchAnalysisRequest": {
+        "type": "object",
+        "properties": {
+          "plies": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Native GNUbg checker and cube search depth. Defaults to 0.",
+            "maximum": 2,
+            "minimum": 0
+          }
+        }
+      },
+      "MatchAnalysisSummary": {
+        "type": "object",
+        "required": [
+          "engine",
+          "plies",
+          "total_games",
+          "completed_games",
+          "total_moves",
+          "analyzed_moves",
+          "players"
+        ],
+        "properties": {
+          "analyzed_moves": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "completed_games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "engine": {
+            "type": "string"
+          },
+          "players": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlayerAnalysisSummary"
+            }
+          },
+          "plies": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total_games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total_moves": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
       },
       "MatchPage": {
         "type": "object",
@@ -972,6 +1367,117 @@
           },
           "white": {
             "type": "string"
+          }
+        }
+      },
+      "MoveAnalysis": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Decision"
+          },
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "game_no"
+            ],
+            "properties": {
+              "game_no": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "id": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "position_uuid": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Imported board before this checker move; cube-only decisions have no checker board."
+              }
+            }
+          }
+        ]
+      },
+      "MoveAnalysisPage": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MoveAnalysis"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "PlayerAnalysisSummary": {
+        "type": "object",
+        "required": [
+          "player",
+          "checker_decisions",
+          "cube_decisions",
+          "forced_moves",
+          "unavailable",
+          "doubtful",
+          "bad",
+          "very_bad",
+          "checker_equity_loss",
+          "cube_equity_loss"
+        ],
+        "properties": {
+          "bad": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "checker_decisions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "checker_equity_loss": {
+            "type": "number",
+            "format": "double",
+            "description": "Sum of normalized equity losses, not a performance rating (PR)."
+          },
+          "cube_decisions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cube_equity_loss": {
+            "type": "number",
+            "format": "double"
+          },
+          "doubtful": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "forced_moves": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "player": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "unavailable": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "very_bad": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -1039,6 +1545,13 @@
             "type": "string"
           }
         }
+      },
+      "PositionJobKind": {
+        "type": "string",
+        "enum": [
+          "analysis",
+          "dice"
+        ]
       },
       "PositionPage": {
         "type": "object",

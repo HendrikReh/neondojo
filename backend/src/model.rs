@@ -9,12 +9,14 @@ use uuid::Uuid;
 pub enum JobKind {
     Analysis,
     Dice,
+    Match,
 }
 impl JobKind {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Analysis => "analysis",
             Self::Dice => "dice",
+            Self::Match => "match",
         }
     }
 }
@@ -33,6 +35,7 @@ pub enum JobStatus {
 pub enum JobResult {
     Analysis(crate::engine::Analysis),
     Dice(crate::engine::Distribution),
+    Match(MatchAnalysisSummary),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
@@ -65,7 +68,10 @@ pub struct Position {
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct Job {
     pub id: Uuid,
-    pub position_uuid: Uuid,
+    pub position_uuid: Option<Uuid>,
+    pub match_uuid: Option<Uuid>,
+    pub total_games: i32,
+    pub completed_games: i32,
     #[schema(value_type=JobKind)]
     pub kind: String,
     #[schema(minimum = 0, maximum = 2)]
@@ -99,6 +105,8 @@ pub struct JobProgress {
     pub progress: i32,
     pub error: Option<String>,
     pub attempt: Option<i32>,
+    pub total_games: Option<i32>,
+    pub completed_games: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -131,4 +139,46 @@ pub struct DiceCount {
 pub struct DiceStats {
     pub total: i64,
     pub rolls: Vec<DiceCount>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
+pub struct PlayerAnalysisSummary {
+    pub player: i32,
+    pub checker_decisions: i32,
+    pub cube_decisions: i32,
+    pub forced_moves: i32,
+    pub unavailable: i32,
+    pub doubtful: i32,
+    pub bad: i32,
+    pub very_bad: i32,
+    /// Sum of normalized equity losses, not a performance rating (PR).
+    pub checker_equity_loss: f64,
+    pub cube_equity_loss: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct MatchAnalysisSummary {
+    pub engine: String,
+    pub plies: i32,
+    pub total_games: i32,
+    pub completed_games: i32,
+    pub total_moves: i32,
+    pub analyzed_moves: i32,
+    pub players: [PlayerAnalysisSummary; 2],
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct MoveAnalysis {
+    pub id: i64,
+    /// Imported board before this checker move; cube-only decisions have no checker board.
+    pub position_uuid: Option<Uuid>,
+    pub game_no: i32,
+    #[serde(flatten)]
+    pub decision: crate::match_analysis::Decision,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct MoveAnalysisPage {
+    pub items: Vec<MoveAnalysis>,
+    pub next_cursor: Option<i64>,
 }

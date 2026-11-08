@@ -221,3 +221,81 @@ pub async fn events(pool: &PgPool, job_id: Uuid, after: i64) -> Result<Vec<JobEv
             .await?,
     )
 }
+
+pub async fn latest_match_job(pool: &PgPool, match_id: Uuid) -> Result<Option<Job>> {
+    Ok(sqlx::query_as("SELECT * FROM jobs WHERE match_uuid=$1 AND kind='match' ORDER BY created_at DESC,id DESC LIMIT 1")
+        .bind(match_id).fetch_optional(pool).await?)
+}
+
+pub async fn create_match_job(
+    pool: &PgPool,
+    match_id: Uuid,
+    plies: i32,
+    total_games: i32,
+) -> Result<Job> {
+    let mut tx = pool.begin().await?;
+    let job = loop {
+        let inserted = sqlx::query_as::<_, Job>("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games) VALUES($1,$2,'match',$3,'queued',$4) ON CONFLICT(match_uuid,plies) WHERE kind='match' AND status IN ('queued','running') DO NOTHING RETURNING *")
+            .bind(Uuid::new_v4()).bind(match_id).bind(plies).bind(total_games).fetch_optional(&mut *tx).await?;
+        if let Some(job) = inserted {
+            sqlx::query("INSERT INTO job_events(job_id,event,data) VALUES($1,'queued',$2)")
+                .bind(job.id).bind(serde_json::json!({"status":"queued","progress":0,"total_games":total_games,"completed_games":0}))
+                .execute(&mut *tx).await?;
+            break job;
+        }
+        let existing = sqlx::query_as("SELECT * FROM jobs WHERE match_uuid=$1 AND plies=$2 AND kind='match' AND status IN ('queued','running')")
+            .bind(match_id).bind(plies).fetch_optional(&mut *tx).await?;
+        if let Some(job) = existing {
+            break job;
+        }
+    };
+    tx.commit().await?;
+    Ok(job)
+}
+
+pub async fn move_analyses(
+    pool: &PgPool,
+    job_id: Uuid,
+    after: i64,
+    limit: i64,
+    errors_only: bool,
+    player: Option<i32>,
+    kind: Option<&str>,
+) -> Result<MoveAnalysisPage> {
+    let mut q = QueryBuilder::<Postgres>::new(
+        "SELECT id,position_uuid,game_no,data FROM move_analyses WHERE job_id=",
+    );
+    q.push_bind(job_id).push(" AND id>").push_bind(after);
+    if errors_only {
+        q.push(" AND equity_loss>=0.04");
+    }
+    if let Some(player) = player {
+        q.push(" AND player=").push_bind(player);
+    }
+    if let Some(kind) = kind {
+        q.push(" AND kind=").push_bind(kind);
+    }
+    q.push(" ORDER BY id LIMIT ").push_bind(limit + 1);
+    let rows = q
+        .build_query_as::<(i64, Option<Uuid>, i32, serde_json::Value)>()
+        .fetch_all(pool)
+        .await?;
+    let mut items: Vec<MoveAnalysis> = rows
+        .into_iter()
+        .map(|(id, position_uuid, game_no, data)| {
+            Ok(MoveAnalysis {
+                id,
+                position_uuid,
+                game_no,
+                decision: serde_json::from_value(data)?,
+            })
+        })
+        .collect::<Result<_>>()?;
+    let next_cursor = if items.len() > limit as usize {
+        items.pop();
+        items.last().map(|row| row.id)
+    } else {
+        None
+    };
+    Ok(MoveAnalysisPage { items, next_cursor })
+}

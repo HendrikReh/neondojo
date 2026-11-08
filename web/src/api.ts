@@ -9,6 +9,9 @@ export type Roll = Schema['DiceEvaluation'];
 export type Distribution = Schema['Distribution'];
 export type Job = Schema['Job'];
 export type DiceStats = Schema['DiceStats'];
+export type MatchAnalysisSummary = Schema['MatchAnalysisSummary'];
+export type MoveAnalysis = Schema['MoveAnalysis'];
+export type MoveAnalysisPage = Schema['MoveAnalysisPage'];
 export interface Page<T> {
   items: T[];
   next_cursor: string | null;
@@ -24,7 +27,7 @@ export async function request<T>(
   try {
     data = JSON.parse(text);
   } catch {
-    data = null;
+    data = undefined;
   }
   if (!response.ok) {
     const error =
@@ -33,7 +36,7 @@ export async function request<T>(
         : text;
     throw new Error(error || `HTTP ${response.status}`);
   }
-  if (data === null)
+  if (data === undefined)
     throw new Error('Das Backend hat keine gültige Antwort geliefert.');
   return data as T;
 }

@@ -3,7 +3,7 @@
 //! Index 0 is Black's bar, and index 25 is White's bar.
 
 mod ids;
-mod sgf;
+pub(crate) mod sgf;
 mod xg;
 pub use sgf::parse_sgf;
 pub use xg::xg_to_sgf;

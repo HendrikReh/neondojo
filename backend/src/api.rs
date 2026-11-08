@@ -82,10 +82,15 @@ pub fn router(state: AppState) -> Router {
         .route("/api/matches/{id}", get(get_match))
         .route("/api/matches/{id}/dice", get(dice))
         .route("/api/matches/{id}/source", get(source))
+        .route(
+            "/api/matches/{id}/analysis",
+            get(latest_match_analysis).post(create_match_analysis),
+        )
         .route("/api/positions", get(positions))
         .route("/api/jobs", post(create_job))
         .route("/api/jobs/{id}", get(job))
         .route("/api/jobs/{id}/events", get(events))
+        .route("/api/jobs/{id}/moves", get(move_analyses))
         .route("/api/openapi.json", get(openapi))
         .fallback(|| async { ApiError::missing() })
         .layer(DefaultBodyLimit::max(16 * 1024 * 1024))
@@ -347,11 +352,18 @@ async fn dice(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResult<
 }
 
 #[derive(Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+enum PositionJobKind {
+    Analysis,
+    Dice,
+}
+
+#[derive(Deserialize, ToSchema)]
 struct JobRequest {
     /// Database UUID of the imported position, not its GNUbg ID.
     position_id: Uuid,
     /// analysis: five candidate moves; dice: 21 weighted rolls.
-    kind: JobKind,
+    kind: PositionJobKind,
     /// GNUbg search depth, 0 to 2. Defaults to 0.
     #[serde(default)]
     #[schema(minimum = 0, maximum = 2)]
@@ -373,12 +385,109 @@ async fn create_job(
     let job = store::create_job(
         &state.pool,
         request.position_id,
-        request.kind.as_str(),
+        match request.kind {
+            PositionJobKind::Analysis => "analysis",
+            PositionJobKind::Dice => "dice",
+        },
         request.plies,
     )
     .await?;
     state.wake.notify_one();
     Ok((StatusCode::ACCEPTED, Json(job)))
+}
+
+#[derive(Deserialize, ToSchema)]
+struct MatchAnalysisRequest {
+    /// Native GNUbg checker and cube search depth. Defaults to 0.
+    #[serde(default)]
+    #[schema(minimum = 0, maximum = 2)]
+    plies: i32,
+}
+
+#[utoipa::path(post, path="/api/matches/{id}/analysis", params(("id"=Uuid, Path)), request_body=MatchAnalysisRequest, responses((status=202, body=Job),(status=404,body=ErrorBody),(status=422,body=ErrorBody)), tag="Match analysis")]
+async fn create_match_analysis(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    payload: Result<Json<MatchAnalysisRequest>, axum::extract::rejection::JsonRejection>,
+) -> ApiResult<(StatusCode, Json<Job>)> {
+    let Json(request) = payload.map_err(|e| ApiError::invalid(e.body_text()))?;
+    if !(0..=2).contains(&request.plies) {
+        return Err(ApiError::invalid("plies must be 0..2"));
+    }
+    let source: String = sqlx::query_scalar("SELECT sgf FROM matches WHERE id=$1")
+        .bind(id)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(anyhow::Error::from)?
+        .ok_or_else(ApiError::missing)?;
+    let total = tokio::task::spawn_blocking(move || crate::match_analysis::game_count(&source))
+        .await
+        .map_err(anyhow::Error::from)??;
+    let job = store::create_match_job(&state.pool, id, request.plies, total).await?;
+    state.wake.notify_one();
+    Ok((StatusCode::ACCEPTED, Json(job)))
+}
+
+#[utoipa::path(get, path="/api/matches/{id}/analysis", params(("id"=Uuid, Path)), responses((status=200, body=Option<Job>,description="Latest match analysis job, or null if none has been submitted. Includes persisted partial summary during execution."),(status=404,body=ErrorBody)), tag="Match analysis")]
+async fn latest_match_analysis(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<Option<Job>>> {
+    store::get_match(&state.pool, id)
+        .await?
+        .ok_or_else(ApiError::missing)?;
+    Ok(Json(store::latest_match_job(&state.pool, id).await?))
+}
+
+#[derive(Deserialize, IntoParams)]
+struct MoveAnalysisQuery {
+    /// Continue after a move-analysis row ID, keeping the same filters.
+    after: Option<i64>,
+    /// Page size 1–100, defaults to 50.
+    limit: Option<i64>,
+    /// Only decisions losing at least 0.04 normalized equity.
+    #[serde(default)]
+    errors_only: bool,
+    /// 0 = White, 1 = Black.
+    player: Option<i32>,
+    /// checker or cube; omitted means both.
+    kind: Option<String>,
+}
+
+#[utoipa::path(get, path="/api/jobs/{id}/moves", params(("id"=Uuid, Path),MoveAnalysisQuery), responses((status=200,body=MoveAnalysisPage),(status=404,body=ErrorBody),(status=422,body=ErrorBody)), tag="Match analysis")]
+async fn move_analyses(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    query: Result<Query<MoveAnalysisQuery>, axum::extract::rejection::QueryRejection>,
+) -> ApiResult<Json<MoveAnalysisPage>> {
+    let Query(query) = query.map_err(|e| ApiError::invalid(e.body_text()))?;
+    let job = store::get_job(&state.pool, id)
+        .await?
+        .ok_or_else(ApiError::missing)?;
+    if job.kind != "match" {
+        return Err(ApiError::invalid("This job is not a match analysis"));
+    }
+    if query.after.is_some_and(|n| n < 0)
+        || query.player.is_some_and(|n| !(0..=1).contains(&n))
+        || query
+            .kind
+            .as_deref()
+            .is_some_and(|k| k != "checker" && k != "cube")
+    {
+        return Err(ApiError::invalid("Invalid analysis cursor, player or kind"));
+    }
+    Ok(Json(
+        store::move_analyses(
+            &state.pool,
+            id,
+            query.after.unwrap_or(0),
+            limit(query.limit)?,
+            query.errors_only,
+            query.player,
+            query.kind.as_deref(),
+        )
+        .await?,
+    ))
 }
 
 #[utoipa::path(get, path="/api/jobs/{id}", params(("id"=Uuid, Path)), responses((status=200, body=Job), (status=404, body=ErrorBody)), tag="Analysis")]
@@ -449,7 +558,19 @@ async fn events(
         description = "Local headless backgammon library and GNUbg analysis. No authentication; bind to loopback."
     ),
     paths(
-        health, upload, matches, get_match, source, positions, dice, create_job, job, events
+        health,
+        upload,
+        matches,
+        get_match,
+        source,
+        positions,
+        dice,
+        create_job,
+        job,
+        events,
+        create_match_analysis,
+        latest_match_analysis,
+        move_analyses
     ),
     components(schemas(
         Health,
@@ -469,7 +590,13 @@ async fn events(
         Analysis,
         Candidate,
         Distribution,
-        DiceEvaluation
+        DiceEvaluation,
+        MatchAnalysisRequest,
+        MatchAnalysisSummary,
+        PlayerAnalysisSummary,
+        MoveAnalysis,
+        MoveAnalysisPage,
+        crate::match_analysis::Decision
     ))
 )]
 pub struct ApiDoc;

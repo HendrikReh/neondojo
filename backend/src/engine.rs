@@ -68,6 +68,16 @@ impl Engine {
     }
 
     async fn run(&self, directory: &Path, commands: &str) -> Result<String> {
+        self.run_with_timeout(directory, commands, Duration::from_secs(90))
+            .await
+    }
+
+    pub(crate) async fn run_with_timeout(
+        &self,
+        directory: &Path,
+        commands: &str,
+        timeout: Duration,
+    ) -> Result<String> {
         tokio::fs::write(directory.join("commands.txt"), commands).await?;
         let mut child = Command::new(&self.binary)
             .args(["-t", "-q", "-r", "-c", "commands.txt"])
@@ -108,11 +118,11 @@ impl Engine {
             ensure!(err.trim().is_empty(), "GNUbg: {}", err.trim());
             Ok::<_, anyhow::Error>(String::from_utf8_lossy(&out).into_owned())
         };
-        match tokio::time::timeout(Duration::from_secs(90), work).await {
+        match tokio::time::timeout(timeout, work).await {
             Ok(result) => result,
             Err(_) => {
                 let _ = child.kill().await;
-                bail!("GNUbg timed out after 90 seconds")
+                bail!("GNUbg timed out after {} seconds", timeout.as_secs())
             }
         }
     }

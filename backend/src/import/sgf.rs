@@ -2,7 +2,7 @@ use super::{ImportedMatch, ImportedPosition, ids};
 use anyhow::{Context, Result, bail, ensure};
 use std::collections::BTreeMap;
 
-type Node = BTreeMap<String, Vec<String>>;
+pub(crate) type Node = BTreeMap<String, Vec<String>>;
 const MAX_SGF_BYTES: usize = 32 * 1024 * 1024;
 const MAX_NODES: usize = 100_000;
 
@@ -129,7 +129,7 @@ fn number(value: &str, name: &str) -> Result<i32> {
     Ok(n)
 }
 
-pub(super) fn initial_board() -> [i32; 26] {
+pub(crate) fn initial_board() -> [i32; 26] {
     let mut b = [0; 26];
     for (p, n) in [
         (6, 5),
@@ -358,7 +358,7 @@ fn play(board: &mut [i32; 26], player: i32, value: &str) -> Result<([i32; 2], St
     ))
 }
 
-pub fn parse_sgf(input: &str) -> Result<ImportedMatch> {
+pub(crate) fn parse_trees(input: &str) -> Result<Vec<Vec<Node>>> {
     ensure!(input.len() <= MAX_SGF_BYTES, "SGF exceeds 32 MiB limit");
     let input = input.trim_start_matches('\u{feff}');
     let mut parser = Parser {
@@ -371,6 +371,49 @@ pub fn parse_sgf(input: &str) -> Result<ImportedMatch> {
         trees.push(parser.tree(0)?);
     }
     ensure!(!trees.is_empty(), "SGF contains no games");
+    Ok(trees)
+}
+
+/// Validated state for every game, including games without checker plays.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct GameContext {
+    pub length: i32,
+    pub scores: [i32; 2],
+    pub crawford: bool,
+    pub jacoby: bool,
+    pub decision_ids: Vec<(String, String)>,
+}
+
+pub fn parse_sgf(input: &str) -> Result<ImportedMatch> {
+    let (result, _) = parse_sgf_with_context(input)?;
+    ensure!(
+        !result.positions.is_empty(),
+        "SGF contains no checker-play decisions"
+    );
+    Ok(result)
+}
+
+/// Internal analysis accepts an individual empty or cube-only game exported
+/// from an otherwise importable match, while public imports still need checkers.
+pub(crate) fn parse_sgf_with_context(input: &str) -> Result<(ImportedMatch, Vec<GameContext>)> {
+    parse_sgf_context(input, false)
+}
+
+/// GNUbg 1.05.002 can write PL[W] for a Black setup because its SETBOARD record
+/// lacks fPlayer. Only native output may infer turn from the next actual move;
+/// callers must compare all resulting context IDs against the strict source.
+pub(crate) fn parse_native_sgf_with_context(
+    input: &str,
+) -> Result<(ImportedMatch, Vec<GameContext>)> {
+    parse_sgf_context(input, true)
+}
+
+fn parse_sgf_context(
+    input: &str,
+    native_setup_turn: bool,
+) -> Result<(ImportedMatch, Vec<GameContext>)> {
+    let trees = parse_trees(input)?;
+    let mut contexts = Vec::new();
     let mut result = ImportedMatch {
         players: ["White".into(), "Black".into()],
         match_length: 0,
@@ -448,6 +491,13 @@ pub fn parse_sgf(input: &str) -> Result<ImportedMatch> {
         }
         ensure!(!crawford || length > 0, "Crawford game in a money session");
         ensure!(!jacoby || length == 0, "Jacoby rule in a point match");
+        let mut context = GameContext {
+            length,
+            scores,
+            crawford,
+            jacoby,
+            decision_ids: Vec::new(),
+        };
         let mut board = initial_board();
         let mut cube = 1i32;
         let mut owner = -1;
@@ -481,7 +531,9 @@ pub fn parse_sgf(input: &str) -> Result<ImportedMatch> {
                     _ => bail!("Unsupported SGF cube owner {co}"),
                 };
             }
-            if let Some(pl) = one(node, "PL")? {
+            if native_setup_turn && ["AE", "AW", "AB"].iter().any(|key| node.contains_key(*key)) {
+                expected_turn = None;
+            } else if let Some(pl) = one(node, "PL")? {
                 expected_turn = Some(match pl {
                     "W" => 0,
                     "B" => 1,
@@ -498,6 +550,21 @@ pub fn parse_sgf(input: &str) -> Result<ImportedMatch> {
                 continue;
             };
             ensure!(!ended, "SGF contains moves after a cube drop");
+            if matches!(value, "double" | "take" | "drop") {
+                context.decision_ids.push((
+                    ids::position_id(&board, player),
+                    ids::match_id(
+                        length,
+                        scores,
+                        cube,
+                        owner,
+                        crawford,
+                        jacoby,
+                        player,
+                        [0, 0],
+                    ),
+                ));
+            }
             match value {
                 "double" => {
                     ensure!(!crawford, "SGF contains a double in a Crawford game");
@@ -544,6 +611,10 @@ pub fn parse_sgf(input: &str) -> Result<ImportedMatch> {
                         format!("game {}, checker ply {}", game_index + 1, ply + 1)
                     })?;
                     ply += 1;
+                    context.decision_ids.push((
+                        ids::position_id(&before, player),
+                        ids::match_id(length, scores, cube, owner, crawford, jacoby, player, dice),
+                    ));
                     result.positions.push(ImportedPosition {
                         game_no: game_index as i32 + 1,
                         ply,
@@ -560,6 +631,7 @@ pub fn parse_sgf(input: &str) -> Result<ImportedMatch> {
                 }
             }
         }
+        contexts.push(context);
         previous_scores = scores;
         if let Some(re) = one(root, "RE")?
             && let Some((winner, points)) = re.split_once('+')
@@ -581,9 +653,5 @@ pub fn parse_sgf(input: &str) -> Result<ImportedMatch> {
             }
         }
     }
-    ensure!(
-        !result.positions.is_empty(),
-        "SGF contains no checker-play decisions"
-    );
-    Ok(result)
+    Ok((result, contexts))
 }
