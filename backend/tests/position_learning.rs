@@ -1,0 +1,712 @@
+use axum::{body::Body, http::Request};
+use bgtutor::{api, engine::Engine, import, model::Position, store};
+use http_body_util::BodyExt;
+use serde_json::{Value, json};
+use sqlx::PgPool;
+use tower::ServiceExt;
+use uuid::Uuid;
+
+const SOURCE: &str = "(;GM[6]PW[Alice]PB[Bob]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])";
+
+fn app(pool: &PgPool) -> axum::Router {
+    api::router(api::AppState::new(
+        pool.clone(),
+        Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into())),
+    ))
+}
+
+async fn call(app: axum::Router, method: &str, uri: &str, body: Value) -> (u16, Value) {
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(method)
+                .uri(uri)
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status().as_u16();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
+}
+
+async fn positions(pool: &PgPool, source: &str) -> Vec<Position> {
+    let imported = store::import_match(
+        pool,
+        "position-learning.sgf",
+        "sgf",
+        source.as_bytes(),
+        source,
+        &import::parse_sgf(source).unwrap(),
+    )
+    .await
+    .unwrap();
+    store::positions(pool, Some(imported.r#match.id), None, None, 100)
+        .await
+        .unwrap()
+        .items
+}
+
+async fn create_deck(app: &axum::Router) -> Uuid {
+    let (status, result) = call(
+        app.clone(),
+        "POST",
+        "/api/decks",
+        json!({"name":"Positions"}),
+    )
+    .await;
+    assert_eq!(status, 201, "{result}");
+    Uuid::parse_str(result["id"].as_str().unwrap()).unwrap()
+}
+
+async fn native_analysis(pool: &PgPool, position: Uuid, plies: i32, notation: &str) -> Uuid {
+    let id = Uuid::new_v4();
+    let result = json!({"engine":"GNU Backgammon native fixture", "plies":plies,"candidates":[
+        {"rank":1,"notation":notation,"equity":0.123,"probabilities":[0.6,0.1,0.01,0.4,0.05,0.005]}
+    ]});
+    sqlx::query("INSERT INTO jobs(id,position_uuid,kind,plies,status,result) VALUES($1,$2,'analysis',$3,'completed',$4)")
+        .bind(id).bind(position).bind(plies).bind(result).execute(pool).await.unwrap();
+    id
+}
+
+async fn alias(pool: &PgPool, position: Uuid) -> Uuid {
+    let id = Uuid::new_v4();
+    sqlx::query("INSERT INTO positions(id,match_uuid,ordinal,game_no,ply,player,dice,board,position_id,gnubg_match_id,notation) SELECT $1,match_uuid,ordinal+100,game_no,ply,player,dice,board,position_id,gnubg_match_id,notation FROM positions WHERE id=$2")
+        .bind(id).bind(position).execute(pool).await.unwrap();
+    id
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn bulk_reports_each_input_and_maps_repeated_identities_without_fake_answers(pool: PgPool) {
+    let positions = positions(&pool, SOURCE).await;
+    let analyzed = &positions[0];
+    let unanalysed = &positions[1];
+    let job = native_analysis(&pool, analyzed.id, 0, "native best play").await;
+    let same_identity = alias(&pool, analyzed.id).await;
+    native_analysis(&pool, same_identity, 0, "alias best play").await;
+    let missing = Uuid::new_v4();
+    let app = app(&pool);
+    let deck = create_deck(&app).await;
+    let path = format!("/api/decks/{deck}/positions");
+    let requested = [
+        analyzed.id,
+        unanalysed.id,
+        missing,
+        analyzed.id,
+        same_identity,
+    ];
+    let (status, result) = call(
+        app.clone(),
+        "POST",
+        &path,
+        json!({"position_ids":requested}),
+    )
+    .await;
+    assert_eq!(status, 200, "{result}");
+    assert_eq!(result["added"], 1);
+    assert_eq!(result["updated"], 0);
+    assert_eq!(result["total"], 1);
+    let items = result["items"].as_array().unwrap();
+    assert_eq!(items.len(), requested.len());
+    for (item, requested) in items.iter().zip(requested) {
+        assert_eq!(item["position_id"], requested.to_string());
+    }
+    assert_eq!(items[0]["status"], "added");
+    assert_eq!(items[1]["status"], "analysis_required");
+    assert!(items[1]["message"].as_str().unwrap().contains("Analyze"));
+    assert_eq!(items[2]["status"], "not_found");
+    assert!(items[2]["message"].is_string());
+    for index in [3, 4] {
+        assert_eq!(items[index]["status"], "duplicate");
+        assert_eq!(items[index]["card_id"], items[0]["card_id"]);
+    }
+    let payload: Value = sqlx::query_scalar("SELECT payload FROM learning_cards")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(payload["source"]["position_id"], analyzed.id.to_string());
+    assert_eq!(payload["source"]["job_id"], job.to_string());
+    assert_eq!(
+        payload["solution"]["candidates"][0]["notation"],
+        "native best play"
+    );
+    assert_eq!(payload["position"]["position_id"], analyzed.position_id);
+    assert_eq!(
+        payload["position"]["gnubg_match_id"],
+        analyzed.gnubg_match_id
+    );
+    let (status, again) = call(
+        app,
+        "POST",
+        &path,
+        json!({"position_ids":[analyzed.id,analyzed.id]}),
+    )
+    .await;
+    assert_eq!(status, 200, "{again}");
+    assert_eq!(again["added"], 0);
+    assert_eq!(again["updated"], 0);
+    assert_eq!(again["total"], 1);
+    assert!(
+        again["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|item| item["status"] == "duplicate")
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn bulk_strictly_validates_bounded_requests_and_missing_decks(pool: PgPool) {
+    let app = app(&pool);
+    let deck = create_deck(&app).await;
+    let path = format!("/api/decks/{deck}/positions");
+    for body in [
+        json!({}),
+        json!({"position_ids":[]}),
+        json!({"position_ids":vec![Uuid::new_v4();201]}),
+        json!({"position_ids":["not-a-uuid"]}),
+        json!({"position_ids":[Uuid::new_v4()],"job_id":Uuid::new_v4()}),
+        json!({"position_ids":null}),
+    ] {
+        let (status, error) = call(app.clone(), "POST", &path, body.clone()).await;
+        assert_eq!(status, 422, "request {body}: {error}");
+        assert!(error["error"].is_string());
+    }
+    let (status, result) = call(
+        app.clone(),
+        "POST",
+        &path,
+        json!({"position_ids":vec![Uuid::new_v4();200]}),
+    )
+    .await;
+    assert_eq!(status, 200, "{result}");
+    assert_eq!(result["items"].as_array().unwrap().len(), 200);
+    assert_eq!(result["total"], 0);
+    assert_eq!(
+        call(
+            app,
+            "POST",
+            &format!("/api/decks/{}/positions", Uuid::new_v4()),
+            json!({"position_ids":[Uuid::new_v4()]})
+        )
+        .await
+        .0,
+        404
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn bulk_preserves_fsrs_history_and_only_versions_changed_native_payloads(pool: PgPool) {
+    let position = positions(&pool, SOURCE).await.remove(0);
+    native_analysis(&pool, position.id, 0, "first native answer").await;
+    let app = app(&pool);
+    let deck = create_deck(&app).await;
+    let legacy = format!("/api/decks/{deck}/cards");
+    assert_eq!(
+        call(
+            app.clone(),
+            "POST",
+            &legacy,
+            json!({"position_id":position.id})
+        )
+        .await
+        .0,
+        200
+    );
+    let (_, cards) = call(app.clone(), "GET", &legacy, Value::Null).await;
+    let card = cards["items"][0]["id"].as_str().unwrap();
+    let (_, reveal) = call(
+        app.clone(),
+        "POST",
+        &format!("/api/cards/{card}/reveal"),
+        json!({"expected_version":0}),
+    )
+    .await;
+    let (status, review) = call(
+        app.clone(),
+        "POST",
+        &format!("/api/cards/{card}/review"),
+        json!({"session_id":reveal["session_id"],"request_id":Uuid::new_v4(),"rating":"good"}),
+    )
+    .await;
+    assert_eq!(status, 200, "{review}");
+    let before: (Value, Value) =
+        sqlx::query_as("SELECT to_jsonb(c)-'payload'-'updated_at',payload FROM learning_cards c")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let path = format!("/api/decks/{deck}/positions");
+    let (_, duplicate) = call(
+        app.clone(),
+        "POST",
+        &path,
+        json!({"position_ids":[position.id]}),
+    )
+    .await;
+    assert_eq!(duplicate["items"][0]["status"], "duplicate");
+    let better = native_analysis(&pool, position.id, 2, "deeper native answer").await;
+    let (status, result) = call(
+        app.clone(),
+        "POST",
+        &path,
+        json!({"position_ids":[position.id]}),
+    )
+    .await;
+    assert_eq!(status, 200, "{result}");
+    assert_eq!(result["added"], 0);
+    assert_eq!(result["updated"], 1);
+    assert_eq!(result["items"][0]["status"], "updated");
+    assert_eq!(result["items"][0]["card_id"], card);
+    let (mut after, payload): (Value, Value) =
+        sqlx::query_as("SELECT to_jsonb(c)-'payload'-'updated_at',payload FROM learning_cards c")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        after["version"].as_i64().unwrap(),
+        before.0["version"].as_i64().unwrap() + 1
+    );
+    after["version"] = before.0["version"].clone();
+    assert_eq!(
+        after, before.0,
+        "all FSRS history and identity fields stay intact"
+    );
+    assert_eq!(payload["source"]["job_id"], better.to_string());
+    assert_eq!(payload["solution"]["plies"], 2);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM card_reviews")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        1
+    );
+    let other = create_deck(&app).await;
+    let (_, result) = call(
+        app.clone(),
+        "POST",
+        &format!("/api/decks/{other}/positions"),
+        json!({"position_ids":[position.id]}),
+    )
+    .await;
+    assert_eq!(result["added"], 1);
+    assert_eq!(result["items"][0]["card_id"], card);
+    let (_, legacy_duplicate) =
+        call(app, "POST", &legacy, json!({"position_id":position.id})).await;
+    assert_eq!(
+        legacy_duplicate["updated"], 1,
+        "legacy card API keeps its existing counting contract"
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn bulk_keeps_dice_score_and_cube_contexts_as_distinct_questions(pool: PgPool) {
+    let mut selected = Vec::new();
+    for source in [
+        "(;GM[6]PW[Alice]PB[Bob]MI[length:7][ws:0][bs:0];W[31hefe])",
+        "(;GM[6]PW[Alice]PB[Bob]MI[length:7][ws:0][bs:0];W[42hfhd])",
+        "(;GM[6]PW[Alice]PB[Bob]MI[length:7][ws:1][bs:0];W[31hefe])",
+        "(;GM[6]PW[Alice]PB[Bob]MI[length:7][ws:0][bs:0]CV[2]CO[w];W[31hefe])",
+    ] {
+        let position = positions(&pool, source).await.remove(0);
+        native_analysis(&pool, position.id, 0, "native best").await;
+        selected.push(position);
+    }
+    assert!(
+        selected
+            .iter()
+            .all(|p| p.position_id == selected[0].position_id)
+    );
+    let app = app(&pool);
+    let deck = create_deck(&app).await;
+    let ids: Vec<_> = selected.iter().map(|p| p.id).collect();
+    let (status, result) = call(
+        app,
+        "POST",
+        &format!("/api/decks/{deck}/positions"),
+        json!({"position_ids":ids}),
+    )
+    .await;
+    assert_eq!(status, 200, "{result}");
+    assert_eq!(result["added"], 4);
+    let payloads: Vec<Value> = sqlx::query_scalar("SELECT payload FROM learning_cards")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(payloads.len(), 4);
+    for position in selected {
+        let payload = payloads
+            .iter()
+            .find(|p| p["source"]["position_id"] == position.id.to_string())
+            .unwrap();
+        assert_eq!(
+            payload["position"]["gnubg_match_id"],
+            position.gnubg_match_id
+        );
+        assert_eq!(payload["position"]["dice"], json!(position.dice));
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn bulk_reuses_native_match_solution_and_individual_analysis_priority(pool: PgPool) {
+    let positions = positions(&pool, SOURCE).await;
+    let match_job = Uuid::new_v4();
+    sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,result) VALUES($1,$2,'match',2,'completed',$3)")
+        .bind(match_job).bind(positions[0].match_uuid).bind(json!({"engine":"Native match engine"})).execute(&pool).await.unwrap();
+    for (index, position) in positions.iter().enumerate() {
+        let decision_no = index as i32 + 1;
+        let data = json!({"decision_no":decision_no,"checker_no":decision_no,"player":position.player,"kind":"checker","played":position.notation,"best":"native match best","played_equity":0.0,"best_equity":0.08,"equity_loss":0.08,"severity":"bad","dice":position.dice,"evaluation_status":"evaluated"});
+        sqlx::query("INSERT INTO move_analyses(job_id,position_uuid,game_no,decision_no,player,kind,equity_loss,data) VALUES($1,$2,$3,$4,$5,'checker',0.08,$6)")
+            .bind(match_job).bind(position.id).bind(position.game_no).bind(decision_no).bind(position.player).bind(data).execute(&pool).await.unwrap();
+    }
+    let individual = native_analysis(&pool, positions[1].id, 0, "individual native best").await;
+    let app = app(&pool);
+    let deck = create_deck(&app).await;
+    let (status, result) = call(
+        app,
+        "POST",
+        &format!("/api/decks/{deck}/positions"),
+        json!({"position_ids":[positions[0].id,positions[1].id]}),
+    )
+    .await;
+    assert_eq!(status, 200, "{result}");
+    let payloads: Vec<Value> = sqlx::query_scalar("SELECT payload FROM learning_cards")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    let first = payloads
+        .iter()
+        .find(|p| p["source"]["position_id"] == positions[0].id.to_string())
+        .unwrap();
+    assert_eq!(first["source"]["kind"], "match");
+    assert_eq!(first["source"]["job_id"], match_job.to_string());
+    assert_eq!(first["solution"]["engine"], "Native match engine");
+    assert_eq!(first["solution"]["plies"], 2);
+    assert_eq!(first["solution"]["decision"]["best"], "native match best");
+    let second = payloads
+        .iter()
+        .find(|p| p["source"]["position_id"] == positions[1].id.to_string())
+        .unwrap();
+    assert_eq!(second["source"]["kind"], "analysis");
+    assert_eq!(second["source"]["job_id"], individual.to_string());
+    assert_eq!(
+        second["solution"]["plies"], 0,
+        "retain single-position source priority even with a deeper match result"
+    );
+    assert_eq!(
+        second["solution"]["candidates"][0]["notation"],
+        "individual native best"
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn bulk_does_not_convert_imported_analysis_or_empty_native_candidates_into_answers(
+    pool: PgPool,
+) {
+    let source = include_str!("fixtures/analysis-game1.sgf");
+    let position = positions(&pool, source).await.remove(0);
+    assert!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM imported_analyses WHERE position_uuid=$1"
+        )
+        .bind(position.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+            > 0
+    );
+    let app = app(&pool);
+    let deck = create_deck(&app).await;
+    let path = format!("/api/decks/{deck}/positions");
+    for _ in 0..2 {
+        let (status, result) = call(
+            app.clone(),
+            "POST",
+            &path,
+            json!({"position_ids":[position.id]}),
+        )
+        .await;
+        assert_eq!(status, 200, "{result}");
+        assert_eq!(result["items"][0]["status"], "analysis_required");
+        assert!(result["items"][0].get("card_id").is_none());
+        assert_eq!(result["total"], 0);
+        sqlx::query("INSERT INTO jobs(id,position_uuid,kind,plies,status,result) VALUES($1,$2,'analysis',2,'completed',$3)")
+            .bind(Uuid::new_v4()).bind(position.id).bind(json!({"engine":"GNU Backgammon","plies":2,"candidates":[]})).execute(&pool).await.unwrap();
+    }
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM learning_cards")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn bulk_deck_limit_rolls_back_memberships_and_shared_payload_refreshes(pool: PgPool) {
+    let positions = positions(&pool, SOURCE).await;
+    for position in &positions {
+        native_analysis(&pool, position.id, 0, "original native answer").await;
+    }
+    let app = app(&pool);
+    let deck = create_deck(&app).await;
+    let path = format!("/api/decks/{deck}/positions");
+    assert_eq!(
+        call(
+            app.clone(),
+            "POST",
+            &path,
+            json!({"position_ids":[positions[0].id]})
+        )
+        .await
+        .0,
+        200
+    );
+    let before: (Value, i64) = sqlx::query_as("SELECT payload,version FROM learning_cards")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    native_analysis(
+        &pool,
+        positions[0].id,
+        2,
+        "better answer that must roll back",
+    )
+    .await;
+    sqlx::query("WITH inserted AS (INSERT INTO learning_cards(id,signature,payload) SELECT gen_random_uuid(),'bound-'||n,'{}'::jsonb FROM generate_series(1,999) n RETURNING id) INSERT INTO deck_cards(deck_id,card_id) SELECT $1,id FROM inserted").bind(deck).execute(&pool).await.unwrap();
+    let (status, error) = call(
+        app,
+        "POST",
+        &path,
+        json!({"position_ids":[positions[0].id,positions[1].id]}),
+    )
+    .await;
+    assert_eq!(status, 422, "{error}");
+    let counts: (i64,i64) = sqlx::query_as("SELECT (SELECT count(*) FROM learning_cards),(SELECT count(*) FROM deck_cards WHERE deck_id=$1)").bind(deck).fetch_one(&pool).await.unwrap();
+    assert_eq!(counts, (1000, 1000));
+    let after: (Value, i64) = sqlx::query_as(
+        "SELECT payload,version FROM learning_cards WHERE payload->'source'->>'position_id'=$1",
+    )
+    .bind(positions[0].id.to_string())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        after, before,
+        "a rejected batch cannot refresh shared payloads or versions"
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn bulk_propagates_unexpected_database_errors_and_rolls_back_valid_writes(pool: PgPool) {
+    let positions = positions(&pool, SOURCE).await;
+    native_analysis(&pool, positions[0].id, 0, "valid native answer").await;
+    native_analysis(&pool, positions[1].id, 0, "reject transaction").await;
+    sqlx::query("ALTER TABLE learning_cards ADD CONSTRAINT reject_test_write CHECK (payload->'solution'->'candidates'->0->>'notation' <> 'reject transaction')").execute(&pool).await.unwrap();
+    let app = app(&pool);
+    let deck = create_deck(&app).await;
+    let (status, error) = call(
+        app,
+        "POST",
+        &format!("/api/decks/{deck}/positions"),
+        json!({"position_ids":[positions[0].id,Uuid::new_v4(),positions[1].id]}),
+    )
+    .await;
+    assert_eq!(status, 500, "{error}");
+    assert!(error["error"].is_string());
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM learning_cards")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM deck_cards")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn bulk_and_legacy_imports_share_stable_lock_order_and_card_identity(pool: PgPool) {
+    let positions = positions(&pool, SOURCE).await;
+    for position in &positions {
+        native_analysis(&pool, position.id, 0, "native best").await;
+    }
+    let app = app(&pool);
+    let a = create_deck(&app).await;
+    let b = create_deck(&app).await;
+    let ids: Vec<_> = positions.iter().map(|p| p.id).collect();
+    let mut reverse = ids.clone();
+    reverse.reverse();
+    let a_path = format!("/api/decks/{a}/positions");
+    let b_path = format!("/api/decks/{b}/positions");
+    let (left, right) = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        tokio::join!(
+            call(app.clone(), "POST", &a_path, json!({"position_ids":ids})),
+            call(
+                app.clone(),
+                "POST",
+                &b_path,
+                json!({"position_ids":reverse})
+            ),
+        )
+    })
+    .await
+    .expect("opposite selection orders must not deadlock");
+    assert_eq!(left.0, 200, "{:?}", left);
+    assert_eq!(right.0, 200, "{:?}", right);
+    assert_eq!(left.1["added"], 2);
+    assert_eq!(right.1["added"], 2);
+    for position in positions {
+        let (status, result) = call(
+            app.clone(),
+            "POST",
+            &format!("/api/decks/{a}/cards"),
+            json!({"position_id":position.id}),
+        )
+        .await;
+        assert_eq!(status, 200, "{result}");
+        assert_eq!(result["added"], 0);
+    }
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM learning_cards")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        2
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM deck_cards")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        4
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn bulk_requires_a_usable_selected_native_match_solution_and_accepts_forced_moves(
+    pool: PgPool,
+) {
+    let position = positions(&pool, SOURCE).await.remove(0);
+    let match_job = Uuid::new_v4();
+    sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,result) VALUES($1,$2,'match',2,'completed',$3)")
+        .bind(match_job).bind(position.match_uuid).bind(json!({"engine":"Native match engine"})).execute(&pool).await.unwrap();
+    let mut data = json!({"decision_no":1,"checker_no":1,"player":position.player,"kind":"checker","played":position.notation,"best":"","played_equity":null,"best_equity":null,"equity_loss":0.0,"severity":"none","dice":position.dice,"evaluation_status":"unavailable"});
+    sqlx::query("INSERT INTO move_analyses(job_id,position_uuid,game_no,decision_no,player,kind,equity_loss,data) VALUES($1,$2,$3,1,$4,'checker',0,$5)")
+        .bind(match_job).bind(position.id).bind(position.game_no).bind(position.player).bind(&data).execute(&pool).await.unwrap();
+    let app = app(&pool);
+    let deck = create_deck(&app).await;
+    let path = format!("/api/decks/{deck}/positions");
+    for (status, best, played_equity, best_equity, loss) in [
+        ("unavailable", "", Value::Null, Value::Null, 0.0),
+        ("evaluated", "  ", json!(0.0), json!(0.1), 0.1),
+        ("evaluated", "native best", Value::Null, Value::Null, 0.0),
+        ("forced", "native forced", Value::Null, Value::Null, 0.1),
+    ] {
+        data["evaluation_status"] = json!(status);
+        data["best"] = json!(best);
+        data["played_equity"] = played_equity;
+        data["best_equity"] = best_equity;
+        data["equity_loss"] = json!(loss);
+        sqlx::query("UPDATE move_analyses SET data=$2,equity_loss=$3 WHERE job_id=$1")
+            .bind(match_job)
+            .bind(&data)
+            .bind(loss)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let (code, result) = call(
+            app.clone(),
+            "POST",
+            &path,
+            json!({"position_ids":[position.id]}),
+        )
+        .await;
+        assert_eq!(code, 200, "{result}");
+        assert_eq!(
+            result["items"][0]["status"], "analysis_required",
+            "source {data}: {result}"
+        );
+        assert!(result["items"][0].get("card_id").is_none());
+        assert_eq!(result["total"], 0);
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM learning_cards")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            0
+        );
+    }
+    data["evaluation_status"] = json!("forced");
+    data["best"] = json!("Cannot move");
+    data["equity_loss"] = json!(0.0);
+    sqlx::query("UPDATE move_analyses SET data=$2,equity_loss=0 WHERE job_id=$1")
+        .bind(match_job)
+        .bind(&data)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (code, result) = call(app, "POST", &path, json!({"position_ids":[position.id]})).await;
+    assert_eq!(code, 200, "{result}");
+    assert_eq!(result["items"][0]["status"], "added");
+    let solution: Value = sqlx::query_scalar("SELECT payload->'solution' FROM learning_cards")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(solution["decision"]["best"], "Cannot move");
+    assert!(solution["decision"]["played_equity"].is_null());
+    assert!(solution["decision"]["best_equity"].is_null());
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn bulk_does_not_fall_back_from_the_selected_individual_hint_with_an_empty_answer(
+    pool: PgPool,
+) {
+    let position = positions(&pool, SOURCE).await.remove(0);
+    native_analysis(&pool, position.id, 0, "older native best").await;
+    let selected = native_analysis(&pool, position.id, 2, "   ").await;
+    let app = app(&pool);
+    let deck = create_deck(&app).await;
+    let path = format!("/api/decks/{deck}/positions");
+    let (status, result) = call(
+        app.clone(),
+        "POST",
+        &path,
+        json!({"position_ids":[position.id]}),
+    )
+    .await;
+    assert_eq!(status, 200, "{result}");
+    assert_eq!(result["items"][0]["status"], "analysis_required");
+    assert_eq!(result["total"], 0);
+    sqlx::query("UPDATE jobs SET result=jsonb_set(result,'{candidates,0,notation}','\"selected native best\"'::jsonb) WHERE id=$1")
+        .bind(selected).execute(&pool).await.unwrap();
+    let (status, result) = call(app, "POST", &path, json!({"position_ids":[position.id]})).await;
+    assert_eq!(status, 200, "{result}");
+    assert_eq!(result["items"][0]["status"], "added");
+    let source: Uuid =
+        sqlx::query_scalar("SELECT (payload->'source'->>'job_id')::uuid FROM learning_cards")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(source, selected);
+}

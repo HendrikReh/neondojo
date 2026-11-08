@@ -9,6 +9,8 @@ import { request, type Match, type Position } from './api';
 import AnalysisWorkspace, { type AnalysisDetail } from './AnalysisWorkspace';
 import MatchDatabase from './MatchDatabase';
 import LearningWorkspace from './LearningPanel';
+import PositionBrowser from './PositionBrowser';
+import { usePositionText } from './position-browser-messages';
 import SettingsDialog from './SettingsDialog';
 import { loadSettings, type AppSettings } from './settings-api';
 import { readTheme, saveTheme } from './ui-preferences';
@@ -34,13 +36,18 @@ import {
 import { useLibraryText } from './library-messages';
 import MoveNotesDialog, { type MoveNotesTarget } from './MoveNotesDialog';
 
-type View = 'analysis' | 'database' | 'learning';
-const views: View[] = ['analysis', 'database', 'learning'];
+type View = 'analysis' | 'database' | 'positions' | 'learning';
+const views: View[] = ['analysis', 'database', 'positions', 'learning'];
 export default function App() {
   const { t, setLocale, formatError, formatPercent } = useI18n();
   const w = useWorkspaceText(),
     learnT = useLearningText();
   const l = useLibraryText();
+  const positionText = usePositionText();
+  const [requestedDeck, setRequestedDeck] = useState<{
+    id: string;
+    token: number;
+  }>();
   const [databaseId, setDatabaseId] = useState(readDatabase);
   const [moveNotes, setMoveNotes] = useState<MoveNotesTarget>();
   const [importResults, setImportResults] = useState<
@@ -342,18 +349,15 @@ export default function App() {
               onKeyDown={(event) => tabKey(event, tab)}
               onClick={() => setView(tab)}
             >
-              {tab === 'learning' ? learnT('study') : w(tab)}
+              {tab === 'learning'
+                ? learnT('study')
+                : tab === 'positions'
+                  ? positionText('title')
+                  : w(tab)}
             </button>
           ))}
         </nav>
         <div className="app-header-actions">
-          <button
-            className="app-import"
-            onClick={() => input.current?.click()}
-            disabled={uploading}
-          >
-            {uploading ? t('app.importing') : t('app.import')}
-          </button>
           <button
             className="settings-trigger"
             onClick={() => setSettingsOpen(true)}
@@ -535,12 +539,36 @@ export default function App() {
           />
         </div>
         <div
+          id="workspace-panel-positions"
+          role="tabpanel"
+          aria-labelledby="workspace-tab-positions"
+          hidden={view !== 'positions'}
+        >
+          <PositionBrowser
+            visible={view === 'positions'}
+            revision={revision}
+            annotationRevision={annotationRevision}
+            deckRevision={deckRevision}
+            theme={theme}
+            onOpenPosition={(id) => {
+              setDetail('evaluation');
+              openPosition(id);
+            }}
+            onDeckChanged={deckChanged}
+            onStudy={(id) => {
+              setRequestedDeck((old) => ({ id, token: (old?.token ?? 0) + 1 }));
+              setView('learning');
+            }}
+          />
+        </div>
+        <div
           id="workspace-panel-learning"
           role="tabpanel"
           aria-labelledby="workspace-tab-learning"
           hidden={view !== 'learning'}
         >
           <LearningWorkspace
+            requestedDeck={requestedDeck}
             theme={theme}
             revision={deckRevision}
             onChanged={deckChanged}

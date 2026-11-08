@@ -733,6 +733,67 @@
         }
       }
     },
+    "/api/decks/{id}/positions": {
+      "post": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "add_positions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddPositions"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddPositionsResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/engines": {
       "get": {
         "tags": [
@@ -2744,6 +2805,269 @@
         }
       }
     },
+    "/api/position-browser": {
+      "get": {
+        "tags": [
+          "Positions"
+        ],
+        "operationId": "search",
+        "parameters": [
+          {
+            "name": "filters",
+            "in": "query",
+            "description": "URL-encoded JSON PositionFilterDefinition. Omitted: unfiltered, match order.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "{\"schema_version\":1,\"player\":\"Alice\",\"sort\":\"match\"}"
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Default 25, maximum 100.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PositionBrowserPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/position-filters": {
+      "get": {
+        "tags": [
+          "Positions"
+        ],
+        "operationId": "list_filters",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SavedPositionFilter"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Positions"
+        ],
+        "operationId": "create_filter",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePositionFilter"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedPositionFilter"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/position-filters/{id}": {
+      "put": {
+        "tags": [
+          "Positions"
+        ],
+        "operationId": "update_filter",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePositionFilter"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedPositionFilter"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Positions"
+        ],
+        "operationId": "delete_filter",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "expected_version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/positions": {
       "get": {
         "tags": [
@@ -3327,6 +3651,55 @@
           "added": {
             "type": "integer",
             "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updated": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "AddPositions": {
+        "type": "object",
+        "required": [
+          "position_ids"
+        ],
+        "properties": {
+          "position_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Saved position UUIDs in selection order. Every occurrence receives an outcome.",
+            "maxItems": 200,
+            "minItems": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "AddPositionsResult": {
+        "type": "object",
+        "required": [
+          "added",
+          "updated",
+          "total",
+          "items"
+        ],
+        "properties": {
+          "added": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PositionAddItem"
+            },
+            "description": "Outcomes in the same order as the request, including repeated UUIDs."
           },
           "total": {
             "type": "integer",
@@ -4159,6 +4532,22 @@
             "type": "string"
           }
         }
+      },
+      "CreatePositionFilter": {
+        "type": "object",
+        "required": [
+          "name",
+          "definition"
+        ],
+        "properties": {
+          "definition": {
+            "$ref": "#/components/schemas/PositionFilterDefinition"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       },
       "Database": {
         "type": "object",
@@ -5828,12 +6217,395 @@
           }
         }
       },
+      "PositionAddItem": {
+        "type": "object",
+        "required": [
+          "position_id",
+          "status"
+        ],
+        "properties": {
+          "card_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "position_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PositionAddStatus"
+          }
+        }
+      },
+      "PositionAddStatus": {
+        "type": "string",
+        "enum": [
+          "added",
+          "updated",
+          "duplicate",
+          "analysis_required",
+          "not_found"
+        ]
+      },
+      "PositionAnalysisState": {
+        "type": "string",
+        "enum": [
+          "ready",
+          "missing"
+        ]
+      },
+      "PositionBrowserHit": {
+        "type": "object",
+        "required": [
+          "position",
+          "match_info",
+          "database_id",
+          "database_name",
+          "display_name",
+          "tags",
+          "notes",
+          "card_ready"
+        ],
+        "properties": {
+          "black_score": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "card_ready": {
+            "type": "boolean"
+          },
+          "crawford": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "cube_owner": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "-1: centered; 0: White; 1: Black; null: unknown source context."
+          },
+          "cube_value": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "database_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "database_name": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "match_info": {
+            "$ref": "#/components/schemas/MatchSummary"
+          },
+          "native_error": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PositionNativeError"
+              }
+            ]
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PositionBrowserNote"
+            }
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "round": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tournament": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "white_score": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "PositionBrowserNote": {
+        "type": "object",
+        "required": [
+          "scope",
+          "tags",
+          "comment_excerpt"
+        ],
+        "properties": {
+          "comment_excerpt": {
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/AnnotationKind"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "PositionBrowserPage": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PositionBrowserHit"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "PositionBrowserSort": {
+        "type": "string",
+        "enum": [
+          "match",
+          "loss"
+        ]
+      },
+      "PositionFilterDefinition": {
+        "type": "object",
+        "required": [
+          "schema_version"
+        ],
+        "properties": {
+          "analysis_state": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PositionAnalysisState"
+              }
+            ]
+          },
+          "black_score": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "comment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "crawford": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "cube_value": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "database_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "die1": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "die2": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "match_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "match_points_max": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "match_points_min": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "max_loss": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "min_loss": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Native normalized equity loss. Individual hints do not imply a played-move loss."
+          },
+          "player": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Literal name substring of the player on roll, rather than either match participant."
+          },
+          "position_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "q": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "round": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "schema_version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Supported definition version: exactly 1.",
+            "maximum": 1,
+            "minimum": 1
+          },
+          "sort": {
+            "$ref": "#/components/schemas/PositionBrowserSort"
+          },
+          "tag": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tournament": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "white_score": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
       "PositionJobKind": {
         "type": "string",
         "enum": [
           "analysis",
           "dice"
         ]
+      },
+      "PositionNativeError": {
+        "type": "object",
+        "required": [
+          "job_id",
+          "engine",
+          "plies",
+          "equity_loss",
+          "severity"
+        ],
+        "properties": {
+          "engine": {
+            "type": "string"
+          },
+          "equity_loss": {
+            "type": "number",
+            "format": "double"
+          },
+          "job_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "plies": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/MoveSeverity"
+          }
+        }
       },
       "PositionPage": {
         "type": "object",
@@ -6021,6 +6793,45 @@
           }
         }
       },
+      "SavedPositionFilter": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "definition",
+          "version",
+          "created_at",
+          "updated_at",
+          "database_missing"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "database_missing": {
+            "type": "boolean"
+          },
+          "definition": {
+            "$ref": "#/components/schemas/PositionFilterDefinition"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "StoredMove": {
         "type": "object",
         "required": [
@@ -6098,6 +6909,27 @@
             "description": "Checker notes use this canonical position occurrence; cube notes use id."
           }
         }
+      },
+      "UpdatePositionFilter": {
+        "type": "object",
+        "required": [
+          "name",
+          "definition",
+          "expected_version"
+        ],
+        "properties": {
+          "definition": {
+            "$ref": "#/components/schemas/PositionFilterDefinition"
+          },
+          "expected_version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       },
       "UploadForm": {
         "type": "object",

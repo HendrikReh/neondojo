@@ -36,7 +36,8 @@
   background: transparent;
   padding: 9px 15px;
 }
-.app-tabs button[aria-selected='true'] {
+.app-tabs button[aria-selected='true'],
+.app-tabs button[aria-selected='true']:hover:not(:disabled) {
   color: #fff;
   background: #355d42;
 }

@@ -1,0 +1,197 @@
+import { request } from './api';
+import { AppError } from './i18n-core';
+
+import type { components } from './generated-api';
+type Schema = components['schemas'];
+export type PositionFilterDefinition = Schema['PositionFilterDefinition'];
+export type PositionBrowserHit = Schema['PositionBrowserHit'];
+export type SavedPositionFilter = Schema['SavedPositionFilter'];
+export type PositionFilterDraft = Record<
+  Exclude<keyof PositionFilterDefinition, 'schema_version'>,
+  string
+>;
+export type PositionBrowserPage = Required<Schema['PositionBrowserPage']>;
+export type PositionTransferStatus = Schema['PositionAddStatus'];
+export type PositionTransferResult = Schema['AddPositionsResult'];
+export const positionSelectionLimit = 200;
+const textFields = [
+  'database_id',
+  'q',
+  'player',
+  'match_name',
+  'tournament',
+  'round',
+  'tag',
+  'comment',
+  'position_id',
+] as const;
+const numberFields = [
+  'match_points_min',
+  'match_points_max',
+  'die1',
+  'die2',
+  'white_score',
+  'black_score',
+  'cube_value',
+  'min_loss',
+  'max_loss',
+] as const;
+export function emptyPositionFilters(): PositionFilterDraft {
+  return Object.fromEntries(
+    [...textFields, ...numberFields, 'crawford', 'analysis_state', 'sort'].map(
+      (key) => [key, key === 'sort' ? 'match' : ''],
+    ),
+  ) as PositionFilterDraft;
+}
+export function positionDefinition(
+  draft: PositionFilterDraft,
+): PositionFilterDefinition {
+  const definition: PositionFilterDefinition = {
+    schema_version: 1,
+    sort: draft.sort === 'loss' ? 'loss' : 'match',
+  };
+  for (const key of textFields)
+    if (draft[key]?.trim()) definition[key] = draft[key].trim();
+  for (const key of numberFields) {
+    const raw = draft[key]?.trim();
+    if (!raw) continue;
+    const value = Number(raw),
+      loss = key === 'min_loss' || key === 'max_loss';
+    if (
+      !Number.isFinite(value) ||
+      value < 0 ||
+      (!loss && !Number.isInteger(value)) ||
+      ((key === 'die1' || key === 'die2') && (value < 1 || value > 6)) ||
+      (key === 'cube_value' &&
+        (value < 1 || value > 32768 || (value & (value - 1)) !== 0))
+    )
+      throw new Error('invalidFilter');
+    definition[key] = value;
+  }
+  if (definition.tag) definition.tag = definition.tag.toLowerCase();
+  if (
+    definition.die1 != null &&
+    definition.die2 != null &&
+    definition.die1 > definition.die2
+  )
+    [definition.die1, definition.die2] = [definition.die2, definition.die1];
+  if (draft.crawford) {
+    if (!['true', 'false'].includes(draft.crawford))
+      throw new Error('invalidFilter');
+    definition.crawford = draft.crawford === 'true';
+  }
+  if (draft.analysis_state) {
+    if (draft.analysis_state !== 'ready' && draft.analysis_state !== 'missing')
+      throw new Error('invalidFilter');
+    definition.analysis_state = draft.analysis_state;
+  }
+  if (
+    (definition.match_points_min ?? 0) >
+      (definition.match_points_max ?? Infinity) ||
+    (definition.min_loss ?? 0) > (definition.max_loss ?? Infinity)
+  )
+    throw new Error('invalidFilter');
+  return definition;
+}
+export function positionDraft(
+  definition: PositionFilterDefinition,
+): PositionFilterDraft {
+  const draft = emptyPositionFilters();
+  for (const key of Object.keys(draft) as (keyof PositionFilterDraft)[]) {
+    const value = definition[key];
+    if (value !== null && value !== undefined) draft[key] = String(value);
+  }
+  return draft;
+}
+export function positionParams(
+  definition: PositionFilterDefinition,
+  after?: string,
+  limit = 25,
+) {
+  return new URLSearchParams({
+    filters: JSON.stringify(positionDefinition(positionDraft(definition))),
+    limit: String(limit),
+    ...(after ? { after } : {}),
+  });
+}
+export function samePositionDefinition(
+  a: PositionFilterDefinition,
+  b: PositionFilterDefinition,
+) {
+  return (
+    JSON.stringify(positionDefinition(positionDraft(a))) ===
+    JSON.stringify(positionDefinition(positionDraft(b)))
+  );
+}
+export function togglePositionSelection(
+  selection: ReadonlySet<string>,
+  ids: readonly string[],
+  checked: boolean,
+) {
+  const next = new Set(selection);
+  for (const id of ids)
+    if (!checked) next.delete(id);
+    else if (next.size < positionSelectionLimit) next.add(id);
+  return next;
+}
+export function mergePositionPages(
+  previous: PositionBrowserHit[],
+  incoming: PositionBrowserHit[],
+) {
+  const merged = new Map(previous.map((hit) => [hit.position.id, hit]));
+  for (const hit of incoming) merged.set(hit.position.id, hit);
+  return [...merged.values()];
+}
+export const loadPositionPage = (
+  definition: PositionFilterDefinition,
+  signal: AbortSignal,
+  after?: string,
+) =>
+  request<PositionBrowserPage>(
+    `/position-browser?${positionParams(definition, after)}`,
+    { signal },
+  );
+export const loadPositionFilters = (signal: AbortSignal) =>
+  request<SavedPositionFilter[]>('/position-filters', { signal });
+export const savePositionFilter = (
+  name: string,
+  definition: PositionFilterDefinition,
+  existing?: SavedPositionFilter,
+) =>
+  request<SavedPositionFilter>(
+    `/position-filters${existing ? `/${existing.id}` : ''}`,
+    {
+      method: existing ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name,
+        definition,
+        ...(existing ? { expected_version: existing.version } : {}),
+      }),
+    },
+  );
+export async function deletePositionFilter(existing: SavedPositionFilter) {
+  const response = await fetch(
+    `/api/position-filters/${existing.id}?expected_version=${existing.version}`,
+    { method: 'DELETE' },
+  );
+  if (!response.ok) {
+    let diagnostic = await response.text();
+    try {
+      diagnostic = JSON.parse(diagnostic).error ?? diagnostic;
+    } catch {
+      /* Plain HTTP error. */
+    }
+    throw new AppError(
+      'error.request',
+      { status: String(response.status) },
+      diagnostic,
+    );
+  }
+}
+export const transferPositions = (deckId: string, ids: string[]) =>
+  request<PositionTransferResult>(`/decks/${deckId}/positions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ position_ids: ids }),
+  });

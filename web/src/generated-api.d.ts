@@ -148,6 +148,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/decks/{id}/positions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["add_positions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/engines": {
         parameters: {
             query?: never;
@@ -644,6 +660,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/position-browser": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["search"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/position-filters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_filters"];
+        put?: never;
+        post: operations["create_filter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/position-filters/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["update_filter"];
+        post?: never;
+        delete: operations["delete_filter"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/positions": {
         parameters: {
             query?: never;
@@ -791,6 +855,20 @@ export interface components {
         AddCardsResult: {
             /** Format: int64 */
             added: number;
+            /** Format: int64 */
+            total: number;
+            /** Format: int64 */
+            updated: number;
+        };
+        AddPositions: {
+            /** @description Saved position UUIDs in selection order. Every occurrence receives an outcome. */
+            position_ids: string[];
+        };
+        AddPositionsResult: {
+            /** Format: int64 */
+            added: number;
+            /** @description Outcomes in the same order as the request, including repeated UUIDs. */
+            items: components["schemas"]["PositionAddItem"][];
             /** Format: int64 */
             total: number;
             /** Format: int64 */
@@ -1022,6 +1100,10 @@ export interface components {
             position_id?: string | null;
         };
         CreateDeck: {
+            name: string;
+        };
+        CreatePositionFilter: {
+            definition: components["schemas"]["PositionFilterDefinition"];
             name: string;
         };
         Database: {
@@ -1544,8 +1626,109 @@ export interface components {
             ply: number;
             position_id: string;
         };
+        PositionAddItem: {
+            /** Format: uuid */
+            card_id?: string | null;
+            message?: string | null;
+            /** Format: uuid */
+            position_id: string;
+            status: components["schemas"]["PositionAddStatus"];
+        };
+        /** @enum {string} */
+        PositionAddStatus: "added" | "updated" | "duplicate" | "analysis_required" | "not_found";
+        /** @enum {string} */
+        PositionAnalysisState: "ready" | "missing";
+        PositionBrowserHit: {
+            /** Format: int32 */
+            black_score?: number | null;
+            card_ready: boolean;
+            crawford?: boolean | null;
+            /**
+             * Format: int32
+             * @description -1: centered; 0: White; 1: Black; null: unknown source context.
+             */
+            cube_owner?: number | null;
+            /** Format: int32 */
+            cube_value?: number | null;
+            /** Format: uuid */
+            database_id: string;
+            database_name: string;
+            display_name: string;
+            match_info: components["schemas"]["MatchSummary"];
+            native_error?: null | components["schemas"]["PositionNativeError"];
+            notes: components["schemas"]["PositionBrowserNote"][];
+            position: components["schemas"]["Position"];
+            round?: string | null;
+            tags: string[];
+            tournament?: string | null;
+            /** Format: int32 */
+            white_score?: number | null;
+        };
+        PositionBrowserNote: {
+            comment_excerpt: string;
+            scope: components["schemas"]["AnnotationKind"];
+            tags: string[];
+        };
+        PositionBrowserPage: {
+            items: components["schemas"]["PositionBrowserHit"][];
+            next_cursor?: string | null;
+        };
+        /** @enum {string} */
+        PositionBrowserSort: "match" | "loss";
+        PositionFilterDefinition: {
+            analysis_state?: null | components["schemas"]["PositionAnalysisState"];
+            /** Format: int32 */
+            black_score?: number | null;
+            comment?: string | null;
+            crawford?: boolean | null;
+            /** Format: int32 */
+            cube_value?: number | null;
+            /** Format: uuid */
+            database_id?: string | null;
+            /** Format: int32 */
+            die1?: number | null;
+            /** Format: int32 */
+            die2?: number | null;
+            match_name?: string | null;
+            /** Format: int32 */
+            match_points_max?: number | null;
+            /** Format: int32 */
+            match_points_min?: number | null;
+            /** Format: double */
+            max_loss?: number | null;
+            /**
+             * Format: double
+             * @description Native normalized equity loss. Individual hints do not imply a played-move loss.
+             */
+            min_loss?: number | null;
+            /** @description Literal name substring of the player on roll, rather than either match participant. */
+            player?: string | null;
+            position_id?: string | null;
+            q?: string | null;
+            round?: string | null;
+            /**
+             * Format: int32
+             * @description Supported definition version: exactly 1.
+             */
+            schema_version: number;
+            sort?: components["schemas"]["PositionBrowserSort"];
+            tag?: string | null;
+            tournament?: string | null;
+            /** Format: int32 */
+            white_score?: number | null;
+        };
         /** @enum {string} */
         PositionJobKind: "analysis" | "dice";
+        PositionNativeError: {
+            engine: string;
+            /** Format: double */
+            equity_loss: number;
+            /** Format: uuid */
+            job_id: string;
+            /** Format: int32 */
+            plies: number;
+            severity: components["schemas"]["MoveSeverity"];
+        };
         PositionPage: {
             items: components["schemas"]["Position"][];
             /**
@@ -1614,6 +1797,19 @@ export interface components {
             /** Format: int64 */
             version: number;
         };
+        SavedPositionFilter: {
+            /** Format: date-time */
+            created_at: string;
+            database_missing: boolean;
+            definition: components["schemas"]["PositionFilterDefinition"];
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: int64 */
+            version: number;
+        };
         StoredMove: {
             board: number[];
             dice: number[];
@@ -1644,6 +1840,12 @@ export interface components {
              * @description Checker notes use this canonical position occurrence; cube notes use id.
              */
             position_uuid?: string | null;
+        };
+        UpdatePositionFilter: {
+            definition: components["schemas"]["PositionFilterDefinition"];
+            /** Format: int64 */
+            expected_version: number;
+            name: string;
         };
         UploadForm: {
             /**
@@ -2166,6 +2368,47 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    add_positions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddPositions"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddPositionsResult"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3421,6 +3664,194 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["XgBookStatus"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    search: {
+        parameters: {
+            query?: {
+                /**
+                 * @description URL-encoded JSON PositionFilterDefinition. Omitted: unfiltered, match order.
+                 * @example {"schema_version":1,"player":"Alice","sort":"match"}
+                 */
+                filters?: string;
+                after?: string;
+                /** @description Default 25, maximum 100. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PositionBrowserPage"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_filters: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedPositionFilter"][];
+                };
+            };
+        };
+    };
+    create_filter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePositionFilter"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedPositionFilter"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_filter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePositionFilter"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedPositionFilter"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_filter: {
+        parameters: {
+            query: {
+                expected_version: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             422: {

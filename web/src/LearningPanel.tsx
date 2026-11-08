@@ -285,10 +285,12 @@ export default function LearningWorkspace({
   theme,
   revision,
   onChanged,
+  requestedDeck,
 }: {
   theme: Theme;
   revision: number;
   onChanged: () => void;
+  requestedDeck?: { id: string; token: number };
 }) {
   const t = useLearningText();
   const {
@@ -301,6 +303,7 @@ export default function LearningWorkspace({
   } = useI18n();
   const { decks, error: deckError, addDeck, ready } = useDecks(revision);
   const [deckId, setDeckId] = useState(savedDeck);
+  const [appliedDeckToken, setAppliedDeckToken] = useState<number>();
   const [studying, setStudying] = useState(false);
   const [next, setNext] = useState<NextCard | null>(null);
   const [revealed, setRevealed] = useState<RevealedCard | null>(null);
@@ -334,6 +337,25 @@ export default function LearningWorkspace({
     setLoading(false);
     setPage({ items: [], next_cursor: null });
   }, [deckId]);
+  useEffect(() => {
+    if (
+      !requestedDeck ||
+      appliedDeckToken === requestedDeck.token ||
+      !ready ||
+      !decks.some((deck) => deck.id === requestedDeck.id)
+    )
+      return;
+    generation.current++;
+    setDeckId(requestedDeck.id);
+    setStudying(true);
+    setRevealed(null);
+    setNext(null);
+    setReviewResult(null);
+    setError(null);
+    setBusy(false);
+    setQueueRevision((value) => value + 1);
+    setAppliedDeckToken(requestedDeck.token);
+  }, [requestedDeck, appliedDeckToken, ready, decks]);
   useEffect(() => {
     if (!deckId) return;
     const abort = new AbortController();
@@ -491,6 +513,19 @@ export default function LearningWorkspace({
   const context = card ? matchContext(card.position.gnubg_match_id) : null;
   const decision = revealed?.answer.solution.decision;
   const name = decks.find((deck) => deck.id === deckId)?.name;
+  if (requestedDeck && requestedDeck.token !== appliedDeckToken)
+    return (
+      <section className="learning-workspace" aria-label={t('study')}>
+        <h2>{t('study')}</h2>
+        <p role="status">{t('loading')}</p>
+        {!!deckError && (
+          <>
+            <p role="alert">{formatError(deckError)}</p>
+            <button onClick={onChanged}>{uiT('games.retry')}</button>
+          </>
+        )}
+      </section>
+    );
   return (
     <section className="learning-workspace" aria-label={t('study')}>
       <div className="learning-heading">

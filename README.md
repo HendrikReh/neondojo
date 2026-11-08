@@ -53,7 +53,9 @@ Die Positionssuche identifiziert die Brettstellung aus Sicht des Spielers am Zug
 
 ## Analysearbeitsplatz und Einstellungen
 
-Die Hauptnavigation trennt **Analyse**, **Matchdatenbank** und **Lernen & Anki**. Brett, Zugverlauf und Positionsbewertung stehen im Analysearbeitsplatz nebeneinander; ein optionaler Brettfokus blendet die Zugliste aus. Bewertung, Fehler, Notizen und Lernkarten haben eigene Reiter. Bei kleinen Fenstern werden die Bereiche untereinander angeordnet. Die Haupt- und Detailreiter sind mit Pfeiltasten sowie Home/End bedienbar. Die letzte Match-/Spiel-/Positionsauswahl wird lokal wiederhergestellt, ohne eine neue Analyse zu starten.
+BG Tutor ist für die informationsdichte Partieanalyse am Desktop ausgelegt. Brett, Zugliste, Kandidaten, Bewertungen und Statistiken sollen auf großen Fenstern möglichst gleichzeitig sichtbar und mit Maus und Tastatur effizient bedienbar sein. Desktop-Nutzbarkeit und Informationsdichte bestimmen die weitere UX-Entwicklung und deren Abnahmekriterien. Mobilgeräte sind keine Zielplattform; zusätzliche mobile Layouts und mobile Testanforderungen gehören nicht zum Projektumfang.
+
+Die Hauptnavigation trennt **Analyse**, **Matchdatenbank**, **Positionen** und **Lernen & Anki**. Brett, Zugverlauf und Positionsbewertung stehen im Analysearbeitsplatz nebeneinander; ein optionaler Brettfokus blendet die Zugliste aus. Bewertung, Fehler, Notizen und Lernkarten haben eigene Reiter. Bei kleinen Fenstern werden die Bereiche untereinander angeordnet. Die Haupt- und Detailreiter sind mit Pfeiltasten sowie Home/End bedienbar. Die letzte Match-/Spiel-/Positionsauswahl wird lokal wiederhergestellt, ohne eine neue Analyse zu starten.
 
 Ansichten bleiben beim Tabwechsel eingebunden: Suchfilter, ungespeicherte Notizen und SSE-Abonnements bleiben erhalten. Akzeptierte Aufträge erscheinen auch dann im globalen Fortschritt, wenn während der POST-Antwort die Position oder das Spiel gewechselt wird.
 
@@ -62,6 +64,18 @@ Ansichten bleiben beim Tabwechsel eingebunden: Suchfilter, ungespeicherte Notize
 Enginepfad, Spielername und Profile werden mit Revisionsprüfung in PostgreSQL gespeichert. Eine gleichzeitige Änderung liefert einen sichtbaren Konflikt und erhält den Entwurf. **Installation prüfen** und Speichern prüfen die Version und eine echte GNUbg-Positionsbewertung einschließlich Netzgewichten mit insgesamt zehn Sekunden Zeitlimit. Der Pfad gehört zum Rechner des Rust-Backends. Ungültige Einstellungen ersetzen keine funktionierende Konfiguration. Sprache und Theme bleiben lokale Browserpräferenzen.
 
 Jeder neue Analyseauftrag erhält eine unveränderliche Enginekonfiguration; explizite oder gespeicherte Ply stehen am Auftrag. Aktive Deduplizierung berücksichtigt neben Ziel/Umfang/Ply auch den Enginepfad und die Version. Läuft ein älterer Auftrag nach einer externen Ersetzung des Binary am gleichen Pfad weiter, schlägt er mit Diagnose fehl, statt Ergebnisse verschiedener Versionen zu mischen. Bereits gespeicherte Match-Checkpoints bleiben erhalten. Legacy-Aufträge ohne Snapshot verwenden weiterhin die beim Backendstart konfigurierte Engine. MAT-Importe verwenden den aktuell gespeicherten GNUbg-Pfad.
+
+## Position Browser und gespeicherte Suchen
+
+**Positionen** ist eine eigene Hauptansicht. Die Suche umfasst Datenbank, Freitext, Spieler am Zug, Matchname, Turnier, Runde, exakte Tags, Kommentare, Checker-ID, Matchpunkte, Wurf, Spielstand, Crawford, Cube-Wert sowie vorhandene lokale Analyse und nativen Equity-Verlust. Ein einzelner Würfel passt auf beide Würfel; ein Paar wird unabhängig von seiner Reihenfolge gesucht. Fehlende Analysewerte bleiben unbekannt. Native Fehlerwerte nennen ihre tatsächliche Engine und Tiefe. Importierte/Buchanalysen werden dafür nicht als lokale Fehlerbewertung ausgegeben.
+
+Treffer behalten ihre vollständigen Positions-/Match-IDs einschließlich Wurf, Score und Cube. Notizen werden nur von passenden Ebenen berücksichtigt: Match, betreffende Partie, Position und zugehöriger Checkerzug. Ein Kommentar zu einem anderen Zug macht nicht das ganze Match zum Treffer. Die erste Version durchsucht gespeicherte Checkerentscheidungen; Cube-Entscheidungen bleiben über Statistik und Cube-/Zugnotizen erreichbar. Eine Vorschau zeigt die Ausgangsstellung, **Analyse öffnen** führt zum exakten Zug im Analysearbeitsplatz.
+
+Benannte Suchdefinitionen liegen mit Schema- und Änderungsrevision in PostgreSQL. Laden, neu speichern, aktualisieren/umbenennen und löschen stehen unter **Gespeicherte Suchen** bereit. Gleichzeitige Änderungen liefern HTTP 409 und erhalten den Entwurf. Ein Bezug zu einer gelöschten Datenbank wird sichtbar und führt nicht stillschweigend zu einer globalen Suche. Pagination bindet den Cursor an die vollständige Filterdefinition; beim Rückwechsel bleibt die geladene Ergebnisfolge mit Vorschau und Auswahl erhalten und wird aktualisiert.
+
+Bis zu 200 ausgewählte Treffer lassen sich in einen neuen oder bestehenden Lernstapel übernehmen. Jede Position erhält ein Ergebnis: hinzugefügt, aktualisiert, bereits vertreten, Analyse erforderlich oder nicht mehr vorhanden. Nur verwendbare abgeschlossene lokale Lösungen liefern Lernantworten; fehlende oder nicht auswertbare Analysen erzeugen keine erfundene Karte. Identische Lernfragen teilen die vorhandene FSRS-Historie. **Dieses Deck lernen** öffnet den bestehenden Lernmodus ohne eine alte aufgedeckte Antwort mitzunehmen; **Gesamtes Deck als Anki herunterladen** verwendet den vorhandenen Rust-APKG-Export. Das Deck-Limit bleibt 1.000 Karten, ein Grenzverstoß übernimmt keine Teilmenge.
+
+Der sichtbare Importknopf wurde aus dem Header entfernt. Import und Mehrfachimport bleiben in der Matchdatenbank verfügbar, ebenso der gemeinsame Dateieingang und Drop auf der Startansicht.
 
 ## Zugvorschau und interaktive Statistiken
 
@@ -205,6 +219,10 @@ Ein Upload enthält genau eine Datei; Limit: **16 MiB einschließlich Multipart-
 | GET | `/api/matches/{id}/analysis?game_no=` | Letzter Auftrag des Spielumfangs; ohne `game_no` letzter Matchauftrag, sonst `null` |
 | GET | `/api/jobs/{id}/moves?game_no=&after=&limit=&errors_only=&player=&kind=&severity=` | Paginierte Zugbewertung; kombinierbare Partie-, Spieler-, Checker-/Cube- und Fehlerschwerefilter; Cursorprüfung |
 | GET | `/api/jobs/{id}/statistics` | Native Match-/Partiestatistik mit Analyseabdeckung und vorhandenen PR-Werten |
+| GET | `/api/position-browser?filters=&after=&limit=` | Kontextbezogene Checkerpositionssuche; URL-kodierte JSON-Definition mit schema_version 1 |
+| GET/POST | `/api/position-filters` | Gespeicherte Suchdefinitionen auflisten/anlegen |
+| PUT/DELETE | `/api/position-filters/{id}` | Mit expected_version aktualisieren oder löschen |
+| POST | `/api/decks/{id}/positions` | Bis zu 200 Positions-UUIDs mit einzelnem Übernahmeergebnis in einen Lernstapel übernehmen |
 
 ```sh
 curl -F file=@backend/tests/fixtures/tutorial.mat http://127.0.0.1:8787/api/imports

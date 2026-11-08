@@ -19,6 +19,7 @@ use axum::{
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
+use std::collections::BTreeMap;
 use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
 
@@ -66,6 +67,39 @@ pub struct AddCardsResult {
     pub added: i64,
     pub updated: i64,
     pub total: i64,
+}
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AddPositions {
+    /// Saved position UUIDs in selection order. Every occurrence receives an outcome.
+    #[schema(min_items = 1, max_items = 200)]
+    pub position_ids: Vec<Uuid>,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PositionAddStatus {
+    Added,
+    Updated,
+    Duplicate,
+    AnalysisRequired,
+    NotFound,
+}
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct PositionAddItem {
+    pub position_id: Uuid,
+    pub status: PositionAddStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub card_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct AddPositionsResult {
+    pub added: i64,
+    pub updated: i64,
+    pub total: i64,
+    /// Outcomes in the same order as the request, including repeated UUIDs.
+    pub items: Vec<PositionAddItem>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CardSource {
@@ -233,6 +267,7 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/decks", get(decks).post(create_deck))
         .route("/api/decks/{id}/cards", get(cards).post(add_cards))
+        .route("/api/decks/{id}/positions", post(add_positions))
         .route("/api/decks/{id}/export.apkg", get(export_deck))
         .route("/api/decks/{id}/next", get(next_card))
         .route("/api/cards/{id}/reveal", post(reveal))
@@ -246,6 +281,7 @@ pub fn routes() -> Router<AppState> {
         create_deck,
         cards,
         add_cards,
+        add_positions,
         export_deck,
         next_card,
         reveal,
@@ -256,6 +292,10 @@ pub fn routes() -> Router<AppState> {
         CreateDeck,
         AddCards,
         AddCardsResult,
+        AddPositions,
+        AddPositionsResult,
+        PositionAddItem,
+        PositionAddStatus,
         CardSource,
         CardSolution,
         CardAnswer,
@@ -360,46 +400,192 @@ async fn add_cards(
             "Batch exceeds 1000 cards; narrow the player or minimum-loss filter",
         ));
     }
-    // Collapse repeated decisions to one final payload, and lock cards in stable order.
-    // This also prevents opposite source orders in two concurrent deck imports from deadlocking.
-    let mut unique = std::collections::BTreeMap::new();
+    // Keep the legacy last-payload-wins behavior for repeated source decisions.
+    let mut unique = BTreeMap::new();
     for c in contents {
-        unique.insert(
-            format!(
-                "{}:{}:{}",
-                c.position.position_id, c.position.gnubg_match_id, c.kind
-            ),
-            c,
-        );
+        unique.insert(card_signature(&c), c);
     }
-    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
+    let written = write_cards(&state.pool, id, unique).await?;
+    let added = written.cards.values().filter(|card| card.added).count() as i64;
+    Ok(Json(AddCardsResult {
+        added,
+        // The existing single-source API counts all existing memberships as updated.
+        updated: written.cards.len() as i64 - added,
+        total: written.total,
+    }))
+}
+
+#[utoipa::path(post,path="/api/decks/{id}/positions",params(("id"=Uuid,Path)),request_body=AddPositions,responses((status=200,body=AddPositionsResult),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
+async fn add_positions(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    LearningJson(body): LearningJson<AddPositions>,
+) -> ApiResult<Json<AddPositionsResult>> {
+    require_deck(&state.pool, id).await?;
+    if !(1..=200).contains(&body.position_ids.len()) {
+        return Err(ApiError::invalid("position_ids must contain 1..200 UUIDs"));
+    }
+    let mut unique = BTreeMap::new();
+    let mut items = Vec::with_capacity(body.position_ids.len());
+    let mut resolved = Vec::with_capacity(body.position_ids.len());
+    for position_id in body.position_ids {
+        let request = AddCards {
+            game_no: None,
+            position_id: Some(position_id),
+            job_id: None,
+            min_loss: None,
+            player: None,
+        };
+        // Use the same native-source selection and solutions as single-card imports.
+        // Only expected missing/unanalysed sources become item outcomes; database or
+        // malformed native-result errors must fail the whole request before any writes.
+        let (status, message, source) = match content::from_source(&state.pool, &request).await {
+            Ok(mut contents) => {
+                let content = contents.pop().ok_or_else(|| {
+                    ApiError::from(anyhow::anyhow!("Position source returned no learning card"))
+                })?;
+                if !has_usable_checker_solution(&content.solution) {
+                    (
+                        PositionAddStatus::AnalysisRequired,
+                        Some("Analyze this position again; its selected native analysis has no usable checker solution".into()),
+                        None,
+                    )
+                } else {
+                    let signature = card_signature(&content);
+                    let first = !unique.contains_key(&signature);
+                    unique.entry(signature.clone()).or_insert(content);
+                    (PositionAddStatus::Duplicate, None, Some((signature, first)))
+                }
+            }
+            Err(ApiError(StatusCode::NOT_FOUND, message)) => {
+                (PositionAddStatus::NotFound, Some(message), None)
+            }
+            Err(ApiError(StatusCode::UNPROCESSABLE_ENTITY, message)) => {
+                (PositionAddStatus::AnalysisRequired, Some(message), None)
+            }
+            Err(error) => return Err(error),
+        };
+        items.push(PositionAddItem {
+            position_id,
+            status,
+            card_id: None,
+            message,
+        });
+        resolved.push(source);
+    }
+    let written = write_cards(&state.pool, id, unique).await?;
+    let mut added = 0;
+    let mut updated = 0;
+    for (item, source) in items.iter_mut().zip(resolved) {
+        if let Some((signature, first)) = source {
+            let card = &written.cards[&signature];
+            item.card_id = Some(card.id);
+            if first && card.added {
+                item.status = PositionAddStatus::Added;
+                added += 1;
+            } else if first && card.changed {
+                item.status = PositionAddStatus::Updated;
+                updated += 1;
+            }
+        }
+    }
+    Ok(Json(AddPositionsResult {
+        added,
+        updated,
+        total: written.total,
+        items,
+    }))
+}
+
+fn card_signature(content: &CardContent) -> String {
+    format!(
+        "{}:{}:{}",
+        content.position.position_id, content.position.gnubg_match_id, content.kind
+    )
+}
+
+// Bulk selection reports unavailable historical native results explicitly, while
+// retaining the existing single-source endpoint and its source priority unchanged.
+fn has_usable_checker_solution(solution: &CardSolution) -> bool {
+    if let Some(decision) = &solution.decision {
+        !decision.best.trim().is_empty()
+            && match decision.evaluation_status.as_str() {
+                "forced" => decision.equity_loss == 0.0,
+                "evaluated" => {
+                    decision.played_equity.is_some_and(f64::is_finite)
+                        && decision.best_equity.is_some_and(f64::is_finite)
+                }
+                _ => false,
+            }
+    } else {
+        solution
+            .candidates
+            .first()
+            .is_some_and(|candidate| !candidate.notation.trim().is_empty())
+    }
+}
+
+struct CardWrite {
+    id: Uuid,
+    added: bool,
+    changed: bool,
+}
+struct WrittenCards {
+    cards: BTreeMap<String, CardWrite>,
+    total: i64,
+}
+
+async fn write_cards(
+    pool: &PgPool,
+    deck_id: Uuid,
+    unique: BTreeMap<String, CardContent>,
+) -> ApiResult<WrittenCards> {
+    let mut tx = pool.begin().await.map_err(anyhow::Error::from)?;
     // Serializing deck mutations keeps the size bound valid under concurrent requests.
     sqlx::query("SELECT id FROM decks WHERE id=$1 FOR UPDATE")
-        .bind(id)
-        .fetch_one(&mut *tx)
+        .bind(deck_id)
+        .fetch_optional(&mut *tx)
         .await
-        .map_err(anyhow::Error::from)?;
-    let mut added = 0i64;
-    let mut updated = 0i64;
+        .map_err(anyhow::Error::from)?
+        .ok_or_else(ApiError::missing)?;
+    let mut cards = BTreeMap::new();
+    // Byte-sorted signatures match export's C collation and prevent opposite source
+    // orders in concurrent imports from acquiring shared-card locks in reverse order.
     for (signature, c) in unique {
         let payload = serde_json::to_value(&c).map_err(anyhow::Error::from)?;
-        let (card_id,):(Uuid,)=sqlx::query_as("INSERT INTO learning_cards(id,signature,payload) VALUES($1,$2,$3) ON CONFLICT(signature) DO UPDATE SET payload=EXCLUDED.payload,version=learning_cards.version+CASE WHEN learning_cards.payload IS DISTINCT FROM EXCLUDED.payload THEN 1 ELSE 0 END,updated_at=now() RETURNING id").bind(Uuid::new_v4()).bind(signature).bind(payload).fetch_one(&mut *tx).await.map_err(anyhow::Error::from)?;
+        let new_id = Uuid::new_v4();
+        // ON CONFLICT locks even unchanged rows, so a later lookup observes the exact
+        // shared card protected by this transaction. No FSRS fields are overwritten.
+        let changed_id: Option<Uuid> = sqlx::query_scalar("INSERT INTO learning_cards(id,signature,payload) VALUES($1,$2,$3) ON CONFLICT(signature) DO UPDATE SET payload=EXCLUDED.payload,version=learning_cards.version+1,updated_at=now() WHERE learning_cards.payload IS DISTINCT FROM EXCLUDED.payload RETURNING id")
+            .bind(new_id).bind(&signature).bind(payload).fetch_optional(&mut *tx).await.map_err(anyhow::Error::from)?;
+        let card_id = if let Some(card_id) = changed_id {
+            card_id
+        } else {
+            sqlx::query_scalar("SELECT id FROM learning_cards WHERE signature=$1")
+                .bind(&signature)
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(anyhow::Error::from)?
+        };
         let result = sqlx::query(
             "INSERT INTO deck_cards(deck_id,card_id) VALUES($1,$2) ON CONFLICT DO NOTHING",
         )
-        .bind(id)
+        .bind(deck_id)
         .bind(card_id)
         .execute(&mut *tx)
         .await
         .map_err(anyhow::Error::from)?;
-        if result.rows_affected() == 1 {
-            added += 1;
-        } else {
-            updated += 1;
-        }
+        cards.insert(
+            signature,
+            CardWrite {
+                id: card_id,
+                added: result.rows_affected() == 1,
+                changed: changed_id.is_some_and(|id| id != new_id),
+            },
+        );
     }
     let total: i64 = sqlx::query_scalar("SELECT count(*) FROM deck_cards WHERE deck_id=$1")
-        .bind(id)
+        .bind(deck_id)
         .fetch_one(&mut *tx)
         .await
         .map_err(anyhow::Error::from)?;
@@ -409,11 +595,7 @@ async fn add_cards(
         ));
     }
     tx.commit().await.map_err(anyhow::Error::from)?;
-    Ok(Json(AddCardsResult {
-        added,
-        updated,
-        total,
-    }))
+    Ok(WrittenCards { cards, total })
 }
 #[utoipa::path(get,path="/api/decks/{id}/next",params(("id"=Uuid,Path)),responses((status=200,body=NextCard),(status=404,body=ErrorBody)),tag="Learning")]
 async fn next_card(
