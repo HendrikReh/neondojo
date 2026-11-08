@@ -16,15 +16,15 @@ test('played move arrows and before/after remain tied to the original decision',
   });
   await expect(page.locator('.analysis-workspace .board')).toBeVisible();
   const code = await page.locator('.position-code code').innerText();
-  const arrows = page.getByRole('button', { name: 'Move arrows', exact: true });
+  const arrows = page.getByRole('button', { name: 'Arrows', exact: true });
   await expect(arrows).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('.analysis-workspace .move-arrows')).toBeVisible();
-  await page.getByRole('button', { name: 'Before move', exact: true }).click();
+  await page.getByRole('button', { name: 'Initial', exact: true }).click();
   await expect(page.locator('.analysis-workspace .move-arrows')).toHaveCount(0);
   await expect(page.locator('.board-shell .player-bar').last()).toContainText(
     '167 pips',
   );
-  await page.getByRole('button', { name: 'After move', exact: true }).click();
+  await page.getByRole('button', { name: 'Final', exact: true }).click();
   await expect(page.locator('.board-shell .player-bar').last()).toContainText(
     '163 pips',
   );
@@ -33,9 +33,8 @@ test('played move arrows and before/after remain tied to the original decision',
     'before this move',
   );
   await page.getByRole('button', { name: 'Next move', exact: true }).click();
-  await expect(page.locator('.board-review-selection')).toContainText(
-    '8/4 6/4',
-  );
+  await expect(page.locator('.board-review-selection')).toHaveCount(0);
+  await expect(page.locator('.board-navigation')).toContainText('8/4 6/4');
   await expect(page.locator('.board-shell .player-bar').first()).toContainText(
     '161 pips',
   );
@@ -68,25 +67,23 @@ test('file, book and native candidates preview explicitly and source changes res
     'GNU Backgammon',
   );
   await expect(page.locator('.board-shell .move-arrows')).toBeVisible();
-  await page.getByRole('button', { name: 'After move', exact: true }).click();
+  await page.getByRole('button', { name: 'Final', exact: true }).click();
   await expect(page.locator('.board-shell')).toHaveAttribute(
     'data-preview-mode',
     'after',
   );
   await page.getByRole('tab', { name: 'Opening book', exact: true }).click();
-  await expect(page.locator('.board-review-selection')).not.toContainText(
-    'Candidate 2',
-  );
+  await expect(page.locator('.board-review-selection')).toHaveCount(0);
   await imported
     .getByRole('button', { name: 'Preview best move', exact: true })
     .click();
   await expect(page.locator('.board-review-selection')).toContainText(
     'BackgammonDB',
   );
-  await page.getByRole('button', { name: 'Played move', exact: true }).click();
-  await expect(page.locator('.board-review-selection')).not.toContainText(
-    'Candidate',
-  );
+  await page
+    .getByRole('button', { name: 'Reset preview', exact: true })
+    .click();
+  await expect(page.locator('.board-review-selection')).toHaveCount(0);
   await page
     .getByRole('button', { name: 'Analyze position', exact: true })
     .click();
@@ -101,9 +98,7 @@ test('file, book and native candidates preview explicitly and source changes res
     'GNU Backgammon',
   );
   await page.getByRole('button', { name: 'Next move', exact: true }).click();
-  await expect(page.locator('.board-review-selection')).not.toContainText(
-    'Candidate',
-  );
+  await expect(page.locator('.board-review-selection')).toHaveCount(0);
 });
 
 test('native match and game metrics open the exact visible decision filters', async ({
@@ -304,7 +299,7 @@ test('all board themes render the same arrows and projected checker counts', asy
           .sort(),
       );
     expect(steps, theme).toEqual(['6:5:1', '8:5:3']);
-    await page.getByRole('button', { name: 'After move', exact: true }).click();
+    await page.getByRole('button', { name: 'Final', exact: true }).click();
     await expect(board.locator('.player-bar').last()).toContainText('163 pips');
     await expect(board.locator('.move-arrows')).toHaveCount(0);
   }

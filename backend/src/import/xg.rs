@@ -364,6 +364,8 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
     let mut cube = 1;
     let mut owner = 0; // XG player +/-1; zero is centered.
     let mut game_crawford = false;
+    let mut game_scores = [0, 0];
+    let mut root_end = 0;
     let mut board = super::sgf::initial_board();
     let mut pending_cube_analysis = None;
     for (index, record) in bytes.chunks_exact(RECORD_BYTES).enumerate().skip(1) {
@@ -379,6 +381,7 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
                     white_score >= 0 && black_score >= 0,
                     "XG: negative match score is not supported"
                 );
+                game_scores = [white_score, black_score];
                 game_crawford = bool_at(record, 20)?;
                 game_in_progress = bool_at(record, 52)?;
                 let initial: Vec<i32> =
@@ -405,6 +408,7 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
                 if !rules.is_empty() {
                     out.push_str(&format!("RU[{}]", rules.join(":")));
                 }
+                root_end = out.len();
                 in_game = true;
                 board = super::sgf::initial_board();
                 checker_no = 0;
@@ -560,9 +564,32 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
             }
             4 => {
                 ensure!(in_game, "XG: game footer outside game");
-                // Scores for the next game are authoritative in its header.
-                match_decided =
-                    length > 0 && (i32_at(record, 12)? >= length || i32_at(record, 16)? >= length);
+                let final_scores = [i32_at(record, 12)?, i32_at(record, 16)?];
+                match_decided = length > 0 && final_scores.iter().any(|s| *s >= length);
+                // tsFooterGame contains the actual final scores. Pointswon can
+                // hold producer sentinels for match resignations (e.g. 1998),
+                // so derive points only from a consistent, one-sided delta.
+                if length > 0 && !game_in_progress {
+                    let side = match i32_at(record, 24)? {
+                        1 => Some(0),
+                        -1 => Some(1),
+                        _ => None,
+                    };
+                    if let Some(side) = side
+                        && final_scores[1 - side] == game_scores[1 - side]
+                        && let Some(points) = final_scores[side].checked_sub(game_scores[side])
+                        && (1..=32767).contains(&points)
+                    {
+                        let color = if side == 0 { 'W' } else { 'B' };
+                        let termination = i32_at(record, 32)?;
+                        let resignation = if (100..1000).contains(&termination) {
+                            "R"
+                        } else {
+                            ""
+                        };
+                        out.insert_str(root_end, &format!("RE[{color}+{points}{resignation}]"));
+                    }
+                }
                 out.push_str(")\n");
                 in_game = false;
             }
@@ -618,6 +645,59 @@ mod tests {
             "cube analysis must survive too"
         );
     }
+    #[test]
+    fn completed_match_preserves_final_footer_score_in_sgf() {
+        let sgf = xg_to_sgf(include_bytes!("../../tests/fixtures/WC2014.xg")).unwrap();
+        let trees = super::super::sgf::parse_trees(&sgf).unwrap();
+        assert_eq!(
+            trees.last().unwrap()[0].get("RE"),
+            Some(&vec!["W+2".to_owned()])
+        );
+        let metadata = crate::databases::source_metadata(&sgf);
+        assert_eq!(
+            (metadata.white_score, metadata.black_score),
+            (Some(11), Some(9))
+        );
+        assert_eq!(metadata.result_state, "completed");
+    }
+
+    #[test]
+    fn unknown_footer_cannot_supply_a_match_outcome() {
+        let mut records = main_records(include_bytes!("../../tests/fixtures/WC2014.xg")).unwrap();
+        let last = records
+            .chunks_exact(RECORD_BYTES)
+            .rposition(|r| r[8] == 4)
+            .unwrap()
+            * RECORD_BYTES;
+        set_u32(&mut records, last + 24, 0); // no recorded winner
+        let sgf = xg_to_sgf(&wrap(&records, None)).unwrap();
+        let metadata = crate::databases::source_metadata(&sgf);
+        assert_eq!(
+            (metadata.white_score, metadata.black_score),
+            (Some(9), Some(9))
+        );
+        assert_eq!(metadata.result_state, "ongoing");
+    }
+
+    #[test]
+    fn resignation_uses_recorded_score_delta_when_points_field_is_a_sentinel() {
+        let mut records = main_records(include_bytes!("../../tests/fixtures/WC2014.xg")).unwrap();
+        let last = records
+            .chunks_exact(RECORD_BYTES)
+            .rposition(|r| r[8] == 4)
+            .unwrap()
+            * RECORD_BYTES;
+        set_u32(&mut records, last + 28, 1998);
+        set_u32(&mut records, last + 32, 104);
+        let sgf = xg_to_sgf(&wrap(&records, None)).unwrap();
+        let metadata = crate::databases::source_metadata(&sgf);
+        assert_eq!(
+            (metadata.white_score, metadata.black_score),
+            (Some(11), Some(9))
+        );
+        assert_eq!(metadata.result_state, "completed");
+    }
+
     #[test]
     fn native_payload_does_not_inflate_long_matches_past_sgf_limits() {
         let value = serde_json::json!({"raw":"precision retained ".repeat(30_000)});
@@ -756,6 +836,9 @@ mod tests {
         assert_eq!(parsed.positions.len(), expected);
         assert!(expected > 0);
         assert!(sgf.contains("Jacoby"));
+        let metadata = crate::databases::source_metadata(&sgf);
+        assert_eq!(metadata.result_state, "unknown");
+        assert_eq!((metadata.white_score, metadata.black_score), (None, None));
         assert!(parsed.positions.iter().all(|p| p.game_no == 1));
         // Ending inside a game is still an incomplete stream.
         records.truncate(end * RECORD_BYTES);

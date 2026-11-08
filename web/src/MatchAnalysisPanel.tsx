@@ -23,12 +23,13 @@ import {
   type StatisticsAction,
 } from './match-statistics-api';
 import { useStatisticsText } from './review-statistics-messages';
+import { DEFAULT_ANALYSIS_PLIES } from './analysis-depth';
 
-const emptyFilter: MatchDecisionFilter = {
+const defaultFilter: MatchDecisionFilter = {
   player: '',
   kind: '',
   severity: '',
-  errors_only: false,
+  errors_only: true,
 };
 
 const severityKeys: Record<string, TranslationKey> = {
@@ -47,13 +48,17 @@ export default function MatchAnalysisPanel({
   showStatistics = false,
   onShowErrors,
   onGame,
-  defaultPlies = 0,
+  defaultPlies = DEFAULT_ANALYSIS_PLIES,
   configured = true,
   onJob,
   onAccepted,
   onFilterChange,
+  overview = false,
+  selectedPositionId,
 }: {
   match: Match;
+  overview?: boolean;
+  selectedPositionId?: string;
   gameNo?: number;
   onPosition: (id: string) => void;
   controlsTarget?: HTMLElement | null;
@@ -98,10 +103,13 @@ export default function MatchAnalysisPanel({
   const [selection, setSelection] = useState<{
     scope: string;
     filter: MatchDecisionFilter;
-  }>();
-  useEffect(() => setSelection(undefined), [filterScope]);
+  }>({ scope: filterScope, filter: defaultFilter });
+  useEffect(
+    () => setSelection({ scope: filterScope, filter: defaultFilter }),
+    [filterScope],
+  );
   const selected =
-    selection?.scope === filterScope ? selection.filter : emptyFilter;
+    selection.scope === filterScope ? selection.filter : defaultFilter;
   const {
     player,
     kind,
@@ -280,6 +288,7 @@ export default function MatchAnalysisPanel({
             <option value={0}>{t('matchAnalysis.fast')}</option>
             <option value={1}>1-Ply</option>
             <option value={2}>{t('matchAnalysis.thorough')}</option>
+            <option value={3}>3-ply</option>
           </select>
         </label>
         <button
@@ -307,7 +316,8 @@ export default function MatchAnalysisPanel({
     <>
       <div
         id={controlsTarget ? 'inspector-panel-errors' : undefined}
-        role={controlsTarget ? 'tabpanel' : undefined}
+        className={overview ? 'overview-errors' : undefined}
+        role={controlsTarget ? (overview ? 'region' : 'tabpanel') : undefined}
         aria-labelledby={controlsTarget ? 'inspector-tab-errors' : undefined}
         hidden={!showResults}
       >
@@ -316,7 +326,15 @@ export default function MatchAnalysisPanel({
           data-job-id={job?.id}
           aria-label={t(scoped ? 'gameAnalysis.label' : 'matchAnalysis.label')}
         >
+          {overview && !job && (
+            <h2 className="desktop-pane-title">
+              {errorsOnly
+                ? t('matchAnalysis.overview')
+                : text('decisionsByMove')}
+            </h2>
+          )}
           {!controlsTarget && heading}
+          {overview && !controlsTarget && progress}
           {!!error && !controlsTarget && (
             <p className="analysis-error" role="alert">
               {formatError(error)}
@@ -325,8 +343,8 @@ export default function MatchAnalysisPanel({
           {!job && <p className="analysis-empty">{text('noAnalysis')}</p>}
           {job && (
             <>
-              {showResults && progress}
-              {summary && (
+              {showResults && !overview && progress}
+              {summary && !overview && (
                 <>
                   <PlayerStatisticsSummary
                     summary={summary}
@@ -345,7 +363,11 @@ export default function MatchAnalysisPanel({
                 </>
               )}
               <details className="match-move-overview" open>
-                <summary>{t('matchAnalysis.overview')}</summary>
+                <summary>
+                  {errorsOnly
+                    ? t('matchAnalysis.overview')
+                    : text('decisionsByMove')}
+                </summary>
                 <div className="match-analysis-filters">
                   <label>
                     <input
@@ -432,7 +454,10 @@ export default function MatchAnalysisPanel({
                     type="button"
                     className="statistics-reset"
                     onClick={() =>
-                      setSelection({ scope: filterScope, filter: emptyFilter })
+                      setSelection({
+                        scope: filterScope,
+                        filter: defaultFilter,
+                      })
                     }
                   >
                     {text('resetFilters')}
@@ -455,7 +480,15 @@ export default function MatchAnalysisPanel({
                     </thead>
                     <tbody>
                       {rows.map((row) => (
-                        <tr key={row.id}>
+                        <tr
+                          key={row.id}
+                          aria-current={
+                            row.position_uuid &&
+                            row.position_uuid === selectedPositionId
+                              ? 'true'
+                              : undefined
+                          }
+                        >
                           <td>
                             {row.position_uuid ? (
                               <button
@@ -548,6 +581,7 @@ export default function MatchAnalysisPanel({
         </section>
       </div>
       <MatchStatisticsView
+        overview={overview}
         job={job}
         statistics={statistics}
         names={names}
@@ -560,12 +594,13 @@ export default function MatchAnalysisPanel({
             ? statisticsError.error
             : undefined
         }
-        progress={showStatistics ? progress : undefined}
+        progress={showStatistics && !overview ? progress : undefined}
       />
       {controlsTarget &&
         createPortal(
           <>
             {heading}
+            {overview && progress}
             {!!error && (
               <p className="analysis-error" role="alert">
                 {formatError(error)}

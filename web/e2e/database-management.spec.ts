@@ -14,16 +14,27 @@ test('collections, independent copies, filters and metadata work together', asyn
     .getByRole('button', { name: 'Save', exact: true })
     .click();
   await expect(page.locator('.database-sidebar')).toContainText(name);
+  const whitePlayer = `Library ${crypto.randomUUID()}`;
   await page.getByLabel('Match file', { exact: true }).setInputFiles({
     name: 'library.sgf',
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(
-      `(;GM[6]PW[Library ${crypto.randomUUID()}]PB[Opponent]DT[2026-11-08]EV[Test Open]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])`,
+      `(;GM[6]PW[${whitePlayer}]PB[Opponent]DT[2026-11-08]EV[Test Open]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])`,
     ),
   });
   await expect(page.locator('.analysis-workspace .board')).toBeVisible();
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();
   await expect(page.locator('.database-table tbody tr')).toHaveCount(1);
+  await expect(page.locator('.database-table')).toContainText(whitePlayer);
+  await expect(page.locator('.database-table')).toContainText('Opponent');
+  await expect(page.locator('.database-table')).not.toContainText(
+    'library.sgf',
+  );
+  await expect(
+    page
+      .locator('.database-table')
+      .getByRole('columnheader', { name: 'Matches', exact: true }),
+  ).toHaveCount(0);
   await page.locator('.database-table tbody tr').first().click();
   await expect(page.locator('.match-preview .board')).toBeVisible();
   await page
@@ -366,7 +377,7 @@ test('a native full-match analysis supplies GNUbg PR to the match overview', asy
   await page.getByLabel('Search matches', { exact: true }).fill(player);
   const row = page.locator('.database-table tbody tr');
   await expect(row).toHaveCount(1);
-  await expect(row.locator('td').nth(3)).toHaveText(/\d+\.\d{2}/);
-  await expect(row.locator('td').nth(5)).toHaveText(/\d+\.\d{2}/);
+  await expect(row.locator('td').nth(2)).toHaveText(/\d+\.\d{2}/);
+  await expect(row.locator('td').nth(4)).toHaveText(/\d+\.\d{2}/);
   await expect(row).toContainText('Completed');
 });

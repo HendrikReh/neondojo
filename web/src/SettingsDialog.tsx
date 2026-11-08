@@ -1,3 +1,4 @@
+import { ANALYSIS_PLIES, isAnalysisDepth } from './analysis-depth';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import Board from './Board';
 import type { Position } from './api';
@@ -153,7 +154,7 @@ export default function SettingsDialog({
     saveError instanceof SettingsApiError && saveError.status === 409;
   const engine = engines.find(({ id }) => id === 'gnubg');
   const selectedTheme = themes.find(({ id }) => id === draftTheme) ?? themes[0];
-  const plies = engine?.plies.filter((ply) => [0, 1, 2].includes(ply)) ?? [];
+  const plies = engine?.plies.filter(isAnalysisDepth) ?? [];
 
   function diagnostic(error: unknown) {
     if (error instanceof SettingsApiError && error.status === 200)
@@ -400,13 +401,15 @@ export default function SettingsDialog({
                         update({ analysis_plies: Number(event.target.value) })
                       }
                     >
-                      {[0, 1, 2].map((ply) => (
+                      {ANALYSIS_PLIES.map((ply) => (
                         <option
                           key={ply}
                           value={ply}
                           disabled={!plies.includes(ply)}
                         >
-                          {t((['fast', 'deep', 'thorough'] as const)[ply])}
+                          {ply === 3
+                            ? '3-ply'
+                            : t((['fast', 'deep', 'thorough'] as const)[ply])}
                         </option>
                       ))}
                     </select>

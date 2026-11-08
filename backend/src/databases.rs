@@ -1154,11 +1154,32 @@ pub async fn backfill_source_metadata(pool: &PgPool) -> anyhow::Result<usize> {
     let ids:Vec<Uuid>=sqlx::query_scalar("SELECT id FROM matches WHERE NOT source_metadata_loaded ORDER BY id LIMIT 100 FOR UPDATE SKIP LOCKED").fetch_all(&mut *tx).await?;
     for id in &ids {
         // Fetch sources one at a time: a batch must not retain 100 large SGFs.
-        let sgf: String = sqlx::query_scalar("SELECT sgf FROM matches WHERE id=$1")
-            .bind(id)
-            .fetch_one(&mut *tx)
-            .await?;
-        let m = source_metadata(&sgf);
+        let (sgf, format, original, version): (String, String, Vec<u8>, i64) =
+            sqlx::query_as("SELECT sgf,format,original,metadata_version FROM matches WHERE id=$1")
+                .bind(id)
+                .fetch_one(&mut *tx)
+                .await?;
+        let m = tokio::task::spawn_blocking(move || {
+            let mut metadata = source_metadata(&sgf);
+            if version == 0 {
+                // Earlier native converters dropped final-game outcomes. Recover
+                // metadata from immutable original bytes without rewriting SGF,
+                // position IDs, annotations, imported analysis, or move catalogs.
+                let canonical = match format.as_str() {
+                    "xg" => crate::import::xg_to_sgf(&original),
+                    "bgf" => crate::import::bgf_to_sgf(&original),
+                    _ => return metadata,
+                };
+                if let Ok(canonical) = canonical {
+                    let result = source_metadata(&canonical);
+                    metadata.result_state = result.result_state;
+                    metadata.white_score = result.white_score;
+                    metadata.black_score = result.black_score;
+                }
+            }
+            metadata
+        })
+        .await?;
         sqlx::query("UPDATE matches SET played_on=$2,tournament=$3,round=$4,place=$5,result_state=$6,white_score=$7,black_score=$8,source_metadata_loaded=true WHERE id=$1 AND metadata_version=0").bind(id).bind(m.played_on).bind(m.tournament).bind(m.round).bind(m.place).bind(m.result_state).bind(m.white_score).bind(m.black_score).execute(&mut *tx).await?;
         sqlx::query("UPDATE matches SET source_metadata_loaded=true WHERE id=$1")
             .bind(id)

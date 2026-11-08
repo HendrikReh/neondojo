@@ -258,6 +258,7 @@ test('returning to an analysis filter starts at its first page', async ({
   await expect(
     analysis.getByText('Partieanalyse abgeschlossen', { exact: true }),
   ).toBeVisible();
+  await analysis.getByLabel('Nur Auffälligkeiten').uncheck();
   await expect(analysis.locator('tbody tr')).toHaveCount(50);
   const first = await analysis.locator('tbody tr').first().textContent();
   await analysis

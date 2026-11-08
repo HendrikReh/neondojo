@@ -42,5 +42,14 @@ export function useBackgroundJobs() {
       clearInterval(timer);
     };
   }, [ids, track]);
-  return { active, track };
+  const assessmentRevision = Object.values(tracked)
+    .filter(
+      (job) =>
+        job.status === 'completed' &&
+        (job.kind === 'analysis' || job.kind === 'match'),
+    )
+    .map((job) => `${job.id}:${job.updated_at}`)
+    .sort()
+    .join('|');
+  return { active, track, assessmentRevision };
 }

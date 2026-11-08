@@ -523,7 +523,7 @@ pub(crate) async fn copy_records(
 }
 /// Earlier libraries already retain exact originals. Catalog lazily from them,
 /// while holding the match row lock so concurrent readers cannot duplicate rows.
-async fn ensure_catalog(pool: &PgPool, id: Uuid) -> Result<bool> {
+pub(crate) async fn ensure_catalog(pool: &PgPool, id: Uuid) -> Result<bool> {
     let loaded: Option<bool> =
         sqlx::query_scalar("SELECT imported_analysis_loaded FROM matches WHERE id=$1")
             .bind(id)

@@ -8,14 +8,12 @@ export default function BoardReviewControls({
   view,
   preview,
   selected,
-  played,
   onView,
   onPlayed,
 }: {
   view: BoardView;
   preview: MovePreview;
   selected?: PreviewCandidate;
-  played: string;
   onView: (view: BoardView) => void;
   onPlayed: () => void;
 }) {
@@ -36,25 +34,24 @@ export default function BoardReviewControls({
           </button>
         ))}
       </div>
-      <div className="board-review-selection">
-        <button
-          type="button"
-          className="played-preview-button"
-          aria-pressed={!selected}
-          onClick={onPlayed}
-        >
-          {l('played')}
-        </button>
-        <strong>
-          {selected
-            ? l('candidate', {
-                rank: selected.rank,
-                move: formatDecision(selected.notation),
-              })
-            : formatDecision(played)}
-        </strong>
-        {selected && <small>{selected.source}</small>}
-      </div>
+      {selected && (
+        <div className="board-review-selection">
+          <button
+            type="button"
+            className="played-preview-button"
+            onClick={onPlayed}
+          >
+            {l('reset')}
+          </button>
+          <strong>
+            {l('candidate', {
+              rank: selected.rank,
+              move: formatDecision(selected.notation),
+            })}
+          </strong>
+          <small>{selected.source}</small>
+        </div>
+      )}
       {!preview.ok ? (
         <p className="board-review-warning" role="status">
           {l('unavailable')}

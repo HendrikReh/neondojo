@@ -269,7 +269,8 @@
   padding: 8px 6px;
   font-size: 11px;
 }
-.inspector-tabs button[aria-selected='true'] {
+.inspector-tabs button[aria-selected='true'],
+.inspector-tabs button[aria-selected='true']:hover:not(:disabled) {
   background: #355d42;
   color: white;
 }
@@ -438,16 +439,6 @@
   gap: 12px;
   flex-wrap: wrap;
   margin-bottom: 14px;
-}
-.background-job-indicator {
-  background: #eaf0e1;
-  border-color: #d4dfc9;
-  color: #35563f;
-  font-size: 12px;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin: 0 0 18px;
 }
 .database-heading {
   display: flex;
@@ -770,11 +761,6 @@
   }
   .analysis-welcome h1 {
     font-size: 28px;
-  }
-  .background-job-indicator {
-    max-width: 100%;
-    flex-wrap: wrap;
-    font-size: 11px;
   }
 }
 

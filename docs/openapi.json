@@ -2341,6 +2341,80 @@
         }
       }
     },
+    "/api/matches/{id}/move-assessments": {
+      "get": {
+        "tags": [
+          "Match analysis"
+        ],
+        "operationId": "assessments",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "game_no",
+            "in": "query",
+            "description": "One source game, required so loading history never scans the whole match.",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "job_id",
+            "in": "query",
+            "description": "Selected native match-analysis job; its scope must include this game.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GameMoveAssessments"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/matches/{id}/source": {
       "get": {
         "tags": [
@@ -3922,7 +3996,8 @@
           "analysis_plies": {
             "type": "integer",
             "format": "int32",
-            "maximum": 2,
+            "default": 2,
+            "maximum": 3,
             "minimum": 0
           },
           "gnubg_path": {
@@ -3946,6 +4021,13 @@
             "description": "Expected revision on PUT; a successful write increments it by one."
           }
         }
+      },
+      "AssessmentSource": {
+        "type": "string",
+        "enum": [
+          "native",
+          "imported"
+        ]
       },
       "BookChecker": {
         "type": "object",
@@ -5130,6 +5212,39 @@
           }
         }
       },
+      "GameMoveAssessments": {
+        "type": "object",
+        "required": [
+          "match_id",
+          "game_no",
+          "items"
+        ],
+        "properties": {
+          "game_no": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MoveAssessment"
+            },
+            "description": "Unknown, unavailable, invalid and non-comparable evaluations are omitted."
+          },
+          "job_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Requested job identity, null when the caller allowed automatic selection."
+          },
+          "match_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "Health": {
         "type": "object",
         "required": [
@@ -5449,7 +5564,7 @@
           "plies": {
             "type": "integer",
             "format": "int32",
-            "maximum": 2,
+            "maximum": 3,
             "minimum": 0
           },
           "position_uuid": {
@@ -5618,8 +5733,8 @@
               "null"
             ],
             "format": "int32",
-            "description": "GNUbg search depth, 0 to 2. Omitted uses saved analysis depth.",
-            "maximum": 2,
+            "description": "GNUbg search depth, 0 to 3. Omitted uses saved analysis depth.",
+            "maximum": 3,
             "minimum": 0
           },
           "position_id": {
@@ -5734,7 +5849,7 @@
             ],
             "format": "int32",
             "description": "Native GNUbg checker and cube search depth. Omitted uses saved analysis depth.",
-            "maximum": 2,
+            "maximum": 3,
             "minimum": 0
           }
         }
@@ -5996,6 +6111,58 @@
               "null"
             ],
             "format": "int64"
+          }
+        }
+      },
+      "MoveAssessment": {
+        "type": "object",
+        "required": [
+          "position_id",
+          "severity",
+          "equity_loss",
+          "source",
+          "engine"
+        ],
+        "properties": {
+          "depth": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "depth_plies": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "engine": {
+            "type": "string"
+          },
+          "equity_loss": {
+            "type": "number",
+            "format": "double",
+            "description": "Actual best-minus-played equity, never a default for missing evaluation."
+          },
+          "job_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Native match-analysis or individual-hint job that supplied this result."
+          },
+          "position_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Persisted checker-position UUID, not a GNUbg position encoding."
+          },
+          "severity": {
+            "$ref": "#/components/schemas/MoveSeverity"
+          },
+          "source": {
+            "$ref": "#/components/schemas/AssessmentSource"
           }
         }
       },

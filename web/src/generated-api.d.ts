@@ -516,6 +516,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matches/{id}/move-assessments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["assessments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matches/{id}/source": {
         parameters: {
             query?: never;
@@ -935,7 +951,10 @@ export interface components {
         };
         AppSettings: {
             analysis_engine: string;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @default 2
+             */
             analysis_plies: number;
             gnubg_path: string;
             play_engine: string;
@@ -948,6 +967,8 @@ export interface components {
              */
             version: number;
         };
+        /** @enum {string} */
+        AssessmentSource: "native" | "imported";
         BookChecker: {
             candidates: components["schemas"]["Candidate"][];
             /** Format: int32 */
@@ -1294,6 +1315,19 @@ export interface components {
             game_no: number;
             items: components["schemas"]["StoredMove"][];
         };
+        GameMoveAssessments: {
+            /** Format: int32 */
+            game_no: number;
+            /** @description Unknown, unavailable, invalid and non-comparable evaluations are omitted. */
+            items: components["schemas"]["MoveAssessment"][];
+            /**
+             * Format: uuid
+             * @description Requested job identity, null when the caller allowed automatic selection.
+             */
+            job_id?: string | null;
+            /** Format: uuid */
+            match_id: string;
+        };
         Health: {
             database: boolean;
             gnubg?: string | null;
@@ -1430,7 +1464,7 @@ export interface components {
             kind: components["schemas"]["PositionJobKind"];
             /**
              * Format: int32
-             * @description GNUbg search depth, 0 to 2. Omitted uses saved analysis depth.
+             * @description GNUbg search depth, 0 to 3. Omitted uses saved analysis depth.
              */
             plies?: number | null;
             /**
@@ -1543,6 +1577,29 @@ export interface components {
             items: components["schemas"]["MoveAnalysis"][];
             /** Format: int64 */
             next_cursor?: number | null;
+        };
+        MoveAssessment: {
+            depth?: string | null;
+            /** Format: int32 */
+            depth_plies?: number | null;
+            engine: string;
+            /**
+             * Format: double
+             * @description Actual best-minus-played equity, never a default for missing evaluation.
+             */
+            equity_loss: number;
+            /**
+             * Format: uuid
+             * @description Native match-analysis or individual-hint job that supplied this result.
+             */
+            job_id?: string | null;
+            /**
+             * Format: uuid
+             * @description Persisted checker-position UUID, not a GNUbg position encoding.
+             */
+            position_id: string;
+            severity: components["schemas"]["MoveSeverity"];
+            source: components["schemas"]["AssessmentSource"];
         };
         /**
          * @description Native decision severity, using the saved GNUbg normalized loss categories.
@@ -3320,6 +3377,48 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    assessments: {
+        parameters: {
+            query: {
+                /** @description One source game, required so loading history never scans the whole match. */
+                game_no: number;
+                /** @description Selected native match-analysis job; its scope must include this game. */
+                job_id?: string | null;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GameMoveAssessments"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

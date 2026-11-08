@@ -8,6 +8,7 @@ import SourceAnalysisView from './SourceAnalysisView';
 import type { PreviewCandidate } from './candidate-preview';
 import { useBoardReviewText } from './board-review-messages';
 import './analysis-sources.css';
+import { DEFAULT_ANALYSIS_PLIES } from './analysis-depth';
 
 export default function AnalysisPanel({
   jobs,
@@ -15,7 +16,7 @@ export default function AnalysisPanel({
   gameNo,
   disabled,
   onAnalyze,
-  defaultPlies = 0,
+  defaultPlies = DEFAULT_ANALYSIS_PLIES,
   positionId,
   sourceRevision = 0,
   onBookSettings,
@@ -142,6 +143,7 @@ export default function AnalysisPanel({
             <option value={0}>{t('analysis.fast')}</option>
             <option value={1}>1-ply</option>
             <option value={2}>{t('analysis.accurate')}</option>
+            <option value={3}>3-ply</option>
           </select>
         </label>
         <button

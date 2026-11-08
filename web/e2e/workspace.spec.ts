@@ -124,10 +124,10 @@ test('inspector tabs support arrow, Home and End navigation', async ({
   await notes.focus();
   await page.keyboard.press('Home');
   await expect(
-    page.getByRole('tab', { name: 'Bewertung', exact: true }),
+    page.getByRole('tab', { name: 'Übersicht', exact: true }),
   ).toBeFocused();
   await expect(
-    page.getByRole('tab', { name: 'Bewertung', exact: true }),
+    page.getByRole('tab', { name: 'Übersicht', exact: true }),
   ).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('End');
   await expect(
@@ -164,7 +164,7 @@ test('an analysis submission error appears once in the errors view', async ({
   ).toHaveCount(1);
 });
 
-test('accepted position jobs remain visible after a position switch during submission', async ({
+test('accepted position jobs remain tracked without a duplicate banner after a position switch', async ({
   page,
 }) => {
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
@@ -201,14 +201,18 @@ test('accepted position jobs remain visible after a position switch during submi
     .click();
   await started;
   await page.getByRole('button', { name: 'Nächster Zug', exact: true }).click();
+  const tracked = () =>
+    page.waitForRequest(
+      (request) => new URL(request.url()).pathname === `/api/jobs/${job!.id}`,
+    );
+  const firstPoll = tracked();
   release();
-  await expect(
-    page.getByRole('button', { name: 'Zur Analyse zurückkehren', exact: true }),
-  ).toBeVisible();
+  await firstPoll;
+  await expect(page.locator('.background-job-indicator')).toHaveCount(0);
+  const backgroundPoll = tracked();
   await page.getByRole('tab', { name: 'Matchdatenbank', exact: true }).click();
-  await expect(
-    page.getByRole('button', { name: 'Zur Analyse zurückkehren', exact: true }),
-  ).toBeVisible();
+  await backgroundPoll;
+  await expect(page.locator('.background-job-indicator')).toHaveCount(0);
 });
 
 test('accepted game jobs remain tracked when the game changes during submission', async ({
@@ -254,11 +258,13 @@ test('accepted game jobs remain tracked when the game changes during submission'
     .click();
   await started;
   await page.getByLabel('Spiel auswählen', { exact: true }).selectOption('2');
+  const tracked = page.waitForRequest(
+    (request) => new URL(request.url()).pathname === `/api/jobs/${job!.id}`,
+  );
   release();
+  await tracked;
   await expect(page.locator('.board-heading')).toContainText('Spiel 2');
-  await expect(
-    page.getByRole('button', { name: 'Zur Analyse zurückkehren', exact: true }),
-  ).toBeVisible();
+  await expect(page.locator('.background-job-indicator')).toHaveCount(0);
 });
 
 test('next position error respects the player filter', async ({ page }) => {

@@ -44,6 +44,8 @@ struct Game {
     is_crawford: bool,
     lost_on_time: bool,
     was_forfeit: bool,
+    #[serde(default)]
+    won_points: i32,
     moves: Vec<Move>,
 }
 #[derive(Deserialize)]
@@ -253,7 +255,11 @@ pub fn bgf_to_sgf(input: &[u8]) -> Result<String> {
         if !rules.is_empty() {
             out.push_str(&format!("RU[{}]", rules.join(":")));
         }
+        let root_end = out.len();
         let mut board = super::sgf::initial_board();
+        let mut cube = 1i32;
+        let mut dropped = false;
+        let mut resigned = false;
         let mut pending = None;
         let mut winner = None;
         let mut won = false;
@@ -352,6 +358,19 @@ pub fn bgf_to_sgf(input: &[u8]) -> Result<String> {
             let (value, next_pending, next_winner, next_won) = apply().with_context(|| {
                 format!("BGF game {}, record {}", game_index + 1, move_index + 1)
             })?;
+            if record.green == 7 {
+                match record.red {
+                    2 => {
+                        cube = cube
+                            .checked_mul(2)
+                            .filter(|c| *c <= 32768)
+                            .context("BGF: cube exceeds GNUbg range")?
+                    }
+                    3 => dropped = true,
+                    9 => resigned = true,
+                    _ => {}
+                }
+            }
             out.push_str(&value);
             if !value.is_empty() && !record.foreign.is_empty() {
                 out.push_str("BGA[");
@@ -373,6 +392,44 @@ pub fn bgf_to_sgf(input: &[u8]) -> Result<String> {
             won || game_index + 1 == data.games.len(),
             "BGF: unfinished game before another game"
         );
+        if data.matchlen > 0
+            && won
+            && let Some(side) = winner
+        {
+            // BGBlitz can leave wonPoints=0 after a completed bear-off. A
+            // replayed terminal board or drop proves the award independently.
+            let sign = if side == 0 { 1 } else { -1 };
+            let points = if dropped {
+                Some(cube)
+            } else if !board.iter().any(|n| n * sign > 0) {
+                let remaining: i32 = board.iter().map(|n| (-n * sign).max(0)).sum();
+                let loser_in_home = if side == 0 {
+                    board[0] < 0 || board[1..=6].iter().any(|n| *n < 0)
+                } else {
+                    board[25] > 0 || board[19..=24].iter().any(|n| *n > 0)
+                };
+                Some(
+                    cube * if remaining < 15 {
+                        1
+                    } else if loser_in_home {
+                        3
+                    } else {
+                        2
+                    },
+                )
+            } else if resigned && (1..=32767).contains(&game.won_points) {
+                Some(game.won_points)
+            } else {
+                None
+            };
+            // Legal cube values can produce awards beyond SGF's supported
+            // result range. Keep the played line without inventing a result.
+            if let Some(points) = points.filter(|p| (1..=32767).contains(p)) {
+                let color = if side == 0 { 'W' } else { 'B' };
+                let suffix = if resigned { "R" } else { "" };
+                out.insert_str(root_end, &format!("RE[{color}+{points}{suffix}]"));
+            }
+        }
         out.push_str(")\n");
     }
     super::parse_sgf(&out).context("BGF played-line validation failed")?;
@@ -416,6 +473,48 @@ mod tests {
         output.push(b'\n');
         output.extend(payload);
         output
+    }
+
+    #[test]
+    fn completed_resignation_preserves_explicit_winner_and_points() {
+        let sgf = bgf_to_sgf(&package(&fixture(), true, true)).unwrap();
+        let trees = super::super::sgf::parse_trees(&sgf).unwrap();
+        assert_eq!(trees[0][0].get("RE"), Some(&vec!["W+2R".to_owned()]));
+        let metadata = crate::databases::source_metadata(&sgf);
+        assert_eq!(
+            (metadata.white_score, metadata.black_score),
+            (Some(2), Some(0))
+        );
+    }
+
+    #[test]
+    fn completed_drop_scores_from_the_accepted_cube_when_won_points_is_zero() {
+        let mut value = fixture();
+        value["games"][0]["scoreGreen"] = json!(5);
+        value["games"][0]["wonPoints"] = json!(0);
+        value["games"][0]["wasResignation"] = json!(false);
+        let mut moves = value["games"][0]["moves"].as_array().unwrap()[..5].to_vec();
+        moves.extend([special(1, 1), special(-1, 3), special(1, 4)]);
+        value["games"][0]["moves"] = json!(moves);
+        let sgf = bgf_to_sgf(&package(&value, false, false)).unwrap();
+        let metadata = crate::databases::source_metadata(&sgf);
+        assert_eq!(
+            (metadata.white_score, metadata.black_score),
+            (Some(5), Some(2))
+        );
+    }
+
+    #[test]
+    fn unfinished_resignation_without_points_does_not_invent_a_result() {
+        let mut value = fixture();
+        value["games"][0]["wonPoints"] = json!(0);
+        let sgf = bgf_to_sgf(&package(&value, false, false)).unwrap();
+        let metadata = crate::databases::source_metadata(&sgf);
+        assert_eq!(
+            (metadata.white_score, metadata.black_score),
+            (Some(0), Some(0))
+        );
+        assert_eq!(metadata.result_state, "ongoing");
     }
 
     #[test]
@@ -574,8 +673,18 @@ mod tests {
             games.push(game);
         }
         value["games"] = json!(games);
-        let parsed =
-            crate::import::parse_sgf(&bgf_to_sgf(&package(&value, true, true)).unwrap()).unwrap();
+        // Some BGBlitz exports leave wonPoints at zero even after a full bear-off.
+        for game in value["games"].as_array_mut().unwrap() {
+            game["wonPoints"] = json!(0);
+        }
+        let sgf = bgf_to_sgf(&package(&value, true, true)).unwrap();
+        let metadata = crate::databases::source_metadata(&sgf);
+        assert_eq!(
+            (metadata.white_score, metadata.black_score),
+            (Some(9), Some(11))
+        );
+        assert_eq!(metadata.result_state, "completed");
+        let parsed = crate::import::parse_sgf(&sgf).unwrap();
         let expected = crate::import::parse_sgf(source).unwrap();
         assert_eq!(parsed.positions.len(), 460);
         for (a, b) in parsed.positions.iter().zip(&expected.positions) {
@@ -585,6 +694,65 @@ mod tests {
             assert_eq!(a.board, b.board);
             assert_eq!(a.dice, b.dice);
         }
+    }
+
+    #[test]
+    fn high_cube_bearoff_keeps_legal_import_when_award_exceeds_sgf_result_range() {
+        let source = include_str!("../../tests/fixtures/WC2014.gnubg.sgf");
+        let trees = crate::import::sgf::parse_trees(source).unwrap();
+        let mut value = fixture();
+        value["games"][0]["wonPoints"] = json!(0);
+        let mut moves = Vec::new();
+        let mut checker_count = 0;
+        for node in trees.last().unwrap() {
+            for (property, side) in [("W", -1), ("B", 1)] {
+                let Some(play) = node.get(property).map(|values| values[0].as_bytes()) else {
+                    continue;
+                };
+                if !play[0].is_ascii_digit() {
+                    continue;
+                }
+                if (2..17).contains(&checker_count) {
+                    moves.extend([special(side, 1), special(-side, 2)]);
+                }
+                let point = |c| match c {
+                    b'y' => 25,
+                    b'z' => 0,
+                    _ if side == -1 => i32::from(c - b'a' + 1),
+                    _ => i32::from(b'x' - c + 1),
+                };
+                let mut from = [-1; 4];
+                let mut to = [-1; 4];
+                for (i, pair) in play[2..].chunks_exact(2).enumerate() {
+                    from[i] = point(pair[0]);
+                    to[i] = point(pair[1]);
+                }
+                moves.push(record(
+                    side,
+                    [i32::from(play[0] - b'0'), i32::from(play[1] - b'0')],
+                    from,
+                    to,
+                ));
+                checker_count += 1;
+            }
+        }
+        moves.push(special(1, 4)); // Black bears off for a single at cube 32768.
+        value["games"][0]["moves"] = json!(moves);
+        let sgf = bgf_to_sgf(&package(&value, false, false))
+            .expect("legal played line must remain importable");
+        let imported = crate::import::parse_sgf(&sgf).unwrap();
+        assert_eq!(imported.positions.len(), checker_count);
+        assert!(
+            !sgf.contains("RE["),
+            "unrepresentable result must not be emitted or clamped"
+        );
+        let metadata = crate::databases::source_metadata(&sgf);
+        assert_eq!(metadata.result_state, "ongoing");
+        assert_eq!(
+            (metadata.white_score, metadata.black_score),
+            (Some(0), Some(0)),
+            "only the recorded starting score is known"
+        );
     }
 
     #[test]

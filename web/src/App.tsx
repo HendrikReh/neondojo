@@ -34,12 +34,13 @@ import {
   type StoredMove,
 } from './library-api';
 import { useLibraryText } from './library-messages';
+import { DEFAULT_ANALYSIS_PLIES } from './analysis-depth';
 import MoveNotesDialog, { type MoveNotesTarget } from './MoveNotesDialog';
 
 type View = 'analysis' | 'database' | 'positions' | 'learning';
 const views: View[] = ['analysis', 'database', 'positions', 'learning'];
 export default function App() {
-  const { t, setLocale, formatError, formatPercent } = useI18n();
+  const { t, setLocale, formatError } = useI18n();
   const w = useWorkspaceText(),
     learnT = useLearningText();
   const l = useLibraryText();
@@ -63,7 +64,7 @@ export default function App() {
   }, [databaseId]);
   useEffect(() => () => annotationNavigation.current?.abort(), []);
   const [view, setView] = useState<View>('analysis');
-  const [detail, setDetail] = useState<AnalysisDetail>('evaluation');
+  const [detail, setDetail] = useState<AnalysisDetail>('overview');
   const [theme, setTheme] = useState<Theme>(readTheme);
   const [settings, setSettings] = useState<AppSettings>();
   const [settingsError, setSettingsError] = useState<unknown>();
@@ -86,7 +87,7 @@ export default function App() {
   }>();
   const [restoring, setRestoring] = useState(false);
   const navigation = useGameNavigation();
-  const { active, track } = useBackgroundJobs();
+  const { track, assessmentRevision } = useBackgroundJobs();
   const jobs = useJobs(navigation.position?.id, track);
   const settingsLoad = useRef<AbortController | undefined>(undefined);
   const input = useRef<HTMLInputElement>(null);
@@ -231,7 +232,7 @@ export default function App() {
         });
         if (selected.length === 1) {
           setView('analysis');
-          setDetail('evaluation');
+          setDetail('overview');
           void navigation.selectMatch(imported.match);
           setNotice({
             duplicate: imported.duplicate,
@@ -251,7 +252,7 @@ export default function App() {
   function openMatch(match: Match, gameNo?: number) {
     setError(undefined);
     setView('analysis');
-    setDetail('evaluation');
+    setDetail('overview');
     void (gameNo
       ? navigation.openMatch(match.id, gameNo)
       : navigation.selectMatch(match));
@@ -376,7 +377,9 @@ export default function App() {
           onChange={(event) => void upload(event.target.files ?? undefined)}
         />
       </header>
-      <main className="app-body">
+      <main
+        className={`app-body${view === 'analysis' ? ' app-body-analysis' : ''}`}
+      >
         {!!(error || navigation.error) && (
           <div className="error" role="alert">
             {formatError(error || navigation.error)}
@@ -434,22 +437,6 @@ export default function App() {
             </ul>
           </div>
         )}
-        {active.length > 0 && (
-          <button
-            className="background-job-indicator"
-            aria-label={w('background')}
-            onClick={() => setView('analysis')}
-          >
-            <span className="status-dot ready" />
-            {w('activeJobs', { count: active.length })} ·{' '}
-            {formatPercent(
-              active.reduce((n, job) => n + job.progress, 0) /
-                active.length /
-                100,
-            )}{' '}
-            →
-          </button>
-        )}
         <div
           id="workspace-panel-analysis"
           role="tabpanel"
@@ -457,10 +444,11 @@ export default function App() {
           hidden={view !== 'analysis'}
         >
           <AnalysisWorkspace
+            analysisRevision={assessmentRevision}
             navigation={navigation}
             jobs={jobs}
             theme={theme}
-            defaultPlies={settings?.analysis_plies ?? 0}
+            defaultPlies={settings?.analysis_plies ?? DEFAULT_ANALYSIS_PLIES}
             sourceRevision={bookRevision}
             onBookSettings={() => setBookOpen(true)}
             configured={!!settings}
@@ -551,7 +539,7 @@ export default function App() {
             deckRevision={deckRevision}
             theme={theme}
             onOpenPosition={(id) => {
-              setDetail('evaluation');
+              setDetail('overview');
               openPosition(id);
             }}
             onDeckChanged={deckChanged}

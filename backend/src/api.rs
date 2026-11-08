@@ -85,6 +85,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::learning::routes())
         .merge(crate::analysis_statistics::routes())
         .merge(crate::position_browser::routes())
+        .merge(crate::move_assessments::routes())
         .route("/api/health", get(health))
         .route("/api/imports", post(upload))
         .route("/api/matches", get(matches))
@@ -490,9 +491,9 @@ struct JobRequest {
     position_id: Uuid,
     /// analysis: five candidate moves; dice: 21 weighted rolls.
     kind: PositionJobKind,
-    /// GNUbg search depth, 0 to 2. Omitted uses saved analysis depth.
+    /// GNUbg search depth, 0 to 3. Omitted uses saved analysis depth.
     #[serde(default)]
-    #[schema(minimum = 0, maximum = 2)]
+    #[schema(minimum = 0, maximum = 3)]
     plies: Option<i32>,
 }
 
@@ -504,8 +505,8 @@ async fn create_job(
     let Json(request) = payload.map_err(|e| ApiError::invalid(e.body_text()))?;
     let (settings, snapshot) = crate::settings::snapshot(&state).await?;
     let plies = request.plies.unwrap_or(settings.analysis_plies);
-    if !(0..=2).contains(&plies) {
-        return Err(ApiError::invalid("plies must be 0..2"));
+    if !(0..=3).contains(&plies) {
+        return Err(ApiError::invalid("plies must be 0..3"));
     }
     store::get_position(&state.pool, request.position_id)
         .await?
@@ -531,7 +532,7 @@ struct MatchAnalysisRequest {
     game_no: Option<i32>,
     /// Native GNUbg checker and cube search depth. Omitted uses saved analysis depth.
     #[serde(default)]
-    #[schema(minimum = 0, maximum = 2)]
+    #[schema(minimum = 0, maximum = 3)]
     plies: Option<i32>,
 }
 
@@ -544,8 +545,8 @@ async fn create_match_analysis(
     let Json(request) = payload.map_err(|e| ApiError::invalid(e.body_text()))?;
     let (settings, snapshot) = crate::settings::snapshot(&state).await?;
     let plies = request.plies.unwrap_or(settings.analysis_plies);
-    if !(0..=2).contains(&plies) {
-        return Err(ApiError::invalid("plies must be 0..2"));
+    if !(0..=3).contains(&plies) {
+        return Err(ApiError::invalid("plies must be 0..3"));
     }
     let games = validate_game(&state, id, request.game_no).await?;
     let total = if request.game_no.is_some() {
@@ -796,6 +797,7 @@ impl OpenApi for ApiDoc {
         doc.merge(crate::learning::LearningDoc::openapi());
         doc.merge(crate::analysis_statistics::StatisticsDoc::openapi());
         doc.merge(crate::position_browser::PositionBrowserDoc::openapi());
+        doc.merge(crate::move_assessments::MoveAssessmentsDoc::openapi());
         doc
     }
 }

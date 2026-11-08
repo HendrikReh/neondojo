@@ -220,7 +220,7 @@ impl Engine {
         plies: i32,
         dice: Option<[i32; 2]>,
     ) -> Result<Analysis> {
-        ensure!((0..=2).contains(&plies), "plies must be 0..2");
+        ensure!((0..=3).contains(&plies), "plies must be 0..3");
         ensure!(
             valid_id(position_id, 14) && valid_id(match_id, 12),
             "Invalid GNUbg ID"

@@ -85,7 +85,7 @@ pub struct Job {
     pub completed_games: i32,
     #[schema(value_type=JobKind)]
     pub kind: String,
-    #[schema(minimum = 0, maximum = 2)]
+    #[schema(minimum = 0, maximum = 3)]
     pub plies: i32,
     #[schema(value_type=JobStatus)]
     pub status: String,

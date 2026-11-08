@@ -125,7 +125,7 @@ pub fn game_count(sgf: &str) -> Result<i32> {
 
 impl Engine {
     pub async fn analyze_game(&self, sgf: &str, game_no: i32, plies: i32) -> Result<AnalyzedGame> {
-        ensure!((0..=2).contains(&plies), "plies must be 0..2");
+        ensure!((0..=3).contains(&plies), "plies must be 0..3");
         ensure!(
             (1..=game_count(sgf)?).contains(&game_no),
             "Game number outside match"

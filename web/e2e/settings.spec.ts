@@ -23,8 +23,11 @@ const initialSettings = {
   gnubg_path: '/opt/bin/gnubg',
 };
 
-async function settingsBackend(page: Page) {
-  let saved = { ...initialSettings };
+async function settingsBackend(
+  page: Page,
+  analysisPlies = initialSettings.analysis_plies,
+) {
+  let saved = { ...initialSettings, analysis_plies: analysisPlies };
   let conflict = false;
   const writes: (typeof initialSettings)[] = [];
   await page.route('**/api/settings', async (route) => {
@@ -45,7 +48,7 @@ async function settingsBackend(page: Page) {
           name: 'GNU Backgammon',
           available: true,
           version: 'GNUbg 1.08',
-          plies: [0, 1, 2],
+          plies: [0, 1, 2, 3],
         },
         {
           id: 'bgsage',
@@ -264,4 +267,68 @@ test('load errors offer retry and the mobile dialog has reachable actions', asyn
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
+});
+
+test('two-ply defaults and three-ply selections persist through settings and submit real analysis', async ({
+  page,
+}) => {
+  test.setTimeout(120000);
+  page.setDefaultTimeout(10000);
+  const backend = await settingsBackend(page, 2);
+  await page.goto('/');
+  await page.getByLabel('Match file', { exact: true }).setInputFiles({
+    name: 'depth.sgf',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.from(
+      `(;GM[6]PW[Depth ${crypto.randomUUID()}]PB[Opponent]MI[length:7];W[31hefe])`,
+    ),
+  });
+  await expect(page.getByLabel('Search depth', { exact: true })).toHaveValue(
+    '2',
+  );
+  await expect(
+    page.getByLabel('Match analysis depth', { exact: true }),
+  ).toHaveValue('2');
+  const { dialog } = await openSettings(page);
+  await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
+  const profile = dialog.getByLabel('Default analysis profile', {
+    exact: true,
+  });
+  await expect(profile).toHaveValue('2');
+  await profile.selectOption('3');
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  expect(backend.writes.at(-1)?.analysis_plies).toBe(3);
+  await expect(page.getByLabel('Search depth', { exact: true })).toHaveValue(
+    '3',
+  );
+  await expect(
+    page.getByLabel('Match analysis depth', { exact: true }),
+  ).toHaveValue('3');
+  const submitted = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === '/api/jobs' &&
+      response.request().method() === 'POST',
+  );
+  await page
+    .getByRole('button', { name: 'Analyze position', exact: true })
+    .click();
+  const response = await submitted;
+  expect(response.status()).toBe(202);
+  expect(response.request().postDataJSON().plies).toBe(3);
+  const job = await response.json();
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/jobs/${job.id}`)).json()).status,
+      { timeout: 90000 },
+    )
+    .toBe('completed');
+  await expect(
+    page.locator('.analysis-panel .candidates tbody tr').first(),
+  ).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel('Search depth', { exact: true })).toHaveValue(
+    '3',
+  );
 });

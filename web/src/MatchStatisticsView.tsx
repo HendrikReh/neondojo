@@ -149,8 +149,10 @@ export default function MatchStatisticsView({
   loading = false,
   error,
   progress,
+  overview = false,
 }: {
   job?: Job;
+  overview?: boolean;
   statistics?: JobAnalysisStatistics;
   names: string[];
   onSelect: SelectMetric;
@@ -167,9 +169,9 @@ export default function MatchStatisticsView({
   const summary = current?.summary;
   return (
     <section
-      className="match-statistics"
+      className={`match-statistics${overview ? ' overview-statistics' : ''}`}
       id="inspector-panel-statistics"
-      role="tabpanel"
+      role={overview ? 'region' : 'tabpanel'}
       aria-labelledby="inspector-tab-statistics"
       hidden={hidden}
       data-job-id={job?.id}

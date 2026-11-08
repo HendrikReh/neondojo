@@ -239,6 +239,7 @@ test('the latest clicked analysis row wins during a delayed game load', async ({
   await expect(
     panel.getByText('Partieanalyse abgeschlossen', { exact: true }),
   ).toBeVisible({ timeout: 45_000 });
+  await panel.getByLabel('Nur Auffälligkeiten').uncheck();
   await panel
     .getByLabel('Analyse nach Entscheidung filtern')
     .selectOption('checker');

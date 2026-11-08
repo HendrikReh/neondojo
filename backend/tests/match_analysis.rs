@@ -136,7 +136,7 @@ async fn full_match_analysis_is_persisted_paginated_and_replayable(pool: PgPool)
         );
     }
     assert_eq!(
-        call(app, "POST", &endpoint, json!({"plies":3})).await.0,
+        call(app, "POST", &endpoint, json!({"plies":4})).await.0,
         422
     );
 }

@@ -905,3 +905,85 @@ async fn library_round_filter_rejects_overlong_text(pool: PgPool) {
     .await;
     assert_eq!(status, 422, "{body}");
 }
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn source_metadata_backfill_recovers_original_results_and_preserves_manual_edits(
+    pool: PgPool,
+) {
+    let bytes = include_bytes!("fixtures/WC2014.xg");
+    let converted = bgtutor::import::xg_to_sgf(bytes).unwrap();
+    let old_canonical = regex::Regex::new(r"RE\[[^\]]*\]")
+        .unwrap()
+        .replace_all(&converted, "")
+        .into_owned();
+    let mut ids = Vec::new();
+    for manual in [false, true] {
+        let id = Uuid::new_v4();
+        sqlx::query("INSERT INTO matches(id,filename,format,sha256,white,black,match_length,position_count,original,sgf,result_state,white_score,black_score,metadata_version,display_name,source_metadata_loaded) VALUES($1,'source.xg','xg',$2,'White','Black',11,460,$3,$4,'ongoing',9,9,$5,$6,true)")
+            .bind(id).bind(id.to_string()).bind(bytes.as_slice()).bind(&old_canonical).bind(i64::from(manual)).bind(if manual { "My tournament final" } else { "" }).execute(&pool).await.unwrap();
+        ids.push(id);
+    }
+    // Reproduce a library created before the result-repair migration: every
+    // import was already source-loaded, while manual saves own their fields.
+    let changed = sqlx::raw_sql(include_str!("../migrations/0018_source_results.sql"))
+        .execute(&pool)
+        .await
+        .unwrap()
+        .rows_affected();
+    assert_eq!(changed, 1);
+    assert_eq!(
+        bgtutor::databases::backfill_source_metadata(&pool)
+            .await
+            .unwrap(),
+        1
+    );
+    let recovered: (String, Option<i32>, Option<i32>, String, bool, i64) = sqlx::query_as("SELECT result_state,white_score,black_score,sgf,source_metadata_loaded,metadata_version FROM matches WHERE id=$1")
+        .bind(ids[0]).fetch_one(&pool).await.unwrap();
+    assert_eq!(
+        (recovered.0.as_str(), recovered.1, recovered.2),
+        ("completed", Some(11), Some(9))
+    );
+    assert_eq!(
+        recovered.3, old_canonical,
+        "repair must leave imported SGF and position context immutable"
+    );
+    assert!(recovered.4);
+    assert_eq!(recovered.5, 0);
+    let manual: (String, Option<i32>, Option<i32>, String, i64, bool) = sqlx::query_as("SELECT result_state,white_score,black_score,display_name,metadata_version,source_metadata_loaded FROM matches WHERE id=$1")
+        .bind(ids[1]).fetch_one(&pool).await.unwrap();
+    assert_eq!(
+        manual,
+        (
+            "ongoing".to_owned(),
+            Some(9),
+            Some(9),
+            "My tournament final".to_owned(),
+            1,
+            true
+        )
+    );
+    assert_eq!(
+        bgtutor::databases::backfill_source_metadata(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn new_native_import_stores_final_result_in_the_library(pool: PgPool) {
+    let bytes = include_bytes!("fixtures/WC2014.xg");
+    let sgf = bgtutor::import::xg_to_sgf(bytes).unwrap();
+    let imported = bgtutor::import::parse_sgf(&sgf).unwrap();
+    let result = bgtutor::store::import_match(&pool, "sample.xg", "xg", bytes, &sgf, &imported)
+        .await
+        .unwrap();
+    let (status, page) = request(&pool, "GET", "/api/library/matches", None).await;
+    assert_eq!(status, 200);
+    assert_eq!(page["items"][0]["id"], result.r#match.id.to_string());
+    assert_eq!(page["items"][0]["white_score"], 11);
+    assert_eq!(page["items"][0]["black_score"], 9);
+    assert_eq!(page["items"][0]["result_state"], "completed");
+}

@@ -1,4 +1,5 @@
 import type { components } from './generated-api';
+import { isAnalysisDepth } from './analysis-depth';
 
 type Schema = components['schemas'];
 export type AppSettings = Omit<
@@ -49,7 +50,7 @@ function parseSettings(value: unknown): AppSettings {
     typeof value.player_name !== 'string' ||
     value.analysis_engine !== 'gnubg' ||
     value.play_engine !== 'gnubg' ||
-    ![0, 1, 2].includes(Number(value.analysis_plies)) ||
+    !isAnalysisDepth(value.analysis_plies) ||
     ![0, 1, 2].includes(Number(value.play_plies)) ||
     typeof value.analysis_plies !== 'number' ||
     typeof value.play_plies !== 'number' ||

@@ -1,6 +1,14 @@
 import { useI18n } from './i18n';
 import { interpolate, type Locale, type TranslationParams } from './i18n-core';
 const rows = {
+  decisionsByMove: [
+    'Decisions by move',
+    'Entscheidungen pro Zug',
+    'Decisiones por jugada',
+    'Décisions par coup',
+    'Decyzje według ruchów',
+    'Decisioni per mossa',
+  ],
   tab: [
     'Statistics',
     'Statistik',

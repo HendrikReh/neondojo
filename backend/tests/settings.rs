@@ -73,7 +73,7 @@ async fn defaults_use_injected_engine_and_survive_new_app_states(pool: PgPool) {
     assert_eq!(status, 200, "{settings}");
     assert_eq!(
         settings,
-        json!({"version":0,"player_name":"","analysis_engine":"gnubg","analysis_plies":0,"play_engine":"gnubg","play_plies":0,"gnubg_path":"/missing/injected-gnubg"})
+        json!({"version":0,"player_name":"","analysis_engine":"gnubg","analysis_plies":2,"play_engine":"gnubg","play_plies":0,"gnubg_path":"/missing/injected-gnubg"})
     );
     let second = api::router(AppState::new(pool.clone(), Engine::new("different".into())));
     assert_eq!(
@@ -84,7 +84,7 @@ async fn defaults_use_injected_engine_and_survive_new_app_states(pool: PgPool) {
     assert_eq!(engines[0]["id"], "gnubg");
     assert_eq!(engines[0]["available"], false);
     assert_eq!(engines[0]["version"], Value::Null);
-    assert_eq!(engines[0]["plies"], json!([0, 1, 2]));
+    assert_eq!(engines[0]["plies"], json!([0, 1, 2, 3]));
     assert_eq!(
         engines[1],
         json!({"id":"bgsage","name":"BGSage","available":false,"version":null,"plies":[]})
@@ -94,6 +94,170 @@ async fn defaults_use_injected_engine_and_survive_new_app_states(pool: PgPool) {
         assert!(schema["paths"][route].is_object(), "{route}");
     }
     assert!(schema["components"]["schemas"]["AppSettings"].is_object());
+    for name in ["JobRequest", "MatchAnalysisRequest", "Job"] {
+        assert_eq!(
+            schema["components"]["schemas"][name]["properties"]["plies"]["maximum"], 3,
+            "{name}"
+        );
+    }
+    assert_eq!(
+        schema["components"]["schemas"]["AppSettings"]["properties"]["analysis_plies"]["maximum"],
+        3
+    );
+    assert_eq!(
+        schema["components"]["schemas"]["AppSettings"]["properties"]["play_plies"]["maximum"],
+        2
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn analysis_depth_applies_to_position_dice_game_and_match_jobs(pool: PgPool) {
+    let imported = imported(&pool).await;
+    let position = store::positions(&pool, Some(imported.r#match.id), None, None, 10)
+        .await
+        .unwrap()
+        .items
+        .remove(0);
+    let app = api::router(AppState::new(pool, Engine::new("/missing/gnubg".into())));
+    let endpoint = format!("/api/matches/{}/analysis", imported.r#match.id);
+    for (uri, body) in [
+        (
+            "/api/jobs",
+            json!({"position_id":position.id,"kind":"analysis"}),
+        ),
+        (
+            "/api/jobs",
+            json!({"position_id":position.id,"kind":"dice"}),
+        ),
+        (endpoint.as_str(), json!({})),
+        (endpoint.as_str(), json!({"game_no":1})),
+    ] {
+        let (status, default) = call(app.clone(), "POST", uri, body.clone()).await;
+        assert_eq!(status, 202, "{default}");
+        assert_eq!(default["plies"], 2);
+        for plies in 0..=3 {
+            let mut explicit = body.clone();
+            explicit["plies"] = json!(plies);
+            let (status, job) = call(app.clone(), "POST", uri, explicit).await;
+            assert_eq!(status, 202, "{job}");
+            assert_eq!(job["plies"], plies);
+        }
+        for plies in [-1, 4] {
+            let mut invalid = body.clone();
+            invalid["plies"] = json!(plies);
+            assert_eq!(call(app.clone(), "POST", uri, invalid).await.0, 422);
+        }
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn depth_migration_changes_only_untouched_defaults_and_preserves_old_jobs(pool: PgPool) {
+    let imported = imported(&pool).await;
+    let position = store::positions(&pool, Some(imported.r#match.id), None, None, 10)
+        .await
+        .unwrap()
+        .items
+        .remove(0);
+    let old = store::create_job(&pool, position.id, "analysis", 0)
+        .await
+        .unwrap();
+    let snapshot = json!({"engine_id":"gnubg","gnubg_path":"/legacy/gnubg","engine_version":"GNU Backgammon legacy"});
+    let result = json!({"engine":"GNU Backgammon legacy","plies":0,"candidates":[]});
+    sqlx::query("UPDATE jobs SET status='completed',engine_snapshot=$2,result=$3 WHERE id=$1")
+        .bind(old.id)
+        .bind(&snapshot)
+        .bind(&result)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let before: Value = sqlx::query_scalar("SELECT to_jsonb(jobs) FROM jobs WHERE id=$1")
+        .bind(old.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    // Reproduce the pre-upgrade schema inside this isolated test database.
+    sqlx::raw_sql("ALTER TABLE jobs DROP CONSTRAINT jobs_plies_check; ALTER TABLE jobs ADD CONSTRAINT jobs_plies_check CHECK (plies BETWEEN 0 AND 2); ALTER TABLE app_settings DROP CONSTRAINT app_settings_analysis_plies_check; ALTER TABLE app_settings ADD CONSTRAINT app_settings_analysis_plies_check CHECK (analysis_plies BETWEEN 0 AND 2); ALTER TABLE app_settings ALTER COLUMN analysis_plies SET DEFAULT 0;")
+        .execute(&pool).await.unwrap();
+    let migration = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/migrations/0019_analysis_depth.sql"
+    ))
+    .expect("analysis-depth migration must exist");
+    for (version, plies, expected_plies, expected_version) in [
+        (0i64, 0, 2, 1i64),
+        (1, 0, 0, 1),
+        (0, 1, 1, 0),
+        (0, 2, 2, 0),
+        (4, 2, 2, 4),
+    ] {
+        sqlx::query("DELETE FROM app_settings")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO app_settings(singleton,version,analysis_plies,play_plies,player_name,gnubg_path,gnubg_version) VALUES(true,$1,$2,1,'Saved name','/saved/gnubg','GNU Backgammon saved')")
+            .bind(version).bind(plies).execute(&pool).await.unwrap();
+        sqlx::raw_sql(&migration).execute(&pool).await.unwrap();
+        let settings: Value = sqlx::query_scalar("SELECT to_jsonb(app_settings) FROM app_settings")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(settings["analysis_plies"], expected_plies);
+        assert_eq!(settings["version"], expected_version);
+        assert_eq!(settings["play_plies"], 1);
+        assert_eq!(settings["player_name"], "Saved name");
+        assert_eq!(settings["gnubg_path"], "/saved/gnubg");
+        assert_eq!(settings["gnubg_version"], "GNU Backgammon saved");
+    }
+    let after: Value = sqlx::query_scalar("SELECT to_jsonb(jobs) FROM jobs WHERE id=$1")
+        .bind(old.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        before, after,
+        "migration must not rewrite old jobs or their provenance"
+    );
+    sqlx::query("DELETE FROM app_settings")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let default: i32 = sqlx::query_scalar(
+        "INSERT INTO app_settings(gnubg_path) VALUES('/new/gnubg') RETURNING analysis_plies",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(default, 2);
+    assert!(
+        store::create_job(&pool, position.id, "analysis", 3)
+            .await
+            .is_ok()
+    );
+    assert!(
+        store::create_job(&pool, position.id, "analysis", 4)
+            .await
+            .is_err()
+    );
+    assert!(
+        sqlx::query("UPDATE app_settings SET analysis_plies=3")
+            .execute(&pool)
+            .await
+            .is_ok()
+    );
+    assert!(
+        sqlx::query("UPDATE app_settings SET analysis_plies=4")
+            .execute(&pool)
+            .await
+            .is_err()
+    );
+    assert!(
+        sqlx::query("UPDATE app_settings SET play_plies=3")
+            .execute(&pool)
+            .await
+            .is_err()
+    );
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -120,7 +284,7 @@ async fn validates_installation_updates_atomically_and_rejects_stale_writes(pool
     assert!(available[0]["version"].is_string());
     let mut update = initial.clone();
     update["player_name"] = json!("Hendrik");
-    update["analysis_plies"] = json!(1);
+    update["analysis_plies"] = json!(3);
     update["play_plies"] = json!(2);
     let (status, saved) = call(app.clone(), "PUT", "/api/settings", update.clone()).await;
     assert_eq!(status, 200, "{saved}");
@@ -133,7 +297,9 @@ async fn validates_installation_updates_atomically_and_rejects_stale_writes(pool
     for (field, value) in [
         ("analysis_engine", json!("bgsage")),
         ("play_engine", json!("unknown")),
-        ("analysis_plies", json!(3)),
+        ("analysis_plies", json!(4)),
+        ("analysis_plies", json!(-1)),
+        ("play_plies", json!(3)),
         ("play_plies", json!(-1)),
         ("player_name", json!("a\nname")),
         ("player_name", json!("x".repeat(121))),
@@ -194,7 +360,7 @@ async fn jobs_use_saved_defaults_snapshot_installations_and_deduplicate_by_confi
         json!({"position_id":position.id,"kind":"analysis"}),
     )
     .await;
-    assert_eq!(old["plies"], 0);
+    assert_eq!(old["plies"], 2);
     let endpoint = format!("/api/matches/{}/analysis", imported.r#match.id);
     let (_, old_full) = call(app.clone(), "POST", &endpoint, json!({"plies":0})).await;
     let (_, old_game) = call(
@@ -348,6 +514,112 @@ fn fixture_engine(script: &str) -> (tempfile::TempDir, Engine) {
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
     let engine = Engine::new(path.to_string_lossy().into_owned());
     (temp, engine)
+}
+
+#[cfg(unix)]
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL and GNUbg with weights"]
+async fn three_ply_native_jobs_preserve_real_search_depth(pool: PgPool) {
+    let evidence = tempfile::tempdir().unwrap();
+    let quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
+    let native = quote(absolute_binary().to_str().unwrap());
+    let output_log = evidence.path().join("native-output.txt");
+    let export_log = evidence.path().join("native-game-export.txt");
+    // Capture the real native output and exported depth, rather than trusting
+    // the requested depth echoed into our result metadata.
+    let script = format!(
+        "#!/bin/sh\nif [ \"$1\" = --version ]; then exec {native} \"$@\"; fi\n{native} \"$@\" >native-output.txt\nstatus=$?\ncat native-output.txt\ncat native-output.txt >>{}\nif [ -f analyzed.txt ]; then cat analyzed.txt >>{}; fi\nexit \"$status\"\n",
+        quote(output_log.to_str().unwrap()),
+        quote(export_log.to_str().unwrap())
+    );
+    let (_wrapper, engine) = fixture_engine(&script);
+    // Opening 51 has close candidate moves; GNUbg's normal pruning can stop
+    // obvious choices such as opening 31 below the requested maximum depth.
+    let sgf = "(;GM[6]FF[4]PW[Alice]PB[Bob]MI[length:7][game:0][ws:0][bs:0];W[51xwmh])";
+    let parsed = import::parse_sgf(sgf).unwrap();
+    let imported = store::import_match(&pool, "three-ply.sgf", "sgf", sgf.as_bytes(), sgf, &parsed)
+        .await
+        .unwrap();
+    let position = store::positions(&pool, Some(imported.r#match.id), None, None, 10)
+        .await
+        .unwrap()
+        .items
+        .remove(0);
+    let analysis = engine
+        .analyze(&position.position_id, &position.gnubg_match_id, 3, None)
+        .await
+        .unwrap();
+    assert_eq!(analysis.plies, 3);
+    assert!(!analysis.candidates.is_empty());
+    assert!(
+        std::fs::read_to_string(&output_log)
+            .unwrap()
+            .contains("Cubeful 3-ply")
+    );
+    let game = engine.analyze_game(sgf, 1, 3).await.unwrap();
+    assert_eq!(game.decisions.len(), 1);
+    assert!(
+        std::fs::read_to_string(&export_log)
+            .unwrap()
+            .contains("3-ply")
+    );
+
+    let state = AppState::new(pool.clone(), engine);
+    let app = api::router(state.clone());
+    let endpoint = format!("/api/matches/{}/analysis", imported.r#match.id);
+    for (uri, body, kind) in [
+        (
+            "/api/jobs",
+            json!({"position_id":position.id,"kind":"analysis","plies":3}),
+            "analysis",
+        ),
+        (
+            "/api/jobs",
+            json!({"position_id":position.id,"kind":"dice","plies":3}),
+            "dice",
+        ),
+        (endpoint.as_str(), json!({"plies":3}), "match"),
+        (endpoint.as_str(), json!({"game_no":1,"plies":3}), "match"),
+    ] {
+        std::fs::write(&output_log, "").unwrap();
+        std::fs::write(&export_log, "").unwrap();
+        let (status, submitted) = call(app.clone(), "POST", uri, body).await;
+        assert_eq!(status, 202, "{submitted}");
+        assert!(jobs::run_one(&state).await.unwrap());
+        let (status, done) = call(
+            app.clone(),
+            "GET",
+            &format!("/api/jobs/{}", submitted["id"].as_str().unwrap()),
+            Value::Null,
+        )
+        .await;
+        assert_eq!(status, 200);
+        assert_eq!(done["status"], "completed", "{done}");
+        assert_eq!(done["plies"], 3);
+        assert_eq!(done["result"]["plies"], 3);
+        if kind == "match" {
+            assert_eq!(done["completed_games"], 1);
+            assert!(
+                std::fs::read_to_string(&export_log)
+                    .unwrap()
+                    .contains("3-ply")
+            );
+        } else {
+            let native_output = std::fs::read_to_string(&output_log).unwrap();
+            assert!(native_output.contains("Cubeful 3-ply"));
+            if kind == "dice" {
+                assert_eq!(done["result"]["rolls"].as_array().unwrap().len(), 21);
+                assert_eq!(native_output.matches("Setting GNUbg ID").count(), 21);
+                let weight: i64 = done["result"]["rolls"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|r| r["weight"].as_i64().unwrap())
+                    .sum();
+                assert_eq!(weight, 36);
+            }
+        }
+    }
 }
 
 #[cfg(unix)]

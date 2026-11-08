@@ -20,7 +20,7 @@ pub struct AppSettings {
     pub version: i64,
     pub player_name: String,
     pub analysis_engine: String,
-    #[schema(minimum = 0, maximum = 2)]
+    #[schema(minimum = 0, maximum = 3, default = 2)]
     pub analysis_plies: i32,
     pub play_engine: String,
     #[schema(minimum = 0, maximum = 2)]
@@ -133,8 +133,11 @@ fn validate(settings: &AppSettings) -> ApiResult<()> {
             "Only the available GNUbg engine can be selected",
         ));
     }
-    if !(0..=2).contains(&settings.analysis_plies) || !(0..=2).contains(&settings.play_plies) {
-        return Err(ApiError::invalid("plies must be 0..2"));
+    if !(0..=3).contains(&settings.analysis_plies) {
+        return Err(ApiError::invalid("analysis plies must be 0..3"));
+    }
+    if !(0..=2).contains(&settings.play_plies) {
+        return Err(ApiError::invalid("play plies must be 0..2"));
     }
     validate_path(&settings.gnubg_path)
 }
@@ -187,7 +190,7 @@ async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo
             name: "GNUbg".into(),
             available: version.is_some(),
             version,
-            plies: vec![0, 1, 2],
+            plies: vec![0, 1, 2, 3],
         },
         EngineInfo {
             id: "bgsage".into(),

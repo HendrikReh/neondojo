@@ -24,10 +24,19 @@ import { useJobs } from './useJobs';
 import { useI18n } from './i18n';
 import { useWorkspaceText } from './workspace-messages';
 import type { AnnotationKind } from './annotation-api';
+import { useMoveAssessments } from './useMoveAssessments';
+import { useSourceText } from './analysis-source-messages';
 
 export type AnalysisDetail =
-  'evaluation' | 'statistics' | 'errors' | 'notes' | 'cards';
+  'overview' | 'evaluation' | 'statistics' | 'errors' | 'notes' | 'cards';
+const severityLabels = {
+  none: 'severity.none',
+  doubtful: 'severity.doubtful',
+  bad: 'severity.bad',
+  very_bad: 'severity.very_bad',
+} as const;
 const detailTabs: AnalysisDetail[] = [
+  'overview',
   'evaluation',
   'statistics',
   'errors',
@@ -40,6 +49,7 @@ export default function AnalysisWorkspace({
   theme,
   defaultPlies,
   sourceRevision,
+  analysisRevision,
   onBookSettings,
   configured,
   detail,
@@ -60,6 +70,7 @@ export default function AnalysisWorkspace({
   theme: Theme;
   defaultPlies: number;
   sourceRevision: number;
+  analysisRevision?: string;
   onBookSettings: () => void;
   configured: boolean;
   detail: AnalysisDetail;
@@ -75,17 +86,38 @@ export default function AnalysisWorkspace({
   scopeRequest?: { kind: AnnotationKind; token: number };
   welcome: ReactNode;
 }) {
-  const { t, formatNumber, formatDecision, formatError } = useI18n();
+  const { t, formatNumber, formatEquity, formatDecision, formatError } =
+    useI18n();
   const w = useWorkspaceText();
   const review = useBoardReviewText();
   const statistics = useStatisticsText();
+  const sourceText = useSourceText();
   const { match, game, games, positions, position, index, loading, stats } =
     navigation;
   const [commandTarget, setCommandTarget] = useState<HTMLDivElement | null>(
     null,
   );
   const [focus, setFocus] = useState(false);
+  const overview = detail === 'overview';
   const [matchJob, setMatchJob] = useState<Job>();
+  const moveAssessments = useMoveAssessments({
+    matchId: match?.id,
+    gameNo: game?.game_no,
+    job: matchJob,
+    analysisRevision,
+  });
+  const moveList = useRef<HTMLDivElement>(null);
+  const currentMove = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const list = moveList.current,
+      current = currentMove.current;
+    if (!list || !current || !list.clientHeight) return;
+    const outer = list.getBoundingClientRect(),
+      row = current.getBoundingClientRect();
+    if (row.top < outer.top) list.scrollTop -= outer.top - row.top;
+    else if (row.bottom > outer.bottom)
+      list.scrollTop += row.bottom - outer.bottom;
+  }, [position?.id, positions.length, detail, focus]);
   const [moveFilter, setMoveFilter] = useState<{
     player: string;
     kind: string;
@@ -154,7 +186,7 @@ export default function AnalysisWorkspace({
   async function nextError() {
     setNextErrorFailure(undefined);
     setNoErrors(false);
-    onDetail('errors');
+    if (!overview) onDetail('errors');
     if (
       !matchJob ||
       !match ||
@@ -200,7 +232,7 @@ export default function AnalysisWorkspace({
     return <section className="analysis-workspace">{welcome}</section>;
   return (
     <section
-      className={`analysis-workspace ${focus ? 'board-focus' : ''}`}
+      className={`analysis-workspace ${overview ? 'analysis-overview' : ''} ${focus ? 'board-focus' : ''}`}
       aria-label={w('analysis')}
     >
       <div className="analysis-heading">
@@ -216,7 +248,6 @@ export default function AnalysisWorkspace({
             <a href={`/api/matches/${match.id}/source`}>SGF ↓</a>
           </p>
         </div>
-        <button onClick={onOpenDatabase}>{w('openMatch')}</button>
       </div>
       <div className="analysis-commandbar">
         <GameSelector
@@ -226,31 +257,90 @@ export default function AnalysisWorkspace({
         />
         <div className="workspace-analysis-command" ref={setCommandTarget} />
       </div>
-      <div className="analysis-grid">
+      <div
+        className="inspector-tabs analysis-detail-navigation"
+        role="tablist"
+        aria-label={w('positionDetails')}
+      >
+        {detailTabs.map((tab) => (
+          <button
+            key={tab}
+            role="tab"
+            id={`inspector-tab-${tab}`}
+            aria-controls={`inspector-panel-${tab}`}
+            aria-selected={detail === tab}
+            tabIndex={detail === tab ? 0 : -1}
+            ref={(element) => {
+              tabRefs.current[tab] = element;
+            }}
+            onKeyDown={(event) => tabKey(event, tab)}
+            onClick={() => onDetail(tab)}
+          >
+            {tab === 'statistics' ? statistics('tab') : w(tab)}
+          </button>
+        ))}
+      </div>
+      <div
+        className="analysis-grid"
+        id="inspector-panel-overview"
+        role={overview ? 'tabpanel' : undefined}
+        aria-labelledby={overview ? 'inspector-tab-overview' : undefined}
+      >
         <aside className="moves-panel">
           <div className="section-heading">
             <h3>{t('app.moveHistory')}</h3>
             <span>{formatNumber(game?.position_count ?? 0)}</span>
           </div>
-          <div className="moves-list">
-            {positions.map((p, i) => (
-              <button
-                key={p.id}
-                className={i === index ? 'current' : ''}
-                aria-current={i === index ? 'step' : undefined}
-                onClick={() => navigation.selectIndex(i)}
-              >
-                <span className="move-no">
-                  {p.game_no}.{p.ply}
-                </span>
-                <i
-                  className={`player-dot ${p.player === 0 ? 'white' : 'black'}`}
-                />
-                <span className="move-dice">{p.dice.join('–')}</span>
-                <strong>{formatDecision(p.notation)}</strong>
-              </button>
-            ))}
+          <div className="moves-list" ref={moveList}>
+            {positions.map((p, i) => {
+              const assessment = moveAssessments.assessments[p.id];
+              const description = assessment
+                ? `${t(severityLabels[assessment.severity])} · Δ ${formatEquity(assessment.equity_loss)} · ${sourceText(assessment.source === 'imported' ? 'imported' : 'engine')} · ${assessment.engine}${assessment.depth ? ` · ${assessment.depth}` : ''}`
+                : undefined;
+              return (
+                <button
+                  key={p.id}
+                  ref={i === index ? currentMove : undefined}
+                  className={`${i === index ? 'current' : ''}${assessment ? ` move-assessment-${assessment.severity}` : ''}`}
+                  data-position-id={p.id}
+                  data-assessment-source={assessment?.source}
+                  aria-current={i === index ? 'step' : undefined}
+                  onClick={() => navigation.selectIndex(i)}
+                >
+                  <span className="move-no">
+                    {p.game_no}.{p.ply}
+                  </span>
+                  <i
+                    className={`player-dot ${p.player === 0 ? 'white' : 'black'}`}
+                  />
+                  <span className="move-dice">{p.dice.join('–')}</span>
+                  <strong>{formatDecision(p.notation)}</strong>
+                  {assessment && (
+                    <span
+                      className="move-assessment-marker"
+                      title={description}
+                    >
+                      <span aria-hidden="true">
+                        {assessment.severity === 'none'
+                          ? '✓'
+                          : assessment.severity === 'doubtful'
+                            ? '?!'
+                            : assessment.severity === 'bad'
+                              ? '?'
+                              : '??'}
+                      </span>
+                      <span className="sr-only">{description}</span>
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
+          {!!moveAssessments.error && (
+            <p className="move-assessment-error" role="alert">
+              {formatError(moveAssessments.error)}
+            </p>
+          )}
           <button
             className="next-error"
             onClick={() => void nextError()}
@@ -287,7 +377,6 @@ export default function AnalysisWorkspace({
                   view={effectiveView}
                   preview={preview}
                   selected={selectedPreview}
-                  played={position.notation}
                   onView={setBoardView}
                   onPlayed={() => onPreview(null)}
                 />
@@ -358,33 +447,11 @@ export default function AnalysisWorkspace({
         </section>
         <aside className="position-inspector">
           <div
-            className="inspector-tabs"
-            role="tablist"
-            aria-label={w('positionDetails')}
-          >
-            {detailTabs.map((tab) => (
-              <button
-                key={tab}
-                role="tab"
-                id={`inspector-tab-${tab}`}
-                aria-controls={`inspector-panel-${tab}`}
-                aria-selected={detail === tab}
-                tabIndex={detail === tab ? 0 : -1}
-                ref={(element) => {
-                  tabRefs.current[tab] = element;
-                }}
-                onKeyDown={(event) => tabKey(event, tab)}
-                onClick={() => onDetail(tab)}
-              >
-                {tab === 'statistics' ? statistics('tab') : w(tab)}
-              </button>
-            ))}
-          </div>
-          <div
             id="inspector-panel-evaluation"
-            role="tabpanel"
+            className={overview ? 'overview-evaluation' : undefined}
+            role={overview ? 'region' : 'tabpanel'}
             aria-labelledby="inspector-tab-evaluation"
-            hidden={detail !== 'evaluation'}
+            hidden={!overview && detail !== 'evaluation'}
           >
             {!!jobs.error && (
               <p className="error" role="alert">
@@ -417,7 +484,10 @@ export default function AnalysisWorkspace({
             onTrackJob={onTrackJob}
             onCurrentJob={setMatchJob}
             onFilterChange={setMoveFilter}
-            onShowErrors={() => onDetail('errors')}
+            onShowErrors={() => {
+              if (!overview) onDetail('errors');
+            }}
+            selectedPositionId={position?.id}
           />
           <div
             id="inspector-panel-notes"
@@ -468,6 +538,7 @@ function MatchResults({
   onCurrentJob,
   onFilterChange,
   onShowErrors,
+  selectedPositionId,
 }: {
   matchId: string;
   gameNo?: number;
@@ -486,6 +557,7 @@ function MatchResults({
     game_no?: number;
   }) => void;
   onShowErrors: () => void;
+  selectedPositionId?: string;
 }) {
   const onJob = useCallback(
     (job: Job | undefined) => {
@@ -495,7 +567,12 @@ function MatchResults({
     [onCurrentJob, onTrackJob],
   );
   return (
-    <div hidden={detail !== 'errors' && detail !== 'statistics'}>
+    <div
+      className="workspace-match-results"
+      hidden={
+        detail !== 'overview' && detail !== 'errors' && detail !== 'statistics'
+      }
+    >
       <MatchAnalysisPanel
         key={navigation.match!.id}
         match={navigation.match!}
@@ -503,8 +580,10 @@ function MatchResults({
         defaultPlies={defaultPlies}
         configured={configured}
         controlsTarget={target}
-        showResults={detail === 'errors'}
-        showStatistics={detail === 'statistics'}
+        overview={detail === 'overview'}
+        selectedPositionId={selectedPositionId}
+        showResults={detail === 'overview' || detail === 'errors'}
+        showStatistics={detail === 'overview' || detail === 'statistics'}
         onShowErrors={onShowErrors}
         onGame={(number) => void navigation.selectGame(number)}
         onJob={onJob}

@@ -2,6 +2,7 @@ import { useI18n, type Locale } from './i18n';
 import { interpolate, type TranslationParams } from './i18n-core';
 
 const en = {
+  overview: 'Overview',
   analysis: 'Analysis',
   database: 'Match database',
   settings: 'Settings',
@@ -29,8 +30,6 @@ const en = {
   noComment: 'No comment yet.',
   noTags: 'No tags yet.',
   loading: 'Loading …',
-  activeJobs: '{count} analysis jobs running',
-  background: 'Return to analysis',
   engine: 'Local GNU Backgammon',
   navigation: 'Workspaces',
   positionDetails: 'Position details',
@@ -42,6 +41,7 @@ const en = {
 type Key = keyof typeof en;
 type Catalog = Record<Key, string>;
 const de: Catalog = {
+  overview: 'Übersicht',
   analysis: 'Analyse',
   database: 'Matchdatenbank',
   settings: 'Einstellungen',
@@ -69,8 +69,6 @@ const de: Catalog = {
   noComment: 'Noch kein Kommentar.',
   noTags: 'Noch keine Tags.',
   loading: 'Wird geladen …',
-  activeJobs: '{count} Analyseaufträge laufen',
-  background: 'Zur Analyse zurückkehren',
   engine: 'Lokales GNU Backgammon',
   navigation: 'Arbeitsbereiche',
   positionDetails: 'Positionsdetails',
@@ -80,6 +78,7 @@ const de: Catalog = {
   configurationError: 'Einstellungen konnten nicht geladen werden.',
 };
 const es: Catalog = {
+  overview: 'Vista general',
   analysis: 'Análisis',
   database: 'Base de partidas',
   settings: 'Ajustes',
@@ -107,8 +106,6 @@ const es: Catalog = {
   noComment: 'Todavía no hay comentario.',
   noTags: 'Todavía no hay etiquetas.',
   loading: 'Cargando …',
-  activeJobs: '{count} análisis en curso',
-  background: 'Volver al análisis',
   engine: 'GNU Backgammon local',
   navigation: 'Áreas de trabajo',
   positionDetails: 'Detalles de la posición',
@@ -118,6 +115,7 @@ const es: Catalog = {
   configurationError: 'No se pudieron cargar los ajustes.',
 };
 const fr: Catalog = {
+  overview: 'Vue d’ensemble',
   analysis: 'Analyse',
   database: 'Base de matchs',
   settings: 'Paramètres',
@@ -145,8 +143,6 @@ const fr: Catalog = {
   noComment: 'Aucun commentaire.',
   noTags: 'Aucune étiquette.',
   loading: 'Chargement …',
-  activeJobs: '{count} analyses en cours',
-  background: 'Revenir à l’analyse',
   engine: 'GNU Backgammon local',
   navigation: 'Espaces de travail',
   positionDetails: 'Détails de la position',
@@ -156,6 +152,7 @@ const fr: Catalog = {
   configurationError: 'Impossible de charger les paramètres.',
 };
 const pl: Catalog = {
+  overview: 'Przegląd',
   analysis: 'Analiza',
   database: 'Baza meczów',
   settings: 'Ustawienia',
@@ -183,8 +180,6 @@ const pl: Catalog = {
   noComment: 'Brak komentarza.',
   noTags: 'Brak tagów.',
   loading: 'Ładowanie …',
-  activeJobs: '{count} analiz w toku',
-  background: 'Wróć do analizy',
   engine: 'Lokalny GNU Backgammon',
   navigation: 'Obszary robocze',
   positionDetails: 'Szczegóły pozycji',
@@ -194,6 +189,7 @@ const pl: Catalog = {
   configurationError: 'Nie można wczytać ustawień.',
 };
 const it: Catalog = {
+  overview: 'Panoramica',
   analysis: 'Analisi',
   database: 'Archivio partite',
   settings: 'Impostazioni',
@@ -221,8 +217,6 @@ const it: Catalog = {
   noComment: 'Nessun commento.',
   noTags: 'Nessun tag.',
   loading: 'Caricamento …',
-  activeJobs: '{count} analisi in corso',
-  background: 'Torna all’analisi',
   engine: 'GNU Backgammon locale',
   navigation: 'Aree di lavoro',
   positionDetails: 'Dettagli della posizione',

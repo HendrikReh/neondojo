@@ -613,7 +613,6 @@ export default function MatchDatabase({
                           onChange={(e) => selectAll(e.target.checked)}
                         />
                       </th>
-                      {heading('name', t('app.matches'))}
                       {heading('white', l('white'))}
                       {heading('white_pr', 'PR (GNUbg)')}
                       {heading('black', l('black'))}
@@ -664,11 +663,15 @@ export default function MatchDatabase({
                               onOpen(m);
                             }}
                           >
-                            <span className="library-match-title">
-                              {m.display_name}
-                            </span>
+                            {m.display_name.trim() &&
+                              m.display_name !== m.filename && (
+                                <span className="library-match-title">
+                                  {m.display_name}
+                                </span>
+                              )}
+                            <span>{m.white}</span>
                             <span className="sr-only">
-                              {m.white} {t('common.versus')} {m.black}
+                              {t('common.versus')} {m.black}
                             </span>
                             <small>
                               {m.format.toUpperCase()} ·{' '}
@@ -676,7 +679,6 @@ export default function MatchDatabase({
                             </small>
                           </button>
                         </td>
-                        <td>{m.white}</td>
                         <td title={m.pr_profile ?? l('prHelp')}>
                           {pr(m.white_pr)}
                         </td>
