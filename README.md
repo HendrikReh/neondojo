@@ -47,9 +47,41 @@ Dann genügt <http://127.0.0.1:8787>. Der Dienst und die Datenbank binden standa
 4. **Position analysieren** startet einen echten dauerhaften GNUbg-Auftrag mit 0, 1 oder 2 Ply. Die Ausgabe enthält bis zu fünf Zugkandidaten, Cubeful Equity und Gewinnwahrscheinlichkeiten.
 5. **Dice Distribution** berechnet dieselbe Stellung mit allen 21 ungeordneten Würfelpaaren. Die Matrix zeigt alle 36 geordneten Würfe; ein Pasch erhält Gewicht 1, andere Paare Gewicht 2. Das gewichtete Mittel ist die erwartete Equity. Blockierte Würfe werden als echter Zugaussetzer bewertet.
 6. **Gesamte Partie analysieren** wertet alle Spiele mit 0–2 Ply aus. Nach jedem Spiel erscheinen Fortschritt, Spielerstatistik und eine filterbare Fehlerübersicht. Jede Checker-Entscheidung zeigt den gespielten Zug, den besten Zug, beide Equities und den Verlust; Cube-Entscheidungen enthalten auch nicht genutzte Doppelangebote sowie Double/Take/Drop. Ein Klick auf die Zugnummer öffnet die zugehörige Brettstellung.
-7. **Partiewürfe** zeigt separat die tatsächlich aufgezeichneten Würfe. **Position finden** sucht nach einer exakten GNUbg Position-ID. **Forest/Walnut/Slate** wechseln das Brettdesign; die Auswahl bleibt im Browser gespeichert.
+7. **Partiewürfe** zeigt separat die tatsächlich aufgezeichneten Würfe. **Position finden** sucht nach einer exakten GNUbg Position-ID. **Brett** wechselt zwischen Forest/Walnut/Slate und den lokalen BGBlitz-Themes aus `themes/*.zip`. **Sprache** schaltet die vollständige Oberfläche zwischen Deutsch, Español, Français, Polski, Italiano und English um. Beide Einstellungen bleiben im Browser gespeichert; Standard ist Deutsch.
 
 Die Positionssuche identifiziert die Brettstellung aus Sicht des Spielers am Zug. Spielstand, Doppler und Würfel stehen in der zusätzlichen GNUbg Match-ID und werden für die Analyse berücksichtigt. Identische Bretter in verschiedenen Matchsituationen erscheinen daher als getrennte Treffer. Ähnlichkeitssuche und ein grafischer Positionseditor sind nicht Bestandteil dieses Standes.
+
+## Board-Themes und Sprachen
+
+Die Originalgrafiken der lokal bereitgestellten BGBlitz-Archive werden automatisch bei `npm run dev` und `npm run build` eingelesen. Dafür wird **Python 3.10+** ohne zusätzliche Pakete benötigt. Die Darstellung verwendet echte Hintergründe, Checker-Varianten, Würfel, Doppler und Nummernleisten. Neue Archive in `themes/` ablegen und den Entwicklungsserver neu starten oder `npm run themes:prepare --prefix web` ausführen. Ohne lokale ZIPs bleiben die drei eingebauten Themes verfügbar. Format, Herkunft und Rechte: [themes/README.md](themes/README.md).
+
+Die Sprachwahl ist direkt neben der Theme-Auswahl verfügbar. Texte, Status, Fehlermeldungen, Beschriftungen und Zahlenformate wechseln sofort; bereits sichtbare Analyseergebnisse bleiben erhalten. Spieler-/Dateinamen und originale GNUbg-Zugnotationen bleiben ihre ursprünglichen Daten. Native technische Engine-Diagnosen erscheinen zusammen mit einer lokalisierten Fehlermeldung. Schlüssel und Platzhalter aller sechs Kataloge werden typisiert und beim Start geprüft. Die Übersetzungen sind noch nicht muttersprachlich lektoriert.
+
+## Tags, Kommentare und Lernen
+
+Partien und importierte Positionen haben jeweils eigene **Tags und Kommentare**. „Notizen speichern“ schreibt sie nach PostgreSQL; beim Blättern bleiben ungespeicherte Entwürfe in der aktuellen Sitzung erhalten. Parallele Änderungen erzeugen einen sichtbaren Konflikt, ohne den Entwurf zu überschreiben. Kommentare sind Klartext/Markdown und werden als Text dargestellt. Tags werden vereinheitlicht; Grenzen: 30 Tags zu je 64 Zeichen und 20.000 Kommentarzeichen.
+
+**Tags & Kommentare durchsuchen** findet beide Zieltypen. Freitext ab drei Zeichen, exakter Tag und Zieltyp sind kombinierbar; Treffer öffnen die betreffende Partie oder Zugposition. Die normale Bibliothekssuche findet ebenfalls Partien über ihre eigenen Notizen und die Notizen ihrer Positionen. Suchindizes erhalten die schnelle Suche auch bei großen Bibliotheken.
+
+Unter **Positionen als Lernkarten** ein Deck erstellen oder auswählen. Eine bereits analysierte Einzelposition hinzufügen, oder Fehler aus einer abgeschlossenen Partieanalyse nach Spieler und Mindestverlust übernehmen. Checker-Züge, Double-/No-double- und Take-/Pass-Entscheidungen werden unterstützt. Kartenidentität berücksichtigt Brett, vollständigen Matchkontext und Fragetyp; derselbe Lerninhalt kann mehreren Decks angehören. Erneutes Hinzufügen aktualisiert seine Analysequelle und erhält den Lernfortschritt. Die Tags und Kommentare der aktuellen Partie-/Positionsquelle werden beim Aufdecken und Export gelesen. Eine Deckauswahl ist auf 1.000 Karten begrenzt; pro Anfrage werden maximal 100 Karten gelistet.
+
+**Lernen & Anki** zeigt fällige Karten mit dem gewählten Board-Theme, Matchlänge, Spielstand und Spieler am Zug; Money Games nennen zusätzlich den Jacoby-Status. Erst die eigene Antwort überlegen, dann die Lösung aufdecken und mit **Nochmal/Schwer/Gut/Einfach** bewerten. Die Wiederholungsplanung läuft in Rust mit `fsrs`, Zielbehaltensrate **90 %**: Nochmal nach **60 Sekunden**, die erste schwere Bewertung nach **10 Minuten**, spätere Hard-/Good-/Easy-Intervalle aus FSRS in ganzen Tagen. Easy liegt mindestens einen Tag nach Good. Zustand, Bewertungshistorie und Fälligkeit liegen in PostgreSQL. Gleichzeitige oder wiederholte Bewertungsanfragen können denselben Review nicht doppelt anwenden.
+
+**Anki-Deck herunterladen** erzeugt ein eigenständiges `.apkg` vollständig in Rust: stabiles Notizmodell und GUIDs, eigene SVG-Brettdiagramme, Spielstand/Doppler/Würfel, Lösungen, Tags und Kommentare. Es benötigt keine BGBlitz-Bilder und keinen Python-Prozess zur Laufzeit. Die Beschriftung folgt der ausgewählten Sprache. Wiederholter Import aktualisiert vorhandene Notizen; ein persistierter Inhaltsfingerabdruck sorgt auch bei schnellen Kommentar- oder Sprachänderungen für eine neuere Anki-Änderungszeit. Der Export enthält keine BG-Tutor-Review-Historie. **Anki und BG Tutor führen ihre Lernstände getrennt.** Ein bidirektionaler Abgleich, AnkiConnect und der Import fremder Decks gehören nicht zu dieser ersten Ausbaustufe.
+
+Der Aufbau orientiert sich an persönlichen/thematischen Fehlerdecks, wie sie [Dirk Schiemann](https://www.dirk-schiemann.de/the-anki-method.html), [XG2Anki](https://xg2anki.de/) und [AnkiGammon](https://ankigammon.com/) beschreiben. Anki-Pakete und Aktualisierungen: [Anki-Handbuch](https://docs.ankiweb.net/manual/importing/packaged-decks). Wiederholungsbibliothek: [FSRS-rs](https://docs.rs/fsrs/latest/fsrs/).
+
+Die API bietet Annotationen unter `/api/matches/{id}/annotation` und `/api/positions/{id}/annotation` (GET/PUT), Suche unter `/api/annotations/search`, Tag-Vorschläge unter `/api/tags` sowie Decks, Karten, fällige Karten, Aufdecken und Bewertungen unter `/api/decks` und `/api/cards`. Der vollständige Vertrag steht in OpenAPI; der Client verwendet daraus erzeugte Typen.
+
+Optionaler Test mit Ankis eigener Python-Importbibliothek in einem **temporären, leeren Profil**:
+
+```sh
+python tools/verify_anki_package.py deck.apkg --expected-cards 10
+# Für ein aktualisiertes Paket derselben Karten:
+python tools/verify_anki_package.py vorher.apkg --updated nachher.apkg
+```
+
+Dafür wird separat das offizielle Python-Paket `anki` benötigt; die Prüfung verändert keine vorhandene Anki-Sammlung. Getestet wurde mit Anki 26.9.4, einschließlich Import, Duplikaterkennung, HTML-Escaping und aktualisiertem Kommentar/Sprachinhalt.
 
 ## Importformate
 
@@ -109,6 +141,7 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 npm test --prefix web
+npm run test:themes --prefix web
 npm run build --prefix web
 ```
 
@@ -128,7 +161,7 @@ Browserprüfung bei laufendem Backend und Vite; verwendet installiertes Google C
 npm run test:e2e --prefix web
 ```
 
-Der Test importiert eine klar benannte Demo-Partie in die lokale Bibliothek und prüft Analyse, Würfelmatrix, Suche, Theme-Persistenz, Wiederaufnahme von Ergebnissen und ein 390 px breites Layout. Eine verzögerte API-Antwort prüft außerdem, dass beim schnellen Wechsel zwischen analysierten Positionen die zuletzt angeklickte Position ausgewählt bleibt. Screenshots liegen unter `web/test-results/`.
+Die Browserprüfungen importieren klar benannte Demo-Partien in die lokale Bibliothek und prüfen Analyse, Würfelmatrix, Suche, alle sechs Sprachen, lokale ZIP-Themes, Wiederaufnahme von Ergebnissen und ein 390 px breites Layout. Weitere Abläufe prüfen Notizen mit Versionskonflikten, direkte Positionssprünge, Deckanlage, verdeckte Lernantworten, persistierte Bewertungen, Checker-/Cube-Karten und Anki-Downloads. Eine verzögerte API-Antwort prüft außerdem, dass beim schnellen Wechsel zwischen analysierten Positionen die zuletzt angeklickte Position ausgewählt bleibt. Screenshots liegen unter `web/test-results/`.
 
 ## Struktur und nächste Schritte
 

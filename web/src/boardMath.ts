@@ -22,6 +22,8 @@ export function checkerCounts(board: number[]): [number, number] {
 
 export function matchContext(id: string): {
   scores: [number, number];
+  length: number;
+  jacoby: boolean;
   cube: number;
   owner: number | null;
   crawford: boolean;
@@ -38,6 +40,8 @@ export function matchContext(id: string): {
   const owner = bits(4, 2);
   return {
     scores: [bits(36, 15), bits(51, 15)],
+    length: bits(21, 15),
+    jacoby: !bits(66, 1),
     cube: 2 ** bits(0, 4),
     owner: owner === 3 ? null : owner,
     crawford: !!bits(7, 1),

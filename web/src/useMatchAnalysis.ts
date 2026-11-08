@@ -4,7 +4,7 @@ import { mergeJob, request, terminal, type Job } from './api';
 /** The backend stores the latest match job; reopening a match needs no local cache. */
 export function useMatchAnalysis(matchId: string) {
   const [job, setJob] = useState<Job>();
-  const [error, setError] = useState('');
+  const [error, setError] = useState<unknown>(null);
   const [submitting, setSubmitting] = useState(false);
   const [revision, setRevision] = useState(0);
   const [starting, setStarting] = useState<AbortController>();
@@ -20,13 +20,13 @@ export function useMatchAnalysis(matchId: string) {
         });
         if (abort.signal.aborted) return;
         setJob((previous) => mergeJob(previous, incoming));
-        setError('');
+        setError(null);
         if (terminal(incoming)) {
           stream?.close();
           clearInterval(timer);
         }
       } catch (error) {
-        if (!abort.signal.aborted) setError(String(error));
+        if (!abort.signal.aborted) setError(error);
       }
     }
     void request<Job | null>(`/matches/${matchId}/analysis`, {
@@ -53,7 +53,7 @@ export function useMatchAnalysis(matchId: string) {
         }, 3000);
       })
       .catch((error) => {
-        if (!abort.signal.aborted) setError(String(error));
+        if (!abort.signal.aborted) setError(error);
       });
     return () => {
       abort.abort();
@@ -66,7 +66,7 @@ export function useMatchAnalysis(matchId: string) {
     const abort = new AbortController();
     setStarting(abort);
     setSubmitting(true);
-    setError('');
+    setError(null);
     try {
       const incoming = await request<Job>(`/matches/${matchId}/analysis`, {
         method: 'POST',
@@ -78,7 +78,7 @@ export function useMatchAnalysis(matchId: string) {
       setJob(incoming);
       setRevision((value) => value + 1);
     } catch (error) {
-      if (!abort.signal.aborted) setError(String(error));
+      if (!abort.signal.aborted) setError(error);
     } finally {
       if (!abort.signal.aborted) setSubmitting(false);
     }

@@ -8,3 +8,9 @@
 /web/playwright-report/
 .worktrees/
 *.tsbuildinfo
+
+# Local third-party theme packages and reproducible build output.
+/themes/*.zip
+/web/public/themes/
+/web/src/generated-themes.json
+/tools/__pycache__/

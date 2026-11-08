@@ -83,14 +83,15 @@ pub async fn get_match(pool: &PgPool, id: Uuid) -> Result<Option<MatchSummary>> 
 pub async fn matches(pool: &PgPool, q: &str, after: Option<Uuid>, limit: i64) -> Result<MatchPage> {
     let mut query = QueryBuilder::<Postgres>::new(format!("{MATCH_SUMMARY} WHERE true"));
     if !q.is_empty() {
-        let escaped = q
-            .to_lowercase()
-            .replace('\\', "\\\\")
-            .replace('%', "\\%")
-            .replace('_', "\\_");
+        let pattern = crate::annotations::literal_pattern(q);
+        // UNION collects indexed hits before fetching summaries; avoid an OR with
+        // correlated child-position scans across the entire match library.
         query
-            .push(" AND search_text LIKE ")
-            .push_bind(format!("%{escaped}%"));
+            .push(" AND id IN (SELECT id FROM matches WHERE search_text LIKE ")
+            .push_bind(pattern.clone())
+            .push(" UNION SELECT coalesce(a.match_uuid,p.match_uuid) FROM annotations a LEFT JOIN positions p ON p.id=a.position_uuid WHERE a.search_text LIKE ")
+            .push_bind(pattern)
+            .push(")");
     }
     if let Some(after) = after {
         query.push(" AND id > ").push_bind(after);

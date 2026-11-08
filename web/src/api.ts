@@ -1,4 +1,5 @@
 import type { components } from './generated-api';
+import { AppError } from './i18n-core';
 
 type Schema = components['schemas'];
 export type Match = Schema['MatchSummary'];
@@ -21,7 +22,17 @@ export async function request<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const response = await fetch(`/api${path}`, options);
+  let response: Response;
+  try {
+    response = await fetch(`/api${path}`, options);
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') throw error;
+    throw new AppError(
+      'error.network',
+      {},
+      error instanceof Error ? error.message : String(error),
+    );
+  }
   const text = await response.text();
   let data: unknown;
   try {
@@ -34,10 +45,13 @@ export async function request<T>(
       data && typeof data === 'object' && 'error' in data
         ? String(data.error)
         : text;
-    throw new Error(error || `HTTP ${response.status}`);
+    throw new AppError(
+      'error.request',
+      { status: String(response.status) },
+      error,
+    );
   }
-  if (data === undefined)
-    throw new Error('Das Backend hat keine gültige Antwort geliefert.');
+  if (data === undefined) throw new AppError('error.invalidResponse');
   return data as T;
 }
 

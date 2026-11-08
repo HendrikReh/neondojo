@@ -11,7 +11,12 @@
     "test:e2e": "playwright test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "api:types": "cargo run -q --manifest-path ../Cargo.toml -p bgtutor --example openapi > ../docs/openapi.json && openapi-typescript ../docs/openapi.json -o src/generated-api.d.ts"
+    "api:types": "cargo run -q --manifest-path ../Cargo.toml -p bgtutor --example openapi > ../docs/openapi.json && openapi-typescript ../docs/openapi.json -o src/generated-api.d.ts",
+    "themes:prepare": "python3 ../tools/prepare_themes.py",
+    "predev": "npm run themes:prepare",
+    "prebuild": "npm run themes:prepare",
+    "pretest": "npm run themes:prepare",
+    "test:themes": "python3 -m unittest discover -s ../tools -p 'test_*.py'"
   },
   "dependencies": {
     "react": "^19.2.0",

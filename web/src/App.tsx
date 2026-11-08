@@ -10,8 +10,20 @@ import Board, { themes, type Theme } from './Board';
 import AnalysisPanel from './AnalysisPanel';
 import MatchAnalysisPanel from './MatchAnalysisPanel';
 import { useJobs } from './useJobs';
+import AnnotationPanel from './AnnotationPanel';
+import AnnotationSearch, { type AnnotationHit } from './AnnotationSearch';
+import LearningWorkspace, { AddCardsPanel } from './LearningPanel';
+import { useLearningText } from './learning-messages';
+import { languages, useI18n, type Locale } from './i18n';
+import { AppError } from './i18n-core';
 
 export default function App() {
+  const learnT = useLearningText();
+  const [view, setView] = useState<'library' | 'learning'>('library');
+  const [annotationRevision, setAnnotationRevision] = useState(0);
+  const [deckRevision, setDeckRevision] = useState(0);
+  const { t, locale, setLocale, formatNumber, formatDecision, formatError } =
+    useI18n();
   const [matches, setMatches] = useState<Match[]>([]);
   const [matchCursor, setMatchCursor] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -22,14 +34,17 @@ export default function App() {
   const [index, setIndex] = useState(0);
   const [loadingPositions, setLoadingPositions] = useState(false);
   const [stats, setStats] = useState<DiceStats | null>(null);
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const [error, setError] = useState<unknown>(null);
+  const [notice, setNotice] = useState<{
+    duplicate: boolean;
+    count: number;
+  } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [exactId, setExactId] = useState('');
   const [found, setFound] = useState<Page<Position> | null>(null);
   const [exactLoading, setExactLoading] = useState(false);
-  const [exactError, setExactError] = useState('');
+  const [exactError, setExactError] = useState<unknown>(null);
   const [health, setHealth] = useState<'checking' | 'ok' | 'degraded'>(
     'checking',
   );
@@ -44,6 +59,11 @@ export default function App() {
   const desiredPosition = useRef<string | undefined>(undefined);
   const position = positions[index];
   const jobs = useJobs(position?.id);
+  function invalidateNavigation() {
+    navigationVersion.current++;
+    setLoadingPositions(false);
+    return navigationVersion.current;
+  }
 
   useEffect(() => {
     localStorage.setItem('bgtutor.theme', theme);
@@ -61,7 +81,7 @@ export default function App() {
     const abort = new AbortController();
     const version = ++searchVersion.current;
     setSearching(true);
-    setError('');
+    setError(null);
     setMatchCursor(null);
     const timer = setTimeout(() => {
       if (query.trim().length > 0 && query.trim().length < 3) {
@@ -77,7 +97,7 @@ export default function App() {
           setMatchCursor(page.next_cursor);
         })
         .catch((error) => {
-          if (!abort.signal.aborted) setError(String(error));
+          if (!abort.signal.aborted) setError(error);
         })
         .finally(() => {
           if (!abort.signal.aborted) setSearching(false);
@@ -92,7 +112,7 @@ export default function App() {
   useEffect(() => {
     const abort = new AbortController();
     selection.current = selectedMatch?.id;
-    navigationVersion.current++;
+    invalidateNavigation();
     setPositions([]);
     setIndex(0);
     setPositionCursor(null);
@@ -133,7 +153,7 @@ export default function App() {
           }),
         );
       } catch (error) {
-        if (!abort.signal.aborted) setError(String(error));
+        if (!abort.signal.aborted) setError(error);
       } finally {
         if (!abort.signal.aborted) setLoadingPositions(false);
       }
@@ -144,12 +164,12 @@ export default function App() {
   async function upload(file: File | undefined) {
     if (!file) return;
     if (file.size > 16 * 1024 * 1024) {
-      setError('Die Datei darf höchstens 16 MiB groß sein.');
+      setError(new AppError('error.fileSize'));
       return;
     }
     setUploading(true);
-    setError('');
-    setNotice('');
+    setError(null);
+    setNotice(null);
     try {
       const body = new FormData();
       body.append('file', file);
@@ -161,13 +181,12 @@ export default function App() {
       setRefresh((r) => r + 1);
       setSelectedMatch(imported.match);
       setFound(null);
-      setNotice(
-        imported.duplicate
-          ? 'Diese Datei ist bereits in deiner Bibliothek.'
-          : `${imported.match.position_count} Positionen importiert.`,
-      );
+      setNotice({
+        duplicate: imported.duplicate,
+        count: imported.match.position_count,
+      });
     } catch (error) {
-      setError(String(error));
+      setError(error);
     } finally {
       setUploading(false);
       if (uploadInput.current) uploadInput.current.value = '';
@@ -185,12 +204,13 @@ export default function App() {
       setMatches((previous) => [...previous, ...page.items]);
       setMatchCursor(page.next_cursor);
     } catch (error) {
-      setError(String(error));
+      setError(error);
     } finally {
       if (version === searchVersion.current) setSearching(false);
     }
   }
   async function nextPosition(loadMore = false) {
+    const version = invalidateNavigation();
     if (!loadMore && index < positions.length - 1) {
       setIndex(index + 1);
       return;
@@ -202,20 +222,22 @@ export default function App() {
       const page = await request<Page<Position>>(
         `/positions?match_id=${id}&limit=100&after=${positionCursor}`,
       );
-      if (selection.current !== id) return;
+      if (selection.current !== id || navigationVersion.current !== version)
+        return;
       const firstNew = positions.length;
       setPositions((previous) => [...previous, ...page.items]);
       setPositionCursor(page.next_cursor);
       setIndex(firstNew);
     } catch (error) {
-      setError(String(error));
+      if (navigationVersion.current === version) setError(error);
     } finally {
-      if (selection.current === id) setLoadingPositions(false);
+      if (selection.current === id && navigationVersion.current === version)
+        setLoadingPositions(false);
     }
   }
   async function searchPosition(more = false) {
     setExactLoading(true);
-    setExactError('');
+    setExactError(null);
     try {
       const page = await request<Page<Position>>(
         `/positions?position_id=${encodeURIComponent(exactId.trim())}&limit=20${more && found?.next_cursor ? `&after=${found.next_cursor}` : ''}`,
@@ -226,13 +248,13 @@ export default function App() {
           : page,
       );
     } catch (error) {
-      setExactError(String(error));
+      setExactError(error);
     } finally {
       setExactLoading(false);
     }
   }
   async function openFound(p: Position) {
-    navigationVersion.current++;
+    const version = invalidateNavigation();
     setLoadingPositions(false);
     try {
       if (
@@ -243,17 +265,18 @@ export default function App() {
         return;
       }
       const match = await request<Match>(`/matches/${p.match_uuid}`);
+      if (navigationVersion.current !== version) return;
       desiredPosition.current = p.id;
       setSelectedMatch(match);
     } catch (error) {
-      setError(String(error));
+      if (navigationVersion.current === version) setError(error);
     }
   }
 
   async function openAnalyzedPosition(id: string) {
     if (!selectedMatch) return;
     const matchId = selectedMatch.id;
-    const version = ++navigationVersion.current;
+    const version = invalidateNavigation();
     setLoadingPositions(true);
     try {
       const all = [...positions];
@@ -276,8 +299,7 @@ export default function App() {
       )
         return;
       const target = all.findIndex((p) => p.id === id);
-      if (target < 0)
-        throw new Error('Die analysierte Position wurde nicht gefunden.');
+      if (target < 0) throw new AppError('error.positionMissing');
       setPositions(all);
       setPositionCursor(cursor);
       setIndex(target);
@@ -289,7 +311,7 @@ export default function App() {
         selection.current === matchId &&
         navigationVersion.current === version
       )
-        setError(String(error));
+        setError(error);
     } finally {
       if (
         selection.current === matchId &&
@@ -299,85 +321,113 @@ export default function App() {
     }
   }
 
+  async function openAnnotation(hit: AnnotationHit) {
+    setLoadingPositions(false);
+    setView('library');
+    const version = invalidateNavigation();
+    if (
+      hit.target_kind === 'position' &&
+      selectedMatch?.id === hit.match_uuid &&
+      positions.some((p) => p.id === hit.target_id)
+    ) {
+      setIndex(positions.findIndex((p) => p.id === hit.target_id));
+      document
+        .querySelector('.board-panel')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    try {
+      const match = await request<Match>(`/matches/${hit.match_uuid}`);
+      if (navigationVersion.current !== version) return;
+      desiredPosition.current =
+        hit.target_kind === 'position' ? hit.target_id : undefined;
+      setSelectedMatch(match);
+    } catch (error) {
+      if (navigationVersion.current === version) setError(error);
+    }
+  }
+
   return (
     <div className="app">
       <aside className="sidebar">
-        <a className="brand" href="/" aria-label="BG Tutor Startseite">
+        <a className="brand" href="/" aria-label={t('app.home')}>
           <span className="brand-mark">
             b<span>g</span>
           </span>
           <span>
-            BG Tutor<small>EVERY MOVE, UNDERSTOOD.</small>
+            BG Tutor<small>{t('app.tagline')}</small>
           </span>
         </a>
         <div className="library-heading">
-          <span className="eyebrow">DEINE BIBLIOTHEK</span>
-          <span className="small-badge">LOKAL</span>
+          <span className="eyebrow">{t('app.libraryEyebrow')}</span>
+          <span className="small-badge">{t('app.localBadge')}</span>
         </div>
         <button
           className="upload-button"
           onClick={() => uploadInput.current?.click()}
           disabled={uploading}
         >
-          {uploading ? 'Partie wird importiert …' : '+  Partie importieren'}
+          {uploading ? t('app.importing') : t('app.import')}
           <small>.mat · .xg · .sgf</small>
         </button>
         <input
           ref={uploadInput}
           className="sr-only"
           type="file"
-          aria-label="Partiedatei"
+          aria-label={t('app.matchFile')}
           accept=".mat,.sgf,.xg"
           onChange={(e) => void upload(e.target.files?.[0])}
         />
         <label className="search-box">
           <span>⌕</span>
           <input
-            aria-label="Partien durchsuchen"
-            placeholder="Spieler oder Datei suchen"
+            aria-label={t('app.searchMatches')}
+            placeholder={t('app.searchPlaceholder')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </label>
         {query.trim().length > 0 && query.trim().length < 3 && (
-          <p className="search-hint">Mindestens 3 Zeichen eingeben.</p>
+          <p className="search-hint">{t('app.searchMin')}</p>
         )}
         <div className="library-count">
-          <span>Partien</span>
+          <span>{t('app.matches')}</span>
           <span>
             {searching
-              ? 'Suche …'
-              : `${matches.length}${matchCursor ? '+' : ''}`}
+              ? t('app.searching')
+              : `${formatNumber(matches.length)}${matchCursor ? '+' : ''}`}
           </span>
         </div>
-        <nav className="match-list" aria-label="Partien">
+        <nav className="match-list" aria-label={t('app.matches')}>
           {matches.map((m) => (
             <button
               key={m.id}
               className={`match-card ${m.id === selectedMatch?.id ? 'active' : ''}`}
               onClick={() => {
+                invalidateNavigation();
                 desiredPosition.current = undefined;
+                setView('library');
                 setSelectedMatch(m);
               }}
             >
               <span className="match-players">
                 {m.white}
-                <span className="versus">vs.</span>
+                <span className="versus">{t('common.versus')}</span>
                 {m.black}
               </span>
               <span className="match-meta">
-                {m.match_length ? `${m.match_length} Punkte` : 'Money Game'}
+                {m.match_length
+                  ? t('board.points', { count: m.match_length })
+                  : t('common.moneyGame')}
                 <span>·</span>
-                {m.position_count} Züge
+                {t('app.moves', { count: m.position_count })}
               </span>
               <small title={m.filename}>{m.filename}</small>
             </button>
           ))}
           {!matches.length && !searching && (
             <div className="library-empty">
-              {query
-                ? 'Keine passenden Partien.'
-                : 'Deine nächste Erkenntnis beginnt mit einer Partie.'}
+              {query ? t('app.noMatches') : t('app.libraryEmpty')}
             </div>
           )}
         </nav>
@@ -387,17 +437,17 @@ export default function App() {
             disabled={searching}
             onClick={() => void loadMatches()}
           >
-            Weitere Partien laden
+            {t('app.moreMatches')}
           </button>
         )}
         <div className="sidebar-footer">
           <span className={`status-dot ${health === 'ok' ? 'ready' : ''}`} />
           <span>
             {health === 'ok'
-              ? 'GNUbg verbunden'
+              ? t('app.engineConnected')
               : health === 'checking'
-                ? 'Backend wird geprüft'
-                : 'Backend / GNUbg nicht bereit'}
+                ? t('app.healthChecking')
+                : t('app.healthUnavailable')}
           </span>
           <a href="/api/openapi.json" target="_blank" rel="noreferrer">
             API ↗
@@ -407,19 +457,18 @@ export default function App() {
       <main>
         <header className="topbar">
           <div className="breadcrumb">
-            Bibliothek <span>/</span> <strong>Analyse-Workspace</strong>
+            {t('app.library')} <span>/</span>{' '}
+            <strong>{t('app.workspace')}</strong>
           </div>
-          <span className="privacy-note">
-            ↳ Alles bleibt auf deinem Rechner
-          </span>
+          <span className="privacy-note">{t('app.privacy')}</span>
         </header>
         <div className="workspace">
-          {error && (
+          {!!error && (
             <div className="error" role="alert">
-              {error}
+              {formatError(error)}
               <button
-                aria-label="Fehlermeldung schließen"
-                onClick={() => setError('')}
+                aria-label={t('app.closeError')}
+                onClick={() => setError(null)}
               >
                 ×
               </button>
@@ -427,10 +476,13 @@ export default function App() {
           )}
           {notice && (
             <div className="notice" role="status">
-              ✓ {notice}
+              ✓{' '}
+              {notice.duplicate
+                ? t('app.importDuplicate')
+                : t('app.importCount', { count: notice.count })}
               <button
-                aria-label="Hinweis schließen"
-                onClick={() => setNotice('')}
+                aria-label={t('app.closeNotice')}
+                onClick={() => setNotice(null)}
               >
                 ×
               </button>
@@ -438,282 +490,376 @@ export default function App() {
           )}
           <div className="workspace-title">
             <div>
-              <span className="eyebrow">BACKGAMMON, EINEN ZUG WEITER</span>
+              <span className="eyebrow">{t('app.eyebrow')}</span>
               <h1>
-                {selectedMatch
-                  ? 'Kleine Züge. Große Unterschiede.'
-                  : 'Dein Spiel. Dein nächster Schritt.'}
+                {selectedMatch ? t('app.selectedTitle') : t('app.welcomeTitle')}
               </h1>
             </div>
-            <label className="theme-picker">
-              Brett{' '}
-              <select
-                aria-label="Board-Theme"
-                value={theme}
-                onChange={(e) => setTheme(e.target.value as Theme)}
-              >
-                {themes.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <details className="position-search">
-            <summary>
-              ⌕ Position in der Bibliothek finden <span>GNUbg Position-ID</span>
-            </summary>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                void searchPosition();
-              }}
-            >
-              <input
-                aria-label="GNUbg Position-ID"
-                placeholder="z. B. 4HPwATDgc/ABMA"
-                value={exactId}
-                onChange={(e) => {
-                  setExactId(e.target.value);
-                  setFound(null);
-                }}
-              />
-              <button disabled={exactLoading || !exactId.trim()}>
-                Exakt suchen
-              </button>
-              {position && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setExactId(position.position_id);
-                    setFound(null);
-                  }}
+            <div className="workspace-settings">
+              <label className="theme-picker">
+                {t('common.board')}{' '}
+                <select
+                  aria-label={t('app.themeLabel')}
+                  value={theme}
+                  onChange={(e) => setTheme(e.target.value as Theme)}
                 >
-                  Aktuelle Position übernehmen
-                </button>
-              )}
-            </form>
-            {exactError && (
-              <p role="alert" className="search-hint">
-                {exactError}
-              </p>
-            )}
-            {found && (
-              <div className="position-results">
-                {found.items.length === 0 ? (
-                  <p>Keine identische Brettstellung gefunden.</p>
-                ) : (
-                  found.items.map((p) => (
-                    <button key={p.id} onClick={() => void openFound(p)}>
-                      Spiel {p.game_no} · Zug {p.ply} · {p.dice.join('–')}{' '}
-                      <strong>{p.notation}</strong>
-                      <small>{p.match_uuid.slice(0, 8)}…</small>
-                    </button>
-                  ))
-                )}
-                {found.next_cursor && (
-                  <button
-                    onClick={() => void searchPosition(true)}
-                    disabled={exactLoading}
-                  >
-                    Weitere Treffer
-                  </button>
-                )}
-              </div>
-            )}
-          </details>
-          {!selectedMatch ? (
-            <section
-              className="welcome"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (!uploading) void upload(e.dataTransfer.files[0]);
+                  {themes.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="theme-picker language-picker">
+                {t('common.language')}{' '}
+                <select
+                  aria-label={t('common.language')}
+                  value={locale}
+                  onChange={(event) => setLocale(event.target.value as Locale)}
+                >
+                  {languages.map((language) => (
+                    <option key={language.id} value={language.id}>
+                      {language.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </div>
+          <nav className="workspace-views" aria-label={learnT('study')}>
+            <button
+              aria-pressed={view === 'library'}
+              onClick={() => {
+                invalidateNavigation();
+                setView('library');
               }}
             >
-              <div className="welcome-board" aria-hidden="true">
-                <span>▲▼▲▼▲▼</span>
-                <div>
-                  ● ● <b>⚄ ⚂</b> ○ ○
-                </div>
-                <span>▼▲▼▲▼▲</span>
-              </div>
-              <span className="eyebrow">DEIN PERSÖNLICHES ANALYSEBRETT</span>
-              <h2>Jede Partie erzählt dir etwas.</h2>
-              <p>
-                Importiere eine Partie, entdecke entscheidende Positionen und
-                finde mit GNUbg heraus, was in deinem nächsten Zug steckt.
-              </p>
-              <button
-                className="primary"
-                onClick={() => uploadInput.current?.click()}
-                disabled={uploading}
-              >
-                {uploading ? 'Import läuft …' : 'Erste Partie importieren'}{' '}
-                <span>↗</span>
-              </button>
-              <small>Oder eine MAT-, XG- oder SGF-Datei hier ablegen.</small>
-              <div className="welcome-features">
-                <span>
-                  <b>01</b> Partien sammeln
-                </span>
-                <span>
-                  <b>02</b> Positionen finden
-                </span>
-                <span>
-                  <b>03</b> Züge verstehen
-                </span>
-              </div>
-            </section>
+              {learnT('library')}
+            </button>
+            <button
+              aria-pressed={view === 'learning'}
+              onClick={() => {
+                invalidateNavigation();
+                setView('learning');
+              }}
+            >
+              {learnT('study')}
+            </button>
+          </nav>
+          {view === 'learning' ? (
+            <LearningWorkspace
+              theme={theme}
+              revision={deckRevision}
+              onChanged={() => setDeckRevision((n) => n + 1)}
+            />
           ) : (
             <>
-              <div className="match-title">
-                <h2>
-                  {selectedMatch.white} <span>vs.</span> {selectedMatch.black}
-                </h2>
-                <span>
-                  {selectedMatch.match_length
-                    ? `${selectedMatch.match_length}-Punkte-Match`
-                    : 'Money Game'}{' '}
-                  <b>·</b> {selectedMatch.format.toUpperCase()}{' '}
-                  <a href={`/api/matches/${selectedMatch.id}/source`}>SGF ↓</a>
-                </span>
-              </div>
-              <div className="play-layout">
-                <section className="board-panel">
-                  {position ? (
-                    <>
-                      <div className="board-heading">
-                        <span>
-                          Spiel {position.game_no} <b>·</b> Zug {position.ply}
-                        </span>
-                        <strong>
-                          {position.player === 0
-                            ? selectedMatch.white
-                            : selectedMatch.black}{' '}
-                          am Zug
-                        </strong>
-                      </div>
-                      <Board
-                        position={position}
-                        white={selectedMatch.white}
-                        black={selectedMatch.black}
-                        theme={theme}
-                      />
-                      <div className="board-navigation">
-                        <button
-                          aria-label="Vorheriger Zug"
-                          disabled={index === 0 || loadingPositions}
-                          onClick={() => setIndex(index - 1)}
-                        >
-                          ←
-                        </button>
-                        <span>
-                          Gespielt <strong>{position.notation}</strong>
-                          <small>
-                            {position.ordinal + 1} /{' '}
-                            {selectedMatch.position_count}
-                          </small>
-                        </span>
-                        <button
-                          aria-label="Nächster Zug"
-                          disabled={
-                            loadingPositions ||
-                            (index === positions.length - 1 && !positionCursor)
-                          }
-                          onClick={() => void nextPosition()}
-                        >
-                          →
-                        </button>
-                      </div>
-                      <div className="position-code">
-                        <span>POSITION-ID</span>
-                        <code>{position.position_id}</code>
-                        <button
-                          title="Positionssuche vorbereiten"
-                          onClick={() => {
-                            setExactId(position.position_id);
-                            setFound(null);
-                            const details =
-                              document.querySelector<HTMLDetailsElement>(
-                                '.position-search',
-                              );
-                            if (details) details.open = true;
-                          }}
-                        >
-                          ⌕
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="board-loading" role="status">
-                      {loadingPositions
-                        ? 'Positionen werden geladen …'
-                        : 'Keine Positionen vorhanden.'}
-                    </div>
-                  )}
-                </section>
-                <aside className="moves-panel">
-                  <div className="section-heading">
-                    <h3>Zugverlauf</h3>
-                    <span>{selectedMatch.position_count}</span>
-                  </div>
-                  <div className="moves-list">
-                    {positions.map((p, i) => (
-                      <button
-                        key={p.id}
-                        className={i === index ? 'current' : ''}
-                        onClick={() => {
-                          navigationVersion.current++;
-                          setLoadingPositions(false);
-                          setIndex(i);
-                        }}
-                      >
-                        <span className="move-no">
-                          {p.game_no}.{p.ply}
-                        </span>
-                        <i
-                          className={`player-dot ${p.player === 0 ? 'white' : 'black'}`}
-                        />
-                        <span className="move-dice">{p.dice.join('–')}</span>
-                        <strong>{p.notation}</strong>
-                      </button>
-                    ))}
-                  </div>
-                  {positionCursor && (
+              <AnnotationSearch
+                revision={annotationRevision}
+                onOpen={(hit) => void openAnnotation(hit)}
+              />
+              <details className="position-search">
+                <summary>
+                  ⌕ {t('app.findPosition')} <span>{t('app.positionId')}</span>
+                </summary>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void searchPosition();
+                  }}
+                >
+                  <input
+                    aria-label={t('app.positionId')}
+                    placeholder={t('app.positionPlaceholder')}
+                    value={exactId}
+                    onChange={(e) => {
+                      setExactId(e.target.value);
+                      setFound(null);
+                    }}
+                  />
+                  <button disabled={exactLoading || !exactId.trim()}>
+                    {t('app.exactSearch')}
+                  </button>
+                  {position && (
                     <button
-                      disabled={loadingPositions}
-                      onClick={() => void nextPosition(true)}
+                      type="button"
+                      onClick={() => {
+                        setExactId(position.position_id);
+                        setFound(null);
+                      }}
                     >
-                      Weiter im Verlauf →
+                      {t('app.usePosition')}
                     </button>
                   )}
-                </aside>
-              </div>
-              <MatchAnalysisPanel
-                key={selectedMatch.id}
-                match={selectedMatch}
-                onPosition={(id) => void openAnalyzedPosition(id)}
-              />
-              {jobs.error && (
-                <div className="error" role="alert">
-                  {jobs.error}
-                </div>
+                </form>
+                {!!exactError && (
+                  <p role="alert" className="search-hint">
+                    {formatError(exactError)}
+                  </p>
+                )}
+                {found && (
+                  <div className="position-results">
+                    {found.items.length === 0 ? (
+                      <p>{t('app.noPositionMatches')}</p>
+                    ) : (
+                      found.items.map((p) => (
+                        <button key={p.id} onClick={() => void openFound(p)}>
+                          {t('app.positionResult', {
+                            game: p.game_no,
+                            move: p.ply,
+                            dice: p.dice.join('–'),
+                          })}{' '}
+                          <strong>{formatDecision(p.notation)}</strong>
+                          <small>{p.match_uuid.slice(0, 8)}…</small>
+                        </button>
+                      ))
+                    )}
+                    {found.next_cursor && (
+                      <button
+                        onClick={() => void searchPosition(true)}
+                        disabled={exactLoading}
+                      >
+                        {t('app.moreResults')}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </details>
+              {!selectedMatch ? (
+                <section
+                  className="welcome"
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (!uploading) void upload(e.dataTransfer.files[0]);
+                  }}
+                >
+                  <div className="welcome-board" aria-hidden="true">
+                    <span>▲▼▲▼▲▼</span>
+                    <div>
+                      ● ● <b>⚄ ⚂</b> ○ ○
+                    </div>
+                    <span>▼▲▼▲▼▲</span>
+                  </div>
+                  <span className="eyebrow">{t('app.welcomeEyebrow')}</span>
+                  <h2>{t('app.welcomeHeading')}</h2>
+                  <p>{t('app.welcomeDescription')}</p>
+                  <button
+                    className="primary"
+                    onClick={() => uploadInput.current?.click()}
+                    disabled={uploading}
+                  >
+                    {uploading ? t('app.importRunning') : t('app.importFirst')}{' '}
+                    <span>↗</span>
+                  </button>
+                  <small>{t('app.dropFile')}</small>
+                  <div className="welcome-features">
+                    <span>
+                      <b>01</b> {t('app.collectMatches')}
+                    </span>
+                    <span>
+                      <b>02</b> {t('app.findPositions')}
+                    </span>
+                    <span>
+                      <b>03</b> {t('app.understandMoves')}
+                    </span>
+                  </div>
+                </section>
+              ) : (
+                <>
+                  <div className="match-title">
+                    <h2>
+                      {selectedMatch.white} <span>{t('common.versus')}</span>{' '}
+                      {selectedMatch.black}
+                    </h2>
+                    <span>
+                      {selectedMatch.match_length
+                        ? t('app.matchLength', {
+                            count: selectedMatch.match_length,
+                          })
+                        : t('common.moneyGame')}{' '}
+                      <b>·</b> {selectedMatch.format.toUpperCase()}{' '}
+                      <a href={`/api/matches/${selectedMatch.id}/source`}>
+                        SGF ↓
+                      </a>
+                    </span>
+                  </div>
+                  <AnnotationPanel
+                    kind="match"
+                    id={selectedMatch.id}
+                    onSaved={() => {
+                      setAnnotationRevision((n) => n + 1);
+                      setRefresh((n) => n + 1);
+                    }}
+                  />
+                  <div className="play-layout">
+                    <section className="board-panel">
+                      {position ? (
+                        <>
+                          <div className="board-heading">
+                            <span>
+                              {t('app.gameMove', {
+                                game: position.game_no,
+                                move: position.ply,
+                              })}
+                            </span>
+                            <strong>
+                              {t('app.toMove', {
+                                player:
+                                  position.player === 0
+                                    ? selectedMatch.white
+                                    : selectedMatch.black,
+                              })}
+                            </strong>
+                          </div>
+                          <Board
+                            position={position}
+                            white={selectedMatch.white}
+                            black={selectedMatch.black}
+                            theme={theme}
+                          />
+                          <div className="board-navigation">
+                            <button
+                              aria-label={t('app.previousMove')}
+                              disabled={index === 0 || loadingPositions}
+                              onClick={() => {
+                                invalidateNavigation();
+                                setIndex(index - 1);
+                              }}
+                            >
+                              ←
+                            </button>
+                            <span>
+                              {t('common.played')}{' '}
+                              <strong>
+                                {formatDecision(position.notation)}
+                              </strong>
+                              <small>
+                                {formatNumber(position.ordinal + 1)} /{' '}
+                                {formatNumber(selectedMatch.position_count)}
+                              </small>
+                            </span>
+                            <button
+                              aria-label={t('app.nextMove')}
+                              disabled={
+                                loadingPositions ||
+                                (index === positions.length - 1 &&
+                                  !positionCursor)
+                              }
+                              onClick={() => void nextPosition()}
+                            >
+                              →
+                            </button>
+                          </div>
+                          <div className="position-code">
+                            <span>{t('app.positionCode')}</span>
+                            <code>{position.position_id}</code>
+                            <button
+                              title={t('app.prepareSearch')}
+                              onClick={() => {
+                                setExactId(position.position_id);
+                                setFound(null);
+                                const details =
+                                  document.querySelector<HTMLDetailsElement>(
+                                    '.position-search',
+                                  );
+                                if (details) details.open = true;
+                              }}
+                            >
+                              ⌕
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="board-loading" role="status">
+                          {loadingPositions
+                            ? t('app.positionsLoading')
+                            : t('app.noPositions')}
+                        </div>
+                      )}
+                    </section>
+                    <aside className="moves-panel">
+                      <div className="section-heading">
+                        <h3>{t('app.moveHistory')}</h3>
+                        <span>
+                          {formatNumber(selectedMatch.position_count)}
+                        </span>
+                      </div>
+                      <div className="moves-list">
+                        {positions.map((p, i) => (
+                          <button
+                            key={p.id}
+                            className={i === index ? 'current' : ''}
+                            onClick={() => {
+                              invalidateNavigation();
+                              setLoadingPositions(false);
+                              setIndex(i);
+                            }}
+                          >
+                            <span className="move-no">
+                              {p.game_no}.{p.ply}
+                            </span>
+                            <i
+                              className={`player-dot ${p.player === 0 ? 'white' : 'black'}`}
+                            />
+                            <span className="move-dice">
+                              {p.dice.join('–')}
+                            </span>
+                            <strong>{formatDecision(p.notation)}</strong>
+                          </button>
+                        ))}
+                      </div>
+                      {positionCursor && (
+                        <button
+                          disabled={loadingPositions}
+                          onClick={() => void nextPosition(true)}
+                        >
+                          {t('app.moreHistory')}
+                        </button>
+                      )}
+                    </aside>
+                  </div>
+                  {position && (
+                    <AnnotationPanel
+                      kind="position"
+                      id={position.id}
+                      onSaved={() => {
+                        setAnnotationRevision((n) => n + 1);
+                        setRefresh((n) => n + 1);
+                      }}
+                    />
+                  )}
+                  <AddCardsPanel
+                    positionId={position?.id}
+                    matchId={selectedMatch.id}
+                    revision={deckRevision}
+                    onChanged={() => setDeckRevision((n) => n + 1)}
+                  />
+                  <MatchAnalysisPanel
+                    key={selectedMatch.id}
+                    match={selectedMatch}
+                    onPosition={(id) => void openAnalyzedPosition(id)}
+                  />
+                  {!!jobs.error && (
+                    <div className="error" role="alert">
+                      {formatError(jobs.error)}
+                    </div>
+                  )}
+                  <AnalysisPanel
+                    jobs={jobs.jobs}
+                    stats={stats}
+                    disabled={!position || jobs.submitting}
+                    onAnalyze={(kind, plies) => void jobs.run(kind, plies)}
+                  />
+                </>
               )}
-              <AnalysisPanel
-                jobs={jobs.jobs}
-                stats={stats}
-                disabled={!position || jobs.submitting}
-                onAnalyze={(kind, plies) => void jobs.run(kind, plies)}
-              />
             </>
           )}
           <footer className="workspace-footer">
             <span>
-              BG TUTOR <b>·</b> Lern aus jeder Position.
+              BG TUTOR <b>·</b> {t('app.footer')}
             </span>
-            <span>Headless Engine / v0.1</span>
+            <span>{t('app.engineVersion')}</span>
           </footer>
         </div>
       </main>

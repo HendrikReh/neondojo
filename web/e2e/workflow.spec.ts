@@ -107,11 +107,20 @@ test('full match analysis, errors, board navigation and persisted results', asyn
     name: 'Vollständige Partieanalyse',
   });
   await expect(panel).toBeVisible();
+  const analysisResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST' &&
+      /\/api\/matches\/[^/]+\/analysis$/.test(new URL(response.url()).pathname),
+  );
   await panel
     .getByRole('button', {
       name: /Gesamte Partie analysieren|Partie erneut analysieren/,
     })
     .click();
+  const submitted = await analysisResponse;
+  expect(submitted.status()).toBe(202);
+  const created = await submitted.json();
+  await expect(panel).toHaveAttribute('data-job-id', created.id);
   await expect(
     panel.getByText('Partieanalyse abgeschlossen', { exact: true }),
   ).toBeVisible({ timeout: 45_000 });
@@ -170,11 +179,20 @@ test('the latest clicked analysis row wins during position pagination', async ({
   const panel = page.getByRole('region', {
     name: 'Vollständige Partieanalyse',
   });
+  const analysisResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST' &&
+      /\/api\/matches\/[^/]+\/analysis$/.test(new URL(response.url()).pathname),
+  );
   await panel
     .getByRole('button', {
       name: /Gesamte Partie analysieren|Partie erneut analysieren/,
     })
     .click();
+  const submitted = await analysisResponse;
+  expect(submitted.status()).toBe(202);
+  const created = await submitted.json();
+  await expect(panel).toHaveAttribute('data-job-id', created.id);
   await expect(
     panel.getByText('Partieanalyse abgeschlossen', { exact: true }),
   ).toBeVisible({ timeout: 45_000 });

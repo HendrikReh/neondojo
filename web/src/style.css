@@ -1657,3 +1657,340 @@ progress::-webkit-progress-value {
     width: 100%;
   }
 }
+
+.workspace-settings {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  max-width: 440px;
+}
+.workspace-settings .theme-picker,
+.language-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #697963;
+}
+.workspace-settings select {
+  max-width: 230px;
+  font-size: 12px;
+  padding: 8px;
+}
+.theme-player-checker {
+  width: 15px;
+  height: 15px;
+  vertical-align: middle;
+  margin-right: 5px;
+}
+.bgblitz-board {
+  border-radius: 5px;
+  background: #22362b;
+}
+.theme-credit {
+  display: block;
+  font-size: 10px;
+  text-align: right;
+  padding: 0 0 7px;
+  color: #63745c;
+}
+.theme-load-error {
+  font-size: 12px;
+  color: #a13428;
+}
+@media (max-width: 850px) {
+  .workspace-title {
+    flex-wrap: wrap;
+  }
+  .workspace-settings {
+    width: 100%;
+    max-width: none;
+    justify-content: flex-start;
+  }
+  .workspace-settings .theme-picker {
+    margin: 0;
+  }
+  .workspace-settings select {
+    max-width: min(220px, 65vw);
+  }
+}
+
+.workspace-views {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 20px;
+}
+.workspace-views button[aria-pressed='true'] {
+  background: #234b3d;
+  color: #fff;
+}
+.annotation-panel,
+.add-cards,
+.learning-workspace {
+  border: 1px solid #dce2d6;
+  border-radius: 12px;
+  padding: 20px;
+  margin: 18px 0;
+  background: #fffefa;
+  min-width: 0;
+}
+.annotation-heading,
+.learning-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.annotation-heading h3,
+.add-cards h3 {
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+.annotation-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+  gap: 20px;
+}
+.annotation-fields label,
+.annotation-comment {
+  display: grid;
+  gap: 7px;
+  font-size: 12px;
+  color: #61735b;
+}
+.annotation-panel textarea {
+  width: 100%;
+  min-height: 95px;
+  resize: vertical;
+  padding: 10px;
+  border: 1px solid #d5ddd0;
+  border-radius: 6px;
+  font: inherit;
+}
+.annotation-tag-entry,
+.annotation-actions,
+.annotation-search-form,
+.annotation-search-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+.annotation-tag-entry input {
+  flex: 1;
+  min-width: 100px;
+}
+.annotation-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-height: 25px;
+}
+.annotation-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #e8efdf;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.annotation-tag button {
+  padding: 0 3px;
+  border: none;
+  background: transparent;
+}
+.annotation-help,
+.annotation-status {
+  font-size: 11px;
+  color: #70806a;
+  margin: 7px 0;
+}
+.annotation-conflict,
+.annotation-panel [role='alert'],
+.annotation-search [role='alert'],
+.learning-workspace [role='alert'],
+.add-cards [role='alert'] {
+  color: #963c27;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.annotation-search {
+  border: 1px solid #dce2d6;
+  border-radius: 8px;
+  background: #f9fbf6;
+  margin-bottom: 16px;
+  padding: 12px;
+  font-size: 12px;
+}
+.annotation-search summary {
+  cursor: pointer;
+  color: #4e6647;
+}
+.annotation-search-form label {
+  display: grid;
+  gap: 6px;
+}
+.annotation-search-form input {
+  min-width: 120px;
+  max-width: 100%;
+}
+.annotation-search-results {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+.annotation-search-hit {
+  text-align: left;
+  padding: 12px;
+  border: 1px solid #dce2d6;
+  background: #fff;
+  border-radius: 7px;
+}
+.annotation-hit-heading {
+  display: block;
+  color: #37553d;
+}
+.annotation-hit-context,
+.annotation-hit-tags {
+  display: block;
+  font-size: 10px;
+  color: #788572;
+  margin: 6px 0;
+}
+.annotation-hit-excerpt {
+  display: block;
+  white-space: pre-wrap;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.learning-controls,
+.create-deck {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+}
+.learning-controls label {
+  font-size: 12px;
+  display: grid;
+  gap: 6px;
+}
+.learning-controls select {
+  min-width: 150px;
+  max-width: min(350px, 75vw);
+}
+.learning-controls input[type='number'] {
+  width: 100px;
+}
+.create-deck input {
+  max-width: 100%;
+  min-width: 100px;
+}
+.learning-explainer,
+.add-cards > p,
+.learning-heading p {
+  font-size: 12px;
+  color: #70806a;
+  line-height: 1.7;
+}
+.learning-workspace h2 {
+  margin: 0 0 6px;
+}
+.study-card {
+  max-width: 920px;
+  margin: 20px auto;
+  padding: 20px;
+  border: 1px solid #dce2d6;
+  border-radius: 10px;
+  background: #fff;
+}
+.study-card h3 {
+  font-family: Georgia, serif;
+  font-size: 23px;
+  margin: 14px 0;
+}
+.study-answer {
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid #dce2d6;
+}
+.study-answer table,
+.learning-card-list table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+}
+.study-answer th,
+.study-answer td,
+.learning-card-list th,
+.learning-card-list td {
+  padding: 10px;
+  border-bottom: 1px solid #e3e8dd;
+}
+.learning-card-list small {
+  display: block;
+  font: 10px monospace;
+  color: #7b8874;
+  margin-top: 6px;
+}
+.study-ratings {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+.study-ratings button {
+  padding: 14px 6px;
+  background: #edf2e7;
+}
+.study-ratings small {
+  display: block;
+  margin-top: 7px;
+  color: #70806a;
+  font-size: 11px;
+}
+.plaintext-comment {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.learning-counts,
+.learning-review-result {
+  color: #4c7046;
+  font-size: 12px;
+}
+@media (max-width: 700px) {
+  .annotation-fields {
+    grid-template-columns: 1fr;
+  }
+  .annotation-panel,
+  .add-cards,
+  .learning-workspace,
+  .study-card {
+    padding: 14px;
+  }
+  .study-ratings {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .annotation-search-form,
+  .create-deck {
+    align-items: stretch;
+  }
+  .annotation-search-form label {
+    width: 100%;
+  }
+  .annotation-search-form input,
+  .create-deck input {
+    width: 100%;
+  }
+  .learning-heading .create-deck {
+    width: 100%;
+  }
+}

@@ -49,12 +49,12 @@ impl AppState {
 pub struct ErrorBody {
     pub error: String,
 }
-pub struct ApiError(StatusCode, String);
+pub struct ApiError(pub(crate) StatusCode, pub(crate) String);
 impl ApiError {
-    fn invalid(message: impl Into<String>) -> Self {
+    pub(crate) fn invalid(message: impl Into<String>) -> Self {
         Self(StatusCode::UNPROCESSABLE_ENTITY, message.into())
     }
-    fn missing() -> Self {
+    pub(crate) fn missing() -> Self {
         Self(StatusCode::NOT_FOUND, "Not found".into())
     }
 }
@@ -72,10 +72,12 @@ impl IntoResponse for ApiError {
         (self.0, Json(ErrorBody { error: self.1 })).into_response()
     }
 }
-type ApiResult<T> = Result<T, ApiError>;
+pub(crate) type ApiResult<T> = Result<T, ApiError>;
 
 pub fn router(state: AppState) -> Router {
     Router::new()
+        .merge(crate::annotations::routes())
+        .merge(crate::learning::routes())
         .route("/api/health", get(health))
         .route("/api/imports", post(upload))
         .route("/api/matches", get(matches))
@@ -101,7 +103,11 @@ pub fn router(state: AppState) -> Router {
                     "http://127.0.0.1:5173".parse().unwrap(),
                     "tauri://localhost".parse().unwrap(),
                 ])
-                .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
+                .allow_methods([
+                    axum::http::Method::GET,
+                    axum::http::Method::POST,
+                    axum::http::Method::PUT,
+                ])
                 .allow_headers([
                     header::CONTENT_TYPE,
                     header::HeaderName::from_static("last-event-id"),
@@ -599,7 +605,17 @@ async fn events(
         crate::match_analysis::Decision
     ))
 )]
+pub struct BaseApiDoc;
+
 pub struct ApiDoc;
+impl OpenApi for ApiDoc {
+    fn openapi() -> utoipa::openapi::OpenApi {
+        let mut doc = BaseApiDoc::openapi();
+        doc.merge(crate::annotations::AnnotationDoc::openapi());
+        doc.merge(crate::learning::LearningDoc::openapi());
+        doc
+    }
+}
 
 async fn openapi() -> Json<utoipa::openapi::OpenApi> {
     Json(ApiDoc::openapi())

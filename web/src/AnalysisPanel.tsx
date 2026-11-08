@@ -1,11 +1,7 @@
 import { useState } from 'react';
-import {
-  equity,
-  type Analysis,
-  type Distribution,
-  type DiceStats,
-} from './api';
+import { type Analysis, type Distribution, type DiceStats } from './api';
 import type { Jobs } from './useJobs';
+import { useI18n } from './i18n';
 
 export default function AnalysisPanel({
   jobs,
@@ -18,6 +14,8 @@ export default function AnalysisPanel({
   disabled: boolean;
   onAnalyze: (kind: 'analysis' | 'dice', plies: number) => void;
 }) {
+  const { t, formatNumber, formatPercent, formatEquity, formatDecision } =
+    useI18n();
   const [plies, setPlies] = useState(0);
   const [view, setView] = useState<'analysis' | 'dice' | 'observed'>(
     'analysis',
@@ -48,22 +46,22 @@ export default function AnalysisPanel({
     <section className="analysis-panel">
       <div className="section-heading">
         <div>
-          <span className="eyebrow">DEIN NÄCHSTER SCHRITT</span>
-          <h2>Die Position verstehen</h2>
+          <span className="eyebrow">{t('analysis.eyebrow')}</span>
+          <h2>{t('analysis.title')}</h2>
         </div>
-        <span className="engine-label">GNUbg · lokal</span>
+        <span className="engine-label">GNUbg · {t('common.local')}</span>
       </div>
       <div className="analysis-controls">
         <label className="depth-label">
-          Suchtiefe{' '}
+          {t('analysis.depth')}{' '}
           <select
-            aria-label="Suchtiefe"
+            aria-label={t('analysis.depth')}
             value={plies}
             onChange={(e) => setPlies(Number(e.target.value))}
           >
-            <option value={0}>0-ply · schnell</option>
+            <option value={0}>{t('analysis.fast')}</option>
             <option value={1}>1-ply</option>
-            <option value={2}>2-ply · genauer</option>
+            <option value={2}>{t('analysis.accurate')}</option>
           </select>
         </label>
         <button
@@ -71,10 +69,10 @@ export default function AnalysisPanel({
           disabled={disabled || pending}
           onClick={() => choose('analysis')}
         >
-          Position analysieren <span>↗</span>
+          {t('analysis.analyze')} <span aria-hidden="true">↗</span>
         </button>
         <button disabled={disabled || pending} onClick={() => choose('dice')}>
-          Dice Distribution
+          {t('analysis.distribution')}
         </button>
       </div>
       {pending && (
@@ -82,43 +80,48 @@ export default function AnalysisPanel({
           <div>
             <span>
               {job.status === 'queued'
-                ? 'Wartet auf GNUbg …'
+                ? t('analysis.queued')
                 : job.kind === 'dice'
-                  ? 'Würfelpaare werden berechnet …'
-                  : 'Züge werden analysiert …'}
+                  ? t('analysis.diceRunning')
+                  : t('analysis.movesRunning')}
             </span>
-            <b>{job.progress}%</b>
+            <b>{formatPercent(job.progress / 100)}</b>
           </div>
-          <progress max="100" value={job.progress} />
+          <progress
+            aria-label={t('analysis.progress')}
+            max="100"
+            value={job.progress}
+          />
         </div>
       )}
       {job?.status === 'failed' && (
         <div className="error" role="alert">
-          <strong>Analyse fehlgeschlagen.</strong> {job.error} Ein erneuter
-          Start legt einen neuen Auftrag an.
+          <strong>{t('analysis.failed')}</strong>{' '}
+          {job.error && t('error.engine', { details: job.error })}{' '}
+          {t('analysis.retryHint')}
         </div>
       )}
-      <div className="tabs" role="tablist" aria-label="Auswertungen">
+      <div className="tabs" role="tablist" aria-label={t('analysis.views')}>
         <button
           role="tab"
           aria-selected={view === 'analysis'}
           onClick={() => setView('analysis')}
         >
-          Zugkandidaten
+          {t('analysis.candidates')}
         </button>
         <button
           role="tab"
           aria-selected={view === 'dice'}
           onClick={() => setView('dice')}
         >
-          Würfel-Equity
+          {t('analysis.diceEquity')}
         </button>
         <button
           role="tab"
           aria-selected={view === 'observed'}
           onClick={() => setView('observed')}
         >
-          Partiewürfe
+          {t('analysis.observed')}
         </button>
       </div>
       {view === 'analysis' &&
@@ -127,49 +130,50 @@ export default function AnalysisPanel({
             <table className="candidates">
               <thead>
                 <tr>
-                  <th>Rang</th>
-                  <th>Zug</th>
-                  <th>Equity</th>
-                  <th>Gewinn</th>
+                  <th>{t('analysis.rank')}</th>
+                  <th>{t('common.move')}</th>
+                  <th>{t('common.equity')}</th>
+                  <th>{t('analysis.win')}</th>
                 </tr>
               </thead>
               <tbody>
                 {analysis.candidates.map((c) => (
                   <tr key={c.rank} className={c.rank === 1 ? 'best-move' : ''}>
-                    <td>{String(c.rank).padStart(2, '0')}</td>
+                    <td>{formatNumber(c.rank, { minimumIntegerDigits: 2 })}</td>
                     <td>
-                      {c.notation}
+                      {formatDecision(c.notation)}
                       {c.rank === 1 && (
-                        <span className="best-label">BESTER ZUG</span>
+                        <span className="best-label">
+                          {t('analysis.bestMove')}
+                        </span>
                       )}
                     </td>
-                    <td>{equity(c.equity)}</td>
-                    <td>{(c.probabilities[0] * 100).toFixed(1)}%</td>
+                    <td>{formatEquity(c.equity)}</td>
+                    <td>{formatPercent(c.probabilities[0], 1)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
             <p className="fineprint">
-              {analysis.engine} · {analysis.plies}-ply · Cubeful Equity aus
-              Sicht des Spielers am Zug.
+              {t('analysis.method', {
+                engine: analysis.engine,
+                plies: analysis.plies,
+              })}
             </p>
           </>
         ) : (
           <div className="panel-empty">
             <span className="empty-symbol">↗</span>
-            <h3>Aus einem Zug wird eine Erkenntnis.</h3>
-            <p>
-              Starte eine Analyse und vergleiche die besten legalen Züge, ihre
-              Equity und Gewinnchance.
-            </p>
+            <h3>{t('analysis.emptyHeading')}</h3>
+            <p>{t('analysis.emptyDescription')}</p>
           </div>
         ))}
       {view === 'dice' &&
         (distribution ? (
           <div className="distribution">
             <div className="distribution-caption">
-              <span>36 Würfe. 21 Kombinationen.</span>
-              <strong>Ø {equity(distribution.mean_equity)}</strong>
+              <span>{t('analysis.combinations')}</span>
+              <strong>Ø {formatEquity(distribution.mean_equity)}</strong>
             </div>
             <div className="dice-grid">
               {Array.from({ length: 36 }, (_, i) => {
@@ -183,7 +187,11 @@ export default function AnalysisPanel({
                 return (
                   <button
                     key={i}
-                    title={`${a}–${b}: ${roll?.best.notation}`}
+                    title={t('analysis.rollTitle', {
+                      first: a,
+                      second: b,
+                      move: roll ? formatDecision(roll.best.notation) : '—',
+                    })}
                     className={`${roll && roll.best.equity >= distribution.mean_equity ? 'above' : 'below'} ${selectedRoll === [Math.min(a, b), Math.max(a, b)].join('-') ? 'selected' : ''}`}
                     onClick={() =>
                       setSelectedRoll(
@@ -194,7 +202,7 @@ export default function AnalysisPanel({
                     <span>
                       {a} · {b}
                     </span>
-                    <b>{roll ? equity(roll.best.equity) : '—'}</b>
+                    <b>{roll ? formatEquity(roll.best.equity) : '—'}</b>
                   </button>
                 );
               })}
@@ -202,51 +210,49 @@ export default function AnalysisPanel({
             {best && (
               <p className="roll-detail">
                 <strong>{best.dice.join('–')}</strong>
-                <span>{best.best.notation}</span>
-                <b>{equity(best.best.equity)}</b>
+                <span>{formatDecision(best.best.notation)}</span>
+                <b>{formatEquity(best.best.equity)}</b>
                 <small>
-                  {(best.probability * 100).toFixed(2)}% Wahrscheinlichkeit
+                  {t('analysis.probability', {
+                    value: formatPercent(best.probability, 2),
+                  })}
                 </small>
               </p>
             )}
             <p className="fineprint">
-              Grün: über der mittleren Equity. Pasch zählt 1/36, andere
-              Kombinationen 2/36. {distribution.plies}-ply.
+              {t('analysis.distributionMethod', { plies: distribution.plies })}
             </p>
           </div>
         ) : (
           <div className="panel-empty">
             <span className="empty-symbol">⚄</span>
-            <h3>Was bringt der nächste Wurf?</h3>
-            <p>
-              „Dice Distribution“ berechnet für diese Position alle Würfelpaare
-              mit GNUbg.
-            </p>
+            <h3>{t('analysis.diceEmptyHeading')}</h3>
+            <p>{t('analysis.diceEmptyDescription')}</p>
           </div>
         ))}
       {view === 'observed' &&
         (stats ? (
           <div className="observed">
             <p className="fineprint">
-              {stats.total} aufgezeichnete Würfe dieser Partie. Häufigkeiten
-              sind keine Equity-Analyse; Eröffnungswürfe enthalten keinen Pasch.
+              {t('analysis.observedMethod', { count: stats.total })}
             </p>
             <div className="roll-counts">
               {stats.rolls.map((r) => (
                 <div key={r.dice.join('-')}>
                   <span>{r.dice.join('–')}</span>
                   <meter
+                    aria-label={r.dice.join('–')}
                     value={r.count}
                     max={Math.max(1, ...stats.rolls.map((r) => r.count))}
                   />
-                  <b>{r.count}</b>
+                  <b>{formatNumber(r.count)}</b>
                 </div>
               ))}
             </div>
           </div>
         ) : (
           <div className="panel-empty">
-            <p>Wähle eine Partie aus.</p>
+            <p>{t('analysis.selectMatch')}</p>
           </div>
         ))}
     </section>

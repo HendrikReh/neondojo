@@ -18,12 +18,12 @@ export function useJobs(positionId: string | undefined) {
   const [jobs, setJobs] = useState<Jobs>({});
   const [revision, setRevision] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<unknown>(null);
   const currentPosition = useRef(positionId);
   currentPosition.current = positionId;
   useEffect(() => {
     setJobs({});
-    setError('');
+    setError(null);
     setSubmitting(false);
     if (!positionId) return;
     const abort = new AbortController();
@@ -48,7 +48,7 @@ export function useJobs(positionId: string | undefined) {
           }
           return job;
         } catch (error) {
-          if (!abort.signal.aborted) setError(String(error));
+          if (!abort.signal.aborted) setError(error);
         }
       };
       void refresh().then((job) => {
@@ -83,7 +83,7 @@ export function useJobs(positionId: string | undefined) {
   async function run(kind: 'analysis' | 'dice', plies: number) {
     if (!positionId) return;
     setSubmitting(true);
-    setError('');
+    setError(null);
     try {
       const job = await request<Job>('/jobs', {
         method: 'POST',
@@ -96,7 +96,7 @@ export function useJobs(positionId: string | undefined) {
       );
       if (currentPosition.current === positionId) setRevision((r) => r + 1);
     } catch (error) {
-      if (currentPosition.current === positionId) setError(String(error));
+      if (currentPosition.current === positionId) setError(error);
     } finally {
       if (currentPosition.current === positionId) setSubmitting(false);
     }

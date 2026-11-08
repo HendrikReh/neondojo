@@ -1,0 +1,11 @@
+# Lokale BGBlitz-Themes
+
+Die ZIP-Archive in diesem Ordner stammen aus [BGBlitz Themes](https://www.bgblitz.com/themes.html), überwiegend von [Jorges Theme-Seite](https://www.bgblitz.com/themes_jorge.html). CL Green ist auf der Downloadseite Rain zugeordnet. Die Dateien bleiben lokale Drittanbieterdateien; Bilder und ZIPs werden nicht als eigene Projektgrafiken lizenziert oder automatisch in Git aufgenommen. Die urheberrechtlichen Hinweise und Bedingungen der jeweiligen Originalquelle gelten weiterhin. Die BGBlitz-Seite enthält insbesondere gesonderte, restriktive Bedingungen für Radu-Dan Sabaus Werke; ein kostenloser Download ist keine allgemeine Weitergabelizenz.
+
+`npm run dev` und `npm run build` im Verzeichnis `web/` bereiten die vorhandenen `*.zip` automatisch auf. Für neu hinzugefügte Archive den Entwicklungsserver neu starten oder `npm run themes:prepare` ausführen. Python 3.10+ wird nur als Entwicklungs-/Build-Werkzeug benötigt; es werden keine Python-Pakete installiert. Das ausgelieferte Frontend benötigt weder Python noch die ZIP-Dateien zur Laufzeit.
+
+Das Werkzeug liest BGBlitz-XML und kopiert referenzierte PNG-/JPEG-Dateien unverändert nach `web/public/themes/`. Der generierte Katalog liegt in `web/src/generated-themes.json`. Beide Ausgaben werden nicht versioniert. Der Build enthält die lokal ausgewählten Archive als statische Grafikdateien; für die Weitergabe eines solchen Builds sind die Rechte an diesen Grafiken maßgeblich.
+
+Unterstützt wird das Format der bereitgestellten Archive: Hintergrundbild, 15 Checker-Spalten, Checker-Varianten, separate Würfel-/Dopplerbilder und zwei Nummernleisten pro Richtung. Die drei eingebauten SVG-Themes funktionieren auch ohne ZIP-Archive. Nicht unterstützte oder beschädigte Archive erzeugen einen Fehler mit Dateiname, statt unvollständige Themes einzubauen.
+
+Formatbeschreibung: [Create a theme – How to](https://www.bgblitz.com/Create_a_theme_How_to.txt). Der Renderer übernimmt die horizontalen XML-Koordinaten und Offsets; vertikale Checker-Reihen werden innerhalb des Rahmens aus den Bildmaßen angeordnet. Punktnummern folgen dem Spieler am Zug, Partiekoordinaten und Spielerzuordnung bleiben unverändert.

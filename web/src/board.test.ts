@@ -22,10 +22,16 @@ describe('board arithmetic', () => {
   });
   it('decodes score and cube ownership from the analysis match context', () => {
     expect(matchContext('QYkqASAAIAAE')).toMatchObject({
+      length: 9,
+      jacoby: false,
       scores: [2, 4],
       cube: 2,
       owner: 0,
       crawford: false,
+    });
+    expect(matchContext('cIkFAAAAAAAA')).toMatchObject({
+      length: 0,
+      jacoby: true,
     });
     expect(matchContext('cInlAAAAAAAE')).toMatchObject({
       scores: [0, 0],

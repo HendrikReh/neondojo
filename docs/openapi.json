@@ -9,6 +9,556 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/annotations/search": {
+      "get": {
+        "tags": [
+          "Annotations"
+        ],
+        "operationId": "search_annotations",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "path",
+            "description": "Literal substring, 3–200 characters. Omit only when supplying an exact tag.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "tag",
+            "in": "path",
+            "description": "Exact normalized tag; can be combined with the text and kind filters.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/AnnotationKind"
+                }
+              ]
+            }
+          },
+          {
+            "name": "after",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnotationPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cards/{id}/reveal": {
+      "post": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "reveal",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevealCard"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevealedCard"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cards/{id}/review": {
+      "post": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "review",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewCard"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decks": {
+      "get": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "decks",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Deck"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "create_deck",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDeck"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deck"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decks/{id}/cards": {
+      "get": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "cards",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "add_cards",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddCards"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddCardsResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decks/{id}/export.apkg": {
+      "get": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "export_deck",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "locale",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Native Anki package; review history remains independent",
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "int32",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decks/{id}/next": {
+      "get": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "next_card",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NextCard"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "tags": [
@@ -583,6 +1133,116 @@
         }
       }
     },
+    "/api/matches/{id}/annotation": {
+      "get": {
+        "tags": [
+          "Annotations"
+        ],
+        "operationId": "get_match_annotation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Annotation"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Annotations"
+        ],
+        "operationId": "put_match_annotation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnnotationUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Annotation"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/matches/{id}/dice": {
       "get": {
         "tags": [
@@ -743,10 +1403,234 @@
           }
         }
       }
+    },
+    "/api/positions/{id}/annotation": {
+      "get": {
+        "tags": [
+          "Annotations"
+        ],
+        "operationId": "get_position_annotation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Annotation"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Annotations"
+        ],
+        "operationId": "put_position_annotation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnnotationUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Annotation"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tags": {
+      "get": {
+        "tags": [
+          "Annotations"
+        ],
+        "operationId": "tags",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "path",
+            "description": "Optional literal tag substring, at most 64 characters.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AddCards": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "min_loss": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "player": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "position_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "AddCardsResult": {
+        "type": "object",
+        "required": [
+          "added",
+          "updated",
+          "total"
+        ],
+        "properties": {
+          "added": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updated": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "Analysis": {
         "type": "object",
         "required": [
@@ -767,6 +1651,174 @@
           "plies": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "Annotation": {
+        "type": "object",
+        "required": [
+          "target_kind",
+          "target_id",
+          "tags",
+          "comment",
+          "version"
+        ],
+        "properties": {
+          "comment": {
+            "type": "string",
+            "description": "Plaintext Markdown; never interpreted as trusted HTML."
+          },
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Null for an existing target without a saved annotation."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "target_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "target_kind": {
+            "$ref": "#/components/schemas/AnnotationKind"
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Zero until first save. Supply this value as expected_version when saving."
+          }
+        }
+      },
+      "AnnotationHit": {
+        "type": "object",
+        "required": [
+          "id",
+          "target_kind",
+          "target_id",
+          "match_uuid",
+          "filename",
+          "white",
+          "black",
+          "tags",
+          "comment_excerpt",
+          "updated_at"
+        ],
+        "properties": {
+          "black": {
+            "type": "string"
+          },
+          "comment_excerpt": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "game_no": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "match_uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ply": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "target_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "target_kind": {
+            "$ref": "#/components/schemas/AnnotationKind"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "white": {
+            "type": "string"
+          }
+        }
+      },
+      "AnnotationKind": {
+        "type": "string",
+        "enum": [
+          "match",
+          "position"
+        ]
+      },
+      "AnnotationPage": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnnotationHit"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "AnnotationUpdate": {
+        "type": "object",
+        "required": [
+          "tags",
+          "comment",
+          "expected_version"
+        ],
+        "properties": {
+          "comment": {
+            "type": "string"
+          },
+          "expected_version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -797,6 +1849,189 @@
           "rank": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "CardAnswer": {
+        "type": "object",
+        "required": [
+          "solution",
+          "notes",
+          "tags",
+          "played"
+        ],
+        "properties": {
+          "notes": {
+            "type": "string"
+          },
+          "played": {
+            "type": "string"
+          },
+          "solution": {
+            "$ref": "#/components/schemas/CardSolution"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CardPage": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CardQuestion"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "CardQuestion": {
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "kind",
+          "position",
+          "players",
+          "prompt",
+          "source",
+          "due_at",
+          "review_count"
+        ],
+        "properties": {
+          "due_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "description": "checker, cube_offer, or cube_response."
+          },
+          "players": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Absolute colors: White, Black."
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "review_count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "source": {
+            "$ref": "#/components/schemas/CardSource"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "CardSolution": {
+        "type": "object",
+        "required": [
+          "engine",
+          "plies",
+          "candidates"
+        ],
+        "properties": {
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Candidate"
+            }
+          },
+          "decision": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Decision"
+              }
+            ]
+          },
+          "engine": {
+            "type": "string"
+          },
+          "plies": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "CardSource": {
+        "type": "object",
+        "required": [
+          "kind",
+          "job_id",
+          "match_id",
+          "game_no"
+        ],
+        "properties": {
+          "decision_no": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "game_no": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "job_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "match_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "position_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "CreateDeck": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
           }
         }
       },
@@ -882,6 +2117,37 @@
           "severity": {
             "type": "string",
             "description": "\"none\", \"doubtful\" (>= 0.04), \"bad\" (>= 0.08), or \"very_bad\" (>= 0.16)."
+          }
+        }
+      },
+      "Deck": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "card_count",
+          "due_count",
+          "created_at"
+        ],
+        "properties": {
+          "card_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "due_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
           }
         }
       },
@@ -1423,6 +2689,27 @@
           }
         }
       },
+      "NextCard": {
+        "type": "object",
+        "required": [
+          "counts"
+        ],
+        "properties": {
+          "card": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CardQuestion"
+              }
+            ]
+          },
+          "counts": {
+            "$ref": "#/components/schemas/ReviewCounts"
+          }
+        }
+      },
       "PlayerAnalysisSummary": {
         "type": "object",
         "required": [
@@ -1572,6 +2859,170 @@
             ],
             "format": "uuid",
             "description": "Opaque cursor; continue with the same filters."
+          }
+        }
+      },
+      "Rating": {
+        "type": "string",
+        "enum": [
+          "again",
+          "hard",
+          "good",
+          "easy"
+        ]
+      },
+      "RatingIntervals": {
+        "type": "object",
+        "required": [
+          "again",
+          "hard",
+          "good",
+          "easy"
+        ],
+        "properties": {
+          "again": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Seconds until due for each rating; Again and initial Hard use learning steps."
+          },
+          "easy": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "good": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "hard": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "RevealCard": {
+        "type": "object",
+        "required": [
+          "expected_version"
+        ],
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "RevealedCard": {
+        "type": "object",
+        "required": [
+          "card_id",
+          "version",
+          "answer",
+          "intervals",
+          "session_id"
+        ],
+        "properties": {
+          "answer": {
+            "$ref": "#/components/schemas/CardAnswer"
+          },
+          "card_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "intervals": {
+            "$ref": "#/components/schemas/RatingIntervals"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ReviewCard": {
+        "type": "object",
+        "required": [
+          "session_id",
+          "request_id",
+          "rating"
+        ],
+        "properties": {
+          "rating": {
+            "$ref": "#/components/schemas/Rating"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "ReviewCounts": {
+        "type": "object",
+        "required": [
+          "total",
+          "due",
+          "new"
+        ],
+        "properties": {
+          "due": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "new": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ReviewResult": {
+        "type": "object",
+        "required": [
+          "card_id",
+          "version",
+          "due_at",
+          "interval_seconds",
+          "stability",
+          "difficulty",
+          "review_count"
+        ],
+        "properties": {
+          "card_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "difficulty": {
+            "type": "number",
+            "format": "double"
+          },
+          "due_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "interval_seconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "review_count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "stability": {
+            "type": "number",
+            "format": "double"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },

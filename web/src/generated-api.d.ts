@@ -4,6 +4,118 @@
  */
 
 export interface paths {
+    "/api/annotations/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["search_annotations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cards/{id}/reveal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reveal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cards/{id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["review"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/decks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["decks"];
+        put?: never;
+        post: operations["create_deck"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/decks/{id}/cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["cards"];
+        put?: never;
+        post: operations["add_cards"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/decks/{id}/export.apkg": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["export_deck"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/decks/{id}/next": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["next_card"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -148,6 +260,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matches/{id}/annotation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_match_annotation"];
+        put: operations["put_match_annotation"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matches/{id}/dice": {
         parameters: {
             query?: never;
@@ -196,15 +324,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/positions/{id}/annotation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_position_annotation"];
+        put: operations["put_position_annotation"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["tags"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AddCards: {
+            /** Format: uuid */
+            job_id?: string | null;
+            /** Format: double */
+            min_loss?: number | null;
+            /** Format: int32 */
+            player?: number | null;
+            /** Format: uuid */
+            position_id?: string | null;
+        };
+        AddCardsResult: {
+            /** Format: int64 */
+            added: number;
+            /** Format: int64 */
+            total: number;
+            /** Format: int64 */
+            updated: number;
+        };
         Analysis: {
             candidates: components["schemas"]["Candidate"][];
             engine: string;
             /** Format: int32 */
             plies: number;
+        };
+        Annotation: {
+            /** @description Plaintext Markdown; never interpreted as trusted HTML. */
+            comment: string;
+            /**
+             * Format: uuid
+             * @description Null for an existing target without a saved annotation.
+             */
+            id?: string | null;
+            tags: string[];
+            /** Format: uuid */
+            target_id: string;
+            target_kind: components["schemas"]["AnnotationKind"];
+            /** Format: date-time */
+            updated_at?: string | null;
+            /**
+             * Format: int64
+             * @description Zero until first save. Supply this value as expected_version when saving.
+             */
+            version: number;
+        };
+        AnnotationHit: {
+            black: string;
+            comment_excerpt: string;
+            filename: string;
+            /** Format: int32 */
+            game_no?: number | null;
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            match_uuid: string;
+            /** Format: int32 */
+            ply?: number | null;
+            tags: string[];
+            /** Format: uuid */
+            target_id: string;
+            target_kind: components["schemas"]["AnnotationKind"];
+            /** Format: date-time */
+            updated_at: string;
+            white: string;
+        };
+        /** @enum {string} */
+        AnnotationKind: "match" | "position";
+        AnnotationPage: {
+            items: components["schemas"]["AnnotationHit"][];
+            /** Format: uuid */
+            next_cursor?: string | null;
+        };
+        AnnotationUpdate: {
+            comment: string;
+            /** Format: int64 */
+            expected_version: number;
+            tags: string[];
         };
         Candidate: {
             /** Format: double */
@@ -217,6 +448,57 @@ export interface components {
             probabilities: number[];
             /** Format: int32 */
             rank: number;
+        };
+        CardAnswer: {
+            notes: string;
+            played: string;
+            solution: components["schemas"]["CardSolution"];
+            tags: string[];
+        };
+        CardPage: {
+            items: components["schemas"]["CardQuestion"][];
+            /** Format: uuid */
+            next_cursor?: string | null;
+        };
+        CardQuestion: {
+            /** Format: date-time */
+            due_at: string;
+            /** Format: uuid */
+            id: string;
+            /** @description checker, cube_offer, or cube_response. */
+            kind: string;
+            /** @description Absolute colors: White, Black. */
+            players: string[];
+            position: components["schemas"]["Position"];
+            prompt: string;
+            /** Format: int32 */
+            review_count: number;
+            source: components["schemas"]["CardSource"];
+            /** Format: int64 */
+            version: number;
+        };
+        CardSolution: {
+            candidates: components["schemas"]["Candidate"][];
+            decision?: null | components["schemas"]["Decision"];
+            engine: string;
+            /** Format: int32 */
+            plies: number;
+        };
+        CardSource: {
+            /** Format: int32 */
+            decision_no?: number | null;
+            /** Format: int32 */
+            game_no: number;
+            /** Format: uuid */
+            job_id: string;
+            kind: string;
+            /** Format: uuid */
+            match_id: string;
+            /** Format: uuid */
+            position_id?: string | null;
+        };
+        CreateDeck: {
+            name: string;
         };
         Decision: {
             /** @description Best checker notation or cube action under the native evaluation. */
@@ -266,6 +548,17 @@ export interface components {
             player: number;
             /** @description "none", "doubtful" (>= 0.04), "bad" (>= 0.08), or "very_bad" (>= 0.16). */
             severity: string;
+        };
+        Deck: {
+            /** Format: int64 */
+            card_count: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int64 */
+            due_count: number;
+            /** Format: uuid */
+            id: string;
+            name: string;
         };
         DiceCount: {
             /** Format: int64 */
@@ -431,6 +724,10 @@ export interface components {
             /** Format: int64 */
             next_cursor?: number | null;
         };
+        NextCard: {
+            card?: null | components["schemas"]["CardQuestion"];
+            counts: components["schemas"]["ReviewCounts"];
+        };
         PlayerAnalysisSummary: {
             /** Format: int32 */
             bad: number;
@@ -485,6 +782,66 @@ export interface components {
              */
             next_cursor?: string | null;
         };
+        /** @enum {string} */
+        Rating: "again" | "hard" | "good" | "easy";
+        RatingIntervals: {
+            /**
+             * Format: int64
+             * @description Seconds until due for each rating; Again and initial Hard use learning steps.
+             */
+            again: number;
+            /** Format: int64 */
+            easy: number;
+            /** Format: int64 */
+            good: number;
+            /** Format: int64 */
+            hard: number;
+        };
+        RevealCard: {
+            /** Format: int64 */
+            expected_version: number;
+        };
+        RevealedCard: {
+            answer: components["schemas"]["CardAnswer"];
+            /** Format: uuid */
+            card_id: string;
+            intervals: components["schemas"]["RatingIntervals"];
+            /** Format: uuid */
+            session_id: string;
+            /** Format: int64 */
+            version: number;
+        };
+        ReviewCard: {
+            rating: components["schemas"]["Rating"];
+            /** Format: uuid */
+            request_id: string;
+            /** Format: uuid */
+            session_id: string;
+        };
+        ReviewCounts: {
+            /** Format: int64 */
+            due: number;
+            /** Format: int64 */
+            new: number;
+            /** Format: int64 */
+            total: number;
+        };
+        ReviewResult: {
+            /** Format: uuid */
+            card_id: string;
+            /** Format: double */
+            difficulty: number;
+            /** Format: date-time */
+            due_at: string;
+            /** Format: int64 */
+            interval_seconds: number;
+            /** Format: int32 */
+            review_count: number;
+            /** Format: double */
+            stability: number;
+            /** Format: int64 */
+            version: number;
+        };
         UploadForm: {
             /**
              * Format: binary
@@ -501,6 +858,347 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    search_annotations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Literal substring, 3–200 characters. Omit only when supplying an exact tag. */
+                q: string | null;
+                /** @description Exact normalized tag; can be combined with the text and kind filters. */
+                tag: string | null;
+                kind: null | components["schemas"]["AnnotationKind"];
+                after: string | null;
+                limit: number | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnotationPage"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    reveal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevealCard"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevealedCard"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    review: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewCard"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewResult"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    decks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Deck"][];
+                };
+            };
+        };
+    };
+    create_deck: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDeck"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Deck"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    cards: {
+        parameters: {
+            query?: {
+                after?: string | null;
+                limit?: number | null;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardPage"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    add_cards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddCards"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddCardsResult"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    export_deck: {
+        parameters: {
+            query?: {
+                locale?: string | null;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Native Anki package; review history remains independent */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/zip": number[];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    next_card: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NextCard"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     health: {
         parameters: {
             query?: never;
@@ -870,6 +1568,84 @@ export interface operations {
             };
         };
     };
+    get_match_annotation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Annotation"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    put_match_annotation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnnotationUpdate"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Annotation"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     dice: {
         parameters: {
             query?: never;
@@ -948,6 +1724,115 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PositionPage"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_position_annotation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Annotation"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    put_position_annotation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnnotationUpdate"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Annotation"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    tags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Optional literal tag substring, at most 64 characters. */
+                q: string | null;
+                limit: number | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
                 };
             };
             422: {

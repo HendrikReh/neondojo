@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import {
-  equity,
   request,
   terminal,
   type Match,
@@ -9,27 +8,14 @@ import {
   type MoveAnalysisPage,
 } from './api';
 import { useMatchAnalysis } from './useMatchAnalysis';
+import { useI18n, type TranslationKey } from './i18n';
 
-const labels: Record<string, string> = {
-  none: 'Gut',
-  doubtful: 'Ungenau',
-  bad: 'Fehler',
-  very_bad: 'Grober Fehler',
+const severityKeys: Record<string, TranslationKey> = {
+  none: 'severity.none',
+  doubtful: 'severity.doubtful',
+  bad: 'severity.bad',
+  very_bad: 'severity.very_bad',
 };
-const actions: Record<string, string> = {
-  'No double': 'Nicht doppeln',
-  'no double': 'Nicht doppeln',
-  double: 'Doppeln',
-  take: 'Annehmen',
-  drop: 'Passen',
-  'Cannot move': 'Aussetzen',
-  Double: 'Doppeln',
-  Take: 'Annehmen',
-  Pass: 'Passen',
-  Drop: 'Passen',
-  dance: 'Aussetzen',
-};
-const notation = (value: string) => actions[value] || value;
 
 export default function MatchAnalysisPanel({
   match,
@@ -38,6 +24,16 @@ export default function MatchAnalysisPanel({
   match: Match;
   onPosition: (id: string) => void;
 }) {
+  const {
+    t,
+    formatNumber,
+    formatPercent,
+    formatEquity,
+    formatDecision,
+    formatError,
+  } = useI18n();
+  const decimal = (value: number) =>
+    formatNumber(value, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
   const { job, error, submitting, run } = useMatchAnalysis(match.id);
   const [plies, setPlies] = useState(0);
   const [errorsOnly, setErrorsOnly] = useState(false);
@@ -45,7 +41,7 @@ export default function MatchAnalysisPanel({
   const [kind, setKind] = useState('');
   const [rows, setRows] = useState<MoveAnalysis[]>([]);
   const [cursor, setCursor] = useState<number | null>(null);
-  const [pageError, setPageError] = useState('');
+  const [pageError, setPageError] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState<number | null>(null);
   const [version, setVersion] = useState(0);
@@ -64,7 +60,7 @@ export default function MatchAnalysisPanel({
     if (!job?.id) return;
     const abort = new AbortController();
     setLoading(true);
-    setPageError('');
+    setPageError(null);
     void request<MoveAnalysisPage>(
       `/jobs/${job.id}/moves?limit=50&${filter}${page ? `&after=${page}` : ''}`,
       { signal: abort.signal },
@@ -77,7 +73,7 @@ export default function MatchAnalysisPanel({
         setCursor(result.next_cursor ?? null);
       })
       .catch((error) => {
-        if (!abort.signal.aborted) setPageError(String(error));
+        if (!abort.signal.aborted) setPageError(error);
       })
       .finally(() => {
         if (!abort.signal.aborted) setLoading(false);
@@ -86,25 +82,29 @@ export default function MatchAnalysisPanel({
   }, [job?.id, filter, page, version]);
 
   return (
-    <section className="match-analysis" aria-label="Vollständige Partieanalyse">
+    <section
+      className="match-analysis"
+      data-job-id={job?.id}
+      aria-label={t('matchAnalysis.label')}
+    >
       <div className="match-analysis-heading">
         <div>
-          <span className="eyebrow">DIE GANZE PARTIE VERSTEHEN</span>
-          <h3>Partieanalyse</h3>
-          <p>Alle Checker- und Cube-Entscheidungen mit GNUbg.</p>
+          <span className="eyebrow">{t('matchAnalysis.eyebrow')}</span>
+          <h3>{t('matchAnalysis.title')}</h3>
+          <p>{t('matchAnalysis.description')}</p>
         </div>
         <div className="match-analysis-controls">
           <label>
-            Analysetiefe{' '}
+            {t('matchAnalysis.depth')}{' '}
             <select
-              aria-label="Partie-Analysetiefe"
+              aria-label={t('matchAnalysis.depthLabel')}
               value={plies}
               disabled={!!active || submitting}
               onChange={(event) => setPlies(Number(event.target.value))}
             >
-              <option value={0}>0-Ply · Schnell</option>
+              <option value={0}>{t('matchAnalysis.fast')}</option>
               <option value={1}>1-Ply</option>
-              <option value={2}>2-Ply · Gründlich</option>
+              <option value={2}>{t('matchAnalysis.thorough')}</option>
             </select>
           </label>
           <button
@@ -113,18 +113,18 @@ export default function MatchAnalysisPanel({
             disabled={!!active || submitting}
           >
             {submitting
-              ? 'Auftrag wird erstellt …'
+              ? t('matchAnalysis.submitting')
               : active
-                ? 'Analyse läuft …'
+                ? t('matchAnalysis.running')
                 : job
-                  ? 'Partie erneut analysieren'
-                  : 'Gesamte Partie analysieren'}
+                  ? t('matchAnalysis.again')
+                  : t('matchAnalysis.start')}
           </button>
         </div>
       </div>
-      {error && (
+      {!!error && (
         <p className="analysis-error" role="alert">
-          {error}
+          {formatError(error)}
         </p>
       )}
       {job && (
@@ -137,30 +137,31 @@ export default function MatchAnalysisPanel({
             <div>
               <strong>
                 {job.status === 'completed'
-                  ? 'Partieanalyse abgeschlossen'
+                  ? t('matchAnalysis.completed')
                   : job.status === 'failed'
-                    ? 'Partieanalyse fehlgeschlagen'
+                    ? t('matchAnalysis.failed')
                     : job.status === 'queued'
-                      ? 'In der Warteschlange'
-                      : 'GNUbg analysiert'}
+                      ? t('matchAnalysis.queued')
+                      : t('matchAnalysis.engineRunning')}
               </strong>
               <span>
-                {job.completed_games} / {job.total_games} Spiele · {job.plies}
-                -Ply · {job.progress}%
+                {t('matchAnalysis.progressText', {
+                  completed: job.completed_games,
+                  total: job.total_games,
+                  plies: job.plies,
+                  progress: formatPercent(job.progress / 100),
+                })}
               </span>
             </div>
             <progress
-              aria-label="Fortschritt der Partieanalyse"
+              aria-label={t('matchAnalysis.progressLabel')}
               value={job.progress}
               max={100}
             />
-            {active && (
-              <small>
-                Fortschritt und Ergebnisse werden nach jedem Spiel gespeichert.
-                Du kannst die Partie währenddessen weiter ansehen.
-              </small>
+            {active && <small>{t('matchAnalysis.progressHint')}</small>}
+            {job.error && (
+              <p role="alert">{t('error.engine', { details: job.error })}</p>
             )}
-            {job.error && <p role="alert">{job.error}</p>}
           </div>
           {summary && (
             <>
@@ -170,42 +171,56 @@ export default function MatchAnalysisPanel({
                     <h4>{names[stats.player]}</h4>
                     <div className="match-summary-numbers">
                       <span>
-                        <b>{stats.doubtful + stats.bad + stats.very_bad}</b>{' '}
-                        Auffälligkeiten
+                        <b>
+                          {formatNumber(
+                            stats.doubtful + stats.bad + stats.very_bad,
+                          )}
+                        </b>{' '}
+                        {t('matchAnalysis.inaccuracies')}
                       </span>
                       <span>
                         <b>
-                          {(
-                            stats.checker_equity_loss + stats.cube_equity_loss
-                          ).toFixed(3)}
+                          {decimal(
+                            stats.checker_equity_loss + stats.cube_equity_loss,
+                          )}
                         </b>{' '}
-                        Equity-Verlust
+                        {t('matchAnalysis.equityLoss')}
                       </span>
                     </div>
                     <p>
-                      {stats.checker_decisions} Züge · {stats.cube_decisions}{' '}
-                      Cube-Entscheidungen
+                      {t('matchAnalysis.decisionsCount', {
+                        moves: stats.checker_decisions,
+                        cube: stats.cube_decisions,
+                      })}
                     </p>
                     <small>
-                      {stats.doubtful} ungenau · {stats.bad} Fehler ·{' '}
-                      {stats.very_bad} grobe Fehler
+                      {t('matchAnalysis.severityCount', {
+                        doubtful: stats.doubtful,
+                        bad: stats.bad,
+                        veryBad: stats.very_bad,
+                      })}
                       {stats.unavailable
-                        ? ` · ${stats.unavailable} nicht bewertet`
+                        ? t('matchAnalysis.unavailableCount', {
+                            count: stats.unavailable,
+                          })
                         : ''}
                     </small>
                   </article>
                 ))}
               </div>
               <p className="analysis-method">
-                {summary.analyzed_moves} / {summary.total_moves} Züge
-                ausgewertet. Equity-Verlust ist die Differenz zur besten
-                Entscheidung, kein PR. Ungenau ab 0,04 · Fehler ab 0,08 · grober
-                Fehler ab 0,16.
+                {t('matchAnalysis.method', {
+                  analyzed: summary.analyzed_moves,
+                  total: summary.total_moves,
+                  doubtful: formatNumber(0.04),
+                  bad: formatNumber(0.08),
+                  veryBad: formatNumber(0.16),
+                })}
               </p>
             </>
           )}
           <details className="match-move-overview" open>
-            <summary>Fehlerübersicht pro Zug</summary>
+            <summary>{t('matchAnalysis.overview')}</summary>
             <div className="match-analysis-filters">
               <label>
                 <input
@@ -213,38 +228,40 @@ export default function MatchAnalysisPanel({
                   checked={errorsOnly}
                   onChange={(event) => setErrorsOnly(event.target.checked)}
                 />{' '}
-                Nur Auffälligkeiten (≥ 0,04)
+                {t('matchAnalysis.errorsOnly', {
+                  threshold: formatNumber(0.04),
+                })}
               </label>
               <select
-                aria-label="Analyse nach Spieler filtern"
+                aria-label={t('matchAnalysis.filterPlayer')}
                 value={player}
                 onChange={(event) => setPlayer(event.target.value)}
               >
-                <option value="">Beide Spieler</option>
+                <option value="">{t('matchAnalysis.bothPlayers')}</option>
                 <option value="0">{match.white}</option>
                 <option value="1">{match.black}</option>
               </select>
               <select
-                aria-label="Analyse nach Entscheidung filtern"
+                aria-label={t('matchAnalysis.filterDecision')}
                 value={kind}
                 onChange={(event) => setKind(event.target.value)}
               >
-                <option value="">Checker und Cube</option>
-                <option value="checker">Checker</option>
-                <option value="cube">Cube</option>
+                <option value="">{t('matchAnalysis.bothKinds')}</option>
+                <option value="checker">{t('common.checker')}</option>
+                <option value="cube">{t('common.cube')}</option>
               </select>
             </div>
-            {pageError && <p role="alert">{pageError}</p>}
+            {!!pageError && <p role="alert">{formatError(pageError)}</p>}
             <div className="match-moves-scroll">
               <table className="match-moves-table">
                 <thead>
                   <tr>
-                    <th>Spiel · Zug</th>
-                    <th>Spieler / Art</th>
-                    <th>Gespielt</th>
-                    <th>Beste Entscheidung</th>
-                    <th>Verlust</th>
-                    <th>Bewertung</th>
+                    <th>{t('matchAnalysis.gameMove')}</th>
+                    <th>{t('matchAnalysis.playerKind')}</th>
+                    <th>{t('common.played')}</th>
+                    <th>{t('matchAnalysis.bestDecision')}</th>
+                    <th>{t('matchAnalysis.loss')}</th>
+                    <th>{t('matchAnalysis.rating')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -254,51 +271,63 @@ export default function MatchAnalysisPanel({
                         {row.position_uuid ? (
                           <button
                             className="position-link"
-                            aria-label={`Spiel ${row.game_no}, Zug ${row.checker_no} auf dem Brett öffnen`}
+                            aria-label={t('matchAnalysis.openPosition', {
+                              game: row.game_no,
+                              move: row.checker_no ?? '—',
+                            })}
                             onClick={() => onPosition(row.position_uuid!)}
                           >
-                            {row.game_no} · {row.checker_no} ↗
+                            {formatNumber(row.game_no)} ·{' '}
+                            {row.checker_no == null
+                              ? '—'
+                              : formatNumber(row.checker_no)}{' '}
+                            ↗
                           </button>
                         ) : (
-                          `${row.game_no} · Cube ${row.decision_no}`
+                          t('matchAnalysis.cubeMove', {
+                            game: row.game_no,
+                            decision: row.decision_no,
+                          })
                         )}
                       </td>
                       <td>
                         {names[row.player]}
                         <small>
                           {row.kind === 'checker'
-                            ? `Checker · ${row.dice?.join('–')}`
-                            : 'Cube'}
+                            ? `${t('common.checker')} · ${row.dice?.join('–')}`
+                            : t('common.cube')}
                         </small>
                       </td>
                       <td>
-                        {notation(row.played)}
+                        {formatDecision(row.played)}
                         <small>
                           {row.played_equity != null
-                            ? equity(row.played_equity)
+                            ? formatEquity(row.played_equity)
                             : '—'}
                         </small>
                       </td>
                       <td>
-                        {notation(row.best)}
+                        {formatDecision(row.best)}
                         <small>
                           {row.best_equity != null
-                            ? equity(row.best_equity)
+                            ? formatEquity(row.best_equity)
                             : '—'}
                         </small>
                       </td>
                       <td className="equity-loss">
                         {row.evaluation_status === 'unavailable'
                           ? '—'
-                          : row.equity_loss.toFixed(3)}
+                          : decimal(row.equity_loss)}
                       </td>
                       <td>
                         <span className={`severity severity-${row.severity}`}>
                           {row.evaluation_status === 'forced'
-                            ? 'Erzwungen'
+                            ? t('matchAnalysis.forced')
                             : row.evaluation_status === 'unavailable'
-                              ? 'Nicht bewertet'
-                              : labels[row.severity] || row.severity}
+                              ? t('matchAnalysis.unavailable')
+                              : severityKeys[row.severity]
+                                ? t(severityKeys[row.severity])
+                                : row.severity}
                         </span>
                       </td>
                     </tr>
@@ -309,14 +338,14 @@ export default function MatchAnalysisPanel({
             {rows.length === 0 && !loading && (
               <p className="analysis-empty">
                 {job.completed_games === 0
-                  ? 'Die Zugübersicht erscheint nach dem ersten analysierten Spiel.'
-                  : 'Keine Entscheidungen für diese Filter.'}
+                  ? t('matchAnalysis.firstGameHint')
+                  : t('matchAnalysis.noDecisions')}
               </p>
             )}
-            {loading && <p role="status">Zugübersicht wird geladen …</p>}
+            {loading && <p role="status">{t('matchAnalysis.loading')}</p>}
             {cursor && (
               <button onClick={() => setPage(cursor)} disabled={loading}>
-                Weitere Entscheidungen laden
+                {t('matchAnalysis.more')}
               </button>
             )}
           </details>
