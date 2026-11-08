@@ -267,6 +267,94 @@ fn apply_pairs(board: &[i32; 26], moves: &[(usize, usize)], dice: &[i32]) -> Opt
     None
 }
 
+type ExpandedPlay = ([i32; 26], Vec<(usize, usize)>);
+
+fn expand_runs(
+    board: &[i32; 26],
+    runs: &[(usize, usize)],
+    dice: &[i32],
+    remaining: usize,
+) -> Option<ExpandedPlay> {
+    if runs.is_empty() {
+        return (remaining == 0).then(|| (*board, Vec::new()));
+    }
+    if remaining == 0 || runs.len() > remaining || remaining > dice.len() {
+        return None;
+    }
+    for (run, &(from, target)) in runs.iter().enumerate() {
+        if runs[..run].contains(&(from, target)) {
+            continue;
+        }
+        for (die_index, &die) in dice.iter().enumerate() {
+            if die_index > 0 && dice[die_index - 1] == die {
+                continue;
+            }
+            let to = from.saturating_sub(die as usize);
+            // Joined notation has no intermediate hits. A hit must be an explicit
+            // endpoint in the source, otherwise choosing a path would invent one.
+            if to < target || (to != target && board[to] == -1) {
+                continue;
+            }
+            let Some(next) = step(board, from, to, die) else {
+                continue;
+            };
+            let mut next_runs = runs.to_vec();
+            if to == target {
+                next_runs.remove(run);
+            } else {
+                next_runs[run].0 = to;
+            }
+            let mut next_dice = dice.to_vec();
+            next_dice.remove(die_index);
+            if let Some((after, mut steps)) =
+                expand_runs(&next, &next_runs, &next_dice, remaining - 1)
+            {
+                steps.insert(0, (from, to));
+                return Some((after, steps));
+            }
+        }
+    }
+    None
+}
+
+/// XG files imported from text can join several dice into one From/To run.
+/// Expand at most four dice using the replayed board, including bar priority and
+/// legal overshoots. SGF imports themselves continue to require explicit steps.
+pub(crate) fn expand_xg_play(
+    board: &mut [i32; 26],
+    player: i32,
+    dice: [i32; 2],
+    runs: &[(usize, usize)],
+) -> Result<Vec<(usize, usize)>> {
+    ensure!(dice.iter().all(|d| (1..=6).contains(d)), "XG: invalid dice");
+    ensure!(
+        runs.len() <= 4
+            && runs
+                .iter()
+                .all(|&(from, to)| (1..=25).contains(&from) && to < from),
+        "XG: invalid checker run"
+    );
+    let available = if dice[0] == dice[1] {
+        vec![dice[0]; 4]
+    } else {
+        dice.to_vec()
+    };
+    let before = local_board(board, player);
+    let required = max_plays(&before, &available);
+    let (after, steps) = expand_runs(&before, runs, &available, required)
+        .context("XG: checker runs cannot be expanded to a legal, complete play")?;
+    if steps.len() == 1 && dice[0] != dice[1] {
+        let high = dice[0].max(dice[1]);
+        let (from, to) = steps[0];
+        ensure!(
+            step(&before, from, to, high).is_some() || !any_step(&before, high),
+            "XG: single checker move must use the larger die"
+        );
+    }
+    *board = local_board(&after, player);
+    Ok(steps)
+}
+
 /// Validate and apply one SGF checker play. Coordinates in SGF are absolute;
 /// notation is always from the moving player's perspective.
 fn play(board: &mut [i32; 26], player: i32, value: &str) -> Result<([i32; 2], String)> {

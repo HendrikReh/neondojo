@@ -244,9 +244,11 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
     let mut in_game = false;
     let mut saw_footer = false;
     let mut game_count = 0;
+    let mut checker_no = 0;
     let mut cube = 1;
     let mut owner = 0; // XG player +/-1; zero is centered.
     let mut game_crawford = false;
+    let mut board = super::sgf::initial_board();
     for (index, record) in bytes.chunks_exact(RECORD_BYTES).enumerate().skip(1) {
         ensure!(!saw_footer, "XG: records after match footer");
         match record[8] {
@@ -286,6 +288,8 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
                     out.push_str(&format!("RU[{}]", rules.join(":")));
                 }
                 in_game = true;
+                board = super::sgf::initial_board();
+                checker_no = 0;
                 game_count += 1;
                 cube = 1;
                 owner = 0;
@@ -305,9 +309,14 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
                     "XG automatic doubles are not supported"
                 );
                 let active = i32_at(record, 12)?;
-                let c = color(active)?;
                 let action = i32_at(record, 16)?;
                 ensure!((-2..=1).contains(&action), "XG: invalid double action");
+                // XG can store an unavailable-cube placeholder before the opening
+                // roll with no actor. It is not a played cube decision.
+                if active == 0 && action == -2 {
+                    continue;
+                }
+                let c = color(active)?;
                 if action == 1 {
                     ensure!(!game_crawford, "XG: double in a Crawford game");
                     ensure!(
@@ -337,9 +346,11 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
                     !bool_at(record, 2528)?,
                     "XG edited checker positions are not supported"
                 );
+                let invalid = i32_at(record, 2480)?;
                 ensure!(
-                    i32_at(record, 2480)? == 0,
-                    "XG contains a checker record marked invalid"
+                    invalid == 0,
+                    "XG: checker record marked invalid (code {invalid}) in game {game_count}, checker ply {} (record {index})",
+                    checker_no + 1
                 );
                 ensure!(
                     version < 27 || i32_at(record, 2540)? == 0,
@@ -348,6 +359,7 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
                 if !bool_at(record, 2308)? {
                     continue;
                 }
+                checker_no += 1;
                 let active = i32_at(record, 64)?;
                 let c = color(active)?;
                 let cube_state = i32_at(record, 108)?;
@@ -373,7 +385,7 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
                     (1..=6).contains(&d1) && (1..=6).contains(&d2),
                     "XG: invalid dice"
                 );
-                out.push_str(&format!("\n;{c}[{d1}{d2}"));
+                let mut runs = Vec::new();
                 let mut terminated = false;
                 for pair in 0..4 {
                     let from = i32_at(record, 68 + pair * 8)?;
@@ -384,8 +396,27 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
                     }
                     ensure!(!terminated, "XG: checker moves after terminator");
                     ensure!(from >= 0 && to < from, "XG: invalid checker move direction");
-                    out.push(coordinate(from, active)?);
-                    out.push(coordinate(to, active)?);
+                    // Keep coordinate bounds strict before converting XG's
+                    // zero-based player-relative points to the rule engine.
+                    coordinate(from, active)?;
+                    coordinate(to, active)?;
+                    runs.push(((from + 1) as usize, (to + 1).max(0) as usize));
+                }
+                let steps = super::sgf::expand_xg_play(
+                    &mut board,
+                    if active == 1 { 0 } else { 1 },
+                    [d1, d2],
+                    &runs,
+                )
+                .with_context(|| {
+                    format!(
+                        "XG checker-play validation failed at record {index} (game {game_count})"
+                    )
+                })?;
+                out.push_str(&format!("\n;{c}[{d1}{d2}"));
+                for (from, to) in steps {
+                    out.push(coordinate(from as i32 - 1, active)?);
+                    out.push(coordinate(to as i32 - 1, active)?);
                 }
                 out.push(']');
             }
@@ -405,8 +436,10 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
             kind => bail!("Unsupported XG record type {kind} at record {index}"),
         }
     }
+    // Ongoing money sessions have no match winner/footer. Their final game
+    // must still be closed; archive CRCs and exact record bounds were checked above.
     ensure!(
-        saw_footer && !in_game && game_count > 0,
+        (saw_footer || length == 0) && !in_game && game_count > 0,
         "XG: incomplete match record stream"
     );
     // Replay validates bars, hits, legal die distances, bearing off, and turns.
@@ -461,6 +494,131 @@ mod tests {
         set_u32(&mut header, 8, 8232);
         header.extend_from_slice(&archive);
         header
+    }
+
+    #[test]
+    fn unavailable_cube_placeholder_can_have_no_active_player() {
+        let sample = include_bytes!("../../tests/fixtures/WC2014.xg");
+        let expected = xg_to_sgf(sample).unwrap();
+        let mut records = main_records(sample).unwrap();
+        let cube_record = RECORD_BYTES * 2;
+        assert_eq!(records[cube_record + 8], 2);
+        assert_eq!(i32_at(&records, cube_record + 16).unwrap(), -2);
+        set_u32(&mut records, cube_record + 12, 0);
+        let converted = xg_to_sgf(&wrap(&records, None)).unwrap();
+        assert_eq!(converted, expected);
+    }
+
+    #[test]
+    fn completed_money_games_can_end_without_a_match_footer() {
+        let mut records = main_records(include_bytes!("../../tests/fixtures/WC2014.xg")).unwrap();
+        let end = records
+            .chunks_exact(RECORD_BYTES)
+            .position(|r| r[8] == 4)
+            .unwrap();
+        records.truncate((end + 1) * RECORD_BYTES);
+        // A point match still requires its match footer.
+        assert!(
+            xg_to_sgf(&wrap(&records, None))
+                .unwrap_err()
+                .to_string()
+                .contains("incomplete")
+        );
+        set_u32(&mut records, 552, 26);
+        set_u32(&mut records, 92, 99999);
+        records[101] = 1;
+        let sgf = xg_to_sgf(&wrap(&records, None)).unwrap();
+        let parsed = super::super::parse_sgf(&sgf).unwrap();
+        let expected = records
+            .chunks_exact(RECORD_BYTES)
+            .filter(|r| r[8] == 3 && r[2308] == 1)
+            .count();
+        assert_eq!(parsed.match_length, 0);
+        assert_eq!(parsed.positions.len(), expected);
+        assert!(expected > 0);
+        assert!(sgf.contains("Jacoby"));
+        assert!(parsed.positions.iter().all(|p| p.game_no == 1));
+        // Ending inside a game is still an incomplete stream.
+        records.truncate(end * RECORD_BYTES);
+        assert!(
+            xg_to_sgf(&wrap(&records, None))
+                .unwrap_err()
+                .to_string()
+                .contains("incomplete")
+        );
+    }
+
+    #[test]
+    fn actual_cube_decisions_still_require_an_active_player() {
+        let original = main_records(include_bytes!("../../tests/fixtures/WC2014.xg")).unwrap();
+        for action in [0, 1] {
+            let mut records = original.clone();
+            let cube_record = RECORD_BYTES * 2;
+            set_u32(&mut records, cube_record + 12, 0);
+            set_u32(&mut records, cube_record + 16, action);
+            assert!(
+                xg_to_sgf(&wrap(&records, None))
+                    .unwrap_err()
+                    .to_string()
+                    .contains("invalid active player 0")
+            );
+        }
+    }
+
+    #[test]
+    fn compact_checker_runs_expand_to_the_original_positions() {
+        let sample = include_bytes!("../../tests/fixtures/WC2014.xg");
+        let original = main_records(sample).unwrap();
+        let expected = super::super::parse_sgf(&xg_to_sgf(sample).unwrap()).unwrap();
+        for doubles in [false, true] {
+            let mut move_no = 0;
+            let (index, _) = original
+                .chunks_exact(RECORD_BYTES)
+                .enumerate()
+                .find(|(_, record)| {
+                    if record[8] != 3 || record[2308] != 1 {
+                        return false;
+                    }
+                    let p = &expected.positions[move_no];
+                    move_no += 1;
+                    let middle = i32_at(record, 72).unwrap();
+                    let absolute = if p.player == 0 {
+                        middle + 1
+                    } else {
+                        24 - middle
+                    };
+                    middle >= 0
+                        && middle == i32_at(record, 76).unwrap()
+                        && (i32_at(record, 100).unwrap() == i32_at(record, 104).unwrap()) == doubles
+                        && p.board[absolute as usize] * if p.player == 0 { 1 } else { -1 } >= 0
+                })
+                .expect("fixture has a joinable non-hitting checker run");
+            let mut records = original.clone();
+            let start = index * RECORD_BYTES;
+            let end = u32_at(&records, start + 80).unwrap();
+            set_u32(&mut records, start + 72, end);
+            records.copy_within(start + 84..start + 100, start + 76);
+            set_u32(&mut records, start + 92, u32::MAX);
+            set_u32(&mut records, start + 96, u32::MAX);
+            let sgf = xg_to_sgf(&wrap(&records, None)).unwrap();
+            let actual = super::super::parse_sgf(&sgf).unwrap();
+            assert_eq!(actual.positions.len(), expected.positions.len());
+            for (a, b) in actual.positions.iter().zip(&expected.positions) {
+                assert_eq!(a.position_id, b.position_id);
+                assert_eq!(a.match_id, b.match_id);
+                assert_eq!(a.board, b.board);
+            }
+        }
+    }
+
+    #[test]
+    fn invalid_marked_checker_reports_its_game_and_ply() {
+        let mut records = main_records(include_bytes!("../../tests/fixtures/WC2014.xg")).unwrap();
+        set_u32(&mut records, RECORD_BYTES * 3 + 2480, 2);
+        let error = xg_to_sgf(&wrap(&records, None)).unwrap_err().to_string();
+        assert!(error.contains("invalid"), "{error}");
+        assert!(error.contains("game 1"), "{error}");
+        assert!(error.contains("checker ply 1"), "{error}");
     }
 
     #[test]

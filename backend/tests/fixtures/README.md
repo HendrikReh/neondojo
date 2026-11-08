@@ -92,3 +92,26 @@ GNUbg installation and can be run with:
 ```
 GNUBG_BIN=/path/to/gnubg cargo test -p bgtutor match_analysis::tests --lib -- --ignored
 ```
+
+## Additional XG import regressions
+
+Portable tests derive version-26 money-session and compact-move cases from the
+public WC2014 fixture and rewrap them with valid compression and checksums. They
+cover inactive cube placeholders (`Actif=0`, `double=-2`), money sessions ending
+at a completed game without `tsFooterMatch`, and joined checker runs such as
+13/7 with 5–1 or a joined portion of a double. The latter must expand to legal
+individual dice steps while retaining every original position and match ID.
+The normalizer uses the replayed board, enforces bar-entry order and maximum
+dice use, and never inserts an unrecorded intermediate hit. Public SGF parsing
+still requires explicit individual steps.
+
+Additional rule tests cover interleaved bar entries, both player orientations,
+endpoint hits, bearing-off overshoots and the larger-die rule. Invalid-marked
+records remain rejected with game, checker-ply and record coordinates.
+
+On 2026-11-08, 35 user-provided local XG files (15 distinct contents) were
+checked without adding them to the repository. All 14 distinct valid files
+retained their complete played-checker counts, including a 200-game,
+7,476-position money session. One file carries an explicit invalid-play marker
+and remains rejected. The private files are not required by the regression
+suite.

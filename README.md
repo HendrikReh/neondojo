@@ -89,7 +89,7 @@ Dafür wird separat das offizielle Python-Paket `anki` benötigt; die Prüfung v
 | --- | --- |
 | `.mat` | GNUbg normalisiert Jellyfish-MAT zu SGF. Parserdiagnosen werden zusätzlich zum Exitcode geprüft, damit beschädigte Dateien nicht als gültiger Teilimport gespeichert werden. |
 | `.sgf` | Nativer Parser für Standard-Backgammon, Escape-Sequenzen, mehrere Spiele, Setup-Positionen, Doppler, Scores, Crawford/Jacoby und Zugrekonstruktion. UTF-8; mehrdeutige Variantenbäume werden abgelehnt. |
-| `.xg` | Nativer Decoder für binäre XG2-Dateien mit Save-Version 24–40: RichGame-Container, begrenzte Zlib-Dekompression, CRC, Datensätze und Konvertierung zu SGF. Mit einer echten Version-31-Datei über 460 Positionen geprüft. |
+| `.xg` | Nativer Decoder für binäre XG2-Dateien mit Save-Version 24–40: RichGame-Container, begrenzte Zlib-Dekompression, CRC, Datensätze und Konvertierung zu SGF. Unterstützt inaktive Cube-Platzhalter, abgeschlossene Spiele in offenen Money-Sessions ohne Match-Enddatensatz sowie zusammengefasste Checker-Züge aus Textimporten. Geprüft mit realen Dateien der Versionen 26, 30 und 31; die Referenz mit 460 Positionen wird gegen GNUbg verglichen. |
 
 XG1, bearbeitete/custom XG-Startstellungen, automatische Doppel, Beavers/Raccoons und andere Spielvarianten werden mit einer Fehlermeldung abgelehnt. Vorhandene XG-Analysen, Rollouts und Kommentare werden noch nicht übernommen. Die Originaldatei bleibt gespeichert. Details und Quellen: [Import-Fixtures](backend/tests/fixtures/README.md).
 
