@@ -1,0 +1,19 @@
+name: bgtutor
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: bgtutor
+      POSTGRES_PASSWORD: bgtutor_local
+      POSTGRES_DB: bgtutor
+    ports:
+      - "127.0.0.1:${BGTUTOR_DB_PORT:-54329}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bgtutor -d bgtutor"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+volumes:
+  postgres_data:

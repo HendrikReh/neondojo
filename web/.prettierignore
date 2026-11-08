@@ -1,0 +1,6 @@
+src/generated-api.d.ts
+dist
+node_modules
+test-results
+package-lock.json
+*.tsbuildinfo
