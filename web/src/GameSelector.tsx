@@ -1,0 +1,58 @@
+import type { MatchGame } from './api';
+import { useI18n } from './i18n';
+
+export default function GameSelector({
+  games,
+  selected,
+  onSelect,
+}: {
+  games: MatchGame[];
+  selected?: number;
+  onSelect: (game: number) => void;
+}) {
+  const { t } = useI18n();
+  const index = games.findIndex((game) => game.game_no === selected);
+  return (
+    <section className="game-selector" aria-label={t('games.heading')}>
+      <span className="eyebrow">{t('games.heading')}</span>
+      <div className="game-selector-controls">
+        <button
+          aria-label={t('games.previous')}
+          disabled={index <= 0}
+          onClick={() => onSelect(games[index - 1].game_no)}
+        >
+          ←
+        </button>
+        <label>
+          {t('games.choose')}
+          <select
+            aria-label={t('games.choose')}
+            value={selected ?? ''}
+            disabled={!games.length}
+            onChange={(event) => onSelect(Number(event.target.value))}
+          >
+            {!games.length && <option value="">{t('games.loading')}</option>}
+            {games.map((game) => (
+              <option key={game.game_no} value={game.game_no}>
+                {t('games.option', {
+                  game: game.game_no,
+                  white: game.white_score,
+                  black: game.black_score,
+                  moves: game.position_count,
+                })}
+                {game.crawford ? ' · Crawford' : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          aria-label={t('games.next')}
+          disabled={index < 0 || index >= games.length - 1}
+          onClick={() => onSelect(games[index + 1].game_no)}
+        >
+          →
+        </button>
+      </div>
+    </section>
+  );
+}

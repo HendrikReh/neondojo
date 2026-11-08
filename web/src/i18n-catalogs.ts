@@ -1,6 +1,28 @@
 // Complete message catalogs: every locale must provide every key.
 
 export const de = {
+  'games.choose': 'Spiel auswählen',
+  'games.previous': 'Vorheriges Spiel',
+  'games.next': 'Nächstes Spiel',
+  'games.option': 'Spiel {game} · {white}:{black} · {moves} Züge',
+  'games.heading': 'Einzelnes Spiel',
+  'games.loading': 'Spiele werden geladen …',
+  'games.retry': 'Spiel erneut laden',
+  'gameAnalysis.label': 'Spielanalyse',
+  'gameAnalysis.title': 'Spiel {game} analysieren',
+  'gameAnalysis.description':
+    'Checker- und Dopplerentscheidungen dieses Spiels im ursprünglichen Matchkontext auswerten.',
+  'gameAnalysis.start': 'Spiel analysieren',
+  'gameAnalysis.again': 'Spiel erneut analysieren',
+  'gameAnalysis.completed': 'Spielanalyse abgeschlossen',
+  'gameAnalysis.failed': 'Spielanalyse fehlgeschlagen',
+  'gameAnalysis.scope': 'Analyseumfang',
+  'gameAnalysis.scopeGame': 'Ausgewähltes Spiel',
+  'gameAnalysis.scopeMatch': 'Gesamtes Match',
+  'analysis.observedGame': 'Spielwürfe',
+  'analysis.observedGameDescription':
+    '{count} aufgezeichnete Würfe aus Spiel {game}. Häufigkeiten sind keine Equity-Analyse.',
+  'games.addErrors': 'Fehler aus Spiel {game} übernehmen',
   'board.assetError':
     'Theme-Grafik konnte nicht geladen werden. Das Standardbrett wird angezeigt.',
   'common.language': 'Sprache',
@@ -193,6 +215,28 @@ export type TranslationKey = keyof typeof de;
 export type Catalog = Record<TranslationKey, string>;
 
 export const en = {
+  'games.choose': 'Select game',
+  'games.previous': 'Previous game',
+  'games.next': 'Next game',
+  'games.option': 'Game {game} · {white}:{black} · {moves} moves',
+  'games.heading': 'Individual game',
+  'games.loading': 'Loading games…',
+  'games.retry': 'Reload game',
+  'gameAnalysis.label': 'Game analysis',
+  'gameAnalysis.title': 'Analyze game {game}',
+  'gameAnalysis.description':
+    'Evaluate this game’s checker and cube decisions in the original match context.',
+  'gameAnalysis.start': 'Analyze game',
+  'gameAnalysis.again': 'Analyze game again',
+  'gameAnalysis.completed': 'Game analysis completed',
+  'gameAnalysis.failed': 'Game analysis failed',
+  'gameAnalysis.scope': 'Analysis scope',
+  'gameAnalysis.scopeGame': 'Selected game',
+  'gameAnalysis.scopeMatch': 'Entire match',
+  'analysis.observedGame': 'Game rolls',
+  'analysis.observedGameDescription':
+    '{count} recorded rolls from game {game}. Frequencies are not an equity analysis.',
+  'games.addErrors': 'Add errors from game {game}',
   'board.assetError':
     'The theme image could not be loaded. The default board is shown.',
   'common.language': 'Language',
@@ -380,6 +424,28 @@ export const en = {
 } satisfies Catalog;
 
 export const es = {
+  'games.choose': 'Seleccionar juego',
+  'games.previous': 'Juego anterior',
+  'games.next': 'Juego siguiente',
+  'games.option': 'Juego {game} · {white}:{black} · {moves} jugadas',
+  'games.heading': 'Juego individual',
+  'games.loading': 'Cargando juegos…',
+  'games.retry': 'Recargar juego',
+  'gameAnalysis.label': 'Análisis del juego',
+  'gameAnalysis.title': 'Analizar juego {game}',
+  'gameAnalysis.description':
+    'Evaluar las decisiones de fichas y cubo de este juego en el contexto original de la partida.',
+  'gameAnalysis.start': 'Analizar juego',
+  'gameAnalysis.again': 'Volver a analizar el juego',
+  'gameAnalysis.completed': 'Análisis del juego completado',
+  'gameAnalysis.failed': 'Error en el análisis del juego',
+  'gameAnalysis.scope': 'Alcance del análisis',
+  'gameAnalysis.scopeGame': 'Juego seleccionado',
+  'gameAnalysis.scopeMatch': 'Partida completa',
+  'analysis.observedGame': 'Tiradas del juego',
+  'analysis.observedGameDescription':
+    '{count} tiradas registradas del juego {game}. Las frecuencias no son un análisis de equity.',
+  'games.addErrors': 'Añadir errores del juego {game}',
   'board.assetError':
     'No se ha podido cargar la imagen del tema. Se muestra el tablero predeterminado.',
   'common.language': 'Idioma',
@@ -569,6 +635,28 @@ export const es = {
 } satisfies Catalog;
 
 export const fr = {
+  'games.choose': 'Choisir une manche',
+  'games.previous': 'Manche précédente',
+  'games.next': 'Manche suivante',
+  'games.option': 'Manche {game} · {white}:{black} · {moves} coups',
+  'games.heading': 'Manche individuelle',
+  'games.loading': 'Chargement des manches…',
+  'games.retry': 'Recharger la manche',
+  'gameAnalysis.label': 'Analyse de la manche',
+  'gameAnalysis.title': 'Analyser la manche {game}',
+  'gameAnalysis.description':
+    'Évaluer les décisions de pions et de videau de cette manche dans le contexte original du match.',
+  'gameAnalysis.start': 'Analyser la manche',
+  'gameAnalysis.again': 'Analyser à nouveau la manche',
+  'gameAnalysis.completed': 'Analyse de la manche terminée',
+  'gameAnalysis.failed': 'Échec de l’analyse de la manche',
+  'gameAnalysis.scope': 'Portée de l’analyse',
+  'gameAnalysis.scopeGame': 'Manche sélectionnée',
+  'gameAnalysis.scopeMatch': 'Match complet',
+  'analysis.observedGame': 'Lancers de la manche',
+  'analysis.observedGameDescription':
+    '{count} lancers enregistrés dans la manche {game}. Les fréquences ne sont pas une analyse d’équité.',
+  'games.addErrors': 'Ajouter les erreurs de la manche {game}',
   'board.assetError':
     'L’image du thème n’a pas pu être chargée. Le plateau par défaut est affiché.',
   'common.language': 'Langue',
@@ -758,6 +846,28 @@ export const fr = {
 } satisfies Catalog;
 
 export const pl = {
+  'games.choose': 'Wybierz partię',
+  'games.previous': 'Poprzednia partia',
+  'games.next': 'Następna partia',
+  'games.option': 'Partia {game} · {white}:{black} · {moves} ruchów',
+  'games.heading': 'Pojedyncza partia',
+  'games.loading': 'Ładowanie partii…',
+  'games.retry': 'Wczytaj partię ponownie',
+  'gameAnalysis.label': 'Analiza partii',
+  'gameAnalysis.title': 'Analizuj partię {game}',
+  'gameAnalysis.description':
+    'Oceń decyzje dotyczące pionów i kostki w tej partii w oryginalnym kontekście meczu.',
+  'gameAnalysis.start': 'Analizuj partię',
+  'gameAnalysis.again': 'Analizuj partię ponownie',
+  'gameAnalysis.completed': 'Analiza partii zakończona',
+  'gameAnalysis.failed': 'Analiza partii nie powiodła się',
+  'gameAnalysis.scope': 'Zakres analizy',
+  'gameAnalysis.scopeGame': 'Wybrana partia',
+  'gameAnalysis.scopeMatch': 'Cały mecz',
+  'analysis.observedGame': 'Rzuty w partii',
+  'analysis.observedGameDescription':
+    '{count} zapisanych rzutów w partii {game}. Częstości nie stanowią analizy equity.',
+  'games.addErrors': 'Dodaj błędy z partii {game}',
   'board.assetError':
     'Nie udało się wczytać grafiki motywu. Wyświetlana jest domyślna plansza.',
   'common.language': 'Język',
@@ -946,6 +1056,28 @@ export const pl = {
 } satisfies Catalog;
 
 export const it = {
+  'games.choose': 'Seleziona game',
+  'games.previous': 'Game precedente',
+  'games.next': 'Game successivo',
+  'games.option': 'Game {game} · {white}:{black} · {moves} mosse',
+  'games.heading': 'Singolo game',
+  'games.loading': 'Caricamento dei game…',
+  'games.retry': 'Ricarica game',
+  'gameAnalysis.label': 'Analisi del game',
+  'gameAnalysis.title': 'Analizza il game {game}',
+  'gameAnalysis.description':
+    'Valuta le decisioni di pedine e cubo di questo game nel contesto originale del match.',
+  'gameAnalysis.start': 'Analizza game',
+  'gameAnalysis.again': 'Analizza di nuovo il game',
+  'gameAnalysis.completed': 'Analisi del game completata',
+  'gameAnalysis.failed': 'Analisi del game non riuscita',
+  'gameAnalysis.scope': 'Ambito dell’analisi',
+  'gameAnalysis.scopeGame': 'Game selezionato',
+  'gameAnalysis.scopeMatch': 'Match intero',
+  'analysis.observedGame': 'Tiri del game',
+  'analysis.observedGameDescription':
+    '{count} tiri registrati nel game {game}. Le frequenze non sono un’analisi dell’equity.',
+  'games.addErrors': 'Aggiungi errori del game {game}',
   'board.assetError':
     'Impossibile caricare l’immagine del tema. Viene mostrato il tavoliere predefinito.',
   'common.language': 'Lingua',

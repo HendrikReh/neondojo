@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { request } from './api';
+import { useLibraryText } from './library-messages';
 import {
   annotationPath,
   annotationValidation,
@@ -53,6 +54,7 @@ export default function AnnotationPanel(props: AnnotationPanelProps) {
 
 function AnnotationEditor({ kind, id, onSaved }: AnnotationPanelProps) {
   const { t, formatError } = useAnnotationI18n();
+  const l = useLibraryText();
   const cacheKey = `${kind}:${id}`;
   const htmlId = useId();
   const [draft, setDraft] = useState(
@@ -191,7 +193,11 @@ function AnnotationEditor({ kind, id, onSaved }: AnnotationPanelProps) {
         <div>
           <span className="eyebrow">{t('eyebrow')}</span>
           <h3 id={`${htmlId}-title`}>
-            {t(kind === 'match' ? 'matchTitle' : 'positionTitle')}
+            {kind === 'game'
+              ? `${l('game')} · ${l('comment')}`
+              : kind === 'move'
+                ? `${l('sourceMove')} · ${l('comment')}`
+                : t(kind === 'match' ? 'matchTitle' : 'positionTitle')}
           </h3>
         </div>
         {unsaved && <span className="annotation-status">{t('unsaved')}</span>}

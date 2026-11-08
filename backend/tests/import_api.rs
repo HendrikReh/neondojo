@@ -24,12 +24,12 @@ fn upload(filename: &str, bytes: &[u8]) -> Request<Body> {
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL and local GNUbg"]
-async fn all_three_formats_are_atomic_and_engine_failures_are_persisted(pool: PgPool) {
+async fn all_four_formats_are_atomic_and_engine_failures_are_persisted(pool: PgPool) {
     let state = AppState::new(
         pool.clone(),
         Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into())),
     );
-    let app = api::router(state);
+    let app = api::router(state.clone());
     let bad=b"7 point match\n\n Game 1\n Alice : 0                         Bob : 0\n 1) 31: 8/5 6/5                    42: 8/4 6/4\n 2) 65: 24/22 22/13\n";
     assert_eq!(
         app.clone()
@@ -53,15 +53,26 @@ async fn all_three_formats_are_atomic_and_engine_failures_are_persisted(pool: Pg
         422
     );
     let mut imported = Vec::new();
-    for (filename, bytes) in [
-        ("WC2014.xg", include_bytes!("fixtures/WC2014.xg").as_slice()),
+    for (filename, bytes, expected) in [
+        (
+            "WC2014.xg",
+            include_bytes!("fixtures/WC2014.xg").as_slice(),
+            460,
+        ),
         (
             "WC2014.sgf",
             include_bytes!("fixtures/WC2014.gnubg.sgf").as_slice(),
+            460,
         ),
         (
             "WC2014.mat",
             include_bytes!("fixtures/WC2014.mat").as_slice(),
+            460,
+        ),
+        (
+            "tutorial.bgf",
+            include_bytes!("fixtures/tutorial.bgf").as_slice(),
+            3,
         ),
     ] {
         let response = app.clone().oneshot(upload(filename, bytes)).await.unwrap();
@@ -69,9 +80,25 @@ async fn all_three_formats_are_atomic_and_engine_failures_are_persisted(pool: Pg
         let data = response.into_body().collect().await.unwrap().to_bytes();
         assert_eq!(status, 201, "{}", String::from_utf8_lossy(&data));
         let result: ImportResponse = serde_json::from_slice(&data).unwrap();
-        assert_eq!(result.r#match.position_count, 460);
+        assert_eq!(result.r#match.position_count, expected);
         imported.push(result.r#match.id);
     }
+    // A BGF source reaches the real native checker/cube analysis worker, too.
+    let bgf_job = store::create_match_job(&pool, imported[3], 0, 1)
+        .await
+        .unwrap();
+    assert!(jobs::run_one(&state).await.unwrap());
+    let analyzed = store::get_job(&pool, bgf_job.id).await.unwrap().unwrap();
+    assert_eq!(analyzed.status, "completed", "{:?}", analyzed.error);
+    assert_eq!((analyzed.total_games, analyzed.completed_games), (1, 1));
+    let checker_count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM move_analyses WHERE job_id=$1 AND kind='checker'")
+            .bind(bgf_job.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(checker_count, 3);
+
     // An actual spawn failure must be durable and visible as a terminal SSE event.
     let position = store::positions(&pool, Some(imported[0]), None, None, 1)
         .await

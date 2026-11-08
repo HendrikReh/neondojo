@@ -225,3 +225,27 @@ fn compact_xg_bearing_off_and_single_die_priority_follow_the_rules() {
     assert!(sgf::expand_xg_play(&mut board, 0, [6, 5], &[(25, 20)]).is_err());
     assert_eq!(board, before);
 }
+
+#[test]
+fn winning_bearoff_can_end_before_every_playable_die_is_used() {
+    for (color, move_value) in [("W", "42cz"), ("B", "42vz")] {
+        let setup = if color == "W" {
+            "AW[c]AB[x]"
+        } else {
+            "AB[v]AW[a]"
+        };
+        let input = format!("(;GM[6]AE[a:y]{setup};{color}[{move_value}])");
+        let imported = parse_sgf(&input).unwrap();
+        assert_eq!(imported.positions.len(), 1);
+        assert_eq!(imported.positions[0].notation, "3/off");
+    }
+    let mut board = [0; 26];
+    board[3] = 1;
+    board[24] = -1;
+    assert_eq!(
+        sgf::expand_xg_play(&mut board, 0, [4, 2], &[(3, 0)]).unwrap(),
+        vec![(3, 0)]
+    );
+    assert!(!board.iter().any(|n| *n > 0));
+    assert!(parse_sgf("(;GM[6]AE[a:y]AW[c][c]AB[x];W[42cz])").is_err());
+}

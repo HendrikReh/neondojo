@@ -76,12 +76,18 @@ pub(crate) type ApiResult<T> = Result<T, ApiError>;
 
 pub fn router(state: AppState) -> Router {
     Router::new()
+        .merge(crate::settings::routes())
+        .merge(crate::opening_book::routes())
+        .merge(crate::imported_analysis::routes())
+        .merge(crate::databases::routes())
+        .merge(crate::move_catalog::routes())
         .merge(crate::annotations::routes())
         .merge(crate::learning::routes())
         .route("/api/health", get(health))
         .route("/api/imports", post(upload))
         .route("/api/matches", get(matches))
         .route("/api/matches/{id}", get(get_match))
+        .route("/api/matches/{id}/games", get(match_games))
         .route("/api/matches/{id}/dice", get(dice))
         .route("/api/matches/{id}/source", get(source))
         .route(
@@ -89,6 +95,7 @@ pub fn router(state: AppState) -> Router {
             get(latest_match_analysis).post(create_match_analysis),
         )
         .route("/api/positions", get(positions))
+        .route("/api/positions/{id}", get(get_position))
         .route("/api/jobs", post(create_job))
         .route("/api/jobs/{id}", get(job))
         .route("/api/jobs/{id}/events", get(events))
@@ -107,6 +114,8 @@ pub fn router(state: AppState) -> Router {
                     axum::http::Method::GET,
                     axum::http::Method::POST,
                     axum::http::Method::PUT,
+                    axum::http::Method::PATCH,
+                    axum::http::Method::DELETE,
                 ])
                 .allow_headers([
                     header::CONTENT_TYPE,
@@ -127,7 +136,10 @@ pub struct Health {
 #[utoipa::path(get, path="/api/health", responses((status=200, body=Health), (status=503, body=Health)), tag="System")]
 async fn health(State(state): State<AppState>) -> (StatusCode, Json<Health>) {
     let database = sqlx::query("SELECT 1").execute(&state.pool).await.is_ok();
-    let gnubg = state.engine.version().await.ok();
+    let gnubg = match crate::settings::load(&state).await {
+        Ok(settings) => Engine::new(settings.gnubg_path).version().await.ok(),
+        Err(_) => None,
+    };
     let ready = database && gnubg.is_some();
     (
         if ready {
@@ -143,17 +155,24 @@ async fn health(State(state): State<AppState>) -> (StatusCode, Json<Health>) {
     )
 }
 
+#[derive(Deserialize, IntoParams)]
+pub struct ImportQuery {
+    /// Target logical database. Omitted: default database.
+    pub database_id: Option<Uuid>,
+}
+
 #[derive(ToSchema)]
 #[allow(dead_code)]
 struct UploadForm {
-    /// One MAT, SGF, or binary XG file, at most 16 MiB including multipart envelope.
+    /// One MAT, SGF, binary XG, or BGBlitz BGF file, at most 16 MiB including multipart envelope.
     #[schema(value_type=String, format=Binary)]
     file: String,
 }
 
-#[utoipa::path(post, path="/api/imports", request_body(content=UploadForm, content_type="multipart/form-data"), responses((status=201, body=ImportResponse), (status=200, body=ImportResponse, description="Previously imported file"), (status=422, body=ErrorBody), (status=413, description="Upload too large"), (status=429, body=ErrorBody)), tag="Library")]
+#[utoipa::path(post, path="/api/imports", params(ImportQuery), request_body(content=UploadForm, content_type="multipart/form-data"), responses((status=201, body=ImportResponse), (status=200, body=ImportResponse, description="Previously imported file"), (status=422, body=ErrorBody), (status=413, description="Upload too large"), (status=429, body=ErrorBody)), tag="Library")]
 async fn upload(
     State(state): State<AppState>,
+    Query(query): Query<ImportQuery>,
     mut multipart: Multipart,
 ) -> ApiResult<(StatusCode, Json<ImportResponse>)> {
     let _permit = state.imports.try_acquire().map_err(|_| {
@@ -185,8 +204,10 @@ async fn upload(
         .next()
         .unwrap_or("")
         .to_ascii_lowercase();
-    if !["mat", "sgf", "xg"].contains(&format.as_str()) {
-        return Err(ApiError::invalid("Supported formats: .mat, .sgf, .xg"));
+    if !["mat", "sgf", "xg", "bgf"].contains(&format.as_str()) {
+        return Err(ApiError::invalid(
+            "Supported formats: .mat, .sgf, .xg, .bgf",
+        ));
     }
     let bytes = field
         .bytes()
@@ -204,13 +225,19 @@ async fn upload(
         return Err(ApiError::invalid("Upload one file per request"));
     }
     let sgf = match format.as_str() {
-        "mat" => state
-            .engine
+        "mat" => Engine::new(crate::settings::load(&state).await?.gnubg_path)
             .normalize_mat(&bytes)
             .await
             .map_err(|e| ApiError::invalid(format!("MAT import failed: {e:#}")))?,
         "sgf" => {
             String::from_utf8(bytes.to_vec()).map_err(|_| ApiError::invalid("SGF must be UTF-8"))?
+        }
+        "bgf" => {
+            let data = bytes.clone();
+            tokio::task::spawn_blocking(move || import::bgf_to_sgf(&data))
+                .await
+                .map_err(anyhow::Error::from)?
+                .map_err(|e| ApiError::invalid(format!("BGF import failed: {e:#}")))?
         }
         "xg" => {
             let data = bytes.clone();
@@ -229,8 +256,25 @@ async fn upload(
     if imported.positions.is_empty() || imported.positions.len() > 100_000 {
         return Err(ApiError::invalid("Expected 1–100000 checker moves"));
     }
-    let result =
-        store::import_match(&state.pool, &filename, &format, &bytes, &sgf, &imported).await?;
+    let database_id = query.database_id.unwrap_or(Uuid::from_u128(1));
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM databases WHERE id=$1)")
+        .bind(database_id)
+        .fetch_one(&state.pool)
+        .await
+        .map_err(anyhow::Error::from)?;
+    if !exists {
+        return Err(ApiError::missing());
+    }
+    let result = store::import_match_in_database(
+        &state.pool,
+        &filename,
+        &format,
+        &bytes,
+        &sgf,
+        &imported,
+        database_id,
+    )
+    .await?;
     Ok((
         if result.duplicate {
             StatusCode::OK
@@ -281,6 +325,50 @@ async fn get_match(
     ))
 }
 
+#[utoipa::path(get, path="/api/matches/{id}/games", params(("id"=Uuid, Path)), responses((status=200, body=Vec<MatchGame>), (status=404, body=ErrorBody)), tag="Library")]
+async fn match_games(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<Vec<MatchGame>>> {
+    Ok(Json(
+        store::match_games(&state.pool, id)
+            .await?
+            .ok_or_else(ApiError::missing)?,
+    ))
+}
+
+#[utoipa::path(get, path="/api/positions/{id}", params(("id"=Uuid, Path)), responses((status=200, body=Position), (status=404, body=ErrorBody)), tag="Library")]
+async fn get_position(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<Position>> {
+    Ok(Json(
+        store::get_position(&state.pool, id)
+            .await?
+            .ok_or_else(ApiError::missing)?,
+    ))
+}
+
+#[derive(Deserialize, IntoParams)]
+struct GameScope {
+    /// One-based source game number; omitted means the whole match.
+    game_no: Option<i32>,
+}
+
+async fn validate_game(
+    state: &AppState,
+    match_id: Uuid,
+    game_no: Option<i32>,
+) -> ApiResult<Vec<MatchGame>> {
+    let games = store::match_games(&state.pool, match_id)
+        .await?
+        .ok_or_else(ApiError::missing)?;
+    if game_no.is_some_and(|n| !games.iter().any(|g| g.game_no == n)) {
+        return Err(ApiError::invalid("game_no is outside this match"));
+    }
+    Ok(games)
+}
+
 #[utoipa::path(get, path="/api/matches/{id}/source", params(("id"=Uuid, Path)), responses((status=200, body=String, content_type="application/x-go-sgf"), (status=404, body=ErrorBody)), tag="Library")]
 async fn source(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResult<Response> {
     let sgf: Option<String> = sqlx::query_scalar("SELECT sgf FROM matches WHERE id=$1")
@@ -303,7 +391,9 @@ async fn source(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResul
 
 #[derive(Deserialize, IntoParams)]
 struct PositionQuery {
+    database_id: Option<Uuid>,
     match_id: Option<Uuid>,
+    game_no: Option<i32>,
     position_id: Option<String>,
     after: Option<Uuid>,
     limit: Option<i64>,
@@ -314,6 +404,12 @@ async fn positions(
     State(state): State<AppState>,
     Query(query): Query<PositionQuery>,
 ) -> ApiResult<Json<PositionPage>> {
+    if query.game_no.is_some() {
+        let match_id = query
+            .match_id
+            .ok_or_else(|| ApiError::invalid("game_no requires match_id"))?;
+        validate_game(&state, match_id, query.game_no).await?;
+    }
     if let Some(ref id) = query.position_id
         && !valid_id(id, 14)
     {
@@ -328,7 +424,23 @@ async fn positions(
         let p = store::get_position(&state.pool, cursor)
             .await?
             .ok_or_else(|| ApiError::invalid("Unknown cursor"))?;
+        if let Some(database_id) = query.database_id {
+            let belongs: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM matches WHERE id=$1 AND database_id=$2)",
+            )
+            .bind(p.match_uuid)
+            .bind(database_id)
+            .fetch_one(&state.pool)
+            .await
+            .map_err(anyhow::Error::from)?;
+            if !belongs {
+                return Err(ApiError::invalid(
+                    "Cursor does not match the database filter",
+                ));
+            }
+        }
         if query.match_id.is_some_and(|id| id != p.match_uuid)
+            || query.game_no.is_some_and(|n| n != p.game_no)
             || query
                 .position_id
                 .as_ref()
@@ -338,23 +450,29 @@ async fn positions(
         }
     }
     Ok(Json(
-        store::positions(
+        store::positions_scoped_in_database(
             &state.pool,
             query.match_id,
             query.position_id.as_deref(),
             query.after,
             limit(query.limit)?,
+            query.game_no,
+            query.database_id,
         )
         .await?,
     ))
 }
 
-#[utoipa::path(get, path="/api/matches/{id}/dice", params(("id"=Uuid, Path)), responses((status=200, body=DiceStats), (status=404, body=ErrorBody)), tag="Library")]
-async fn dice(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResult<Json<DiceStats>> {
-    store::get_match(&state.pool, id)
-        .await?
-        .ok_or_else(ApiError::missing)?;
-    Ok(Json(store::dice_stats(&state.pool, id).await?))
+#[utoipa::path(get, path="/api/matches/{id}/dice", params(("id"=Uuid, Path), GameScope), responses((status=200, body=DiceStats), (status=404, body=ErrorBody), (status=422, body=ErrorBody)), tag="Library")]
+async fn dice(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Query(query): Query<GameScope>,
+) -> ApiResult<Json<DiceStats>> {
+    validate_game(&state, id, query.game_no).await?;
+    Ok(Json(
+        store::dice_stats_scoped(&state.pool, id, query.game_no).await?,
+    ))
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -370,10 +488,10 @@ struct JobRequest {
     position_id: Uuid,
     /// analysis: five candidate moves; dice: 21 weighted rolls.
     kind: PositionJobKind,
-    /// GNUbg search depth, 0 to 2. Defaults to 0.
+    /// GNUbg search depth, 0 to 2. Omitted uses saved analysis depth.
     #[serde(default)]
     #[schema(minimum = 0, maximum = 2)]
-    plies: i32,
+    plies: Option<i32>,
 }
 
 #[utoipa::path(post, path="/api/jobs", request_body=JobRequest, responses((status=202, body=Job), (status=404, body=ErrorBody), (status=422, body=ErrorBody)), tag="Analysis")]
@@ -382,20 +500,23 @@ async fn create_job(
     payload: Result<Json<JobRequest>, axum::extract::rejection::JsonRejection>,
 ) -> ApiResult<(StatusCode, Json<Job>)> {
     let Json(request) = payload.map_err(|e| ApiError::invalid(e.body_text()))?;
-    if !(0..=2).contains(&request.plies) {
+    let (settings, snapshot) = crate::settings::snapshot(&state).await?;
+    let plies = request.plies.unwrap_or(settings.analysis_plies);
+    if !(0..=2).contains(&plies) {
         return Err(ApiError::invalid("plies must be 0..2"));
     }
     store::get_position(&state.pool, request.position_id)
         .await?
         .ok_or_else(ApiError::missing)?;
-    let job = store::create_job(
+    let job = store::create_job_with_snapshot(
         &state.pool,
         request.position_id,
         match request.kind {
             PositionJobKind::Analysis => "analysis",
             PositionJobKind::Dice => "dice",
         },
-        request.plies,
+        plies,
+        Some(&snapshot),
     )
     .await?;
     state.wake.notify_one();
@@ -404,10 +525,12 @@ async fn create_job(
 
 #[derive(Deserialize, ToSchema)]
 struct MatchAnalysisRequest {
-    /// Native GNUbg checker and cube search depth. Defaults to 0.
+    /// Analyze one source game in its original match context; omitted means the whole match.
+    game_no: Option<i32>,
+    /// Native GNUbg checker and cube search depth. Omitted uses saved analysis depth.
     #[serde(default)]
     #[schema(minimum = 0, maximum = 2)]
-    plies: i32,
+    plies: Option<i32>,
 }
 
 #[utoipa::path(post, path="/api/matches/{id}/analysis", params(("id"=Uuid, Path)), request_body=MatchAnalysisRequest, responses((status=202, body=Job),(status=404,body=ErrorBody),(status=422,body=ErrorBody)), tag="Match analysis")]
@@ -417,36 +540,46 @@ async fn create_match_analysis(
     payload: Result<Json<MatchAnalysisRequest>, axum::extract::rejection::JsonRejection>,
 ) -> ApiResult<(StatusCode, Json<Job>)> {
     let Json(request) = payload.map_err(|e| ApiError::invalid(e.body_text()))?;
-    if !(0..=2).contains(&request.plies) {
+    let (settings, snapshot) = crate::settings::snapshot(&state).await?;
+    let plies = request.plies.unwrap_or(settings.analysis_plies);
+    if !(0..=2).contains(&plies) {
         return Err(ApiError::invalid("plies must be 0..2"));
     }
-    let source: String = sqlx::query_scalar("SELECT sgf FROM matches WHERE id=$1")
-        .bind(id)
-        .fetch_optional(&state.pool)
-        .await
-        .map_err(anyhow::Error::from)?
-        .ok_or_else(ApiError::missing)?;
-    let total = tokio::task::spawn_blocking(move || crate::match_analysis::game_count(&source))
-        .await
-        .map_err(anyhow::Error::from)??;
-    let job = store::create_match_job(&state.pool, id, request.plies, total).await?;
+    let games = validate_game(&state, id, request.game_no).await?;
+    let total = if request.game_no.is_some() {
+        1
+    } else {
+        games.len() as i32
+    };
+    let job = store::create_match_job_scoped_with_snapshot(
+        &state.pool,
+        id,
+        plies,
+        total,
+        request.game_no,
+        Some(&snapshot),
+    )
+    .await?;
     state.wake.notify_one();
     Ok((StatusCode::ACCEPTED, Json(job)))
 }
 
-#[utoipa::path(get, path="/api/matches/{id}/analysis", params(("id"=Uuid, Path)), responses((status=200, body=Option<Job>,description="Latest match analysis job, or null if none has been submitted. Includes persisted partial summary during execution."),(status=404,body=ErrorBody)), tag="Match analysis")]
+#[utoipa::path(get, path="/api/matches/{id}/analysis", params(("id"=Uuid, Path), GameScope), responses((status=200, body=Option<Job>,description="Latest analysis job for this game or whole-match scope, or null if none has been submitted. Includes persisted partial summary during execution."),(status=404,body=ErrorBody),(status=422,body=ErrorBody)), tag="Match analysis")]
 async fn latest_match_analysis(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
+    Query(query): Query<GameScope>,
 ) -> ApiResult<Json<Option<Job>>> {
-    store::get_match(&state.pool, id)
-        .await?
-        .ok_or_else(ApiError::missing)?;
-    Ok(Json(store::latest_match_job(&state.pool, id).await?))
+    validate_game(&state, id, query.game_no).await?;
+    Ok(Json(
+        store::latest_match_job_scoped(&state.pool, id, query.game_no).await?,
+    ))
 }
 
 #[derive(Deserialize, IntoParams)]
 struct MoveAnalysisQuery {
+    /// Restrict decisions to one source game.
+    game_no: Option<i32>,
     /// Continue after a move-analysis row ID, keeping the same filters.
     after: Option<i64>,
     /// Page size 1–100, defaults to 50.
@@ -482,8 +615,39 @@ async fn move_analyses(
     {
         return Err(ApiError::invalid("Invalid analysis cursor, player or kind"));
     }
+    if let Some(game_no) = query.game_no {
+        if job.game_no.is_some_and(|n| n != game_no) {
+            return Err(ApiError::invalid("game_no does not match this job's scope"));
+        }
+        validate_game(
+            &state,
+            job.match_uuid.ok_or_else(ApiError::missing)?,
+            Some(game_no),
+        )
+        .await?;
+    }
+    if let Some(after) = query.after.filter(|n| *n > 0) {
+        let row: Option<(Uuid, i32, i32, String, f64)> = sqlx::query_as(
+            "SELECT job_id,game_no,player,kind,equity_loss FROM move_analyses WHERE id=$1",
+        )
+        .bind(after)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(anyhow::Error::from)?;
+        let Some((job_id, game_no, player, kind, loss)) = row else {
+            return Err(ApiError::invalid("Unknown cursor"));
+        };
+        if job_id != id
+            || query.game_no.is_some_and(|n| n != game_no)
+            || query.player.is_some_and(|n| n != player)
+            || query.kind.as_ref().is_some_and(|k| *k != kind)
+            || (query.errors_only && loss < 0.04)
+        {
+            return Err(ApiError::invalid("Cursor does not match the filters"));
+        }
+    }
     Ok(Json(
-        store::move_analyses(
+        store::move_analyses_scoped(
             &state.pool,
             id,
             query.after.unwrap_or(0),
@@ -491,6 +655,7 @@ async fn move_analyses(
             query.errors_only,
             query.player,
             query.kind.as_deref(),
+            query.game_no,
         )
         .await?,
     ))
@@ -568,8 +733,10 @@ async fn events(
         upload,
         matches,
         get_match,
+        match_games,
         source,
         positions,
+        get_position,
         dice,
         create_job,
         job,
@@ -584,6 +751,7 @@ async fn events(
         UploadForm,
         ImportResponse,
         MatchSummary,
+        MatchGame,
         MatchPage,
         Position,
         PositionPage,
@@ -611,6 +779,11 @@ pub struct ApiDoc;
 impl OpenApi for ApiDoc {
     fn openapi() -> utoipa::openapi::OpenApi {
         let mut doc = BaseApiDoc::openapi();
+        doc.merge(crate::settings::SettingsDoc::openapi());
+        doc.merge(crate::opening_book::OpeningBookDoc::openapi());
+        doc.merge(crate::imported_analysis::ImportedAnalysisDoc::openapi());
+        doc.merge(crate::databases::DatabaseDoc::openapi());
+        doc.merge(crate::move_catalog::MoveCatalogDoc::openapi());
         doc.merge(crate::annotations::AnnotationDoc::openapi());
         doc.merge(crate::learning::LearningDoc::openapi());
         doc

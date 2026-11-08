@@ -3,18 +3,23 @@ import { request, terminal, mergeJob, type Job } from './api';
 
 export type Jobs = Partial<Record<'analysis' | 'dice', Job>>;
 type Ids = Partial<Record<'analysis' | 'dice', string>>;
+const sessionIds = new Map<string, Ids>();
 
 function saved(positionId: string): Ids {
   try {
-    return JSON.parse(
-      localStorage.getItem(`bgtutor.jobs.${positionId}`) || '{}',
-    ) as Ids;
+    return {
+      ...JSON.parse(localStorage.getItem(`bgtutor.jobs.${positionId}`) || '{}'),
+      ...sessionIds.get(positionId),
+    } as Ids;
   } catch {
-    return {};
+    return sessionIds.get(positionId) ?? {};
   }
 }
 
-export function useJobs(positionId: string | undefined) {
+export function useJobs(
+  positionId: string | undefined,
+  onAccepted?: (job: Job) => void,
+) {
   const [jobs, setJobs] = useState<Jobs>({});
   const [revision, setRevision] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -90,10 +95,16 @@ export function useJobs(positionId: string | undefined) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ position_id: positionId, kind, plies }),
       });
-      localStorage.setItem(
-        `bgtutor.jobs.${positionId}`,
-        JSON.stringify({ ...saved(positionId), [kind]: job.id }),
-      );
+      onAccepted?.(job);
+      const ids = { ...saved(positionId), [kind]: job.id };
+      sessionIds.set(positionId, ids);
+      try {
+        localStorage.setItem(`bgtutor.jobs.${positionId}`, JSON.stringify(ids));
+      } catch {
+        /* Session tracking remains active without storage. */
+      }
+      if (currentPosition.current === positionId)
+        setJobs((previous) => ({ ...previous, [kind]: job }));
       if (currentPosition.current === positionId) setRevision((r) => r + 1);
     } catch (error) {
       if (currentPosition.current === positionId) setError(error);

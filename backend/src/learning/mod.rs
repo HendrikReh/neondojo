@@ -54,6 +54,8 @@ pub struct CreateDeck {
 }
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct AddCards {
+    /// Restrict a match analysis source to this source game.
+    pub game_no: Option<i32>,
     pub position_id: Option<Uuid>,
     pub job_id: Option<Uuid>,
     pub min_loss: Option<f64>,
@@ -339,7 +341,7 @@ async fn add_cards(
     require_deck(&state.pool, id).await?;
     if body.position_id.is_some() == body.job_id.is_some() {
         return Err(ApiError::invalid(
-            "Supply exactly one position_id or completed full-match job_id",
+            "Supply exactly one position_id or completed match-analysis job_id",
         ));
     }
     if body.min_loss.is_some_and(|n| !n.is_finite() || n < 0.0)
@@ -348,6 +350,9 @@ async fn add_cards(
         return Err(ApiError::invalid(
             "min_loss must be finite and nonnegative; player must be 0 or 1",
         ));
+    }
+    if body.game_no.is_some_and(|n| n < 1) {
+        return Err(ApiError::invalid("game_no must be positive"));
     }
     let contents = content::from_source(&state.pool, &body).await?;
     if contents.len() > MAX_CARDS as usize {

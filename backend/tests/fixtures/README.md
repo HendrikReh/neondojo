@@ -48,8 +48,11 @@ moves and cube decisions instead of trusting those cached positions.
 Support boundaries: standard backgammon, XG2 save versions 24–40, match play
 and money sessions without automatic doubles. Edited/custom XG positions,
 beavers/raccoons, nonstandard variants, invalid-marked records and unsupported
-versions are rejected explicitly. XG stored analysis/rollouts/comments are
-not imported. SGF supports absolute setup coordinates and repeated stones,
+versions are rejected explicitly. XG native candidate and cube evaluations, original XG depth labels, and
+rollout references are retained separately from new GNUbg jobs. Original
+artifacts retain complete rollout streams and comments byte for byte; RTF
+comments are not interpreted. Bounded zlib/base64 SGF extensions transport
+foreign analysis without inflating long sessions beyond the SGF size limit. SGF supports absolute setup coordinates and repeated stones,
 cube setup (standard CO and GNUbg CP), scores, Crawford and Jacoby. Ambiguous
 SGF variation trees are rejected; export the played main line first.
 
@@ -115,3 +118,50 @@ retained their complete played-checker counts, including a 200-game,
 7,476-position money session. One file carries an explicit invalid-play marker
 and remains rejected. The private files are not required by the regression
 suite.
+
+## BGF, MAT and interrupted XG corpus coverage
+
+`tutorial.bgf` is a synthetic, uncompressed JSON BGF 1.0 fixture with three
+checker plays, a double/take and a resignation. It exercises REST persistence
+and real GNUbg full-game analysis without requiring private input files.
+BGF unit tests also wrap synthetic data in JSON/Smile and gzip, test damaged
+and oversized transport, reject unsupported rules, and roundtrip all 460
+positions and Match IDs from the public native SGF oracle above.
+
+BGBlitz special move codes were checked against the installed producer's
+public `bgblitz.Move` predicates: Green player -1, Red +1; special green=7,
+red=1 double,2 take,3 drop,4 win,5 dance,6 resignation proposal,8 dummy,9
+accepted resignation. Dance dice occupy from[0]/to[0]. The converter preserves foreign analysis fields independently and reconstructs
+legal explicit moves by replay. BGBlitz per-candidate ply and the explicit
+match-equity flag are retained; absent engine provenance remains unknown.
+Format/library references: https://www.bgblitz.com/ and
+https://docs.rs/serde-smile/0.3.1/serde_smile/ .
+
+New MAT regressions cover a numbered `wants to resign` cell followed by an
+opposite-player `Wins` result, native joined overshoot bearoffs, both colors,
+and the rule that bearing off the final checker ends the game immediately.
+Malformed resignation cells and truncated/illegal tails remain rejected.
+
+Interrupted point-match XG tests retain all played prefix positions, nonzero
+scores and accepted-double context. A last game is closed only if its native
+`InProgress` flag is set. Missing game footers for completed games and missing
+match footers after reaching the target still fail.
+
+The optional `import_corpus` SQLx test sends every local file from
+`games/{xg,mat,bgf}` through the real REST router in a disposable database;
+`mat_corpus` additionally checks the engine normalization boundary. Neither
+test requires copying local games into versioned fixtures. See
+[the full per-file report](../../../docs/import-corpus-results.md).
+
+
+## Imported analysis preservation
+
+Synthetic and public-fixture tests cover source engine and native depth labels,
+checker candidates, pre-roll and actual cube-event identities, MWC versus
+normalized equity, foreign precision, and raw unknown fields. PostgreSQL tests
+prove transactional import, independent deep copies, recovery from an older
+normalized SGF using exact original XG bytes, and coexistence with later GNUbg
+analysis. Source statistics never supply this app's computed PR. The GNUbg
+SGF evaluation and rollout encodings follow the producer's `sgf.c`
+(`WriteMoveAnalysis`, `WriteDoubleAnalysis`, `WriteRolloutAnalysis`):
+https://sources.debian.org/src/gnubg/1.05.002-2/sgf.c/ .

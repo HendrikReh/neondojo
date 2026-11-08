@@ -1,22 +1,79 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { type Analysis, type Distribution, type DiceStats } from './api';
 import type { Jobs } from './useJobs';
 import { useI18n } from './i18n';
+import { useAnalysisSources } from './useAnalysisSources';
+import { useSourceText } from './analysis-source-messages';
+import SourceAnalysisView from './SourceAnalysisView';
+import './analysis-sources.css';
 
 export default function AnalysisPanel({
   jobs,
   stats,
+  gameNo,
   disabled,
   onAnalyze,
+  defaultPlies = 0,
+  positionId,
+  sourceRevision = 0,
+  onBookSettings,
 }: {
   jobs: Jobs;
   stats: DiceStats | null;
+  gameNo?: number;
   disabled: boolean;
   onAnalyze: (kind: 'analysis' | 'dice', plies: number) => void;
+  defaultPlies?: number;
+  positionId?: string;
+  sourceRevision?: number;
+  onBookSettings: () => void;
 }) {
-  const { t, formatNumber, formatPercent, formatEquity, formatDecision } =
-    useI18n();
-  const [plies, setPlies] = useState(0);
+  const {
+    t,
+    formatNumber,
+    formatPercent,
+    formatEquity,
+    formatDecision,
+    formatError,
+  } = useI18n();
+  const l = useSourceText();
+  const sources = useAnalysisSources(positionId, sourceRevision);
+  const [sourceChoice, setSourceChoice] = useState<{
+    positionId?: string;
+    source: 'file' | 'book' | 'engine';
+  }>();
+  const selectedSource =
+    sourceChoice && sourceChoice.positionId === positionId
+      ? sourceChoice.source
+      : jobs.analysis?.status === 'completed'
+        ? 'engine'
+        : sources.records.length
+          ? 'file'
+          : sources.book?.hit
+            ? 'book'
+            : 'engine';
+  type Source = 'file' | 'book' | 'engine';
+  const sourceRefs = useRef<Partial<Record<Source, HTMLButtonElement | null>>>(
+    {},
+  );
+  function sourceKey(event: KeyboardEvent<HTMLButtonElement>, current: Source) {
+    const options: Source[] = sources.records.length
+      ? ['file', 'book', 'engine']
+      : ['book', 'engine'];
+    const index = options.indexOf(current);
+    let next: number;
+    if (event.key === 'ArrowRight') next = (index + 1) % options.length;
+    else if (event.key === 'ArrowLeft')
+      next = (index + options.length - 1) % options.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = options.length - 1;
+    else return;
+    event.preventDefault();
+    setSourceChoice({ positionId, source: options[next] });
+    sourceRefs.current[options[next]]?.focus();
+  }
+  const [plies, setPlies] = useState(defaultPlies);
+  useEffect(() => setPlies(defaultPlies), [defaultPlies]);
   const [view, setView] = useState<'analysis' | 'dice' | 'observed'>(
     'analysis',
   );
@@ -37,6 +94,7 @@ export default function AnalysisPanel({
       : null;
   const choose = (kind: 'analysis' | 'dice') => {
     setView(kind);
+    setSourceChoice({ positionId, source: 'engine' });
     onAnalyze(kind, plies);
   };
   const best = distribution?.rolls.find(
@@ -49,7 +107,17 @@ export default function AnalysisPanel({
           <span className="eyebrow">{t('analysis.eyebrow')}</span>
           <h2>{t('analysis.title')}</h2>
         </div>
-        <span className="engine-label">GNUbg · {t('common.local')}</span>
+        <span className="engine-label source-heading-label">
+          {view === 'observed'
+            ? t('analysis.observed')
+            : view === 'dice'
+              ? (distribution?.engine ?? `GNUbg · ${t('common.local')}`)
+              : selectedSource === 'file' && sources.records[0]
+                ? sources.records[0].engine
+                : selectedSource === 'book'
+                  ? l('book')
+                  : `GNUbg · ${t('common.local')}`}
+        </span>
       </div>
       <div className="analysis-controls">
         <label className="depth-label">
@@ -121,10 +189,61 @@ export default function AnalysisPanel({
           aria-selected={view === 'observed'}
           onClick={() => setView('observed')}
         >
-          {t('analysis.observed')}
+          {t(gameNo ? 'analysis.observedGame' : 'analysis.observed')}
         </button>
       </div>
+      {view === 'analysis' && (
+        <>
+          <div className="analysis-source-tools">
+            <span className="eyebrow">{l('sources')}</span>
+            <button type="button" onClick={onBookSettings}>
+              {l('books')}
+            </button>
+          </div>
+          <div
+            className="analysis-source-tabs"
+            role="tablist"
+            aria-label={l('sources')}
+          >
+            {(['file', 'book', 'engine'] as const).map((source) => (
+              <button
+                type="button"
+                role="tab"
+                key={source}
+                aria-selected={selectedSource === source}
+                tabIndex={selectedSource === source ? 0 : -1}
+                ref={(element) => {
+                  sourceRefs.current[source] = element;
+                }}
+                onKeyDown={(event) => sourceKey(event, source)}
+                disabled={source === 'file' && !sources.records.length}
+                onClick={() => setSourceChoice({ positionId, source })}
+              >
+                {l(source === 'file' ? 'imported' : source)}
+              </button>
+            ))}
+          </div>
+          {sources.loading && (
+            <p className="fineprint" role="status">
+              {l('loading')}
+            </p>
+          )}
+          {sources.errors.map((error, index) => (
+            <p className="analysis-source-error" key={index}>
+              {formatError(error)}
+            </p>
+          ))}
+          {selectedSource !== 'engine' && (
+            <SourceAnalysisView
+              records={sources.records}
+              book={sources.book}
+              source={selectedSource}
+            />
+          )}
+        </>
+      )}
       {view === 'analysis' &&
+        selectedSource === 'engine' &&
         (analysis ? (
           <>
             <table className="candidates">
@@ -234,7 +353,12 @@ export default function AnalysisPanel({
         (stats ? (
           <div className="observed">
             <p className="fineprint">
-              {t('analysis.observedMethod', { count: stats.total })}
+              {gameNo
+                ? t('analysis.observedGameDescription', {
+                    count: stats.total,
+                    game: gameNo,
+                  })
+                : t('analysis.observedMethod', { count: stats.total })}
             </p>
             <div className="roll-counts">
               {stats.rolls.map((r) => (

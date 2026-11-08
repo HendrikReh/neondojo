@@ -78,6 +78,19 @@
               ],
               "format": "int64"
             }
+          },
+          {
+            "name": "database_id",
+            "in": "path",
+            "description": "Restrict all note scopes to one logical database.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
@@ -234,6 +247,167 @@
             }
           },
           "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/databases": {
+      "get": {
+        "tags": [
+          "Databases"
+        ],
+        "operationId": "list_databases",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Database"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Databases"
+        ],
+        "operationId": "create_database",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatabaseWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Database"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/databases/{id}": {
+      "put": {
+        "tags": [
+          "Databases"
+        ],
+        "operationId": "update_database",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatabaseWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Database"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Databases"
+        ],
+        "operationId": "delete_database",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "delete_matches",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -559,6 +733,179 @@
         }
       }
     },
+    "/api/engines": {
+      "get": {
+        "tags": [
+          "Settings"
+        ],
+        "operationId": "engines",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EngineInfo"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/engines/gnubg/check": {
+      "post": {
+        "tags": [
+          "Settings"
+        ],
+        "operationId": "check_engine",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EngineCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EngineCheckResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/games/{id}/annotation": {
+      "get": {
+        "tags": [
+          "Annotations"
+        ],
+        "operationId": "get_game_annotation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Annotation"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Annotations"
+        ],
+        "operationId": "put_game_annotation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnnotationUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Annotation"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "tags": [
@@ -595,6 +942,21 @@
           "Library"
         ],
         "operationId": "upload",
+        "parameters": [
+          {
+            "name": "database_id",
+            "in": "query",
+            "description": "Target logical database. Omitted: default database.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "multipart/form-data": {
@@ -824,6 +1186,19 @@
             }
           },
           {
+            "name": "game_no",
+            "in": "path",
+            "description": "Restrict decisions to one source game.",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
             "name": "after",
             "in": "path",
             "description": "Continue after a move-analysis row ID, keeping the same filters.",
@@ -901,6 +1276,350 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/library/actions": {
+      "post": {
+        "tags": [
+          "Databases"
+        ],
+        "operationId": "actions",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LibraryAction"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/library/export": {
+      "post": {
+        "tags": [
+          "Databases"
+        ],
+        "operationId": "export",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Original/SGF file or ZIP for multiple matches",
+            "content": {
+              "application/octet-stream": {}
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/library/matches": {
+      "get": {
+        "tags": [
+          "Databases"
+        ],
+        "operationId": "library_matches",
+        "parameters": [
+          {
+            "name": "database_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "q",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "player",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "date_from",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date"
+            }
+          },
+          {
+            "name": "date_field",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "tag",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "comment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "position_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "tournament",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "round",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "match_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "match_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "result",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "match_points_min",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "match_points_max",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "direction",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "after",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryPage"
                 }
               }
             }
@@ -1041,11 +1760,24 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "game_no",
+            "in": "query",
+            "description": "One-based source game number; omitted means the whole match.",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Latest match analysis job, or null if none has been submitted. Includes persisted partial summary during execution.",
+            "description": "Latest analysis job for this game or whole-match scope, or null if none has been submitted. Includes persisted partial summary during execution.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1062,6 +1794,16 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "",
             "content": {
               "application/json": {
@@ -1258,6 +2000,19 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "game_no",
+            "in": "query",
+            "description": "One-based source game number; omitted means the whole match.",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
           }
         ],
         "responses": {
@@ -1272,6 +2027,202 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/matches/{id}/games": {
+      "get": {
+        "tags": [
+          "Library"
+        ],
+        "operationId": "match_games",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MatchGame"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/matches/{id}/games/{game_no}/decisions": {
+      "get": {
+        "tags": [
+          "Library"
+        ],
+        "operationId": "game_decisions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "game_no",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GameDecisions"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/matches/{id}/imported-analysis": {
+      "get": {
+        "tags": [
+          "Imported analysis"
+        ],
+        "operationId": "get_match",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportedAnalysisSummary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/matches/{id}/metadata": {
+      "put": {
+        "tags": [
+          "Databases"
+        ],
+        "operationId": "update_metadata",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MetadataWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseMatch"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -1325,6 +2276,429 @@
         }
       }
     },
+    "/api/moves/{id}": {
+      "get": {
+        "tags": [
+          "Library"
+        ],
+        "operationId": "get_move",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoredMove"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/moves/{id}/annotation": {
+      "get": {
+        "tags": [
+          "Annotations"
+        ],
+        "operationId": "get_move_annotation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Annotation"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Annotations"
+        ],
+        "operationId": "put_move_annotation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnnotationUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Annotation"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/moves/{id}/imported-analysis": {
+      "get": {
+        "tags": [
+          "Imported analysis"
+        ],
+        "operationId": "get_move",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ImportedAnalysisRecord"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/opening-book": {
+      "get": {
+        "tags": [
+          "Opening book"
+        ],
+        "operationId": "get_settings",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookSettings"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Opening book"
+        ],
+        "operationId": "put_settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BookConfigWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookSettings"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/opening-book/check": {
+      "post": {
+        "tags": [
+          "Opening book"
+        ],
+        "operationId": "check_book",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BookPathRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/opening-book/install": {
+      "post": {
+        "tags": [
+          "Opening book"
+        ],
+        "operationId": "install_book",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BookPathRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/opening-book/xg/check": {
+      "post": {
+        "tags": [
+          "Opening book"
+        ],
+        "operationId": "check_xg_book",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BookPathRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/XgBookStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/opening-book/xg/install": {
+      "post": {
+        "tags": [
+          "Opening book"
+        ],
+        "operationId": "install_xg_book",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BookPathRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/XgBookStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/positions": {
       "get": {
         "tags": [
@@ -1332,6 +2706,18 @@
         ],
         "operationId": "positions",
         "parameters": [
+          {
+            "name": "database_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
           {
             "name": "match_id",
             "in": "query",
@@ -1342,6 +2728,18 @@
                 "null"
               ],
               "format": "uuid"
+            }
+          },
+          {
+            "name": "game_no",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
             }
           },
           {
@@ -1392,6 +2790,47 @@
             }
           },
           "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/positions/{id}": {
+      "get": {
+        "tags": [
+          "Library"
+        ],
+        "operationId": "get_position",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Position"
+                }
+              }
+            }
+          },
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -1514,6 +2953,159 @@
         }
       }
     },
+    "/api/positions/{id}/imported-analysis": {
+      "get": {
+        "tags": [
+          "Imported analysis"
+        ],
+        "operationId": "get_position",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ImportedAnalysisRecord"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/positions/{id}/opening-book": {
+      "get": {
+        "tags": [
+          "Opening book"
+        ],
+        "operationId": "position_book",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookLookup"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings": {
+      "get": {
+        "tags": [
+          "Settings"
+        ],
+        "operationId": "get_settings",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppSettings"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Settings"
+        ],
+        "operationId": "put_settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppSettings"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/tags": {
       "get": {
         "tags": [
@@ -1543,6 +3135,18 @@
                 "null"
               ],
               "format": "int64"
+            }
+          },
+          {
+            "name": "database_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
             }
           }
         ],
@@ -1576,9 +3180,67 @@
   },
   "components": {
     "schemas": {
+      "ActionItem": {
+        "type": "object",
+        "required": [
+          "match_id",
+          "status"
+        ],
+        "properties": {
+          "created_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "existing_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "match_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "ActionResponse": {
+        "type": "object",
+        "required": [
+          "results"
+        ],
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActionItem"
+            }
+          }
+        }
+      },
       "AddCards": {
         "type": "object",
         "properties": {
+          "game_no": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Restrict a match analysis source to this source game."
+          },
           "job_id": {
             "type": [
               "string",
@@ -1775,7 +3437,9 @@
         "type": "string",
         "enum": [
           "match",
-          "position"
+          "position",
+          "game",
+          "move"
         ]
       },
       "AnnotationPage": {
@@ -1819,6 +3483,422 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "AppSettings": {
+        "type": "object",
+        "required": [
+          "version",
+          "player_name",
+          "analysis_engine",
+          "analysis_plies",
+          "play_engine",
+          "play_plies",
+          "gnubg_path"
+        ],
+        "properties": {
+          "analysis_engine": {
+            "type": "string"
+          },
+          "analysis_plies": {
+            "type": "integer",
+            "format": "int32",
+            "maximum": 2,
+            "minimum": 0
+          },
+          "gnubg_path": {
+            "type": "string"
+          },
+          "play_engine": {
+            "type": "string"
+          },
+          "play_plies": {
+            "type": "integer",
+            "format": "int32",
+            "maximum": 2,
+            "minimum": 0
+          },
+          "player_name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Expected revision on PUT; a successful write increments it by one."
+          }
+        }
+      },
+      "BookChecker": {
+        "type": "object",
+        "required": [
+          "candidates"
+        ],
+        "properties": {
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Candidate"
+            }
+          },
+          "plies": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "BookConfig": {
+        "type": "object",
+        "required": [
+          "version",
+          "provider",
+          "path",
+          "xg_path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "xg_path": {
+            "type": "string"
+          }
+        }
+      },
+      "BookConfigWrite": {
+        "type": "object",
+        "required": [
+          "version",
+          "provider",
+          "path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "xg_path": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Omission preserves a previously configured XG path."
+          }
+        }
+      },
+      "BookContext": {
+        "type": "object",
+        "required": [
+          "name",
+          "entries"
+        ],
+        "properties": {
+          "complete": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "depth": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Decisions into the game; this is not evaluation ply."
+          },
+          "entries": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "BookCube": {
+        "type": "object",
+        "required": [
+          "probabilities",
+          "equities",
+          "verdict"
+        ],
+        "properties": {
+          "equities": {
+            "$ref": "#/components/schemas/BookCubeEquities"
+          },
+          "plies": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "probabilities": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "verdict": {
+            "type": "string"
+          }
+        }
+      },
+      "BookCubeEquities": {
+        "type": "object",
+        "required": [
+          "no_double",
+          "double_take",
+          "double_pass"
+        ],
+        "properties": {
+          "double_pass": {
+            "type": "number",
+            "format": "double"
+          },
+          "double_take": {
+            "type": "number",
+            "format": "double"
+          },
+          "no_double": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "BookLookup": {
+        "type": "object",
+        "required": [
+          "provider",
+          "hit"
+        ],
+        "properties": {
+          "checker": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BookChecker"
+              }
+            ]
+          },
+          "checker_xgid": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cube": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BookCube"
+              }
+            ]
+          },
+          "cube_xgid": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hit": {
+            "type": "boolean"
+          },
+          "provenance": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BookProvenance"
+              }
+            ]
+          },
+          "provider": {
+            "type": "string"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "xg_position": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/XgPositionResult"
+              }
+            ]
+          }
+        }
+      },
+      "BookPathRequest": {
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        }
+      },
+      "BookProvenance": {
+        "type": "object",
+        "required": [
+          "provider",
+          "engine",
+          "evaluation_kind",
+          "equity_kind",
+          "context"
+        ],
+        "properties": {
+          "attribution": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "context": {
+            "type": "string"
+          },
+          "context_depth": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "engine": {
+            "type": "string"
+          },
+          "equity_kind": {
+            "type": "string",
+            "description": "Cubeful equity normalized to the current cube (match play uses GNUbg NEMG)."
+          },
+          "evaluation_kind": {
+            "type": "string"
+          },
+          "license": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "provider": {
+            "type": "string"
+          },
+          "source_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "BookSettings": {
+        "type": "object",
+        "required": [
+          "config",
+          "status",
+          "xg_status"
+        ],
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/BookConfig"
+          },
+          "status": {
+            "$ref": "#/components/schemas/BookStatus"
+          },
+          "xg_status": {
+            "$ref": "#/components/schemas/XgBookStatus"
+          }
+        }
+      },
+      "BookStatus": {
+        "type": "object",
+        "required": [
+          "available",
+          "path",
+          "entries",
+          "contexts"
+        ],
+        "properties": {
+          "attribution": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "compression": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contexts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BookContext"
+            }
+          },
+          "engine_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "entries": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "license": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "source_url": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -2032,6 +4112,219 @@
         "properties": {
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "Database": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "version",
+          "is_default",
+          "created_at",
+          "updated_at",
+          "match_count"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "is_default": {
+            "type": "boolean"
+          },
+          "match_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "DatabaseMatch": {
+        "type": "object",
+        "required": [
+          "id",
+          "filename",
+          "format",
+          "white",
+          "black",
+          "match_length",
+          "position_count",
+          "created_at",
+          "database_id",
+          "display_name",
+          "result_state",
+          "game_count",
+          "tags",
+          "comment",
+          "version"
+        ],
+        "properties": {
+          "analysis_status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "black": {
+            "type": "string"
+          },
+          "black_pr": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "black_score": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "database_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string"
+          },
+          "game_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "match_length": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "place": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "played_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "position_count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pr_method": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pr_profile": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "result_state": {
+            "type": "string"
+          },
+          "round": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tournament": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "white": {
+            "type": "string"
+          },
+          "white_pr": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "white_score": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "DatabaseWrite": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           }
         }
       },
@@ -2252,6 +4545,61 @@
           }
         }
       },
+      "EngineCheckRequest": {
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        }
+      },
+      "EngineCheckResponse": {
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "properties": {
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "EngineInfo": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "available",
+          "plies"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "plies": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "ErrorBody": {
         "type": "object",
         "required": [
@@ -2260,6 +4608,49 @@
         "properties": {
           "error": {
             "type": "string"
+          }
+        }
+      },
+      "ExportRequest": {
+        "type": "object",
+        "required": [
+          "match_ids",
+          "format"
+        ],
+        "properties": {
+          "format": {
+            "type": "string"
+          },
+          "match_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        }
+      },
+      "GameDecisions": {
+        "type": "object",
+        "required": [
+          "game_id",
+          "game_no",
+          "items"
+        ],
+        "properties": {
+          "game_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "game_no": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StoredMove"
+            }
           }
         }
       },
@@ -2299,6 +4690,231 @@
           }
         }
       },
+      "ImportedAnalysisData": {
+        "type": "object",
+        "required": [
+          "game_no",
+          "source_move_no",
+          "kind",
+          "player",
+          "played",
+          "engine",
+          "method",
+          "candidates",
+          "raw"
+        ],
+        "properties": {
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImportedCandidate"
+            }
+          },
+          "checker_ply": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "cube": {},
+          "depth": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "depth_plies": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "dice": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "engine": {
+            "type": "string"
+          },
+          "engine_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "game_no": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "gnubg_match_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "type": "string"
+          },
+          "method": {
+            "type": "string"
+          },
+          "played": {
+            "type": "string"
+          },
+          "player": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "position_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "raw": {},
+          "source_move_no": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ImportedAnalysisRecord": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ImportedAnalysisData"
+          },
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "match_uuid",
+              "source_format"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "match_uuid": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "position_uuid": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "source_format": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "ImportedAnalysisSummary": {
+        "type": "object",
+        "required": [
+          "status",
+          "source_format",
+          "record_count",
+          "checker_records",
+          "cube_records",
+          "engines",
+          "depths"
+        ],
+        "properties": {
+          "checker_records": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "cube_records": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "depths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "engines": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "record_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "source_format": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "ImportedCandidate": {
+        "type": "object",
+        "required": [
+          "rank",
+          "notation",
+          "equity_kind",
+          "probabilities",
+          "raw"
+        ],
+        "properties": {
+          "depth": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "depth_plies": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "equity": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "equity_kind": {
+            "type": "string"
+          },
+          "method": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notation": {
+            "type": "string"
+          },
+          "probabilities": {},
+          "rank": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "raw": {}
+        }
+      },
       "Job": {
         "type": "object",
         "required": [
@@ -2331,6 +4947,14 @@
               "string",
               "null"
             ]
+          },
+          "game_no": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Source game number for a single-game match analysis; null means the whole match."
           },
           "id": {
             "type": "string",
@@ -2482,9 +5106,12 @@
             "description": "analysis: five candidate moves; dice: 21 weighted rolls."
           },
           "plies": {
-            "type": "integer",
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int32",
-            "description": "GNUbg search depth, 0 to 2. Defaults to 0.",
+            "description": "GNUbg search depth, 0 to 2. Omitted uses saved analysis depth.",
             "maximum": 2,
             "minimum": 0
           },
@@ -2517,13 +5144,89 @@
           "failed"
         ]
       },
+      "LibraryAction": {
+        "type": "object",
+        "required": [
+          "action",
+          "match_ids"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "add_tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "database_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "match_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "remove_tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "target_database_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "LibraryPage": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DatabaseMatch"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "MatchAnalysisRequest": {
         "type": "object",
         "properties": {
-          "plies": {
-            "type": "integer",
+          "game_no": {
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int32",
-            "description": "Native GNUbg checker and cube search depth. Defaults to 0.",
+            "description": "Analyze one source game in its original match context; omitted means the whole match."
+          },
+          "plies": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Native GNUbg checker and cube search depth. Omitted uses saved analysis depth.",
             "maximum": 2,
             "minimum": 0
           }
@@ -2552,6 +5255,17 @@
           "engine": {
             "type": "string"
           },
+          "performance_rating": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PerformanceRatingSummary",
+                "description": "Native GNUbg normalized loss and non-trivial decision denominator.\nMissing for legacy results or if any analyzed game lacks native statistics."
+              }
+            ]
+          },
           "players": {
             "type": "array",
             "items": {
@@ -2567,6 +5281,37 @@
             "format": "int32"
           },
           "total_moves": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "MatchGame": {
+        "type": "object",
+        "required": [
+          "game_no",
+          "position_count",
+          "white_score",
+          "black_score",
+          "crawford"
+        ],
+        "properties": {
+          "black_score": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "crawford": {
+            "type": "boolean"
+          },
+          "game_no": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "position_count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "white_score": {
             "type": "integer",
             "format": "int32"
           }
@@ -2633,6 +5378,64 @@
           },
           "white": {
             "type": "string"
+          }
+        }
+      },
+      "MetadataWrite": {
+        "type": "object",
+        "required": [
+          "version",
+          "result_state"
+        ],
+        "properties": {
+          "black_score": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "place": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "played_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "result_state": {
+            "type": "string"
+          },
+          "round": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tournament": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "white_score": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -2710,6 +5513,35 @@
           }
         }
       },
+      "PerformanceRatingSummary": {
+        "type": "object",
+        "required": [
+          "method",
+          "profile",
+          "games",
+          "players"
+        ],
+        "properties": {
+          "games": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of games contributing complete native statistics."
+          },
+          "method": {
+            "type": "string",
+            "description": "gnubg_emg_500_v1: 500 × native normalized loss / (unforced checker + close/actual cube).\nGNUbg counting is not interchangeable with XG or BMAB counting."
+          },
+          "players": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlayerPerformanceRating"
+            }
+          },
+          "profile": {
+            "type": "string"
+          }
+        }
+      },
       "PlayerAnalysisSummary": {
         "type": "object",
         "required": [
@@ -2765,6 +5597,41 @@
           "very_bad": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "PlayerPerformanceRating": {
+        "type": "object",
+        "required": [
+          "player",
+          "normalized_equity_loss",
+          "unforced_checker_moves",
+          "close_cube_decisions"
+        ],
+        "properties": {
+          "close_cube_decisions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "normalized_equity_loss": {
+            "type": "number",
+            "format": "double"
+          },
+          "player": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "unforced_checker_moves": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "value": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Null if the native denominator is zero; lower values indicate less equity lost."
           }
         }
       },
@@ -3026,6 +5893,84 @@
           }
         }
       },
+      "StoredMove": {
+        "type": "object",
+        "required": [
+          "id",
+          "match_uuid",
+          "game_no",
+          "move_no",
+          "kind",
+          "player",
+          "notation",
+          "board",
+          "dice",
+          "position_id",
+          "gnubg_match_id"
+        ],
+        "properties": {
+          "board": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "dice": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "game_no": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "gnubg_match_id": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "examples": [
+              "checker",
+              "cube",
+              "resign"
+            ]
+          },
+          "match_uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "move_no": {
+            "type": "integer",
+            "format": "int32",
+            "description": "One-based actual source event, including explicit cube actions."
+          },
+          "notation": {
+            "type": "string"
+          },
+          "player": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "position_id": {
+            "type": "string"
+          },
+          "position_uuid": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Checker notes use this canonical position occurrence; cube notes use id."
+          }
+        }
+      },
       "UploadForm": {
         "type": "object",
         "required": [
@@ -3035,10 +5980,230 @@
           "file": {
             "type": "string",
             "format": "binary",
-            "description": "One MAT, SGF, or binary XG file, at most 16 MiB including multipart envelope."
+            "description": "One MAT, SGF, binary XG, or BGBlitz BGF file, at most 16 MiB including multipart envelope."
+          }
+        }
+      },
+      "XgBookStatus": {
+        "type": "object",
+        "required": [
+          "available",
+          "path",
+          "entries",
+          "notes",
+          "source_url",
+          "license"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "book_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "entries": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "license": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "source_url": {
+            "type": "string"
+          }
+        }
+      },
+      "XgEvaluation": {
+        "type": "object",
+        "required": [
+          "record_index",
+          "source_author",
+          "engine",
+          "engine_version",
+          "method",
+          "depth",
+          "level",
+          "equity",
+          "equity_kind",
+          "probabilities",
+          "native_equity",
+          "native_probabilities"
+        ],
+        "properties": {
+          "depth": {
+            "type": "string"
+          },
+          "engine": {
+            "type": "string"
+          },
+          "engine_version": {
+            "type": "string"
+          },
+          "equity": {
+            "type": "number",
+            "format": "double"
+          },
+          "equity_kind": {
+            "type": "string"
+          },
+          "level": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "method": {
+            "type": "string"
+          },
+          "native_equity": {
+            "type": "number",
+            "format": "double"
+          },
+          "native_probabilities": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "plies": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "probabilities": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "record_index": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "rollout": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/XgRollout"
+              }
+            ]
+          },
+          "source_author": {
+            "type": "string"
+          }
+        }
+      },
+      "XgPositionResult": {
+        "type": "object",
+        "required": [
+          "position_key",
+          "perspective",
+          "native_perspective",
+          "book_version",
+          "source_url",
+          "license",
+          "evaluations"
+        ],
+        "properties": {
+          "book_version": {
+            "type": "string"
+          },
+          "evaluations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/XgEvaluation"
+            }
+          },
+          "license": {
+            "type": "string"
+          },
+          "native_perspective": {
+            "type": "string"
+          },
+          "perspective": {
+            "type": "string"
+          },
+          "position_key": {
+            "type": "string"
+          },
+          "source_url": {
+            "type": "string"
+          }
+        }
+      },
+      "XgRollout": {
+        "type": "object",
+        "required": [
+          "games",
+          "standard_deviation",
+          "checker_level",
+          "cube_level",
+          "dice_rotation",
+          "seed",
+          "truncation",
+          "duration_seconds"
+        ],
+        "properties": {
+          "checker_level": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cube_level": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "dice_rotation": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "duration_seconds": {
+            "type": "number",
+            "format": "double"
+          },
+          "games": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "seed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "standard_deviation": {
+            "type": "number",
+            "format": "double"
+          },
+          "truncation": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       }
     }
-  }
+  },
+  "tags": [
+    {
+      "name": "Databases",
+      "description": "Independent match databases and library management"
+    }
+  ]
 }

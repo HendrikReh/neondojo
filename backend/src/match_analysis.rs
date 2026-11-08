@@ -12,11 +12,73 @@ use std::sync::OnceLock;
 use tokio::io::AsyncReadExt;
 use utoipa::ToSchema;
 
+pub const PERFORMANCE_RATING_METHOD: &str = "gnubg_emg_500_v1";
+
+pub(crate) fn performance_rating_profile(engine: &str, plies: i32) -> String {
+    format!("{engine}; {plies}-ply cubeful deterministic")
+}
+
+/// Return a whole-result rating only with complete native statistical coverage.
+/// Callers selecting match overview values must also require a completed,
+/// whole-match job (game_no IS NULL); a scoped game's result has the same format.
+pub fn match_performance_rating(
+    result: &serde_json::Value,
+) -> Option<crate::model::PerformanceRatingSummary> {
+    let summary: crate::model::MatchAnalysisSummary =
+        serde_json::from_value(result.clone()).ok()?;
+    let rating = summary.performance_rating?;
+    if summary.total_games <= 0
+        || summary.completed_games != summary.total_games
+        || summary.analyzed_moves != summary.total_moves
+        || summary.players.iter().any(|p| p.unavailable != 0)
+        || rating.games != summary.total_games
+        || rating.method != PERFORMANCE_RATING_METHOD
+        || rating.profile != performance_rating_profile(&summary.engine, summary.plies)
+    {
+        return None;
+    }
+    for (index, player) in rating.players.iter().enumerate() {
+        if player.player != index as i32
+            || player.unforced_checker_moves < 0
+            || player.close_cube_decisions < 0
+            || !player.normalized_equity_loss.is_finite()
+            || player.normalized_equity_loss < 0.0
+        {
+            return None;
+        }
+        let decisions = player
+            .unforced_checker_moves
+            .checked_add(player.close_cube_decisions)?;
+        let expected =
+            (decisions > 0).then(|| 500.0 * player.normalized_equity_loss / decisions as f64);
+        match (player.value, expected) {
+            (Some(value), Some(expected))
+                if value.is_finite() && (value - expected).abs() <= 1e-9 => {}
+            (None, None) => {}
+            _ => return None,
+        }
+    }
+    Some(rating)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct AnalyzedGame {
     pub engine: String,
     pub game_no: i32,
     pub decisions: Vec<Decision>,
+    /// Authoritative native statistics. Absent if the export cannot prove full coverage.
+    #[serde(default)]
+    pub statistics: Option<[NativePlayerStatistics; 2]>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct NativePlayerStatistics {
+    pub total_checker_moves: i32,
+    pub total_cube_decisions: i32,
+    pub unforced_checker_moves: i32,
+    pub close_cube_decisions: i32,
+    /// GNUbg's combined normalized Error total EMG, exported to six decimals.
+    pub normalized_equity_loss: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -74,7 +136,7 @@ impl Engine {
         let temp = tempfile::tempdir()?;
         tokio::fs::write(temp.path().join("input.sgf"), analysis_input(sgf)?).await?;
         let mut commands = String::from(
-            "set confirm default yes\nset confirm new no\nset display off\nset analysis moves on\nset analysis cube on\nset analysis luck off\nset analysis player 0 analyse on\nset analysis player 1 analyse on\nset output mwc off\nset output digits 6\nset export moves number 10000\n",
+            "set confirm default yes\nset confirm new no\nset display off\nset analysis moves on\nset analysis cube on\nset analysis luck off\nset analysis player 0 analyse on\nset analysis player 1 analyse on\nset output mwc off\nset output digits 6\nset export moves number 10000\nset export include statistics on\n",
         );
         for kind in ["chequerplay", "cubedecision"] {
             commands.push_str(&format!("set analysis {kind} type evaluation\nset analysis {kind} evaluation plies {plies}\nset analysis {kind} evaluation cubeful on\nset analysis {kind} evaluation deterministic on\nset analysis {kind} evaluation noise 0\n"));
@@ -107,6 +169,7 @@ impl Engine {
         let native = read_analysis_artifact(&temp.path().join("analyzed.sgf")).await?;
         let export = read_analysis_artifact(&temp.path().join("analyzed.txt")).await?;
         let decisions = parse_game(sgf, game_no, &native, &export)?;
+        let statistics = parse_native_statistics(&export, game_no, &decisions);
         let engine = output
             .lines()
             .find(|l| l.starts_with("GNU Backgammon "))
@@ -116,8 +179,93 @@ impl Engine {
             engine,
             game_no,
             decisions,
+            statistics,
         })
     }
+}
+
+/// GNUbg's own denominator excludes checker plays with at most one legal move
+/// and cube choices that are neither close nor actual. Its statistics also use
+/// native normalized losses, rather than sums reconstructed from move exports.
+/// See the GNUbg manual, Statistics / Overall rating, and analysis.c GetStatistics.
+/// https://www.gnu.org/software/gnubg/manual/gnubg.html#gnubg-matches_review_stat_overall
+fn parse_native_statistics(
+    export: &str,
+    game_no: i32,
+    decisions: &[Decision],
+) -> Option<[NativePlayerStatistics; 2]> {
+    static HEADER: OnceLock<Regex> = OnceLock::new();
+    let header =
+        HEADER.get_or_init(|| Regex::new(r"(?m)^Game statistics for game (\d+)\r?$").unwrap());
+    let mut sections = header.captures_iter(export);
+    let section = sections.next()?;
+    if section[1].parse::<i32>().ok()? != game_no
+        || sections.next().is_some()
+        || decisions
+            .iter()
+            .any(|d| d.evaluation_status == "unavailable")
+    {
+        return None;
+    }
+    let statistics = &export[section.get(0)?.end()..];
+    let (checker, cube_and_overall) = statistics.split_once("Cube statistics")?;
+    let (cube, overall) = cube_and_overall.split_once("Overall statistics")?;
+    let counts = |section: &str, label: &str| -> Option<[i32; 2]> {
+        let mut values = section
+            .lines()
+            .filter_map(|line| line.trim().strip_prefix(label));
+        let row = values.next()?;
+        if values.next().is_some() {
+            return None;
+        }
+        let values: Vec<_> = row.split_whitespace().map(str::parse::<i32>).collect();
+        match values.as_slice() {
+            [Ok(white), Ok(black)] if *white >= 0 && *black >= 0 => Some([*white, *black]),
+            _ => None,
+        }
+    };
+    let total_moves = counts(checker, "Total moves")?;
+    let unforced = counts(checker, "Unforced moves")?;
+    let total_cube = counts(cube, "Total cube decisions")?;
+    let close_cube = counts(cube, "Close or actual cube decisions")?;
+    static LOSS: OnceLock<Regex> = OnceLock::new();
+    let loss = LOSS.get_or_init(|| {
+        Regex::new(
+        r"(?m)^Error total EMG \(MWC\)\s+(-\d+\.\d+)\s+\([^\n)]*\)\s+(-\d+\.\d+)\s+\([^\n)]*\)\s*$"
+    ).unwrap()
+    });
+    let mut rows = loss.captures_iter(overall);
+    let row = rows.next()?;
+    if rows.next().is_some() {
+        return None;
+    }
+    let losses = [-row[1].parse::<f64>().ok()?, -row[2].parse::<f64>().ok()?];
+    let mut players = Vec::with_capacity(2);
+    for player in 0..2 {
+        let count = |kind| {
+            decisions
+                .iter()
+                .filter(|d| d.player == player as i32 && d.kind == kind)
+                .count()
+        };
+        if total_moves[player] as usize != count("checker")
+            || total_cube[player] as usize != count("cube")
+            || unforced[player] > total_moves[player]
+            || close_cube[player] > total_cube[player]
+            || !losses[player].is_finite()
+            || losses[player] < 0.0
+        {
+            return None;
+        }
+        players.push(NativePlayerStatistics {
+            total_checker_moves: total_moves[player],
+            total_cube_decisions: total_cube[player],
+            unforced_checker_moves: unforced[player],
+            close_cube_decisions: close_cube[player],
+            normalized_equity_loss: losses[player],
+        });
+    }
+    players.try_into().ok()
 }
 
 async fn read_analysis_artifact(path: &std::path::Path) -> Result<String> {
@@ -162,7 +310,13 @@ fn analysis_input(sgf: &str) -> Result<String> {
                 out.push(';');
                 for key in ["FF", "GM", "CA", "RU", "RE"] {
                     if let Some(values) = node.get(key) {
-                        property(&mut out, key, values);
+                        if key == "RU" && context.crawford {
+                            // Native GNUbg recognizes CrawfordGame only together
+                            // with its Crawford rule flag; strict SGF accepts either.
+                            property(&mut out, key, &["Crawford:CrawfordGame".into()]);
+                        } else {
+                            property(&mut out, key, values);
+                        }
                     }
                 }
                 // The importer inherits omitted scores/length, whereas GNUbg
@@ -511,6 +665,114 @@ fn parse_game(sgf: &str, game_no: i32, native: &str, text: &str) -> Result<Vec<D
 mod tests {
     use super::*;
     const MATCH: &str = include_str!("../tests/fixtures/WC2014.gnubg.sgf");
+
+    #[tokio::test]
+    #[ignore = "requires local GNUbg with weights"]
+    async fn native_performance_statistics_exclude_forced_moves_and_trivial_cube_choices() {
+        let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()));
+        // Two legal opening moves; the second player's pre-roll cube choice is trivial.
+        let source = "(;GM[6]MI[length:7];W[31xufe];B[42qusu])";
+        let game = engine.analyze_game(source, 1, 0).await.unwrap();
+        let value = serde_json::to_value(game).unwrap();
+        assert_eq!(value["statistics"][0]["unforced_checker_moves"], 1);
+        assert_eq!(value["statistics"][1]["unforced_checker_moves"], 1);
+        assert_eq!(value["statistics"][1]["total_cube_decisions"], 1);
+        assert_eq!(value["statistics"][1]["close_cube_decisions"], 0);
+        assert!(
+            (value["statistics"][0]["normalized_equity_loss"]
+                .as_f64()
+                .unwrap()
+                - 0.267064)
+                .abs()
+                < 0.000002
+        );
+        // Independent CLI oracle: query native statistics directly, without
+        // running our text-export parser or reconstructing losses from decisions.
+        let temp = tempfile::tempdir().unwrap();
+        tokio::fs::write(temp.path().join("input.sgf"), source)
+            .await
+            .unwrap();
+        let native = engine.run_with_timeout(temp.path(),
+            "set confirm default yes\nset display off\nset output mwc off\nset output digits 6\nset analysis luck off\nset analysis chequerplay evaluation plies 0\nset analysis cubedecision evaluation plies 0\nload match input.sgf\nanalyse clear game\nanalyse game\nshow statistics game\n",
+            std::time::Duration::from_secs(30)).await.unwrap();
+        assert!(
+            Regex::new(r"(?m)^Unforced moves\s+1\s+1\s*$")
+                .unwrap()
+                .is_match(&native)
+        );
+        assert!(
+            Regex::new(r"(?m)^Close or actual cube decisions\s+0\s+0\s*$")
+                .unwrap()
+                .is_match(&native)
+        );
+        let overall = native.split_once("Overall statistics").unwrap().1;
+        let row = overall
+            .lines()
+            .find(|line| line.starts_with("Error total EMG"))
+            .unwrap();
+        let oracle_white: f64 = row.split_whitespace().nth(4).unwrap().parse().unwrap();
+        assert_eq!(
+            value["statistics"][0]["normalized_equity_loss"]
+                .as_f64()
+                .unwrap(),
+            -oracle_white
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "requires local GNUbg with weights"]
+    async fn native_performance_statistics_cover_cube_only_and_forced_checker_games() {
+        let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()));
+        let source = "(;GM[6]MI[length:7];W[31hefe])\n(;GM[6]MI[length:7]AE[a:y]AW[f]AB[s]PL[W]RE[W+1];W[double];B[drop])";
+        let cube = engine.analyze_game(source, 2, 0).await.unwrap();
+        let native = cube
+            .statistics
+            .as_ref()
+            .expect("cube-only native statistics");
+        for player in native {
+            assert_eq!(player.total_checker_moves, 0);
+            assert_eq!(player.unforced_checker_moves, 0);
+            assert_eq!(player.total_cube_decisions, 1);
+            assert_eq!(player.close_cube_decisions, 1);
+        }
+        for source in [
+            "(;GM[6]MI[length:7][ws:6][bs:0]RU[Crawford:CrawfordGame]AE[a:y]AW[f]AB[s]PL[W];W[66fz])",
+            "(;GM[6]MI[length:7][ws:6][bs:0]RU[Crawford:CrawfordGame]AE[a:y]AW[y]AB[s][s]PL[W];W[66])",
+        ] {
+            let game = engine.analyze_game(source, 1, 0).await.unwrap();
+            let native = game.statistics.as_ref().expect("forced native statistics");
+            assert_eq!(native[0].total_checker_moves, 1);
+            assert_eq!(native[0].unforced_checker_moves, 0);
+            assert_eq!(native[0].normalized_equity_loss, 0.0);
+        }
+    }
+
+    #[test]
+    fn native_performance_statistics_reject_missing_malformed_and_partial_exports() {
+        let decisions = vec![decision(0, "checker", "played", "best", Some((0.0, 0.1)))];
+        let export = "Game statistics for game 1\nChequerplay statistics\nTotal moves 1 0\nUnforced moves 1 0\nCube statistics\nTotal cube decisions 0 0\nClose or actual cube decisions 0 0\nOverall statistics\nError total EMG (MWC) -0.100000 ( -1.000%) -0.000000 ( -0.000%)\n";
+        let native = parse_native_statistics(export, 1, &decisions).unwrap();
+        assert_eq!(native[0].normalized_equity_loss, 0.1);
+        for changed in [
+            export.replace("Game statistics for game 1", "Game statistics for game 10"),
+            export.replace("Unforced moves 1 0", "Unforced moves 2 0"),
+            export.replace("Total moves 1 0", "Total moves 0 0"),
+            export.replace("Close or actual cube decisions 0 0", ""),
+            export.replace("-0.100000", "NaN"),
+            export.replace("-0.100000", "+0.100000"),
+            export.replace("Overall statistics", "Unknown statistics"),
+            format!("{export}{export}"),
+        ] {
+            assert!(
+                parse_native_statistics(&changed, 1, &decisions).is_none(),
+                "{changed}"
+            );
+        }
+        assert!(parse_native_statistics(export, 2, &decisions).is_none());
+        let mut unavailable = decisions;
+        unavailable[0].evaluation_status = "unavailable".into();
+        assert!(parse_native_statistics(export, 1, &unavailable).is_none());
+    }
 
     #[test]
     fn counts_games_and_rejects_truncated_input() {

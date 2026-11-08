@@ -35,7 +35,7 @@ pub enum JobStatus {
 pub enum JobResult {
     Analysis(crate::engine::Analysis),
     Dice(crate::engine::Distribution),
-    Match(MatchAnalysisSummary),
+    Match(Box<MatchAnalysisSummary>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
@@ -48,6 +48,15 @@ pub struct MatchSummary {
     pub match_length: i32,
     pub position_count: i32,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+pub struct MatchGame {
+    pub game_no: i32,
+    pub position_count: i32,
+    pub white_score: i32,
+    pub black_score: i32,
+    pub crawford: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
@@ -70,6 +79,8 @@ pub struct Job {
     pub id: Uuid,
     pub position_uuid: Option<Uuid>,
     pub match_uuid: Option<Uuid>,
+    /// Source game number for a single-game match analysis; null means the whole match.
+    pub game_no: Option<i32>,
     pub total_games: i32,
     pub completed_games: i32,
     #[schema(value_type=JobKind)]
@@ -165,6 +176,31 @@ pub struct MatchAnalysisSummary {
     pub total_moves: i32,
     pub analyzed_moves: i32,
     pub players: [PlayerAnalysisSummary; 2],
+    /// Native GNUbg normalized loss and non-trivial decision denominator.
+    /// Missing for legacy results or if any analyzed game lacks native statistics.
+    #[serde(default)]
+    pub performance_rating: Option<PerformanceRatingSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PerformanceRatingSummary {
+    /// gnubg_emg_500_v1: 500 × native normalized loss / (unforced checker + close/actual cube).
+    /// GNUbg counting is not interchangeable with XG or BMAB counting.
+    pub method: String,
+    pub profile: String,
+    /// Number of games contributing complete native statistics.
+    pub games: i32,
+    pub players: [PlayerPerformanceRating; 2],
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
+pub struct PlayerPerformanceRating {
+    pub player: i32,
+    /// Null if the native denominator is zero; lower values indicate less equity lost.
+    pub value: Option<f64>,
+    pub normalized_equity_loss: f64,
+    pub unforced_checker_moves: i32,
+    pub close_cube_decisions: i32,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]

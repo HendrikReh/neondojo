@@ -167,6 +167,16 @@ fn main_records(input: &[u8]) -> Result<Vec<u8>> {
     }
     main.context("XG archive contains no .xg match stream")
 }
+/// Read the declared rule independently of whether any Beaver was played.
+/// The played-line import continues to reject unsupported Beaver actions.
+pub(crate) fn xg_beaver_rule(input: &[u8]) -> Result<bool> {
+    let records = main_records(input)?;
+    let header = records
+        .get(..RECORD_BYTES)
+        .context("XG: truncated match header")?;
+    ensure!(header[8] == 0, "XG: match header must be the first record");
+    bool_at(header, 102)
+}
 fn escape(s: &str) -> String {
     s.replace('\\', "\\\\").replace(']', "\\]")
 }
@@ -208,8 +218,112 @@ fn coordinate(point: i32, active: i32) -> Result<char> {
     }
 }
 
+fn f32_at(b: &[u8], p: usize) -> Result<f64> {
+    let value = f32::from_bits(u32_at(b, p)?) as f64;
+    ensure!(value.is_finite(), "XG: non-finite evaluation");
+    Ok(value)
+}
+fn f64_at(b: &[u8], p: usize) -> Result<f64> {
+    let value = f64::from_le_bytes(
+        b.get(p..p + 8)
+            .context("XG: truncated evaluation")?
+            .try_into()?,
+    );
+    ensure!(value.is_finite(), "XG: non-finite evaluation");
+    Ok(value)
+}
+fn level(value: i32) -> (String, Option<i32>, &'static str) {
+    match value {
+        0..=6 => (format!("{}-ply", value + 1), Some(value + 1), "evaluation"),
+        12 => ("3-ply red".into(), Some(3), "evaluation"),
+        100 => ("Rollout".into(), None, "rollout"),
+        998 => ("Opening Book V2".into(), None, "opening_book"),
+        999 => ("Opening Book V1".into(), None, "opening_book"),
+        1000 => ("XGRoller".into(), None, "xgroller"),
+        1001 => ("XGRoller+".into(), None, "xgroller"),
+        1002 => ("XGRoller++".into(), None, "xgroller"),
+        _ => (format!("Unknown (XG level {value})"), None, "unknown"),
+    }
+}
+fn native_notation(endpoints: &[i32]) -> String {
+    let point = |n: i32| {
+        if n == 24 {
+            "bar".into()
+        } else if n < 0 {
+            "off".into()
+        } else {
+            (n + 1).to_string()
+        }
+    };
+    let moves: Vec<_> = endpoints
+        .chunks_exact(2)
+        .take_while(|p| p[0] != -1)
+        .map(|p| format!("{}/{}", point(p[0]), point(p[1])))
+        .collect();
+    if moves.is_empty() {
+        "Cannot move".into()
+    } else {
+        moves.join(" ")
+    }
+}
+fn checker_analysis(record: &[u8], index: usize) -> Result<Option<serde_json::Value>> {
+    use serde_json::json;
+    let count = i32_at(record, 120)?;
+    ensure!(
+        (0..=32).contains(&count),
+        "XG: invalid analysis candidate count"
+    );
+    if count == 0 {
+        return Ok(None);
+    }
+    let mut candidates = Vec::new();
+    for i in 0..count as usize {
+        let code = i16::from_le_bytes(record[1280 + i * 4..1282 + i * 4].try_into()?) as i32;
+        let (depth, plies, method) = level(code);
+        let endpoints: Vec<_> = record[1024 + i * 8..1032 + i * 8]
+            .iter()
+            .map(|b| i32::from(*b as i8))
+            .collect();
+        let values: Vec<_> = (0..7)
+            .map(|j| f32_at(record, 1408 + i * 28 + j * 4))
+            .collect::<Result<_>>()?;
+        candidates.push(json!({"rank":i+1,"notation":native_notation(&endpoints),"equity":values[6],"equity_kind":"cubeful","probabilities":{"lose_backgammon":values[0],"lose_gammon":values[1],"lose":values[2],"win":values[3],"win_gammon":values[4],"win_backgammon":values[5]},"depth":depth,"depth_plies":plies,"method":method,"raw":{"level":code,"is_double_byte":record[1282+i*4],"endpoints":endpoints,"values":values,"rollout_index":i32_at(record,2344+i*4)?}}));
+    }
+    let first = &candidates[0];
+    Ok(Some(
+        json!({"engine":"eXtreme Gammon","engine_version":null,"depth":first["depth"],"depth_plies":first["depth_plies"],"method":first["method"],"candidates":candidates,"raw":{"record_index":index,"analyze_level":i32_at(record,2472)?,"requested_level":i32_at(record,160)?,"equity_loss":f64_at(record,2312)?,"candidate_count":count}}),
+    ))
+}
+fn cube_analysis(record: &[u8], index: usize) -> Result<Option<serde_json::Value>> {
+    use serde_json::json;
+    let code = i32_at(record, 232)?;
+    if code < 0 {
+        return Ok(None);
+    }
+    let (depth, plies, method) = level(code);
+    let no_double: Vec<_> = (0..7)
+        .map(|j| f32_at(record, 124 + j * 4))
+        .collect::<Result<_>>()?;
+    let double_take: Vec<_> = (0..7)
+        .map(|j| f32_at(record, 168 + j * 4))
+        .collect::<Result<_>>()?;
+    let mut value = json!({"engine":"eXtreme Gammon","engine_version":null,"depth":depth,"depth_plies":plies,"method":method,"candidates":[],"cube":{"equity_kind":"cubeful","perspective":"doubler","no_double":f32_at(record,152)?,"double_take":f32_at(record,156)?,"double_pass":f32_at(record,160)?},"raw":{"record_index":index,"action":i32_at(record,16)?,"analyze_level":code,"requested_level":i32_at(record,256)?,"equity_loss":f64_at(record,200)?,"take_equity_loss":f64_at(record,216)?,"rollout_index":i32_at(record,224)?,"no_double_values":no_double,"double_take_values":double_take}});
+    let action = i32_at(record, 16)?;
+    if action < 0 {
+        value["played"] = json!(format!("Unknown (XG cube action {action})"));
+    }
+    Ok(Some(value))
+}
+fn analysis_property(out: &mut String, key: &str, value: &serde_json::Value) -> Result<()> {
+    out.push_str(key);
+    out.push('[');
+    out.push_str(&super::sgf::encode_retained_analysis(value)?);
+    out.push(']');
+    Ok(())
+}
+
 /// Convert real binary XG2 files, retaining played moves, score and cube state.
-/// Stored analysis, rollouts and RTF comments are deliberately not imported.
+/// Native analysis is retained independently through XGA/XGC SGF extensions.
 pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
     let bytes = main_records(input)?;
     ensure!(
@@ -242,13 +356,16 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
     let players = [name(header, 880, 9)?, name(header, 1138, 50)?];
     let mut out = String::new();
     let mut in_game = false;
+    let mut game_in_progress = false;
     let mut saw_footer = false;
+    let mut match_decided = false;
     let mut game_count = 0;
     let mut checker_no = 0;
     let mut cube = 1;
     let mut owner = 0; // XG player +/-1; zero is centered.
     let mut game_crawford = false;
     let mut board = super::sgf::initial_board();
+    let mut pending_cube_analysis = None;
     for (index, record) in bytes.chunks_exact(RECORD_BYTES).enumerate().skip(1) {
         ensure!(!saw_footer, "XG: records after match footer");
         match record[8] {
@@ -263,6 +380,7 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
                     "XG: negative match score is not supported"
                 );
                 game_crawford = bool_at(record, 20)?;
+                game_in_progress = bool_at(record, 52)?;
                 let initial: Vec<i32> =
                     record[21..47].iter().map(|b| i32::from(*b as i8)).collect();
                 ensure!(
@@ -293,6 +411,7 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
                 game_count += 1;
                 cube = 1;
                 owner = 0;
+                pending_cube_analysis = None;
             }
             2 => {
                 ensure!(in_game, "XG: cube record outside game");
@@ -317,6 +436,7 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
                     continue;
                 }
                 let c = color(active)?;
+                let analysis = cube_analysis(record, index)?;
                 if action == 1 {
                     ensure!(!game_crawford, "XG: double in a Crawford game");
                     ensure!(
@@ -328,16 +448,25 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
                         (0..=1).contains(&take),
                         "XG beavers/raccoons and unanswered doubles are not supported"
                     );
+                    out.push_str(&format!("\n;{c}[double]"));
+                    if let Some(ref value) = analysis {
+                        analysis_property(&mut out, "XGC", value)?;
+                    }
                     out.push_str(&format!(
-                        "\n;{c}[double];{}[{}]",
+                        ";{}[{}]",
                         color(-active)?,
                         if take == 1 { "take" } else { "drop" }
                     ));
+                    if let Some(ref value) = analysis {
+                        analysis_property(&mut out, "XGC", value)?;
+                    }
                     if take == 1 {
                         cube *= 2;
                         ensure!(cube <= 32768, "XG: cube value exceeds GNUbg range");
                         owner = -active;
                     }
+                } else if action == 0 || action == -1 {
+                    pending_cube_analysis = analysis;
                 }
             }
             3 => {
@@ -419,27 +548,43 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
                     out.push(coordinate(to as i32 - 1, active)?);
                 }
                 out.push(']');
+                if let Some(value) = checker_analysis(record, index)? {
+                    analysis_property(&mut out, "XGA", &value)?;
+                }
+                if let Some(mut value) = pending_cube_analysis.take() {
+                    if value.get("played").is_none() {
+                        value["played"] = serde_json::json!("No double");
+                    }
+                    analysis_property(&mut out, "XGC", &value)?;
+                }
             }
             4 => {
                 ensure!(in_game, "XG: game footer outside game");
                 // Scores for the next game are authoritative in its header.
+                match_decided =
+                    length > 0 && (i32_at(record, 12)? >= length || i32_at(record, 16)? >= length);
                 out.push_str(")\n");
                 in_game = false;
             }
             5 => {
-                if in_game {
-                    out.push_str(")\n");
-                    in_game = false;
-                }
+                ensure!(!in_game, "XG: match footer before game footer");
                 saw_footer = true;
             }
             kind => bail!("Unsupported XG record type {kind} at record {index}"),
         }
     }
-    // Ongoing money sessions have no match winner/footer. Their final game
-    // must still be closed; archive CRCs and exact record bounds were checked above.
+    // XG can save between games, or during a game whose header explicitly
+    // carries InProgress. Close only that declared unfinished game; a game
+    // marked complete without its footer remains an incomplete record stream.
+    if in_game && game_in_progress {
+        out.push_str(")\n");
+        in_game = false;
+    }
+    // A point match that reached its target still needs its match footer.
+    // Ongoing matches and money sessions do not have a match winner/footer.
+    // Archive CRCs and exact record bounds were checked before parsing records.
     ensure!(
-        (saw_footer || length == 0) && !in_game && game_count > 0,
+        (saw_footer || !match_decided) && !in_game && game_count > 0,
         "XG: incomplete match record stream"
     );
     // Replay validates bars, hits, legal die distances, bearing off, and turns.
@@ -453,6 +598,50 @@ mod tests {
     use flate2::{Compression, write::ZlibEncoder};
     use std::io::Write;
 
+    #[test]
+    fn conversion_preserves_native_analysis_and_xg_depth() {
+        let sgf = xg_to_sgf(include_bytes!("../../tests/fixtures/WC2014.xg")).unwrap();
+        let trees = super::super::sgf::parse_trees(&sgf).unwrap();
+        let first = trees[0]
+            .iter()
+            .find(|n| n.contains_key("XGA"))
+            .expect("XG analysis must survive conversion");
+        let data: serde_json::Value =
+            super::super::sgf::decode_retained_analysis(&first["XGA"][0]).unwrap();
+        assert_eq!(data["engine"], "eXtreme Gammon");
+        assert_eq!(data["candidates"].as_array().unwrap().len(), 10);
+        assert_eq!(data["candidates"][0]["depth"], "Opening Book V2");
+        assert_eq!(data["candidates"][0]["raw"]["level"], 998);
+        assert!(data["candidates"][0]["equity"].is_number());
+        assert!(
+            trees.iter().flatten().any(|n| n.contains_key("XGC")),
+            "cube analysis must survive too"
+        );
+    }
+    #[test]
+    fn native_payload_does_not_inflate_long_matches_past_sgf_limits() {
+        let value = serde_json::json!({"raw":"precision retained ".repeat(30_000)});
+        let mut out = String::new();
+        analysis_property(&mut out, "XGA", &value).unwrap();
+        assert!(
+            out.len() < 10_000,
+            "foreign analysis must use bounded compressed SGF transport"
+        );
+    }
+    #[test]
+    fn unknown_native_cube_actions_keep_their_source_label() {
+        let bytes = main_records(include_bytes!("../../tests/fixtures/WC2014.xg")).unwrap();
+        let mut record = bytes
+            .chunks_exact(RECORD_BYTES)
+            .find(|r| r[8] == 2 && i32_at(r, 232).unwrap() >= 0 && i32_at(r, 16).unwrap() == 0)
+            .unwrap()
+            .to_vec();
+        set_u32(&mut record, 16, u32::MAX);
+        let data = cube_analysis(&record, 1).unwrap().unwrap();
+        assert_eq!(data["raw"]["action"], -1);
+        assert_eq!(data["played"], "Unknown (XG cube action -1)");
+    }
+
     fn compress(bytes: &[u8]) -> Vec<u8> {
         let mut encoder = ZlibEncoder::new(Vec::new(), Compression::fast());
         encoder.write_all(bytes).unwrap();
@@ -460,6 +649,43 @@ mod tests {
     }
     fn set_u32(bytes: &mut [u8], offset: usize, n: u32) {
         bytes[offset..offset + 4].copy_from_slice(&n.to_le_bytes());
+    }
+    #[test]
+    fn native_beaver_rule_reads_header_without_inventing_it_from_actions() {
+        let sample = include_bytes!("../../tests/fixtures/WC2014.xg");
+        assert!(
+            !xg_beaver_rule(sample).unwrap(),
+            "public fixture declares Beaver off"
+        );
+        let mut records = main_records(sample).unwrap();
+        for expected in [false, true] {
+            records[102] = u8::from(expected);
+            assert_eq!(xg_beaver_rule(&wrap(&records, None)).unwrap(), expected);
+        }
+        records[102] = 2;
+        assert!(xg_beaver_rule(&wrap(&records, None)).is_err());
+        records[102] = 0;
+        records[8] = 1;
+        assert!(xg_beaver_rule(&wrap(&records, None)).is_err());
+    }
+    #[test]
+    fn unanalysed_native_records_do_not_project_zero_equities() {
+        let sample = include_bytes!("../../tests/fixtures/WC2014.xg");
+        let records = main_records(sample).unwrap();
+        let mut checker = records
+            .chunks_exact(RECORD_BYTES)
+            .find(|r| r[8] == 3)
+            .unwrap()
+            .to_vec();
+        set_u32(&mut checker, 120, 0);
+        assert!(checker_analysis(&checker, 1).unwrap().is_none());
+        let mut cube = records
+            .chunks_exact(RECORD_BYTES)
+            .find(|r| r[8] == 2)
+            .unwrap()
+            .to_vec();
+        set_u32(&mut cube, 232, u32::MAX);
+        assert!(cube_analysis(&cube, 1).unwrap().is_none());
     }
     /// Write the documented binary container around actual fixture records.
     /// This lets malformed-record tests reach the semantic checks with valid
@@ -517,13 +743,6 @@ mod tests {
             .position(|r| r[8] == 4)
             .unwrap();
         records.truncate((end + 1) * RECORD_BYTES);
-        // A point match still requires its match footer.
-        assert!(
-            xg_to_sgf(&wrap(&records, None))
-                .unwrap_err()
-                .to_string()
-                .contains("incomplete")
-        );
         set_u32(&mut records, 552, 26);
         set_u32(&mut records, 92, 99999);
         records[101] = 1;
@@ -545,6 +764,137 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("incomplete")
+        );
+    }
+
+    #[test]
+    fn point_match_saved_between_games_preserves_all_played_positions() {
+        let sample = include_bytes!("../../tests/fixtures/WC2014.xg");
+        let expected = super::super::parse_sgf(&xg_to_sgf(sample).unwrap()).unwrap();
+        let mut records = main_records(sample).unwrap();
+        let end = records
+            .chunks_exact(RECORD_BYTES)
+            .enumerate()
+            .filter(|(_, r)| r[8] == 4)
+            .nth(1)
+            .unwrap()
+            .0;
+        records.truncate((end + 1) * RECORD_BYTES);
+        let sgf = xg_to_sgf(&wrap(&records, None)).unwrap();
+        let actual = super::super::parse_sgf(&sgf).unwrap();
+        let expected: Vec<_> = expected
+            .positions
+            .iter()
+            .filter(|p| p.game_no <= 2)
+            .collect();
+        assert_eq!(actual.match_length, 11);
+        assert_eq!(actual.positions.len(), expected.len());
+        for (a, b) in actual.positions.iter().zip(expected) {
+            assert_eq!(a.position_id, b.position_id);
+            assert_eq!(a.match_id, b.match_id);
+            assert_eq!(a.board, b.board);
+            assert_eq!((a.game_no, a.ply), (b.game_no, b.ply));
+        }
+    }
+
+    #[test]
+    fn in_progress_game_preserves_played_positions_and_nonzero_score_cube_context() {
+        let sample = include_bytes!("../../tests/fixtures/WC2014.xg");
+        let expected = super::super::parse_sgf(&xg_to_sgf(sample).unwrap()).unwrap();
+        let mut records = main_records(sample).unwrap();
+        // Game five starts at 1-3. Retain its first played move after an
+        // accepted double, the following no-double cube record, and a rolled
+        // checker record that has not been played yet.
+        let last_played = records
+            .chunks_exact(RECORD_BYTES)
+            .position(|r| r[8] == 3 && i32_at(r, 108).unwrap() != 0)
+            .unwrap();
+        let game_header = records[..last_played * RECORD_BYTES]
+            .chunks_exact(RECORD_BYTES)
+            .rposition(|r| r[8] == 1)
+            .unwrap();
+        assert_eq!(
+            i32_at(&records, game_header * RECORD_BYTES + 12).unwrap(),
+            1
+        );
+        assert_eq!(
+            i32_at(&records, game_header * RECORD_BYTES + 16).unwrap(),
+            3
+        );
+        assert_eq!(records[(last_played + 1) * RECORD_BYTES + 8], 2);
+        assert_eq!(records[(last_played + 2) * RECORD_BYTES + 8], 3);
+        records.truncate((last_played + 3) * RECORD_BYTES);
+        records[game_header * RECORD_BYTES + 52] = 1; // InProgress
+        records[(last_played + 2) * RECORD_BYTES + 2308] = 0; // Played
+        let played_count = records
+            .chunks_exact(RECORD_BYTES)
+            .filter(|r| r[8] == 3 && r[2308] == 1)
+            .count();
+        let sgf = xg_to_sgf(&wrap(&records, None)).unwrap();
+        let actual = super::super::parse_sgf(&sgf).unwrap();
+        assert_eq!(actual.positions.len(), played_count);
+        assert_eq!(actual.positions.last().unwrap().game_no, 5);
+        for (a, b) in actual.positions.iter().zip(&expected.positions) {
+            assert_eq!(a.position_id, b.position_id);
+            assert_eq!(a.match_id, b.match_id);
+            assert_eq!(a.board, b.board);
+            assert_eq!((a.game_no, a.ply), (b.game_no, b.ply));
+        }
+        // InProgress never bypasses unsupported-position checks, including
+        // the final rolled but unplayed checker record.
+        records[(last_played + 2) * RECORD_BYTES + 2528] = 1;
+        assert!(
+            xg_to_sgf(&wrap(&records, None))
+                .unwrap_err()
+                .to_string()
+                .contains("edited")
+        );
+    }
+
+    #[test]
+    fn completed_point_match_without_its_footer_is_rejected() {
+        let mut records = main_records(include_bytes!("../../tests/fixtures/WC2014.xg")).unwrap();
+        assert_eq!(records[records.len() - RECORD_BYTES + 8], 5);
+        records.truncate(records.len() - RECORD_BYTES);
+        assert!(
+            xg_to_sgf(&wrap(&records, None))
+                .unwrap_err()
+                .to_string()
+                .contains("incomplete")
+        );
+    }
+
+    #[test]
+    fn a_game_marked_complete_cannot_be_missing_its_game_footer() {
+        let mut records = main_records(include_bytes!("../../tests/fixtures/WC2014.xg")).unwrap();
+        let end = records
+            .chunks_exact(RECORD_BYTES)
+            .position(|r| r[8] == 4)
+            .unwrap();
+        records.truncate(end * RECORD_BYTES);
+        assert_eq!(records[RECORD_BYTES + 52], 0);
+        assert!(
+            xg_to_sgf(&wrap(&records, None))
+                .unwrap_err()
+                .to_string()
+                .contains("incomplete")
+        );
+    }
+
+    #[test]
+    fn a_match_footer_cannot_replace_a_missing_game_footer() {
+        let original = main_records(include_bytes!("../../tests/fixtures/WC2014.xg")).unwrap();
+        let end = original
+            .chunks_exact(RECORD_BYTES)
+            .position(|r| r[8] == 4)
+            .unwrap();
+        let mut records = original[..end * RECORD_BYTES].to_vec();
+        records.extend_from_slice(&original[original.len() - RECORD_BYTES..]);
+        assert!(
+            xg_to_sgf(&wrap(&records, None))
+                .unwrap_err()
+                .to_string()
+                .contains("game footer")
         );
     }
 

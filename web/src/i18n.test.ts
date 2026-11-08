@@ -5,6 +5,7 @@ import {
   formatLocalizedError,
   interpolate,
   localizeDecision,
+  languages,
   readLocale,
   saveLocale,
   translate,
@@ -12,17 +13,29 @@ import {
 } from './i18n-core';
 
 describe('language selection and translation', () => {
-  it('starts in German and ignores unsupported or inaccessible saved preferences', () => {
-    expect(readLocale({ getItem: () => null })).toBe('de');
+  it('starts in English and preserves explicit saved preferences', () => {
+    expect(readLocale({ getItem: () => null })).toBe('en');
+    expect(readLocale({ getItem: () => 'de' })).toBe('de');
     expect(readLocale({ getItem: () => 'fr' })).toBe('fr');
-    expect(readLocale({ getItem: () => 'pt-BR' })).toBe('de');
+    expect(readLocale({ getItem: () => 'pt-BR' })).toBe('en');
     expect(
       readLocale({
         getItem: () => {
           throw new Error('blocked');
         },
       }),
-    ).toBe('de');
+    ).toBe('en');
+  });
+
+  it('lists all six languages alphabetically by their visible names', () => {
+    expect(languages.map(({ name }) => name)).toEqual([
+      'Deutsch',
+      'English',
+      'Español',
+      'Français',
+      'Italiano',
+      'Polski',
+    ]);
   });
 
   it('persists a supported language and tolerates disabled browser storage', () => {

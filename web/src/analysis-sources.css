@@ -1,0 +1,166 @@
+.analysis-source-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 10px 0;
+  border-bottom: 1px solid #dfe6dc;
+  margin-bottom: 12px;
+}
+.analysis-source-tabs button {
+  padding: 7px 9px;
+  font-size: 11px;
+  background: transparent;
+  border: 1px solid #d9e2d5;
+  border-radius: 6px;
+}
+.analysis-source-tabs button[aria-selected='true'] {
+  background: #e8f0df;
+  color: #28513c;
+  border-color: #90a981;
+}
+.analysis-source-tabs button:disabled {
+  opacity: 0.45;
+}
+.analysis-source-tools {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+.analysis-source-tools > button {
+  font-size: 10px;
+  padding: 4px 7px;
+}
+.source-provenance {
+  display: grid;
+  gap: 5px;
+  font-size: 12px;
+  padding: 12px;
+  background: #f3f6ef;
+  border-radius: 8px;
+  border: 1px solid #e1e7da;
+  margin-bottom: 12px;
+}
+.source-provenance strong {
+  font-weight: 600;
+}
+.source-provenance small {
+  color: #71806a;
+  font-size: 10px;
+}
+.source-record {
+  display: grid;
+  gap: 6px;
+  font-size: 11px;
+  margin-bottom: 10px;
+}
+.source-record select {
+  width: 100%;
+  padding: 8px;
+  min-width: 0;
+  border: 1px solid #d5dfcd;
+  border-radius: 5px;
+  background: white;
+  color: #304d38;
+}
+.source-candidates {
+  max-height: 390px;
+  overflow: auto;
+}
+.source-analysis .candidates td small {
+  display: block;
+  font-size: 9px;
+  color: #7d8b73;
+  margin-top: 3px;
+}
+.source-decision-buttons {
+  display: flex;
+  gap: 5px;
+  margin: 10px 0;
+}
+.source-decision-buttons button[aria-pressed='true'] {
+  background: #e9f0df;
+  border-color: #91a37e;
+}
+.source-attribution {
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+  margin-top: 12px;
+}
+.source-book-status {
+  padding: 13px;
+  background: #eff5e8;
+  border: 1px solid #d7e4ca;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.settings-book-button {
+  margin: 10px 0;
+}
+.source-analysis {
+  min-width: 0;
+}
+.source-analysis > p {
+  font-size: 12px;
+  line-height: 1.6;
+}
+.analysis-source-error {
+  font-size: 11px;
+  color: #98513f;
+}
+.analysis-panel .source-heading-label {
+  font-size: 10px;
+  max-width: 180px;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.library-native-layer {
+  position: fixed;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  width: 100dvw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+}
+.library-native-layer::backdrop {
+  background: transparent;
+}
+
+.source-book-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+.source-book-selector button {
+  font-size: 11px;
+  padding: 7px;
+}
+.source-book-selector button[aria-pressed='true'] {
+  background: #e7efde;
+  border-color: #93a980;
+}
+.xg-book-evaluation {
+  border-bottom: 1px solid #dce5d4;
+  padding: 8px 0;
+}
+.xg-book-author {
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.xg-probabilities {
+  width: 100%;
+  font-size: 11px;
+  text-align: left;
+}
+.xg-probabilities td,
+.xg-probabilities th {
+  padding: 5px;
+}

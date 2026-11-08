@@ -1,5 +1,12 @@
 import { test, expect } from '@playwright/test';
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    if (localStorage.getItem('bgtutor.locale') === null)
+      localStorage.setItem('bgtutor.locale', 'de');
+  });
+});
+
 async function importStudy(
   page: import('@playwright/test').Page,
   suffix: string,
@@ -21,6 +28,8 @@ test('match and position notes persist, search jumps to the exact move, and conf
 }) => {
   const suffix = crypto.randomUUID();
   await importStudy(page, suffix);
+  await page.getByRole('tab', { name: 'Notizen', exact: true }).click();
+  await page.getByRole('tab', { name: 'Match', exact: true }).click();
   const match = page.locator('[data-annotation-kind=match]');
   await match.getByLabel('Tags', { exact: true }).fill(`Match-${suffix}`);
   await match
@@ -36,6 +45,7 @@ test('match and position notes persist, search jumps to the exact move, and conf
     match.getByText('Notizen gespeichert.', { exact: true }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Nächster Zug', exact: true }).click();
+  await page.getByRole('tab', { name: 'Position', exact: true }).click();
   const position = page.locator('[data-annotation-kind=position]');
   await position.getByLabel('Tags', { exact: true }).fill(`Position-${suffix}`);
   await position
@@ -48,13 +58,18 @@ test('match and position notes persist, search jumps to the exact move, and conf
     position.getByText('Notizen gespeichert.', { exact: true }),
   ).toBeVisible();
   await page.reload();
+  await page.getByRole('tab', { name: 'Matchdatenbank', exact: true }).click();
+  await page.getByLabel('Partien durchsuchen').fill(`Study ${suffix}`);
   await page
     .locator('.match-card')
     .filter({ hasText: `Study ${suffix}` })
     .click();
+  await page.getByRole('tab', { name: 'Notizen', exact: true }).click();
+  await page.getByRole('tab', { name: 'Match', exact: true }).click();
   await expect(match.getByLabel('Kommentar', { exact: true })).toHaveValue(
     `match-comment-${suffix}`,
   );
+  await page.getByRole('tab', { name: 'Matchdatenbank', exact: true }).click();
   const search = page.locator('.annotation-search');
   await search.locator('summary').click();
   await search
@@ -67,7 +82,14 @@ test('match and position notes persist, search jumps to the exact move, and conf
   await search
     .getByRole('button', { name: 'Position öffnen', exact: true })
     .click();
+  await expect(
+    page.getByRole('tab', { name: 'Analyse', exact: true }),
+  ).toHaveAttribute('aria-selected', 'true');
+  await expect(
+    page.getByRole('tab', { name: 'Notizen', exact: true }),
+  ).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('.board-heading')).toContainText('Zug 2');
+  await page.getByRole('tab', { name: 'Position', exact: true }).click();
   await expect(position.getByLabel('Kommentar', { exact: true })).toHaveValue(
     `position-comment-${suffix} <img src=x onerror=alert(1)>`,
   );
@@ -148,10 +170,14 @@ test('an analyzed annotated position becomes a shared study card and a downloada
     })
   ).json();
   await page.reload();
+  await page.getByRole('tab', { name: 'Matchdatenbank', exact: true }).click();
+  await page.getByLabel('Partien durchsuchen').fill(`Study ${suffix}`);
   await page
     .locator('.match-card')
     .filter({ hasText: `Study ${suffix}` })
     .click();
+  await page.getByRole('tab', { name: 'Notizen', exact: true }).click();
+  await page.getByRole('tab', { name: 'Position', exact: true }).click();
   const position = page.locator('[data-annotation-kind=position]');
   const note = `lesson-${suffix}`;
   await position.getByLabel('Tags', { exact: true }).fill('Opening plans');
@@ -162,12 +188,14 @@ test('an analyzed annotated position becomes a shared study card and a downloada
   await expect(
     position.getByText('Notizen gespeichert.', { exact: true }),
   ).toBeVisible();
+  await page.getByRole('tab', { name: 'Bewertung', exact: true }).click();
   await page
     .getByRole('button', { name: 'Position analysieren', exact: true })
     .click();
   await expect(page.getByText('BESTER ZUG', { exact: true })).toBeVisible({
     timeout: 30_000,
   });
+  await page.getByRole('tab', { name: 'Lernkarten', exact: true }).click();
   const add = page.getByRole('region', {
     name: 'Positionen als Lernkarten',
     exact: true,
@@ -189,9 +217,7 @@ test('an analyzed annotated position becomes a shared study card and a downloada
     .getByRole('button', { name: 'Aktuelle Position hinzufügen', exact: true })
     .click();
   await expect(add).toContainText('1 Karten verarbeitet.');
-  await page
-    .getByRole('button', { name: 'Lernen & Anki', exact: true })
-    .click();
+  await page.getByRole('tab', { name: 'Lernen & Anki', exact: true }).click();
   const study = page.getByRole('region', {
     name: 'Lernen & Anki',
     exact: true,
@@ -291,9 +317,7 @@ test('an analyzed annotated position becomes a shared study card and a downloada
     study.getByRole('button', { name: 'Anki-Deck herunterladen', exact: true }),
   ).toBeEnabled();
   await page.reload();
-  await page
-    .getByRole('button', { name: 'Lernen & Anki', exact: true })
-    .click();
+  await page.getByRole('tab', { name: 'Lernen & Anki', exact: true }).click();
   await study
     .getByLabel('Deck auswählen', { exact: true })
     .selectOption(deck.id);
@@ -308,14 +332,14 @@ test('an analyzed annotated position becomes a shared study card and a downloada
   expect(failures).toEqual([]);
 });
 
-test('an annotation jump cancels an older move-page navigation and releases navigation controls', async ({
+test('an annotation jump supersedes a delayed game load and switching views preserves navigation', async ({
   page,
 }) => {
   await page.goto('/');
   await page
     .locator('input[type=file]')
     .setInputFiles('../backend/tests/fixtures/WC2014.mat');
-  await expect(page.locator('.moves-list button')).toHaveCount(100);
+  await expect(page.locator('.moves-list button')).toHaveCount(8);
   const id = await page
     .locator('[data-annotation-kind=position]')
     .getAttribute('data-annotation-id');
@@ -334,6 +358,7 @@ test('an annotation jump cancels an older move-page navigation and releases navi
       })
     ).status(),
   ).toBe(200);
+  await page.getByRole('tab', { name: 'Matchdatenbank', exact: true }).click();
   const search = page.locator('.annotation-search');
   await search.locator('summary').click();
   await search.getByLabel('Text', { exact: true }).fill(marker);
@@ -343,8 +368,8 @@ test('an annotation jump cancels an older move-page navigation and releases navi
   await expect(
     search.getByRole('button', { name: 'Position öffnen', exact: true }),
   ).toBeVisible();
-  let release: () => void = () => {};
-  let requested: () => void = () => {};
+  let release = () => {};
+  let requested = () => {};
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
@@ -352,20 +377,19 @@ test('an annotation jump cancels an older move-page navigation and releases navi
     requested = resolve;
   });
   await page.route('**/api/positions?**', async (route) => {
-    if (new URL(route.request().url()).searchParams.has('after')) {
+    if (new URL(route.request().url()).searchParams.get('game_no') === '2') {
       requested();
       await gate;
     }
     await route.continue();
   });
-  const response = page.waitForResponse(
-    (r) =>
-      r.url().includes('/api/positions?') &&
-      new URL(r.url()).searchParams.has('after'),
-  );
-  await page.getByRole('button', { name: 'Weiter im Verlauf' }).click();
+  await page.getByRole('tab', { name: 'Analyse', exact: true }).click();
+  await page.getByLabel('Spiel auswählen', { exact: true }).selectOption('2');
   await started;
   try {
+    await page
+      .getByRole('tab', { name: 'Matchdatenbank', exact: true })
+      .click();
     await search
       .getByRole('button', { name: 'Position öffnen', exact: true })
       .click();
@@ -375,43 +399,60 @@ test('an annotation jump cancels an older move-page navigation and releases navi
   } finally {
     release();
   }
-  await (await response).finished();
-  await page.waitForTimeout(100);
-  await expect(page.locator('.board-navigation')).toContainText('1 / 460');
-  await page.unroute('**/api/positions?**');
+  await page.unrouteAll({ behavior: 'wait' });
+  await expect(page.locator('.board-navigation')).toContainText('1 / 8');
+  await expect(page.getByLabel('Spiel auswählen', { exact: true })).toHaveValue(
+    '1',
+  );
+  await expect(page.locator('[data-annotation-kind=position]')).toHaveAttribute(
+    'data-annotation-id',
+    id!,
+  );
 
-  let releaseView: () => void = () => {};
-  let signalView: () => void = () => {};
+  let releaseView = () => {};
+  let signalView = () => {};
   const viewGate = new Promise<void>((resolve) => {
     releaseView = resolve;
   });
   const viewStarted = new Promise<void>((resolve) => {
     signalView = resolve;
   });
+  let gameTwoRequests = 0;
   await page.route('**/api/positions?**', async (route) => {
-    if (new URL(route.request().url()).searchParams.has('after')) {
+    if (new URL(route.request().url()).searchParams.get('game_no') === '2') {
+      gameTwoRequests++;
       signalView();
       await viewGate;
     }
     await route.continue();
   });
-  const oldPage = page.waitForResponse(
-    (r) =>
-      r.url().includes('/api/positions?') &&
-      new URL(r.url()).searchParams.has('after'),
-  );
-  await page.getByRole('button', { name: 'Weiter im Verlauf' }).click();
+  const backgroundResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      url.pathname === '/api/positions' &&
+      url.searchParams.get('game_no') === '2'
+    );
+  });
+  await page.getByLabel('Spiel auswählen', { exact: true }).selectOption('2');
   await viewStarted;
-  await page
-    .getByRole('button', { name: 'Lernen & Anki', exact: true })
-    .click();
+  await page.getByRole('tab', { name: 'Lernen & Anki', exact: true }).click();
+  await expect(
+    page.getByRole('region', { name: 'Lernen & Anki', exact: true }),
+  ).toBeVisible();
   releaseView();
-  await (await oldPage).finished();
-  await page.getByRole('button', { name: 'Bibliothek', exact: true }).click();
+  expect(await (await backgroundResponse).finished()).toBeNull();
+  await page.unrouteAll({ behavior: 'wait' });
+  await page.getByRole('tab', { name: 'Analyse', exact: true }).click();
   await expect(
     page.getByRole('button', { name: 'Nächster Zug', exact: true }),
   ).toBeEnabled();
-  await expect(page.locator('.board-navigation')).toContainText('1 / 460');
+  await expect(page.getByLabel('Spiel auswählen', { exact: true })).toHaveValue(
+    '2',
+  );
+  await expect(page.locator('.board-heading')).toContainText('Spiel 2');
+  expect(gameTwoRequests).toBe(1);
+  await page.getByRole('button', { name: 'Nächster Zug', exact: true }).click();
+  await expect(page.locator('.board-heading')).toContainText('Zug 2');
 });
 
 test('a whole-match deck trains checker, double and response cards with the selected theme', async ({
@@ -428,6 +469,7 @@ test('a whole-match deck trains checker, double and response cards with the sele
     ),
   });
   await expect(page.locator('.board')).toBeVisible();
+  await page.getByLabel('Analyseumfang', { exact: true }).selectOption('match');
   const panel = page.getByRole('region', {
     name: 'Vollständige Partieanalyse',
     exact: true,
@@ -437,16 +479,19 @@ test('a whole-match deck trains checker, double and response cards with the sele
       r.request().method() === 'POST' &&
       /\/api\/matches\/[^/]+\/analysis$/.test(new URL(r.url()).pathname),
   );
-  await panel
+  await page
+    .locator('.workspace-analysis-command')
     .getByRole('button', {
       name: /Gesamte Partie analysieren|Partie erneut analysieren/,
     })
     .click();
   const job = await (await started).json();
+  await page.getByRole('tab', { name: 'Fehler', exact: true }).click();
   await expect(panel).toHaveAttribute('data-job-id', job.id);
   await expect(
     panel.getByText('Partieanalyse abgeschlossen', { exact: true }),
   ).toBeVisible({ timeout: 30_000 });
+  await page.getByRole('tab', { name: 'Lernkarten', exact: true }).click();
   const add = page.getByRole('region', {
     name: 'Positionen als Lernkarten',
     exact: true,
@@ -466,19 +511,34 @@ test('a whole-match deck trains checker, double and response cards with the sele
   );
   await add.getByLabel('Mindestverlust', { exact: true }).fill('0');
   await add
-    .getByRole('button', { name: 'Fehler aus Partie übernehmen', exact: true })
+    .getByRole('button', { name: 'Fehler aus Spiel 1 übernehmen', exact: true })
     .click();
-  await expect(add).toContainText('3 Karten verarbeitet.');
-  if (
-    await page
-      .getByLabel('Board-Theme')
-      .locator('option[value="bgblitz:bg-earthboard"]')
-      .count()
-  )
-    await page.getByLabel('Board-Theme').selectOption('bgblitz:bg-earthboard');
+  await expect(add).toContainText('1 Karten verarbeitet.');
+  await page.getByLabel('Spiel auswählen', { exact: true }).selectOption('2');
+  await expect(page.locator('.moves-list button')).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Notizen', exact: true }).click();
+  await expect(
+    page.getByRole('tab', { name: 'Position', exact: true }),
+  ).toBeDisabled();
+  await page.getByRole('tab', { name: 'Lernkarten', exact: true }).click();
+  await add
+    .getByRole('button', { name: 'Fehler aus Spiel 2 übernehmen', exact: true })
+    .click();
+  await expect(add).toContainText('2 Karten verarbeitet.');
   await page
-    .getByRole('button', { name: 'Lernen & Anki', exact: true })
+    .getByRole('button', { name: 'Einstellungen', exact: true })
     .click();
+  const settings = page.getByRole('dialog', {
+    name: 'Einstellungen',
+    exact: true,
+  });
+  await settings.getByRole('button', { name: 'Brett', exact: true }).click();
+  await settings.getByRole('button', { name: 'Walnut', exact: true }).click();
+  await settings
+    .getByRole('button', { name: 'Speichern', exact: true })
+    .click();
+  await expect(settings).not.toBeVisible();
+  await page.getByRole('tab', { name: 'Lernen & Anki', exact: true }).click();
   const study = page.getByRole('region', {
     name: 'Lernen & Anki',
     exact: true,
@@ -493,6 +553,7 @@ test('a whole-match deck trains checker, double and response cards with the sele
   for (let index = 0; index < 3; index++) {
     const card = study.locator('.study-card');
     await expect(card).toBeVisible();
+    await expect(card.locator('.board-shell')).toHaveClass(/\btheme-walnut\b/);
     await expect(card.locator('.study-context')).toContainText(
       '25-Punkte-Match',
     );

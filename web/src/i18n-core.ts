@@ -2,15 +2,15 @@ import { catalogs, type Catalog, type TranslationKey } from './i18n-catalogs';
 
 export type Locale = keyof typeof catalogs;
 export type TranslationParams = Record<string, string | number>;
-export const defaultLocale: Locale = 'de';
+export const defaultLocale: Locale = 'en';
 export const localeStorageKey = 'bgtutor.locale';
 export const languages: ReadonlyArray<{ id: Locale; name: string }> = [
   { id: 'de', name: 'Deutsch' },
+  { id: 'en', name: 'English' },
   { id: 'es', name: 'Español' },
   { id: 'fr', name: 'Français' },
-  { id: 'pl', name: 'Polski' },
   { id: 'it', name: 'Italiano' },
-  { id: 'en', name: 'English' },
+  { id: 'pl', name: 'Polski' },
 ];
 
 export function isLocale(value: unknown): value is Locale {

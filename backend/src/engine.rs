@@ -8,6 +8,7 @@ use utoipa::ToSchema;
 #[derive(Clone)]
 pub struct Engine {
     binary: String,
+    expected_version: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -45,7 +46,41 @@ pub struct Distribution {
 
 impl Engine {
     pub fn new(binary: String) -> Self {
-        Self { binary }
+        Self {
+            binary,
+            expected_version: None,
+        }
+    }
+
+    pub(crate) fn with_expected_version(mut self, version: Option<String>) -> Self {
+        self.expected_version = version;
+        self
+    }
+
+    pub fn binary(&self) -> &str {
+        &self.binary
+    }
+
+    /// Check both the executable and its evaluation data. Dropping the timed-out
+    /// evaluation kills its GNUbg child through `kill_on_drop`.
+    pub async fn check_installation(&self) -> Result<String> {
+        tokio::time::timeout(Duration::from_secs(10), async {
+            let version = self.version().await?;
+            ensure!(
+                version.starts_with("GNU Backgammon "),
+                "Executable is not GNUbg"
+            );
+            let analysis = self
+                .analyze("4HPwATDgc/ABMA", "cInlAAAAAAAE", 0, None)
+                .await?;
+            ensure!(
+                !analysis.candidates.is_empty(),
+                "GNUbg returned no evaluated moves"
+            );
+            Ok(version)
+        })
+        .await
+        .context("GNUbg installation check timed out after 10 seconds")?
     }
 
     pub async fn version(&self) -> Result<String> {
@@ -59,12 +94,19 @@ impl Engine {
         )
         .await??;
         ensure!(result.status.success(), "GNUbg is unavailable");
-        Ok(String::from_utf8_lossy(&result.stdout)
+        let version = String::from_utf8_lossy(&result.stdout)
             .lines()
             .next()
             .unwrap_or("GNUbg")
             .trim()
-            .into())
+            .to_owned();
+        if let Some(expected) = &self.expected_version {
+            ensure!(
+                version == *expected,
+                "GNUbg version changed since job submission: expected '{expected}', found '{version}'. Restore the original installation or submit a new analysis job"
+            );
+        }
+        Ok(version)
     }
 
     async fn run(&self, directory: &Path, commands: &str) -> Result<String> {
@@ -78,6 +120,13 @@ impl Engine {
         commands: &str,
         timeout: Duration,
     ) -> Result<String> {
+        // A job may outlive an upgrade at the same path. Fence every native
+        // invocation, including later games, dice rolls and forced-pass calls.
+        if self.expected_version.is_some() {
+            self.version()
+                .await
+                .context("Cannot execute the saved GNUbg job configuration")?;
+        }
         tokio::fs::write(directory.join("commands.txt"), commands).await?;
         let mut child = Command::new(&self.binary)
             .args(["-t", "-q", "-r", "-c", "commands.txt"])
@@ -118,18 +167,30 @@ impl Engine {
             ensure!(err.trim().is_empty(), "GNUbg: {}", err.trim());
             Ok::<_, anyhow::Error>(String::from_utf8_lossy(&out).into_owned())
         };
-        match tokio::time::timeout(timeout, work).await {
-            Ok(result) => result,
+        let output = match tokio::time::timeout(timeout, work).await {
+            Ok(result) => result?,
             Err(_) => {
                 let _ = child.kill().await;
                 bail!("GNUbg timed out after {} seconds", timeout.as_secs())
             }
+        };
+        // Discard output if an installation replacement raced the invocation;
+        // no checkpoint or completed result may incorporate another version.
+        if self.expected_version.is_some() {
+            self.version()
+                .await
+                .context("GNUbg changed during execution; discarding the result")?;
         }
+        Ok(output)
     }
 
     pub async fn normalize_mat(&self, bytes: &[u8]) -> Result<String> {
         let temp = tempfile::tempdir()?;
-        tokio::fs::write(temp.path().join("input.mat"), bytes).await?;
+        tokio::fs::write(
+            temp.path().join("input.mat"),
+            normalize_mat_resignations(bytes)?,
+        )
+        .await?;
         let output = self.run(temp.path(), "set confirm default yes\nset confirm new no\nset display off\nimport mat input.mat\nsave match canonical.sgf\n").await?;
         // GNUbg intentionally saves a valid prefix even after some MAT parse
         // failures. Exit status and artifact existence alone are insufficient.
@@ -146,9 +207,10 @@ impl Engine {
                 bail!("GNUbg rejected the MAT file: {line}");
             }
         }
-        tokio::fs::read_to_string(temp.path().join("canonical.sgf"))
+        let native = tokio::fs::read_to_string(temp.path().join("canonical.sgf"))
             .await
-            .context("GNUbg could not import this MAT file")
+            .context("GNUbg could not import this MAT file")?;
+        crate::import::sgf::normalize_mat_sgf(&native)
     }
 
     pub async fn analyze(
@@ -193,6 +255,68 @@ impl Engine {
             candidates,
         })
     }
+}
+
+fn normalize_mat_resignations(bytes: &[u8]) -> Result<Vec<u8>> {
+    const MARKER: &[u8] = b"wants to resign";
+    static RESULT: OnceLock<Regex> = OnceLock::new();
+    let result = RESULT.get_or_init(|| {
+        Regex::new(r"(?i)^Wins +[1-9][0-9]* +points?(?: +and +the +match)?$").unwrap()
+    });
+    let is_result = |value: &[u8]| {
+        std::str::from_utf8(value.trim_ascii()).is_ok_and(|value| result.is_match(value))
+    };
+    let lines = bytes.split_inclusive(|b| *b == b'\n').collect::<Vec<_>>();
+    let mut output = Vec::with_capacity(bytes.len());
+    for (line_index, line) in lines.iter().enumerate() {
+        let mut normalized = line.to_vec();
+        // Restrict this dialect alias to numbered move rows, preserving all
+        // byte offsets used by GNUbg's two-column MAT reader.
+        if let Some(end_number) = line.iter().position(|b| *b == b')') {
+            let number = line[..end_number].trim_ascii();
+            if !number.is_empty() && number.iter().all(u8::is_ascii_digit) {
+                for start in end_number + 1..line.len().saturating_sub(MARKER.len()) + 1 {
+                    if !line[start..].starts_with(MARKER) {
+                        continue;
+                    }
+                    let left = line[end_number + 1..start]
+                        .iter()
+                        .all(u8::is_ascii_whitespace);
+                    let right =
+                        start >= 16 && line[start - 2..start].iter().all(u8::is_ascii_whitespace);
+                    let suffix = &line[start + MARKER.len()..];
+                    let result_column = suffix
+                        .iter()
+                        .take_while(|b| b.is_ascii_whitespace())
+                        .count();
+                    let resolved = if left && result_column >= 2 && is_result(suffix) {
+                        true
+                    } else if suffix.trim_ascii().is_empty() {
+                        lines[line_index + 1..]
+                            .iter()
+                            .find(|next| !next.trim_ascii().is_empty())
+                            .is_some_and(|next| {
+                                let column =
+                                    next.iter().position(|b| !b.is_ascii_whitespace()).unwrap();
+                                is_result(next)
+                                    && ((left && column >= 16) || (right && column < 16))
+                            })
+                    } else {
+                        false
+                    };
+                    ensure!(
+                        (left || right) && resolved,
+                        "MAT: resignation marker requires an opposite-player result"
+                    );
+                    // GNUbg ignores Resigns and derives the exact award from
+                    // the following Wins record, including gammons/backgammons.
+                    normalized[start..start + MARKER.len()].copy_from_slice(b"Resigns        ");
+                }
+            }
+        }
+        output.extend_from_slice(&normalized);
+    }
+    Ok(output)
 }
 
 pub fn valid_id(value: &str, length: usize) -> bool {
@@ -289,6 +413,101 @@ mod tests {
         assert_eq!(hints[0].equity, 0.219);
         assert_eq!(hints[0].probabilities[0], 0.551);
         assert!(super::parse_hints("No game in progress").is_err());
+    }
+
+    #[cfg(unix)]
+    fn native_sgf_engine(
+        sgf: &str,
+        reject_resignation_marker: bool,
+    ) -> (tempfile::TempDir, super::Engine) {
+        use std::os::unix::fs::PermissionsExt;
+        let directory = tempfile::tempdir().unwrap();
+        let binary = directory.path().join("native-sgf-engine");
+        let check = if reject_resignation_marker {
+            "case \"$(cat input.mat)\" in *'wants to resign'*) echo 'Unrecognised move resignation in .mat file.';; esac\n"
+        } else {
+            ""
+        };
+        std::fs::write(
+            &binary,
+            format!(
+                "#!/bin/sh\n{check}cat >canonical.sgf <<'CANONICAL_SGF'\n{sgf}\nCANONICAL_SGF\n"
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let engine = super::Engine::new(binary.to_str().unwrap().to_owned());
+        (directory, engine)
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn mat_native_joined_overshoot_bearoffs_become_strict_sgf_steps() {
+        for (native, expected) in [
+            ("(;GM[6]AE[a:y]AW[f][d][c]AB[x];W[52fz])", "6/4 4/off"),
+            ("(;GM[6]AE[a:y]AW[d][c][c]AB[a][b];W[51dz])", "4/3 3/off"),
+            ("(;GM[6]AE[a:y]AB[s][u][v]AW[a];B[52sz])", "6/4 4/off"),
+        ] {
+            assert!(crate::import::parse_sgf(native).is_err());
+            let (_directory, engine) = native_sgf_engine(native, false);
+            let normalized = engine
+                .normalize_mat(b"native import boundary fixture")
+                .await
+                .unwrap();
+            let imported = crate::import::parse_sgf(&normalized).unwrap();
+            assert_eq!(imported.positions.len(), 1);
+            assert_eq!(imported.positions[0].notation, expected);
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn mat_numbered_resignation_cells_are_normalized_before_gnubg() {
+        let (_directory, engine) = native_sgf_engine("(;GM[6]RE[W+1R];W[31hefe])", true);
+        let input = b"7 point match\n\n Game 1\n Alice : 0                         Bob : 0\n 1) 31: 8/5 6/5                    42: 8/4 6/4\n 2) wants to resign                Wins 1 point\n";
+        assert!(engine.normalize_mat(input).await.is_ok());
+    }
+
+    #[test]
+    fn mat_resignation_alias_preserves_columns_and_requires_a_result() {
+        let input = b" Player wants to resign : 0\r\n 1) 31: 8/5 6/5                 wants to resign\r\n      Wins 2 points\r\n 2) wants to resign              Wins 4 points and the match\r\n";
+        let normalized = super::normalize_mat_resignations(input).unwrap();
+        assert_eq!(normalized.len(), input.len());
+        assert!(normalized.starts_with(b" Player wants to resign : 0\r\n"));
+        assert_eq!(
+            normalized
+                .windows(b"Resigns        ".len())
+                .filter(|w| *w == b"Resigns        ")
+                .count(),
+            2
+        );
+        for input in [
+            b" 1) wants to resign\n".as_slice(),
+            b" 1) wants to resign              unexpected text\n",
+            b" 1) wants to resignWins 1 point\n",
+            b" 1) 31: 8/5 6/5                 wants to resign\n                                  Wins 2 points\n",
+            b" 1) wants to resign\n      Wins 2 points\n",
+        ] {
+            assert!(super::normalize_mat_resignations(input).is_err());
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn mat_native_normalization_rejects_incomplete_plays() {
+        for native in [
+            "(;GM[6];W[31he])",
+            "(;GM[6]AE[a:y]AW[d][b]AB[c][c];W[51dz])",
+            "(;GM[6];W[31hefe];W[42hdfd])",
+        ] {
+            let (_directory, engine) = native_sgf_engine(native, false);
+            assert!(
+                engine
+                    .normalize_mat(b"native import boundary fixture")
+                    .await
+                    .is_err()
+            );
+        }
     }
 
     #[tokio::test]

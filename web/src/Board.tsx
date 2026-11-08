@@ -70,14 +70,16 @@ export default function Board({
   const pips = pipCounts(board);
   const counts = checkerCounts(board);
   const context = matchContext(position.gnubg_match_id);
+  const displayedCube = context.cube * (context.doubled ? 2 : 1);
+  const cubeOwner = context.doubled ? null : context.owner;
   const active = position.player === 0 ? white : black;
   const x = (index: number) => 40 + index * 51 + (index >= 6 ? 28 : 0);
   const cubeLabel = t('board.cube', {
-    value: context.cube,
+    value: displayedCube,
     owner:
-      context.owner === null
+      cubeOwner === null
         ? t('board.centered')
-        : context.owner === 0
+        : cubeOwner === 0
           ? white
           : black,
   });
@@ -183,8 +185,11 @@ export default function Board({
           <Checkers count={board[0]} x={340} y={64} />
           <Checkers count={board[25]} x={340} y={406} bottom />
           <g
-            transform={`translate(328,${context.owner === null ? 223 : context.owner === 0 ? 365 : 81})`}
+            transform={`translate(328,${cubeOwner === null ? 223 : cubeOwner === 0 ? 365 : 81})`}
             aria-label={cubeLabel}
+            data-cube={displayedCube}
+            data-cube-owner={cubeOwner ?? 'centered'}
+            data-cube-pending={context.doubled}
           >
             <rect
               width="24"
@@ -201,7 +206,7 @@ export default function Board({
               fill="#3b5944"
               fontWeight="600"
             >
-              {context.cube === 1 ? '64' : context.cube}
+              {displayedCube === 1 ? '64' : displayedCube}
             </text>
           </g>
           {position.dice

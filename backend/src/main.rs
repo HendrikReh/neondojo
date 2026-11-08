@@ -24,6 +24,7 @@ async fn main() -> anyhow::Result<()> {
         .connect(&url)
         .await?;
     sqlx::migrate!().run(&pool).await?;
+    while bgtutor::databases::backfill_source_metadata(&pool).await? > 0 {}
     let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or_else(|_| "gnubg".into()));
     match engine.version().await {
         Ok(version) => tracing::info!(%version,"Local engine ready"),

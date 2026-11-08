@@ -14,3 +14,8 @@
 /web/public/themes/
 /web/src/generated-themes.json
 /tools/__pycache__/
+
+# Private test/demo matches and local data must never be committed.
+/games/
+/local-data/
+/backups/

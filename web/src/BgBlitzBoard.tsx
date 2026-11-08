@@ -93,23 +93,27 @@ export default function BgBlitzBoard({
     );
   }
   const numbers = theme.numbers[position.player === 0 ? 'RLD' : 'RLU'];
-  const cubeValue = context.cube === 1 ? 64 : context.cube;
+  const displayedCube = context.cube * (context.doubled ? 2 : 1);
+  const cubeOwner = context.doubled ? null : context.owner;
+  const cubeValue = displayedCube === 1 ? 64 : displayedCube;
   const cubeImage =
-    theme.cubes[context.owner === null ? '64_r' : String(cubeValue)] ||
-    theme.cubes[String(cubeValue)];
+    theme.cubes[
+      !context.doubled && cubeOwner === null && displayedCube === 1
+        ? '64_r'
+        : String(cubeValue)
+    ] || theme.cubes[String(cubeValue)];
   const barX = theme.columns[7] + theme.checkers.white[0].width / 2;
-  const configuredCubeX =
-    context.owner === 0 ? theme.cubeRightX : theme.cubeLeftX;
+  const configuredCubeX = cubeOwner === 0 ? theme.cubeRightX : theme.cubeLeftX;
   // XML positions are image origins; only the centered/default cube is centered on the bar.
   const cubeX =
-    context.owner === null || configuredCubeX === 0
+    cubeOwner === null || configuredCubeX === 0
       ? barX - (cubeImage?.width ?? 64) / 2
       : configuredCubeX;
   const cubeY =
     height / 2 +
-    (context.owner === null
+    (cubeOwner === null
       ? theme.cubeCenteredY
-      : (context.owner === 0 ? -1 : 1) * theme.cubeOffsetY);
+      : (cubeOwner === 0 ? -1 : 1) * theme.cubeOffsetY);
   const dice = position.player === 0 ? theme.dice.white : theme.dice.black;
   const diceX = position.player === 0 ? theme.diceRightX : theme.diceLeftX;
   return (
@@ -135,8 +139,9 @@ export default function BgBlitzBoard({
       {stack(15 - counts[0], 14, true, 'off-white')}
       <g
         aria-label={cubeLabel}
-        data-cube={context.cube}
-        data-cube-owner={context.owner ?? 'centered'}
+        data-cube={displayedCube}
+        data-cube-pending={context.doubled}
+        data-cube-owner={cubeOwner ?? 'centered'}
       >
         {cubeImage ? (
           artwork(cubeImage, cubeX, cubeY - cubeImage.height / 2)

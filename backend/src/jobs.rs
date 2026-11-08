@@ -103,8 +103,9 @@ async fn with_heartbeat(
 }
 
 async fn execute(state: &AppState, job: &Job, token: Uuid) -> Result<Value> {
+    let configured_engine = store::job_engine(&state.pool, job.id, &state.engine).await?;
     if job.kind == "match" {
-        return crate::match_jobs::execute(state, job, token).await;
+        return crate::match_jobs::execute(state, job, token, &configured_engine).await;
     }
     let position = store::get_position(
         &state.pool,
@@ -115,8 +116,7 @@ async fn execute(state: &AppState, job: &Job, token: Uuid) -> Result<Value> {
     .context("Position no longer exists")?;
     if job.kind == "analysis" {
         return Ok(serde_json::to_value(
-            state
-                .engine
+            configured_engine
                 .analyze(
                     &position.position_id,
                     &position.gnubg_match_id,
@@ -130,8 +130,7 @@ async fn execute(state: &AppState, job: &Job, token: Uuid) -> Result<Value> {
     let mut engine = String::new();
     for a in 1..=6 {
         for b in a..=6 {
-            let analysis = state
-                .engine
+            let analysis = configured_engine
                 .analyze(
                     &position.position_id,
                     &position.gnubg_match_id,

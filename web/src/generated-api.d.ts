@@ -52,6 +52,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/databases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_databases"];
+        put?: never;
+        post: operations["create_database"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/databases/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["update_database"];
+        post?: never;
+        delete: operations["delete_database"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/decks": {
         parameters: {
             query?: never;
@@ -109,6 +141,54 @@ export interface paths {
         };
         get: operations["next_card"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/engines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["engines"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/engines/gnubg/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["check_engine"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/games/{id}/annotation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_game_annotation"];
+        put: operations["put_game_annotation"];
         post?: never;
         delete?: never;
         options?: never;
@@ -212,6 +292,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/library/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["actions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["export"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/matches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["library_matches"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matches": {
         parameters: {
             query?: never;
@@ -292,6 +420,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matches/{id}/games": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["match_games"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matches/{id}/games/{game_no}/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["game_decisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matches/{id}/imported-analysis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_match"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matches/{id}/metadata": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["update_metadata"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matches/{id}/source": {
         parameters: {
             query?: never;
@@ -302,6 +494,134 @@ export interface paths {
         get: operations["source"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/moves/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_move"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/moves/{id}/annotation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_move_annotation"];
+        put: operations["put_move_annotation"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/moves/{id}/imported-analysis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_move"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/opening-book": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_settings"];
+        put: operations["put_settings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/opening-book/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["check_book"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/opening-book/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["install_book"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/opening-book/xg/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["check_xg_book"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/opening-book/xg/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["install_xg_book"];
         delete?: never;
         options?: never;
         head?: never;
@@ -324,6 +644,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/positions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_position"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/positions/{id}/annotation": {
         parameters: {
             query?: never;
@@ -333,6 +669,54 @@ export interface paths {
         };
         get: operations["get_position_annotation"];
         put: operations["put_position_annotation"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/positions/{id}/imported-analysis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_position"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/positions/{id}/opening-book": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["position_book"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_settings"];
+        put: operations["put_settings"];
         post?: never;
         delete?: never;
         options?: never;
@@ -360,7 +744,25 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ActionItem: {
+            /** Format: uuid */
+            created_id?: string | null;
+            error?: string | null;
+            /** Format: uuid */
+            existing_id?: string | null;
+            /** Format: uuid */
+            match_id: string;
+            status: string;
+        };
+        ActionResponse: {
+            results: components["schemas"]["ActionItem"][];
+        };
         AddCards: {
+            /**
+             * Format: int32
+             * @description Restrict a match analysis source to this source game.
+             */
+            game_no?: number | null;
             /** Format: uuid */
             job_id?: string | null;
             /** Format: double */
@@ -425,7 +827,7 @@ export interface components {
             white: string;
         };
         /** @enum {string} */
-        AnnotationKind: "match" | "position";
+        AnnotationKind: "match" | "position" | "game" | "move";
         AnnotationPage: {
             items: components["schemas"]["AnnotationHit"][];
             /** Format: uuid */
@@ -436,6 +838,112 @@ export interface components {
             /** Format: int64 */
             expected_version: number;
             tags: string[];
+        };
+        AppSettings: {
+            analysis_engine: string;
+            /** Format: int32 */
+            analysis_plies: number;
+            gnubg_path: string;
+            play_engine: string;
+            /** Format: int32 */
+            play_plies: number;
+            player_name: string;
+            /**
+             * Format: int64
+             * @description Expected revision on PUT; a successful write increments it by one.
+             */
+            version: number;
+        };
+        BookChecker: {
+            candidates: components["schemas"]["Candidate"][];
+            /** Format: int32 */
+            plies?: number | null;
+        };
+        BookConfig: {
+            path: string;
+            provider: string;
+            /** Format: int64 */
+            version: number;
+            xg_path: string;
+        };
+        BookConfigWrite: {
+            path: string;
+            provider: string;
+            /** Format: int64 */
+            version: number;
+            /** @description Omission preserves a previously configured XG path. */
+            xg_path?: string | null;
+        };
+        BookContext: {
+            complete?: boolean | null;
+            /**
+             * Format: int32
+             * @description Decisions into the game; this is not evaluation ply.
+             */
+            depth?: number | null;
+            /** Format: int64 */
+            entries: number;
+            name: string;
+        };
+        BookCube: {
+            equities: components["schemas"]["BookCubeEquities"];
+            /** Format: int32 */
+            plies?: number | null;
+            probabilities: number[];
+            verdict: string;
+        };
+        BookCubeEquities: {
+            /** Format: double */
+            double_pass: number;
+            /** Format: double */
+            double_take: number;
+            /** Format: double */
+            no_double: number;
+        };
+        BookLookup: {
+            checker?: null | components["schemas"]["BookChecker"];
+            checker_xgid?: string | null;
+            cube?: null | components["schemas"]["BookCube"];
+            cube_xgid?: string | null;
+            hit: boolean;
+            provenance?: null | components["schemas"]["BookProvenance"];
+            provider: string;
+            reason?: string | null;
+            xg_position?: null | components["schemas"]["XgPositionResult"];
+        };
+        BookPathRequest: {
+            path: string;
+        };
+        BookProvenance: {
+            attribution?: string | null;
+            context: string;
+            /** Format: int32 */
+            context_depth?: number | null;
+            engine: string;
+            /** @description Cubeful equity normalized to the current cube (match play uses GNUbg NEMG). */
+            equity_kind: string;
+            evaluation_kind: string;
+            license?: string | null;
+            provider: string;
+            source_url?: string | null;
+        };
+        BookSettings: {
+            config: components["schemas"]["BookConfig"];
+            status: components["schemas"]["BookStatus"];
+            xg_status: components["schemas"]["XgBookStatus"];
+        };
+        BookStatus: {
+            attribution?: string | null;
+            available: boolean;
+            compression?: string | null;
+            contexts: components["schemas"]["BookContext"][];
+            engine_version?: string | null;
+            /** Format: int64 */
+            entries: number;
+            error?: string | null;
+            license?: string | null;
+            path: string;
+            source_url?: string | null;
         };
         Candidate: {
             /** Format: double */
@@ -499,6 +1007,67 @@ export interface components {
         };
         CreateDeck: {
             name: string;
+        };
+        Database: {
+            /** Format: date-time */
+            created_at: string;
+            description: string;
+            /** Format: uuid */
+            id: string;
+            is_default: boolean;
+            /** Format: int64 */
+            match_count: number;
+            name: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: int64 */
+            version: number;
+        };
+        DatabaseMatch: {
+            analysis_status?: string | null;
+            black: string;
+            /** Format: double */
+            black_pr?: number | null;
+            /** Format: int32 */
+            black_score?: number | null;
+            comment: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            database_id: string;
+            display_name: string;
+            filename: string;
+            format: string;
+            /** Format: int64 */
+            game_count: number;
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            match_length: number;
+            place?: string | null;
+            /** Format: date */
+            played_on?: string | null;
+            /** Format: int32 */
+            position_count: number;
+            pr_method?: string | null;
+            pr_profile?: string | null;
+            result_state: string;
+            round?: string | null;
+            tags: string[];
+            tournament?: string | null;
+            /** Format: int64 */
+            version: number;
+            white: string;
+            /** Format: double */
+            white_pr?: number | null;
+            /** Format: int32 */
+            white_score?: number | null;
+        };
+        DatabaseWrite: {
+            description?: string;
+            name: string;
+            /** Format: int64 */
+            version?: number | null;
         };
         Decision: {
             /** @description Best checker notation or cube action under the native evaluation. */
@@ -588,8 +1157,32 @@ export interface components {
             plies: number;
             rolls: components["schemas"]["DiceEvaluation"][];
         };
+        EngineCheckRequest: {
+            path: string;
+        };
+        EngineCheckResponse: {
+            version: string;
+        };
+        EngineInfo: {
+            available: boolean;
+            id: string;
+            name: string;
+            plies: number[];
+            version?: string | null;
+        };
         ErrorBody: {
             error: string;
+        };
+        ExportRequest: {
+            format: string;
+            match_ids: string[];
+        };
+        GameDecisions: {
+            /** Format: uuid */
+            game_id: string;
+            /** Format: int32 */
+            game_no: number;
+            items: components["schemas"]["StoredMove"][];
         };
         Health: {
             database: boolean;
@@ -600,6 +1193,65 @@ export interface components {
             duplicate: boolean;
             match: components["schemas"]["MatchSummary"];
         };
+        ImportedAnalysisData: {
+            candidates: components["schemas"]["ImportedCandidate"][];
+            /** Format: int32 */
+            checker_ply?: number | null;
+            cube?: unknown;
+            depth?: string | null;
+            /** Format: int32 */
+            depth_plies?: number | null;
+            dice?: number[] | null;
+            engine: string;
+            engine_version?: string | null;
+            /** Format: int32 */
+            game_no: number;
+            gnubg_match_id?: string | null;
+            kind: string;
+            method: string;
+            played: string;
+            /** Format: int32 */
+            player: number;
+            position_id?: string | null;
+            raw: unknown;
+            /** Format: int32 */
+            source_move_no: number;
+        };
+        ImportedAnalysisRecord: components["schemas"]["ImportedAnalysisData"] & {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            match_uuid: string;
+            /** Format: uuid */
+            position_uuid?: string | null;
+            source_format: string;
+        };
+        ImportedAnalysisSummary: {
+            /** Format: int64 */
+            checker_records: number;
+            /** Format: int64 */
+            cube_records: number;
+            depths: string[];
+            engines: string[];
+            /** Format: int64 */
+            record_count: number;
+            source_format: string;
+            status: string;
+        };
+        ImportedCandidate: {
+            depth?: string | null;
+            /** Format: int32 */
+            depth_plies?: number | null;
+            /** Format: double */
+            equity?: number | null;
+            equity_kind: string;
+            method?: string | null;
+            notation: string;
+            probabilities: unknown;
+            /** Format: int32 */
+            rank: number;
+            raw: unknown;
+        };
         Job: {
             /** Format: int32 */
             attempts: number;
@@ -608,6 +1260,11 @@ export interface components {
             /** Format: date-time */
             created_at: string;
             error?: string | null;
+            /**
+             * Format: int32
+             * @description Source game number for a single-game match analysis; null means the whole match.
+             */
+            game_no?: number | null;
             /** Format: uuid */
             id: string;
             kind: components["schemas"]["JobKind"];
@@ -656,9 +1313,9 @@ export interface components {
             kind: components["schemas"]["PositionJobKind"];
             /**
              * Format: int32
-             * @description GNUbg search depth, 0 to 2. Defaults to 0.
+             * @description GNUbg search depth, 0 to 2. Omitted uses saved analysis depth.
              */
-            plies?: number;
+            plies?: number | null;
             /**
              * Format: uuid
              * @description Database UUID of the imported position, not its GNUbg ID.
@@ -668,12 +1325,31 @@ export interface components {
         JobResult: components["schemas"]["Analysis"] | components["schemas"]["Distribution"] | components["schemas"]["MatchAnalysisSummary"];
         /** @enum {string} */
         JobStatus: "queued" | "running" | "completed" | "failed";
+        LibraryAction: {
+            action: string;
+            add_tags?: string[];
+            /** Format: uuid */
+            database_id?: string | null;
+            match_ids: string[];
+            remove_tags?: string[];
+            /** Format: uuid */
+            target_database_id?: string | null;
+        };
+        LibraryPage: {
+            items: components["schemas"]["DatabaseMatch"][];
+            next_cursor?: string | null;
+        };
         MatchAnalysisRequest: {
             /**
              * Format: int32
-             * @description Native GNUbg checker and cube search depth. Defaults to 0.
+             * @description Analyze one source game in its original match context; omitted means the whole match.
              */
-            plies?: number;
+            game_no?: number | null;
+            /**
+             * Format: int32
+             * @description Native GNUbg checker and cube search depth. Omitted uses saved analysis depth.
+             */
+            plies?: number | null;
         };
         MatchAnalysisSummary: {
             /** Format: int32 */
@@ -681,6 +1357,7 @@ export interface components {
             /** Format: int32 */
             completed_games: number;
             engine: string;
+            performance_rating?: null | components["schemas"]["PerformanceRatingSummary"];
             players: components["schemas"]["PlayerAnalysisSummary"][];
             /** Format: int32 */
             plies: number;
@@ -688,6 +1365,17 @@ export interface components {
             total_games: number;
             /** Format: int32 */
             total_moves: number;
+        };
+        MatchGame: {
+            /** Format: int32 */
+            black_score: number;
+            crawford: boolean;
+            /** Format: int32 */
+            game_no: number;
+            /** Format: int32 */
+            position_count: number;
+            /** Format: int32 */
+            white_score: number;
         };
         MatchPage: {
             items: components["schemas"]["MatchSummary"][];
@@ -708,6 +1396,21 @@ export interface components {
             position_count: number;
             white: string;
         };
+        MetadataWrite: {
+            /** Format: int32 */
+            black_score?: number | null;
+            display_name?: string;
+            place?: string | null;
+            /** Format: date */
+            played_on?: string | null;
+            result_state: string;
+            round?: string | null;
+            tournament?: string | null;
+            /** Format: int64 */
+            version: number;
+            /** Format: int32 */
+            white_score?: number | null;
+        };
         MoveAnalysis: components["schemas"]["Decision"] & {
             /** Format: int32 */
             game_no: number;
@@ -727,6 +1430,20 @@ export interface components {
         NextCard: {
             card?: null | components["schemas"]["CardQuestion"];
             counts: components["schemas"]["ReviewCounts"];
+        };
+        PerformanceRatingSummary: {
+            /**
+             * Format: int32
+             * @description Number of games contributing complete native statistics.
+             */
+            games: number;
+            /**
+             * @description gnubg_emg_500_v1: 500 × native normalized loss / (unforced checker + close/actual cube).
+             *     GNUbg counting is not interchangeable with XG or BMAB counting.
+             */
+            method: string;
+            players: components["schemas"]["PlayerPerformanceRating"][];
+            profile: string;
         };
         PlayerAnalysisSummary: {
             /** Format: int32 */
@@ -752,6 +1469,21 @@ export interface components {
             unavailable: number;
             /** Format: int32 */
             very_bad: number;
+        };
+        PlayerPerformanceRating: {
+            /** Format: int32 */
+            close_cube_decisions: number;
+            /** Format: double */
+            normalized_equity_loss: number;
+            /** Format: int32 */
+            player: number;
+            /** Format: int32 */
+            unforced_checker_moves: number;
+            /**
+             * Format: double
+             * @description Null if the native denominator is zero; lower values indicate less equity lost.
+             */
+            value?: number | null;
         };
         Position: {
             board: number[];
@@ -842,12 +1574,102 @@ export interface components {
             /** Format: int64 */
             version: number;
         };
+        StoredMove: {
+            board: number[];
+            dice: number[];
+            /** Format: int32 */
+            game_no: number;
+            gnubg_match_id: string;
+            /** Format: uuid */
+            id: string;
+            /**
+             * @example checker
+             * @example cube
+             * @example resign
+             */
+            kind: string;
+            /** Format: uuid */
+            match_uuid: string;
+            /**
+             * Format: int32
+             * @description One-based actual source event, including explicit cube actions.
+             */
+            move_no: number;
+            notation: string;
+            /** Format: int32 */
+            player: number;
+            position_id: string;
+            /**
+             * Format: uuid
+             * @description Checker notes use this canonical position occurrence; cube notes use id.
+             */
+            position_uuid?: string | null;
+        };
         UploadForm: {
             /**
              * Format: binary
-             * @description One MAT, SGF, or binary XG file, at most 16 MiB including multipart envelope.
+             * @description One MAT, SGF, binary XG, or BGBlitz BGF file, at most 16 MiB including multipart envelope.
              */
             file: string;
+        };
+        XgBookStatus: {
+            available: boolean;
+            book_version?: string | null;
+            /** Format: int64 */
+            entries: number;
+            error?: string | null;
+            license: string;
+            notes: string;
+            path: string;
+            source_url: string;
+        };
+        XgEvaluation: {
+            depth: string;
+            engine: string;
+            engine_version: string;
+            /** Format: double */
+            equity: number;
+            equity_kind: string;
+            /** Format: int32 */
+            level: number;
+            method: string;
+            /** Format: double */
+            native_equity: number;
+            native_probabilities: number[];
+            /** Format: int32 */
+            plies?: number | null;
+            probabilities: number[];
+            /** Format: int32 */
+            record_index: number;
+            rollout?: null | components["schemas"]["XgRollout"];
+            source_author: string;
+        };
+        XgPositionResult: {
+            book_version: string;
+            evaluations: components["schemas"]["XgEvaluation"][];
+            license: string;
+            native_perspective: string;
+            perspective: string;
+            position_key: string;
+            source_url: string;
+        };
+        XgRollout: {
+            /** Format: int32 */
+            checker_level: number;
+            /** Format: int32 */
+            cube_level: number;
+            /** Format: int32 */
+            dice_rotation: number;
+            /** Format: double */
+            duration_seconds: number;
+            /** Format: int32 */
+            games: number;
+            /** Format: int32 */
+            seed: number;
+            /** Format: double */
+            standard_deviation: number;
+            /** Format: int32 */
+            truncation: number;
         };
     };
     responses: never;
@@ -870,6 +1692,8 @@ export interface operations {
                 kind: null | components["schemas"]["AnnotationKind"];
                 after: string | null;
                 limit: number | null;
+                /** @description Restrict all note scopes to one logical database. */
+                database_id: string | null;
             };
             cookie?: never;
         };
@@ -982,6 +1806,118 @@ export interface operations {
                 };
             };
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_databases: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Database"][];
+                };
+            };
+        };
+    };
+    create_database: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatabaseWrite"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Database"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_database: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatabaseWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Database"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_database: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                version: number;
+                delete_matches: boolean;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1199,6 +2135,134 @@ export interface operations {
             };
         };
     };
+    engines: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EngineInfo"][];
+                };
+            };
+        };
+    };
+    check_engine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EngineCheckRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EngineCheckResponse"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_game_annotation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Annotation"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    put_game_annotation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnnotationUpdate"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Annotation"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     health: {
         parameters: {
             query?: never;
@@ -1228,7 +2292,10 @@ export interface operations {
     };
     upload: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Target logical database. Omitted: default database. */
+                database_id?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -1396,6 +2463,8 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
+                /** @description Restrict decisions to one source game. */
+                game_no: number | null;
                 /** @description Continue after a move-analysis row ID, keeping the same filters. */
                 after: number | null;
                 /** @description Page size 1–100, defaults to 50. */
@@ -1425,6 +2494,125 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    actions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LibraryAction"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResponse"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    export: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Original/SGF file or ZIP for multiple matches */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": unknown;
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    library_matches: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                database_id: string | null;
+                q: string | null;
+                player: string | null;
+                date_from: string | null;
+                date_to: string | null;
+                date_field: string | null;
+                tag: string | null;
+                comment: string | null;
+                position_id: string | null;
+                tournament: string | null;
+                round: string | null;
+                match_name: string | null;
+                match_type: string | null;
+                result: string | null;
+                match_points_min: number | null;
+                match_points_max: number | null;
+                sort: string | null;
+                direction: string | null;
+                after: string | null;
+                limit: number | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryPage"];
                 };
             };
             422: {
@@ -1499,7 +2687,10 @@ export interface operations {
     };
     latest_match_analysis: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description One-based source game number; omitted means the whole match. */
+                game_no?: number | null;
+            };
             header?: never;
             path: {
                 id: string;
@@ -1508,7 +2699,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Latest match analysis job, or null if none has been submitted. Includes persisted partial summary during execution. */
+            /** @description Latest analysis job for this game or whole-match scope, or null if none has been submitted. Includes persisted partial summary during execution. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1518,6 +2709,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1648,7 +2847,10 @@ export interface operations {
     };
     dice: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description One-based source game number; omitted means the whole match. */
+                game_no?: number | null;
+            };
             header?: never;
             path: {
                 id: string;
@@ -1666,6 +2868,135 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    match_games: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchGame"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    game_decisions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                game_no: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GameDecisions"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_match: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportedAnalysisSummary"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_metadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MetadataWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseMatch"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1704,10 +3035,330 @@ export interface operations {
             };
         };
     };
+    get_move: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoredMove"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_move_annotation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Annotation"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    put_move_annotation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnnotationUpdate"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Annotation"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_move: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportedAnalysisRecord"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookSettings"];
+                };
+            };
+        };
+    };
+    put_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BookConfigWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookSettings"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    check_book: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BookPathRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookStatus"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    install_book: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BookPathRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookStatus"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    check_xg_book: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BookPathRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["XgBookStatus"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    install_xg_book: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BookPathRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["XgBookStatus"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     positions: {
         parameters: {
             query?: {
+                database_id?: string | null;
                 match_id?: string | null;
+                game_no?: number | null;
                 position_id?: string | null;
                 after?: string | null;
                 limit?: number | null;
@@ -1727,6 +3378,35 @@ export interface operations {
                 };
             };
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_position: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Position"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1814,6 +3494,122 @@ export interface operations {
             };
         };
     };
+    get_position: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportedAnalysisRecord"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    position_book: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookLookup"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppSettings"];
+                };
+            };
+        };
+    };
+    put_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppSettings"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppSettings"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     tags: {
         parameters: {
             query?: never;
@@ -1822,6 +3618,7 @@ export interface operations {
                 /** @description Optional literal tag substring, at most 64 characters. */
                 q: string | null;
                 limit: number | null;
+                database_id: string | null;
             };
             cookie?: never;
         };

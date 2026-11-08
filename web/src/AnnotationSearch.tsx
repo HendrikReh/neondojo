@@ -8,18 +8,22 @@ import {
   type AnnotationKind,
   type SearchValidation,
 } from './annotation-api';
+import { useLibraryText } from './library-messages';
 import { useAnnotationI18n } from './annotation-messages';
 
 export type { AnnotationHit } from './annotation-api';
 
 export default function AnnotationSearch({
   revision = 0,
+  databaseId,
   onOpen,
 }: {
   revision?: number;
+  databaseId?: string;
   onOpen: (hit: AnnotationHit) => void;
 }) {
   const { t, formatError } = useAnnotationI18n();
+  const l = useLibraryText();
   const htmlId = useId();
   const [q, setQuery] = useState('');
   const [tag, setTag] = useState('');
@@ -44,7 +48,11 @@ export default function AnnotationSearch({
     setLoadingMore(false);
     setComplete(false);
     setError(null);
-    void searchAnnotations(submitted, null, controller.signal)
+    void searchAnnotations(
+      { ...submitted, database_id: databaseId },
+      null,
+      controller.signal,
+    )
       .then((result) => {
         if (controller.signal.aborted) return;
         setItems(result.items);
@@ -61,7 +69,7 @@ export default function AnnotationSearch({
       controller.abort();
       moreController.current?.abort();
     };
-  }, [submitted, revision]);
+  }, [submitted, revision, databaseId]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -79,7 +87,7 @@ export default function AnnotationSearch({
     setError(null);
     try {
       const result = await searchAnnotations(
-        submitted,
+        { ...submitted, database_id: databaseId },
         cursor,
         controller.signal,
       );
@@ -148,6 +156,8 @@ export default function AnnotationSearch({
             <option value="">{t('allKinds')}</option>
             <option value="match">{t('matches')}</option>
             <option value="position">{t('positions')}</option>
+            <option value="game">{l('game')}</option>
+            <option value="move">{l('sourceMove')}</option>
           </select>
         </label>
         <button type="submit" className="primary" disabled={loading}>
@@ -182,7 +192,11 @@ export default function AnnotationSearch({
             <div className="annotation-hit-heading">
               <div>
                 <span className="eyebrow">
-                  {t(hit.target_kind === 'match' ? 'match' : 'position')}
+                  {hit.target_kind === 'game'
+                    ? l('game')
+                    : hit.target_kind === 'move'
+                      ? l('sourceMove')
+                      : t(hit.target_kind === 'match' ? 'match' : 'position')}
                 </span>
                 <h4>
                   {hit.white} — {hit.black}

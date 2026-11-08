@@ -1,0 +1,288 @@
+import { expect, test } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+
+test('imported GNUbg analysis remains available independently from new engine jobs', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.goto('/');
+  // Export-native A annotations record candidates and their original evaluation depth.
+  const imported = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === '/api/imports',
+  );
+  await page.getByLabel('Match file', { exact: true }).setInputFiles({
+    name: 'retained-analysis.sgf',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.from(
+      readFileSync(
+        '../backend/tests/fixtures/analysis-game1.sgf',
+        'utf8',
+      ).replace(/PW\[[^\]]*\]/, `PW[Source ${crypto.randomUUID()}]`),
+    ),
+  });
+  const response = await (await imported).json();
+  expect(response.match).toBeTruthy();
+  await expect(
+    page.getByRole('tab', { name: 'Imported analysis', exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole('tab', { name: 'Imported analysis', exact: true })
+    .click();
+  await expect(page.locator('.source-analysis')).toContainText(
+    'GNU Backgammon',
+  );
+  await expect(page.locator('.source-analysis')).toContainText('0-ply');
+  await expect(page.locator('.source-analysis')).toContainText('0.014');
+  await page
+    .getByRole('button', { name: 'Analyze position', exact: true })
+    .click();
+  await expect(
+    page.locator('.analysis-panel .candidates tbody tr').first(),
+  ).toBeVisible();
+  await page
+    .getByRole('tab', { name: 'Imported analysis', exact: true })
+    .click();
+  await expect(page.locator('.source-analysis')).toContainText('0-ply');
+  const catalog = await (
+    await page.request.get(
+      `/api/matches/${response.match.id}/games/1/decisions`,
+    )
+  ).json();
+  let cube;
+  for (const move of catalog.items.filter(
+    (m: { kind: string }) => m.kind === 'cube',
+  )) {
+    const data = await (
+      await page.request.get(`/api/moves/${move.id}/imported-analysis`)
+    ).json();
+    if (data.length) {
+      cube = move;
+      break;
+    }
+  }
+  expect(cube).toBeTruthy();
+  await page.getByRole('tab', { name: 'Notes', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Cube and move notes', exact: true })
+    .click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Move', { exact: true }).selectOption(cube.id);
+  await expect(dialog.locator('.imported-move-analysis')).toContainText(
+    'GNU Backgammon',
+  );
+  await expect(dialog.locator('.imported-move-analysis')).toContainText('MWC');
+});
+
+test('opening-book preferences and a real opening lookup expose source and depth', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Analysis', exact: true })
+    .click();
+  await page
+    .getByRole('button', { name: 'Opening books', exact: true })
+    .click();
+  const dialog = page.getByRole('dialog', {
+    name: 'Opening books',
+    exact: true,
+  });
+  await expect(
+    dialog.getByLabel('Opening-book source', { exact: true }),
+  ).toBeVisible();
+  await expect(dialog).toContainText('BackgammonDB');
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await page.getByLabel('Match file', { exact: true }).setInputFiles({
+    name: 'book-hit.sgf',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.from(
+      `(;GM[6]PW[Book ${crypto.randomUUID()}]PB[Opponent]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])`,
+    ),
+  });
+  await page.getByRole('tab', { name: 'Opening book', exact: true }).click();
+  await expect(page.locator('.source-analysis')).toContainText('BackgammonDB');
+  await expect(page.locator('.source-analysis')).toContainText('3-ply');
+  await expect(
+    page.locator('.source-analysis .candidates tbody tr'),
+  ).toHaveCount(8);
+  await page.getByRole('button', { name: 'Next move', exact: true }).click();
+  await page.getByRole('tab', { name: 'Opening book', exact: true }).click();
+  await page
+    .locator('.source-analysis')
+    .getByRole('button', { name: 'Cube', exact: true })
+    .click();
+  await expect(page.locator('.source-analysis')).toContainText(
+    'before this roll (00)',
+  );
+  const submitted = page.waitForResponse(
+    (r) =>
+      new URL(r.url()).pathname === '/api/jobs' &&
+      r.request().method() === 'POST',
+  );
+  await page
+    .getByRole('button', { name: 'Dice distribution', exact: true })
+    .click();
+  const diceJob = await (await submitted).json();
+  await expect(page.locator('.dice-grid button')).toHaveCount(36, {
+    timeout: 30000,
+  });
+  const completed = await (
+    await page.request.get(`/api/jobs/${diceJob.id}`)
+  ).json();
+  expect(completed.status).toBe('completed');
+  await page.getByRole('tab', { name: 'Candidate moves', exact: true }).click();
+  await page.getByRole('tab', { name: 'Opening book', exact: true }).click();
+  await page.getByRole('tab', { name: 'Dice equity', exact: true }).click();
+  await expect(page.locator('.analysis-panel .engine-label')).toHaveText(
+    completed.result.engine,
+  );
+});
+
+test('opening-book dialog keeps unsaved engine profile changes', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.route('**/api/opening-book', (route) =>
+    route.fulfill({
+      json: {
+        config: {
+          version: 0,
+          provider: 'automatic',
+          path: '/local/book.sqlite',
+        },
+        status: {
+          available: false,
+          path: '/local/book.sqlite',
+          entries: 0,
+          contexts: [],
+          engine_version: null,
+          compression: null,
+          license: null,
+          source_url: null,
+          attribution: null,
+          error: null,
+        },
+      },
+    }),
+  );
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
+  await settings.getByRole('button', { name: 'Analysis', exact: true }).click();
+  const profile = settings.getByLabel('Default analysis profile', {
+    exact: true,
+  });
+  await profile.selectOption('1');
+  await settings
+    .getByRole('button', { name: 'Opening books', exact: true })
+    .click();
+  const books = page.getByRole('dialog', {
+    name: 'Opening books',
+    exact: true,
+  });
+  await expect(
+    books.getByLabel('Opening-book source', { exact: true }),
+  ).toBeVisible();
+  await books.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(settings).toBeVisible();
+  await expect(profile).toHaveValue('1');
+  await page.keyboard.press('Escape');
+  await expect(settings).not.toBeVisible();
+});
+
+test('XG lookup is an attributed position reference, separate from rolled candidates', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.goto('/');
+  await page.getByLabel('Match file', { exact: true }).setInputFiles({
+    name: 'xg-book-reference.sgf',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.from(
+      `(;GM[6]PW[XG reference ${crypto.randomUUID()}]PB[Opponent]MI[length:0][ws:0][bs:0]RU[Jacoby];W[31hefe];B[42qusu])`,
+    ),
+  });
+  await expect(page.locator('.analysis-workspace .board')).toBeVisible();
+  await page.getByRole('button', { name: 'Next move', exact: true }).click();
+  await page.getByRole('tab', { name: 'Opening book', exact: true }).click();
+  await page
+    .locator('.source-book-selector')
+    .getByRole('button', { name: 'XG position reference', exact: true })
+    .click();
+  const reference = page.locator('.xg-position-reference');
+  await expect(reference).toContainText('3.70');
+  await expect(reference).toContainText('before the roll');
+  await expect(reference.locator('.xg-book-author')).not.toHaveCount(0);
+  await expect(reference.locator('.xg-book-evaluation')).not.toHaveCount(0);
+  await expect(reference.locator('.candidates')).toHaveCount(0);
+  await expect(
+    reference.getByRole('button', { name: 'Cube', exact: true }),
+  ).toHaveCount(0);
+  await expect(reference).toContainText('player on roll');
+});
+
+test('a late imported source response cannot replace a newer position', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  let release = () => {},
+    started = () => {},
+    first = true;
+  const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    }),
+    waiting = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+  await page.route('**/api/positions/*/imported-analysis', async (route) => {
+    if (!first) return route.continue();
+    first = false;
+    const response = await route.fetch();
+    started();
+    await gate;
+    await route.fulfill({ response });
+  });
+  await page.goto('/');
+  const imported = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === '/api/imports',
+  );
+  await page.getByLabel('Match file', { exact: true }).setInputFiles({
+    name: 'late-source.sgf',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.from(
+      readFileSync(
+        '../backend/tests/fixtures/analysis-game1.sgf',
+        'utf8',
+      ).replace(/PW\[[^\]]*\]/, `PW[Late source ${crypto.randomUUID()}]`),
+    ),
+  });
+  const { match } = await (await imported).json();
+  await waiting;
+  const positions = await (
+    await page.request.get(`/api/positions?match_id=${match.id}&game_no=1`)
+  ).json();
+  const records = await (
+    await page.request.get(
+      `/api/positions/${positions.items[1].id}/imported-analysis`,
+    )
+  ).json();
+  const expected = records.find((r: { kind: string }) => r.kind === 'checker')
+    .candidates[0].notation;
+  await page.getByRole('button', { name: 'Next move', exact: true }).click();
+  await page
+    .getByRole('tab', { name: 'Imported analysis', exact: true })
+    .click();
+  await expect(
+    page.locator('.source-analysis .candidates tbody tr').first(),
+  ).toContainText(expected);
+  release();
+  await page.unrouteAll({ behavior: 'wait' });
+  await expect(
+    page.locator('.source-analysis .candidates tbody tr').first(),
+  ).toContainText(expected);
+  await expect(page.locator('.board-heading')).toContainText('Move 2');
+});

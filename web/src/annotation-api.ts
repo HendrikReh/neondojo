@@ -5,13 +5,16 @@ import type { components } from './generated-api';
 type Schema = components['schemas'];
 export type AnnotationKind = Schema['AnnotationKind'];
 export type Annotation = Required<Schema['Annotation']>;
-export type AnnotationHit = Schema['AnnotationHit'];
+export type AnnotationHit = Omit<Schema['AnnotationHit'], 'target_kind'> & {
+  target_kind: AnnotationKind;
+};
 export type AnnotationSearchPage = Required<Schema['AnnotationPage']>;
 
 export interface AnnotationFilters {
   q: string;
   tag: string;
   kind: AnnotationKind | '';
+  database_id?: string;
 }
 
 export type AnnotationValidation =
@@ -65,7 +68,7 @@ export function searchValidation(
 }
 
 export const annotationPath = (kind: AnnotationKind, id: string) =>
-  `/${kind === 'match' ? 'matches' : 'positions'}/${encodeURIComponent(id)}/annotation`;
+  `/${({ match: 'matches', position: 'positions', game: 'games', move: 'moves' } as const)[kind]}/${encodeURIComponent(id)}/annotation`;
 
 export const isAnnotationConflict = (error: unknown) =>
   error instanceof AppError && String(error.params.status) === '409';
@@ -79,6 +82,7 @@ export function searchAnnotations(
   if (filters.q) params.set('q', filters.q);
   if (filters.tag) params.set('tag', filters.tag);
   if (filters.kind) params.set('kind', filters.kind);
+  if (filters.database_id) params.set('database_id', filters.database_id);
   if (after) params.set('after', after);
   return request<AnnotationSearchPage>(`/annotations/search?${params}`, {
     signal,

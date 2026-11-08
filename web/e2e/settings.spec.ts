@@ -1,0 +1,267 @@
+import { test, expect, type Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+
+const themes: { id: string; name: string }[] = [
+  { id: 'forest', name: 'Forest' },
+  { id: 'walnut', name: 'Walnut' },
+  { id: 'slate', name: 'Slate' },
+  ...JSON.parse(
+    readFileSync(
+      new URL('../src/generated-themes.json', import.meta.url),
+      'utf8',
+    ),
+  ),
+];
+
+const initialSettings = {
+  version: 3,
+  player_name: 'Settings Player',
+  analysis_engine: 'gnubg',
+  analysis_plies: 0,
+  play_engine: 'gnubg',
+  play_plies: 1,
+  gnubg_path: '/opt/bin/gnubg',
+};
+
+async function settingsBackend(page: Page) {
+  let saved = { ...initialSettings };
+  let conflict = false;
+  const writes: (typeof initialSettings)[] = [];
+  await page.route('**/api/settings', async (route) => {
+    if (route.request().method() === 'GET')
+      return route.fulfill({ json: saved });
+    const body = route.request().postDataJSON();
+    writes.push(body);
+    if (conflict)
+      return route.fulfill({ status: 409, json: { error: 'Version changed' } });
+    saved = { ...body, version: saved.version + 1 };
+    await route.fulfill({ json: saved });
+  });
+  await page.route('**/api/engines', (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: 'gnubg',
+          name: 'GNU Backgammon',
+          available: true,
+          version: 'GNUbg 1.08',
+          plies: [0, 1, 2],
+        },
+        {
+          id: 'bgsage',
+          name: 'BGSage',
+          available: false,
+          version: null,
+          plies: [],
+        },
+      ],
+    }),
+  );
+  await page.route('**/api/engines/gnubg/check', (route) =>
+    route.fulfill({ status: 422, json: { error: 'Executable not found' } }),
+  );
+  return {
+    writes,
+    conflict: (value: boolean) => {
+      conflict = value;
+    },
+  };
+}
+
+async function openSettings(page: Page) {
+  const trigger = page.getByRole('button', { name: 'Settings', exact: true });
+  await trigger.click();
+  const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
+  await expect(dialog.getByLabel('Player name', { exact: true })).toHaveValue(
+    initialSettings.player_name,
+  );
+  return { dialog, trigger };
+}
+
+test('English default, alphabetical languages, draft cancellation, focus trap and restore', async ({
+  page,
+}) => {
+  const backend = await settingsBackend(page);
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  const { dialog, trigger } = await openSettings(page);
+  const languages = dialog.getByLabel('Language', { exact: true });
+  expect(await languages.locator('option').allTextContents()).toEqual([
+    'Deutsch',
+    'English',
+    'Español',
+    'Français',
+    'Italiano',
+    'Polski',
+  ]);
+  await languages.selectOption('fr');
+  await dialog.getByLabel('Player name', { exact: true }).fill('Draft');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await dialog.getByRole('button', { name: 'Board', exact: true }).click();
+  await expect(dialog.locator('.settings-theme-choice')).toHaveCount(
+    themes.length,
+  );
+  await dialog.getByRole('button', { name: 'Walnut', exact: true }).click();
+  await expect(dialog.locator('.settings-preview .theme-walnut')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Save', exact: true }).focus();
+  await page.keyboard.press('Tab');
+  await expect(
+    dialog.getByRole('button', { name: 'Close settings' }),
+  ).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialog).not.toBeVisible();
+  await expect(trigger).toBeFocused();
+  expect(backend.writes).toHaveLength(0);
+  expect(
+    await page.evaluate(() => localStorage.getItem('bgtutor.theme')),
+  ).not.toBe('walnut');
+  await openSettings(page);
+  await expect(page.getByLabel('Language', { exact: true })).toHaveValue('en');
+  await expect(page.getByLabel('Player name', { exact: true })).toHaveValue(
+    initialSettings.player_name,
+  );
+});
+
+test('real artwork previews, independent profiles and settings persist only after save', async ({
+  page,
+}) => {
+  const backend = await settingsBackend(page);
+  await page.goto('/');
+  const { dialog } = await openSettings(page);
+  await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
+  await dialog
+    .getByLabel('Default analysis profile', { exact: true })
+    .selectOption('2');
+  await expect(
+    dialog
+      .getByLabel('Analysis engine', { exact: true })
+      .locator('option[value=bgsage]'),
+  ).toBeDisabled();
+  await dialog.getByRole('button', { name: 'Playing', exact: true }).click();
+  await expect(
+    dialog.getByLabel('Strength for future games', { exact: true }),
+  ).toHaveValue('1');
+  await dialog.getByRole('button', { name: 'Board', exact: true }).click();
+  const archive = themes.find(({ id }) => id.startsWith('bgblitz:'));
+  if (archive) {
+    await dialog
+      .getByRole('button', { name: archive.name, exact: true })
+      .click();
+    const preview = dialog.locator('.settings-preview .bgblitz-board');
+    await expect(preview).toHaveAttribute('data-theme', archive.id);
+    await expect(preview.locator('image').first()).toHaveAttribute(
+      'href',
+      /\/themes\//,
+    );
+    await expect(preview.locator('[data-dice]')).toHaveAttribute(
+      'data-dice',
+      '3-2',
+    );
+    await expect(preview.locator('[data-point="bar-white"]')).toHaveAttribute(
+      'data-count',
+      '1',
+    );
+  }
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  expect(backend.writes).toHaveLength(1);
+  expect(backend.writes[0]).toMatchObject({
+    version: 3,
+    analysis_plies: 2,
+    play_plies: 1,
+  });
+  await openSettings(page);
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Analysis', exact: true })
+    .click();
+  await expect(
+    page.getByLabel('Default analysis profile', { exact: true }),
+  ).toHaveValue('2');
+});
+
+test('installation failures and save conflicts retain drafts and do not apply preferences', async ({
+  page,
+}) => {
+  const backend = await settingsBackend(page);
+  await page.goto('/');
+  const { dialog } = await openSettings(page);
+  await dialog
+    .getByLabel('Player name', { exact: true })
+    .fill('Retained draft');
+  await dialog.getByLabel('Language', { exact: true }).selectOption('de');
+  await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
+  await dialog
+    .getByLabel('GNUbg executable path', { exact: true })
+    .fill('/missing/gnubg');
+  await dialog
+    .getByRole('button', { name: 'Check installation', exact: true })
+    .click();
+  await expect(dialog.getByRole('alert')).toContainText('Executable not found');
+  await expect(
+    dialog.getByLabel('GNUbg executable path', { exact: true }),
+  ).toHaveValue('/missing/gnubg');
+  backend.conflict(true);
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(
+    dialog.getByRole('alert').filter({ hasText: 'Settings changed elsewhere' }),
+  ).toBeVisible();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await dialog.getByRole('button', { name: 'General', exact: true }).click();
+  await expect(dialog.getByLabel('Player name', { exact: true })).toHaveValue(
+    'Retained draft',
+  );
+  await expect(dialog.getByLabel('Language', { exact: true })).toHaveValue(
+    'de',
+  );
+  await dialog
+    .getByRole('button', { name: 'Load latest and discard draft', exact: true })
+    .click();
+  await expect(dialog.getByLabel('Player name', { exact: true })).toHaveValue(
+    initialSettings.player_name,
+  );
+});
+
+test('load errors offer retry and the mobile dialog has reachable actions', async ({
+  page,
+}) => {
+  await settingsBackend(page);
+  let fail = true;
+  await page.route('**/api/settings', (route) =>
+    route.fulfill(
+      fail
+        ? { status: 503, json: { error: 'Temporarily unavailable' } }
+        : { json: initialSettings },
+    ),
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('alert')).toContainText(
+    'Settings could not be loaded',
+  );
+  await expect(
+    dialog.getByRole('button', { name: 'Save', exact: true }),
+  ).toBeDisabled();
+  await expect(dialog.getByLabel('Player name', { exact: true })).toHaveCount(
+    0,
+  );
+  fail = false;
+  await dialog.getByRole('button', { name: 'Try again', exact: true }).click();
+  await expect(dialog.getByLabel('Player name', { exact: true })).toHaveValue(
+    initialSettings.player_name,
+  );
+  await dialog.getByRole('button', { name: 'Board', exact: true }).click();
+  await expect(
+    dialog.getByRole('button', { name: 'Cancel', exact: true }),
+  ).toBeInViewport();
+  await expect(
+    dialog.getByRole('button', { name: 'Save', exact: true }),
+  ).toBeInViewport();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+});

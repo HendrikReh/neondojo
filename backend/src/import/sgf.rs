@@ -276,7 +276,9 @@ fn expand_runs(
     remaining: usize,
 ) -> Option<ExpandedPlay> {
     if runs.is_empty() {
-        return (remaining == 0).then(|| (*board, Vec::new()));
+        // Bearing off the final checker ends the game immediately, even when
+        // playing a smaller die first could have consumed another die.
+        return (remaining == 0 || !board.iter().any(|n| *n > 0)).then(|| (*board, Vec::new()));
     }
     if remaining == 0 || runs.len() > remaining || remaining > dice.len() {
         return None;
@@ -421,12 +423,12 @@ fn play(board: &mut [i32; 26], player: i32, value: &str) -> Result<([i32; 2], St
         dice.to_vec()
     };
     let before = local_board(board, player);
-    ensure!(
-        pairs.len() == max_plays(&before, &available),
-        "SGF: checker play does not use the maximum possible dice"
-    );
     let after = apply_pairs(&before, &pairs, &available)
         .with_context(|| format!("SGF: illegal or incomplete checker move {value}"))?;
+    ensure!(
+        pairs.len() == max_plays(&before, &available) || !after.iter().any(|n| *n > 0),
+        "SGF: checker play does not use the maximum possible dice"
+    );
     if pairs.len() == 1 && dice[0] != dice[1] {
         let high = dice[0].max(dice[1]);
         let (from, to) = pairs[0];
@@ -462,6 +464,87 @@ pub(crate) fn parse_trees(input: &str) -> Result<Vec<Vec<Node>>> {
     Ok(trees)
 }
 
+/// GNUbg's MAT reader can retain a joined overshoot bearoff in its SGF output
+/// (for example 6/off with 52), despite expanding other joined checker runs.
+/// Expand only the native MAT boundary; public SGF remains explicit and strict.
+pub(crate) fn normalize_mat_sgf(input: &str) -> Result<String> {
+    let mut trees = parse_trees(input)?;
+    for (game, nodes) in trees.iter_mut().enumerate() {
+        let mut board = initial_board();
+        let mut ply = 0;
+        for node in nodes {
+            setup(node, &mut board)?;
+            for (property, player) in [("W", 0), ("B", 1)] {
+                let Some(value) = one(node, property)? else {
+                    continue;
+                };
+                if matches!(value, "double" | "take" | "drop") {
+                    continue;
+                }
+                let bytes = value.as_bytes();
+                ensure!(
+                    (2..=10).contains(&bytes.len())
+                        && bytes.len().is_multiple_of(2)
+                        && bytes[..2].iter().all(|d| (b'1'..=b'6').contains(d)),
+                    "MAT: malformed native checker move {value}"
+                );
+                let dice = [i32::from(bytes[0] - b'0'), i32::from(bytes[1] - b'0')];
+                let point = |c: u8| -> Result<usize> {
+                    match c {
+                        b'a'..=b'x' => Ok(if player == 0 {
+                            usize::from(c - b'a' + 1)
+                        } else {
+                            usize::from(b'x' - c + 1)
+                        }),
+                        b'y' => Ok(25),
+                        b'z' => Ok(0),
+                        _ => bail!("MAT: invalid native checker coordinate"),
+                    }
+                };
+                let runs = bytes[2..]
+                    .chunks_exact(2)
+                    .map(|pair| Ok((point(pair[0])?, point(pair[1])?)))
+                    .collect::<Result<Vec<_>>>()?;
+                let steps = expand_xg_play(&mut board, player, dice, &runs)
+                    .with_context(|| format!("MAT game {}, checker ply {}", game + 1, ply + 1))?;
+                let coordinate = |p: usize| match p {
+                    25 => 'y',
+                    0 => 'z',
+                    _ if player == 0 => char::from(b'a' + p as u8 - 1),
+                    _ => char::from(b'x' + 1 - p as u8),
+                };
+                let mut expanded = value[..2].to_owned();
+                for (from, to) in steps {
+                    expanded.push(coordinate(from));
+                    expanded.push(coordinate(to));
+                }
+                node.insert(property.to_owned(), vec![expanded]);
+                ply += 1;
+            }
+        }
+    }
+    let mut output = String::new();
+    for nodes in trees {
+        output.push('(');
+        for node in nodes {
+            output.push(';');
+            for (property, values) in node {
+                output.push_str(&property);
+                for value in values {
+                    output.push('[');
+                    output.push_str(&value.replace('\\', "\\\\").replace(']', "\\]"));
+                    output.push(']');
+                }
+            }
+        }
+        output.push_str(")\n");
+    }
+    // Check turns, cube state and match context as well as checker legality
+    // before any native artifact is returned for persistence.
+    parse_sgf(&output)?;
+    Ok(output)
+}
+
 /// Validated state for every game, including games without checker plays.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct GameContext {
@@ -470,6 +553,28 @@ pub(crate) struct GameContext {
     pub crawford: bool,
     pub jacoby: bool,
     pub decision_ids: Vec<(String, String)>,
+}
+
+/// An actual played source event and its state before the action. Checker ply
+/// links the catalog to the existing canonical position occurrence.
+#[derive(Debug)]
+pub(crate) struct SourceMove {
+    pub game_no: i32,
+    pub move_no: i32,
+    pub kind: &'static str,
+    pub player: i32,
+    pub notation: String,
+    pub checker_ply: Option<i32>,
+    pub board: Vec<i32>,
+    pub dice: [i32; 2],
+    pub position_id: String,
+    pub match_id: String,
+}
+
+pub(crate) fn parse_sgf_source_moves(input: &str) -> Result<(ImportedMatch, Vec<SourceMove>)> {
+    let mut moves = Vec::new();
+    let (imported, _) = parse_sgf_context(input, false, Some(&mut moves))?;
+    Ok((imported, moves))
 }
 
 pub fn parse_sgf(input: &str) -> Result<ImportedMatch> {
@@ -484,7 +589,7 @@ pub fn parse_sgf(input: &str) -> Result<ImportedMatch> {
 /// Internal analysis accepts an individual empty or cube-only game exported
 /// from an otherwise importable match, while public imports still need checkers.
 pub(crate) fn parse_sgf_with_context(input: &str) -> Result<(ImportedMatch, Vec<GameContext>)> {
-    parse_sgf_context(input, false)
+    parse_sgf_context(input, false, None)
 }
 
 /// GNUbg 1.05.002 can write PL[W] for a Black setup because its SETBOARD record
@@ -493,12 +598,13 @@ pub(crate) fn parse_sgf_with_context(input: &str) -> Result<(ImportedMatch, Vec<
 pub(crate) fn parse_native_sgf_with_context(
     input: &str,
 ) -> Result<(ImportedMatch, Vec<GameContext>)> {
-    parse_sgf_context(input, true)
+    parse_sgf_context(input, true, None)
 }
 
 fn parse_sgf_context(
     input: &str,
     native_setup_turn: bool,
+    mut source_moves: Option<&mut Vec<SourceMove>>,
 ) -> Result<(ImportedMatch, Vec<GameContext>)> {
     let trees = parse_trees(input)?;
     let mut contexts = Vec::new();
@@ -506,6 +612,7 @@ fn parse_sgf_context(
         players: ["White".into(), "Black".into()],
         match_length: 0,
         positions: Vec::new(),
+        games: Vec::new(),
     };
     let mut previous_scores = [0, 0];
     for (game_index, nodes) in trees.iter().enumerate() {
@@ -593,6 +700,7 @@ fn parse_sgf_context(
         let mut expected_turn = None;
         let mut ended = false;
         let mut ply = 0;
+        let mut move_no = 0;
         for (node_index, node) in nodes.iter().enumerate() {
             ensure!(
                 node_index == 0
@@ -638,6 +746,11 @@ fn parse_sgf_context(
                 continue;
             };
             ensure!(!ended, "SGF contains moves after a cube drop");
+            move_no += 1;
+            let before_event = board;
+            let pending_before = pending;
+            let cube_before = cube;
+            let owner_before = owner;
             if matches!(value, "double" | "take" | "drop") {
                 context.decision_ids.push((
                     ids::position_id(&board, player),
@@ -718,7 +831,103 @@ fn parse_sgf_context(
                     expected_turn = Some(1 - player);
                 }
             }
+            if let Some(moves) = source_moves.as_deref_mut() {
+                let checker = !matches!(value, "double" | "take" | "drop");
+                let (dice, notation) = if checker {
+                    let position = result
+                        .positions
+                        .last()
+                        .context("SGF: missing checker snapshot")?;
+                    (position.dice, position.notation.clone())
+                } else {
+                    (
+                        [0, 0],
+                        match value {
+                            "double" => "Double",
+                            "take" => "Take",
+                            _ => "Drop",
+                        }
+                        .to_owned(),
+                    )
+                };
+                let mut match_id = ids::match_id(
+                    length,
+                    scores,
+                    cube_before,
+                    owner_before,
+                    crawford,
+                    jacoby,
+                    player,
+                    dice,
+                );
+                if let Some(doubler) = pending_before {
+                    // GNUbg's player on roll remains the doubler while the
+                    // opponent decides; bit 13 marks the outstanding offer.
+                    use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
+                    let mut bytes = STANDARD_NO_PAD.decode(&match_id)?;
+                    bytes[0] = (bytes[0] & !(1 << 6)) | ((doubler as u8) << 6);
+                    bytes[1] |= 1 << 4;
+                    match_id = STANDARD_NO_PAD.encode(bytes);
+                }
+                moves.push(SourceMove {
+                    game_no: game_index as i32 + 1,
+                    move_no,
+                    kind: if checker { "checker" } else { "cube" },
+                    player,
+                    notation,
+                    checker_ply: checker.then_some(ply),
+                    board: before_event.to_vec(),
+                    dice,
+                    position_id: ids::position_id(&before_event, pending_before.unwrap_or(player)),
+                    match_id,
+                });
+            }
         }
+        // GNUbg writes MOVE_RESIGN only as the result's R suffix and restores
+        // it as a final source event after replaying the explicit move nodes.
+        // Preserve the existing checker and analysis-context import contracts.
+        if let Some(moves) = source_moves.as_deref_mut()
+            && let Some((winner, points)) = one(root, "RE")?.and_then(|r| r.split_once('+'))
+            && points.ends_with(['R', 'r'])
+        {
+            ensure!(
+                pending.is_none() && !ended,
+                "SGF: resignation after cube offer or drop"
+            );
+            let player = match winner {
+                "W" => 1,
+                "B" => 0,
+                _ => bail!("SGF: invalid resignation winner"),
+            };
+            moves.push(SourceMove {
+                game_no: game_index as i32 + 1,
+                move_no: move_no + 1,
+                kind: "resign",
+                player,
+                notation: "Resign".to_owned(),
+                checker_ply: None,
+                board: board.to_vec(),
+                dice: [0, 0],
+                position_id: ids::position_id(&board, player),
+                match_id: ids::match_id(
+                    length,
+                    scores,
+                    cube,
+                    owner,
+                    crawford,
+                    jacoby,
+                    player,
+                    [0, 0],
+                ),
+            });
+        }
+        result.games.push(crate::model::MatchGame {
+            game_no: game_index as i32 + 1,
+            position_count: ply,
+            white_score: scores[0],
+            black_score: scores[1],
+            crawford,
+        });
         contexts.push(context);
         previous_scores = scores;
         if let Some(re) = one(root, "RE")?
@@ -742,4 +951,46 @@ fn parse_sgf_context(
         }
     }
     Ok((result, contexts))
+}
+
+/// Compact, bounded transport for foreign native evaluations. The source
+/// artifact itself remains separately stored byte for byte.
+pub(crate) fn encode_retained_analysis(value: &serde_json::Value) -> Result<String> {
+    use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
+    use flate2::{Compression, write::ZlibEncoder};
+    use std::io::Write;
+    let bytes = serde_json::to_vec(value)?;
+    ensure!(
+        bytes.len() <= 1024 * 1024,
+        "Retained analysis exceeds 1 MiB limit"
+    );
+    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::fast());
+    encoder.write_all(&bytes)?;
+    Ok(format!(
+        "BGTUTOR-ZLIB:{}",
+        STANDARD_NO_PAD.encode(encoder.finish()?)
+    ))
+}
+pub(crate) fn decode_retained_analysis(value: &str) -> Result<serde_json::Value> {
+    use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
+    use std::io::Read;
+    if let Some(value) = value.strip_prefix("BGTUTOR-ZLIB:") {
+        let bytes = STANDARD_NO_PAD.decode(value)?;
+        let mut decoder = flate2::read::ZlibDecoder::new(bytes.as_slice());
+        let mut output = Vec::new();
+        (&mut decoder)
+            .take(1024 * 1024 + 1)
+            .read_to_end(&mut output)?;
+        ensure!(
+            output.len() <= 1024 * 1024,
+            "Retained analysis exceeds 1 MiB limit"
+        );
+        ensure!(
+            decoder.total_in() as usize == bytes.len(),
+            "Trailing retained analysis data"
+        );
+        Ok(serde_json::from_slice(&output)?)
+    } else {
+        Ok(serde_json::from_str(value)?)
+    }
 }

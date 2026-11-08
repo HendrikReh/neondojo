@@ -27,6 +27,7 @@ export function matchContext(id: string): {
   cube: number;
   owner: number | null;
   crawford: boolean;
+  doubled: boolean;
 } {
   const bytes = Uint8Array.from(atob(id), (char) => char.charCodeAt(0));
   const bits = (start: number, length: number) => {
@@ -45,5 +46,6 @@ export function matchContext(id: string): {
     cube: 2 ** bits(0, 4),
     owner: owner === 3 ? null : owner,
     crawford: !!bits(7, 1),
+    doubled: !!bits(12, 1),
   };
 }

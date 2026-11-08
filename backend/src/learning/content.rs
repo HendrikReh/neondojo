@@ -22,6 +22,9 @@ async fn from_position(pool: &PgPool, id: Uuid, request: &AddCards) -> ApiResult
     let position = store::get_position(pool, id)
         .await?
         .ok_or_else(ApiError::missing)?;
+    if request.game_no.is_some_and(|n| n != position.game_no) {
+        return Err(ApiError::invalid("game_no does not match this position"));
+    }
     if request.player.is_some_and(|p| p != position.player) {
         return Ok(vec![]);
     }
@@ -89,7 +92,7 @@ async fn from_position(pool: &PgPool, id: Uuid, request: &AddCards) -> ApiResult
         }]);
     }
     Err(ApiError::invalid(
-        "Analyze this position or complete its full-match analysis before adding it",
+        "Analyze this position or complete its game or match analysis before adding it",
     ))
 }
 
@@ -105,17 +108,31 @@ async fn from_match(pool: &PgPool, id: Uuid, request: &AddCards) -> ApiResult<Ve
         .ok_or_else(ApiError::missing)?;
     if job.kind != "match" || job.status != "completed" {
         return Err(ApiError::invalid(
-            "job_id must refer to a completed full-match analysis",
+            "job_id must refer to a completed match analysis",
         ));
     }
-    let match_id = job.match_uuid.context("Full-match job lacks match UUID")?;
+    let match_id = job.match_uuid.context("Match job lacks match UUID")?;
+    if request
+        .game_no
+        .is_some_and(|n| job.game_no.is_some_and(|scope| scope != n))
+    {
+        return Err(ApiError::invalid("game_no does not match this job's scope"));
+    }
+    if let Some(game_no) = request.game_no {
+        let games = store::match_games(pool, match_id)
+            .await?
+            .ok_or_else(ApiError::missing)?;
+        if !games.iter().any(|g| g.game_no == game_no) {
+            return Err(ApiError::invalid("game_no is outside this match"));
+        }
+    }
     let (sgf, white, black): (String, String, String) =
         sqlx::query_as("SELECT sgf,white,black FROM matches WHERE id=$1")
             .bind(match_id)
             .fetch_one(pool)
             .await
             .map_err(anyhow::Error::from)?;
-    let rows:Vec<DecisionRow>=sqlx::query_as("SELECT position_uuid,game_no,data FROM move_analyses WHERE job_id=$1 ORDER BY game_no,decision_no LIMIT 200001").bind(id).fetch_all(pool).await.map_err(anyhow::Error::from)?;
+    let rows:Vec<DecisionRow>=sqlx::query_as("SELECT position_uuid,game_no,data FROM move_analyses WHERE job_id=$1 AND ($2::integer IS NULL OR game_no=$2) ORDER BY game_no,decision_no LIMIT 200001").bind(id).bind(request.game_no).fetch_all(pool).await.map_err(anyhow::Error::from)?;
     if rows.len() > 200000 {
         return Err(ApiError::invalid(
             "Analysis exceeds supported decision count",

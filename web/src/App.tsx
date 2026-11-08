@@ -1,448 +1,554 @@
-import { useEffect, useRef, useState } from 'react';
 import {
-  request,
-  type Match,
-  type Position,
-  type Page,
-  type DiceStats,
-} from './api';
-import Board, { themes, type Theme } from './Board';
-import AnalysisPanel from './AnalysisPanel';
-import MatchAnalysisPanel from './MatchAnalysisPanel';
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react';
+import { request, type Match, type Position } from './api';
+import AnalysisWorkspace, { type AnalysisDetail } from './AnalysisWorkspace';
+import MatchDatabase from './MatchDatabase';
+import LearningWorkspace from './LearningPanel';
+import SettingsDialog from './SettingsDialog';
+import { loadSettings, type AppSettings } from './settings-api';
+import { readTheme, saveTheme } from './ui-preferences';
+import type { Theme } from './themes';
+import { useGameNavigation } from './useGameNavigation';
 import { useJobs } from './useJobs';
-import AnnotationPanel from './AnnotationPanel';
-import AnnotationSearch, { type AnnotationHit } from './AnnotationSearch';
-import LearningWorkspace, { AddCardsPanel } from './LearningPanel';
+import { useBackgroundJobs } from './useBackgroundJobs';
+import { useI18n, type Locale } from './i18n';
+import { useWorkspaceText } from './workspace-messages';
 import { useLearningText } from './learning-messages';
-import { languages, useI18n, type Locale } from './i18n';
+import { readSelection, saveSelection } from './workspace-state';
 import { AppError } from './i18n-core';
+import type { AnnotationHit } from './AnnotationSearch';
+import type { AnnotationKind } from './annotation-api';
+import './workspace.css';
+import OpeningBookDialog from './OpeningBookDialog';
+import {
+  readDatabase,
+  saveDatabase,
+  defaultDatabaseId,
+  type StoredMove,
+} from './library-api';
+import { useLibraryText } from './library-messages';
+import MoveNotesDialog, { type MoveNotesTarget } from './MoveNotesDialog';
 
+type View = 'analysis' | 'database' | 'learning';
+const views: View[] = ['analysis', 'database', 'learning'];
 export default function App() {
-  const learnT = useLearningText();
-  const [view, setView] = useState<'library' | 'learning'>('library');
-  const [annotationRevision, setAnnotationRevision] = useState(0);
-  const [deckRevision, setDeckRevision] = useState(0);
-  const { t, locale, setLocale, formatNumber, formatDecision, formatError } =
-    useI18n();
-  const [matches, setMatches] = useState<Match[]>([]);
-  const [matchCursor, setMatchCursor] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
-  const [searching, setSearching] = useState(false);
-  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
-  const [positions, setPositions] = useState<Position[]>([]);
-  const [positionCursor, setPositionCursor] = useState<string | null>(null);
-  const [index, setIndex] = useState(0);
-  const [loadingPositions, setLoadingPositions] = useState(false);
-  const [stats, setStats] = useState<DiceStats | null>(null);
-  const [error, setError] = useState<unknown>(null);
-  const [notice, setNotice] = useState<{
-    duplicate: boolean;
-    count: number;
-  } | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [refresh, setRefresh] = useState(0);
-  const [exactId, setExactId] = useState('');
-  const [found, setFound] = useState<Page<Position> | null>(null);
-  const [exactLoading, setExactLoading] = useState(false);
-  const [exactError, setExactError] = useState<unknown>(null);
+  const { t, setLocale, formatError, formatPercent } = useI18n();
+  const w = useWorkspaceText(),
+    learnT = useLearningText();
+  const l = useLibraryText();
+  const [databaseId, setDatabaseId] = useState(readDatabase);
+  const [moveNotes, setMoveNotes] = useState<MoveNotesTarget>();
+  const [importResults, setImportResults] = useState<
+    {
+      name: string;
+      status: 'importedFile' | 'duplicate' | 'error';
+      detail?: unknown;
+    }[]
+  >([]);
+  const annotationNavigation = useRef<AbortController | undefined>(undefined);
+  useEffect(() => {
+    if (databaseId) saveDatabase(databaseId);
+  }, [databaseId]);
+  useEffect(() => () => annotationNavigation.current?.abort(), []);
+  const [view, setView] = useState<View>('analysis');
+  const [detail, setDetail] = useState<AnalysisDetail>('evaluation');
+  const [theme, setTheme] = useState<Theme>(readTheme);
+  const [settings, setSettings] = useState<AppSettings>();
+  const [settingsError, setSettingsError] = useState<unknown>();
+  const [settingsRevision, setSettingsRevision] = useState(0);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [bookOpen, setBookOpen] = useState(false);
+  const [bookRevision, setBookRevision] = useState(0);
   const [health, setHealth] = useState<'checking' | 'ok' | 'degraded'>(
     'checking',
   );
-  const [theme, setTheme] = useState<Theme>(() => {
-    const stored = localStorage.getItem('bgtutor.theme');
-    return themes.find((t) => t.id === stored)?.id || 'forest';
-  });
-  const uploadInput = useRef<HTMLInputElement>(null);
-  const selection = useRef<string | undefined>(undefined);
-  const searchVersion = useRef(0);
-  const navigationVersion = useRef(0);
-  const desiredPosition = useRef<string | undefined>(undefined);
-  const position = positions[index];
-  const jobs = useJobs(position?.id);
-  function invalidateNavigation() {
-    navigationVersion.current++;
-    setLoadingPositions(false);
-    return navigationVersion.current;
-  }
-
+  const [error, setError] = useState<unknown>();
+  const [notice, setNotice] = useState<{ duplicate: boolean; count: number }>();
+  const [uploading, setUploading] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const [annotationRevision, setAnnotationRevision] = useState(0);
+  const [deckRevision, setDeckRevision] = useState(0);
+  const [scopeRequest, setScopeRequest] = useState<{
+    kind: AnnotationKind;
+    token: number;
+  }>();
+  const [restoring, setRestoring] = useState(false);
+  const navigation = useGameNavigation();
+  const { active, track } = useBackgroundJobs();
+  const jobs = useJobs(navigation.position?.id, track);
+  const settingsLoad = useRef<AbortController | undefined>(undefined);
+  const input = useRef<HTMLInputElement>(null);
+  const tabs = useRef<Partial<Record<View, HTMLButtonElement | null>>>({});
+  useEffect(() => saveTheme(theme), [theme]);
   useEffect(() => {
-    localStorage.setItem('bgtutor.theme', theme);
-  }, [theme]);
+    Object.values(jobs.jobs).forEach(track);
+  }, [jobs.jobs, track]);
   useEffect(() => {
     const abort = new AbortController();
-    request<{ status: string }>('/health', { signal: abort.signal })
-      .then((h) => setHealth(h.status === 'ok' ? 'ok' : 'degraded'))
+    settingsLoad.current = abort;
+    void loadSettings(abort.signal)
+      .then((value) => {
+        if (abort.signal.aborted) return;
+        setSettings((current) =>
+          current && current.version > value.version ? current : value,
+        );
+        setSettingsError(undefined);
+      })
+      .catch((e) => {
+        if (!abort.signal.aborted) setSettingsError(e);
+      });
+    return () => abort.abort();
+  }, [settingsRevision]);
+  useEffect(() => {
+    const abort = new AbortController();
+    void request<{ status: string }>('/health', { signal: abort.signal })
+      .then((value) => setHealth(value.status === 'ok' ? 'ok' : 'degraded'))
       .catch(() => {
         if (!abort.signal.aborted) setHealth('degraded');
       });
     return () => abort.abort();
+  }, [settings?.version]);
+  useEffect(() => {
+    const previous = readSelection();
+    if (!previous) return;
+    let alive = true;
+    setRestoring(true);
+    const restored = previous.positionId
+      ? navigation.openPosition(previous.positionId)
+      : navigation.openMatch(previous.matchId, previous.gameNo);
+    void restored.finally(() => {
+      if (alive) setRestoring(false);
+    });
+    return () => {
+      alive = false;
+    };
+    // The navigation hook fences restoration against subsequent user actions.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
-    const abort = new AbortController();
-    const version = ++searchVersion.current;
-    setSearching(true);
-    setError(null);
-    setMatchCursor(null);
-    const timer = setTimeout(() => {
-      if (query.trim().length > 0 && query.trim().length < 3) {
-        setSearching(false);
-        return;
-      }
-      request<Page<Match>>(`/matches?q=${encodeURIComponent(query.trim())}`, {
-        signal: abort.signal,
-      })
-        .then((page) => {
-          if (version !== searchVersion.current) return;
-          setMatches(page.items);
-          setMatchCursor(page.next_cursor);
-        })
-        .catch((error) => {
-          if (!abort.signal.aborted) setError(error);
-        })
-        .finally(() => {
-          if (!abort.signal.aborted) setSearching(false);
-        });
-    }, 250);
-    return () => {
-      abort.abort();
-      clearTimeout(timer);
-    };
-  }, [query, refresh]);
-
-  useEffect(() => {
-    const abort = new AbortController();
-    selection.current = selectedMatch?.id;
-    invalidateNavigation();
-    setPositions([]);
-    setIndex(0);
-    setPositionCursor(null);
-    setStats(null);
-    if (!selectedMatch) return;
-    setLoadingPositions(true);
-    const id = selectedMatch.id;
-    void (async () => {
-      try {
-        const all: Position[] = [];
-        let cursor: string | null = null;
-        do {
-          const page: Page<Position> = await request(
-            `/positions?match_id=${id}&limit=100${cursor ? `&after=${cursor}` : ''}`,
-            { signal: abort.signal },
-          );
-          all.push(...page.items);
-          cursor = page.next_cursor;
-        } while (
-          desiredPosition.current &&
-          !all.some((p) => p.id === desiredPosition.current) &&
-          cursor
-        );
-        if (abort.signal.aborted) return;
-        const target = desiredPosition.current;
-        desiredPosition.current = undefined;
-        setPositions(all);
-        setPositionCursor(cursor);
-        setIndex(
-          Math.max(
-            0,
-            all.findIndex((p) => p.id === target),
-          ),
-        );
-        setStats(
-          await request<DiceStats>(`/matches/${id}/dice`, {
-            signal: abort.signal,
-          }),
-        );
-      } catch (error) {
-        if (!abort.signal.aborted) setError(error);
-      } finally {
-        if (!abort.signal.aborted) setLoadingPositions(false);
-      }
-    })();
-    return () => abort.abort();
-  }, [selectedMatch]);
-
-  async function upload(file: File | undefined) {
-    if (!file) return;
-    if (file.size > 16 * 1024 * 1024) {
-      setError(new AppError('error.fileSize'));
-      return;
-    }
-    setUploading(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const body = new FormData();
-      body.append('file', file);
-      const imported = await request<{ match: Match; duplicate: boolean }>(
-        '/imports',
-        { method: 'POST', body },
-      );
-      setQuery('');
-      setRefresh((r) => r + 1);
-      setSelectedMatch(imported.match);
-      setFound(null);
-      setNotice({
-        duplicate: imported.duplicate,
-        count: imported.match.position_count,
-      });
-    } catch (error) {
-      setError(error);
-    } finally {
-      setUploading(false);
-      if (uploadInput.current) uploadInput.current.value = '';
-    }
-  }
-  async function loadMatches() {
-    if (!matchCursor) return;
-    const version = searchVersion.current;
-    setSearching(true);
-    try {
-      const page = await request<Page<Match>>(
-        `/matches?q=${encodeURIComponent(query.trim())}&after=${matchCursor}`,
-      );
-      if (version !== searchVersion.current) return;
-      setMatches((previous) => [...previous, ...page.items]);
-      setMatchCursor(page.next_cursor);
-    } catch (error) {
-      setError(error);
-    } finally {
-      if (version === searchVersion.current) setSearching(false);
-    }
-  }
-  async function nextPosition(loadMore = false) {
-    const version = invalidateNavigation();
-    if (!loadMore && index < positions.length - 1) {
-      setIndex(index + 1);
-      return;
-    }
-    if (!positionCursor || !selectedMatch) return;
-    const id = selectedMatch.id;
-    setLoadingPositions(true);
-    try {
-      const page = await request<Page<Position>>(
-        `/positions?match_id=${id}&limit=100&after=${positionCursor}`,
-      );
-      if (selection.current !== id || navigationVersion.current !== version)
-        return;
-      const firstNew = positions.length;
-      setPositions((previous) => [...previous, ...page.items]);
-      setPositionCursor(page.next_cursor);
-      setIndex(firstNew);
-    } catch (error) {
-      if (navigationVersion.current === version) setError(error);
-    } finally {
-      if (selection.current === id && navigationVersion.current === version)
-        setLoadingPositions(false);
-    }
-  }
-  async function searchPosition(more = false) {
-    setExactLoading(true);
-    setExactError(null);
-    try {
-      const page = await request<Page<Position>>(
-        `/positions?position_id=${encodeURIComponent(exactId.trim())}&limit=20${more && found?.next_cursor ? `&after=${found.next_cursor}` : ''}`,
-      );
-      setFound(
-        more && found
-          ? { ...page, items: [...found.items, ...page.items] }
-          : page,
-      );
-    } catch (error) {
-      setExactError(error);
-    } finally {
-      setExactLoading(false);
-    }
-  }
-  async function openFound(p: Position) {
-    const version = invalidateNavigation();
-    setLoadingPositions(false);
-    try {
-      if (
-        selectedMatch?.id === p.match_uuid &&
-        positions.some((v) => v.id === p.id)
-      ) {
-        setIndex(positions.findIndex((v) => v.id === p.id));
-        return;
-      }
-      const match = await request<Match>(`/matches/${p.match_uuid}`);
-      if (navigationVersion.current !== version) return;
-      desiredPosition.current = p.id;
-      setSelectedMatch(match);
-    } catch (error) {
-      if (navigationVersion.current === version) setError(error);
-    }
-  }
-
-  async function openAnalyzedPosition(id: string) {
-    if (!selectedMatch) return;
-    const matchId = selectedMatch.id;
-    const version = invalidateNavigation();
-    setLoadingPositions(true);
-    try {
-      const all = [...positions];
-      let cursor = positionCursor;
-      while (!all.some((p) => p.id === id) && cursor) {
-        const next: Page<Position> = await request(
-          `/positions?match_id=${matchId}&limit=100&after=${cursor}`,
-        );
-        if (
-          selection.current !== matchId ||
-          navigationVersion.current !== version
-        )
-          return;
-        all.push(...next.items);
-        cursor = next.next_cursor;
-      }
-      if (
-        selection.current !== matchId ||
-        navigationVersion.current !== version
-      )
-        return;
-      const target = all.findIndex((p) => p.id === id);
-      if (target < 0) throw new AppError('error.positionMissing');
-      setPositions(all);
-      setPositionCursor(cursor);
-      setIndex(target);
-      document
-        .querySelector('.board-panel')
-        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } catch (error) {
-      if (
-        selection.current === matchId &&
-        navigationVersion.current === version
-      )
-        setError(error);
-    } finally {
-      if (
-        selection.current === matchId &&
-        navigationVersion.current === version
-      )
-        setLoadingPositions(false);
-    }
-  }
-
-  async function openAnnotation(hit: AnnotationHit) {
-    setLoadingPositions(false);
-    setView('library');
-    const version = invalidateNavigation();
     if (
-      hit.target_kind === 'position' &&
-      selectedMatch?.id === hit.match_uuid &&
-      positions.some((p) => p.id === hit.target_id)
+      navigation.match &&
+      navigation.game &&
+      !navigation.loading &&
+      !navigation.error &&
+      navigation.stats
     ) {
-      setIndex(positions.findIndex((p) => p.id === hit.target_id));
-      document
-        .querySelector('.board-panel')
-        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      return;
+      saveSelection({
+        matchId: navigation.match.id,
+        gameNo: navigation.game.game_no,
+        positionId: navigation.position?.id,
+      });
     }
-    try {
-      const match = await request<Match>(`/matches/${hit.match_uuid}`);
-      if (navigationVersion.current !== version) return;
-      desiredPosition.current =
-        hit.target_kind === 'position' ? hit.target_id : undefined;
-      setSelectedMatch(match);
-    } catch (error) {
-      if (navigationVersion.current === version) setError(error);
+  }, [
+    navigation.match,
+    navigation.game,
+    navigation.loading,
+    navigation.error,
+    navigation.stats,
+    navigation.position,
+  ]);
+  useEffect(() => {
+    function move(event: globalThis.KeyboardEvent) {
+      if (
+        view !== 'analysis' ||
+        settingsOpen ||
+        bookOpen ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+      )
+        return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.closest(
+          'input,textarea,select,button,[contenteditable="true"],[role="tablist"],[role="dialog"]',
+        )
+      )
+        return;
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        navigation.previous();
+      }
+      if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        navigation.next();
+      }
+    }
+    window.addEventListener('keydown', move);
+    return () => window.removeEventListener('keydown', move);
+  }, [view, settingsOpen, bookOpen, navigation]);
+  function tabKey(event: KeyboardEvent<HTMLButtonElement>, current: View) {
+    let next: number;
+    const index = views.indexOf(current);
+    if (event.key === 'ArrowRight') next = (index + 1) % views.length;
+    else if (event.key === 'ArrowLeft')
+      next = (index + views.length - 1) % views.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = views.length - 1;
+    else return;
+    event.preventDefault();
+    setView(views[next]);
+    tabs.current[views[next]]?.focus();
+  }
+  async function upload(files: File[] | FileList | undefined) {
+    const selected = Array.from(files ?? []);
+    if (!selected.length || uploading) return;
+    setUploading(true);
+    setError(undefined);
+    setNotice(undefined);
+    setImportResults([]);
+    const target = databaseId || defaultDatabaseId;
+    const results: {
+      name: string;
+      status: 'importedFile' | 'duplicate' | 'error';
+      detail?: unknown;
+    }[] = [];
+    for (const file of selected) {
+      try {
+        if (file.size > 16 * 1024 * 1024) throw new AppError('error.fileSize');
+        const body = new FormData();
+        body.append('file', file);
+        const imported = await request<{ match: Match; duplicate: boolean }>(
+          `/imports?database_id=${target}`,
+          { method: 'POST', body },
+        );
+        setRevision((n) => n + 1);
+        results.push({
+          name: file.name,
+          status: imported.duplicate ? 'duplicate' : 'importedFile',
+        });
+        if (selected.length === 1) {
+          setView('analysis');
+          setDetail('evaluation');
+          void navigation.selectMatch(imported.match);
+          setNotice({
+            duplicate: imported.duplicate,
+            count: imported.match.position_count,
+          });
+        }
+      } catch (e) {
+        results.push({ name: file.name, status: 'error', detail: e });
+        if (selected.length === 1) setError(e);
+      }
+      setImportResults([...results]);
+    }
+    if (selected.length > 1) setView('database');
+    setUploading(false);
+    if (input.current) input.current.value = '';
+  }
+  function openMatch(match: Match, gameNo?: number) {
+    setError(undefined);
+    setView('analysis');
+    setDetail('evaluation');
+    void (gameNo
+      ? navigation.openMatch(match.id, gameNo)
+      : navigation.selectMatch(match));
+  }
+  function openPosition(position: Position | string) {
+    setView('analysis');
+    void navigation.openPosition(position);
+  }
+  useEffect(() => {
+    if (view !== 'analysis' || settingsOpen)
+      annotationNavigation.current?.abort();
+  }, [view, settingsOpen]);
+  function openAnnotation(hit: AnnotationHit) {
+    annotationNavigation.current?.abort();
+    const abort = new AbortController();
+    annotationNavigation.current = abort;
+    setView('analysis');
+    setDetail('notes');
+    if (hit.target_kind === 'move') {
+      navigation.cancel();
+      const intent = navigation.intent();
+      void Promise.all([
+        request<StoredMove>(`/moves/${hit.target_id}`, {
+          signal: abort.signal,
+        }),
+        request<Match>(`/matches/${hit.match_uuid}`, { signal: abort.signal }),
+      ])
+        .then(([move, match]) => {
+          if (abort.signal.aborted || navigation.intent() !== intent) return;
+          setMoveNotes({ match, gameNo: move.game_no, moveId: move.id });
+          void navigation.openMatch(match.id, move.game_no);
+        })
+        .catch((e) => {
+          if (!abort.signal.aborted && navigation.intent() === intent)
+            setError(e);
+        });
+    } else {
+      setScopeRequest({ kind: hit.target_kind, token: Date.now() });
+      void (hit.target_kind === 'position'
+        ? navigation.openPosition(hit.target_id)
+        : navigation.openMatch(hit.match_uuid, hit.game_no ?? undefined));
     }
   }
-
+  const notesSaved = useCallback(() => {
+    setAnnotationRevision((n) => n + 1);
+    setRevision((n) => n + 1);
+  }, []);
+  const deckChanged = useCallback(() => setDeckRevision((n) => n + 1), []);
+  const welcome = (
+    <section
+      className="welcome analysis-welcome"
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => {
+        event.preventDefault();
+        if (!uploading) void upload(event.dataTransfer.files);
+      }}
+    >
+      <span className="eyebrow">BG TUTOR</span>
+      <h1>{w('welcomeTitle')}</h1>
+      <p>{w('welcomeDescription')}</p>
+      <div className="welcome-actions">
+        <button className="primary" onClick={() => setView('database')}>
+          {w('openMatch')}
+        </button>
+        <button onClick={() => input.current?.click()} disabled={uploading}>
+          {uploading ? t('app.importRunning') : t('app.import')}
+        </button>
+      </div>
+      {restoring && <p role="status">{w('lastMatch')}</p>}
+      <small>{t('app.dropFile')}</small>
+    </section>
+  );
   return (
-    <div className="app">
-      <aside className="sidebar">
+    <div className="app-shell">
+      <header className="app-header">
         <a className="brand" href="/" aria-label={t('app.home')}>
           <span className="brand-mark">
             b<span>g</span>
           </span>
-          <span>
-            BG Tutor<small>{t('app.tagline')}</small>
-          </span>
+          <span>BG Tutor</span>
         </a>
-        <div className="library-heading">
-          <span className="eyebrow">{t('app.libraryEyebrow')}</span>
-          <span className="small-badge">{t('app.localBadge')}</span>
+        <nav className="app-tabs" role="tablist" aria-label={w('navigation')}>
+          {views.map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              id={`workspace-tab-${tab}`}
+              aria-controls={`workspace-panel-${tab}`}
+              aria-selected={view === tab}
+              tabIndex={view === tab ? 0 : -1}
+              ref={(el) => {
+                tabs.current[tab] = el;
+              }}
+              onKeyDown={(event) => tabKey(event, tab)}
+              onClick={() => setView(tab)}
+            >
+              {tab === 'learning' ? learnT('study') : w(tab)}
+            </button>
+          ))}
+        </nav>
+        <div className="app-header-actions">
+          <button
+            className="app-import"
+            onClick={() => input.current?.click()}
+            disabled={uploading}
+          >
+            {uploading ? t('app.importing') : t('app.import')}
+          </button>
+          <button
+            className="settings-trigger"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <span aria-hidden="true">⚙</span>
+            {w('settings')}
+          </button>
         </div>
-        <button
-          className="upload-button"
-          onClick={() => uploadInput.current?.click()}
-          disabled={uploading}
-        >
-          {uploading ? t('app.importing') : t('app.import')}
-          <small>.mat · .xg · .sgf</small>
-        </button>
         <input
-          ref={uploadInput}
+          ref={input}
           className="sr-only"
           type="file"
           aria-label={t('app.matchFile')}
-          accept=".mat,.sgf,.xg"
-          onChange={(e) => void upload(e.target.files?.[0])}
+          accept=".mat,.sgf,.xg,.bgf"
+          multiple
+          onChange={(event) => void upload(event.target.files ?? undefined)}
         />
-        <label className="search-box">
-          <span>⌕</span>
-          <input
-            aria-label={t('app.searchMatches')}
-            placeholder={t('app.searchPlaceholder')}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </label>
-        {query.trim().length > 0 && query.trim().length < 3 && (
-          <p className="search-hint">{t('app.searchMin')}</p>
-        )}
-        <div className="library-count">
-          <span>{t('app.matches')}</span>
-          <span>
-            {searching
-              ? t('app.searching')
-              : `${formatNumber(matches.length)}${matchCursor ? '+' : ''}`}
-          </span>
-        </div>
-        <nav className="match-list" aria-label={t('app.matches')}>
-          {matches.map((m) => (
+      </header>
+      <main className="app-body">
+        {!!(error || navigation.error) && (
+          <div className="error" role="alert">
+            {formatError(error || navigation.error)}
             <button
-              key={m.id}
-              className={`match-card ${m.id === selectedMatch?.id ? 'active' : ''}`}
+              aria-label={t('app.closeError')}
               onClick={() => {
-                invalidateNavigation();
-                desiredPosition.current = undefined;
-                setView('library');
-                setSelectedMatch(m);
+                setError(undefined);
+                navigation.clearError();
               }}
             >
-              <span className="match-players">
-                {m.white}
-                <span className="versus">{t('common.versus')}</span>
-                {m.black}
-              </span>
-              <span className="match-meta">
-                {m.match_length
-                  ? t('board.points', { count: m.match_length })
-                  : t('common.moneyGame')}
-                <span>·</span>
-                {t('app.moves', { count: m.position_count })}
-              </span>
-              <small title={m.filename}>{m.filename}</small>
+              ×
             </button>
-          ))}
-          {!matches.length && !searching && (
-            <div className="library-empty">
-              {query ? t('app.noMatches') : t('app.libraryEmpty')}
+          </div>
+        )}
+        {!!settingsError && (
+          <div className="error" role="alert">
+            {w('configurationError')} {formatError(settingsError)}
+            <button onClick={() => setSettingsRevision((value) => value + 1)}>
+              {w('retry')}
+            </button>
+          </div>
+        )}
+        {notice && (
+          <div className="notice" role="status">
+            ✓{' '}
+            {notice.duplicate
+              ? t('app.importDuplicate')
+              : t('app.importCount', { count: notice.count })}
+            <button
+              aria-label={t('app.closeNotice')}
+              onClick={() => setNotice(undefined)}
+            >
+              ×
+            </button>
+          </div>
+        )}
+        {importResults.length > 1 && (
+          <div className="import-results" role="status">
+            <div className="section-heading">
+              <h2>{l('importResults')}</h2>
+              <button
+                onClick={() => setImportResults([])}
+                aria-label={l('close')}
+              >
+                ×
+              </button>
             </div>
-          )}
-        </nav>
-        {matchCursor && (
+            <ul>
+              {importResults.map((result, i) => (
+                <li key={i}>
+                  {result.name}: {l(result.status)}
+                  {result.detail ? ` · ${formatError(result.detail)}` : ''}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {active.length > 0 && (
           <button
-            className="load-more"
-            disabled={searching}
-            onClick={() => void loadMatches()}
+            className="background-job-indicator"
+            aria-label={w('background')}
+            onClick={() => setView('analysis')}
           >
-            {t('app.moreMatches')}
+            <span className="status-dot ready" />
+            {w('activeJobs', { count: active.length })} ·{' '}
+            {formatPercent(
+              active.reduce((n, job) => n + job.progress, 0) /
+                active.length /
+                100,
+            )}{' '}
+            →
           </button>
         )}
-        <div className="sidebar-footer">
-          <span className={`status-dot ${health === 'ok' ? 'ready' : ''}`} />
+        <div
+          id="workspace-panel-analysis"
+          role="tabpanel"
+          aria-labelledby="workspace-tab-analysis"
+          hidden={view !== 'analysis'}
+        >
+          <AnalysisWorkspace
+            navigation={navigation}
+            jobs={jobs}
+            theme={theme}
+            defaultPlies={settings?.analysis_plies ?? 0}
+            sourceRevision={bookRevision}
+            onBookSettings={() => setBookOpen(true)}
+            configured={!!settings}
+            detail={detail}
+            onDetail={setDetail}
+            onOpenDatabase={() => setView('database')}
+            onTrackJob={track}
+            onNotesSaved={notesSaved}
+            notesSuspended={!!moveNotes || view !== 'analysis'}
+            onMoveNotes={() => {
+              if (navigation.match && navigation.game)
+                setMoveNotes({
+                  match: navigation.match,
+                  gameNo: navigation.game.game_no,
+                });
+            }}
+            deckRevision={deckRevision}
+            onDeckChanged={deckChanged}
+            onPosition={openPosition}
+            scopeRequest={scopeRequest}
+            welcome={welcome}
+          />
+        </div>
+        <div
+          id="workspace-panel-database"
+          role="tabpanel"
+          aria-labelledby="workspace-tab-database"
+          hidden={view !== 'database'}
+        >
+          <MatchDatabase
+            revision={revision}
+            databaseId={databaseId}
+            onDatabase={setDatabaseId}
+            theme={theme}
+            visible={view === 'database'}
+            onMoveNotes={setMoveNotes}
+            onChanged={(deletedIds = [], validateSelection = false) => {
+              setRevision((n) => n + 1);
+              if (validateSelection && navigation.match) {
+                const intent = navigation.intent(),
+                  id = navigation.match.id;
+                void request(`/matches/${id}`).catch((e) => {
+                  if (
+                    e instanceof AppError &&
+                    String(e.params.status) === '404' &&
+                    navigation.intent() === intent
+                  ) {
+                    navigation.clear();
+                    try {
+                      localStorage.removeItem('bgtutor.workspace');
+                    } catch {
+                      /* Storage unavailable. */
+                    }
+                  }
+                });
+              }
+              if (
+                navigation.match &&
+                deletedIds.includes(navigation.match.id)
+              ) {
+                navigation.clear();
+                try {
+                  localStorage.removeItem('bgtutor.workspace');
+                } catch {
+                  /* Storage unavailable. */
+                }
+              }
+            }}
+            annotationRevision={annotationRevision}
+            currentPosition={navigation.position}
+            selectedMatchId={navigation.match?.id}
+            onOpen={openMatch}
+            onPosition={openPosition}
+            onAnnotation={openAnnotation}
+            onImport={() => input.current?.click()}
+          />
+        </div>
+        <div
+          id="workspace-panel-learning"
+          role="tabpanel"
+          aria-labelledby="workspace-tab-learning"
+          hidden={view !== 'learning'}
+        >
+          <LearningWorkspace
+            theme={theme}
+            revision={deckRevision}
+            onChanged={deckChanged}
+          />
+        </div>
+        <footer className="app-footer">
           <span>
+            <span className={`status-dot ${health === 'ok' ? 'ready' : ''}`} />
             {health === 'ok'
               ? t('app.engineConnected')
               : health === 'checking'
@@ -450,419 +556,41 @@ export default function App() {
                 : t('app.healthUnavailable')}
           </span>
           <a href="/api/openapi.json" target="_blank" rel="noreferrer">
-            API ↗
+            OpenAPI ↗
           </a>
-        </div>
-      </aside>
-      <main>
-        <header className="topbar">
-          <div className="breadcrumb">
-            {t('app.library')} <span>/</span>{' '}
-            <strong>{t('app.workspace')}</strong>
-          </div>
-          <span className="privacy-note">{t('app.privacy')}</span>
-        </header>
-        <div className="workspace">
-          {!!error && (
-            <div className="error" role="alert">
-              {formatError(error)}
-              <button
-                aria-label={t('app.closeError')}
-                onClick={() => setError(null)}
-              >
-                ×
-              </button>
-            </div>
-          )}
-          {notice && (
-            <div className="notice" role="status">
-              ✓{' '}
-              {notice.duplicate
-                ? t('app.importDuplicate')
-                : t('app.importCount', { count: notice.count })}
-              <button
-                aria-label={t('app.closeNotice')}
-                onClick={() => setNotice(null)}
-              >
-                ×
-              </button>
-            </div>
-          )}
-          <div className="workspace-title">
-            <div>
-              <span className="eyebrow">{t('app.eyebrow')}</span>
-              <h1>
-                {selectedMatch ? t('app.selectedTitle') : t('app.welcomeTitle')}
-              </h1>
-            </div>
-            <div className="workspace-settings">
-              <label className="theme-picker">
-                {t('common.board')}{' '}
-                <select
-                  aria-label={t('app.themeLabel')}
-                  value={theme}
-                  onChange={(e) => setTheme(e.target.value as Theme)}
-                >
-                  {themes.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="theme-picker language-picker">
-                {t('common.language')}{' '}
-                <select
-                  aria-label={t('common.language')}
-                  value={locale}
-                  onChange={(event) => setLocale(event.target.value as Locale)}
-                >
-                  {languages.map((language) => (
-                    <option key={language.id} value={language.id}>
-                      {language.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          </div>
-          <nav className="workspace-views" aria-label={learnT('study')}>
-            <button
-              aria-pressed={view === 'library'}
-              onClick={() => {
-                invalidateNavigation();
-                setView('library');
-              }}
-            >
-              {learnT('library')}
-            </button>
-            <button
-              aria-pressed={view === 'learning'}
-              onClick={() => {
-                invalidateNavigation();
-                setView('learning');
-              }}
-            >
-              {learnT('study')}
-            </button>
-          </nav>
-          {view === 'learning' ? (
-            <LearningWorkspace
-              theme={theme}
-              revision={deckRevision}
-              onChanged={() => setDeckRevision((n) => n + 1)}
-            />
-          ) : (
-            <>
-              <AnnotationSearch
-                revision={annotationRevision}
-                onOpen={(hit) => void openAnnotation(hit)}
-              />
-              <details className="position-search">
-                <summary>
-                  ⌕ {t('app.findPosition')} <span>{t('app.positionId')}</span>
-                </summary>
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void searchPosition();
-                  }}
-                >
-                  <input
-                    aria-label={t('app.positionId')}
-                    placeholder={t('app.positionPlaceholder')}
-                    value={exactId}
-                    onChange={(e) => {
-                      setExactId(e.target.value);
-                      setFound(null);
-                    }}
-                  />
-                  <button disabled={exactLoading || !exactId.trim()}>
-                    {t('app.exactSearch')}
-                  </button>
-                  {position && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setExactId(position.position_id);
-                        setFound(null);
-                      }}
-                    >
-                      {t('app.usePosition')}
-                    </button>
-                  )}
-                </form>
-                {!!exactError && (
-                  <p role="alert" className="search-hint">
-                    {formatError(exactError)}
-                  </p>
-                )}
-                {found && (
-                  <div className="position-results">
-                    {found.items.length === 0 ? (
-                      <p>{t('app.noPositionMatches')}</p>
-                    ) : (
-                      found.items.map((p) => (
-                        <button key={p.id} onClick={() => void openFound(p)}>
-                          {t('app.positionResult', {
-                            game: p.game_no,
-                            move: p.ply,
-                            dice: p.dice.join('–'),
-                          })}{' '}
-                          <strong>{formatDecision(p.notation)}</strong>
-                          <small>{p.match_uuid.slice(0, 8)}…</small>
-                        </button>
-                      ))
-                    )}
-                    {found.next_cursor && (
-                      <button
-                        onClick={() => void searchPosition(true)}
-                        disabled={exactLoading}
-                      >
-                        {t('app.moreResults')}
-                      </button>
-                    )}
-                  </div>
-                )}
-              </details>
-              {!selectedMatch ? (
-                <section
-                  className="welcome"
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    if (!uploading) void upload(e.dataTransfer.files[0]);
-                  }}
-                >
-                  <div className="welcome-board" aria-hidden="true">
-                    <span>▲▼▲▼▲▼</span>
-                    <div>
-                      ● ● <b>⚄ ⚂</b> ○ ○
-                    </div>
-                    <span>▼▲▼▲▼▲</span>
-                  </div>
-                  <span className="eyebrow">{t('app.welcomeEyebrow')}</span>
-                  <h2>{t('app.welcomeHeading')}</h2>
-                  <p>{t('app.welcomeDescription')}</p>
-                  <button
-                    className="primary"
-                    onClick={() => uploadInput.current?.click()}
-                    disabled={uploading}
-                  >
-                    {uploading ? t('app.importRunning') : t('app.importFirst')}{' '}
-                    <span>↗</span>
-                  </button>
-                  <small>{t('app.dropFile')}</small>
-                  <div className="welcome-features">
-                    <span>
-                      <b>01</b> {t('app.collectMatches')}
-                    </span>
-                    <span>
-                      <b>02</b> {t('app.findPositions')}
-                    </span>
-                    <span>
-                      <b>03</b> {t('app.understandMoves')}
-                    </span>
-                  </div>
-                </section>
-              ) : (
-                <>
-                  <div className="match-title">
-                    <h2>
-                      {selectedMatch.white} <span>{t('common.versus')}</span>{' '}
-                      {selectedMatch.black}
-                    </h2>
-                    <span>
-                      {selectedMatch.match_length
-                        ? t('app.matchLength', {
-                            count: selectedMatch.match_length,
-                          })
-                        : t('common.moneyGame')}{' '}
-                      <b>·</b> {selectedMatch.format.toUpperCase()}{' '}
-                      <a href={`/api/matches/${selectedMatch.id}/source`}>
-                        SGF ↓
-                      </a>
-                    </span>
-                  </div>
-                  <AnnotationPanel
-                    kind="match"
-                    id={selectedMatch.id}
-                    onSaved={() => {
-                      setAnnotationRevision((n) => n + 1);
-                      setRefresh((n) => n + 1);
-                    }}
-                  />
-                  <div className="play-layout">
-                    <section className="board-panel">
-                      {position ? (
-                        <>
-                          <div className="board-heading">
-                            <span>
-                              {t('app.gameMove', {
-                                game: position.game_no,
-                                move: position.ply,
-                              })}
-                            </span>
-                            <strong>
-                              {t('app.toMove', {
-                                player:
-                                  position.player === 0
-                                    ? selectedMatch.white
-                                    : selectedMatch.black,
-                              })}
-                            </strong>
-                          </div>
-                          <Board
-                            position={position}
-                            white={selectedMatch.white}
-                            black={selectedMatch.black}
-                            theme={theme}
-                          />
-                          <div className="board-navigation">
-                            <button
-                              aria-label={t('app.previousMove')}
-                              disabled={index === 0 || loadingPositions}
-                              onClick={() => {
-                                invalidateNavigation();
-                                setIndex(index - 1);
-                              }}
-                            >
-                              ←
-                            </button>
-                            <span>
-                              {t('common.played')}{' '}
-                              <strong>
-                                {formatDecision(position.notation)}
-                              </strong>
-                              <small>
-                                {formatNumber(position.ordinal + 1)} /{' '}
-                                {formatNumber(selectedMatch.position_count)}
-                              </small>
-                            </span>
-                            <button
-                              aria-label={t('app.nextMove')}
-                              disabled={
-                                loadingPositions ||
-                                (index === positions.length - 1 &&
-                                  !positionCursor)
-                              }
-                              onClick={() => void nextPosition()}
-                            >
-                              →
-                            </button>
-                          </div>
-                          <div className="position-code">
-                            <span>{t('app.positionCode')}</span>
-                            <code>{position.position_id}</code>
-                            <button
-                              title={t('app.prepareSearch')}
-                              onClick={() => {
-                                setExactId(position.position_id);
-                                setFound(null);
-                                const details =
-                                  document.querySelector<HTMLDetailsElement>(
-                                    '.position-search',
-                                  );
-                                if (details) details.open = true;
-                              }}
-                            >
-                              ⌕
-                            </button>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="board-loading" role="status">
-                          {loadingPositions
-                            ? t('app.positionsLoading')
-                            : t('app.noPositions')}
-                        </div>
-                      )}
-                    </section>
-                    <aside className="moves-panel">
-                      <div className="section-heading">
-                        <h3>{t('app.moveHistory')}</h3>
-                        <span>
-                          {formatNumber(selectedMatch.position_count)}
-                        </span>
-                      </div>
-                      <div className="moves-list">
-                        {positions.map((p, i) => (
-                          <button
-                            key={p.id}
-                            className={i === index ? 'current' : ''}
-                            onClick={() => {
-                              invalidateNavigation();
-                              setLoadingPositions(false);
-                              setIndex(i);
-                            }}
-                          >
-                            <span className="move-no">
-                              {p.game_no}.{p.ply}
-                            </span>
-                            <i
-                              className={`player-dot ${p.player === 0 ? 'white' : 'black'}`}
-                            />
-                            <span className="move-dice">
-                              {p.dice.join('–')}
-                            </span>
-                            <strong>{formatDecision(p.notation)}</strong>
-                          </button>
-                        ))}
-                      </div>
-                      {positionCursor && (
-                        <button
-                          disabled={loadingPositions}
-                          onClick={() => void nextPosition(true)}
-                        >
-                          {t('app.moreHistory')}
-                        </button>
-                      )}
-                    </aside>
-                  </div>
-                  {position && (
-                    <AnnotationPanel
-                      kind="position"
-                      id={position.id}
-                      onSaved={() => {
-                        setAnnotationRevision((n) => n + 1);
-                        setRefresh((n) => n + 1);
-                      }}
-                    />
-                  )}
-                  <AddCardsPanel
-                    positionId={position?.id}
-                    matchId={selectedMatch.id}
-                    revision={deckRevision}
-                    onChanged={() => setDeckRevision((n) => n + 1)}
-                  />
-                  <MatchAnalysisPanel
-                    key={selectedMatch.id}
-                    match={selectedMatch}
-                    onPosition={(id) => void openAnalyzedPosition(id)}
-                  />
-                  {!!jobs.error && (
-                    <div className="error" role="alert">
-                      {formatError(jobs.error)}
-                    </div>
-                  )}
-                  <AnalysisPanel
-                    jobs={jobs.jobs}
-                    stats={stats}
-                    disabled={!position || jobs.submitting}
-                    onAnalyze={(kind, plies) => void jobs.run(kind, plies)}
-                  />
-                </>
-              )}
-            </>
-          )}
-          <footer className="workspace-footer">
-            <span>
-              BG TUTOR <b>·</b> {t('app.footer')}
-            </span>
-            <span>{t('app.engineVersion')}</span>
-          </footer>
-        </div>
+        </footer>
       </main>
+      {moveNotes && (
+        <MoveNotesDialog
+          target={moveNotes}
+          theme={theme}
+          onClose={() => setMoveNotes(undefined)}
+          onSaved={notesSaved}
+        />
+      )}
+      {bookOpen && (
+        <OpeningBookDialog
+          onClose={() => setBookOpen(false)}
+          onSaved={() => setBookRevision((n) => n + 1)}
+        />
+      )}
+      <SettingsDialog
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onBookSettings={() => setBookOpen(true)}
+        theme={theme}
+        onApply={(applied: {
+          theme: Theme;
+          locale: Locale;
+          settings: AppSettings;
+        }) => {
+          settingsLoad.current?.abort();
+          setTheme(applied.theme);
+          setLocale(applied.locale);
+          setSettings(applied.settings);
+          setSettingsError(undefined);
+        }}
+      />
     </div>
   );
 }

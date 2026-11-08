@@ -111,11 +111,13 @@ function CreateDeckForm({ onCreated }: { onCreated: (deck: Deck) => void }) {
 export function AddCardsPanel({
   positionId,
   matchId,
+  gameNo,
   revision,
   onChanged,
 }: {
   positionId: string | undefined;
   matchId: string;
+  gameNo?: number;
   revision: number;
   onChanged: () => void;
 }) {
@@ -136,7 +138,7 @@ export function AddCardsPanel({
     setNeedsAnalysis(false);
     setError(null);
     setBusy(false);
-  }, [positionId, matchId]);
+  }, [positionId, matchId, gameNo]);
   useEffect(() => {
     if (!ready) return;
     if (!decks.some((d) => d.id === deckId)) setDeckId(decks[0]?.id || '');
@@ -155,13 +157,21 @@ export function AddCardsPanel({
       if (kind === 'position') {
         body = { position_id: positionId };
       } else {
-        const job = await request<Job | null>(`/matches/${matchId}/analysis`);
+        let job = gameNo
+          ? await request<Job | null>(
+              `/matches/${matchId}/analysis?game_no=${gameNo}`,
+            )
+          : null;
+        if (!job || job.status !== 'completed')
+          job = await request<Job | null>(`/matches/${matchId}/analysis`);
+        if (version !== generation.current) return;
         if (!job || job.status !== 'completed') {
           setNeedsAnalysis(true);
           return;
         }
         body = {
           job_id: job.id,
+          game_no: gameNo,
           min_loss: Number(minLoss),
           player: player === '' ? null : Number(player),
         };
@@ -248,6 +258,7 @@ export function AddCardsPanel({
         <button
           disabled={
             !deckId ||
+            gameNo === undefined ||
             busy ||
             minLoss === '' ||
             !Number.isFinite(Number(minLoss)) ||
@@ -255,7 +266,7 @@ export function AddCardsPanel({
           }
           onClick={() => void add('match')}
         >
-          {t('addErrors')}
+          {gameNo ? baseT('games.addErrors', { game: gameNo }) : t('addErrors')}
         </button>
       </div>
       {needsAnalysis && <p role="alert">{t('addHint')}</p>}

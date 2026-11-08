@@ -3,6 +3,7 @@ import { AppError } from './i18n-core';
 
 type Schema = components['schemas'];
 export type Match = Schema['MatchSummary'];
+export type MatchGame = Schema['MatchGame'];
 export type Position = Schema['Position'];
 export type Candidate = Schema['Candidate'];
 export type Analysis = Schema['Analysis'];
