@@ -83,6 +83,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::move_catalog::routes())
         .merge(crate::annotations::routes())
         .merge(crate::learning::routes())
+        .merge(crate::analysis_statistics::routes())
         .route("/api/health", get(health))
         .route("/api/imports", post(upload))
         .route("/api/matches", get(matches))
@@ -577,6 +578,7 @@ async fn latest_match_analysis(
 }
 
 #[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 struct MoveAnalysisQuery {
     /// Restrict decisions to one source game.
     game_no: Option<i32>,
@@ -591,6 +593,8 @@ struct MoveAnalysisQuery {
     player: Option<i32>,
     /// checker or cube; omitted means both.
     kind: Option<String>,
+    /// Exact error severity; combined with all other filters.
+    severity: Option<MoveSeverity>,
 }
 
 #[utoipa::path(get, path="/api/jobs/{id}/moves", params(("id"=Uuid, Path),MoveAnalysisQuery), responses((status=200,body=MoveAnalysisPage),(status=404,body=ErrorBody),(status=422,body=ErrorBody)), tag="Match analysis")]
@@ -627,14 +631,14 @@ async fn move_analyses(
         .await?;
     }
     if let Some(after) = query.after.filter(|n| *n > 0) {
-        let row: Option<(Uuid, i32, i32, String, f64)> = sqlx::query_as(
-            "SELECT job_id,game_no,player,kind,equity_loss FROM move_analyses WHERE id=$1",
+        let row: Option<(Uuid, i32, i32, String, f64, String)> = sqlx::query_as(
+            "SELECT job_id,game_no,player,kind,equity_loss,data->>'severity' FROM move_analyses WHERE id=$1",
         )
         .bind(after)
         .fetch_optional(&state.pool)
         .await
         .map_err(anyhow::Error::from)?;
-        let Some((job_id, game_no, player, kind, loss)) = row else {
+        let Some((job_id, game_no, player, kind, loss, severity)) = row else {
             return Err(ApiError::invalid("Unknown cursor"));
         };
         if job_id != id
@@ -642,12 +646,13 @@ async fn move_analyses(
             || query.player.is_some_and(|n| n != player)
             || query.kind.as_ref().is_some_and(|k| *k != kind)
             || (query.errors_only && loss < 0.04)
+            || query.severity.is_some_and(|s| s.as_str() != severity)
         {
             return Err(ApiError::invalid("Cursor does not match the filters"));
         }
     }
     Ok(Json(
-        store::move_analyses_scoped(
+        store::move_analyses_filtered(
             &state.pool,
             id,
             query.after.unwrap_or(0),
@@ -656,6 +661,7 @@ async fn move_analyses(
             query.player,
             query.kind.as_deref(),
             query.game_no,
+            query.severity.map(MoveSeverity::as_str),
         )
         .await?,
     ))
@@ -770,6 +776,7 @@ async fn events(
         PlayerAnalysisSummary,
         MoveAnalysis,
         MoveAnalysisPage,
+        MoveSeverity,
         crate::match_analysis::Decision
     ))
 )]
@@ -786,6 +793,7 @@ impl OpenApi for ApiDoc {
         doc.merge(crate::move_catalog::MoveCatalogDoc::openapi());
         doc.merge(crate::annotations::AnnotationDoc::openapi());
         doc.merge(crate::learning::LearningDoc::openapi());
+        doc.merge(crate::analysis_statistics::StatisticsDoc::openapi());
         doc
     }
 }

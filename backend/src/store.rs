@@ -462,6 +462,32 @@ pub async fn move_analyses_scoped(
     kind: Option<&str>,
     game_no: Option<i32>,
 ) -> Result<MoveAnalysisPage> {
+    move_analyses_filtered(
+        pool,
+        job_id,
+        after,
+        limit,
+        errors_only,
+        player,
+        kind,
+        game_no,
+        None,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn move_analyses_filtered(
+    pool: &PgPool,
+    job_id: Uuid,
+    after: i64,
+    limit: i64,
+    errors_only: bool,
+    player: Option<i32>,
+    kind: Option<&str>,
+    game_no: Option<i32>,
+    severity: Option<&str>,
+) -> Result<MoveAnalysisPage> {
     let mut q = QueryBuilder::<Postgres>::new(
         "SELECT id,position_uuid,game_no,data FROM move_analyses WHERE job_id=",
     );
@@ -477,6 +503,9 @@ pub async fn move_analyses_scoped(
     }
     if let Some(kind) = kind {
         q.push(" AND kind=").push_bind(kind);
+    }
+    if let Some(severity) = severity {
+        q.push(" AND data->>'severity'=").push_bind(severity);
     }
     q.push(" ORDER BY id LIMIT ").push_bind(limit + 1);
     let rows = q

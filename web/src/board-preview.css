@@ -1,0 +1,20 @@
+.move-arrows {
+  pointer-events: none;
+}
+.move-arrow-line {
+  fill: none;
+  stroke-linecap: round;
+}
+.move-arrow-head {
+  fill: #28be68;
+  stroke-linejoin: round;
+}
+.move-arrow-dark {
+  stroke: #10291c;
+}
+.move-arrow-light {
+  stroke: #fffde8;
+}
+.move-arrow-green {
+  stroke: #28be68;
+}

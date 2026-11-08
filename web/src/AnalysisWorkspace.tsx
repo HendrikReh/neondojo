@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useMemo,
   useEffect,
   useRef,
   useState,
@@ -7,6 +8,11 @@ import {
   type KeyboardEvent,
 } from 'react';
 import Board, { type Theme } from './Board';
+import BoardReviewControls from './BoardReviewControls';
+import { projectMove, type BoardView } from './move-preview';
+import { useBoardReviewText } from './board-review-messages';
+import type { PreviewCandidate } from './candidate-preview';
+import { useStatisticsText } from './review-statistics-messages';
 import AnalysisPanel from './AnalysisPanel';
 import MatchAnalysisPanel from './MatchAnalysisPanel';
 import NotesPanel from './NotesPanel';
@@ -19,8 +25,15 @@ import { useI18n } from './i18n';
 import { useWorkspaceText } from './workspace-messages';
 import type { AnnotationKind } from './annotation-api';
 
-export type AnalysisDetail = 'evaluation' | 'errors' | 'notes' | 'cards';
-const detailTabs: AnalysisDetail[] = ['evaluation', 'errors', 'notes', 'cards'];
+export type AnalysisDetail =
+  'evaluation' | 'statistics' | 'errors' | 'notes' | 'cards';
+const detailTabs: AnalysisDetail[] = [
+  'evaluation',
+  'statistics',
+  'errors',
+  'notes',
+  'cards',
+];
 export default function AnalysisWorkspace({
   navigation,
   jobs,
@@ -64,6 +77,8 @@ export default function AnalysisWorkspace({
 }) {
   const { t, formatNumber, formatDecision, formatError } = useI18n();
   const w = useWorkspaceText();
+  const review = useBoardReviewText();
+  const statistics = useStatisticsText();
   const { match, game, games, positions, position, index, loading, stats } =
     navigation;
   const [commandTarget, setCommandTarget] = useState<HTMLDivElement | null>(
@@ -71,7 +86,36 @@ export default function AnalysisWorkspace({
   );
   const [focus, setFocus] = useState(false);
   const [matchJob, setMatchJob] = useState<Job>();
-  const [moveFilter, setMoveFilter] = useState({ player: '', kind: '' });
+  const [moveFilter, setMoveFilter] = useState<{
+    player: string;
+    kind: string;
+    severity?: string;
+    game_no?: number;
+  }>({ player: '', kind: '' });
+  const [boardView, setBoardView] = useState<BoardView>('arrows');
+  const [candidate, setCandidate] = useState<
+    PreviewCandidate & { positionId: string }
+  >();
+  const selectedPreview =
+    candidate?.positionId === position?.id ? candidate : undefined;
+  const onPreview = useCallback(
+    (selected: PreviewCandidate | null) => {
+      setCandidate(
+        selected && position
+          ? { ...selected, positionId: position.id }
+          : undefined,
+      );
+      if (selected)
+        setBoardView((view) => (view === 'before' ? 'arrows' : view));
+    },
+    [position],
+  );
+  const preview = useMemo(
+    () =>
+      position ? projectMove(position, selectedPreview?.notation) : undefined,
+    [position, selectedPreview?.notation],
+  );
+  const effectiveView = preview?.ok ? boardView : 'before';
   const [nextErrorFailure, setNextErrorFailure] = useState<unknown>();
   const [noErrors, setNoErrors] = useState(false);
   const tabRefs = useRef<
@@ -100,9 +144,12 @@ export default function AnalysisWorkspace({
   }, [
     match?.id,
     game?.game_no,
+    position?.id,
     matchJob?.id,
     moveFilter.player,
     moveFilter.kind,
+    moveFilter.severity,
+    moveFilter.game_no,
   ]);
   async function nextError() {
     setNextErrorFailure(undefined);
@@ -122,13 +169,13 @@ export default function AnalysisWorkspace({
     errorRequest.current?.abort();
     const abort = new AbortController();
     errorRequest.current = abort;
-    const wantedGame = game.game_no;
+    const wantedGame = moveFilter.game_no ?? game.game_no;
     try {
       let after: number | null = null;
       let first: string | undefined;
       do {
         const page: MoveAnalysisPage = await request(
-          `/jobs/${matchJob.id}/moves?errors_only=true&kind=checker${moveFilter.player ? `&player=${moveFilter.player}` : ''}&game_no=${wantedGame}&limit=100${after ? `&after=${after}` : ''}`,
+          `/jobs/${matchJob.id}/moves?errors_only=true&kind=checker${moveFilter.player ? `&player=${moveFilter.player}` : ''}${moveFilter.severity ? `&severity=${moveFilter.severity}` : ''}&game_no=${wantedGame}&limit=100${after ? `&after=${after}` : ''}`,
           { signal: abort.signal },
         );
         if (abort.signal.aborted) return;
@@ -227,16 +274,38 @@ export default function AnalysisWorkspace({
                   })}
                 </span>
                 <strong>
-                  {t('app.toMove', {
-                    player: position.player === 0 ? match.white : match.black,
-                  })}
+                  {effectiveView === 'after'
+                    ? review('after')
+                    : t('app.toMove', {
+                        player:
+                          position.player === 0 ? match.white : match.black,
+                      })}
                 </strong>
               </div>
+              {preview && (
+                <BoardReviewControls
+                  view={effectiveView}
+                  preview={preview}
+                  selected={selectedPreview}
+                  played={position.notation}
+                  onView={setBoardView}
+                  onPlayed={() => onPreview(null)}
+                />
+              )}
               <Board
                 position={position}
                 white={match.white}
                 black={match.black}
                 theme={theme}
+                preview={preview}
+                previewMode={effectiveView}
+                previewLabel={review('showing', {
+                  view: review(effectiveView),
+                  player: position.player === 0 ? match.white : match.black,
+                  move: formatDecision(
+                    selectedPreview?.notation ?? position.notation,
+                  ),
+                })}
               />
               <div className="board-navigation">
                 <button
@@ -293,25 +362,23 @@ export default function AnalysisWorkspace({
             role="tablist"
             aria-label={w('positionDetails')}
           >
-            {(['evaluation', 'errors', 'notes', 'cards'] as const).map(
-              (tab) => (
-                <button
-                  key={tab}
-                  role="tab"
-                  id={`inspector-tab-${tab}`}
-                  aria-controls={`inspector-panel-${tab}`}
-                  aria-selected={detail === tab}
-                  tabIndex={detail === tab ? 0 : -1}
-                  ref={(element) => {
-                    tabRefs.current[tab] = element;
-                  }}
-                  onKeyDown={(event) => tabKey(event, tab)}
-                  onClick={() => onDetail(tab)}
-                >
-                  {w(tab)}
-                </button>
-              ),
-            )}
+            {detailTabs.map((tab) => (
+              <button
+                key={tab}
+                role="tab"
+                id={`inspector-tab-${tab}`}
+                aria-controls={`inspector-panel-${tab}`}
+                aria-selected={detail === tab}
+                tabIndex={detail === tab ? 0 : -1}
+                ref={(element) => {
+                  tabRefs.current[tab] = element;
+                }}
+                onKeyDown={(event) => tabKey(event, tab)}
+                onClick={() => onDetail(tab)}
+              >
+                {tab === 'statistics' ? statistics('tab') : w(tab)}
+              </button>
+            ))}
           </div>
           <div
             id="inspector-panel-evaluation"
@@ -332,6 +399,8 @@ export default function AnalysisWorkspace({
               positionId={position?.id}
               sourceRevision={sourceRevision}
               onBookSettings={onBookSettings}
+              onPreview={onPreview}
+              selectedPreview={selectedPreview}
               disabled={!position || jobs.submitting || !configured}
               onAnalyze={(kind, plies) => void jobs.run(kind, plies)}
             />
@@ -348,6 +417,7 @@ export default function AnalysisWorkspace({
             onTrackJob={onTrackJob}
             onCurrentJob={setMatchJob}
             onFilterChange={setMoveFilter}
+            onShowErrors={() => onDetail('errors')}
           />
           <div
             id="inspector-panel-notes"
@@ -397,6 +467,7 @@ function MatchResults({
   onTrackJob,
   onCurrentJob,
   onFilterChange,
+  onShowErrors,
 }: {
   matchId: string;
   gameNo?: number;
@@ -408,7 +479,13 @@ function MatchResults({
   onPosition: (id: string) => void;
   onTrackJob: (job: Job | undefined) => void;
   onCurrentJob: (job: Job | undefined) => void;
-  onFilterChange: (filter: { player: string; kind: string }) => void;
+  onFilterChange: (filter: {
+    player: string;
+    kind: string;
+    severity?: string;
+    game_no?: number;
+  }) => void;
+  onShowErrors: () => void;
 }) {
   const onJob = useCallback(
     (job: Job | undefined) => {
@@ -418,12 +495,7 @@ function MatchResults({
     [onCurrentJob, onTrackJob],
   );
   return (
-    <div
-      id="inspector-panel-errors"
-      hidden={detail !== 'errors'}
-      role="tabpanel"
-      aria-labelledby="inspector-tab-errors"
-    >
+    <div hidden={detail !== 'errors' && detail !== 'statistics'}>
       <MatchAnalysisPanel
         key={navigation.match!.id}
         match={navigation.match!}
@@ -432,6 +504,9 @@ function MatchResults({
         configured={configured}
         controlsTarget={target}
         showResults={detail === 'errors'}
+        showStatistics={detail === 'statistics'}
+        onShowErrors={onShowErrors}
+        onGame={(number) => void navigation.selectGame(number)}
         onJob={onJob}
         onAccepted={onTrackJob}
         onFilterChange={onFilterChange}

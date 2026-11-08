@@ -3,8 +3,12 @@ import { checkerCounts, pipCounts, matchContext } from './boardMath';
 
 import { useEffect, useState } from 'react';
 import { useI18n } from './i18n';
+import { useBoardReviewText } from './board-review-messages';
 import BgBlitzBoard from './BgBlitzBoard';
 import { archiveThemes, type Theme } from './themes';
+import MoveArrows from './MoveArrows';
+import type { BoardView, MovePreview } from './move-preview';
+import './board-preview.css';
 export { themes, type Theme } from './themes';
 
 function Checkers({
@@ -12,15 +16,17 @@ function Checkers({
   x,
   y,
   bottom = false,
+  point,
 }: {
   count: number;
   x: number;
   y: number;
   bottom?: boolean;
+  point?: number;
 }) {
   const n = Math.abs(count);
   return (
-    <g>
+    <g data-point={point} data-count={count}>
       {Array.from({ length: Math.min(n, 5) }, (_, index) => (
         <g key={index}>
           <circle
@@ -55,18 +61,30 @@ export default function Board({
   white,
   black,
   theme,
+  preview,
+  previewMode,
+  previewLabel,
 }: {
   position: Position;
   white: string;
   black: string;
   theme: Theme;
+  preview?: MovePreview;
+  previewMode?: BoardView;
+  previewLabel?: string;
 }) {
   const { t, formatNumber } = useI18n();
+  const review = useBoardReviewText();
   const [failedTheme, setFailedTheme] = useState('');
   useEffect(() => setFailedTheme(''), [theme]);
   const archive = archiveThemes.find((entry) => entry.id === theme);
   const custom = failedTheme === theme ? undefined : archive;
-  const board = position.board;
+  const effectiveMode = preview?.ok ? (previewMode ?? 'before') : 'before';
+  const displayedPosition =
+    effectiveMode === 'after' && preview?.ok
+      ? { ...position, board: preview.board, dice: [] }
+      : position;
+  const board = displayedPosition.board;
   const pips = pipCounts(board);
   const counts = checkerCounts(board);
   const context = matchContext(position.gnubg_match_id);
@@ -84,20 +102,24 @@ export default function Board({
           : black,
   });
   const hasDice =
-    position.dice.length === 2 &&
-    position.dice.every((die) => die >= 1 && die <= 6);
-  const label = hasDice
+    displayedPosition.dice.length === 2 &&
+    displayedPosition.dice.every((die) => die >= 1 && die <= 6);
+  const stateLabel = hasDice
     ? t('board.label', {
         player: active,
-        first: position.dice[0],
-        second: position.dice[1],
+        first: displayedPosition.dice[0],
+        second: displayedPosition.dice[1],
         white: pips[0],
         black: pips[1],
       })
-    : `${t('app.toMove', { player: active })}. ${cubeLabel}`;
+    : effectiveMode === 'after'
+      ? `${review('pipsLabel', { white, black, whitePips: formatNumber(pips[0]), blackPips: formatNumber(pips[1]) })}. ${cubeLabel}`
+      : `${t('app.toMove', { player: active })}. ${cubeLabel}`;
+  const label = previewLabel ? `${previewLabel}. ${stateLabel}` : stateLabel;
   return (
     <div
       className={`board-shell theme-${custom ? 'bgblitz' : archive ? 'forest' : theme}`}
+      data-preview-mode={effectiveMode}
     >
       <div className="player-bar">
         <span>
@@ -128,11 +150,16 @@ export default function Board({
       )}
       {custom ? (
         <BgBlitzBoard
-          position={position}
+          position={displayedPosition}
           theme={custom}
           label={label}
           cubeLabel={cubeLabel}
           onError={() => setFailedTheme(theme)}
+          previewSteps={
+            effectiveMode === 'arrows' && preview?.ok
+              ? preview.steps
+              : undefined
+          }
         />
       ) : (
         <svg
@@ -170,20 +197,26 @@ export default function Board({
                   d={`M${x(i) - 24} 38 L${x(i) + 24} 38 L${x(i)} 214 Z`}
                   className={i % 2 ? 'point-light' : 'point-dark'}
                 />
-                <Checkers count={board[top]} x={x(i)} y={61} />
+                <Checkers count={board[top]} x={x(i)} y={61} point={top} />
                 <path
                   d={`M${x(i) - 24} 432 L${x(i) + 24} 432 L${x(i)} 256 Z`}
                   className={i % 2 ? 'point-dark' : 'point-light'}
                 />
-                <Checkers count={board[bottom]} x={x(i)} y={409} bottom />
+                <Checkers
+                  count={board[bottom]}
+                  x={x(i)}
+                  y={409}
+                  bottom
+                  point={bottom}
+                />
                 <text x={x(i)} y="455" className="point-number">
                   {position.player === 0 ? bottom : 25 - bottom}
                 </text>
               </g>
             );
           })}
-          <Checkers count={board[0]} x={340} y={64} />
-          <Checkers count={board[25]} x={340} y={406} bottom />
+          <Checkers count={board[0]} x={340} y={64} point={0} />
+          <Checkers count={board[25]} x={340} y={406} bottom point={25} />
           <g
             transform={`translate(328,${cubeOwner === null ? 223 : cubeOwner === 0 ? 365 : 81})`}
             aria-label={cubeLabel}
@@ -209,7 +242,7 @@ export default function Board({
               {displayedCube === 1 ? '64' : displayedCube}
             </text>
           </g>
-          {position.dice
+          {displayedPosition.dice
             .filter((die) => die >= 1 && die <= 6)
             .map((die, i) => (
               <g key={i} transform={`translate(${420 + i * 45},219)`}>
@@ -230,6 +263,13 @@ export default function Board({
                 </text>
               </g>
             ))}
+          {effectiveMode === 'arrows' && preview?.ok && (
+            <MoveArrows
+              board={position.board}
+              player={position.player}
+              steps={preview.steps}
+            />
+          )}
         </svg>
       )}
       <div className="player-bar">

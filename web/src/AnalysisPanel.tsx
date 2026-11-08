@@ -5,6 +5,8 @@ import { useI18n } from './i18n';
 import { useAnalysisSources } from './useAnalysisSources';
 import { useSourceText } from './analysis-source-messages';
 import SourceAnalysisView from './SourceAnalysisView';
+import type { PreviewCandidate } from './candidate-preview';
+import { useBoardReviewText } from './board-review-messages';
 import './analysis-sources.css';
 
 export default function AnalysisPanel({
@@ -17,6 +19,8 @@ export default function AnalysisPanel({
   positionId,
   sourceRevision = 0,
   onBookSettings,
+  onPreview,
+  selectedPreview,
 }: {
   jobs: Jobs;
   stats: DiceStats | null;
@@ -27,6 +31,8 @@ export default function AnalysisPanel({
   positionId?: string;
   sourceRevision?: number;
   onBookSettings: () => void;
+  onPreview?: (candidate: PreviewCandidate | null) => void;
+  selectedPreview?: PreviewCandidate;
 }) {
   const {
     t,
@@ -37,6 +43,7 @@ export default function AnalysisPanel({
     formatError,
   } = useI18n();
   const l = useSourceText();
+  const review = useBoardReviewText();
   const sources = useAnalysisSources(positionId, sourceRevision);
   const [sourceChoice, setSourceChoice] = useState<{
     positionId?: string;
@@ -52,7 +59,12 @@ export default function AnalysisPanel({
           : sources.book?.hit
             ? 'book'
             : 'engine';
+  useEffect(() => onPreview?.(null), [selectedSource, positionId, onPreview]);
   type Source = 'file' | 'book' | 'engine';
+  function selectSource(source: Source) {
+    onPreview?.(null);
+    setSourceChoice({ positionId, source });
+  }
   const sourceRefs = useRef<Partial<Record<Source, HTMLButtonElement | null>>>(
     {},
   );
@@ -69,7 +81,7 @@ export default function AnalysisPanel({
     else if (event.key === 'End') next = options.length - 1;
     else return;
     event.preventDefault();
-    setSourceChoice({ positionId, source: options[next] });
+    selectSource(options[next]);
     sourceRefs.current[options[next]]?.focus();
   }
   const [plies, setPlies] = useState(defaultPlies);
@@ -94,7 +106,7 @@ export default function AnalysisPanel({
       : null;
   const choose = (kind: 'analysis' | 'dice') => {
     setView(kind);
-    setSourceChoice({ positionId, source: 'engine' });
+    selectSource('engine');
     onAnalyze(kind, plies);
   };
   const best = distribution?.rolls.find(
@@ -217,7 +229,7 @@ export default function AnalysisPanel({
                 }}
                 onKeyDown={(event) => sourceKey(event, source)}
                 disabled={source === 'file' && !sources.records.length}
-                onClick={() => setSourceChoice({ positionId, source })}
+                onClick={() => selectSource(source)}
               >
                 {l(source === 'file' ? 'imported' : source)}
               </button>
@@ -238,6 +250,8 @@ export default function AnalysisPanel({
               records={sources.records}
               book={sources.book}
               source={selectedSource}
+              onPreview={onPreview}
+              selectedPreview={selectedPreview}
             />
           )}
         </>
@@ -246,6 +260,20 @@ export default function AnalysisPanel({
         selectedSource === 'engine' &&
         (analysis ? (
           <>
+            {onPreview && analysis.candidates[0] && (
+              <button
+                type="button"
+                className="preview-best"
+                onClick={() =>
+                  onPreview({
+                    ...analysis.candidates[0],
+                    source: `${analysis.engine} · ${analysis.plies}-ply`,
+                  })
+                }
+              >
+                {review('best')}
+              </button>
+            )}
             <table className="candidates">
               <thead>
                 <tr>
@@ -260,7 +288,31 @@ export default function AnalysisPanel({
                   <tr key={c.rank} className={c.rank === 1 ? 'best-move' : ''}>
                     <td>{formatNumber(c.rank, { minimumIntegerDigits: 2 })}</td>
                     <td>
-                      {formatDecision(c.notation)}
+                      {onPreview ? (
+                        <button
+                          type="button"
+                          className="candidate-preview-button"
+                          aria-label={review('previewMove', {
+                            rank: c.rank,
+                            move: formatDecision(c.notation),
+                          })}
+                          aria-pressed={
+                            selectedPreview?.notation === c.notation &&
+                            selectedPreview?.source ===
+                              `${analysis.engine} · ${analysis.plies}-ply`
+                          }
+                          onClick={() =>
+                            onPreview({
+                              ...c,
+                              source: `${analysis.engine} · ${analysis.plies}-ply`,
+                            })
+                          }
+                        >
+                          {formatDecision(c.notation)}
+                        </button>
+                      ) : (
+                        formatDecision(c.notation)
+                      )}
                       {c.rank === 1 && (
                         <span className="best-label">
                           {t('analysis.bestMove')}

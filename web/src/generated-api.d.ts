@@ -292,6 +292,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/jobs/{id}/statistics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["statistics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/library/actions": {
         parameters: {
             query?: never;
@@ -1177,6 +1193,18 @@ export interface components {
             format: string;
             match_ids: string[];
         };
+        GameAnalysisStatistics: {
+            /** @description True only when this source game has a durable, complete checkpoint for this job. */
+            analyzed: boolean;
+            /** Format: int32 */
+            black_score: number;
+            crawford: boolean;
+            /** Format: int32 */
+            game_no: number;
+            summary?: null | components["schemas"]["MatchAnalysisSummary"];
+            /** Format: int32 */
+            white_score: number;
+        };
         GameDecisions: {
             /** Format: uuid */
             game_id: string;
@@ -1282,6 +1310,13 @@ export interface components {
             total_games: number;
             /** Format: date-time */
             updated_at: string;
+        };
+        JobAnalysisStatistics: {
+            /** @description Ordered source games in this job's scope. Coverage requires a committed game checkpoint. */
+            games: components["schemas"]["GameAnalysisStatistics"][];
+            /** Format: uuid */
+            job_id: string;
+            summary?: null | components["schemas"]["MatchAnalysisSummary"];
         };
         JobEvent: {
             /** Format: date-time */
@@ -1427,6 +1462,11 @@ export interface components {
             /** Format: int64 */
             next_cursor?: number | null;
         };
+        /**
+         * @description Native decision severity, using the saved GNUbg normalized loss categories.
+         * @enum {string}
+         */
+        MoveSeverity: "none" | "doubtful" | "bad" | "very_bad";
         NextCard: {
             card?: null | components["schemas"]["CardQuestion"];
             counts: components["schemas"]["ReviewCounts"];
@@ -2459,22 +2499,25 @@ export interface operations {
     };
     move_analyses: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Restrict decisions to one source game. */
+                game_no?: number;
+                /** @description Continue after a move-analysis row ID, keeping the same filters. */
+                after?: number;
+                /** @description Page size 1–100, defaults to 50. */
+                limit?: number;
+                /** @description Only decisions losing at least 0.04 normalized equity. */
+                errors_only?: boolean;
+                /** @description 0 = White, 1 = Black. */
+                player?: number;
+                /** @description checker or cube; omitted means both. */
+                kind?: string;
+                /** @description Exact error severity; combined with all other filters. */
+                severity?: components["schemas"]["MoveSeverity"];
+            };
             header?: never;
             path: {
                 id: string;
-                /** @description Restrict decisions to one source game. */
-                game_no: number | null;
-                /** @description Continue after a move-analysis row ID, keeping the same filters. */
-                after: number | null;
-                /** @description Page size 1–100, defaults to 50. */
-                limit: number | null;
-                /** @description Only decisions losing at least 0.04 normalized equity. */
-                errors_only: boolean;
-                /** @description 0 = White, 1 = Black. */
-                player: number | null;
-                /** @description checker or cube; omitted means both. */
-                kind: string | null;
             };
             cookie?: never;
         };
@@ -2486,6 +2529,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MoveAnalysisPage"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    statistics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobAnalysisStatistics"];
                 };
             };
             404: {

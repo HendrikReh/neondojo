@@ -218,3 +218,24 @@ pub struct MoveAnalysisPage {
     pub items: Vec<MoveAnalysis>,
     pub next_cursor: Option<i64>,
 }
+
+/// Native decision severity, using the saved GNUbg normalized loss categories.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MoveSeverity {
+    None,
+    Doubtful,
+    Bad,
+    VeryBad,
+}
+
+impl MoveSeverity {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Doubtful => "doubtful",
+            Self::Bad => "bad",
+            Self::VeryBad => "very_bad",
+        }
+    }
+}

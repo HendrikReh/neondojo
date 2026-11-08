@@ -21,3 +21,5 @@ pub mod opening_book;
 pub mod imported_analysis;
 
 pub mod xg_book;
+
+pub mod analysis_statistics;

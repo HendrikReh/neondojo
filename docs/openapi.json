@@ -1187,75 +1187,69 @@
           },
           {
             "name": "game_no",
-            "in": "path",
+            "in": "query",
             "description": "Restrict decisions to one source game.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "format": "int32"
             }
           },
           {
             "name": "after",
-            "in": "path",
+            "in": "query",
             "description": "Continue after a move-analysis row ID, keeping the same filters.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "format": "int64"
             }
           },
           {
             "name": "limit",
-            "in": "path",
+            "in": "query",
             "description": "Page size 1–100, defaults to 50.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "format": "int64"
             }
           },
           {
             "name": "errors_only",
-            "in": "path",
+            "in": "query",
             "description": "Only decisions losing at least 0.04 normalized equity.",
-            "required": true,
+            "required": false,
             "schema": {
               "type": "boolean"
             }
           },
           {
             "name": "player",
-            "in": "path",
+            "in": "query",
             "description": "0 = White, 1 = Black.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "format": "int32"
             }
           },
           {
             "name": "kind",
-            "in": "path",
+            "in": "query",
             "description": "checker or cube; omitted means both.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
+            }
+          },
+          {
+            "name": "severity",
+            "in": "query",
+            "description": "Exact error severity; combined with all other filters.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/MoveSeverity"
             }
           }
         ],
@@ -1266,6 +1260,57 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MoveAnalysisPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{id}/statistics": {
+      "get": {
+        "tags": [
+          "Match analysis"
+        ],
+        "operationId": "statistics",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobAnalysisStatistics"
                 }
               }
             }
@@ -4630,6 +4675,48 @@
           }
         }
       },
+      "GameAnalysisStatistics": {
+        "type": "object",
+        "required": [
+          "game_no",
+          "white_score",
+          "black_score",
+          "crawford",
+          "analyzed"
+        ],
+        "properties": {
+          "analyzed": {
+            "type": "boolean",
+            "description": "True only when this source game has a durable, complete checkpoint for this job."
+          },
+          "black_score": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "crawford": {
+            "type": "boolean"
+          },
+          "game_no": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "summary": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MatchAnalysisSummary",
+                "description": "Null before checkpointing. Legacy checkpoints provide decision totals but no native game PR."
+              }
+            ]
+          },
+          "white_score": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "GameDecisions": {
         "type": "object",
         "required": [
@@ -5009,6 +5096,37 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "JobAnalysisStatistics": {
+        "type": "object",
+        "required": [
+          "job_id",
+          "games"
+        ],
+        "properties": {
+          "games": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GameAnalysisStatistics"
+            },
+            "description": "Ordered source games in this job's scope. Coverage requires a committed game checkpoint."
+          },
+          "job_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "summary": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MatchAnalysisSummary",
+                "description": "The authoritative persisted job summary, including partial progress; null before any summary exists."
+              }
+            ]
           }
         }
       },
@@ -5491,6 +5609,16 @@
             "format": "int64"
           }
         }
+      },
+      "MoveSeverity": {
+        "type": "string",
+        "description": "Native decision severity, using the saved GNUbg normalized loss categories.",
+        "enum": [
+          "none",
+          "doubtful",
+          "bad",
+          "very_bad"
+        ]
       },
       "NextCard": {
         "type": "object",

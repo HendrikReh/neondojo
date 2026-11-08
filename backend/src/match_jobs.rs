@@ -129,6 +129,24 @@ async fn checkpoint(
     next.engine.clone_from(&game.engine);
     next.completed_games += 1;
     next.analyzed_moves += positions.len() as i32;
+    let mut game_summary = MatchAnalysisSummary {
+        engine: game.engine.clone(),
+        plies: job.plies,
+        total_games: 1,
+        completed_games: 0,
+        total_moves: positions.len() as i32,
+        analyzed_moves: positions.len() as i32,
+        players: [
+            PlayerAnalysisSummary::default(),
+            PlayerAnalysisSummary {
+                player: 1,
+                ..Default::default()
+            },
+        ],
+        performance_rating: None,
+    };
+    accumulate_performance_rating(&mut game_summary, game);
+    game_summary.completed_games = 1;
     let mut tx = pool.begin().await?;
     assert_lease(&mut tx, job.id, token).await?;
     for (index, decision) in game.decisions.iter().enumerate() {
@@ -145,38 +163,16 @@ async fn checkpoint(
         } else {
             None
         };
-        let player = &mut next.players[decision.player as usize];
-        match decision.kind.as_str() {
-            "checker" => {
-                player.checker_decisions += 1;
-                player.checker_equity_loss += decision.equity_loss;
-            }
-            "cube" => {
-                player.cube_decisions += 1;
-                player.cube_equity_loss += decision.equity_loss;
-            }
-            _ => anyhow::bail!("Unknown analysis decision kind"),
-        }
-        if decision.evaluation_status == "forced" {
-            player.forced_moves += 1;
-        }
-        if decision.evaluation_status == "unavailable" {
-            player.unavailable += 1;
-        }
-        match decision.severity.as_str() {
-            "doubtful" => player.doubtful += 1,
-            "bad" => player.bad += 1,
-            "very_bad" => player.very_bad += 1,
-            "none" => {}
-            _ => anyhow::bail!("Unknown analysis error severity"),
-        }
+        accumulate_decision(&mut next, decision)?;
+        accumulate_decision(&mut game_summary, decision)?;
         sqlx::query("INSERT INTO move_analyses(job_id,position_uuid,game_no,decision_no,player,kind,equity_loss,data) VALUES($1,$2,$3,$4,$5,$6,$7,$8)")
             .bind(job.id).bind(position_uuid).bind(game.game_no).bind(decision.decision_no).bind(decision.player).bind(&decision.kind)
             .bind(decision.equity_loss).bind(serde_json::to_value(decision)?).execute(&mut *tx).await?;
     }
-    sqlx::query("INSERT INTO match_analysis_games(job_id,game_no) VALUES($1,$2)")
+    sqlx::query("INSERT INTO match_analysis_games(job_id,game_no,summary) VALUES($1,$2,$3)")
         .bind(job.id)
         .bind(game.game_no)
+        .bind(serde_json::to_value(&game_summary)?)
         .execute(&mut *tx)
         .await?;
     let progress = next.completed_games * 100 / job.total_games;
@@ -187,6 +183,38 @@ async fn checkpoint(
         .execute(&mut *tx).await?;
     tx.commit().await?;
     *summary = next;
+    Ok(())
+}
+
+fn accumulate_decision(
+    summary: &mut MatchAnalysisSummary,
+    decision: &crate::match_analysis::Decision,
+) -> Result<()> {
+    let player = &mut summary.players[decision.player as usize];
+    match decision.kind.as_str() {
+        "checker" => {
+            player.checker_decisions += 1;
+            player.checker_equity_loss += decision.equity_loss;
+        }
+        "cube" => {
+            player.cube_decisions += 1;
+            player.cube_equity_loss += decision.equity_loss;
+        }
+        _ => anyhow::bail!("Unknown analysis decision kind"),
+    }
+    if decision.evaluation_status == "forced" {
+        player.forced_moves += 1;
+    }
+    if decision.evaluation_status == "unavailable" {
+        player.unavailable += 1;
+    }
+    match decision.severity.as_str() {
+        "doubtful" => player.doubtful += 1,
+        "bad" => player.bad += 1,
+        "very_bad" => player.very_bad += 1,
+        "none" => {}
+        _ => anyhow::bail!("Unknown analysis error severity"),
+    }
     Ok(())
 }
 

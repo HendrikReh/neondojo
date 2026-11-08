@@ -7,6 +7,8 @@ import {
   type ThemeImage,
 } from './themes';
 import { useI18n } from './i18n';
+import MoveArrows from './MoveArrows';
+import type { MovePreviewStep } from './move-preview';
 
 export default function BgBlitzBoard({
   position,
@@ -14,12 +16,14 @@ export default function BgBlitzBoard({
   label,
   cubeLabel,
   onError,
+  previewSteps,
 }: {
   position: Position;
   theme: BgBlitzTheme;
   label: string;
   cubeLabel: string;
   onError: () => void;
+  previewSteps?: MovePreviewStep[];
 }) {
   const { formatNumber } = useI18n();
   const { width, height } = theme.background;
@@ -179,6 +183,14 @@ export default function BgBlitzBoard({
             ),
           )}
       </g>
+      {previewSteps && (
+        <MoveArrows
+          board={position.board}
+          player={position.player}
+          steps={previewSteps}
+          theme={theme}
+        />
+      )}
     </svg>
   );
 }

@@ -11,6 +11,25 @@ import {
 } from './api';
 import { useMatchAnalysis } from './useMatchAnalysis';
 import { useI18n, type TranslationKey } from './i18n';
+import MatchStatisticsView, {
+  PlayerStatisticsSummary,
+} from './MatchStatisticsView';
+import {
+  buildStatisticsFilter,
+  decisionFilterQuery,
+  statisticsRevision,
+  type JobAnalysisStatistics,
+  type MatchDecisionFilter,
+  type StatisticsAction,
+} from './match-statistics-api';
+import { useStatisticsText } from './review-statistics-messages';
+
+const emptyFilter: MatchDecisionFilter = {
+  player: '',
+  kind: '',
+  severity: '',
+  errors_only: false,
+};
 
 const severityKeys: Record<string, TranslationKey> = {
   none: 'severity.none',
@@ -25,6 +44,9 @@ export default function MatchAnalysisPanel({
   onPosition,
   controlsTarget,
   showResults = true,
+  showStatistics = false,
+  onShowErrors,
+  onGame,
   defaultPlies = 0,
   configured = true,
   onJob,
@@ -36,11 +58,19 @@ export default function MatchAnalysisPanel({
   onPosition: (id: string) => void;
   controlsTarget?: HTMLElement | null;
   showResults?: boolean;
+  showStatistics?: boolean;
+  onShowErrors?: () => void;
+  onGame?: (gameNo: number) => void;
   defaultPlies?: number;
   configured?: boolean;
   onJob?: (job: Job | undefined) => void;
   onAccepted?: (job: Job) => void;
-  onFilterChange?: (filter: { player: string; kind: string }) => void;
+  onFilterChange?: (filter: {
+    player: string;
+    kind: string;
+    severity?: string;
+    game_no?: number;
+  }) => void;
 }) {
   const {
     t,
@@ -50,6 +80,7 @@ export default function MatchAnalysisPanel({
     formatDecision,
     formatError,
   } = useI18n();
+  const text = useStatisticsText();
   const decimal = (value: number) =>
     formatNumber(value, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
   const [scope, setScope] = useState<'game' | 'match'>('game');
@@ -63,13 +94,66 @@ export default function MatchAnalysisPanel({
   const [plies, setPlies] = useState(defaultPlies);
   useEffect(() => setPlies(defaultPlies), [defaultPlies]);
   useEffect(() => onJob?.(job), [job, onJob]);
-  const [errorsOnly, setErrorsOnly] = useState(false);
-  const [player, setPlayer] = useState('');
-  const [kind, setKind] = useState('');
+  const filterScope = `${match.id}:${scoped ? (gameNo ?? 'none') : 'match'}`;
+  const [selection, setSelection] = useState<{
+    scope: string;
+    filter: MatchDecisionFilter;
+  }>();
+  useEffect(() => setSelection(undefined), [filterScope]);
+  const selected =
+    selection?.scope === filterScope ? selection.filter : emptyFilter;
+  const {
+    player,
+    kind,
+    severity,
+    game_no: filteredGame,
+    errors_only: errorsOnly,
+  } = selected;
+  const updateFilter = (patch: Partial<MatchDecisionFilter>) =>
+    setSelection({ scope: filterScope, filter: { ...selected, ...patch } });
+  function selectMetric(action: StatisticsAction) {
+    setSelection({ scope: filterScope, filter: buildStatisticsFilter(action) });
+    if (action.gameNo !== undefined) onGame?.(action.gameNo);
+    onShowErrors?.();
+  }
   useEffect(
-    () => onFilterChange?.({ player, kind }),
-    [player, kind, onFilterChange],
+    () => onFilterChange?.({ player, kind, severity, game_no: filteredGame }),
+    [player, kind, severity, filteredGame, onFilterChange],
   );
+  const statisticsKey = job ? statisticsRevision(job) : '';
+  const [statisticsResult, setStatisticsResult] = useState<{
+    key: string;
+    value: JobAnalysisStatistics;
+  }>();
+  const [statisticsError, setStatisticsError] = useState<{
+    key: string;
+    error: unknown;
+  }>();
+  const [statisticsLoaded, setStatisticsLoaded] = useState<string>();
+  const statistics =
+    statisticsResult?.key === statisticsKey
+      ? statisticsResult.value
+      : undefined;
+  useEffect(() => {
+    if (!job?.id) return;
+    const abort = new AbortController();
+    void request<JobAnalysisStatistics>(`/jobs/${job.id}/statistics`, {
+      signal: abort.signal,
+    })
+      .then((value) => {
+        if (abort.signal.aborted || value.job_id !== job.id) return;
+        setStatisticsResult({ key: statisticsKey, value });
+        setStatisticsError(undefined);
+      })
+      .catch((error) => {
+        if (!abort.signal.aborted)
+          setStatisticsError({ key: statisticsKey, error });
+      })
+      .finally(() => {
+        if (!abort.signal.aborted) setStatisticsLoaded(statisticsKey);
+      });
+    return () => abort.abort();
+  }, [job?.id, statisticsKey]);
   const [results, setResults] = useState<{
     key: string;
     rows: MoveAnalysis[];
@@ -81,9 +165,9 @@ export default function MatchAnalysisPanel({
   const active = job && !terminal(job);
   const summary = job?.result as MatchAnalysisSummary | undefined;
   const names = [match.white, match.black];
-  const filter = `errors_only=${errorsOnly}${player ? `&player=${player}` : ''}${kind ? `&kind=${kind}` : ''}`;
+  const filter = decisionFilterQuery(selected);
   // Filters, checkpoints and scope changes each start their own pagination chain.
-  const resultKey = `${job?.id}:${job?.completed_games}:${filter}`;
+  const resultKey = `${statisticsKey}:${filter}`;
   const after = page?.key === resultKey ? page.cursor : null;
   const requestKey = `${resultKey}:${after}`;
   const rows = results?.key === resultKey ? results.rows : [];
@@ -119,6 +203,39 @@ export default function MatchAnalysisPanel({
       });
     return () => abort.abort();
   }, [job?.id, filter, after, resultKey, requestKey]);
+
+  const progress = job && (
+    <div className="match-analysis-progress" role="status" aria-live="polite">
+      <div>
+        <strong>
+          {job.status === 'completed'
+            ? t(scoped ? 'gameAnalysis.completed' : 'matchAnalysis.completed')
+            : job.status === 'failed'
+              ? t(scoped ? 'gameAnalysis.failed' : 'matchAnalysis.failed')
+              : job.status === 'queued'
+                ? t('matchAnalysis.queued')
+                : t('matchAnalysis.engineRunning')}
+        </strong>
+        <span>
+          {t('matchAnalysis.progressText', {
+            completed: job.completed_games,
+            total: job.total_games,
+            plies: job.plies,
+            progress: formatPercent(job.progress / 100),
+          })}
+        </span>
+      </div>
+      <progress
+        aria-label={t('matchAnalysis.progressLabel')}
+        value={job.progress}
+        max={100}
+      />
+      {active && <small>{t('matchAnalysis.progressHint')}</small>}
+      {job.error && (
+        <p role="alert">{t('error.engine', { details: job.error })}</p>
+      )}
+    </div>
+  );
 
   const heading = (
     <div className="match-analysis-heading">
@@ -188,257 +305,263 @@ export default function MatchAnalysisPanel({
   );
   return (
     <>
-      <section
-        className="match-analysis"
+      <div
+        id={controlsTarget ? 'inspector-panel-errors' : undefined}
+        role={controlsTarget ? 'tabpanel' : undefined}
+        aria-labelledby={controlsTarget ? 'inspector-tab-errors' : undefined}
         hidden={!showResults}
-        data-job-id={job?.id}
-        aria-label={t(scoped ? 'gameAnalysis.label' : 'matchAnalysis.label')}
       >
-        {!controlsTarget && heading}
-        {!!error && !controlsTarget && (
-          <p className="analysis-error" role="alert">
-            {formatError(error)}
-          </p>
-        )}
-        {job && (
-          <>
-            <div
-              className="match-analysis-progress"
-              role="status"
-              aria-live="polite"
-            >
-              <div>
-                <strong>
-                  {job.status === 'completed'
-                    ? t(
-                        scoped
-                          ? 'gameAnalysis.completed'
-                          : 'matchAnalysis.completed',
-                      )
-                    : job.status === 'failed'
-                      ? t(
-                          scoped
-                            ? 'gameAnalysis.failed'
-                            : 'matchAnalysis.failed',
-                        )
-                      : job.status === 'queued'
-                        ? t('matchAnalysis.queued')
-                        : t('matchAnalysis.engineRunning')}
-                </strong>
-                <span>
-                  {t('matchAnalysis.progressText', {
-                    completed: job.completed_games,
-                    total: job.total_games,
-                    plies: job.plies,
-                    progress: formatPercent(job.progress / 100),
-                  })}
-                </span>
-              </div>
-              <progress
-                aria-label={t('matchAnalysis.progressLabel')}
-                value={job.progress}
-                max={100}
-              />
-              {active && <small>{t('matchAnalysis.progressHint')}</small>}
-              {job.error && (
-                <p role="alert">{t('error.engine', { details: job.error })}</p>
+        <section
+          className="match-analysis"
+          data-job-id={job?.id}
+          aria-label={t(scoped ? 'gameAnalysis.label' : 'matchAnalysis.label')}
+        >
+          {!controlsTarget && heading}
+          {!!error && !controlsTarget && (
+            <p className="analysis-error" role="alert">
+              {formatError(error)}
+            </p>
+          )}
+          {!job && <p className="analysis-empty">{text('noAnalysis')}</p>}
+          {job && (
+            <>
+              {showResults && progress}
+              {summary && (
+                <>
+                  <PlayerStatisticsSummary
+                    summary={summary}
+                    names={names}
+                    onSelect={selectMetric}
+                  />
+                  <p className="analysis-method">
+                    {t('matchAnalysis.method', {
+                      analyzed: summary.analyzed_moves,
+                      total: summary.total_moves,
+                      doubtful: formatNumber(0.04),
+                      bad: formatNumber(0.08),
+                      veryBad: formatNumber(0.16),
+                    })}
+                  </p>
+                </>
               )}
-            </div>
-            {summary && (
-              <>
-                <div className="match-analysis-summary">
-                  {summary.players.map((stats) => (
-                    <article key={stats.player}>
-                      <h4>{names[stats.player]}</h4>
-                      <div className="match-summary-numbers">
-                        <span>
-                          <b>
-                            {formatNumber(
-                              stats.doubtful + stats.bad + stats.very_bad,
-                            )}
-                          </b>{' '}
-                          {t('matchAnalysis.inaccuracies')}
-                        </span>
-                        <span>
-                          <b>
-                            {decimal(
-                              stats.checker_equity_loss +
-                                stats.cube_equity_loss,
-                            )}
-                          </b>{' '}
-                          {t('matchAnalysis.equityLoss')}
-                        </span>
-                      </div>
-                      <p>
-                        {t('matchAnalysis.decisionsCount', {
-                          moves: stats.checker_decisions,
-                          cube: stats.cube_decisions,
-                        })}
-                      </p>
-                      <small>
-                        {t('matchAnalysis.severityCount', {
-                          doubtful: stats.doubtful,
-                          bad: stats.bad,
-                          veryBad: stats.very_bad,
-                        })}
-                        {stats.unavailable
-                          ? t('matchAnalysis.unavailableCount', {
-                              count: stats.unavailable,
-                            })
-                          : ''}
-                      </small>
-                    </article>
-                  ))}
-                </div>
-                <p className="analysis-method">
-                  {t('matchAnalysis.method', {
-                    analyzed: summary.analyzed_moves,
-                    total: summary.total_moves,
-                    doubtful: formatNumber(0.04),
-                    bad: formatNumber(0.08),
-                    veryBad: formatNumber(0.16),
-                  })}
-                </p>
-              </>
-            )}
-            <details className="match-move-overview" open>
-              <summary>{t('matchAnalysis.overview')}</summary>
-              <div className="match-analysis-filters">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={errorsOnly}
-                    onChange={(event) => setErrorsOnly(event.target.checked)}
-                  />{' '}
-                  {t('matchAnalysis.errorsOnly', {
-                    threshold: formatNumber(0.04),
-                  })}
-                </label>
-                <select
-                  aria-label={t('matchAnalysis.filterPlayer')}
-                  value={player}
-                  onChange={(event) => setPlayer(event.target.value)}
-                >
-                  <option value="">{t('matchAnalysis.bothPlayers')}</option>
-                  <option value="0">{match.white}</option>
-                  <option value="1">{match.black}</option>
-                </select>
-                <select
-                  aria-label={t('matchAnalysis.filterDecision')}
-                  value={kind}
-                  onChange={(event) => setKind(event.target.value)}
-                >
-                  <option value="">{t('matchAnalysis.bothKinds')}</option>
-                  <option value="checker">{t('common.checker')}</option>
-                  <option value="cube">{t('common.cube')}</option>
-                </select>
-              </div>
-              {pageError?.key === resultKey && (
-                <p role="alert">{formatError(pageError.error)}</p>
-              )}
-              <div className="match-moves-scroll">
-                <table className="match-moves-table">
-                  <thead>
-                    <tr>
-                      <th>{t('matchAnalysis.gameMove')}</th>
-                      <th>{t('matchAnalysis.playerKind')}</th>
-                      <th>{t('common.played')}</th>
-                      <th>{t('matchAnalysis.bestDecision')}</th>
-                      <th>{t('matchAnalysis.loss')}</th>
-                      <th>{t('matchAnalysis.rating')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row) => (
-                      <tr key={row.id}>
-                        <td>
-                          {row.position_uuid ? (
-                            <button
-                              className="position-link"
-                              aria-label={t('matchAnalysis.openPosition', {
-                                game: row.game_no,
-                                move: row.checker_no ?? '—',
-                              })}
-                              onClick={() => onPosition(row.position_uuid!)}
-                            >
-                              {formatNumber(row.game_no)} ·{' '}
-                              {row.checker_no == null
-                                ? '—'
-                                : formatNumber(row.checker_no)}{' '}
-                              ↗
-                            </button>
-                          ) : (
-                            t('matchAnalysis.cubeMove', {
-                              game: row.game_no,
-                              decision: row.decision_no,
-                            })
-                          )}
-                        </td>
-                        <td>
-                          {names[row.player]}
-                          <small>
-                            {row.kind === 'checker'
-                              ? `${t('common.checker')} · ${row.dice?.join('–')}`
-                              : t('common.cube')}
-                          </small>
-                        </td>
-                        <td>
-                          {formatDecision(row.played)}
-                          <small>
-                            {row.played_equity != null
-                              ? formatEquity(row.played_equity)
-                              : '—'}
-                          </small>
-                        </td>
-                        <td>
-                          {formatDecision(row.best)}
-                          <small>
-                            {row.best_equity != null
-                              ? formatEquity(row.best_equity)
-                              : '—'}
-                          </small>
-                        </td>
-                        <td className="equity-loss">
-                          {row.evaluation_status === 'unavailable'
-                            ? '—'
-                            : decimal(row.equity_loss)}
-                        </td>
-                        <td>
-                          <span className={`severity severity-${row.severity}`}>
-                            {row.evaluation_status === 'forced'
-                              ? t('matchAnalysis.forced')
-                              : row.evaluation_status === 'unavailable'
-                                ? t('matchAnalysis.unavailable')
-                                : severityKeys[row.severity]
-                                  ? t(severityKeys[row.severity])
-                                  : row.severity}
-                          </span>
-                        </td>
-                      </tr>
+              <details className="match-move-overview" open>
+                <summary>{t('matchAnalysis.overview')}</summary>
+                <div className="match-analysis-filters">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={errorsOnly}
+                      onChange={(event) =>
+                        updateFilter({
+                          errors_only: event.target.checked,
+                          ...(event.target.checked && severity === 'none'
+                            ? { severity: '' }
+                            : {}),
+                        })
+                      }
+                    />{' '}
+                    {t('matchAnalysis.errorsOnly', {
+                      threshold: formatNumber(0.04),
+                    })}
+                  </label>
+                  <select
+                    aria-label={t('matchAnalysis.filterPlayer')}
+                    value={player}
+                    onChange={(event) =>
+                      updateFilter({ player: event.target.value })
+                    }
+                  >
+                    <option value="">{t('matchAnalysis.bothPlayers')}</option>
+                    <option value="0">{match.white}</option>
+                    <option value="1">{match.black}</option>
+                  </select>
+                  <select
+                    aria-label={t('matchAnalysis.filterDecision')}
+                    value={kind}
+                    onChange={(event) =>
+                      updateFilter({ kind: event.target.value })
+                    }
+                  >
+                    <option value="">{t('matchAnalysis.bothKinds')}</option>
+                    <option value="checker">{t('common.checker')}</option>
+                    <option value="cube">{t('common.cube')}</option>
+                  </select>
+                  <select
+                    aria-label={text('filterSeverity')}
+                    value={severity ?? ''}
+                    onChange={(event) =>
+                      updateFilter({
+                        severity: event.target.value,
+                        ...(event.target.value === 'none'
+                          ? { errors_only: false }
+                          : {}),
+                      })
+                    }
+                  >
+                    <option value="">{text('allSeverities')}</option>
+                    {Object.entries(severityKeys).map(([value, key]) => (
+                      <option key={value} value={value}>
+                        {t(key)}
+                      </option>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-              {rows.length === 0 && !loading && (
-                <p className="analysis-empty">
-                  {job.completed_games === 0
-                    ? t('matchAnalysis.firstGameHint')
-                    : t('matchAnalysis.noDecisions')}
-                </p>
-              )}
-              {loading && <p role="status">{t('matchAnalysis.loading')}</p>}
-              {cursor && (
-                <button
-                  onClick={() => setPage({ key: resultKey, cursor })}
-                  disabled={loading}
-                >
-                  {t('matchAnalysis.more')}
-                </button>
-              )}
-            </details>
-          </>
-        )}
-      </section>
+                  </select>
+                  <select
+                    aria-label={text('filterGame')}
+                    value={filteredGame ?? ''}
+                    onChange={(event) => {
+                      const game = event.target.value
+                        ? Number(event.target.value)
+                        : undefined;
+                      updateFilter({ game_no: game });
+                      if (game !== undefined) onGame?.(game);
+                    }}
+                  >
+                    <option value="">{text('allGames')}</option>
+                    {(
+                      statistics?.games ??
+                      (scoped && gameNo !== undefined
+                        ? [{ game_no: gameNo }]
+                        : [])
+                    ).map((game) => (
+                      <option key={game.game_no} value={game.game_no}>
+                        {text('game', { game: game.game_no })}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="statistics-reset"
+                    onClick={() =>
+                      setSelection({ scope: filterScope, filter: emptyFilter })
+                    }
+                  >
+                    {text('resetFilters')}
+                  </button>
+                </div>
+                {pageError?.key === resultKey && (
+                  <p role="alert">{formatError(pageError.error)}</p>
+                )}
+                <div className="match-moves-scroll">
+                  <table className="match-moves-table">
+                    <thead>
+                      <tr>
+                        <th>{t('matchAnalysis.gameMove')}</th>
+                        <th>{t('matchAnalysis.playerKind')}</th>
+                        <th>{t('common.played')}</th>
+                        <th>{t('matchAnalysis.bestDecision')}</th>
+                        <th>{t('matchAnalysis.loss')}</th>
+                        <th>{t('matchAnalysis.rating')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((row) => (
+                        <tr key={row.id}>
+                          <td>
+                            {row.position_uuid ? (
+                              <button
+                                className="position-link"
+                                aria-label={t('matchAnalysis.openPosition', {
+                                  game: row.game_no,
+                                  move: row.checker_no ?? '—',
+                                })}
+                                onClick={() => onPosition(row.position_uuid!)}
+                              >
+                                {formatNumber(row.game_no)} ·{' '}
+                                {row.checker_no == null
+                                  ? '—'
+                                  : formatNumber(row.checker_no)}{' '}
+                                ↗
+                              </button>
+                            ) : (
+                              t('matchAnalysis.cubeMove', {
+                                game: row.game_no,
+                                decision: row.decision_no,
+                              })
+                            )}
+                          </td>
+                          <td>
+                            {names[row.player]}
+                            <small>
+                              {row.kind === 'checker'
+                                ? `${t('common.checker')} · ${row.dice?.join('–')}`
+                                : t('common.cube')}
+                            </small>
+                          </td>
+                          <td>
+                            {formatDecision(row.played)}
+                            <small>
+                              {row.played_equity != null
+                                ? formatEquity(row.played_equity)
+                                : '—'}
+                            </small>
+                          </td>
+                          <td>
+                            {formatDecision(row.best)}
+                            <small>
+                              {row.best_equity != null
+                                ? formatEquity(row.best_equity)
+                                : '—'}
+                            </small>
+                          </td>
+                          <td className="equity-loss">
+                            {row.evaluation_status === 'unavailable'
+                              ? '—'
+                              : decimal(row.equity_loss)}
+                          </td>
+                          <td>
+                            <span
+                              className={`severity severity-${row.severity}`}
+                            >
+                              {row.evaluation_status === 'forced'
+                                ? t('matchAnalysis.forced')
+                                : row.evaluation_status === 'unavailable'
+                                  ? t('matchAnalysis.unavailable')
+                                  : severityKeys[row.severity]
+                                    ? t(severityKeys[row.severity])
+                                    : row.severity}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {rows.length === 0 && !loading && (
+                  <p className="analysis-empty">
+                    {job.completed_games === 0
+                      ? t('matchAnalysis.firstGameHint')
+                      : t('matchAnalysis.noDecisions')}
+                  </p>
+                )}
+                {loading && <p role="status">{t('matchAnalysis.loading')}</p>}
+                {cursor && (
+                  <button
+                    onClick={() => setPage({ key: resultKey, cursor })}
+                    disabled={loading}
+                  >
+                    {t('matchAnalysis.more')}
+                  </button>
+                )}
+              </details>
+            </>
+          )}
+        </section>
+      </div>
+      <MatchStatisticsView
+        job={job}
+        statistics={statistics}
+        names={names}
+        onSelect={selectMetric}
+        onGame={onGame}
+        hidden={!showStatistics}
+        loading={!!job && statisticsLoaded !== statisticsKey}
+        error={
+          statisticsError?.key === statisticsKey
+            ? statisticsError.error
+            : undefined
+        }
+        progress={showStatistics ? progress : undefined}
+      />
       {controlsTarget &&
         createPortal(
           <>

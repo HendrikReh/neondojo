@@ -1,0 +1,86 @@
+.board-review-controls {
+  padding: 10px 12px;
+  border-bottom: 1px solid #dfe6dc;
+  background: #f8faf5;
+}
+.board-view-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.board-view-buttons button,
+.played-preview-button {
+  font-size: 11px;
+  padding: 7px 9px;
+  border: 1px solid #d7e2d0;
+  border-radius: 6px;
+}
+.board-view-buttons button[aria-pressed='true'],
+.played-preview-button[aria-pressed='true'] {
+  background: #e5efdc;
+  border-color: #81a16f;
+  color: #244e36;
+}
+.board-review-selection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 9px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+.board-review-selection small {
+  flex-basis: 100%;
+  color: #687c60;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.board-review-help,
+.board-review-warning {
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 7px 0 0;
+  color: #637459;
+}
+.board-review-warning {
+  color: #825620;
+}
+.candidate-preview-button {
+  font: inherit;
+  color: #244e36;
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: 1px dotted #94ad86;
+  border-radius: 3px;
+  padding: 3px 4px;
+  text-align: left;
+}
+.candidate-preview-button:hover,
+.candidate-preview-button[aria-pressed='true'] {
+  background: #e1edd6;
+  border-color: #7da06a;
+}
+.preview-best {
+  font-size: 11px;
+  padding: 6px 9px;
+  margin: 8px 0;
+}
+.position-inspector .inspector-tabs {
+  flex-wrap: wrap;
+}
+@media (max-width: 600px) {
+  .board-review-controls {
+    padding: 9px;
+  }
+  .board-view-buttons button {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 5px;
+  }
+  .board-review-selection {
+    font-size: 11px;
+  }
+  .board-view-buttons {
+    gap: 4px;
+  }
+}

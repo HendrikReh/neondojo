@@ -63,6 +63,14 @@ Enginepfad, Spielername und Profile werden mit Revisionsprüfung in PostgreSQL g
 
 Jeder neue Analyseauftrag erhält eine unveränderliche Enginekonfiguration; explizite oder gespeicherte Ply stehen am Auftrag. Aktive Deduplizierung berücksichtigt neben Ziel/Umfang/Ply auch den Enginepfad und die Version. Läuft ein älterer Auftrag nach einer externen Ersetzung des Binary am gleichen Pfad weiter, schlägt er mit Diagnose fehl, statt Ergebnisse verschiedener Versionen zu mischen. Bereits gespeicherte Match-Checkpoints bleiben erhalten. Legacy-Aufträge ohne Snapshot verwenden weiterhin die beim Backendstart konfigurierte Engine. MAT-Importe verwenden den aktuell gespeicherten GNUbg-Pfad.
 
+## Zugvorschau und interaktive Statistiken
+
+Der Analysearbeitsplatz bietet **Vor dem Zug**, **Zugpfeile** und **Nach dem Zug**. Standardmäßig zeigen grüne, kontrastreich umrandete Pfeile den gespielten Zug mit legalen Zwischenpunkten. Checker-Kandidaten aus Datei, BackgammonDB oder neuer Engineanalyse besitzen eigene Vorschau-Schaltflächen und „Besten Zug ansehen“. Quelle und Rang bleiben am Brett sichtbar; „Gespielter Zug“ setzt den Vergleich zurück. Die Nachher-Ansicht hält die Brettorientierung fest und blendet die Würfel aus. Bar-Eintritt, Hits, Mehrfachzüge, Doppelwürfe und Bear-off werden vor der Darstellung legal geprüft. Ungültige oder unbekannte Notation fällt auf die gespeicherte Ausgangsstellung zurück. Alle Themes verwenden dieselbe Projektion.
+
+Vorschauen ändern keine Stellung-IDs, Analyseziele, Notizen oder Lernkarten: Diese beziehen sich weiter auf die Entscheidung vor dem Zug. Positions- und Quellenwechsel verwerfen fremde Kandidaten.
+
+Der Reiter **Statistik** zeigt zum gewählten GNUbg-Auftrag Spielerwerte und eine Partieübersicht. Metriken öffnen die sichtbare Entscheidungsliste mit passendem Spieler-, Checker-/Cube-, Fehlerschwere- und Partiefilter. Partie-Schaltflächen öffnen genau das ausgewählte Spiel. Filterwechsel beginnen die Pagination neu. Native PR bleibt von Quellanalysen und Buchwerten getrennt; fehlende native Daten werden als nicht verfügbar angezeigt. Neue Aufträge speichern vollständige Partiestatistiken atomar. Ältere Aufträge erhalten aus ihren Entscheidungen rekonstruierte Summen, jedoch keine erfundene Partie-PR.
+
 ## Quellanalysen und Opening Books
 
 Importe behalten vorhandene Analysen in eigenen Datensätzen: Engine/Version soweit aufgezeichnet, originale Tiefen-/Profilbezeichnung, Methode, Kandidaten, Cube-Antworten, Equity-Einheit und unveränderte Rohwerte. XG, native GNUbg-SGF und verfügbare BGBlitz-Informationen werden gelesen. MAT ohne Analysedaten erhält keine erfundene Analyse. Unbekannte Engines oder Cube-Einheiten bleiben unbekannt. GNUbg-MWC wird nicht als normalisierte Equity ausgegeben. Neue Berechnungen und unabhängige Matchkopien überschreiben keine Quellresultate. Auch frühere Importe können die Analyse einmalig aus ihren gespeicherten Originaldateien rekonstruieren.
@@ -195,7 +203,8 @@ Ein Upload enthält genau eine Datei; Limit: **16 MiB einschließlich Multipart-
 | GET | `/api/jobs/{id}/events` | Persistenter SSE-Strom |
 | POST | `/api/matches/{id}/analysis` | Ein Spiel: `{ "plies": 0, "game_no": 2 }`; gesamtes Match ohne `game_no`. Aktive Aufträge werden je Match, Spielumfang und Ply zusammengeführt |
 | GET | `/api/matches/{id}/analysis?game_no=` | Letzter Auftrag des Spielumfangs; ohne `game_no` letzter Matchauftrag, sonst `null` |
-| GET | `/api/jobs/{id}/moves?game_no=&after=&limit=&errors_only=&player=&kind=` | Paginierte Zugbewertung; `player` 0/1, `kind` checker/cube, `errors_only=true` ab 0,04 Equity |
+| GET | `/api/jobs/{id}/moves?game_no=&after=&limit=&errors_only=&player=&kind=&severity=` | Paginierte Zugbewertung; kombinierbare Partie-, Spieler-, Checker-/Cube- und Fehlerschwerefilter; Cursorprüfung |
+| GET | `/api/jobs/{id}/statistics` | Native Match-/Partiestatistik mit Analyseabdeckung und vorhandenen PR-Werten |
 
 ```sh
 curl -F file=@backend/tests/fixtures/tutorial.mat http://127.0.0.1:8787/api/imports
@@ -264,3 +273,6 @@ Die Browserprüfungen prüfen außerdem direkte Spielauswahl, automatische Seite
 - `web/src/`: Client, SVG-Brett, Ergebnisse und aus OpenAPI erzeugte Typen
 
 Dieser Stand analysiert ausgewählte Positionen, einzelne Spiele und vollständige Matches einschließlich Cube-Entscheidungen. Rollouts, Analyse-Caching und eine Tauri-Hülle sind Folgeausbau. Ein späterer Tauri-Client kann das Backend als Sidecar starten und dieselben HTTP-Endpunkte verwenden; Rust-Domainlogik liegt nicht im UI.
+
+
+Für isolierte Browserprüfungen kann `BGTUTOR_TEST_URL` auf einen separaten Backend-Server mit eigenem PostgreSQL-Testbestand und gebautem Frontend zeigen. Ohne Variable bleibt die lokale Vite-Adresse unverändert. Die privaten Demo-Bestände müssen dafür nicht verändert werden.

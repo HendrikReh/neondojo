@@ -1,27 +1,35 @@
 import { useEffect, useState } from 'react';
 import { useI18n } from './i18n';
 import XgPositionView from './XgPositionView';
+import { useBoardReviewText } from './board-review-messages';
+import type { PreviewCandidate } from './candidate-preview';
 import { useSourceText } from './analysis-source-messages';
 import type { SourceAnalysis, BookLookup } from './source-analysis-api';
 export default function SourceAnalysisView({
   records,
   book,
   source,
+  onPreview,
+  selectedPreview,
 }: {
   records: SourceAnalysis[];
   book?: BookLookup;
   source: 'file' | 'book';
+  onPreview?: (candidate: PreviewCandidate | null) => void;
+  selectedPreview?: PreviewCandidate;
 }) {
+  const review = useBoardReviewText();
   const l = useSourceText(),
     { t, formatEquity, formatPercent, formatDecision } = useI18n();
   const [bookChoice, setBookChoice] = useState<'backgammondb' | 'xg'>();
   const [recordId, setRecordId] = useState<string>(),
     [decision, setDecision] = useState<'checker' | 'cube'>('checker');
   useEffect(() => {
+    onPreview?.(null);
     setRecordId(undefined);
     setDecision('checker');
     setBookChoice(undefined);
-  }, [records, book]);
+  }, [records, book, onPreview]);
   const record =
     records.find((r) => r.id === recordId) ??
     records.find((r) => r.kind === 'checker') ??
@@ -98,7 +106,10 @@ export default function SourceAnalysisView({
           type="button"
           aria-pressed={selectedBook === 'backgammondb'}
           disabled={book?.provider === 'xg'}
-          onClick={() => setBookChoice('backgammondb')}
+          onClick={() => {
+            onPreview?.(null);
+            setBookChoice('backgammondb');
+          }}
         >
           BackgammonDB
         </button>
@@ -106,12 +117,21 @@ export default function SourceAnalysisView({
           type="button"
           aria-pressed={selectedBook === 'xg'}
           disabled={book?.provider === 'backgammondb'}
-          onClick={() => setBookChoice('xg')}
+          onClick={() => {
+            onPreview?.(null);
+            setBookChoice('xg');
+          }}
         >
           {l('xgPosition')}
         </button>
       </div>
     ) : null;
+  const previewSource =
+    source === 'file'
+      ? `${record?.engine ?? ''} · ${record?.depth ?? l('unknownDepth')}`
+      : `BackgammonDB · ${book?.provenance?.engine ?? ''} · ${book?.checker?.plies ?? '—'}-ply`;
+  const preview = (candidate: { notation: string; rank: number }) =>
+    onPreview?.({ ...candidate, source: previewSource });
   if (source === 'book' && selectedBook === 'xg')
     return (
       <div className="source-analysis">
@@ -131,7 +151,10 @@ export default function SourceAnalysisView({
               <select
                 aria-label={l('decision')}
                 value={record?.id ?? ''}
-                onChange={(e) => setRecordId(e.target.value)}
+                onChange={(e) => {
+                  onPreview?.(null);
+                  setRecordId(e.target.value);
+                }}
               >
                 {records.map((r) => (
                   <option key={r.id} value={r.id}>
@@ -175,14 +198,20 @@ export default function SourceAnalysisView({
               <button
                 aria-pressed={selectedDecision === 'checker'}
                 disabled={!book.checker}
-                onClick={() => setDecision('checker')}
+                onClick={() => {
+                  onPreview?.(null);
+                  setDecision('checker');
+                }}
               >
                 {l('checker')}
               </button>
               <button
                 aria-pressed={selectedDecision === 'cube'}
                 disabled={!book.cube}
-                onClick={() => setDecision('cube')}
+                onClick={() => {
+                  onPreview?.(null);
+                  setDecision('cube');
+                }}
               >
                 {l('cube')}
               </button>
@@ -194,6 +223,15 @@ export default function SourceAnalysisView({
       )}
       {checker && candidates.length > 0 && (
         <div className="source-candidates">
+          {onPreview && (
+            <button
+              type="button"
+              className="preview-best"
+              onClick={() => preview(candidates[0])}
+            >
+              {review('best')}
+            </button>
+          )}
           <table className="candidates">
             <thead>
               <tr>
@@ -208,7 +246,25 @@ export default function SourceAnalysisView({
                 <tr key={c.rank} className={c.rank === 1 ? 'best-move' : ''}>
                   <td>{c.rank}</td>
                   <td>
-                    {formatDecision(c.notation)}
+                    {onPreview ? (
+                      <button
+                        type="button"
+                        className="candidate-preview-button"
+                        aria-label={review('previewMove', {
+                          rank: c.rank,
+                          move: formatDecision(c.notation),
+                        })}
+                        aria-pressed={
+                          selectedPreview?.notation === c.notation &&
+                          selectedPreview?.source === previewSource
+                        }
+                        onClick={() => preview(c)}
+                      >
+                        {formatDecision(c.notation)}
+                      </button>
+                    ) : (
+                      formatDecision(c.notation)
+                    )}
                     <small>{c.depth ?? '—'}</small>
                   </td>
                   <td title={unit(c.equity_kind)}>

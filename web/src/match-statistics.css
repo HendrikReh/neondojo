@@ -1,0 +1,125 @@
+.match-statistics {
+  min-width: 0;
+}
+.match-statistics h3 {
+  margin-top: 0;
+  font-size: 17px;
+}
+.statistics-source,
+.statistics-coverage {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #687364;
+}
+.statistics-summary {
+  margin-top: 14px;
+}
+.statistics-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.statistics-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #d5ddd0;
+  border-radius: 7px;
+  background: #fffefa;
+  color: #294333;
+  text-align: left;
+  line-height: 1.35;
+}
+.statistics-metric span {
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.statistics-metric strong {
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+.statistics-metric:hover {
+  border-color: #416d4a;
+  background: #f4f8f0;
+}
+.statistics-metric:focus-visible {
+  outline: 2px solid #416d4a;
+  outline-offset: 2px;
+}
+.statistics-metric-unavailable {
+  color: #687364;
+  background: transparent;
+}
+.statistics-metric-unavailable strong {
+  font-size: 11px;
+  font-weight: 500;
+}
+.statistics-footnote {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 0;
+}
+.statistics-games-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+  margin-top: 20px;
+}
+.statistics-games-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.statistics-games-table caption {
+  text-align: left;
+  font-size: 14px;
+  font-weight: 650;
+  padding-bottom: 10px;
+}
+.statistics-games-table th,
+.statistics-games-table td {
+  padding: 9px 6px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid #e0e5db;
+}
+.statistics-games-table thead th {
+  color: #687364;
+}
+.statistics-games-table th small {
+  display: block;
+  margin-top: 5px;
+  white-space: nowrap;
+  font-weight: 400;
+}
+.statistics-games-table .position-link {
+  white-space: nowrap;
+}
+.statistics-player-compact {
+  min-width: 145px;
+}
+.statistics-player-compact .statistics-metric {
+  padding: 5px;
+}
+.statistics-player-compact .statistics-metric strong {
+  font-size: 13px;
+}
+.statistics-player-compact .statistics-metric-unavailable strong {
+  font-size: 10px;
+}
+.statistics-player-compact .statistics-footnote {
+  font-size: 10px;
+  color: #687364;
+}
+.match-analysis-filters .statistics-reset {
+  padding: 7px 10px;
+  font-size: 11px;
+}
+@media (max-width: 500px) {
+  .statistics-metrics {
+    gap: 5px;
+  }
+}
