@@ -20,7 +20,7 @@ vi.mock('./useMatchAnalysis', () => ({
 beforeEach(() => vi.stubGlobal('localStorage', { getItem: () => 'en' }));
 afterEach(() => vi.unstubAllGlobals());
 
-it('defaults position search to two plies and offers three plies', () => {
+it('defaults position search to two plies and offers three and four plies', () => {
   const html = renderToStaticMarkup(
     createElement(I18nProvider, {
       children: createElement(AnalysisPanel, {
@@ -34,8 +34,9 @@ it('defaults position search to two plies and offers three plies', () => {
   );
   expect(html).toContain('value="2" selected=""');
   expect(html).toContain('value="3">3-ply</option>');
+  expect(html).toContain('value="4">4-ply</option>');
 });
-it('defaults game/match analysis to two plies and offers three plies', () => {
+it('defaults game/match analysis to two plies and offers three and four plies', () => {
   const html = renderToStaticMarkup(
     createElement(I18nProvider, {
       children: createElement(MatchAnalysisPanel, {
@@ -47,4 +48,5 @@ it('defaults game/match analysis to two plies and offers three plies', () => {
   );
   expect(html).toContain('value="2" selected=""');
   expect(html).toContain('value="3">3-ply</option>');
+  expect(html).toContain('value="4">4-ply</option>');
 });

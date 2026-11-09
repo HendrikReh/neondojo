@@ -857,6 +857,46 @@
         }
       }
     },
+    "/api/game-plans": {
+      "post": {
+        "tags": [
+          "Positions"
+        ],
+        "operationId": "game_plans",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GamePlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GamePlans"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/games/{id}/annotation": {
       "get": {
         "tags": [
@@ -1676,6 +1716,7 @@
           {
             "name": "sort",
             "in": "path",
+            "description": "Sort field: id (or match_no), created_at, played_at, name, white, black,\nwhite_pr, black_pr, match_length, score, result, tournament, format,\nposition_count, analysis_status, tags, or comment. score compares the\nvisible numeric white/black score pair; result retains result-state order.",
             "required": true,
             "schema": {
               "type": [
@@ -1687,6 +1728,7 @@
           {
             "name": "direction",
             "in": "path",
+            "description": "asc or desc (default desc). Missing values sort last in either direction;\nequal values use ascending UUID order for stable pagination.",
             "required": true,
             "schema": {
               "type": [
@@ -2291,6 +2333,45 @@
       }
     },
     "/api/matches/{id}/metadata": {
+      "get": {
+        "tags": [
+          "Databases"
+        ],
+        "operationId": "get_metadata",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseMatch"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
       "put": {
         "tags": [
           "Databases"
@@ -2889,7 +2970,7 @@
           {
             "name": "filters",
             "in": "query",
-            "description": "URL-encoded JSON PositionFilterDefinition. Omitted: unfiltered, match order.",
+            "description": "URL-encoded JSON PositionFilterDefinition, applied only to explicitly saved positions.\nOmitted: the saved collection in match order.",
             "required": false,
             "schema": {
               "type": "string"
@@ -3374,6 +3455,148 @@
             }
           },
           "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/positions/{id}/bookmark": {
+      "get": {
+        "tags": [
+          "Positions"
+        ],
+        "operationId": "get_bookmark",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PositionBookmark"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Positions"
+        ],
+        "operationId": "save_bookmark",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Explicitly save this occurrence. Repeated saves retain its original saved_at.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PositionBookmark"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Positions"
+        ],
+        "operationId": "remove_bookmark",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Remove collection membership while retaining the source position, notes, analysis and learning cards. Repeated removal succeeds for an existing position."
+          },
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -3997,7 +4220,7 @@
             "type": "integer",
             "format": "int32",
             "default": 2,
-            "maximum": 3,
+            "maximum": 4,
             "minimum": 0
           },
           "gnubg_path": {
@@ -4679,6 +4902,8 @@
         "type": "object",
         "required": [
           "id",
+          "source_available",
+          "match_no",
           "filename",
           "format",
           "white",
@@ -4750,6 +4975,11 @@
             "type": "integer",
             "format": "int32"
           },
+          "match_no": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Persistent numeric library entry ID; UUID remains the action identity."
+          },
           "place": {
             "type": [
               "string",
@@ -4787,6 +5017,10 @@
               "string",
               "null"
             ]
+          },
+          "source_available": {
+            "type": "boolean",
+            "description": "False for independent saved-position context whose source match was deleted."
           },
           "tags": {
             "type": "array",
@@ -5245,6 +5479,64 @@
           }
         }
       },
+      "GamePlan": {
+        "type": "string",
+        "enum": [
+          "pure_race",
+          "racing",
+          "attacking",
+          "priming",
+          "anchoring"
+        ]
+      },
+      "GamePlanRequest": {
+        "type": "object",
+        "required": [
+          "board"
+        ],
+        "properties": {
+          "board": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "description": "Absolute-color board: points 1–24 use positive White/negative Black;\nBlack's bar at 0 is nonpositive, White's bar at 25 is nonnegative.\nEach side has at most 15 checkers; absent checkers are borne off.",
+            "maxItems": 26,
+            "minItems": 26
+          }
+        },
+        "additionalProperties": false
+      },
+      "GamePlans": {
+        "type": "object",
+        "required": [
+          "classifier",
+          "source_revision",
+          "game_over",
+          "white",
+          "black"
+        ],
+        "properties": {
+          "black": {
+            "$ref": "#/components/schemas/GamePlan"
+          },
+          "classifier": {
+            "type": "string"
+          },
+          "game_over": {
+            "type": "boolean",
+            "description": "At least one side has no checkers remaining, including on the bar.\nLabels retain the original rule classification for terminal boards."
+          },
+          "source_revision": {
+            "type": "string",
+            "description": "Pinned upstream Git commit; changes when the reference rules change."
+          },
+          "white": {
+            "$ref": "#/components/schemas/GamePlan"
+          }
+        }
+      },
       "Health": {
         "type": "object",
         "required": [
@@ -5564,7 +5856,7 @@
           "plies": {
             "type": "integer",
             "format": "int32",
-            "maximum": 3,
+            "maximum": 4,
             "minimum": 0
           },
           "position_uuid": {
@@ -5733,8 +6025,8 @@
               "null"
             ],
             "format": "int32",
-            "description": "GNUbg search depth, 0 to 3. Omitted uses saved analysis depth.",
-            "maximum": 3,
+            "description": "GNUbg search depth, 0 to 4. Omitted uses saved analysis depth.",
+            "maximum": 4,
             "minimum": 0
           },
           "position_id": {
@@ -5849,7 +6141,7 @@
             ],
             "format": "int32",
             "description": "Native GNUbg checker and cube search depth. Omitted uses saved analysis depth.",
-            "maximum": 3,
+            "maximum": 4,
             "minimum": 0
           }
         }
@@ -5964,6 +6256,7 @@
         "type": "object",
         "required": [
           "id",
+          "source_available",
           "filename",
           "format",
           "white",
@@ -5997,6 +6290,10 @@
           "position_count": {
             "type": "integer",
             "format": "int32"
+          },
+          "source_available": {
+            "type": "boolean",
+            "description": "False for retained saved-position context after the source match was deleted."
           },
           "white": {
             "type": "string"
@@ -6430,17 +6727,51 @@
           "missing"
         ]
       },
+      "PositionBookmark": {
+        "type": "object",
+        "required": [
+          "position_id",
+          "saved"
+        ],
+        "properties": {
+          "position_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "UUID of the exact imported occurrence, retaining its player and source context."
+          },
+          "saved": {
+            "type": "boolean"
+          },
+          "saved_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "PositionBrowserDirection": {
+        "type": "string",
+        "enum": [
+          "asc",
+          "desc"
+        ]
+      },
       "PositionBrowserHit": {
         "type": "object",
         "required": [
           "position",
           "match_info",
+          "source_available",
+          "match_no",
           "database_id",
           "database_name",
           "display_name",
           "tags",
           "notes",
-          "card_ready"
+          "card_ready",
+          "decks"
         ],
         "properties": {
           "black_score": {
@@ -6481,11 +6812,23 @@
           "database_name": {
             "type": "string"
           },
+          "decks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PositionDeckMembership"
+            },
+            "description": "Learning decks for this checker decision's full Position-ID/Match-ID identity."
+          },
           "display_name": {
             "type": "string"
           },
           "match_info": {
             "$ref": "#/components/schemas/MatchSummary"
+          },
+          "match_no": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Persistent library number, independent of the match UUID and row order."
           },
           "native_error": {
             "oneOf": [
@@ -6511,6 +6854,10 @@
               "string",
               "null"
             ]
+          },
+          "source_available": {
+            "type": "boolean",
+            "description": "False when only saved occurrences remain after source deletion."
           },
           "tags": {
             "type": "array",
@@ -6579,8 +6926,37 @@
         "type": "string",
         "enum": [
           "match",
-          "loss"
+          "loss",
+          "match_id",
+          "database",
+          "game",
+          "ply",
+          "player",
+          "opponent",
+          "dice",
+          "score",
+          "cube",
+          "played_move",
+          "decks",
+          "tags",
+          "comment"
         ]
+      },
+      "PositionDeckMembership": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
       },
       "PositionFilterDefinition": {
         "type": "object",
@@ -6644,6 +7020,17 @@
               "null"
             ],
             "format": "int32"
+          },
+          "direction": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PositionBrowserDirection",
+                "description": "Omitted: loss descending; all other columns ascending. Legacy definitions\nomit this field when serialized to preserve their stored definition format."
+              }
+            ]
           },
           "match_name": {
             "type": [

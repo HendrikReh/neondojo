@@ -2,6 +2,82 @@ import { useI18n } from './i18n';
 import { interpolate, type Locale, type TranslationParams } from './i18n-core';
 
 const translations = {
+  decks: ['Decks', 'Lernstapel', 'Mazos', 'Paquets', 'Talie', 'Mazzi'],
+  noDecks: [
+    'Not in a deck yet',
+    'Noch in keinem Lernstapel',
+    'Aún no está en ningún mazo',
+    'Pas encore dans un paquet',
+    'Jeszcze w żadnej talii',
+    'Non ancora in un mazzo',
+  ],
+  opponent: [
+    'Opponent',
+    'Gegner',
+    'Rival',
+    'Adversaire',
+    'Przeciwnik',
+    'Avversario',
+  ],
+  score: ['Score', 'Spielstand', 'Marcador', 'Score', 'Wynik', 'Punteggio'],
+  matchId: [
+    'Match ID',
+    'Match-ID',
+    'ID de partida',
+    'ID du match',
+    'ID meczu',
+    'ID partita',
+  ],
+  gameNumber: ['Game', 'Partie', 'Partida', 'Partie', 'Partia', 'Partita'],
+  moveNumber: ['Move', 'Zug', 'Jugada', 'Coup', 'Ruch', 'Mossa'],
+  playedMove: [
+    'Played move',
+    'Gespielter Zug',
+    'Jugada realizada',
+    'Coup joué',
+    'Zagrany ruch',
+    'Mossa giocata',
+  ],
+  showPlayed: [
+    'Show played moves',
+    'Gespielte Züge anzeigen',
+    'Mostrar jugadas realizadas',
+    'Afficher les coups joués',
+    'Pokaż zagrane ruchy',
+    'Mostra mosse giocate',
+  ],
+  direction: [
+    'Direction',
+    'Richtung',
+    'Dirección',
+    'Direction',
+    'Kierunek',
+    'Direzione',
+  ],
+  sortDefault: [
+    'Default',
+    'Standard',
+    'Predeterminado',
+    'Par défaut',
+    'Domyślnie',
+    'Predefinito',
+  ],
+  ascending: [
+    'Ascending',
+    'Aufsteigend',
+    'Ascendente',
+    'Croissant',
+    'Rosnąco',
+    'Crescente',
+  ],
+  descending: [
+    'Descending',
+    'Absteigend',
+    'Descendente',
+    'Décroissant',
+    'Malejąco',
+    'Decrescente',
+  ],
   title: [
     'Positions',
     'Positionen',
@@ -11,12 +87,44 @@ const translations = {
     'Posizioni',
   ],
   description: [
-    'Find decisions, open their analysis and study them in your decks.',
-    'Entscheidungen finden, ihre Analyse öffnen und in eigenen Decks lernen.',
-    'Busca decisiones, abre su análisis y estúdialas en tus mazos.',
-    'Trouvez des décisions, ouvrez leur analyse et révisez-les dans vos paquets.',
-    'Znajdź decyzje, otwórz ich analizę i ucz się z nich w taliach.',
-    'Trova decisioni, apri la loro analisi e ripassale nei tuoi mazzi.',
+    'Your saved positions for review and further study. Save relevant decisions in Analysis.',
+    'Deine gemerkten Positionen zum Verstehen und Vertiefen. Relevante Stellungen in der Analyse merken.',
+    'Tus posiciones guardadas para revisar y estudiar. Guarda decisiones relevantes en Análisis.',
+    'Vos positions enregistrées pour réviser et approfondir. Enregistrez les décisions utiles dans Analyse.',
+    'Twoje zapisane pozycje do przeglądu i nauki. Zapisuj ważne decyzje w Analizie.',
+    'Le tue posizioni salvate da rivedere e studiare. Salva le decisioni utili in Analisi.',
+  ],
+  removeSaved: [
+    'Remove from collection',
+    'Aus Sammlung entfernen',
+    'Quitar de la colección',
+    'Retirer de la collection',
+    'Usuń z kolekcji',
+    'Rimuovi dalla raccolta',
+  ],
+  removeSelected: [
+    'Remove selected from collection',
+    'Ausgewählte aus Sammlung entfernen',
+    'Quitar seleccionadas de la colección',
+    'Retirer la sélection de la collection',
+    'Usuń zaznaczone z kolekcji',
+    'Rimuovi selezionate dalla raccolta',
+  ],
+  removing: [
+    'Removing…',
+    'Wird entfernt …',
+    'Quitando…',
+    'Suppression…',
+    'Usuwanie…',
+    'Rimozione…',
+  ],
+  removalFailed: [
+    'Some positions could not be removed. They remain in the collection.',
+    'Einige Positionen konnten nicht entfernt werden. Sie bleiben in der Sammlung.',
+    'No se pudieron quitar algunas posiciones. Siguen en la colección.',
+    'Certaines positions n’ont pas pu être retirées. Elles restent dans la collection.',
+    'Nie udało się usunąć niektórych pozycji. Pozostają w kolekcji.',
+    'Non è stato possibile rimuovere alcune posizioni. Restano nella raccolta.',
   ],
   search: [
     'Search positions',
@@ -174,6 +282,8 @@ const translations = {
   any: ['Any', 'Beliebig', 'Cualquiera', 'Tous', 'Dowolne', 'Qualsiasi'],
   yes: ['Yes', 'Ja', 'Sí', 'Oui', 'Tak', 'Sì'],
   no: ['No', 'Nein', 'No', 'Non', 'Nie', 'No'],
+  cubeShort: ['Cube', 'Doppler', 'Cubo', 'Videau', 'Kostka', 'Cubo'],
+  lossShort: ['Loss', 'Verlust', 'Pérdida', 'Perte', 'Strata', 'Perdita'],
   cube: [
     'Cube value',
     'Dopplerwert',
@@ -232,12 +342,12 @@ const translations = {
     'Partita e mossa',
   ],
   sortLoss: [
-    'Largest native error',
-    'Größter nativer Fehler',
-    'Mayor error nativo',
-    'Plus grande erreur native',
-    'Największy błąd natywny',
-    'Errore nativo maggiore',
+    'Native error',
+    'Nativer Fehler',
+    'Error nativo',
+    'Erreur native',
+    'Błąd natywny',
+    'Errore nativo',
   ],
   invalidFilter: [
     'Check the numeric filters and ranges. Dice must be 1–6; cube values must be powers of two.',
@@ -424,12 +534,12 @@ const translations = {
     '{count} posizioni caricate',
   ],
   empty: [
-    'No matching positions.',
-    'Keine passenden Positionen.',
-    'No hay posiciones coincidentes.',
-    'Aucune position correspondante.',
-    'Brak pasujących pozycji.',
-    'Nessuna posizione corrispondente.',
+    'No saved positions match these filters. In Analysis, use “Save position” to add relevant decisions to your collection.',
+    'Keine gemerkten Positionen für diese Filter. In der Analyse mit „Position merken“ relevante Entscheidungen zur Sammlung hinzufügen.',
+    'Ninguna posición guardada coincide con los filtros. Usa «Guardar posición» en Análisis para añadir decisiones relevantes a tu colección.',
+    'Aucune position enregistrée ne correspond aux filtres. Dans Analyse, utilisez « Enregistrer la position » pour enrichir votre collection.',
+    'Brak zapisanych pozycji dla tych filtrów. W Analizie wybierz „Zapisz pozycję”, aby dodać ważne decyzje do kolekcji.',
+    'Nessuna posizione salvata corrisponde ai filtri. In Analisi usa «Salva posizione» per aggiungere le decisioni utili alla raccolta.',
   ],
   loading: [
     'Loading positions…',
@@ -755,4 +865,21 @@ export function usePositionText() {
         ]),
       ),
     );
+}
+
+export function positionText(
+  locale: Locale,
+  key: PositionMessageKey,
+  params: TranslationParams = {},
+) {
+  const number = new Intl.NumberFormat(locale);
+  return interpolate(
+    positionMessages[locale][key],
+    Object.fromEntries(
+      Object.entries(params).map(([key, value]) => [
+        key,
+        typeof value === 'number' ? number.format(value) : value,
+      ]),
+    ),
+  );
 }

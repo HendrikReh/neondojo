@@ -242,3 +242,29 @@ it('provides every statistics message and parameter in all six languages', () =>
   }
   expect(statisticsText('de', 'game', { game: 7 })).toContain('7');
 });
+
+it('single-game native summaries carry their source game in metric actions', () => {
+  const html = renderToStaticMarkup(
+    createElement(I18nProvider, {
+      children: createElement(MatchStatisticsView, {
+        job: { ...job, game_no: 7 },
+        names: ['Alice', 'Bob'],
+        onSelect: () => {},
+        statistics: { job_id: job.id, summary, games: [] },
+      }),
+    }),
+  );
+  expect(html).toContain(
+    statisticsText('en', 'metricGameAction', {
+      game: 7,
+      player: 'Alice',
+      metric: statisticsText('en', 'veryBad'),
+    }),
+  );
+  expect(html).not.toContain(
+    statisticsText('en', 'metricAction', {
+      player: 'Alice',
+      metric: statisticsText('en', 'veryBad'),
+    }),
+  );
+});

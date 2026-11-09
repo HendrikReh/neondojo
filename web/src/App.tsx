@@ -18,7 +18,7 @@ import type { Theme } from './themes';
 import { useGameNavigation } from './useGameNavigation';
 import { useJobs } from './useJobs';
 import { useBackgroundJobs } from './useBackgroundJobs';
-import { useI18n, type Locale } from './i18n';
+import { useI18n } from './i18n';
 import { useWorkspaceText } from './workspace-messages';
 import { useLearningText } from './learning-messages';
 import { readSelection, saveSelection } from './workspace-state';
@@ -36,6 +36,7 @@ import {
 import { useLibraryText } from './library-messages';
 import { DEFAULT_ANALYSIS_PLIES } from './analysis-depth';
 import MoveNotesDialog, { type MoveNotesTarget } from './MoveNotesDialog';
+import { useUiAppearance } from './useUiAppearance';
 
 type View = 'analysis' | 'database' | 'positions' | 'learning';
 const views: View[] = ['analysis', 'database', 'positions', 'learning'];
@@ -45,6 +46,7 @@ export default function App() {
     learnT = useLearningText();
   const l = useLibraryText();
   const positionText = usePositionText();
+  const { appearance, applyAppearance } = useUiAppearance();
   const [requestedDeck, setRequestedDeck] = useState<{
     id: string;
     token: number;
@@ -81,6 +83,7 @@ export default function App() {
   const [revision, setRevision] = useState(0);
   const [annotationRevision, setAnnotationRevision] = useState(0);
   const [deckRevision, setDeckRevision] = useState(0);
+  const [bookmarkRevision, setBookmarkRevision] = useState(0);
   const [scopeRequest, setScopeRequest] = useState<{
     kind: AnnotationKind;
     token: number;
@@ -301,6 +304,10 @@ export default function App() {
     setRevision((n) => n + 1);
   }, []);
   const deckChanged = useCallback(() => setDeckRevision((n) => n + 1), []);
+  const bookmarkChanged = useCallback(
+    () => setBookmarkRevision((n) => n + 1),
+    [],
+  );
   const welcome = (
     <section
       className="welcome analysis-welcome"
@@ -378,7 +385,7 @@ export default function App() {
         />
       </header>
       <main
-        className={`app-body${view === 'analysis' ? ' app-body-analysis' : ''}`}
+        className={`app-body${view === 'analysis' ? ' app-body-analysis' : view === 'database' ? ' app-body-database' : view === 'positions' ? ' app-body-positions' : ''}`}
       >
         {!!(error || navigation.error) && (
           <div className="error" role="alert">
@@ -444,7 +451,11 @@ export default function App() {
           hidden={view !== 'analysis'}
         >
           <AnalysisWorkspace
+            active={view === 'analysis'}
             analysisRevision={assessmentRevision}
+            metadataRevision={revision}
+            bookmarkRevision={bookmarkRevision}
+            onBookmarkChanged={bookmarkChanged}
             navigation={navigation}
             jobs={jobs}
             theme={theme}
@@ -482,9 +493,7 @@ export default function App() {
             revision={revision}
             databaseId={databaseId}
             onDatabase={setDatabaseId}
-            theme={theme}
             visible={view === 'database'}
-            onMoveNotes={setMoveNotes}
             onChanged={(deletedIds = [], validateSelection = false) => {
               setRevision((n) => n + 1);
               if (validateSelection && navigation.match) {
@@ -534,6 +543,8 @@ export default function App() {
         >
           <PositionBrowser
             visible={view === 'positions'}
+            bookmarkRevision={bookmarkRevision}
+            onBookmarkChanged={bookmarkChanged}
             revision={revision}
             annotationRevision={annotationRevision}
             deckRevision={deckRevision}
@@ -556,6 +567,7 @@ export default function App() {
           hidden={view !== 'learning'}
         >
           <LearningWorkspace
+            visible={view === 'learning'}
             requestedDeck={requestedDeck}
             theme={theme}
             revision={deckRevision}
@@ -595,14 +607,12 @@ export default function App() {
         onClose={() => setSettingsOpen(false)}
         onBookSettings={() => setBookOpen(true)}
         theme={theme}
-        onApply={(applied: {
-          theme: Theme;
-          locale: Locale;
-          settings: AppSettings;
-        }) => {
+        appearance={appearance}
+        onApply={(applied) => {
           settingsLoad.current?.abort();
           setTheme(applied.theme);
           setLocale(applied.locale);
+          applyAppearance(applied.appearance);
           setSettings(applied.settings);
           setSettingsError(undefined);
         }}

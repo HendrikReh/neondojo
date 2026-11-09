@@ -144,6 +144,7 @@ export default function AnalysisPanel({
             <option value={1}>1-ply</option>
             <option value={2}>{t('analysis.accurate')}</option>
             <option value={3}>3-ply</option>
+            <option value={4}>4-ply</option>
           </select>
         </label>
         <button

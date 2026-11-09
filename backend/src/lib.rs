@@ -1,5 +1,6 @@
 pub mod api;
 pub mod engine;
+pub mod game_plan;
 pub mod import;
 pub mod jobs;
 pub mod match_analysis;
@@ -25,3 +26,7 @@ pub mod xg_book;
 pub mod analysis_statistics;
 pub mod move_assessments;
 pub mod position_browser;
+
+pub mod position_bookmarks;
+
+mod position_retention;

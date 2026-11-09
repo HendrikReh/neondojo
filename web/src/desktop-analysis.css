@@ -8,7 +8,7 @@
 
   .analysis-workspace {
     --analysis-gap: 10px;
-    --analysis-pane-border: #dce3d6;
+    --analysis-pane-border: var(--ui-border);
     font-size: 13px;
   }
 
@@ -184,7 +184,7 @@
     padding: 11px 12px;
     border: 1px solid var(--analysis-pane-border);
     border-radius: 7px;
-    background: #fffefa;
+    background: var(--ui-surface);
     overflow: auto;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
@@ -196,7 +196,7 @@
     font: inherit;
     font-size: 14px;
     font-weight: 650;
-    color: #36513e;
+    color: var(--ui-text);
   }
 
   .analysis-workspace.analysis-overview .moves-panel {
@@ -245,7 +245,7 @@
   .analysis-workspace .move-no {
     width: auto;
     font-size: 10px;
-    color: #73806b;
+    color: var(--ui-muted);
     font-variant-numeric: tabular-nums;
   }
 
@@ -263,27 +263,27 @@
   }
 
   .analysis-workspace .moves-list button.move-assessment-doubtful {
-    background: #fff6d8;
-    box-shadow: inset 3px 0 #c89f21;
+    background: var(--ui-warning-bg);
+    box-shadow: inset 3px 0 var(--ui-warning-text);
   }
 
   .analysis-workspace .moves-list button.move-assessment-bad {
-    background: #ffeadb;
-    box-shadow: inset 3px 0 #ce742c;
+    background: var(--ui-bad-bg);
+    box-shadow: inset 3px 0 var(--ui-bad-text);
   }
 
   .analysis-workspace .moves-list button.move-assessment-very_bad {
-    background: #fae1dc;
-    box-shadow: inset 3px 0 #b74335;
+    background: var(--ui-danger-bg);
+    box-shadow: inset 3px 0 var(--ui-danger-text);
   }
 
   .analysis-workspace .moves-list button.current {
-    outline: 2px solid #426847;
+    outline: 2px solid var(--ui-accent);
     outline-offset: -2px;
   }
 
   .analysis-workspace .moves-list button:focus-visible {
-    outline: 3px solid #c19c52;
+    outline: 3px solid var(--ui-accent);
     outline-offset: -3px;
   }
 
@@ -293,19 +293,19 @@
     min-width: 12px;
     font-size: 11px;
     font-weight: 750;
-    color: #6c5412;
+    color: var(--ui-warning-text);
   }
 
   .analysis-workspace .move-assessment-bad .move-assessment-marker {
-    color: #94451f;
+    color: var(--ui-bad-text);
   }
 
   .analysis-workspace .move-assessment-none .move-assessment-marker {
-    color: #2f6f49;
+    color: var(--ui-success-text);
   }
 
   .analysis-workspace .move-assessment-very_bad .move-assessment-marker {
-    color: #a13428;
+    color: var(--ui-danger-text);
   }
 
   .analysis-workspace.analysis-overview .board-panel {
@@ -641,10 +641,10 @@
     .match-moves-table
     tr[aria-current='true']
     td {
-    background: #edf3e6;
+    background: var(--ui-selected);
     box-shadow:
-      inset 0 1px #9eb191,
-      inset 0 -1px #9eb191;
+      inset 0 1px var(--ui-accent),
+      inset 0 -1px var(--ui-accent);
   }
 
   .analysis-workspace.analysis-overview .statistics-source,

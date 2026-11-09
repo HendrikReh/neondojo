@@ -1,0 +1,89 @@
+.analysis-workspace .analysis-heading.analysis-match-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-items: baseline;
+  gap: 7px 20px;
+  min-width: 0;
+}
+
+.analysis-workspace .analysis-heading.analysis-match-header h1 {
+  flex: 0 1 auto;
+  min-width: 180px;
+  max-width: min(40%, 700px);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow-wrap: normal;
+  font-size: 25px;
+  line-height: 1.25;
+}
+
+.analysis-workspace .analysis-heading.analysis-match-header h1 span {
+  font-size: 17px;
+}
+
+.analysis-match-metadata {
+  display: flex;
+  flex: 1 1 650px;
+  align-items: baseline;
+  gap: 6px 15px;
+  min-width: 0;
+  margin: 0;
+  color: var(--ui-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+.analysis-match-field {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.analysis-match-field dt {
+  font-weight: 400;
+}
+
+.analysis-match-field dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.analysis-match-event {
+  flex: 0 1 auto;
+  max-width: 300px;
+}
+
+.analysis-match-event dd {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.analysis-match-result small {
+  margin-left: 5px;
+  font-size: 10px;
+}
+
+.analysis-match-error {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ui-danger-text);
+}
+
+.analysis-match-error button {
+  padding: 2px 7px;
+  font-size: 11px;
+}
+
+@media (max-width: 1599px) {
+  .analysis-match-metadata {
+    flex-wrap: wrap;
+  }
+}

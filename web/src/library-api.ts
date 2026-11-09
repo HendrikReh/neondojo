@@ -6,6 +6,24 @@ type Schema = components['schemas'];
 export const defaultDatabaseId = '00000000-0000-0000-0000-000000000001';
 export type Database = Schema['Database'];
 export type LibraryMatch = Required<Schema['DatabaseMatch']>;
+export type LibrarySort =
+  | 'id'
+  | 'name'
+  | 'white'
+  | 'white_pr'
+  | 'black'
+  | 'black_pr'
+  | 'match_length'
+  | 'result'
+  | 'score'
+  | 'played_at'
+  | 'created_at'
+  | 'tournament'
+  | 'format'
+  | 'position_count'
+  | 'analysis_status'
+  | 'tags'
+  | 'comment';
 export type StoredMove = Schema['StoredMove'];
 export type GameDecisions = Schema['GameDecisions'];
 export const movePosition = (move: StoredMove): Position => ({
@@ -59,7 +77,7 @@ export const emptyFilters = (): LibraryFilters => ({
 export function libraryParams(
   databaseId: string,
   filters: LibraryFilters,
-  sort: string,
+  sort: LibrarySort,
   direction: string,
   after?: string,
 ) {
@@ -74,7 +92,7 @@ export function libraryParams(
 export const loadLibrary = (
   databaseId: string,
   filters: LibraryFilters,
-  sort: string,
+  sort: LibrarySort,
   direction: string,
   signal: AbortSignal,
   after?: string,

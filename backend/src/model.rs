@@ -41,6 +41,8 @@ pub enum JobResult {
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct MatchSummary {
     pub id: Uuid,
+    /// False for retained saved-position context after the source match was deleted.
+    pub source_available: bool,
     pub filename: String,
     pub format: String,
     pub white: String,
@@ -85,7 +87,7 @@ pub struct Job {
     pub completed_games: i32,
     #[schema(value_type=JobKind)]
     pub kind: String,
-    #[schema(minimum = 0, maximum = 3)]
+    #[schema(minimum = 0, maximum = 4)]
     pub plies: i32,
     #[schema(value_type=JobStatus)]
     pub status: String,

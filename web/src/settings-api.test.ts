@@ -21,14 +21,17 @@ const settings: AppSettings = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('settings API', () => {
-  it('accepts a three-ply analysis profile while retaining the separate play profile', async () => {
-    vi.stubGlobal('fetch', async () =>
-      Response.json({ ...settings, analysis_plies: 3 }),
-    );
-    expect((await loadSettings()).analysis_plies).toBe(3);
-  });
-  it('rejects analysis depth four and unsupported play depth three', async () => {
-    for (const invalid of [{ analysis_plies: 4 }, { play_plies: 3 }]) {
+  it.each([3, 4])(
+    'accepts a %i-ply analysis profile while retaining the separate play profile',
+    async (plies) => {
+      vi.stubGlobal('fetch', async () =>
+        Response.json({ ...settings, analysis_plies: plies }),
+      );
+      expect((await loadSettings()).analysis_plies).toBe(plies);
+    },
+  );
+  it('rejects analysis depth five and unsupported play depth three', async () => {
+    for (const invalid of [{ analysis_plies: 5 }, { play_plies: 3 }]) {
       vi.stubGlobal('fetch', async () =>
         Response.json({ ...settings, ...invalid }),
       );

@@ -1,0 +1,74 @@
+.analysis-workspace .game-plan-panel {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 38px;
+  padding: 3px 0;
+  color: var(--ui-text);
+  border-bottom: 1px solid var(--ui-border);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.game-plan-heading {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ui-muted);
+  white-space: nowrap;
+}
+
+.game-plan-help {
+  cursor: help;
+  color: var(--ui-muted);
+  border-radius: 3px;
+}
+
+.game-plan-help:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 2px;
+}
+
+.game-plan-players {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 12px;
+  margin: 0;
+  min-width: 0;
+}
+
+.game-plan-players > div {
+  min-width: 0;
+}
+.game-plan-players dt {
+  color: var(--ui-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 10px;
+}
+.game-plan-players dd {
+  margin: 0;
+  color: var(--ui-text);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.game-plan-loading {
+  color: var(--ui-muted);
+}
+.game-plan-unavailable {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 3px 8px;
+  color: var(--ui-muted);
+}
+.analysis-workspace .game-plan-unavailable button {
+  padding: 1px 5px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  border: 1px solid var(--ui-border);
+  font: inherit;
+}

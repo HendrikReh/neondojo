@@ -112,6 +112,14 @@ async fn from_match(pool: &PgPool, id: Uuid, request: &AddCards) -> ApiResult<Ve
         ));
     }
     let match_id = job.match_uuid.context("Match job lacks match UUID")?;
+    if !store::get_match(pool, match_id)
+        .await?
+        .is_some_and(|m| m.source_available)
+    {
+        return Err(ApiError::invalid(
+            "The source match was removed; add its saved positions instead",
+        ));
+    }
     if request
         .game_no
         .is_some_and(|n| job.game_no.is_some_and(|scope| scope != n))
@@ -292,7 +300,7 @@ pub(super) async fn answer_on_connection(
     // One statement reads the match and position annotations from the same fresh snapshot.
     // Export callers use their existing transaction connection while holding shared-card locks.
     let annotations: Vec<(Vec<String>, String)> = sqlx::query_as(
-        "SELECT tags,comment FROM annotations WHERE match_uuid=$1 OR position_uuid=$2 ORDER BY target_kind",
+        "SELECT tags,comment FROM annotations WHERE match_uuid=$1 OR match_uuid=(SELECT match_uuid FROM positions WHERE id=$2) OR position_uuid=$2 ORDER BY target_kind",
     )
     .bind(c.source.match_id)
     .bind(c.source.position_id)

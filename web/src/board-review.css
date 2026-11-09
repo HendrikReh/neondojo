@@ -1,7 +1,7 @@
 .board-review-controls {
   padding: 10px 12px;
-  border-bottom: 1px solid #dfe6dc;
-  background: #f8faf5;
+  border-bottom: 1px solid var(--ui-border);
+  background: var(--ui-surface-alt);
 }
 .board-view-buttons {
   display: flex;
@@ -12,14 +12,14 @@
 .played-preview-button {
   font-size: 11px;
   padding: 7px 9px;
-  border: 1px solid #d7e2d0;
+  border: 1px solid var(--ui-border);
   border-radius: 6px;
 }
 .board-view-buttons button[aria-pressed='true'],
 .played-preview-button[aria-pressed='true'] {
-  background: #e5efdc;
-  border-color: #81a16f;
-  color: #244e36;
+  background: var(--ui-selected);
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
 }
 .board-review-selection {
   display: flex;
@@ -31,7 +31,7 @@
 }
 .board-review-selection small {
   flex-basis: 100%;
-  color: #687c60;
+  color: var(--ui-muted);
   font-size: 10px;
   overflow-wrap: anywhere;
 }
@@ -40,25 +40,25 @@
   font-size: 11px;
   line-height: 1.5;
   margin: 7px 0 0;
-  color: #637459;
+  color: var(--ui-warning-text);
 }
 .board-review-warning {
-  color: #825620;
+  color: var(--ui-warning-text);
 }
 .candidate-preview-button {
   font: inherit;
-  color: #244e36;
+  color: var(--ui-accent);
   background: transparent;
   border: 1px solid transparent;
-  border-bottom: 1px dotted #94ad86;
+  border-bottom: 1px dotted var(--ui-border);
   border-radius: 3px;
   padding: 3px 4px;
   text-align: left;
 }
 .candidate-preview-button:hover,
 .candidate-preview-button[aria-pressed='true'] {
-  background: #e1edd6;
-  border-color: #7da06a;
+  background: var(--ui-selected);
+  border-color: var(--ui-accent);
 }
 .preview-best {
   font-size: 11px;

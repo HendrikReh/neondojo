@@ -5,6 +5,25 @@ import type { components } from './generated-api';
 type Schema = components['schemas'];
 export type PositionFilterDefinition = Schema['PositionFilterDefinition'];
 export type PositionBrowserHit = Schema['PositionBrowserHit'];
+export type PositionSort = Schema['PositionBrowserSort'];
+export type PositionDirection = Schema['PositionBrowserDirection'];
+export const positionSorts = [
+  'match',
+  'loss',
+  'match_id',
+  'database',
+  'game',
+  'ply',
+  'player',
+  'opponent',
+  'dice',
+  'score',
+  'cube',
+  'played_move',
+  'decks',
+  'tags',
+  'comment',
+] as const;
 export type SavedPositionFilter = Schema['SavedPositionFilter'];
 export type PositionFilterDraft = Record<
   Exclude<keyof PositionFilterDefinition, 'schema_version'>,
@@ -38,18 +57,31 @@ const numberFields = [
 ] as const;
 export function emptyPositionFilters(): PositionFilterDraft {
   return Object.fromEntries(
-    [...textFields, ...numberFields, 'crawford', 'analysis_state', 'sort'].map(
-      (key) => [key, key === 'sort' ? 'match' : ''],
-    ),
+    [
+      ...textFields,
+      ...numberFields,
+      'crawford',
+      'analysis_state',
+      'sort',
+      'direction',
+    ].map((key) => [key, key === 'sort' ? 'match' : '']),
   ) as PositionFilterDraft;
 }
 export function positionDefinition(
   draft: PositionFilterDraft,
 ): PositionFilterDefinition {
+  const sort = draft.sort || 'match';
+  if (!(positionSorts as readonly string[]).includes(sort))
+    throw new Error('invalidFilter');
   const definition: PositionFilterDefinition = {
     schema_version: 1,
-    sort: draft.sort === 'loss' ? 'loss' : 'match',
+    sort: sort as PositionSort,
   };
+  if (draft.direction) {
+    if (draft.direction !== 'asc' && draft.direction !== 'desc')
+      throw new Error('invalidFilter');
+    definition.direction = draft.direction;
+  }
   for (const key of textFields)
     if (draft[key]?.trim()) definition[key] = draft[key].trim();
   for (const key of numberFields) {

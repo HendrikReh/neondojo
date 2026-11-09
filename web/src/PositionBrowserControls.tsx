@@ -102,6 +102,7 @@ export default function PositionBrowserControls({
       >
         <div className="position-search-row">
           {field('q', 'q')}
+          {field('player', 'player')}
           <label>
             <span>{p('database')}</span>
             <select
@@ -130,7 +131,6 @@ export default function PositionBrowserControls({
         <details className="position-filter-details">
           <summary>{p('filters')}</summary>
           <div className="position-filter-grid">
-            {field('player', 'player')}
             {field('match_name', 'matchName')}
             {field('tournament', 'tournament')}
             {field('round', 'round')}
@@ -162,6 +162,24 @@ export default function PositionBrowserControls({
           {select('sort', 'sort', [
             ['match', 'sortMatch'],
             ['loss', 'sortLoss'],
+            ['match_id', 'matchId'],
+            ['database', 'database'],
+            ['game', 'gameNumber'],
+            ['ply', 'moveNumber'],
+            ['player', 'player'],
+            ['opponent', 'opponent'],
+            ['dice', 'dice'],
+            ['score', 'score'],
+            ['cube', 'cube'],
+            ['played_move', 'playedMove'],
+            ['decks', 'decks'],
+            ['tags', 'tag'],
+            ['comment', 'comment'],
+          ])}
+          {select('direction', 'direction', [
+            ['', 'sortDefault'],
+            ['asc', 'ascending'],
+            ['desc', 'descending'],
           ])}
           <button type="button" onClick={onClear}>
             {p('clear')}

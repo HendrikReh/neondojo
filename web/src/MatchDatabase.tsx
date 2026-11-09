@@ -1,8 +1,14 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { request, type Match, type Page, type Position } from './api';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react';
+import { request, type Match, type Position } from './api';
+import { useLibraryMatchOpening } from './useLibraryMatchOpening';
 import AnnotationSearch, { type AnnotationHit } from './AnnotationSearch';
 import { useI18n } from './i18n';
-import { useSourceText } from './analysis-source-messages';
 import { useWorkspaceText } from './workspace-messages';
 import { useLibraryText, type LibraryMessageKey } from './library-messages';
 import {
@@ -11,15 +17,25 @@ import {
   defaultDatabaseId,
   type Database,
   type LibraryMatch,
+  type LibrarySort,
   type ActionResponse,
   type LibraryFilters as Filters,
 } from './library-api';
 import DatabaseSidebar from './DatabaseSidebar';
+import LibrarySortHeading from './LibrarySortHeading';
+import { useLibraryColumns } from './useLibraryColumns';
+import {
+  createMatchSummaryFormatter,
+  libraryAnalysisStatus,
+} from './library-match-summary';
+import { LIBRARY_COLUMNS, type LibraryColumn } from './library-columns';
+import {
+  LIBRARY_DATA_COLUMNS,
+  type LibraryDataColumn,
+} from './library-column-preferences';
+import LibraryColumnPicker from './LibraryColumnPicker';
 import LibraryFilters from './LibraryFilters';
 import LibraryDialogs, { type LibraryDialogState } from './LibraryDialogs';
-import MatchPreview from './MatchPreview';
-import type { MoveNotesTarget } from './MoveNotesDialog';
-import type { Theme } from './themes';
 import './library.css';
 
 const resultKey: Record<string, LibraryMessageKey> = {
@@ -46,8 +62,6 @@ export default function MatchDatabase({
   onAnnotation,
   onImport,
   onChanged,
-  onMoveNotes,
-  theme,
   visible,
 }: {
   revision: number;
@@ -62,37 +76,61 @@ export default function MatchDatabase({
   onAnnotation: (hit: AnnotationHit) => void;
   onImport: () => void;
   onChanged: (deletedIds?: string[], validateSelection?: boolean) => void;
-  onMoveNotes: (target: MoveNotesTarget) => void;
-  theme: Theme;
 }) {
   const { t, locale, formatNumber, formatError } = useI18n(),
     w = useWorkspaceText(),
     l = useLibraryText();
-  const sourceT = useSourceText();
+  const columns = useLibraryColumns(visible);
+  const columnNames: Record<LibraryDataColumn, string> = {
+    id: 'ID',
+    white: l('white'),
+    white_pr: `${l('white')} · PR`,
+    black: l('black'),
+    black_pr: `${l('black')} · PR`,
+    match_length: l('length'),
+    score: l('result'),
+    played_at: l('played'),
+    created_at: l('imported'),
+    tournament: l('tournament'),
+    position_count: w('positions'),
+    analysis_status: l('analysis'),
+    tags: l('tags'),
+    comment: l('comment'),
+  };
+  const showColumn = (id: LibraryColumn) => columns.activeColumns.includes(id);
+  const compactActions = !showColumn('white') && !showColumn('black');
   const [databases, setDatabases] = useState<Database[]>([]),
     [localRevision, setRevision] = useState(0),
     [filters, setFilters] = useState<Filters>(emptyFilters),
     [expanded, setExpanded] = useState(false),
     [matches, setMatches] = useState<LibraryMatch[]>([]),
+    [matchResultScope, setMatchResultScope] = useState(''),
     [cursor, setCursor] = useState<string | null>(null),
     [loading, setLoading] = useState(false),
     [error, setError] = useState<unknown>(),
-    [sort, setSort] = useState('created_at'),
-    [direction, setDirection] = useState('desc'),
-    [previewId, setPreviewId] = useState<string>(),
+    [sort, setSort] = useState<LibrarySort>('created_at'),
+    [direction, setDirection] = useState<'asc' | 'desc'>('desc'),
     [selected, setSelected] = useState<Set<string>>(new Set()),
     [dialog, setDialog] = useState<LibraryDialogState>(),
     [result, setResult] = useState<ActionResponse>();
   const queryScope = useRef('');
   const queryVersion = useRef(0),
     moreRequest = useRef<AbortController | undefined>(undefined);
-  const [previewSnapshot, setPreviewSnapshot] = useState<LibraryMatch>();
   const resultNames = useRef<Record<string, string>>({});
   const [exact, setExact] = useState(''),
-    [found, setFound] = useState<Page<Position>>(),
-    [positionLoading, setPositionLoading] = useState(false),
-    [positionError, setPositionError] = useState<unknown>();
-  const positionRequest = useRef<AbortController | undefined>(undefined);
+    [positionInputError, setPositionInputError] = useState(false);
+  const matchScope = JSON.stringify([databaseId, filters, sort, direction]);
+  const matchOpening = useLibraryMatchOpening({
+    scope: matchScope,
+    positionId: filters.position_id.trim(),
+    visible,
+    onOpen,
+    onPosition,
+  });
+  useEffect(() => {
+    setExact(filters.position_id);
+    setPositionInputError(false);
+  }, [filters.position_id]);
   const databaseCallback = useRef(onDatabase);
   databaseCallback.current = onDatabase;
   const databaseCurrent = useRef(databaseId);
@@ -116,12 +154,7 @@ export default function MatchDatabase({
   }, [revision, localRevision]);
   useEffect(() => {
     setSelected(new Set());
-    setPreviewId(undefined);
-    setPreviewSnapshot(undefined);
-    setFound(undefined);
     setResult(undefined);
-    positionRequest.current?.abort();
-    setPositionLoading(false);
   }, [databaseId, filters, sort, direction]);
   useEffect(() => {
     const abort = new AbortController(),
@@ -140,10 +173,7 @@ export default function MatchDatabase({
         .then((page) => {
           if (version !== queryVersion.current || abort.signal.aborted) return;
           setMatches(page.items);
-          setPreviewSnapshot(
-            (previous) =>
-              page.items.find((m) => m.id === previous?.id) ?? previous,
-          );
+          setMatchResultScope(scope);
           setCursor(page.next_cursor);
         })
         .catch((e) => {
@@ -169,7 +199,6 @@ export default function MatchDatabase({
   ]);
   useEffect(
     () => () => {
-      positionRequest.current?.abort();
       moreRequest.current?.abort();
     },
     [],
@@ -205,39 +234,18 @@ export default function MatchDatabase({
         setLoading(false);
     }
   }
-  async function searchPosition(more = false) {
-    positionRequest.current?.abort();
-    const abort = new AbortController();
-    positionRequest.current = abort;
-    setPositionLoading(true);
-    setPositionError(undefined);
-    try {
-      const params = new URLSearchParams({
-        position_id: exact.trim(),
-        limit: '20',
-      });
-      if (databaseId) params.set('database_id', databaseId);
-      if (more && found?.next_cursor) params.set('after', found.next_cursor);
-      const page = await request<Page<Position>>(`/positions?${params}`, {
-        signal: abort.signal,
-      });
-      if (!abort.signal.aborted)
-        setFound((previous) =>
-          more && previous
-            ? { ...page, items: [...previous.items, ...page.items] }
-            : page,
-        );
-    } catch (e) {
-      if (!abort.signal.aborted) setPositionError(e);
-    } finally {
-      if (!abort.signal.aborted) setPositionLoading(false);
+  function searchPosition() {
+    const positionId = exact.trim();
+    if (!/^[A-Za-z0-9+/]{14}$/.test(positionId)) {
+      setPositionInputError(true);
+      return;
     }
+    setPositionInputError(false);
+    setFilters((previous) => ({ ...previous, position_id: positionId }));
   }
   function setPositionQuery(value: string) {
-    positionRequest.current?.abort();
     setExact(value);
-    setFound(undefined);
-    setPositionLoading(false);
+    setPositionInputError(false);
   }
   function changeDatabase(id: string) {
     onDatabase(id);
@@ -264,16 +272,6 @@ export default function MatchDatabase({
     resultNames.current = Object.fromEntries(
       matches.map((m) => [m.id, m.display_name]),
     );
-    if (
-      response.results.some(
-        (r) =>
-          r.match_id === previewId &&
-          (r.status === 'deleted' || (r.status === 'moved' && databaseId)),
-      )
-    ) {
-      setPreviewId(undefined);
-      setPreviewSnapshot(undefined);
-    }
     const deleted = response.results
       .filter((r) => r.status === 'deleted')
       .map((r) => r.match_id);
@@ -302,29 +300,55 @@ export default function MatchDatabase({
     setRevision((n) => n + 1);
     onChanged([], databaseDeleted);
   }
-  function sortBy(key: string) {
+  function sortBy(key: LibrarySort) {
     if (sort === key) setDirection((d) => (d === 'asc' ? 'desc' : 'asc'));
     else {
       setSort(key);
       setDirection('asc');
     }
   }
-  const heading = (key: string, label: string) => (
-    <th
-      aria-sort={
-        sort === key
-          ? direction === 'asc'
-            ? 'ascending'
-            : 'descending'
-          : 'none'
-      }
-    >
-      <button onClick={() => sortBy(key)}>
-        {label}
-        {sort === key ? (direction === 'asc' ? ' ↑' : ' ↓') : ''}
+  const heading = (
+    key: LibrarySort & LibraryColumn,
+    label: string,
+    name?: string,
+  ) =>
+    showColumn(key) ? (
+      <LibrarySortHeading
+        fields={[{ key, label, name }]}
+        sort={sort}
+        direction={direction}
+        onSort={sortBy}
+        column={key}
+        resizeHandle={columns.handle(key, name ?? label)}
+      />
+    ) : null;
+  function openMatchRow(match: LibraryMatch) {
+    if (matchResultScope !== matchScope) return;
+    void matchOpening.open(match);
+  }
+  function matchName(match: LibraryMatch, player: 'white' | 'black') {
+    return (
+      <button
+        className={`match-card ${match.id === selectedMatchId ? 'active' : ''}`}
+        disabled={
+          matchResultScope !== matchScope || matchOpening.openingId === match.id
+        }
+        aria-busy={matchOpening.openingId === match.id}
+        onClick={(event) => {
+          event.stopPropagation();
+          openMatchRow(match);
+        }}
+      >
+        <span className="library-match-player">{match[player]}</span>
+        <span className="sr-only">
+          {t('common.versus')} {match[player === 'white' ? 'black' : 'white']}
+        </span>
+        {match.display_name.trim() && match.display_name !== match.filename && (
+          <span className="library-match-title">· {match.display_name}</span>
+        )}
       </button>
-    </th>
-  );
+    );
+  }
   function rowKey(
     e: KeyboardEvent<HTMLTableRowElement>,
     match: LibraryMatch,
@@ -333,7 +357,7 @@ export default function MatchDatabase({
     if (e.target !== e.currentTarget) return;
     if (e.key === 'Enter') {
       e.preventDefault();
-      onOpen(match);
+      openMatchRow(match);
     }
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       e.preventDefault();
@@ -341,8 +365,6 @@ export default function MatchDatabase({
         matches.length - 1,
         Math.max(0, index + (e.key === 'ArrowDown' ? 1 : -1)),
       );
-      setPreviewId(matches[next].id);
-      setPreviewSnapshot(matches[next]);
       document.getElementById(`library-row-${matches[next].id}`)?.focus();
     }
   }
@@ -357,8 +379,7 @@ export default function MatchDatabase({
     const timer = setInterval(() => setRevision((n) => n + 1), 4000);
     return () => clearInterval(timer);
   }, [visible, matches]);
-  const preview = matches.find((m) => m.id === previewId) ?? previewSnapshot,
-    active = databases.find((d) => d.id === databaseId);
+  const active = databases.find((d) => d.id === databaseId);
   const pr = (value: number | null) =>
     value == null
       ? '—'
@@ -373,17 +394,11 @@ export default function MatchDatabase({
         )
       : '—';
   const state = (m: LibraryMatch) =>
-    m.analysis_status === 'imported'
-      ? sourceT('imported')
-      : m.analysis_status
-        ? l(
-            (['completed', 'queued', 'running', 'failed', 'partial'].includes(
-              m.analysis_status,
-            )
-              ? m.analysis_status
-              : 'noAnalysis') as LibraryMessageKey,
-          )
-        : l('noAnalysis');
+    libraryAnalysisStatus(m.analysis_status, locale);
+  const summaries = useMemo(() => {
+    const summary = createMatchSummaryFormatter(locale);
+    return new Map(matches.map((match) => [match.id, summary(match)]));
+  }, [matches, locale]);
   return (
     <section className="match-database" aria-label={w('database')}>
       <div className="database-heading">
@@ -449,6 +464,11 @@ export default function MatchDatabase({
               {formatError(error)}
             </p>
           )}
+          {!!matchOpening.error && (
+            <p className="error" role="alert">
+              {formatError(matchOpening.error)}
+            </p>
+          )}
           <div className="database-searches">
             <AnnotationSearch
               revision={annotationRevision}
@@ -462,16 +482,17 @@ export default function MatchDatabase({
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
-                  void searchPosition();
+                  searchPosition();
                 }}
               >
                 <input
                   aria-label={t('app.positionId')}
                   placeholder={t('app.positionPlaceholder')}
                   value={exact}
+                  aria-invalid={positionInputError || undefined}
                   onChange={(e) => setPositionQuery(e.target.value)}
                 />
-                <button disabled={positionLoading || !exact.trim()}>
+                <button disabled={loading || !exact.trim()}>
                   {t('app.exactSearch')}
                 </button>
                 {currentPosition && (
@@ -485,43 +506,62 @@ export default function MatchDatabase({
                   </button>
                 )}
               </form>
-              {!!positionError && (
-                <p role="alert">{formatError(positionError)}</p>
-              )}
-              {found && (
-                <div className="position-results">
-                  {!found.items.length ? (
-                    <p>{t('app.noPositionMatches')}</p>
-                  ) : (
-                    found.items.map((p) => (
-                      <button key={p.id} onClick={() => onPosition(p)}>
-                        {t('app.positionResult', {
-                          game: p.game_no,
-                          move: p.ply,
-                          dice: p.dice.join('–'),
-                        })}{' '}
-                        <strong>{p.notation}</strong>
-                        <small>{p.match_uuid.slice(0, 8)}…</small>
-                      </button>
-                    ))
-                  )}
-                  {found.next_cursor && (
-                    <button
-                      disabled={positionLoading}
-                      onClick={() => void searchPosition(true)}
-                    >
-                      {t('app.moreResults')}
-                    </button>
-                  )}
-                </div>
+              {positionInputError && (
+                <p role="alert">{l('invalidPositionId')}</p>
               )}
             </details>
           </div>
-          <div className="database-count">
-            {loading
-              ? t('app.searching')
-              : `${formatNumber(matches.length)}${cursor ? '+' : ''}`}{' '}
-            {t('app.matches')} · {active?.name ?? l('allDatabases')}
+          <div className="library-table-toolbar">
+            <div className="database-count">
+              {loading
+                ? t('app.searching')
+                : `${formatNumber(matches.length)}${cursor ? '+' : ''}`}{' '}
+              {t('app.matches')} · {active?.name ?? l('allDatabases')}
+            </div>
+            {filters.position_id.trim() && (
+              <span className="library-position-filter">
+                <span>
+                  {t('app.positionId')}:{' '}
+                  <code>{filters.position_id.trim()}</code>
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFilters((previous) => ({ ...previous, position_id: '' }))
+                  }
+                >
+                  {l('clearPositionFilter')}
+                </button>
+              </span>
+            )}
+            {!showColumn(sort as LibraryColumn) && (
+              <span className="library-hidden-sort">
+                {l('sortedBy', {
+                  column: columnNames[sort as LibraryDataColumn] ?? sort,
+                  direction: l(
+                    direction === 'asc' ? 'ascending' : 'descending',
+                  ),
+                })}
+              </span>
+            )}
+            <LibraryColumnPicker
+              options={LIBRARY_DATA_COLUMNS.map((id) => ({
+                id,
+                label: columnNames[id],
+              }))}
+              shown={columns.shown}
+              onToggle={columns.toggle}
+              onAll={columns.showAll}
+              onReset={columns.resetSelection}
+            />
+            <button
+              type="button"
+              className="library-width-reset"
+              onClick={columns.reset}
+              disabled={!columns.custom}
+            >
+              {l('resetColumnWidths')}
+            </button>
           </div>
           {selected.size > 0 && <p className="fineprint">{l('batchLimit')}</p>}
           {selected.size > 0 && (
@@ -596,10 +636,31 @@ export default function MatchDatabase({
           <div className="library-content">
             <div>
               <div className="match-list database-table-wrap">
-                <table className="database-table">
+                <table
+                  ref={columns.tableRef}
+                  className={`database-table${columns.dragging ? ' library-table-resizing' : ''}`}
+                  style={
+                    columns.tableStyle ?? { minWidth: columns.minimumWidth }
+                  }
+                >
+                  <colgroup>
+                    {LIBRARY_COLUMNS.filter((column) =>
+                      showColumn(column.id),
+                    ).map((column) => (
+                      <col
+                        key={column.id}
+                        className={column.className}
+                        style={
+                          columns.widths
+                            ? { width: columns.widths[column.id] }
+                            : undefined
+                        }
+                      />
+                    ))}
+                  </colgroup>
                   <thead>
                     <tr>
-                      <th>
+                      <th scope="col" data-column="select">
                         <input
                           type="checkbox"
                           aria-label={l('selectAll')}
@@ -612,21 +673,26 @@ export default function MatchDatabase({
                           disabled={!matches.length}
                           onChange={(e) => selectAll(e.target.checked)}
                         />
+                        {columns.handle('select', l('selection'))}
                       </th>
+                      {heading('id', 'ID')}
                       {heading('white', l('white'))}
-                      {heading('white_pr', 'PR (GNUbg)')}
+                      {heading('white_pr', 'PR', `${l('white')} · PR`)}
                       {heading('black', l('black'))}
-                      {heading('black_pr', 'PR (GNUbg)')}
+                      {heading('black_pr', 'PR', `${l('black')} · PR`)}
                       {heading('match_length', l('length'))}
-                      {heading('result', l('result'))}
+                      {heading('score', l('result'))}
                       {heading('played_at', l('played'))}
                       {heading('created_at', l('imported'))}
-                      <th>{l('tournament')}</th>
-                      <th>{l('analysis')}</th>
-                      <th>
-                        {l('tags')} / {l('comment')}
+                      {heading('tournament', l('tournament'))}
+                      {heading('position_count', w('positions'))}
+                      {heading('analysis_status', l('analysis'))}
+                      {heading('tags', l('tags'))}
+                      {heading('comment', l('comment'))}
+                      <th scope="col" data-column="actions">
+                        {l('actions')}
+                        {columns.handle('actions', l('actions'))}
                       </th>
-                      <th>{w('details')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -634,13 +700,20 @@ export default function MatchDatabase({
                       <tr
                         key={m.id}
                         id={`library-row-${m.id}`}
+                        title={summaries.get(m.id)}
                         tabIndex={0}
-                        className={`${m.id === selectedMatchId ? 'selected ' : ''}${previewId === m.id ? 'previewed' : ''}`}
-                        onClick={() => {
-                          setPreviewId(m.id);
-                          setPreviewSnapshot(m);
+                        className={
+                          m.id === selectedMatchId ? 'selected' : undefined
+                        }
+                        onClick={(event) => event.currentTarget.focus()}
+                        onDoubleClick={(event) => {
+                          if (
+                            !(event.target as HTMLElement).closest(
+                              'button, a, input',
+                            )
+                          )
+                            openMatchRow(m);
                         }}
-                        onDoubleClick={() => onOpen(m)}
                         onKeyDown={(e) => rowKey(e, m, index)}
                       >
                         <td onClick={(e) => e.stopPropagation()}>
@@ -654,82 +727,120 @@ export default function MatchDatabase({
                             }
                           />
                         </td>
-                        <td>
-                          <button
-                            title={m.filename}
-                            className={`match-card ${m.id === selectedMatchId ? 'active' : ''}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onOpen(m);
-                            }}
-                          >
-                            {m.display_name.trim() &&
-                              m.display_name !== m.filename && (
-                                <span className="library-match-title">
-                                  {m.display_name}
+                        {showColumn('id') && (
+                          <td className="library-id-cell">
+                            {formatNumber(m.match_no)}
+                          </td>
+                        )}
+                        {showColumn('white') && (
+                          <td>{matchName(m, 'white')}</td>
+                        )}
+                        {showColumn('white_pr') && (
+                          <td className="library-pr-cell">{pr(m.white_pr)}</td>
+                        )}
+                        {showColumn('black') && (
+                          <td>
+                            {showColumn('white')
+                              ? m.black
+                              : matchName(m, 'black')}
+                          </td>
+                        )}
+                        {showColumn('black_pr') && (
+                          <td className="library-pr-cell">{pr(m.black_pr)}</td>
+                        )}
+                        {showColumn('match_length') && (
+                          <td>{m.match_length || 'M'}</td>
+                        )}
+                        {showColumn('score') && (
+                          <td>
+                            {m.white_score != null && m.black_score != null
+                              ? `${m.white_score}–${m.black_score}`
+                              : 'n/a'}
+                          </td>
+                        )}
+                        {showColumn('played_at') && (
+                          <td>{date(m.played_on)}</td>
+                        )}
+                        {showColumn('created_at') && (
+                          <td>{date(m.created_at)}</td>
+                        )}
+                        {showColumn('tournament') && (
+                          <td>{m.tournament ?? '—'}</td>
+                        )}
+                        {showColumn('position_count') && (
+                          <td className="library-match-positions">
+                            {formatNumber(m.position_count)}
+                          </td>
+                        )}
+                        {showColumn('analysis_status') && <td>{state(m)}</td>}
+                        {showColumn('tags') && (
+                          <td className="library-tags-cell library-notes-cell">
+                            <div className="library-notes-summary">
+                              {m.tags.length > 0 && (
+                                <span className="library-note-tags">
+                                  {m.tags.map((tag) => (
+                                    <span className="tag-chip" key={tag}>
+                                      {tag}
+                                    </span>
+                                  ))}
                                 </span>
                               )}
-                            <span>{m.white}</span>
-                            <span className="sr-only">
-                              {t('common.versus')} {m.black}
+                            </div>
+                          </td>
+                        )}
+                        {showColumn('comment') && (
+                          <td className="library-comment-cell">
+                            <span className="library-note-comment">
+                              {m.comment}
                             </span>
-                            <small>
-                              {m.format.toUpperCase()} ·{' '}
-                              {formatNumber(m.position_count)} {w('positions')}
-                            </small>
-                          </button>
-                        </td>
-                        <td title={m.pr_profile ?? l('prHelp')}>
-                          {pr(m.white_pr)}
-                        </td>
-                        <td>{m.black}</td>
-                        <td title={m.pr_profile ?? l('prHelp')}>
-                          {pr(m.black_pr)}
-                        </td>
-                        <td>{m.match_length || l('money')}</td>
-                        <td
-                          title={l(
-                            m.result_state as
-                              'unknown' | 'ongoing' | 'completed',
-                          )}
-                        >
-                          {m.white_score != null && m.black_score != null
-                            ? `${m.white_score}–${m.black_score}`
-                            : l('unknown')}
-                        </td>
-                        <td>{date(m.played_on)}</td>
-                        <td>{date(m.created_at)}</td>
-                        <td>{m.tournament ?? '—'}</td>
-                        <td>{state(m)}</td>
-                        <td className="library-notes-cell">
-                          <div>
-                            {m.tags.map((tag) => (
-                              <span className="tag-chip" key={tag}>
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                          <small title={m.comment}>
-                            {m.comment.slice(0, 150)}
-                          </small>
-                        </td>
+                          </td>
+                        )}
                         <td>
-                          <button
-                            aria-label={`${w('details')}: ${m.filename}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setPreviewId(m.id);
-                              setPreviewSnapshot(m);
-                            }}
-                          >
-                            {w('details')}
-                          </button>
-                          <a
-                            href={`/api/matches/${m.id}/source`}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            SGF ↓
-                          </a>
+                          <div className="library-row-actions">
+                            {compactActions && (
+                              <button
+                                className="library-row-open"
+                                aria-label={`${w('openMatch')}: ${m.display_name}`}
+                                disabled={
+                                  matchResultScope !== matchScope ||
+                                  matchOpening.openingId === m.id
+                                }
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  openMatchRow(m);
+                                }}
+                              >
+                                <span aria-hidden="true">↗</span>
+                              </button>
+                            )}
+                            <button
+                              className="library-row-edit"
+                              aria-label={`${l('editMatch')}: ${m.display_name}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDialog({ kind: 'metadata', match: m });
+                              }}
+                            >
+                              <svg
+                                width="14"
+                                height="14"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.8"
+                                aria-hidden="true"
+                              >
+                                <path d="m15 5 4 4M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15l-1 6Z" />
+                              </svg>
+                            </button>
+                            <a
+                              href={`/api/matches/${m.id}/source`}
+                              aria-label="SGF ↓"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {compactActions ? '↓' : 'SGF ↓'}
+                            </a>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -750,15 +861,6 @@ export default function MatchDatabase({
               )}
               <p className="fineprint library-pr-help">{l('prHelp')}</p>
             </div>
-            <MatchPreview
-              match={preview}
-              theme={theme}
-              onOpen={onOpen}
-              onEdit={(match) => setDialog({ kind: 'metadata', match })}
-              onNotes={(move, match) =>
-                onMoveNotes({ match, gameNo: move.game_no, moveId: move.id })
-              }
-            />
           </div>
         </div>
       </div>

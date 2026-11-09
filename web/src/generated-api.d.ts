@@ -196,6 +196,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/game-plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["game_plans"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/games/{id}/annotation": {
         parameters: {
             query?: never;
@@ -507,7 +523,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["get_metadata"];
         put: operations["update_metadata"];
         post?: never;
         delete?: never;
@@ -767,6 +783,22 @@ export interface paths {
         put: operations["put_position_annotation"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/positions/{id}/bookmark": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_bookmark"];
+        put: operations["save_bookmark"];
+        post?: never;
+        delete: operations["remove_bookmark"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1163,6 +1195,11 @@ export interface components {
             id: string;
             /** Format: int32 */
             match_length: number;
+            /**
+             * Format: int64
+             * @description Persistent numeric library entry ID; UUID remains the action identity.
+             */
+            match_no: number;
             place?: string | null;
             /** Format: date */
             played_on?: string | null;
@@ -1172,6 +1209,8 @@ export interface components {
             pr_profile?: string | null;
             result_state: string;
             round?: string | null;
+            /** @description False for independent saved-position context whose source match was deleted. */
+            source_available: boolean;
             tags: string[];
             tournament?: string | null;
             /** Format: int64 */
@@ -1328,6 +1367,28 @@ export interface components {
             /** Format: uuid */
             match_id: string;
         };
+        /** @enum {string} */
+        GamePlan: "pure_race" | "racing" | "attacking" | "priming" | "anchoring";
+        GamePlanRequest: {
+            /**
+             * @description Absolute-color board: points 1–24 use positive White/negative Black;
+             *     Black's bar at 0 is nonpositive, White's bar at 25 is nonnegative.
+             *     Each side has at most 15 checkers; absent checkers are borne off.
+             */
+            board: number[];
+        };
+        GamePlans: {
+            black: components["schemas"]["GamePlan"];
+            classifier: string;
+            /**
+             * @description At least one side has no checkers remaining, including on the bar.
+             *     Labels retain the original rule classification for terminal boards.
+             */
+            game_over: boolean;
+            /** @description Pinned upstream Git commit; changes when the reference rules change. */
+            source_revision: string;
+            white: components["schemas"]["GamePlan"];
+        };
         Health: {
             database: boolean;
             gnubg?: string | null;
@@ -1464,7 +1525,7 @@ export interface components {
             kind: components["schemas"]["PositionJobKind"];
             /**
              * Format: int32
-             * @description GNUbg search depth, 0 to 3. Omitted uses saved analysis depth.
+             * @description GNUbg search depth, 0 to 4. Omitted uses saved analysis depth.
              */
             plies?: number | null;
             /**
@@ -1545,6 +1606,8 @@ export interface components {
             match_length: number;
             /** Format: int32 */
             position_count: number;
+            /** @description False for retained saved-position context after the source match was deleted. */
+            source_available: boolean;
             white: string;
         };
         MetadataWrite: {
@@ -1695,6 +1758,18 @@ export interface components {
         PositionAddStatus: "added" | "updated" | "duplicate" | "analysis_required" | "not_found";
         /** @enum {string} */
         PositionAnalysisState: "ready" | "missing";
+        PositionBookmark: {
+            /**
+             * Format: uuid
+             * @description UUID of the exact imported occurrence, retaining its player and source context.
+             */
+            position_id: string;
+            saved: boolean;
+            /** Format: date-time */
+            saved_at?: string | null;
+        };
+        /** @enum {string} */
+        PositionBrowserDirection: "asc" | "desc";
         PositionBrowserHit: {
             /** Format: int32 */
             black_score?: number | null;
@@ -1710,12 +1785,21 @@ export interface components {
             /** Format: uuid */
             database_id: string;
             database_name: string;
+            /** @description Learning decks for this checker decision's full Position-ID/Match-ID identity. */
+            decks: components["schemas"]["PositionDeckMembership"][];
             display_name: string;
             match_info: components["schemas"]["MatchSummary"];
+            /**
+             * Format: int64
+             * @description Persistent library number, independent of the match UUID and row order.
+             */
+            match_no: number;
             native_error?: null | components["schemas"]["PositionNativeError"];
             notes: components["schemas"]["PositionBrowserNote"][];
             position: components["schemas"]["Position"];
             round?: string | null;
+            /** @description False when only saved occurrences remain after source deletion. */
+            source_available: boolean;
             tags: string[];
             tournament?: string | null;
             /** Format: int32 */
@@ -1731,7 +1815,12 @@ export interface components {
             next_cursor?: string | null;
         };
         /** @enum {string} */
-        PositionBrowserSort: "match" | "loss";
+        PositionBrowserSort: "match" | "loss" | "match_id" | "database" | "game" | "ply" | "player" | "opponent" | "dice" | "score" | "cube" | "played_move" | "decks" | "tags" | "comment";
+        PositionDeckMembership: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
         PositionFilterDefinition: {
             analysis_state?: null | components["schemas"]["PositionAnalysisState"];
             /** Format: int32 */
@@ -1746,6 +1835,7 @@ export interface components {
             die1?: number | null;
             /** Format: int32 */
             die2?: number | null;
+            direction?: null | components["schemas"]["PositionBrowserDirection"];
             match_name?: string | null;
             /** Format: int32 */
             match_points_max?: number | null;
@@ -2525,6 +2615,37 @@ export interface operations {
             };
         };
     };
+    game_plans: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GamePlanRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GamePlans"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     get_game_annotation: {
         parameters: {
             query?: never;
@@ -2978,7 +3099,17 @@ export interface operations {
                 result: string | null;
                 match_points_min: number | null;
                 match_points_max: number | null;
+                /**
+                 * @description Sort field: id (or match_no), created_at, played_at, name, white, black,
+                 *     white_pr, black_pr, match_length, score, result, tournament, format,
+                 *     position_count, analysis_status, tags, or comment. score compares the
+                 *     visible numeric white/black score pair; result retains result-state order.
+                 */
                 sort: string | null;
+                /**
+                 * @description asc or desc (default desc). Missing values sort last in either direction;
+                 *     equal values use ascending UUID order for stable pagination.
+                 */
                 direction: string | null;
                 after: string | null;
                 limit: number | null;
@@ -3341,6 +3472,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImportedAnalysisSummary"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_metadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseMatch"];
                 };
             };
             404: {
@@ -3779,7 +3939,8 @@ export interface operations {
         parameters: {
             query?: {
                 /**
-                 * @description URL-encoded JSON PositionFilterDefinition. Omitted: unfiltered, match order.
+                 * @description URL-encoded JSON PositionFilterDefinition, applied only to explicitly saved positions.
+                 *     Omitted: the saved collection in match order.
                  * @example {"schema_version":1,"player":"Alice","sort":"match"}
                  */
                 filters?: string;
@@ -4087,6 +4248,117 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_bookmark: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PositionBookmark"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    save_bookmark: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Explicitly save this occurrence. Repeated saves retain its original saved_at. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PositionBookmark"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    remove_bookmark: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Remove collection membership while retaining the source position, notes, analysis and learning cards. Repeated removal succeeds for an existing position. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

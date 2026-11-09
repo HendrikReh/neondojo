@@ -2,6 +2,41 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script id="ui-appearance-bootstrap">
+      (() => {
+        let theme = 'graphite',
+          mode = 'system';
+        try {
+          const value = JSON.parse(
+            localStorage.getItem('bgtutor.ui-appearance') || 'null',
+          );
+          if (
+            value &&
+            value.version === 1 &&
+            ['graphite', 'club', 'paper'].includes(value.theme) &&
+            ['light', 'dark', 'system'].includes(value.mode)
+          ) {
+            theme = value.theme;
+            mode = value.mode;
+          }
+        } catch {
+          /* Use the default if storage is unavailable or corrupt. */
+        }
+        const resolved =
+          mode === 'system'
+            ? window.matchMedia &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark'
+              : 'light'
+            : mode;
+        const root = document.documentElement;
+        root.dataset.uiTheme = theme;
+        root.dataset.uiMode = resolved;
+        root.dataset.uiPreference = mode;
+        root.style.colorScheme = resolved;
+      })();
+    </script>
+    <link rel="stylesheet" href="/src/ui-appearance.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#173f38" />
     <meta

@@ -108,8 +108,12 @@ export default function MatchAnalysisPanel({
     () => setSelection({ scope: filterScope, filter: defaultFilter }),
     [filterScope],
   );
-  const selected =
-    selection.scope === filterScope ? selection.filter : defaultFilter;
+  const selected = {
+    ...(selection.scope === filterScope ? selection.filter : defaultFilter),
+    // A single-game job always has this scope, including after reset or a
+    // metric action. Keep the visible selection and request explicit.
+    ...(scoped ? { game_no: gameNo } : {}),
+  };
   const {
     player,
     kind,
@@ -121,7 +125,8 @@ export default function MatchAnalysisPanel({
     setSelection({ scope: filterScope, filter: { ...selected, ...patch } });
   function selectMetric(action: StatisticsAction) {
     setSelection({ scope: filterScope, filter: buildStatisticsFilter(action) });
-    if (action.gameNo !== undefined) onGame?.(action.gameNo);
+    if (action.gameNo !== undefined && action.gameNo !== gameNo)
+      onGame?.(action.gameNo);
     onShowErrors?.();
   }
   useEffect(
@@ -289,6 +294,7 @@ export default function MatchAnalysisPanel({
             <option value={1}>1-Ply</option>
             <option value={2}>{t('matchAnalysis.thorough')}</option>
             <option value={3}>3-ply</option>
+            <option value={4}>4-ply</option>
           </select>
         </label>
         <button
@@ -350,6 +356,7 @@ export default function MatchAnalysisPanel({
                     summary={summary}
                     names={names}
                     onSelect={selectMetric}
+                    gameNo={job.game_no ?? undefined}
                   />
                   <p className="analysis-method">
                     {t('matchAnalysis.method', {
@@ -438,7 +445,7 @@ export default function MatchAnalysisPanel({
                       if (game !== undefined) onGame?.(game);
                     }}
                   >
-                    <option value="">{text('allGames')}</option>
+                    {!scoped && <option value="">{text('allGames')}</option>}
                     {(
                       statistics?.games ??
                       (scoped && gameNo !== undefined

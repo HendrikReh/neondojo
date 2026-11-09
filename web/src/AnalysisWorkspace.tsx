@@ -9,6 +9,7 @@ import {
 } from 'react';
 import Board, { type Theme } from './Board';
 import BoardReviewControls from './BoardReviewControls';
+import PositionBookmarkButton from './PositionBookmarkButton';
 import { projectMove, type BoardView } from './move-preview';
 import { useBoardReviewText } from './board-review-messages';
 import type { PreviewCandidate } from './candidate-preview';
@@ -26,6 +27,12 @@ import { useWorkspaceText } from './workspace-messages';
 import type { AnnotationKind } from './annotation-api';
 import { useMoveAssessments } from './useMoveAssessments';
 import { useSourceText } from './analysis-source-messages';
+import AnalysisMatchHeader from './AnalysisMatchHeader';
+import { hasMatchSource } from './match-source';
+import { useAnalysisMatchHeaderText } from './analysis-match-header-messages';
+import './retained-position.css';
+import GamePlanPanel from './GamePlanPanel';
+import { displayedBoardPosition } from './displayed-board';
 
 export type AnalysisDetail =
   'overview' | 'evaluation' | 'statistics' | 'errors' | 'notes' | 'cards';
@@ -50,9 +57,12 @@ export default function AnalysisWorkspace({
   defaultPlies,
   sourceRevision,
   analysisRevision,
+  metadataRevision,
+  bookmarkRevision,
+  onBookmarkChanged,
   onBookSettings,
   configured,
-  detail,
+  detail: requestedDetail,
   onDetail,
   onOpenDatabase,
   onTrackJob,
@@ -64,6 +74,7 @@ export default function AnalysisWorkspace({
   onPosition,
   scopeRequest,
   welcome,
+  active = true,
 }: {
   navigation: ReturnType<typeof useGameNavigation>;
   jobs: ReturnType<typeof useJobs>;
@@ -71,6 +82,9 @@ export default function AnalysisWorkspace({
   defaultPlies: number;
   sourceRevision: number;
   analysisRevision?: string;
+  metadataRevision?: number;
+  bookmarkRevision: number;
+  onBookmarkChanged: () => void;
   onBookSettings: () => void;
   configured: boolean;
   detail: AnalysisDetail;
@@ -85,6 +99,7 @@ export default function AnalysisWorkspace({
   onPosition: (id: string) => void;
   scopeRequest?: { kind: AnnotationKind; token: number };
   welcome: ReactNode;
+  active?: boolean;
 }) {
   const { t, formatNumber, formatEquity, formatDecision, formatError } =
     useI18n();
@@ -92,8 +107,18 @@ export default function AnalysisWorkspace({
   const review = useBoardReviewText();
   const statistics = useStatisticsText();
   const sourceText = useSourceText();
+  const headerText = useAnalysisMatchHeaderText();
   const { match, game, games, positions, position, index, loading, stats } =
     navigation;
+  const sourceAvailable = hasMatchSource(match);
+  const detail =
+    !sourceAvailable &&
+    (requestedDetail === 'statistics' || requestedDetail === 'errors')
+      ? 'overview'
+      : requestedDetail;
+  const availableTabs = sourceAvailable
+    ? detailTabs
+    : detailTabs.filter((tab) => tab !== 'statistics' && tab !== 'errors');
   const [commandTarget, setCommandTarget] = useState<HTMLDivElement | null>(
     null,
   );
@@ -101,7 +126,7 @@ export default function AnalysisWorkspace({
   const overview = detail === 'overview';
   const [matchJob, setMatchJob] = useState<Job>();
   const moveAssessments = useMoveAssessments({
-    matchId: match?.id,
+    matchId: sourceAvailable ? match?.id : undefined,
     gameNo: game?.game_no,
     job: matchJob,
     analysisRevision,
@@ -157,16 +182,16 @@ export default function AnalysisWorkspace({
     event: KeyboardEvent<HTMLButtonElement>,
     current: AnalysisDetail,
   ) {
-    let index = detailTabs.indexOf(current);
-    if (event.key === 'ArrowRight') index = (index + 1) % detailTabs.length;
+    let index = availableTabs.indexOf(current);
+    if (event.key === 'ArrowRight') index = (index + 1) % availableTabs.length;
     else if (event.key === 'ArrowLeft')
-      index = (index + detailTabs.length - 1) % detailTabs.length;
+      index = (index + availableTabs.length - 1) % availableTabs.length;
     else if (event.key === 'Home') index = 0;
-    else if (event.key === 'End') index = detailTabs.length - 1;
+    else if (event.key === 'End') index = availableTabs.length - 1;
     else return;
     event.preventDefault();
-    onDetail(detailTabs[index]);
-    tabRefs.current[detailTabs[index]]?.focus();
+    onDetail(availableTabs[index]);
+    tabRefs.current[availableTabs[index]]?.focus();
   }
   const errorRequest = useRef<AbortController | undefined>(undefined);
   useEffect(() => {
@@ -189,6 +214,7 @@ export default function AnalysisWorkspace({
     if (!overview) onDetail('errors');
     if (
       !matchJob ||
+      !sourceAvailable ||
       !match ||
       !game ||
       moveFilter.kind === 'cube' ||
@@ -232,37 +258,35 @@ export default function AnalysisWorkspace({
     return <section className="analysis-workspace">{welcome}</section>;
   return (
     <section
-      className={`analysis-workspace ${overview ? 'analysis-overview' : ''} ${focus ? 'board-focus' : ''}`}
+      className={`analysis-workspace ${overview ? 'analysis-overview' : ''} ${focus ? 'board-focus' : ''} ${sourceAvailable ? '' : 'analysis-retained'}`}
       aria-label={w('analysis')}
     >
-      <div className="analysis-heading">
-        <div>
-          <h1>
-            {match.white} <span>{t('common.versus')}</span> {match.black}
-          </h1>
-          <p>
-            {match.match_length
-              ? t('app.matchLength', { count: match.match_length })
-              : t('common.moneyGame')}{' '}
-            · {match.format.toUpperCase()}{' '}
-            <a href={`/api/matches/${match.id}/source`}>SGF ↓</a>
-          </p>
-        </div>
-      </div>
+      <AnalysisMatchHeader
+        match={match}
+        metadataRevision={metadataRevision}
+        analysisRevision={analysisRevision}
+      />
+      {!sourceAvailable && (
+        <p className="analysis-retained-context" role="status">
+          {headerText('retainedPosition')}
+        </p>
+      )}
       <div className="analysis-commandbar">
         <GameSelector
           games={games}
           selected={game?.game_no}
           onSelect={(number) => void navigation.selectGame(number)}
         />
-        <div className="workspace-analysis-command" ref={setCommandTarget} />
+        {sourceAvailable && (
+          <div className="workspace-analysis-command" ref={setCommandTarget} />
+        )}
       </div>
       <div
         className="inspector-tabs analysis-detail-navigation"
         role="tablist"
         aria-label={w('positionDetails')}
       >
-        {detailTabs.map((tab) => (
+        {availableTabs.map((tab) => (
           <button
             key={tab}
             role="tab"
@@ -341,16 +365,20 @@ export default function AnalysisWorkspace({
               {formatError(moveAssessments.error)}
             </p>
           )}
-          <button
-            className="next-error"
-            onClick={() => void nextError()}
-            disabled={!matchJob || !game}
-          >
-            {w('nextError')} →
-          </button>
-          {noErrors && <p role="status">{w('noErrors')}</p>}
-          {!!nextErrorFailure && (
-            <p role="alert">{formatError(nextErrorFailure)}</p>
+          {sourceAvailable && (
+            <>
+              <button
+                className="next-error"
+                onClick={() => void nextError()}
+                disabled={!matchJob || !game}
+              >
+                {w('nextError')} →
+              </button>
+              {noErrors && <p role="status">{w('noErrors')}</p>}
+              {!!nextErrorFailure && (
+                <p role="alert">{formatError(nextErrorFailure)}</p>
+              )}
+            </>
           )}
         </aside>
         <section className="board-panel">
@@ -372,15 +400,22 @@ export default function AnalysisWorkspace({
                       })}
                 </strong>
               </div>
-              {preview && (
-                <BoardReviewControls
-                  view={effectiveView}
-                  preview={preview}
-                  selected={selectedPreview}
-                  onView={setBoardView}
-                  onPlayed={() => onPreview(null)}
+              <div className="board-review-toolbar">
+                {preview && (
+                  <BoardReviewControls
+                    view={effectiveView}
+                    preview={preview}
+                    selected={selectedPreview}
+                    onView={setBoardView}
+                    onPlayed={() => onPreview(null)}
+                  />
+                )}
+                <PositionBookmarkButton
+                  positionId={position.id}
+                  revision={bookmarkRevision}
+                  onChanged={onBookmarkChanged}
                 />
-              )}
+              </div>
               <Board
                 position={position}
                 white={match.white}
@@ -395,6 +430,14 @@ export default function AnalysisWorkspace({
                     selectedPreview?.notation ?? position.notation,
                   ),
                 })}
+              />
+              <GamePlanPanel
+                board={
+                  displayedBoardPosition(position, preview, effectiveView).board
+                }
+                white={match.white}
+                black={match.black}
+                active={active}
               />
               <div className="board-navigation">
                 <button
@@ -460,7 +503,7 @@ export default function AnalysisWorkspace({
             )}
             <AnalysisPanel
               jobs={jobs.jobs}
-              stats={stats}
+              stats={sourceAvailable ? stats : null}
               gameNo={game?.game_no}
               defaultPlies={defaultPlies}
               positionId={position?.id}
@@ -472,23 +515,25 @@ export default function AnalysisWorkspace({
               onAnalyze={(kind, plies) => void jobs.run(kind, plies)}
             />
           </div>
-          <MatchResults
-            matchId={match.id}
-            gameNo={game?.game_no}
-            navigation={navigation}
-            defaultPlies={defaultPlies}
-            configured={configured}
-            detail={detail}
-            target={commandTarget}
-            onPosition={onPosition}
-            onTrackJob={onTrackJob}
-            onCurrentJob={setMatchJob}
-            onFilterChange={setMoveFilter}
-            onShowErrors={() => {
-              if (!overview) onDetail('errors');
-            }}
-            selectedPositionId={position?.id}
-          />
+          {sourceAvailable && (
+            <MatchResults
+              matchId={match.id}
+              gameNo={game?.game_no}
+              navigation={navigation}
+              defaultPlies={defaultPlies}
+              configured={configured}
+              detail={detail}
+              target={commandTarget}
+              onPosition={onPosition}
+              onTrackJob={onTrackJob}
+              onCurrentJob={setMatchJob}
+              onFilterChange={setMoveFilter}
+              onShowErrors={() => {
+                if (!overview) onDetail('errors');
+              }}
+              selectedPositionId={position?.id}
+            />
+          )}
           <div
             id="inspector-panel-notes"
             role="tabpanel"
@@ -516,6 +561,7 @@ export default function AnalysisWorkspace({
               positionId={position?.id}
               matchId={match.id}
               gameNo={game?.game_no}
+              allowBatch={sourceAvailable}
               revision={deckRevision}
               onChanged={onDeckChanged}
             />

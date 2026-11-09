@@ -8,6 +8,7 @@ import BgBlitzBoard from './BgBlitzBoard';
 import { archiveThemes, type Theme } from './themes';
 import MoveArrows from './MoveArrows';
 import type { BoardView, MovePreview } from './move-preview';
+import { displayedBoardPosition } from './displayed-board';
 import './board-preview.css';
 export { themes, type Theme } from './themes';
 
@@ -80,10 +81,11 @@ export default function Board({
   const archive = archiveThemes.find((entry) => entry.id === theme);
   const custom = failedTheme === theme ? undefined : archive;
   const effectiveMode = preview?.ok ? (previewMode ?? 'before') : 'before';
-  const displayedPosition =
-    effectiveMode === 'after' && preview?.ok
-      ? { ...position, board: preview.board, dice: [] }
-      : position;
+  const displayedPosition = displayedBoardPosition(
+    position,
+    preview,
+    effectiveMode,
+  );
   const board = displayedPosition.board;
   const pips = pipCounts(board);
   const counts = checkerCounts(board);

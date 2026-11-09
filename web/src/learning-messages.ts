@@ -2,6 +2,9 @@ import { useI18n } from './i18n';
 import { interpolate, type TranslationParams } from './i18n-core';
 
 const de = {
+  cardPreview: 'Kartenvorschau',
+  previewHint: 'Wähle eine Karte, um ihre Position anzuzeigen.',
+  previewCard: 'Karte {number} ansehen',
   library: 'Bibliothek',
   study: 'Lernen & Anki',
   title: 'Lernkarten',
@@ -65,6 +68,9 @@ const de = {
 type Key = keyof typeof de;
 type Messages = Record<Key, string>;
 const en: Messages = {
+  cardPreview: 'Card preview',
+  previewHint: 'Select a card to preview its position.',
+  previewCard: 'Preview card {number}',
   library: 'Library',
   study: 'Study & Anki',
   title: 'Flashcards',
@@ -125,6 +131,9 @@ const en: Messages = {
   newVersion: 'The card has changed. Load the next card.',
 };
 const es: Messages = {
+  cardPreview: 'Vista previa de la tarjeta',
+  previewHint: 'Selecciona una tarjeta para ver su posición.',
+  previewCard: 'Ver tarjeta {number}',
   library: 'Biblioteca',
   study: 'Estudiar y Anki',
   title: 'Tarjetas',
@@ -185,6 +194,9 @@ const es: Messages = {
   newVersion: 'La tarjeta ha cambiado. Carga la siguiente.',
 };
 const fr: Messages = {
+  cardPreview: 'Aperçu de la carte',
+  previewHint: 'Sélectionnez une carte pour afficher sa position.',
+  previewCard: 'Voir la carte {number}',
   library: 'Bibliothèque',
   study: 'Réviser et Anki',
   title: 'Cartes de révision',
@@ -246,6 +258,9 @@ const fr: Messages = {
   newVersion: 'La carte a changé. Chargez la suivante.',
 };
 const pl: Messages = {
+  cardPreview: 'Podgląd karty',
+  previewHint: 'Wybierz kartę, aby zobaczyć jej pozycję.',
+  previewCard: 'Pokaż kartę {number}',
   library: 'Biblioteka',
   study: 'Nauka i Anki',
   title: 'Fiszki',
@@ -306,6 +321,9 @@ const pl: Messages = {
   newVersion: 'Karta została zmieniona. Wczytaj następną.',
 };
 const it: Messages = {
+  cardPreview: 'Anteprima della scheda',
+  previewHint: 'Seleziona una scheda per visualizzare la sua posizione.',
+  previewCard: 'Mostra scheda {number}',
   library: 'Biblioteca',
   study: 'Studio e Anki',
   title: 'Schede di ripasso',

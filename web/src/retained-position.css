@@ -1,0 +1,19 @@
+.analysis-retained-context {
+  margin: 0 0 9px;
+  color: var(--ui-muted);
+  font-size: 12px;
+}
+
+@media (min-width: 961px) {
+  .analysis-workspace.analysis-overview.analysis-retained .analysis-grid {
+    grid-template-columns: 175px minmax(0, 1.35fr) minmax(325px, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: 'moves board evaluation';
+  }
+
+  .analysis-workspace.analysis-overview.analysis-retained.board-focus
+    .analysis-grid {
+    grid-template-columns: minmax(0, 1.35fr) minmax(325px, 1fr);
+    grid-template-areas: 'board evaluation';
+  }
+}

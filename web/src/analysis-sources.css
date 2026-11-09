@@ -3,20 +3,20 @@
   flex-wrap: wrap;
   gap: 5px;
   padding: 10px 0;
-  border-bottom: 1px solid #dfe6dc;
+  border-bottom: 1px solid var(--ui-border);
   margin-bottom: 12px;
 }
 .analysis-source-tabs button {
   padding: 7px 9px;
   font-size: 11px;
   background: transparent;
-  border: 1px solid #d9e2d5;
+  border: 1px solid var(--ui-border);
   border-radius: 6px;
 }
 .analysis-source-tabs button[aria-selected='true'] {
-  background: #e8f0df;
-  color: #28513c;
-  border-color: #90a981;
+  background: var(--ui-selected);
+  color: var(--ui-accent);
+  border-color: var(--ui-accent);
 }
 .analysis-source-tabs button:disabled {
   opacity: 0.45;
@@ -36,16 +36,16 @@
   gap: 5px;
   font-size: 12px;
   padding: 12px;
-  background: #f3f6ef;
+  background: var(--ui-surface-alt);
   border-radius: 8px;
-  border: 1px solid #e1e7da;
+  border: 1px solid var(--ui-border);
   margin-bottom: 12px;
 }
 .source-provenance strong {
   font-weight: 600;
 }
 .source-provenance small {
-  color: #71806a;
+  color: var(--ui-muted);
   font-size: 10px;
 }
 .source-record {
@@ -58,10 +58,10 @@
   width: 100%;
   padding: 8px;
   min-width: 0;
-  border: 1px solid #d5dfcd;
+  border: 1px solid var(--ui-border);
   border-radius: 5px;
-  background: white;
-  color: #304d38;
+  background: var(--ui-surface);
+  color: var(--ui-text);
 }
 .source-candidates {
   max-height: 390px;
@@ -70,7 +70,7 @@
 .source-analysis .candidates td small {
   display: block;
   font-size: 9px;
-  color: #7d8b73;
+  color: var(--ui-muted);
   margin-top: 3px;
 }
 .source-decision-buttons {
@@ -79,8 +79,8 @@
   margin: 10px 0;
 }
 .source-decision-buttons button[aria-pressed='true'] {
-  background: #e9f0df;
-  border-color: #91a37e;
+  background: var(--ui-selected);
+  border-color: var(--ui-accent);
 }
 .source-attribution {
   overflow-wrap: anywhere;
@@ -89,8 +89,8 @@
 }
 .source-book-status {
   padding: 13px;
-  background: #eff5e8;
-  border: 1px solid #d7e4ca;
+  background: var(--ui-surface-alt);
+  border: 1px solid var(--ui-border);
   border-radius: 8px;
   font-size: 13px;
 }
@@ -106,7 +106,7 @@
 }
 .analysis-source-error {
   font-size: 11px;
-  color: #98513f;
+  color: var(--ui-danger-text);
 }
 .analysis-panel .source-heading-label {
   font-size: 10px;
@@ -143,11 +143,11 @@
   padding: 7px;
 }
 .source-book-selector button[aria-pressed='true'] {
-  background: #e7efde;
-  border-color: #93a980;
+  background: var(--ui-selected);
+  border-color: var(--ui-accent);
 }
 .xg-book-evaluation {
-  border-bottom: 1px solid #dce5d4;
+  border-bottom: 1px solid var(--ui-border);
   padding: 8px 0;
 }
 .xg-book-author {

@@ -1,7 +1,7 @@
 .app-shell {
   min-height: 100vh;
-  color: #243d36;
-  background: #f5f6f2;
+  color: var(--ui-text);
+  background: var(--ui-bg);
 }
 .app-shell [hidden] {
   display: none !important;
@@ -11,8 +11,8 @@
   align-items: center;
   gap: 28px;
   padding: 17px 28px;
-  background: #fffefa;
-  border-bottom: 1px solid #dce3d6;
+  background: var(--ui-surface);
+  border-bottom: 1px solid var(--ui-border);
 }
 .app-header .brand {
   margin: 0;
@@ -38,8 +38,8 @@
 }
 .app-tabs button[aria-selected='true'],
 .app-tabs button[aria-selected='true']:hover:not(:disabled) {
-  color: #fff;
-  background: #355d42;
+  color: var(--ui-accent-text);
+  background: var(--ui-accent-hover);
 }
 .app-header-actions {
   display: flex;
@@ -73,7 +73,7 @@
   align-items: center;
   gap: 14px;
   padding: 20px 2px 0;
-  color: #76816f;
+  color: var(--ui-muted);
   font-size: 11px;
 }
 .app-footer > span {
@@ -93,17 +93,17 @@
   overflow-wrap: anywhere;
 }
 .analysis-heading h1 span {
-  color: #8b9884;
+  color: var(--ui-muted);
   font-size: 19px;
 }
 .analysis-heading p {
   font-size: 12px;
-  color: #75816c;
+  color: var(--ui-muted);
   margin-top: 7px;
 }
 .analysis-heading a {
   margin-left: 12px;
-  color: #426b4c;
+  color: var(--ui-accent);
 }
 .analysis-commandbar {
   display: flex;
@@ -111,8 +111,8 @@
   flex-wrap: wrap;
   gap: 18px;
   padding: 15px 18px;
-  background: #fffefa;
-  border: 1px solid #dce3d6;
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
   border-radius: 10px;
   margin-bottom: 18px;
 }
@@ -164,7 +164,7 @@
   white-space: nowrap;
 }
 .workspace-analysis-command .analysis-error {
-  color: #9f392e;
+  color: var(--ui-danger-text);
   font-size: 12px;
   margin-top: 9px;
 }
@@ -236,7 +236,7 @@
 .board-focus-toggle {
   width: 100%;
   border: 0;
-  border-top: 1px solid #e0e6dc;
+  border-top: 1px solid var(--ui-border);
   padding: 9px;
   font-size: 11px;
   background: transparent;
@@ -249,8 +249,8 @@
   display: none;
 }
 .position-inspector {
-  border: 1px solid #dce3d6;
-  background: #fffefa;
+  border: 1px solid var(--ui-border);
+  background: var(--ui-surface);
   border-radius: 9px;
   min-width: 0;
   padding: 12px;
@@ -259,7 +259,7 @@
   display: flex;
   gap: 4px;
   flex-wrap: wrap;
-  border-bottom: 1px solid #e0e6da;
+  border-bottom: 1px solid var(--ui-border);
   padding-bottom: 11px;
   margin-bottom: 14px;
 }
@@ -271,8 +271,8 @@
 }
 .inspector-tabs button[aria-selected='true'],
 .inspector-tabs button[aria-selected='true']:hover:not(:disabled) {
-  background: #355d42;
-  color: white;
+  background: var(--ui-accent-hover);
+  color: var(--ui-accent-text);
 }
 .position-inspector .analysis-panel,
 .position-inspector .match-analysis,
@@ -452,7 +452,7 @@
 }
 .database-heading p {
   font-size: 13px;
-  color: #687864;
+  color: var(--ui-muted);
   margin-top: 7px;
 }
 .match-database .search-box {
@@ -475,7 +475,7 @@
 }
 .database-count {
   font-size: 12px;
-  color: #78866d;
+  color: var(--ui-muted);
   margin: 18px 0 10px;
 }
 .match-database .match-list {
@@ -486,9 +486,9 @@
 }
 .database-table-wrap {
   overflow: auto !important;
-  border: 1px solid #dce3d6;
+  border: 1px solid var(--ui-border);
   border-radius: 10px;
-  background: white;
+  background: var(--ui-surface);
 }
 .database-table {
   width: 100%;
@@ -500,17 +500,17 @@
   padding: 12px 16px;
   font-size: 11px;
   font-weight: 550;
-  color: #73816a;
-  background: #f0f3e9;
+  color: var(--ui-muted);
+  background: var(--ui-surface-alt);
 }
 .database-table td {
   padding: 12px 16px;
-  border-top: 1px solid #e3e8dd;
+  border-top: 1px solid var(--ui-border);
   font-size: 12px;
   vertical-align: middle;
 }
 .database-table tr.selected {
-  background: #f0f4e9;
+  background: var(--ui-selected);
 }
 .match-database .match-card {
   background: transparent;
@@ -537,7 +537,7 @@
 .match-database .match-card small {
   margin-top: 5px;
   display: block;
-  color: #8b9680;
+  color: var(--ui-muted);
   max-width: 500px;
   white-space: normal;
   overflow-wrap: anywhere;
@@ -545,17 +545,17 @@
 .database-table a {
   display: inline-block;
   margin-left: 12px;
-  color: #426d49;
+  color: var(--ui-accent);
 }
 .database-table td:last-child {
   white-space: nowrap;
 }
 .database-details {
-  border: 1px solid #dce3d6;
+  border: 1px solid var(--ui-border);
   border-radius: 10px;
   padding: 20px;
   margin-top: 20px;
-  background: #fffefa;
+  background: var(--ui-surface);
 }
 .database-details h2 {
   font-size: 20px;
@@ -809,7 +809,7 @@
     position: sticky;
     top: -12px;
     padding-top: 6px;
-    background: #fffefa;
+    background: var(--ui-surface);
     z-index: 2;
   }
 }

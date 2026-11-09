@@ -1,0 +1,31 @@
+.table-column-resizer {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: 0;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  outline-offset: -2px;
+}
+.table-column-resizer::after {
+  content: '';
+  position: absolute;
+  top: 25%;
+  bottom: 25%;
+  right: 0;
+  width: 1px;
+  background: var(--ui-border-strong);
+}
+.table-column-resizer:hover::after,
+.table-column-resizer:focus-visible::after {
+  width: 3px;
+  background: var(--ui-accent-hover);
+}
+.resizing-table,
+.resizing-table * {
+  cursor: col-resize !important;
+  user-select: none;
+}

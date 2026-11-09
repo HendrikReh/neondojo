@@ -1,8 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { request } from './api';
+import { removePositionBookmark } from './position-bookmark-api';
 import { useI18n } from './i18n';
 import type { Database } from './library-api';
 import type { Theme } from './themes';
+import {
+  readPositionPlayed,
+  savePositionPlayed,
+} from './position-table-columns';
 import PositionBrowserControls from './PositionBrowserControls';
 import PositionBrowserDecks from './PositionBrowserDecks';
 import {
@@ -17,6 +22,7 @@ import {
   positionDraft,
   togglePositionSelection,
   type PositionBrowserHit,
+  type PositionSort,
   type PositionFilterDefinition,
   type PositionFilterDraft,
   type SavedPositionFilter,
@@ -28,6 +34,8 @@ export default function PositionBrowser({
   visible,
   revision,
   annotationRevision,
+  bookmarkRevision,
+  onBookmarkChanged,
   deckRevision,
   theme,
   onOpenPosition,
@@ -37,6 +45,8 @@ export default function PositionBrowser({
   visible: boolean;
   revision: number;
   annotationRevision: number;
+  bookmarkRevision: number;
+  onBookmarkChanged: () => void;
   deckRevision: number;
   theme: Theme;
   onOpenPosition: (id: string) => void;
@@ -58,10 +68,13 @@ export default function PositionBrowser({
     [loading, setLoading] = useState(false),
     [moreLoading, setMoreLoading] = useState(false),
     [transferBusy, setTransferBusy] = useState(false),
+    [removing, setRemoving] = useState(false),
+    [removeError, setRemoveError] = useState<unknown>(),
     [error, setError] = useState<unknown>(),
     [databaseError, setDatabaseError] = useState<unknown>(),
     [invalid, setInvalid] = useState(false),
-    [refresh, setRefresh] = useState(0);
+    [refresh, setRefresh] = useState(0),
+    [showPlayed, setShowPlayed] = useState(readPositionPlayed);
   const identity = useRef(0),
     scopeRef = useRef(''),
     loadedPages = useRef(1),
@@ -146,7 +159,15 @@ export default function PositionBrowser({
       abort.abort();
       moreRequest.current?.abort();
     };
-  }, [visible, scope, revision, annotationRevision, refresh]);
+  }, [
+    visible,
+    scope,
+    revision,
+    annotationRevision,
+    bookmarkRevision,
+    deckRevision,
+    refresh,
+  ]);
   function apply(next: PositionFilterDraft) {
     try {
       const value = positionDefinition(next);
@@ -191,10 +212,64 @@ export default function PositionBrowser({
         setMoreLoading(false);
     }
   }
+  function sortResults(sort: PositionSort) {
+    if (transferBusy || removing) return;
+    const currentSort = definition.sort ?? 'match';
+    const direction =
+      definition.direction ?? (currentSort === 'loss' ? 'desc' : 'asc');
+    const nextDirection =
+      currentSort === sort && direction === 'asc' ? 'desc' : 'asc';
+    setDraft((previous) => ({ ...previous, sort, direction: nextDirection }));
+    apply({ ...positionDraft(definition), sort, direction: nextDirection });
+  }
+  async function removeSaved(ids: string[]) {
+    if (loading || moreLoading || transferBusy || removing || !ids.length)
+      return;
+    setRemoving(true);
+    setRemoveError(undefined);
+    const removed = new Set<string>();
+    let failure: unknown;
+    try {
+      // Bound concurrent writes while preserving per-position success/failure.
+      for (let start = 0; start < ids.length; start += 8) {
+        const batch = ids.slice(start, start + 8);
+        const results = await Promise.allSettled(
+          batch.map((id) => removePositionBookmark(id)),
+        );
+        results.forEach((result, index) => {
+          if (result.status === 'fulfilled') removed.add(batch[index]);
+          else failure ??= result.reason;
+        });
+      }
+      if (removed.size) {
+        moreRequest.current?.abort();
+        // Reload the complete prefix so failed selections on later pages remain retryable.
+        setPageIndex(0);
+        setCursor(null);
+        setItems((previous) =>
+          previous.filter((hit) => !removed.has(hit.position.id)),
+        );
+        setSelected(
+          (previous) => new Set([...previous].filter((id) => !removed.has(id))),
+        );
+        setPreviewId((previous) =>
+          previous && removed.has(previous) ? undefined : previous,
+        );
+        onBookmarkChanged();
+        setRefresh((value) => value + 1);
+      }
+      if (failure) setRemoveError(failure);
+    } finally {
+      setRemoving(false);
+    }
+  }
+  const pageItems = useMemo(
+    () => items.slice(pageIndex * 25, (pageIndex + 1) * 25),
+    [items, pageIndex],
+  );
   const preview = items.find((hit) => hit.position.id === previewId),
-    pageItems = items.slice(pageIndex * 25, (pageIndex + 1) * 25),
     pageCount = Math.max(1, Math.ceil(items.length / 25));
-  const busy = loading || moreLoading || transferBusy;
+  const busy = loading || moreLoading || transferBusy || removing;
   return (
     <section className="position-browser" aria-label={p('title')}>
       <div className="position-browser-heading">
@@ -227,6 +302,11 @@ export default function PositionBrowser({
           {formatError(databaseError)}
         </p>
       )}
+      {!!removeError && (
+        <p role="alert" className="error">
+          {p('removalFailed')} {formatError(removeError)}
+        </p>
+      )}
       {!!error && (
         <p role="alert" className="error">
           {formatError(error)}
@@ -246,6 +326,12 @@ export default function PositionBrowser({
             >
               {p('clearSelection')}
             </button>
+            <button
+              disabled={!selected.size || busy}
+              onClick={() => void removeSaved([...selected])}
+            >
+              {p(removing ? 'removing' : 'removeSelected')}
+            </button>
             <small>{p('selectionLimit')}</small>
           </div>
           {loading && <p role="status">{p('loading')}</p>}
@@ -263,7 +349,21 @@ export default function PositionBrowser({
                 )
               }
               onOpen={onOpenPosition}
+              onRemove={(ids) => void removeSaved(ids)}
               busy={busy}
+              visible={visible}
+              showPlayed={showPlayed}
+              onShowPlayed={(value) => {
+                setShowPlayed(value);
+                savePositionPlayed(value);
+              }}
+              sort={definition.sort ?? 'match'}
+              direction={
+                definition.direction ??
+                (definition.sort === 'loss' ? 'desc' : 'asc')
+              }
+              onSort={sortResults}
+              sortDisabled={transferBusy || removing}
             />
           )}
           <nav className="position-pagination" aria-label={p('results')}>
@@ -301,6 +401,7 @@ export default function PositionBrowser({
           hit={preview}
           theme={theme}
           onOpen={onOpenPosition}
+          showPlayed={showPlayed}
         />
       </div>
     </section>

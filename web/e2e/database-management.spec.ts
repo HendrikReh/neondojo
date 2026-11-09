@@ -36,9 +36,12 @@ test('collections, independent copies, filters and metadata work together', asyn
       .getByRole('columnheader', { name: 'Matches', exact: true }),
   ).toHaveCount(0);
   await page.locator('.database-table tbody tr').first().click();
-  await expect(page.locator('.match-preview .board')).toBeVisible();
+  await expect(page.locator('.match-preview')).toHaveCount(0);
   await page
-    .getByRole('button', { name: 'Edit match details', exact: true })
+    .getByRole('button', {
+      name: 'Edit match details: library.sgf',
+      exact: true,
+    })
     .click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Name', { exact: true }).fill('Final training match');
@@ -50,6 +53,18 @@ test('collections, independent copies, filters and metadata work together', asyn
   await expect(page.locator('.database-table')).toContainText(
     'Final training match',
   );
+  await page.locator('.database-table tbody tr').first().focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.analysis-workspace .board')).toBeVisible();
+  await page.getByRole('tab', { name: 'Match database', exact: true }).click();
+  await page
+    .locator('.database-table tbody tr')
+    .first()
+    .locator('td')
+    .nth(3)
+    .dblclick();
+  await expect(page.locator('.analysis-workspace .board')).toBeVisible();
+  await page.getByRole('tab', { name: 'Match database', exact: true }).click();
   await page.getByRole('button', { name: 'Filters', exact: true }).click();
   await page
     .locator('.library-filters')
@@ -377,7 +392,7 @@ test('a native full-match analysis supplies GNUbg PR to the match overview', asy
   await page.getByLabel('Search matches', { exact: true }).fill(player);
   const row = page.locator('.database-table tbody tr');
   await expect(row).toHaveCount(1);
-  await expect(row.locator('td').nth(2)).toHaveText(/\d+\.\d{2}/);
-  await expect(row.locator('td').nth(4)).toHaveText(/\d+\.\d{2}/);
+  await expect(row.locator('td').nth(3)).toHaveText(/\d+\.\d{2}/);
+  await expect(row.locator('td').nth(5)).toHaveText(/\d+\.\d{2}/);
   await expect(row).toContainText('Completed');
 });

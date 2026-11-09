@@ -61,7 +61,9 @@ test('real import, search, GNUbg analysis, distribution, themes and mobile layou
     .getByRole('button', { name: 'Aktuelle Position übernehmen' })
     .click();
   await page.getByRole('button', { name: 'Exakt suchen' }).click();
-  await expect(page.locator('.position-results button').first()).toBeVisible();
+  await expect(page.locator('.database-table tbody tr').first()).toBeVisible();
+  await expect(page.locator('.library-position-filter')).toBeVisible();
+  await expect(page.locator('.position-results')).toHaveCount(0);
   await page.getByRole('tab', { name: 'Analyse', exact: true }).click();
   await page.getByRole('tab', { name: 'Spielwürfe' }).click();
   await expect(page.locator('.observed')).toContainText(

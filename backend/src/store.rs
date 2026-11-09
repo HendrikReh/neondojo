@@ -5,8 +5,7 @@ use sqlx::{PgPool, Postgres, QueryBuilder};
 use uuid::Uuid;
 
 // Keep large source artifacts out of every summary/list response at the SQL boundary.
-const MATCH_SUMMARY: &str =
-    "SELECT id,filename,format,white,black,match_length,position_count,created_at FROM matches";
+const MATCH_SUMMARY: &str = "SELECT id,NOT collection_only AS source_available,filename,format,white,black,match_length,position_count,created_at FROM matches";
 
 pub async fn import_match(
     pool: &PgPool,
@@ -53,6 +52,13 @@ pub async fn import_match_in_database(
         tokio::task::spawn_blocking(move || crate::imported_analysis::extract(&analysis_source))
             .await??;
     let mut tx = pool.begin().await?;
+    let available: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM databases WHERE id=$1 AND NOT collection_only)",
+    )
+    .bind(database_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    ensure!(available, "Database not found");
     let inserted: Option<Uuid> = sqlx::query_scalar("INSERT INTO matches(id,filename,format,sha256,white,black,match_length,position_count,original,sgf,database_id,played_on,tournament,round,place,result_state,white_score,black_score,source_metadata_loaded) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,true) ON CONFLICT(database_id,sha256) DO NOTHING RETURNING id")
         .bind(id).bind(filename).bind(format).bind(&hash).bind(&imported.players[0]).bind(&imported.players[1])
         .bind(imported.match_length).bind(imported.positions.len() as i32).bind(bytes).bind(sgf).bind(database_id).bind(metadata.played_on).bind(metadata.tournament).bind(metadata.round).bind(metadata.place).bind(metadata.result_state).bind(metadata.white_score).bind(metadata.black_score)
@@ -170,7 +176,8 @@ pub async fn get_match(pool: &PgPool, id: Uuid) -> Result<Option<MatchSummary>> 
 }
 
 pub async fn matches(pool: &PgPool, q: &str, after: Option<Uuid>, limit: i64) -> Result<MatchPage> {
-    let mut query = QueryBuilder::<Postgres>::new(format!("{MATCH_SUMMARY} WHERE true"));
+    let mut query =
+        QueryBuilder::<Postgres>::new(format!("{MATCH_SUMMARY} WHERE NOT collection_only"));
     if !q.is_empty() {
         let pattern = crate::annotations::literal_pattern(q);
         // UNION collects indexed hits before fetching summaries; avoid an OR with
@@ -336,8 +343,7 @@ pub async fn create_job_with_snapshot(
     // owning match. Match management takes FOR UPDATE before checking active jobs.
     // Lock the same parent until submission commits to prevent accepted jobs from
     // disappearing in a concurrent match/database cascade.
-    let owner:Option<Uuid>=sqlx::query_scalar("SELECT m.id FROM matches m JOIN positions p ON p.match_uuid=m.id WHERE p.id=$1 FOR KEY SHARE OF m")
-        .bind(position_id).fetch_optional(&mut *tx).await?;
+    let owner = crate::position_retention::lock_owner(&mut tx, position_id).await?;
     ensure!(owner.is_some(), "Position not found");
 
     let job = loop {
@@ -420,6 +426,15 @@ pub async fn create_match_job_scoped_with_snapshot(
     let engine_config = snapshot.map_or_else(|| "legacy".into(), |s| s.fingerprint());
     let snapshot = snapshot.map(serde_json::to_value).transpose()?;
     let mut tx = pool.begin().await?;
+    let source: Option<bool> =
+        sqlx::query_scalar("SELECT NOT collection_only FROM matches WHERE id=$1 FOR KEY SHARE")
+            .bind(match_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    ensure!(
+        source == Some(true),
+        "Source match is unavailable; analyze the saved position instead"
+    );
     let job = loop {
         let inserted = sqlx::query_as::<_, Job>("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,game_no,engine_config,engine_snapshot) VALUES($1,$2,'match',$3,'queued',$4,$5,$6,$7) ON CONFLICT(match_uuid,(coalesce(game_no,0)),plies,engine_config) WHERE kind='match' AND status IN ('queued','running') DO NOTHING RETURNING *")
             .bind(Uuid::new_v4()).bind(match_id).bind(plies).bind(total_games).bind(game_no).bind(&engine_config).bind(&snapshot).fetch_optional(&mut *tx).await?;

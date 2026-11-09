@@ -44,6 +44,8 @@ it('shows explicit severity and game filters and a reset action', () => {
   expect(html).toContain('value="very_bad"');
   expect(html).toContain('aria-label="Filter by game"');
   expect(html).toContain('Reset filters');
+  expect(html).toContain('<option value="3" selected="">Game 3</option>');
+  expect(html).not.toContain('All games in this analysis');
 });
 it('starts the focused error list with only actual inaccuracies and errors', () => {
   expect(render()).toMatch(/type="checkbox"[^>]*checked/);

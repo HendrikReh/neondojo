@@ -1,4 +1,5 @@
 use axum::{body::Body, http::Request};
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use bgtutor::{
     api::{self, AppState},
     engine::Engine,
@@ -8,6 +9,7 @@ use bgtutor::{
 };
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -74,6 +76,7 @@ async fn setup(pool: &PgPool) -> (axum::Router, Uuid, Vec<Position>) {
     .await
     .unwrap();
     let id = imported.r#match.id;
+    save_match(pool, id).await;
     bgtutor::move_catalog::ensure_catalog(pool, id)
         .await
         .unwrap();
@@ -87,6 +90,18 @@ async fn setup(pool: &PgPool) -> (axum::Router, Uuid, Vec<Position>) {
         id,
         positions,
     )
+}
+
+// Browser behavior fixtures deliberately join the saved collection; import
+// alone remains unbookmarked and is covered in position_bookmarks.rs.
+async fn save_match(pool: &PgPool, id: Uuid) {
+    sqlx::query(
+        "INSERT INTO saved_positions(position_uuid) SELECT id FROM positions WHERE match_uuid=$1",
+    )
+    .bind(id)
+    .execute(pool)
+    .await
+    .unwrap();
 }
 
 async fn note(pool: &PgPool, column: &str, target: Uuid, text: &str) {
@@ -496,6 +511,7 @@ async fn filters_are_database_scoped_and_do_not_merge_copied_positions(pool: PgP
     .unwrap()
     .r#match
     .id;
+    save_match(&pool, copy).await;
     note(&pool, "match_uuid", original, "private-to-original").await;
     assert_eq!(
         search(app.clone(), json!({})).await["items"]
@@ -717,4 +733,588 @@ async fn forced_zero_loss_is_ready_but_missing_native_equities_or_blank_answers_
         search(app, json!({"analysis_state":"ready"})).await["items"],
         json!([])
     );
+}
+
+async fn table_page(app: axum::Router, fields: &Value, limit: usize, after: &str) -> (u16, Value) {
+    call(
+        app,
+        "GET",
+        &format!(
+            "/api/position-browser?filters={}&limit={limit}{after}",
+            encoded(&definition(fields.clone()))
+        ),
+        None,
+    )
+    .await
+}
+
+async fn table_ids(app: axum::Router, fields: &Value, limit: usize) -> Vec<String> {
+    let mut ids = vec![];
+    let mut after = String::new();
+    loop {
+        let (status, page) = table_page(app.clone(), fields, limit, &after).await;
+        assert_eq!(status, 200, "{fields}: {page}");
+        ids.extend(
+            page["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|hit| hit["position"]["id"].as_str().unwrap().to_owned()),
+        );
+        let Some(cursor) = page["next_cursor"].as_str() else {
+            break;
+        };
+        assert!(
+            cursor.len() < 512,
+            "unbounded table cursor: {}",
+            cursor.len()
+        );
+        assert!(ids.len() < 30, "pagination did not terminate: {fields}");
+        after = format!("&after={cursor}");
+    }
+    ids
+}
+
+#[derive(Debug, PartialEq, PartialOrd)]
+enum TableKey {
+    Number(i64),
+    Loss(f64),
+    Text(String),
+    Pair(i64, i64),
+    Tags(Vec<String>),
+}
+
+fn table_key(hit: &Value, sort: &str) -> Option<TableKey> {
+    let p = &hit["position"];
+    let text = |v: &Value| {
+        v.as_str()
+            .filter(|v| !v.trim().is_empty())
+            .map(|v| TableKey::Text(v.to_lowercase()))
+    };
+    match sort {
+        "match" => text(&hit["display_name"]),
+        "match_id" => hit["match_no"].as_i64().map(TableKey::Number),
+        "database" => text(&hit["database_name"]),
+        "game" => p["game_no"].as_i64().map(TableKey::Number),
+        "ply" => p["ply"].as_i64().map(TableKey::Number),
+        "player" | "opponent" => {
+            let white = (p["player"] == 0) == (sort == "player");
+            text(&hit["match_info"][if white { "white" } else { "black" }])
+        }
+        "dice" => {
+            let a = p["dice"][0].as_i64()?;
+            let b = p["dice"][1].as_i64()?;
+            Some(TableKey::Pair(a.min(b), a.max(b)))
+        }
+        "score" => Some(TableKey::Pair(
+            hit["white_score"].as_i64()?,
+            hit["black_score"].as_i64()?,
+        )),
+        "cube" => hit["cube_value"].as_i64().map(TableKey::Number),
+        "played_move" => text(&p["notation"]),
+        "tags" => {
+            let tags: Vec<_> = hit["tags"]
+                .as_array()?
+                .iter()
+                .map(|v| v.as_str().unwrap().to_owned())
+                .collect();
+            (!tags.is_empty()).then_some(TableKey::Tags(tags))
+        }
+        "comment" => {
+            let comments: Vec<_> = hit["notes"]
+                .as_array()?
+                .iter()
+                .filter_map(|n| {
+                    n["comment_excerpt"]
+                        .as_str()
+                        .filter(|c| !c.trim().is_empty())
+                        .map(str::to_lowercase)
+                })
+                .collect();
+            (!comments.is_empty()).then(|| TableKey::Text(comments.join("\n")))
+        }
+        "loss" => hit["native_error"]["equity_loss"]
+            .as_f64()
+            .map(TableKey::Loss),
+        _ => panic!("uncovered table sort: {sort}"),
+    }
+}
+
+fn table_tie(hit: &Value) -> (String, String, i64, String) {
+    (
+        hit["display_name"].as_str().unwrap().to_lowercase(),
+        hit["match_info"]["id"].as_str().unwrap().to_owned(),
+        hit["position"]["ordinal"].as_i64().unwrap(),
+        hit["position"]["id"].as_str().unwrap().to_owned(),
+    )
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn table_columns_sort_both_directions_with_nulls_last_ties_and_keyset_pages(pool: PgPool) {
+    let (app, first_match, first) = setup(&pool).await;
+    let database = Uuid::new_v4();
+    sqlx::query("INSERT INTO databases(id,name) VALUES($1,'Alpha')")
+        .bind(database)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let other = SOURCE
+        .replace("Alice", "Zelda")
+        .replace("Bob", "Adam")
+        .replace("length:7", "length:15")
+        .replace("ws:6", "ws:10");
+    let second_match = store::import_match_in_database(
+        &pool,
+        "second.sgf",
+        "sgf",
+        other.as_bytes(),
+        &other,
+        &import::parse_sgf(&other).unwrap(),
+        database,
+    )
+    .await
+    .unwrap()
+    .r#match
+    .id;
+    save_match(&pool, second_match).await;
+    bgtutor::move_catalog::ensure_catalog(&pool, second_match)
+        .await
+        .unwrap();
+    let second: Vec<Position> =
+        sqlx::query_as("SELECT * FROM positions WHERE match_uuid=$1 ORDER BY ordinal")
+            .bind(second_match)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    sqlx::query("UPDATE matches SET display_name='Z match' WHERE id=$1")
+        .bind(first_match)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE matches SET display_name='A match' WHERE id=$1")
+        .bind(second_match)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE positions SET gnubg_match_id='legacy-unknown',notation='' WHERE id=$1")
+        .bind(second[1].id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE matches SET black='' WHERE id=$1")
+        .bind(second_match)
+        .execute(&pool)
+        .await
+        .unwrap();
+    native(&pool, first_match, &first[0], 1, 0.04, "completed").await;
+    native(&pool, first_match, &first[1], 1, 0.16, "completed").await;
+    native(&pool, second_match, &second[0], 1, 0.04, "completed").await;
+    note(&pool, "position_uuid", first[0].id, "Zulu comment").await;
+    note(&pool, "position_uuid", second[0].id, "Alpha comment").await;
+    sqlx::query("UPDATE annotations SET tags=ARRAY['zebra','zulu'] WHERE position_uuid=$1")
+        .bind(first[0].id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE annotations SET tags=ARRAY['alpha'] WHERE position_uuid=$1")
+        .bind(second[0].id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let all = search(app.clone(), json!({})).await["items"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert_eq!(all.len(), 6);
+    for sort in [
+        "match",
+        "loss",
+        "match_id",
+        "database",
+        "game",
+        "ply",
+        "player",
+        "opponent",
+        "dice",
+        "score",
+        "cube",
+        "played_move",
+        "tags",
+        "comment",
+    ] {
+        for direction in ["asc", "desc"] {
+            let mut expected = all.clone();
+            expected.sort_by(|a, b| {
+                let order = match (table_key(a, sort), table_key(b, sort)) {
+                    (Some(a), Some(b)) => {
+                        let order = a.partial_cmp(&b).unwrap();
+                        if direction == "desc" {
+                            order.reverse()
+                        } else {
+                            order
+                        }
+                    }
+                    (Some(_), None) => std::cmp::Ordering::Less,
+                    (None, Some(_)) => std::cmp::Ordering::Greater,
+                    (None, None) => std::cmp::Ordering::Equal,
+                };
+                order.then_with(|| table_tie(a).cmp(&table_tie(b)))
+            });
+            let expected: Vec<_> = expected
+                .iter()
+                .map(|h| h["position"]["id"].as_str().unwrap().to_owned())
+                .collect();
+            for limit in [1, 2, 100] {
+                assert_eq!(
+                    table_ids(
+                        app.clone(),
+                        &json!({"sort":sort,"direction":direction}),
+                        limit
+                    )
+                    .await,
+                    expected,
+                    "{sort} {direction} page size {limit}"
+                );
+            }
+        }
+    }
+    for sort in [
+        "match_id",
+        "database",
+        "game",
+        "ply",
+        "player",
+        "opponent",
+        "dice",
+        "score",
+        "cube",
+        "played_move",
+        "tags",
+        "comment",
+    ] {
+        assert_eq!(
+            table_ids(app.clone(), &json!({"sort":sort}), 1).await,
+            table_ids(app.clone(), &json!({"sort":sort,"direction":"asc"}), 1).await
+        );
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn table_hit_keeps_numeric_match_number_across_metadata_and_database_changes(pool: PgPool) {
+    let (app, id, _) = setup(&pool).await;
+    let no: i64 = sqlx::query_scalar("SELECT match_no FROM matches WHERE id=$1")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(no > 0);
+    let found = search(app.clone(), json!({})).await;
+    assert_eq!(found["items"][0]["match_no"], no);
+    assert_eq!(found["items"][0]["match_info"]["id"], id.to_string());
+    let database = Uuid::new_v4();
+    sqlx::query("INSERT INTO databases(id,name) VALUES($1,'Moved')")
+        .bind(database)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE matches SET database_id=$2,display_name='Renamed' WHERE id=$1")
+        .bind(id)
+        .bind(database)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let found = search(app, json!({"sort":"match_id"})).await;
+    assert!(
+        found["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|h| h["match_no"] == no && h["match_info"]["id"] == id.to_string())
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn table_cursors_reject_wrong_direction_forged_unfiltered_or_deleted_anchors(pool: PgPool) {
+    let (app, _, positions) = setup(&pool).await;
+    let fields = json!({"sort":"tags","direction":"asc","player":"Alice"});
+    let (status, page) = table_page(app.clone(), &fields, 1, "").await;
+    assert_eq!(status, 200, "{page}");
+    let cursor = page["next_cursor"].as_str().unwrap();
+    let decoded: Value = serde_json::from_slice(&URL_SAFE_NO_PAD.decode(cursor).unwrap()).unwrap();
+    let after = format!("&after={cursor}");
+    let (status, saved) = call(
+        app.clone(),
+        "POST",
+        "/api/position-filters",
+        Some(json!({"name":"Directed table", "definition":definition(fields.clone())})),
+    )
+    .await;
+    assert_eq!(status, 201, "{saved}");
+    assert_eq!(saved["definition"]["direction"], "asc");
+    assert_eq!(
+        table_page(app.clone(), &saved["definition"], 1, &after)
+            .await
+            .0,
+        200
+    );
+    for wrong in [
+        json!({"sort":"tags","direction":"desc","player":"Alice"}),
+        json!({"sort":"comment","direction":"asc","player":"Alice"}),
+        json!({"sort":"tags","direction":"asc","player":"Bob"}),
+    ] {
+        assert_eq!(table_page(app.clone(), &wrong, 1, &after).await.0, 422);
+    }
+    for anchor in [positions[1].id, Uuid::new_v4()] {
+        let mut forged = decoded.clone();
+        forged["anchor"] = json!(anchor);
+        let forged = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&forged).unwrap());
+        assert_eq!(
+            table_page(app.clone(), &fields, 1, &format!("&after={forged}"))
+                .await
+                .0,
+            422
+        );
+    }
+    let mut exhausted = decoded.clone();
+    exhausted["anchor"] = json!(positions[2].id);
+    let exhausted = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&exhausted).unwrap());
+    let (status, empty) = table_page(app.clone(), &fields, 1, &format!("&after={exhausted}")).await;
+    assert_eq!(status, 200, "{empty}");
+    assert_eq!(empty["items"], json!([]));
+    assert_eq!(empty["next_cursor"], Value::Null);
+    let mut extra = decoded.clone();
+    extra["sort_value"] = json!("invented");
+    let extra = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&extra).unwrap());
+    assert_eq!(
+        table_page(app.clone(), &fields, 1, &format!("&after={extra}"))
+            .await
+            .0,
+        422
+    );
+    let anchor = page["items"][0]["position"]["id"].as_str().unwrap();
+    sqlx::query("UPDATE positions SET player=1 WHERE id=$1")
+        .bind(Uuid::parse_str(anchor).unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(table_page(app.clone(), &fields, 1, &after).await.0, 422);
+    sqlx::query("DELETE FROM positions WHERE id=$1")
+        .bind(Uuid::parse_str(anchor).unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(table_page(app, &fields, 1, &after).await.0, 422);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn table_note_sort_keys_use_full_scoped_content_and_keep_cursors_bounded(pool: PgPool) {
+    let (app, id, positions) = setup(&pool).await;
+    let common = "x".repeat(19_999);
+    for (p, suffix) in [(&positions[0], "b"), (&positions[1], "a")] {
+        note(&pool, "position_uuid", p.id, &format!("{common}{suffix}")).await;
+        let tags: Vec<_> = (0..30)
+            .map(|n| format!("{n:02}{}", "t".repeat(62)))
+            .collect();
+        sqlx::query("UPDATE annotations SET tags=$2 WHERE position_uuid=$1")
+            .bind(p.id)
+            .bind(tags)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    let cube: Uuid = sqlx::query_scalar(
+        "SELECT id FROM match_moves WHERE match_uuid=$1 AND kind='cube' LIMIT 1",
+    )
+    .bind(id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    note(&pool, "move_uuid", cube, "AAA unrelated cube").await;
+    sqlx::query("UPDATE annotations SET tags=ARRAY['aaa-unrelated-cube'] WHERE move_uuid=$1")
+        .bind(cube)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let ascending = table_ids(app.clone(), &json!({"sort":"comment","direction":"asc"}), 1).await;
+    assert_eq!(
+        ascending,
+        vec![
+            positions[1].id.to_string(),
+            positions[0].id.to_string(),
+            positions[2].id.to_string()
+        ]
+    );
+    let descending = table_ids(
+        app.clone(),
+        &json!({"sort":"comment","direction":"desc"}),
+        1,
+    )
+    .await;
+    assert_eq!(
+        descending,
+        vec![
+            positions[0].id.to_string(),
+            positions[1].id.to_string(),
+            positions[2].id.to_string()
+        ]
+    );
+    let found = search(app.clone(), json!({"sort":"tags","direction":"asc"})).await;
+    assert!(found["items"].as_array().unwrap().iter().all(|h| {
+        !h["tags"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("aaa-unrelated-cube"))
+    }));
+    assert!(
+        found["items"][0]["notes"][0]["comment_excerpt"]
+            .as_str()
+            .unwrap()
+            .len()
+            <= 280
+    );
+    assert_eq!(
+        table_ids(app, &json!({"sort":"tags","direction":"desc"}), 1)
+            .await
+            .len(),
+        3
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn mochy_player_filter_matches_on_roll_in_both_colors_without_opponent_leaks(pool: PgPool) {
+    let app = api::router(AppState::new(pool.clone(), Engine::new("unused".into())));
+    let mut expected = vec![];
+    let mut exact = None;
+    for (n, (white, black, turn, include)) in [
+        ("Mochy", "Opponent A", "W", true),
+        ("Opponent B", "Mochy", "B", true),
+        ("Mochy", "Opponent C", "B", false),
+        ("Opponent D", "Mochy", "W", false),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let moves = if turn == "W" { "hefe" } else { "qtst" };
+        let source = format!(
+            "(;GM[6]FF[4]PW[{white}]PB[{black}]MI[length:7][ws:0][bs:0];{turn}[31{moves}])"
+        );
+        let imported = store::import_match(
+            &pool,
+            &format!("mochy-{n}.sgf"),
+            "sgf",
+            source.as_bytes(),
+            &source,
+            &import::parse_sgf(&source).unwrap(),
+        )
+        .await
+        .unwrap();
+        save_match(&pool, imported.r#match.id).await;
+        let position: Position = sqlx::query_as("SELECT * FROM positions WHERE match_uuid=$1")
+            .bind(imported.r#match.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        if let Some(id) = &exact {
+            assert_eq!(&position.position_id, id)
+        } else {
+            exact = Some(position.position_id.clone())
+        }
+        if include {
+            expected.push(position.id.to_string())
+        }
+    }
+    let result = search(app, json!({"player":"mochy","position_id":exact.unwrap(),"die1":3,"die2":1,"sort":"player","direction":"asc"})).await;
+    let mut actual: Vec<_> = result["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|h| h["position"]["id"].as_str().unwrap().to_owned())
+        .collect();
+    expected.sort();
+    actual.sort();
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn legacy_v1_saved_definition_serialization_preserves_the_original_definition_bytes() {
+    use bgtutor::position_browser::PositionFilterDefinition;
+    for sort in ["match", "loss"] {
+        let parsed: PositionFilterDefinition =
+            serde_json::from_value(definition(json!({"sort":sort}))).unwrap();
+        let expected = format!(
+            r#"{{"schema_version":1,"database_id":null,"q":null,"player":null,"match_name":null,"tournament":null,"round":null,"tag":null,"comment":null,"position_id":null,"match_points_min":null,"match_points_max":null,"die1":null,"die2":null,"white_score":null,"black_score":null,"crawford":null,"cube_value":null,"analysis_state":null,"min_loss":null,"max_loss":null,"sort":"{sort}"}}"#
+        );
+        assert_eq!(serde_json::to_string(&parsed).unwrap(), expected);
+        let mut with_direction = definition(json!({"sort":sort,"direction":"asc"}));
+        let directed: PositionFilterDefinition =
+            serde_json::from_value(with_direction.clone()).expect("optional direction accepted");
+        assert_eq!(serde_json::to_value(directed).unwrap()["direction"], "asc");
+        with_direction["direction"] = json!("sideways");
+        assert!(serde_json::from_value::<PositionFilterDefinition>(with_direction).is_err());
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn global_cursors_are_invalidated_while_v1_saved_definitions_still_round_trip(pool: PgPool) {
+    use bgtutor::position_browser::PositionFilterDefinition;
+    let (app, id, positions) = setup(&pool).await;
+    native(&pool, id, &positions[0], 1, 0.04, "completed").await;
+    native(&pool, id, &positions[1], 1, 0.16, "completed").await;
+    for sort in ["match", "loss"] {
+        let fields = json!({"sort":sort});
+        let parsed: PositionFilterDefinition =
+            serde_json::from_value(definition(fields.clone())).unwrap();
+        let scope = format!("{:x}", Sha256::digest(serde_json::to_vec(&parsed).unwrap()));
+        let (_, first) = table_page(app.clone(), &fields, 1, "").await;
+        let item = &first["items"][0];
+        let old = json!({"scope":scope,"name":"fixture_100%.sgf","match_id":id,"ordinal":item["position"]["ordinal"],"id":item["position"]["id"],"loss":item["native_error"]["equity_loss"]});
+        let cursor = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&old).unwrap());
+        let (status, rejected) =
+            table_page(app.clone(), &fields, 1, &format!("&after={cursor}")).await;
+        assert_eq!(status, 422, "Global cursor must be invalidated: {rejected}");
+        let current_cursor = first["next_cursor"].as_str().unwrap();
+        let (status, second) =
+            table_page(app.clone(), &fields, 1, &format!("&after={current_cursor}")).await;
+        assert_eq!(status, 200, "{second}");
+        assert_ne!(second["items"][0]["position"]["id"], item["position"]["id"]);
+        let generated: Value = serde_json::from_slice(
+            &URL_SAFE_NO_PAD
+                .decode(first["next_cursor"].as_str().unwrap())
+                .unwrap(),
+        )
+        .unwrap();
+        assert_ne!(generated["scope"], old["scope"]);
+        assert!(
+            generated["scope"]
+                .as_str()
+                .unwrap()
+                .starts_with("saved-positions-v1:")
+        );
+        let mut expected = old.clone();
+        expected["scope"] = generated["scope"].clone();
+        assert_eq!(generated, expected);
+        let (status, saved) = call(
+            app.clone(),
+            "POST",
+            "/api/position-filters",
+            Some(json!({"name":format!("legacy {sort}"),"definition":definition(fields.clone())})),
+        )
+        .await;
+        assert_eq!(status, 201, "{saved}");
+        assert!(saved["definition"].get("direction").is_none());
+        let (_, restored) = table_page(
+            app.clone(),
+            &saved["definition"],
+            1,
+            &format!("&after={current_cursor}"),
+        )
+        .await;
+        assert_eq!(restored["items"], second["items"]);
+    }
 }

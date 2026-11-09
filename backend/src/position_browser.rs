@@ -1,4 +1,4 @@
-//! Context-preserving checker search and durable, versioned search definitions.
+//! Saved checker occurrences with context-preserving search and durable filter definitions.
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     model::{MatchSummary, MoveSeverity, Position},
@@ -17,7 +17,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Postgres, QueryBuilder, Row};
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
 
@@ -27,6 +27,26 @@ pub enum PositionBrowserSort {
     #[default]
     Match,
     Loss,
+    MatchId,
+    Database,
+    Game,
+    Ply,
+    Player,
+    Opponent,
+    Dice,
+    Score,
+    Cube,
+    PlayedMove,
+    Decks,
+    Tags,
+    Comment,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PositionBrowserDirection {
+    Asc,
+    Desc,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -66,6 +86,10 @@ pub struct PositionFilterDefinition {
     pub max_loss: Option<f64>,
     #[serde(default)]
     pub sort: PositionBrowserSort,
+    /// Omitted: loss descending; all other columns ascending. Legacy definitions
+    /// omit this field when serialized to preserve their stored definition format.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direction: Option<PositionBrowserDirection>,
 }
 
 impl Default for PositionFilterDefinition {
@@ -188,9 +212,19 @@ pub struct PositionNativeError {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct PositionDeckMembership {
+    pub id: Uuid,
+    pub name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct PositionBrowserHit {
     pub position: Position,
     pub match_info: MatchSummary,
+    /// False when only saved occurrences remain after source deletion.
+    pub source_available: bool,
+    /// Persistent library number, independent of the match UUID and row order.
+    pub match_no: i64,
     pub database_id: Uuid,
     pub database_name: String,
     pub display_name: String,
@@ -205,6 +239,8 @@ pub struct PositionBrowserHit {
     pub tags: Vec<String>,
     pub notes: Vec<PositionBrowserNote>,
     pub card_ready: bool,
+    /// Learning decks for this checker decision's full Position-ID/Match-ID identity.
+    pub decks: Vec<PositionDeckMembership>,
     pub native_error: Option<PositionNativeError>,
 }
 
@@ -218,7 +254,8 @@ pub struct PositionBrowserPage {
 #[serde(deny_unknown_fields)]
 #[into_params(parameter_in = Query)]
 pub struct PositionBrowserQuery {
-    /// URL-encoded JSON PositionFilterDefinition. Omitted: unfiltered, match order.
+    /// URL-encoded JSON PositionFilterDefinition, applied only to explicitly saved positions.
+    /// Omitted: the saved collection in match order.
     #[param(example = r#"{"schema_version":1,"player":"Alice","sort":"match"}"#)]
     pub filters: Option<String>,
     pub after: Option<String>,
@@ -235,6 +272,22 @@ struct Cursor {
     ordinal: i32,
     id: Uuid,
     loss: Option<f64>,
+}
+
+/// Table cursors identify an anchor in the same filtered query. Sort values are
+/// read from that row, keeping long comments and tag arrays out of the URL.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TableCursor {
+    scope: String,
+    anchor: Uuid,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+enum BrowserCursor {
+    Legacy(Cursor),
+    Table(TableCursor),
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -315,6 +368,46 @@ fn text_filter(q: &mut QueryBuilder<'_, Postgres>, column: &str, text: &Option<S
 
 const NOTE_SCOPE: &str = "(a.match_uuid=p.match_uuid OR a.position_uuid=p.id OR a.game_uuid=g.id OR a.move_uuid IN (SELECT mv.id FROM match_moves mv WHERE mv.position_uuid=p.id AND mv.match_uuid=p.match_uuid AND mv.game_no=p.game_no AND mv.kind='checker'))";
 const NAME: &str = "lower(coalesce(nullif(m.display_name,''),m.filename))";
+// A global-library cursor must never resume inside the explicit saved collection.
+const CURSOR_SCOPE: &str = "saved-positions-v1:";
+// Matches learning::card_signature; source occurrence UUIDs can differ for one shared card.
+const CHECKER_SIGNATURE: &str = "(p.position_id || ':' || p.gnubg_match_id || ':checker')";
+
+fn table_sort_expression(sort: PositionBrowserSort) -> String {
+    match sort {
+        PositionBrowserSort::Match => NAME.into(),
+        PositionBrowserSort::Loss => "native.equity_loss".into(),
+        PositionBrowserSort::MatchId => "coalesce(m.source_match_no,m.match_no)".into(),
+        PositionBrowserSort::Database => "lower(coalesce(m.source_database_name,d.name))".into(),
+        PositionBrowserSort::Game => "p.game_no".into(),
+        PositionBrowserSort::Ply => "p.ply".into(),
+        PositionBrowserSort::Player => "lower(nullif(btrim(CASE WHEN p.player=0 THEN m.white ELSE m.black END),''))".into(),
+        PositionBrowserSort::Opponent => "lower(nullif(btrim(CASE WHEN p.player=0 THEN m.black ELSE m.white END),''))".into(),
+        PositionBrowserSort::Dice => "CASE WHEN p.dice[1] IS NOT NULL AND p.dice[2] IS NOT NULL THEN ARRAY[least(p.dice[1],p.dice[2]),greatest(p.dice[1],p.dice[2])] END".into(),
+        PositionBrowserSort::Score => "CASE WHEN p.source_white_score IS NOT NULL AND p.source_black_score IS NOT NULL THEN ARRAY[p.source_white_score,p.source_black_score] END".into(),
+        PositionBrowserSort::Cube => "p.source_cube_value".into(),
+        PositionBrowserSort::PlayedMove => "lower(nullif(btrim(p.notation),''))".into(),
+        PositionBrowserSort::Decks => format!("(SELECT string_agg(lower(dk.name),chr(10) ORDER BY lower(dk.name) COLLATE \"C\",dk.name COLLATE \"C\",dk.id) FROM learning_cards c JOIN deck_cards dc ON dc.card_id=c.id JOIN decks dk ON dk.id=dc.deck_id WHERE c.signature={CHECKER_SIGNATURE})"),
+        PositionBrowserSort::Tags => format!("nullif(ARRAY(SELECT DISTINCT tag FROM annotations a CROSS JOIN LATERAL unnest(a.tags) tag WHERE {NOTE_SCOPE} ORDER BY tag),ARRAY[]::text[])"),
+        PositionBrowserSort::Comment => format!("(SELECT string_agg(lower(a.comment),chr(10) ORDER BY a.target_kind,a.id) FROM annotations a WHERE {NOTE_SCOPE} AND btrim(a.comment)<>'')"),
+    }
+}
+
+fn table_order(sql: &mut QueryBuilder<'_, Postgres>, alias: &str, direction: &str) {
+    sql.push(" ORDER BY ")
+        .push(alias)
+        .push(".sort_value ")
+        .push(direction)
+        .push(" NULLS LAST,")
+        .push(alias)
+        .push(".sort_name,")
+        .push(alias)
+        .push(".sort_match_id,")
+        .push(alias)
+        .push(".sort_ordinal,")
+        .push(alias)
+        .push(".sort_id");
+}
 // Learning chooses the highest individual result first and rejects an empty
 // answer there; it does not fall back to an older hint or a match solution.
 const READY: &str = "coalesce((SELECT CASE WHEN jsonb_typeof(hint.result->'candidates')='array' THEN jsonb_array_length(hint.result->'candidates')>0 AND btrim(coalesce(hint.result#>>'{candidates,0,notation}',''))<>'' ELSE false END FROM jobs hint WHERE hint.position_uuid=p.id AND hint.kind='analysis' AND hint.status='completed' AND hint.result IS NOT NULL ORDER BY hint.plies DESC,hint.created_at DESC,hint.id DESC LIMIT 1),native.job_id IS NOT NULL)";
@@ -325,11 +418,13 @@ const NATIVE_SOLUTION: &str = "btrim(coalesce(chosen.data->>'best',''))<>'' AND 
 
 async fn database_exists(pool: &PgPool, id: Option<Uuid>) -> ApiResult<()> {
     if let Some(id) = id {
-        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM databases WHERE id=$1)")
-            .bind(id)
-            .fetch_one(pool)
-            .await
-            .map_err(anyhow::Error::from)?;
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM databases WHERE id=$1 AND NOT collection_only)",
+        )
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .map_err(anyhow::Error::from)?;
         if !exists {
             return Err(ApiError::invalid(
                 "The filter's database no longer exists; choose an existing database explicitly",
@@ -360,19 +455,43 @@ async fn search(
     }
     database_exists(&s.pool, filters.database_id).await?;
     let scope = format!(
-        "{:x}",
+        "{CURSOR_SCOPE}{:x}",
         Sha256::digest(serde_json::to_vec(&filters).map_err(anyhow::Error::from)?)
     );
+    let legacy_order = filters.direction.is_none()
+        && matches!(
+            filters.sort,
+            PositionBrowserSort::Match | PositionBrowserSort::Loss
+        );
+    let direction =
+        match filters
+            .direction
+            .unwrap_or(if filters.sort == PositionBrowserSort::Loss {
+                PositionBrowserDirection::Desc
+            } else {
+                PositionBrowserDirection::Asc
+            }) {
+            PositionBrowserDirection::Asc => "ASC",
+            PositionBrowserDirection::Desc => "DESC",
+        };
     let cursor = if let Some(after) = query.after {
         if after.len() > 4096 {
             return Err(ApiError::invalid("Invalid position cursor"));
         }
-        let cursor: Cursor = URL_SAFE_NO_PAD
+        let cursor: BrowserCursor = URL_SAFE_NO_PAD
             .decode(after)
             .ok()
             .and_then(|v| serde_json::from_slice(&v).ok())
             .ok_or_else(|| ApiError::invalid("Invalid position cursor"))?;
-        if cursor.scope != scope || cursor.loss.is_some_and(|n| !n.is_finite() || n < 0.0) {
+        let valid = match &cursor {
+            BrowserCursor::Legacy(cursor) => {
+                legacy_order
+                    && cursor.scope == scope
+                    && !cursor.loss.is_some_and(|n| !n.is_finite() || n < 0.0)
+            }
+            BrowserCursor::Table(cursor) => !legacy_order && cursor.scope == scope,
+        };
+        if !valid {
             return Err(ApiError::invalid(
                 "Cursor does not match the position filters and sort",
             ));
@@ -381,13 +500,21 @@ async fn search(
     } else {
         None
     };
-    // Explicit summary fields keep source SGF and original bytes out of JSON/list reads.
-    let mut sql = QueryBuilder::<Postgres>::new(
-        "SELECT to_jsonb(p) AS position,jsonb_build_object('id',m.id,'filename',m.filename,'format',m.format,'white',m.white,'black',m.black,'match_length',m.match_length,'position_count',m.position_count,'created_at',m.created_at) AS match_info,m.database_id,d.name AS database_name,coalesce(nullif(m.display_name,''),m.filename) AS display_name,m.tournament,m.round,native.job_id,native.engine,native.plies,native.equity_loss,",
-    );
-    sql.push(READY).push(" AS card_ready,").push(NAME).push(" AS sort_name FROM positions p JOIN matches m ON m.id=p.match_uuid JOIN databases d ON d.id=m.database_id LEFT JOIN match_games g ON g.match_uuid=p.match_uuid AND g.game_no=p.game_no LEFT JOIN LATERAL (SELECT chosen.job_id,chosen.engine,chosen.plies,chosen.equity_loss FROM (SELECT j.id AS job_id,coalesce(j.result->>'engine','GNU Backgammon') AS engine,j.plies,ma.equity_loss,ma.data FROM move_analyses ma JOIN jobs j ON j.id=ma.job_id WHERE ma.position_uuid=p.id AND ma.kind='checker' AND ma.game_no=p.game_no AND j.kind='match' AND j.match_uuid=p.match_uuid AND (j.game_no IS NULL OR j.game_no=p.game_no) AND j.status='completed' ORDER BY j.plies DESC,j.created_at DESC,j.id DESC,ma.id DESC LIMIT 1) chosen WHERE ").push(NATIVE_SOLUTION).push(") native ON true WHERE true");
+    let anchor = match &cursor {
+        Some(BrowserCursor::Legacy(cursor)) => Some(cursor.id),
+        Some(BrowserCursor::Table(cursor)) => Some(cursor.anchor),
+        None => None,
+    };
+    // Every sort and cursor anchor uses the same saved, filtered snapshot.
+    // Explicit summary fields keep source SGF and original bytes out of list reads.
+    let mut sql = QueryBuilder::<Postgres>::new("WITH filtered AS NOT MATERIALIZED (");
+    sql.push("SELECT to_jsonb(p) AS position,jsonb_build_object('id',m.id,'source_available',NOT m.collection_only,'filename',m.filename,'format',m.format,'white',m.white,'black',m.black,'match_length',m.match_length,'position_count',m.position_count,'created_at',m.created_at) AS match_info,NOT m.collection_only AS source_available,coalesce(m.source_match_no,m.match_no) AS match_no,coalesce(m.source_database_id,m.database_id) AS database_id,coalesce(m.source_database_name,d.name) AS database_name,coalesce(nullif(m.display_name,''),m.filename) AS display_name,m.tournament,m.round,native.job_id,native.engine,native.plies,native.equity_loss,");
+    sql.push(table_sort_expression(filters.sort))
+        .push(" AS sort_value,m.id AS sort_match_id,p.ordinal AS sort_ordinal,p.id AS sort_id,");
+    sql.push(READY).push(" AS card_ready,").push(NAME).push(" AS sort_name FROM positions p JOIN saved_positions saved ON saved.position_uuid=p.id JOIN matches m ON m.id=p.match_uuid JOIN databases d ON d.id=m.database_id LEFT JOIN match_games g ON g.match_uuid=p.match_uuid AND g.game_no=p.game_no LEFT JOIN LATERAL (SELECT chosen.job_id,chosen.engine,chosen.plies,chosen.equity_loss FROM (SELECT j.id AS job_id,coalesce(j.result->>'engine','GNU Backgammon') AS engine,j.plies,ma.equity_loss,ma.data FROM move_analyses ma JOIN jobs j ON j.id=ma.job_id WHERE ma.position_uuid=p.id AND ma.kind='checker' AND ma.game_no=p.game_no AND j.kind='match' AND j.match_uuid=p.match_uuid AND (j.game_no IS NULL OR j.game_no=p.game_no) AND j.status='completed' ORDER BY j.plies DESC,j.created_at DESC,j.id DESC,ma.id DESC LIMIT 1) chosen WHERE ").push(NATIVE_SOLUTION).push(") native ON true WHERE true");
     if let Some(id) = filters.database_id {
-        sql.push(" AND m.database_id=").push_bind(id);
+        sql.push(" AND coalesce(m.source_database_id,m.database_id)=")
+            .push_bind(id);
     }
     text_filter(
         &mut sql,
@@ -463,47 +590,43 @@ async fn search(
     if let Some(loss) = filters.max_loss {
         sql.push(" AND native.equity_loss<=").push_bind(loss);
     }
-    if let Some(cursor) = &cursor {
-        sql.push(" AND (");
-        if filters.sort == PositionBrowserSort::Loss {
-            if let Some(loss) = cursor.loss {
-                sql.push("native.equity_loss IS NULL OR native.equity_loss<")
-                    .push_bind(loss)
-                    .push(" OR (native.equity_loss=")
-                    .push_bind(loss)
-                    .push(" AND ");
-            } else {
-                sql.push("native.equity_loss IS NULL AND ");
-            }
-        }
-        sql.push("(")
-            .push(NAME)
-            .push(",m.id,p.ordinal,p.id)>(")
-            .push_bind(cursor.name.clone())
-            .push(",")
-            .push_bind(cursor.match_id)
-            .push(",")
-            .push_bind(cursor.ordinal)
-            .push(",")
-            .push_bind(cursor.id)
-            .push(")");
-        if filters.sort == PositionBrowserSort::Loss && cursor.loss.is_some() {
-            sql.push(")");
-        }
-        sql.push(")");
+    if let Some(anchor) = anchor {
+        // Anchor lookup and page read share one filtered snapshot. A left-joined
+        // marker distinguishes an exhausted page from a deleted/out-of-scope
+        // anchor without running a less restrictive second lookup.
+        sql.push("),anchor AS (SELECT * FROM filtered WHERE sort_id=")
+            .push_bind(anchor)
+            .push("),page AS (SELECT f.* FROM filtered f CROSS JOIN anchor a WHERE ((f.sort_value IS NULL AND a.sort_value IS NOT NULL) OR (f.sort_value IS NOT NULL AND a.sort_value IS NOT NULL AND f.sort_value ")
+            .push(if direction == "ASC" { ">" } else { "<" })
+            .push(" a.sort_value) OR (f.sort_value IS NOT DISTINCT FROM a.sort_value AND (f.sort_name,f.sort_match_id,f.sort_ordinal,f.sort_id)>(a.sort_name,a.sort_match_id,a.sort_ordinal,a.sort_id)))");
+        table_order(&mut sql, "f", direction);
+        sql.push(" LIMIT ").push_bind(limit + 1)
+            .push(") SELECT page.*,EXISTS(SELECT 1 FROM anchor) AS anchor_exists FROM (VALUES (1)) marker(n) LEFT JOIN page ON true");
+        table_order(&mut sql, "page", direction);
+    } else {
+        sql.push(") SELECT f.* FROM filtered f");
+        table_order(&mut sql, "f", direction);
+        sql.push(" LIMIT ").push_bind(limit + 1);
     }
-    sql.push(" ORDER BY ");
-    if filters.sort == PositionBrowserSort::Loss {
-        sql.push("native.equity_loss DESC NULLS LAST,");
-    }
-    sql.push(NAME)
-        .push(",m.id,p.ordinal,p.id LIMIT ")
-        .push_bind(limit + 1);
     let mut rows = sql
         .build()
         .fetch_all(&s.pool)
         .await
         .map_err(anyhow::Error::from)?;
+    if anchor.is_some() {
+        if rows
+            .first()
+            .is_some_and(|row| !row.get::<bool, _>("anchor_exists"))
+        {
+            return Err(ApiError::invalid(
+                "Position cursor anchor no longer matches the filters",
+            ));
+        }
+        rows.retain(|row| {
+            row.get::<Option<serde_json::Value>, _>("position")
+                .is_some()
+        });
+    }
     let more = rows.len() > limit as usize;
     rows.truncate(limit as usize);
     let mut items = Vec::with_capacity(rows.len());
@@ -514,13 +637,20 @@ async fn search(
         if more {
             next_cursor = Some(
                 URL_SAFE_NO_PAD.encode(
-                    serde_json::to_vec(&Cursor {
-                        scope: scope.clone(),
-                        name: row.get("sort_name"),
-                        match_id: position.match_uuid,
-                        ordinal: position.ordinal,
-                        id: position.id,
-                        loss: row.get("equity_loss"),
+                    serde_json::to_vec(&if legacy_order {
+                        BrowserCursor::Legacy(Cursor {
+                            scope: scope.clone(),
+                            name: row.get("sort_name"),
+                            match_id: position.match_uuid,
+                            ordinal: position.ordinal,
+                            id: position.id,
+                            loss: row.get("equity_loss"),
+                        })
+                    } else {
+                        BrowserCursor::Table(TableCursor {
+                            scope: scope.clone(),
+                            anchor: position.id,
+                        })
                     })
                     .map_err(anyhow::Error::from)?,
                 ),
@@ -557,8 +687,10 @@ async fn search(
             .collect();
         items.push(PositionBrowserHit {
             position,
+            source_available: row.get("source_available"),
             match_info: serde_json::from_value(row.get("match_info"))
                 .map_err(anyhow::Error::from)?,
+            match_no: row.get("match_no"),
             database_id: row.get("database_id"),
             database_name: row.get("database_name"),
             display_name: row.get("display_name"),
@@ -572,10 +704,33 @@ async fn search(
             tags,
             notes,
             card_ready: row.get("card_ready"),
+            decks: Vec::new(),
             native_error,
         });
     }
+    load_deck_memberships(&s.pool, &mut items).await?;
     Ok(Json(PositionBrowserPage { items, next_cursor }))
+}
+
+async fn load_deck_memberships(pool: &PgPool, items: &mut [PositionBrowserHit]) -> ApiResult<()> {
+    if items.is_empty() {
+        return Ok(());
+    }
+    let ids: Vec<Uuid> = items.iter().map(|hit| hit.position.id).collect();
+    let rows: Vec<(Uuid, Uuid, String)> = sqlx::query_as(&format!(
+        "SELECT p.id,dk.id,dk.name FROM positions p JOIN learning_cards c ON c.signature={CHECKER_SIGNATURE} JOIN deck_cards dc ON dc.card_id=c.id JOIN decks dk ON dk.id=dc.deck_id WHERE p.id=ANY($1) ORDER BY lower(dk.name) COLLATE \"C\",dk.name COLLATE \"C\",dk.id"
+    )).bind(ids).fetch_all(pool).await.map_err(anyhow::Error::from)?;
+    let mut memberships = HashMap::<Uuid, Vec<PositionDeckMembership>>::new();
+    for (position, id, name) in rows {
+        memberships
+            .entry(position)
+            .or_default()
+            .push(PositionDeckMembership { id, name });
+    }
+    for hit in items {
+        hit.decks = memberships.remove(&hit.position.id).unwrap_or_default();
+    }
+    Ok(())
 }
 
 const SAVED_SELECT: &str = "SELECT f.*,coalesce((f.definition->>'database_id') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM databases d WHERE d.id=(f.definition->>'database_id')::uuid),false) AS database_missing FROM position_filters f";
@@ -730,10 +885,12 @@ async fn delete_filter(
     components(schemas(
         PositionFilterDefinition,
         PositionBrowserSort,
+        PositionBrowserDirection,
         PositionAnalysisState,
         PositionBrowserPage,
         PositionBrowserHit,
         PositionBrowserNote,
+        PositionDeckMembership,
         PositionNativeError,
         SavedPositionFilter,
         CreatePositionFilter,

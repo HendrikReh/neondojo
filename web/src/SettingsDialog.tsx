@@ -18,16 +18,26 @@ import { useSettingsText, type SettingsMessageKey } from './settings-messages';
 import { saveTheme } from './ui-preferences';
 import './settings.css';
 import { useSourceText } from './analysis-source-messages';
+import {
+  uiThemes,
+  type UiAppearance,
+  type UiMode,
+  type UiTheme,
+} from './ui-appearance';
+import { useUiAppearanceText } from './ui-appearance-messages';
+import UiAppearancePreview from './UiAppearancePreview';
 
 export interface SettingsDialogProps {
   open: boolean;
   onClose: () => void;
   onBookSettings: () => void;
   theme: Theme;
+  appearance: UiAppearance;
   onApply: (value: {
     theme: Theme;
     locale: Locale;
     settings: AppSettings;
+    appearance: UiAppearance;
   }) => void;
 }
 
@@ -50,7 +60,7 @@ const previewPosition: Position = {
   notation: '',
 };
 
-type Category = 'general' | 'analysis' | 'play' | 'board';
+type Category = 'general' | 'appearance' | 'analysis' | 'play' | 'board';
 type CheckState =
   { path: string; version: string } | { path: string; error: unknown } | null;
 
@@ -58,19 +68,22 @@ export default function SettingsDialog({
   open,
   onClose,
   theme,
+  appearance,
   onApply,
   onBookSettings,
 }: SettingsDialogProps) {
   const { locale } = useI18n();
   const t = useSettingsText();
   const sourceT = useSourceText();
+  const appearanceT = useUiAppearanceText();
   const id = useId();
   const dialog = useRef<HTMLDialogElement>(null);
-  const preferences = useRef({ theme, locale });
-  preferences.current = { theme, locale };
+  const preferences = useRef({ theme, locale, appearance });
+  preferences.current = { theme, locale, appearance };
   const [category, setCategory] = useState<Category>('general');
   const [draftTheme, setDraftTheme] = useState(theme);
   const [draftLocale, setDraftLocale] = useState(locale);
+  const [draftAppearance, setDraftAppearance] = useState(appearance);
   const [draft, setDraft] = useState<AppSettings | null>(null);
   const [initial, setInitial] = useState<AppSettings | null>(null);
   const [engines, setEngines] = useState<EngineInfo[]>([]);
@@ -97,6 +110,7 @@ export default function SettingsDialog({
     setCategory('general');
     setDraftTheme(preferences.current.theme);
     setDraftLocale(preferences.current.locale);
+    setDraftAppearance(preferences.current.appearance);
     element.showModal();
     document.body.style.overflow = 'hidden';
     return () => {
@@ -148,6 +162,8 @@ export default function SettingsDialog({
     initial &&
     (JSON.stringify(draft) !== JSON.stringify(initial) ||
       draftTheme !== theme ||
+      draftAppearance.theme !== appearance.theme ||
+      draftAppearance.mode !== appearance.mode ||
       draftLocale !== locale),
   );
   const conflict =
@@ -221,7 +237,12 @@ export default function SettingsDialog({
     setDraft(settings);
     setSaving(false);
     savingRef.current = false;
-    onApply({ theme: draftTheme, locale: draftLocale, settings });
+    onApply({
+      theme: draftTheme,
+      locale: draftLocale,
+      settings,
+      appearance: draftAppearance,
+    });
     onClose();
   }
 
@@ -303,7 +324,9 @@ export default function SettingsDialog({
         </header>
         <div className="settings-layout">
           <nav className="settings-categories" aria-label={t('categories')}>
-            {(['general', 'analysis', 'play', 'board'] as const).map((name) => (
+            {(
+              ['general', 'appearance', 'analysis', 'play', 'board'] as const
+            ).map((name) => (
               <button
                 key={name}
                 type="button"
@@ -312,7 +335,7 @@ export default function SettingsDialog({
                 onClick={() => setCategory(name)}
                 disabled={saving}
               >
-                {t(name)}
+                {name === 'appearance' ? appearanceT('appearance') : t(name)}
               </button>
             ))}
           </nav>
@@ -384,6 +407,65 @@ export default function SettingsDialog({
                 <fieldset
                   className="settings-section"
                   disabled={saving}
+                  hidden={category !== 'appearance'}
+                >
+                  <legend>{appearanceT('appearance')}</legend>
+                  <p className="settings-help settings-intro">
+                    {appearanceT('help')}
+                  </p>
+                  <label
+                    className="settings-field"
+                    htmlFor={`${id}-interface-theme`}
+                  >
+                    <span>{appearanceT('interfaceTheme')}</span>
+                    <select
+                      id={`${id}-interface-theme`}
+                      value={draftAppearance.theme}
+                      onChange={(event) =>
+                        setDraftAppearance((previous) => ({
+                          ...previous,
+                          theme: event.target.value as UiTheme,
+                        }))
+                      }
+                    >
+                      {uiThemes.map((name) => (
+                        <option key={name} value={name}>
+                          {appearanceT(name)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label
+                    className="settings-field"
+                    htmlFor={`${id}-display-mode`}
+                  >
+                    <span>{appearanceT('displayMode')}</span>
+                    <select
+                      id={`${id}-display-mode`}
+                      value={draftAppearance.mode}
+                      aria-describedby={`${id}-system-help`}
+                      onChange={(event) =>
+                        setDraftAppearance((previous) => ({
+                          ...previous,
+                          mode: event.target.value as UiMode,
+                        }))
+                      }
+                    >
+                      {(['light', 'dark', 'system'] as const).map((mode) => (
+                        <option key={mode} value={mode}>
+                          {appearanceT(mode)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="settings-help" id={`${id}-system-help`}>
+                    {appearanceT('systemHelp')}
+                  </p>
+                  <UiAppearancePreview appearance={draftAppearance} />
+                </fieldset>
+                <fieldset
+                  className="settings-section"
+                  disabled={saving}
                   hidden={category !== 'analysis'}
                 >
                   <legend>{t('analysis')}</legend>
@@ -407,8 +489,8 @@ export default function SettingsDialog({
                           value={ply}
                           disabled={!plies.includes(ply)}
                         >
-                          {ply === 3
-                            ? '3-ply'
+                          {ply === 3 || ply === 4
+                            ? `${ply}-ply`
                             : t((['fast', 'deep', 'thorough'] as const)[ply])}
                         </option>
                       ))}
@@ -624,6 +706,7 @@ export default function SettingsDialog({
                     onClick={() => {
                       setDraftTheme(theme);
                       setDraftLocale(locale);
+                      setDraftAppearance(appearance);
                       setReload((value) => value + 1);
                     }}
                   >

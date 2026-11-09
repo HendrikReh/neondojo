@@ -4,6 +4,7 @@ import { AppError } from './i18n-core';
 import { useI18n } from './i18n';
 import { useLearningText } from './learning-messages';
 import Board, { type Theme } from './Board';
+import LearningCardBrowser from './LearningCardBrowser';
 import { matchContext } from './boardMath';
 import type {
   Deck,
@@ -114,12 +115,14 @@ export function AddCardsPanel({
   gameNo,
   revision,
   onChanged,
+  allowBatch = true,
 }: {
   positionId: string | undefined;
   matchId: string;
   gameNo?: number;
   revision: number;
   onChanged: () => void;
+  allowBatch?: boolean;
 }) {
   const t = useLearningText();
   const { formatError, t: baseT } = useI18n();
@@ -138,7 +141,7 @@ export function AddCardsPanel({
     setNeedsAnalysis(false);
     setError(null);
     setBusy(false);
-  }, [positionId, matchId, gameNo]);
+  }, [positionId, matchId, gameNo, allowBatch]);
   useEffect(() => {
     if (!ready) return;
     if (!decks.some((d) => d.id === deckId)) setDeckId(decks[0]?.id || '');
@@ -147,7 +150,7 @@ export function AddCardsPanel({
     if (deckId) rememberDeck(deckId);
   }, [deckId]);
   async function add(kind: 'position' | 'match') {
-    if (!deckId) return;
+    if (!deckId || (kind === 'match' && !allowBatch)) return;
     const version = ++generation.current;
     setBusy(true);
     setError(null);
@@ -230,46 +233,50 @@ export function AddCardsPanel({
           onChanged();
         }}
       />
-      <div className="learning-controls">
-        <label>
-          {t('minLoss')}{' '}
-          <input
-            aria-label={t('minLoss')}
-            type="number"
-            min={0}
-            max={10}
-            step="0.01"
-            value={minLoss}
-            onChange={(e) => setMinLoss(e.target.value)}
-          />
-        </label>
-        <label>
-          {t('player')}{' '}
-          <select
-            aria-label={t('player')}
-            value={player}
-            onChange={(e) => setPlayer(e.target.value)}
+      {allowBatch && (
+        <div className="learning-controls">
+          <label>
+            {t('minLoss')}{' '}
+            <input
+              aria-label={t('minLoss')}
+              type="number"
+              min={0}
+              max={10}
+              step="0.01"
+              value={minLoss}
+              onChange={(e) => setMinLoss(e.target.value)}
+            />
+          </label>
+          <label>
+            {t('player')}{' '}
+            <select
+              aria-label={t('player')}
+              value={player}
+              onChange={(e) => setPlayer(e.target.value)}
+            >
+              <option value="">{t('both')}</option>
+              <option value="0">{baseT('common.white')}</option>
+              <option value="1">{baseT('common.black')}</option>
+            </select>
+          </label>
+          <button
+            disabled={
+              !deckId ||
+              gameNo === undefined ||
+              busy ||
+              minLoss === '' ||
+              !Number.isFinite(Number(minLoss)) ||
+              Number(minLoss) < 0
+            }
+            onClick={() => void add('match')}
           >
-            <option value="">{t('both')}</option>
-            <option value="0">{baseT('common.white')}</option>
-            <option value="1">{baseT('common.black')}</option>
-          </select>
-        </label>
-        <button
-          disabled={
-            !deckId ||
-            gameNo === undefined ||
-            busy ||
-            minLoss === '' ||
-            !Number.isFinite(Number(minLoss)) ||
-            Number(minLoss) < 0
-          }
-          onClick={() => void add('match')}
-        >
-          {gameNo ? baseT('games.addErrors', { game: gameNo }) : t('addErrors')}
-        </button>
-      </div>
-      {needsAnalysis && <p role="alert">{t('addHint')}</p>}
+            {gameNo
+              ? baseT('games.addErrors', { game: gameNo })
+              : t('addErrors')}
+          </button>
+        </div>
+      )}
+      {allowBatch && needsAnalysis && <p role="alert">{t('addHint')}</p>}
       {busy && <p role="status">{t('adding')}</p>}
       {processed !== null && (
         <p role="status">{t('added', { count: processed })}</p>
@@ -282,11 +289,13 @@ export function AddCardsPanel({
 }
 
 export default function LearningWorkspace({
+  visible = true,
   theme,
   revision,
   onChanged,
   requestedDeck,
 }: {
+  visible?: boolean;
   theme: Theme;
   revision: number;
   onChanged: () => void;
@@ -307,7 +316,11 @@ export default function LearningWorkspace({
   const [studying, setStudying] = useState(false);
   const [next, setNext] = useState<NextCard | null>(null);
   const [revealed, setRevealed] = useState<RevealedCard | null>(null);
-  const [page, setPage] = useState<CardPage>({ items: [], next_cursor: null });
+  const [page, setPage] = useState<CardPage & { owner?: string }>({
+    items: [],
+    next_cursor: null,
+  });
+  const [moreLoading, setMoreLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -322,6 +335,11 @@ export default function LearningWorkspace({
   } | null>(null);
   const current = useRef(deckId);
   current.current = deckId;
+  const listKey = JSON.stringify([deckId, revision]);
+  const listContext = useRef({ key: listKey });
+  if (listContext.current.key !== listKey)
+    listContext.current = { key: listKey };
+  const moreRequest = useRef<AbortController | undefined>(undefined);
   useEffect(() => {
     if (!ready) return;
     if (!decks.some((d) => d.id === deckId)) setDeckId(decks[0]?.id || '');
@@ -359,16 +377,24 @@ export default function LearningWorkspace({
   useEffect(() => {
     if (!deckId) return;
     const abort = new AbortController();
+    const context = listContext.current;
+    moreRequest.current?.abort();
+    setMoreLoading(false);
     void request<CardPage>(`/decks/${deckId}/cards?limit=50`, {
       signal: abort.signal,
     })
       .then((data) => {
-        if (!abort.signal.aborted) setPage(data);
+        if (!abort.signal.aborted && listContext.current === context)
+          setPage({ ...data, owner: context.key });
       })
       .catch((error) => {
-        if (!abort.signal.aborted) setError(error);
+        if (!abort.signal.aborted && listContext.current === context)
+          setError(error);
       });
-    return () => abort.abort();
+    return () => {
+      abort.abort();
+      moreRequest.current?.abort();
+    };
   }, [deckId, revision]);
   useEffect(() => {
     if (!deckId || !studying) return;
@@ -453,16 +479,34 @@ export default function LearningWorkspace({
     }
   }
   async function more() {
-    if (!page.next_cursor) return;
+    const context = listContext.current;
+    if (!page.next_cursor || moreLoading || page.owner !== context.key) return;
     const id = deckId;
+    const abort = new AbortController();
+    moreRequest.current?.abort();
+    moreRequest.current = abort;
+    setMoreLoading(true);
     try {
       const data = await request<CardPage>(
         `/decks/${id}/cards?limit=50&after=${page.next_cursor}`,
+        { signal: abort.signal },
       );
-      if (current.current === id)
-        setPage((old) => ({ ...data, items: [...old.items, ...data.items] }));
+      if (!abort.signal.aborted && listContext.current === context)
+        setPage((old) => ({
+          ...data,
+          owner: context.key,
+          items: [
+            ...new Map(
+              [...old.items, ...data.items].map((card) => [card.id, card]),
+            ).values(),
+          ],
+        }));
     } catch (error) {
-      if (current.current === id) setError(error);
+      if (!abort.signal.aborted && listContext.current === context)
+        setError(error);
+    } finally {
+      if (!abort.signal.aborted && listContext.current === context)
+        setMoreLoading(false);
     }
   }
   async function download() {
@@ -748,38 +792,17 @@ export default function LearningWorkspace({
           )}
         </>
       ) : (
+        page.owner === listKey &&
         !!page.items.length && (
-          <div className="learning-card-list">
-            <h3>{t('cardList')}</h3>
-            <table>
-              <thead>
-                <tr>
-                  <th>{t('question')}</th>
-                  <th>{t('reviews')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {page.items.map((card) => (
-                  <tr key={card.id}>
-                    <td>
-                      {t(
-                        card.kind === 'checker'
-                          ? 'questionChecker'
-                          : card.kind === 'cube_response'
-                            ? 'questionResponse'
-                            : 'questionOffer',
-                      )}
-                      <small>{card.position.position_id}</small>
-                    </td>
-                    <td>{formatNumber(card.review_count)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {page.next_cursor && (
-              <button onClick={() => void more()}>{t('more')}</button>
-            )}
-          </div>
+          <LearningCardBrowser
+            key={deckId}
+            visible={visible}
+            cards={page.items}
+            theme={theme}
+            hasMore={!!page.next_cursor}
+            moreLoading={moreLoading}
+            onMore={() => void more()}
+          />
         )
       )}
     </section>

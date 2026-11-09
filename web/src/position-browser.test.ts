@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import {
   emptyPositionFilters,
+  positionSorts,
   positionDefinition,
   positionDraft,
   positionParams,
@@ -111,4 +112,30 @@ test('saved filter equality follows backend tag and dice canonicalization', () =
   expect(
     samePositionDefinition(first, { ...first, tag: 'Prime', die1: 6, die2: 1 }),
   ).toBe(true);
+});
+
+test('every table sort and direction survives saved-filter and request roundtrips', () => {
+  for (const sort of positionSorts) {
+    for (const direction of ['asc', 'desc'] as const) {
+      const definition = positionDefinition({
+        ...emptyPositionFilters(),
+        player: 'Mochy',
+        sort,
+        direction,
+      });
+      expect(positionDefinition(positionDraft(definition))).toEqual(definition);
+      expect(JSON.parse(positionParams(definition).get('filters')!)).toEqual({
+        schema_version: 1,
+        player: 'Mochy',
+        sort,
+        direction,
+      });
+    }
+  }
+  expect(() =>
+    positionDefinition({ ...emptyPositionFilters(), sort: 'invalid' }),
+  ).toThrow();
+  expect(() =>
+    positionDefinition({ ...emptyPositionFilters(), direction: 'sideways' }),
+  ).toThrow();
 });

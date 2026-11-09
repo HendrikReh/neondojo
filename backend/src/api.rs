@@ -85,7 +85,9 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::learning::routes())
         .merge(crate::analysis_statistics::routes())
         .merge(crate::position_browser::routes())
+        .merge(crate::position_bookmarks::routes())
         .merge(crate::move_assessments::routes())
+        .merge(crate::game_plan::routes())
         .route("/api/health", get(health))
         .route("/api/imports", post(upload))
         .route("/api/matches", get(matches))
@@ -260,11 +262,13 @@ async fn upload(
         return Err(ApiError::invalid("Expected 1–100000 checker moves"));
     }
     let database_id = query.database_id.unwrap_or(Uuid::from_u128(1));
-    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM databases WHERE id=$1)")
-        .bind(database_id)
-        .fetch_one(&state.pool)
-        .await
-        .map_err(anyhow::Error::from)?;
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM databases WHERE id=$1 AND NOT collection_only)",
+    )
+    .bind(database_id)
+    .fetch_one(&state.pool)
+    .await
+    .map_err(anyhow::Error::from)?;
     if !exists {
         return Err(ApiError::missing());
     }
@@ -374,11 +378,12 @@ async fn validate_game(
 
 #[utoipa::path(get, path="/api/matches/{id}/source", params(("id"=Uuid, Path)), responses((status=200, body=String, content_type="application/x-go-sgf"), (status=404, body=ErrorBody)), tag="Library")]
 async fn source(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResult<Response> {
-    let sgf: Option<String> = sqlx::query_scalar("SELECT sgf FROM matches WHERE id=$1")
-        .bind(id)
-        .fetch_optional(&state.pool)
-        .await
-        .map_err(anyhow::Error::from)?;
+    let sgf: Option<String> =
+        sqlx::query_scalar("SELECT sgf FROM matches WHERE id=$1 AND NOT collection_only")
+            .bind(id)
+            .fetch_optional(&state.pool)
+            .await
+            .map_err(anyhow::Error::from)?;
     Ok((
         [
             (header::CONTENT_TYPE, "application/x-go-sgf"),
@@ -491,9 +496,9 @@ struct JobRequest {
     position_id: Uuid,
     /// analysis: five candidate moves; dice: 21 weighted rolls.
     kind: PositionJobKind,
-    /// GNUbg search depth, 0 to 3. Omitted uses saved analysis depth.
+    /// GNUbg search depth, 0 to 4. Omitted uses saved analysis depth.
     #[serde(default)]
-    #[schema(minimum = 0, maximum = 3)]
+    #[schema(minimum = 0, maximum = 4)]
     plies: Option<i32>,
 }
 
@@ -505,8 +510,8 @@ async fn create_job(
     let Json(request) = payload.map_err(|e| ApiError::invalid(e.body_text()))?;
     let (settings, snapshot) = crate::settings::snapshot(&state).await?;
     let plies = request.plies.unwrap_or(settings.analysis_plies);
-    if !(0..=3).contains(&plies) {
-        return Err(ApiError::invalid("plies must be 0..3"));
+    if !(0..=4).contains(&plies) {
+        return Err(ApiError::invalid("plies must be 0..4"));
     }
     store::get_position(&state.pool, request.position_id)
         .await?
@@ -532,7 +537,7 @@ struct MatchAnalysisRequest {
     game_no: Option<i32>,
     /// Native GNUbg checker and cube search depth. Omitted uses saved analysis depth.
     #[serde(default)]
-    #[schema(minimum = 0, maximum = 3)]
+    #[schema(minimum = 0, maximum = 4)]
     plies: Option<i32>,
 }
 
@@ -543,10 +548,18 @@ async fn create_match_analysis(
     payload: Result<Json<MatchAnalysisRequest>, axum::extract::rejection::JsonRejection>,
 ) -> ApiResult<(StatusCode, Json<Job>)> {
     let Json(request) = payload.map_err(|e| ApiError::invalid(e.body_text()))?;
+    let source = store::get_match(&state.pool, id)
+        .await?
+        .ok_or_else(ApiError::missing)?;
+    if !source.source_available {
+        return Err(ApiError::invalid(
+            "The source match was removed; analyze the saved position instead",
+        ));
+    }
     let (settings, snapshot) = crate::settings::snapshot(&state).await?;
     let plies = request.plies.unwrap_or(settings.analysis_plies);
-    if !(0..=3).contains(&plies) {
-        return Err(ApiError::invalid("plies must be 0..3"));
+    if !(0..=4).contains(&plies) {
+        return Err(ApiError::invalid("plies must be 0..4"));
     }
     let games = validate_game(&state, id, request.game_no).await?;
     let total = if request.game_no.is_some() {
@@ -797,7 +810,9 @@ impl OpenApi for ApiDoc {
         doc.merge(crate::learning::LearningDoc::openapi());
         doc.merge(crate::analysis_statistics::StatisticsDoc::openapi());
         doc.merge(crate::position_browser::PositionBrowserDoc::openapi());
+        doc.merge(crate::position_bookmarks::PositionBookmarksDoc::openapi());
         doc.merge(crate::move_assessments::MoveAssessmentsDoc::openapi());
+        doc.merge(crate::game_plan::GamePlanDoc::openapi());
         doc
     }
 }

@@ -84,6 +84,17 @@ async fn statistics(
     if job.kind != "match" {
         return Err(ApiError::invalid("This job is not a match analysis"));
     }
+    let source_available: bool =
+        sqlx::query_scalar("SELECT NOT collection_only FROM matches WHERE id=$1")
+            .bind(job.match_uuid)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(anyhow::Error::from)?;
+    if !source_available {
+        return Err(ApiError::invalid(
+            "The source match was removed; retained decisions are position analysis only",
+        ));
+    }
     let summary: Option<MatchAnalysisSummary> = job
         .result
         .map(serde_json::from_value)

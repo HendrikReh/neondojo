@@ -208,6 +208,7 @@ export default function MatchStatisticsView({
                 summary={summary}
                 names={names}
                 onSelect={onSelect}
+                gameNo={job.game_no ?? undefined}
               />
               <p className="analysis-method">{text('prMethod')}</p>
             </>

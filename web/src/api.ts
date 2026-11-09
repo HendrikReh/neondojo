@@ -52,6 +52,7 @@ export async function request<T>(
       error,
     );
   }
+  if (response.status === 204) return undefined as T;
   if (data === undefined) throw new AppError('error.invalidResponse');
   return data as T;
 }

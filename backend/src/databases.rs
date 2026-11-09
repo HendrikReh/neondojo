@@ -63,6 +63,10 @@ pub struct DatabaseDelete {
 #[derive(Debug, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct DatabaseMatch {
     pub id: Uuid,
+    /// False for independent saved-position context whose source match was deleted.
+    pub source_available: bool,
+    /// Persistent numeric library entry ID; UUID remains the action identity.
+    pub match_no: i64,
     pub filename: String,
     pub format: String,
     pub white: String,
@@ -112,7 +116,13 @@ pub struct LibraryQuery {
     pub result: Option<String>,
     pub match_points_min: Option<i32>,
     pub match_points_max: Option<i32>,
+    /// Sort field: id (or match_no), created_at, played_at, name, white, black,
+    /// white_pr, black_pr, match_length, score, result, tournament, format,
+    /// position_count, analysis_status, tags, or comment. score compares the
+    /// visible numeric white/black score pair; result retains result-state order.
     pub sort: Option<String>,
+    /// asc or desc (default desc). Missing values sort last in either direction;
+    /// equal values use ascending UUID order for stable pagination.
     pub direction: Option<String>,
     pub after: Option<String>,
     pub limit: Option<i64>,
@@ -122,6 +132,10 @@ struct LibraryCursor {
     scope: String,
     key: Option<String>,
     id: Uuid,
+    // Annotation values can be tens of thousands of Unicode characters. Resolve
+    // those keys from the scoped anchor instead of putting them into the URL.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    anchor: bool,
 }
 #[derive(Deserialize, ToSchema)]
 pub struct MetadataWrite {
@@ -175,7 +189,9 @@ pub fn routes() -> Router<AppState> {
         .route("/api/library/matches", get(library_matches))
         .route(
             "/api/matches/{id}/metadata",
-            axum::routing::put(update_metadata).patch(update_metadata),
+            get(get_metadata)
+                .put(update_metadata)
+                .patch(update_metadata),
         )
         .route("/api/library/actions", post(actions))
         .route("/api/library/export", post(export))
@@ -196,7 +212,7 @@ fn validate_database(w: &DatabaseWrite) -> ApiResult<()> {
 async fn list_databases(State(s): State<AppState>) -> ApiResult<Json<Vec<Database>>> {
     Ok(Json(
         sqlx::query_as(&format!(
-            "{DB_SELECT} ORDER BY is_default DESC,lower(name),id"
+            "{DB_SELECT} WHERE NOT d.collection_only ORDER BY is_default DESC,lower(name),id"
         ))
         .fetch_all(&s.pool)
         .await
@@ -241,7 +257,7 @@ async fn update_database(
         .version
         .filter(|v| *v > 0)
         .ok_or_else(|| ApiError::invalid("version is required"))?;
-    let affected=sqlx::query("UPDATE databases SET name=$2,description=$3,version=version+1,updated_at=now() WHERE id=$1 AND version=$4").bind(id).bind(w.name.trim()).bind(w.description).bind(version).execute(&s.pool).await.map_err(anyhow::Error::from)?.rows_affected();
+    let affected=sqlx::query("UPDATE databases SET name=$2,description=$3,version=version+1,updated_at=now() WHERE id=$1 AND version=$4 AND NOT collection_only").bind(id).bind(w.name.trim()).bind(w.description).bind(version).execute(&s.pool).await.map_err(anyhow::Error::from)?.rows_affected();
     if affected == 0 {
         return Err(if database_exists(&s.pool, id).await? {
             conflict("Database changed; reload before saving")
@@ -258,13 +274,13 @@ async fn update_database(
     ))
 }
 async fn database_exists(pool: &PgPool, id: Uuid) -> ApiResult<bool> {
-    Ok(
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM databases WHERE id=$1)")
-            .bind(id)
-            .fetch_one(pool)
-            .await
-            .map_err(anyhow::Error::from)?,
+    Ok(sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM databases WHERE id=$1 AND NOT collection_only)",
     )
+    .bind(id)
+    .fetch_one(pool)
+    .await
+    .map_err(anyhow::Error::from)?)
 }
 #[utoipa::path(delete,path="/api/databases/{id}",params(("id"=Uuid,Path),DatabaseDelete),responses((status=204),(status=409,body=ErrorBody)),tag="Databases")]
 async fn delete_database(
@@ -274,12 +290,13 @@ async fn delete_database(
 ) -> ApiResult<StatusCode> {
     let q = query(q)?;
     let mut tx = s.pool.begin().await.map_err(anyhow::Error::from)?;
-    let d: Option<(i64, bool)> =
-        sqlx::query_as("SELECT version,is_default FROM databases WHERE id=$1 FOR UPDATE")
-            .bind(id)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(anyhow::Error::from)?;
+    let d: Option<(i64, bool)> = sqlx::query_as(
+        "SELECT version,is_default FROM databases WHERE id=$1 AND NOT collection_only FOR UPDATE",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?;
     let Some((version, default)) = d else {
         return Err(ApiError::missing());
     };
@@ -304,6 +321,9 @@ async fn delete_database(
     if any_active(&mut tx, &ids).await? {
         return Err(conflict("Database has queued or running analyses"));
     }
+    for &match_id in &ids {
+        crate::position_retention::preserve(&mut tx, match_id).await?;
+    }
     sqlx::query("DELETE FROM matches WHERE database_id=$1")
         .bind(id)
         .execute(&mut *tx)
@@ -323,7 +343,7 @@ async fn delete_database(
 const MATCH_FROM: &str = "FROM matches m LEFT JOIN annotations a ON a.match_uuid=m.id
 LEFT JOIN LATERAL (
     SELECT j.result,j.total_games,j.completed_games FROM jobs j
-    WHERE j.match_uuid=m.id AND j.kind='match' AND j.game_no IS NULL AND j.status='completed'
+    WHERE j.match_uuid=m.id AND j.kind='match' AND j.game_no IS NULL AND j.status='completed' AND NOT m.collection_only
     ORDER BY j.created_at DESC,j.id DESC LIMIT 1
 ) rawpr ON true
 LEFT JOIN LATERAL (
@@ -338,10 +358,14 @@ LEFT JOIN LATERAL (
     AND rawpr.result #>> '{performance_rating,profile}'=(rawpr.result->>'engine')||'; '||(rawpr.result->>'plies')||'-ply cubeful deterministic'
     AND rawpr.result #>> '{performance_rating,players,0,player}'='0'
     AND rawpr.result #>> '{performance_rating,players,1,player}'='1'
-) prj ON true";
-const MATCH_COLUMNS: &str = "m.id,m.filename,m.format,m.white,m.black,m.match_length,m.position_count,m.created_at,m.database_id,coalesce(nullif(m.display_name,''),m.filename) AS display_name,m.played_on,m.tournament,m.round,m.place,m.result_state,m.white_score,m.black_score,(prj.result #>> '{performance_rating,players,0,value}')::float8 AS white_pr,(prj.result #>> '{performance_rating,players,1,value}')::float8 AS black_pr,prj.result #>> '{performance_rating,method}' AS pr_method,prj.result #>> '{performance_rating,profile}' AS pr_profile,coalesce((SELECT CASE WHEN j.game_no IS NOT NULL AND j.status='completed' THEN 'partial' ELSE j.status END FROM jobs j WHERE j.match_uuid=m.id AND j.kind='match' ORDER BY (j.game_no IS NULL) DESC,j.created_at DESC,j.id DESC LIMIT 1),CASE WHEN EXISTS(SELECT 1 FROM imported_analyses ia WHERE ia.match_uuid=m.id AND ia.kind IN ('checker','cube')) THEN 'imported' END) AS analysis_status,(SELECT count(*) FROM match_games g WHERE g.match_uuid=m.id) AS game_count,coalesce(a.tags,'{}'::text[]) AS tags,coalesce(a.comment,'') AS comment,m.metadata_version AS version";
+) prj ON true
+LEFT JOIN LATERAL (
+    SELECT coalesce((SELECT CASE WHEN j.game_no IS NOT NULL AND j.status='completed' THEN 'partial' ELSE j.status END FROM jobs j WHERE j.match_uuid=m.id AND j.kind='match' ORDER BY (j.game_no IS NULL) DESC,j.created_at DESC,j.id DESC LIMIT 1),CASE WHEN EXISTS(SELECT 1 FROM imported_analyses ia WHERE ia.match_uuid=m.id AND ia.kind IN ('checker','cube')) THEN 'imported' END) AS status
+) analysis ON true";
+const MATCH_COLUMNS: &str = "m.id,NOT m.collection_only AS source_available,coalesce(m.source_match_no,m.match_no) AS match_no,m.filename,m.format,m.white,m.black,m.match_length,m.position_count,m.created_at,coalesce(m.source_database_id,m.database_id) AS database_id,coalesce(nullif(m.display_name,''),m.filename) AS display_name,m.played_on,m.tournament,m.round,m.place,m.result_state,m.white_score,m.black_score,(prj.result #>> '{performance_rating,players,0,value}')::float8 AS white_pr,(prj.result #>> '{performance_rating,players,1,value}')::float8 AS black_pr,prj.result #>> '{performance_rating,method}' AS pr_method,prj.result #>> '{performance_rating,profile}' AS pr_profile,analysis.status AS analysis_status,(SELECT count(*) FROM match_games g WHERE g.match_uuid=m.id) AS game_count,coalesce(a.tags,'{}'::text[]) AS tags,coalesce(a.comment,'') AS comment,m.metadata_version AS version";
 fn sort_spec(sort: &str) -> Option<(&'static str, &'static str)> {
     Some(match sort {
+        "id" | "match_no" => ("m.match_no", "bigint"),
         "created_at" => ("m.created_at", "timestamptz"),
         "played_at" => ("m.played_on", "date"),
         "name" => (
@@ -351,6 +375,16 @@ fn sort_spec(sort: &str) -> Option<(&'static str, &'static str)> {
         "white" => ("lower(m.white)", "text"),
         "black" => ("lower(m.black)", "text"),
         "match_length" => ("m.match_length", "integer"),
+        "tournament" => ("lower(nullif(m.tournament,''))", "text"),
+        "format" => ("lower(m.format)", "text"),
+        "position_count" => ("m.position_count", "integer"),
+        "analysis_status" => ("analysis.status", "text"),
+        "tags" => ("lower(nullif(array_to_string(a.tags,', '),''))", "text"),
+        "comment" => ("lower(nullif(a.comment,''))", "text"),
+        "score" => (
+            "CASE WHEN m.white_score IS NOT NULL AND m.black_score IS NOT NULL THEN ARRAY[m.white_score,m.black_score] END",
+            "integer[]",
+        ),
         "result" => ("m.result_state", "text"),
         "white_pr" => (
             "(prj.result #>> '{performance_rating,players,0,value}')::float8",
@@ -371,6 +405,16 @@ fn bounded_text(value: &Option<String>) -> ApiResult<()> {
     }
     Ok(())
 }
+fn valid_score_key(key: &str) -> bool {
+    let Some(values) = key.strip_prefix('{').and_then(|v| v.strip_suffix('}')) else {
+        return false;
+    };
+    let values: Vec<_> = values.split(',').collect();
+    values.len() == 2
+        && values
+            .iter()
+            .all(|v| v.parse::<i32>().is_ok_and(|n| n >= 0))
+}
 fn like(q: &mut QueryBuilder<'_, Postgres>, expr: &str, value: &Option<String>) {
     if let Some(v) = value.as_deref().filter(|v| !v.trim().is_empty()) {
         q.push(" AND ")
@@ -378,6 +422,92 @@ fn like(q: &mut QueryBuilder<'_, Postgres>, expr: &str, value: &Option<String>) 
             .push(" LIKE ")
             .push_bind(crate::annotations::literal_pattern(v.trim()));
     }
+}
+fn library_filters(
+    q: &mut QueryBuilder<'_, Postgres>,
+    p: &LibraryQuery,
+    date_field: &str,
+) -> ApiResult<()> {
+    if let Some(id) = p.database_id {
+        q.push(" AND m.database_id=").push_bind(id);
+    }
+    if let Some(v) = p.q.as_deref().filter(|v| !v.trim().is_empty()) {
+        let pattern = crate::annotations::literal_pattern(v.trim());
+        q.push(" AND m.id IN (SELECT id FROM matches WHERE search_text LIKE ").push_bind(pattern.clone()).push(" OR lower(display_name) LIKE ").push_bind(pattern.clone()).push(" OR lower(tournament) LIKE ").push_bind(pattern.clone()).push(" OR lower(round) LIKE ").push_bind(pattern.clone()).push(" UNION SELECT coalesce(n.match_uuid,np.match_uuid,ng.match_uuid,nm.match_uuid) FROM annotations n LEFT JOIN positions np ON np.id=n.position_uuid LEFT JOIN match_games ng ON ng.id=n.game_uuid LEFT JOIN match_moves nm ON nm.id=n.move_uuid WHERE n.search_text LIKE ").push_bind(pattern).push(")");
+    }
+    if let Some(v) = p.player.as_deref().filter(|v| !v.trim().is_empty()) {
+        let pattern = crate::annotations::literal_pattern(v.trim());
+        q.push(" AND (lower(m.white) LIKE ")
+            .push_bind(pattern.clone())
+            .push(" OR lower(m.black) LIKE ")
+            .push_bind(pattern)
+            .push(")");
+    }
+    if date_field == "played" {
+        if let Some(v) = p.date_from {
+            q.push(" AND m.played_on >= ").push_bind(v);
+        }
+        if let Some(v) = p.date_to {
+            q.push(" AND m.played_on <= ").push_bind(v);
+        }
+    } else {
+        if let Some(v) = p.date_from {
+            q.push(" AND m.created_at >= ")
+                .push_bind(v.and_hms_opt(0, 0, 0).unwrap().and_utc());
+        }
+        if let Some(v) = p.date_to {
+            let end = v
+                .succ_opt()
+                .ok_or_else(|| ApiError::invalid("date_to is out of range"))?;
+            q.push(" AND m.created_at < ")
+                .push_bind(end.and_hms_opt(0, 0, 0).unwrap().and_utc());
+        }
+    }
+    like(q, "lower(m.tournament)", &p.tournament);
+    like(q, "lower(m.round)", &p.round);
+    like(
+        q,
+        "lower(coalesce(nullif(m.display_name,''),m.filename))",
+        &p.match_name,
+    );
+    if let Some(v) = p.tag.as_ref() {
+        let tag = normalize_tag(v)?;
+        q.push(" AND EXISTS(SELECT 1 FROM annotations n LEFT JOIN positions np ON np.id=n.position_uuid LEFT JOIN match_games ng ON ng.id=n.game_uuid LEFT JOIN match_moves nm ON nm.id=n.move_uuid WHERE coalesce(n.match_uuid,np.match_uuid,ng.match_uuid,nm.match_uuid)=m.id AND n.tags @> ").push_bind(vec![tag]).push(")");
+    }
+    if let Some(v) = p.comment.as_ref() {
+        q.push(" AND EXISTS(SELECT 1 FROM annotations n LEFT JOIN positions np ON np.id=n.position_uuid LEFT JOIN match_games ng ON ng.id=n.game_uuid LEFT JOIN match_moves nm ON nm.id=n.move_uuid WHERE coalesce(n.match_uuid,np.match_uuid,ng.match_uuid,nm.match_uuid)=m.id AND lower(n.comment) LIKE ").push_bind(crate::annotations::literal_pattern(v)).push(")");
+    }
+    if let Some(v) = &p.position_id {
+        q.push(" AND EXISTS(SELECT 1 FROM positions p WHERE p.match_uuid=m.id AND p.position_id=")
+            .push_bind(v.clone())
+            .push(")");
+    }
+    if let Some(v) = &p.match_type {
+        q.push(if v == "money" {
+            " AND m.match_length=0"
+        } else {
+            " AND m.match_length>0"
+        });
+    }
+    if let Some(v) = &p.result {
+        match v.as_str() {
+            "white_won" | "black_won" | "draw" => {
+                q.push(" AND m.result_state='completed' AND m.white_score IS NOT NULL AND m.black_score IS NOT NULL AND m.white_score")
+                    .push(match v.as_str() {"white_won"=>" > ","black_won"=>" < ",_=>" = "})
+                    .push("m.black_score");
+            }
+            _ => {
+                q.push(" AND m.result_state=").push_bind(v.clone());
+            }
+        }
+    }
+    if let Some(v) = p.match_points_min {
+        q.push(" AND m.match_length>=").push_bind(v);
+    }
+    if let Some(v) = p.match_points_max {
+        q.push(" AND m.match_length<=").push_bind(v);
+    }
+    Ok(())
 }
 #[utoipa::path(get,path="/api/library/matches",params(LibraryQuery),responses((status=200,body=LibraryPage),(status=422,body=ErrorBody)),tag="Databases")]
 async fn library_matches(
@@ -449,7 +579,8 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
         "{:x}",
         Sha256::digest(serde_json::to_vec(&p).map_err(anyhow::Error::from)?)
     );
-    let cursor = after
+    let compact = ["tags", "comment"].contains(&sort.as_str());
+    let mut cursor = after
         .map(|v| {
             if v.len() > 4096 {
                 return Err(ApiError::invalid("Cursor is too long"));
@@ -464,15 +595,49 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
                 })
         })
         .transpose()?;
-    if let Some(c) = &cursor {
+    if let Some(c) = &mut cursor {
+        if c.anchor != compact || (c.anchor && c.key.is_some()) {
+            return Err(ApiError::invalid("Cursor contains an invalid anchor"));
+        }
+        if c.anchor {
+            // Use the same filters as the page, so a deleted anchor or one that
+            // has left the current scope produces a validation error.
+            let mut anchor = QueryBuilder::<Postgres>::new(format!(
+                "SELECT ({expr})::text AS cursor_key {MATCH_FROM} WHERE NOT m.collection_only"
+            ));
+            library_filters(&mut anchor, &p, &date_field)?;
+            let row = anchor
+                .push(" AND m.id=")
+                .push_bind(c.id)
+                .build()
+                .fetch_optional(pool)
+                .await
+                .map_err(anyhow::Error::from)?
+                .ok_or_else(|| {
+                    ApiError::invalid("Cursor anchor is missing from the current filters")
+                })?;
+            c.key = row.try_get("cursor_key").map_err(anyhow::Error::from)?;
+        }
         let valid = match c.key.as_deref() {
-            None => ["date", "float8"].contains(&cast),
+            None => [
+                "played_at",
+                "white_pr",
+                "black_pr",
+                "tournament",
+                "analysis_status",
+                "tags",
+                "comment",
+                "score",
+            ]
+            .contains(&sort.as_str()),
             Some(key) => match cast {
                 "integer" => key.parse::<i32>().is_ok(),
+                "bigint" => key.parse::<i64>().is_ok(),
+                "integer[]" => valid_score_key(key),
                 "float8" => key.parse::<f64>().is_ok_and(f64::is_finite),
                 "date" => NaiveDate::parse_from_str(key, "%Y-%m-%d").is_ok(),
                 "timestamptz" => DateTime::parse_from_str(key, "%Y-%m-%d %H:%M:%S%.f%#z").is_ok(),
-                _ => key.chars().count() <= 2048,
+                _ => c.anchor || key.chars().count() <= 2048,
             },
         };
         if !valid {
@@ -480,87 +645,9 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
         }
     }
     let mut q = QueryBuilder::<Postgres>::new(format!(
-        "SELECT {MATCH_COLUMNS},({expr})::text AS cursor_key {MATCH_FROM} WHERE true"
+        "SELECT {MATCH_COLUMNS},({expr})::text AS cursor_key {MATCH_FROM} WHERE NOT m.collection_only"
     ));
-    if let Some(id) = p.database_id {
-        q.push(" AND m.database_id=").push_bind(id);
-    }
-    if let Some(v) = p.q.as_deref().filter(|v| !v.trim().is_empty()) {
-        let pattern = crate::annotations::literal_pattern(v.trim());
-        q.push(" AND m.id IN (SELECT id FROM matches WHERE search_text LIKE ").push_bind(pattern.clone()).push(" OR lower(display_name) LIKE ").push_bind(pattern.clone()).push(" OR lower(tournament) LIKE ").push_bind(pattern.clone()).push(" OR lower(round) LIKE ").push_bind(pattern.clone()).push(" UNION SELECT coalesce(n.match_uuid,np.match_uuid,ng.match_uuid,nm.match_uuid) FROM annotations n LEFT JOIN positions np ON np.id=n.position_uuid LEFT JOIN match_games ng ON ng.id=n.game_uuid LEFT JOIN match_moves nm ON nm.id=n.move_uuid WHERE n.search_text LIKE ").push_bind(pattern).push(")");
-    }
-    if let Some(v) = p.player.as_deref().filter(|v| !v.trim().is_empty()) {
-        let pattern = crate::annotations::literal_pattern(v.trim());
-        q.push(" AND (lower(m.white) LIKE ")
-            .push_bind(pattern.clone())
-            .push(" OR lower(m.black) LIKE ")
-            .push_bind(pattern)
-            .push(")");
-    }
-    if date_field == "played" {
-        if let Some(v) = p.date_from {
-            q.push(" AND m.played_on >= ").push_bind(v);
-        }
-        if let Some(v) = p.date_to {
-            q.push(" AND m.played_on <= ").push_bind(v);
-        }
-    } else {
-        if let Some(v) = p.date_from {
-            q.push(" AND m.created_at >= ")
-                .push_bind(v.and_hms_opt(0, 0, 0).unwrap().and_utc());
-        }
-        if let Some(v) = p.date_to {
-            let end = v
-                .succ_opt()
-                .ok_or_else(|| ApiError::invalid("date_to is out of range"))?;
-            q.push(" AND m.created_at < ")
-                .push_bind(end.and_hms_opt(0, 0, 0).unwrap().and_utc());
-        }
-    }
-    like(&mut q, "lower(m.tournament)", &p.tournament);
-    like(&mut q, "lower(m.round)", &p.round);
-    like(
-        &mut q,
-        "lower(coalesce(nullif(m.display_name,''),m.filename))",
-        &p.match_name,
-    );
-    if let Some(v) = p.tag.as_ref() {
-        let tag = normalize_tag(v)?;
-        q.push(" AND EXISTS(SELECT 1 FROM annotations n LEFT JOIN positions np ON np.id=n.position_uuid LEFT JOIN match_games ng ON ng.id=n.game_uuid LEFT JOIN match_moves nm ON nm.id=n.move_uuid WHERE coalesce(n.match_uuid,np.match_uuid,ng.match_uuid,nm.match_uuid)=m.id AND n.tags @> ").push_bind(vec![tag]).push(")");
-    }
-    if let Some(v) = p.comment.as_ref() {
-        q.push(" AND EXISTS(SELECT 1 FROM annotations n LEFT JOIN positions np ON np.id=n.position_uuid LEFT JOIN match_games ng ON ng.id=n.game_uuid LEFT JOIN match_moves nm ON nm.id=n.move_uuid WHERE coalesce(n.match_uuid,np.match_uuid,ng.match_uuid,nm.match_uuid)=m.id AND lower(n.comment) LIKE ").push_bind(crate::annotations::literal_pattern(v)).push(")");
-    }
-    if let Some(v) = p.position_id {
-        q.push(" AND EXISTS(SELECT 1 FROM positions p WHERE p.match_uuid=m.id AND p.position_id=")
-            .push_bind(v)
-            .push(")");
-    }
-    if let Some(v) = p.match_type {
-        q.push(if v == "money" {
-            " AND m.match_length=0"
-        } else {
-            " AND m.match_length>0"
-        });
-    }
-    if let Some(v) = p.result {
-        match v.as_str() {
-            "white_won" | "black_won" | "draw" => {
-                q.push(" AND m.result_state='completed' AND m.white_score IS NOT NULL AND m.black_score IS NOT NULL AND m.white_score")
-                    .push(match v.as_str() {"white_won"=>" > ","black_won"=>" < ",_=>" = "})
-                    .push("m.black_score");
-            }
-            _ => {
-                q.push(" AND m.result_state=").push_bind(v);
-            }
-        }
-    }
-    if let Some(v) = p.match_points_min {
-        q.push(" AND m.match_length>=").push_bind(v);
-    }
-    if let Some(v) = p.match_points_max {
-        q.push(" AND m.match_length<=").push_bind(v);
-    }
+    library_filters(&mut q, &p, &date_field)?;
     if let Some(c) = cursor {
         q.push(" AND (");
         if let Some(key) = c.key {
@@ -609,8 +696,13 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
             .map_err(anyhow::Error::from)?;
         last = Some(LibraryCursor {
             scope: scope.clone(),
-            key: row.try_get("cursor_key").map_err(anyhow::Error::from)?,
+            key: if compact {
+                None
+            } else {
+                row.try_get("cursor_key").map_err(anyhow::Error::from)?
+            },
             id: m.id,
+            anchor: compact,
         });
         items.push(m);
     }
@@ -622,6 +714,23 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
         None
     };
     Ok(LibraryPage { items, next_cursor })
+}
+async fn database_match(pool: &PgPool, id: Uuid) -> ApiResult<DatabaseMatch> {
+    sqlx::query_as(&format!(
+        "SELECT {MATCH_COLUMNS} {MATCH_FROM} WHERE m.id=$1"
+    ))
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .map_err(anyhow::Error::from)?
+    .ok_or_else(ApiError::missing)
+}
+#[utoipa::path(get,path="/api/matches/{id}/metadata",params(("id"=Uuid,Path)),responses((status=200,body=DatabaseMatch),(status=404,body=ErrorBody)),tag="Databases")]
+async fn get_metadata(
+    State(s): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<DatabaseMatch>> {
+    Ok(Json(database_match(&s.pool, id).await?))
 }
 #[utoipa::path(put,path="/api/matches/{id}/metadata",params(("id"=Uuid,Path)),request_body=MetadataWrite,responses((status=200,body=DatabaseMatch),(status=409,body=ErrorBody)),tag="Databases")]
 async fn update_metadata(
@@ -643,28 +752,22 @@ async fn update_metadata(
     {
         return Err(ApiError::invalid("Invalid match metadata"));
     }
-    let affected=sqlx::query("UPDATE matches SET display_name=$2,played_on=$3,tournament=$4,round=$5,place=$6,result_state=$7,white_score=$8,black_score=$9,metadata_version=metadata_version+1,source_metadata_loaded=true WHERE id=$1 AND metadata_version=$10").bind(id).bind(w.display_name.trim()).bind(w.played_on).bind(w.tournament).bind(w.round).bind(w.place).bind(w.result_state).bind(w.white_score).bind(w.black_score).bind(w.version).execute(&s.pool).await.map_err(anyhow::Error::from)?.rows_affected();
+    let affected=sqlx::query("UPDATE matches SET display_name=$2,played_on=$3,tournament=$4,round=$5,place=$6,result_state=$7,white_score=$8,black_score=$9,metadata_version=metadata_version+1,source_metadata_loaded=true WHERE id=$1 AND metadata_version=$10 AND NOT collection_only").bind(id).bind(w.display_name.trim()).bind(w.played_on).bind(w.tournament).bind(w.round).bind(w.place).bind(w.result_state).bind(w.white_score).bind(w.black_score).bind(w.version).execute(&s.pool).await.map_err(anyhow::Error::from)?.rows_affected();
     if affected == 0 {
-        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM matches WHERE id=$1)")
-            .bind(id)
-            .fetch_one(&s.pool)
-            .await
-            .map_err(anyhow::Error::from)?;
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM matches WHERE id=$1 AND NOT collection_only)",
+        )
+        .bind(id)
+        .fetch_one(&s.pool)
+        .await
+        .map_err(anyhow::Error::from)?;
         return Err(if exists {
             conflict("Metadata changed; reload before saving")
         } else {
             ApiError::missing()
         });
     }
-    Ok(Json(
-        sqlx::query_as(&format!(
-            "SELECT {MATCH_COLUMNS} {MATCH_FROM} WHERE m.id=$1"
-        ))
-        .bind(id)
-        .fetch_one(&s.pool)
-        .await
-        .map_err(anyhow::Error::from)?,
-    ))
+    Ok(Json(database_match(&s.pool, id).await?))
 }
 
 async fn any_active(tx: &mut sqlx::Transaction<'_, Postgres>, ids: &[Uuid]) -> ApiResult<bool> {
@@ -745,11 +848,12 @@ fn action_item(
 async fn action_one(pool: &PgPool, a: &LibraryAction, id: Uuid) -> ApiResult<ActionItem> {
     let mut tx = pool.begin().await.map_err(anyhow::Error::from)?;
     // Lock database ownership before the source; deletion uses the same order.
-    let source_db: Option<Uuid> = sqlx::query_scalar("SELECT database_id FROM matches WHERE id=$1")
-        .bind(id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?;
+    let source_db: Option<Uuid> =
+        sqlx::query_scalar("SELECT database_id FROM matches WHERE id=$1 AND NOT collection_only")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(anyhow::Error::from)?;
     let Some(source_db) = source_db else {
         return Ok(action_item(id, "not_found", None, None));
     };
@@ -764,12 +868,13 @@ async fn action_one(pool: &PgPool, a: &LibraryAction, id: Uuid) -> ApiResult<Act
         .fetch_all(&mut *tx)
         .await
         .map_err(anyhow::Error::from)?;
-    let source: Option<(Uuid, String)> =
-        sqlx::query_as("SELECT database_id,sha256 FROM matches WHERE id=$1 FOR UPDATE")
-            .bind(id)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(anyhow::Error::from)?;
+    let source: Option<(Uuid, String)> = sqlx::query_as(
+        "SELECT database_id,sha256 FROM matches WHERE id=$1 AND NOT collection_only FOR UPDATE",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?;
     let Some((source_db, hash)) = source else {
         return Ok(action_item(id, "not_found", None, None));
     };
@@ -840,6 +945,7 @@ async fn action_one(pool: &PgPool, a: &LibraryAction, id: Uuid) -> ApiResult<Act
             if any_active(&mut tx, &[id]).await? {
                 return Ok(action_item(id, "busy", None, None));
             }
+            crate::position_retention::preserve(&mut tx, id).await?;
             sqlx::query("DELETE FROM matches WHERE id=$1")
                 .bind(id)
                 .execute(&mut *tx)
@@ -977,7 +1083,7 @@ async fn export(
         return Err(ApiError::invalid("Duplicate match IDs are not allowed"));
     }
     let mut tx = s.pool.begin().await.map_err(anyhow::Error::from)?;
-    let sizes:Vec<(Uuid,i64)>=sqlx::query_as(if r.format=="original"{"SELECT id,octet_length(original)::bigint FROM matches WHERE id=ANY($1) ORDER BY id FOR SHARE"}else{"SELECT id,octet_length(sgf)::bigint FROM matches WHERE id=ANY($1) ORDER BY id FOR SHARE"}).bind(&r.match_ids).fetch_all(&mut *tx).await.map_err(anyhow::Error::from)?;
+    let sizes:Vec<(Uuid,i64)>=sqlx::query_as(if r.format=="original"{"SELECT id,octet_length(original)::bigint FROM matches WHERE id=ANY($1) AND NOT collection_only ORDER BY id FOR SHARE"}else{"SELECT id,octet_length(sgf)::bigint FROM matches WHERE id=ANY($1) AND NOT collection_only ORDER BY id FOR SHARE"}).bind(&r.match_ids).fetch_all(&mut *tx).await.map_err(anyhow::Error::from)?;
     if sizes.len() != r.match_ids.len() {
         return Err(ApiError::missing());
     }
@@ -1052,7 +1158,7 @@ async fn export(
 }
 
 #[derive(OpenApi)]
-#[openapi(paths(list_databases,create_database,update_database,delete_database,library_matches,update_metadata,actions,export),components(schemas(Database,DatabaseWrite,DatabaseMatch,LibraryPage,MetadataWrite,LibraryAction,ActionItem,ActionResponse,ExportRequest)),tags((name="Databases",description="Independent match databases and library management")))]
+#[openapi(paths(list_databases,create_database,update_database,delete_database,library_matches,get_metadata,update_metadata,actions,export),components(schemas(Database,DatabaseWrite,DatabaseMatch,LibraryPage,MetadataWrite,LibraryAction,ActionItem,ActionResponse,ExportRequest)),tags((name="Databases",description="Independent match databases and library management")))]
 pub struct DatabaseDoc;
 
 #[derive(Debug)]

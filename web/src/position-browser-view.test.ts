@@ -11,6 +11,8 @@ import type { PositionBrowserHit } from './position-browser-api';
 beforeEach(() => vi.stubGlobal('localStorage', { getItem: () => 'en' }));
 afterEach(() => vi.unstubAllGlobals());
 const hit: PositionBrowserHit = {
+  source_available: true,
+  match_no: 7,
   position: {
     id: 'one',
     match_uuid: 'match',
@@ -25,6 +27,7 @@ const hit: PositionBrowserHit = {
     notation: 'SECRET SOLUTION',
   },
   match_info: {
+    source_available: true,
     id: 'match',
     white: 'Ada',
     black: 'Grace',
@@ -49,6 +52,7 @@ const hit: PositionBrowserHit = {
     { scope: 'position', tags: ['prime'], comment_excerpt: 'Relevant comment' },
   ],
   card_ready: false,
+  decks: [],
   native_error: null,
 };
 function render(child: ReturnType<typeof createElement>) {
@@ -69,8 +73,108 @@ test('results expose contextual selection, real origin and actionable missing an
   expect(html).toContain('Select this page');
   expect(html).toContain('Independent database');
   expect(html).toContain('Relevant comment');
-  expect(html).toContain('Open analysis');
+  expect(html).not.toMatch(/<button\b[^>]*>\s*Open analysis\s*<\/button>/);
   expect(html).not.toContain('SECRET SOLUTION');
+  expect(html).toContain('data-column="player"');
+  expect(html).toContain('data-column="opponent"');
+  expect(html).toContain('class="position-player">Ada');
+  expect(html).toContain('class="position-opponent">Grace');
+  expect(html).toContain('data-sort="player"');
+  expect(html).toContain('data-sort="opponent"');
+  expect(html).toContain('data-sort="match_id"');
+});
+
+test('saved rows offer removal without deleting the original position', () => {
+  const html = render(
+    createElement(PositionBrowserResults, {
+      items: [hit],
+      selected: new Set<string>(),
+      onPreview: () => {},
+      onToggle: () => {},
+      onOpen: () => {},
+      onRemove: () => {},
+      busy: false,
+    }),
+  );
+  expect(html).toContain('Remove from collection');
+  expect(html).not.toMatch(/<button\b[^>]*>\s*Open analysis\s*<\/button>/);
+  expect(html).not.toContain('Delete position');
+});
+
+test('position results and preview list existing decks without exposing an answer', () => {
+  const member = {
+    ...hit,
+    decks: [
+      { id: 'deck-a', name: 'Contact & timing' },
+      { id: 'deck-b', name: 'Race study' },
+    ],
+  };
+  const html = render(
+    createElement(PositionBrowserResults, {
+      items: [member],
+      selected: new Set<string>(),
+      onPreview: () => {},
+      onToggle: () => {},
+      onOpen: () => {},
+      busy: false,
+    }),
+  );
+  expect(html).toContain('data-column="decks"');
+  expect(html).toContain('data-sort="decks"');
+  expect(html).toContain('Contact &amp; timing, Race study');
+  expect(html).toContain('Decks: Contact &amp; timing, Race study');
+  const preview = render(
+    createElement(PositionBrowserPreview, {
+      hit: member,
+      theme: 'forest',
+      onOpen: () => {},
+    }),
+  );
+  expect(preview).toContain('Contact &amp; timing, Race study');
+  expect(preview).not.toContain('SECRET SOLUTION');
+});
+
+test('the preview explicitly distinguishes a position with no deck membership', () => {
+  const html = render(
+    createElement(PositionBrowserPreview, {
+      hit: { ...hit, decks: [] },
+      theme: 'forest',
+      onOpen: () => {},
+    }),
+  );
+  expect(html).toContain('Not in a deck yet');
+});
+
+test('a black-on-roll record names the actual player and opponent correctly', () => {
+  const html = render(
+    createElement(PositionBrowserResults, {
+      items: [{ ...hit, position: { ...hit.position, player: 1 } }],
+      selected: new Set<string>(),
+      onPreview: () => {},
+      onToggle: () => {},
+      onOpen: () => {},
+      busy: false,
+    }),
+  );
+  expect(html).toContain('class="position-player">Grace');
+  expect(html).toContain('class="position-opponent">Ada');
+  expect(html).toContain('Player on roll: Grace');
+});
+
+test('recorded moves are available only after opting in, without engine answers', () => {
+  const html = render(
+    createElement(PositionBrowserResults, {
+      items: [hit],
+      selected: new Set<string>(),
+      onPreview: () => {},
+      onToggle: () => {},
+      onOpen: () => {},
+      busy: false,
+      showPlayed: true,
+    }),
+  );
+  expect(html).toContain('SECRET SOLUTION');
+  expect(html).toContain('Played move');
 });
 test('one preview shows only the stored board before the move and no invented answer', () => {
   const html = render(
@@ -84,6 +188,7 @@ test('one preview shows only the stored board before the move and no invented an
   expect(html).toContain('data-preview-mode="before"');
   expect(html).toContain('Stored position before the move');
   expect(html).toContain('Local analysis is required');
+  expect(html).toMatch(/<button\b[^>]*>\s*Open analysis\s*<\/button>/);
   expect(html).not.toContain('SECRET SOLUTION');
 });
 test('native error is paired with its actual engine depth and job', () => {
@@ -122,4 +227,21 @@ test('all six position catalogs preserve keys and arguments', () => {
       expect(args(catalog[key])).toEqual(args(source[key]));
     }
   }
+});
+
+test('retained preview explains that the source is gone while individual analysis remains available', () => {
+  const html = render(
+    createElement(PositionBrowserPreview, {
+      hit: {
+        ...hit,
+        source_available: false,
+        match_info: { ...hit.match_info, source_available: false },
+      },
+      theme: 'forest',
+      onOpen: () => {},
+    }),
+  );
+  expect(html).toContain('Original match removed; saved position retained');
+  expect(html).toMatch(/<button\b[^>]*>\s*Open analysis\s*<\/button>/);
+  expect(html).toContain('class="board-shell ');
 });

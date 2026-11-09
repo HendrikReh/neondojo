@@ -1,0 +1,97 @@
+Open Sage game-plan classifier provenance
+========================================
+
+backend/src/game_plan.rs is a Rust adaptation of Open Sage's deterministic
+classify_game_plan rules and the board helpers used by those rules.
+
+Upstream: https://github.com/markbgsage/bgsage
+Pinned revision: 139427d826dd67798226e7d23c003c90315306ba
+Revision date: 2026-10-17T20:57:39Z
+Retrieved and checked: 2026-11-09
+Upstream copyright: Copyright (C) 2026 Mark Higgins
+Upstream SPDX identifier, verified in each pinned source file: MPL-2.0
+License copy: backend/licenses/MPL-2.0.txt (unmodified pinned upstream LICENSE)
+
+Reference files at this revision:
+
+https://github.com/markbgsage/bgsage/blob/139427d826dd67798226e7d23c003c90315306ba/cpp/src/encoding.cpp
+  classify_game_plan; labels declared in cpp/include/bgbot/encoding.h.
+  SHA-256 b2dcefdf3037e8cafea77c07961796bc5a6b6a03e9f332f35f7b92abd3c701b1
+https://github.com/markbgsage/bgsage/blob/139427d826dd67798226e7d23c003c90315306ba/cpp/src/board.cpp
+  flip, is_race, player_borne_off, opponent_borne_off, pip_counts.
+  SHA-256 92f8696fa407f3a1e421c4514832fb71d8d3e22b1a1ee6dd0c0bfb9605b4ad04
+https://github.com/markbgsage/bgsage/blob/139427d826dd67798226e7d23c003c90315306ba/cpp/include/bgbot/encoding.h
+  SHA-256 fc5d59f03c0774dbec607bdb24655b80624427542684ad40e5c5478500b19cc9
+https://github.com/markbgsage/bgsage/blob/139427d826dd67798226e7d23c003c90315306ba/cpp/include/bgbot/board.h
+  SHA-256 6c66bc4a74b799ea27384e16b818b641246a03f308c7a721025676e694bb4602
+https://github.com/markbgsage/bgsage/blob/139427d826dd67798226e7d23c003c90315306ba/python/bgsage/board.py
+  classify_game_plans documents classifying the board and its flip separately.
+  SHA-256 18148b0a3e91db977a7f7d346a5e691821c5a0f75f1feb2b840f416c1161ef38
+Pinned LICENSE SHA-256:
+  3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04
+
+The pinned files, rather than cached web views or README descriptions, were
+used to establish provenance and licensing. All listed source files contain
+the same MPL-2.0 SPDX header. No AGPL-licensed source was used in this port.
+
+Adaptations
+-----------
+
+BG Tutor's board uses absolute White-positive/Black-negative point counts,
+with Black's bar negative at index 0 and White's bar positive at index 25.
+Open Sage uses the same White-oriented points but both bars are nonnegative.
+The adapter negates index 0, classifies White, then uses the upstream flip
+convention (swap bars without negating them; reverse and negate points) to
+classify Black. Labels remain tied to absolute colors, independent of turn.
+
+The API spells upstream PURERACE / "purerace" as "pure_race". All rule
+branches, thresholds, pip-count comparisons and interval endpoints retain
+upstream behavior, including the asymmetric opponent offside interval 1..13.
+Rust sums/range predicates replace the corresponding C++ loops. Validated
+counts are bounded before addition or negation. Missing checkers are treated
+as borne off, as upstream does.
+
+The separate game_over field is a BG Tutor presentation signal: either
+absolute side has no checkers remaining, including on the bar. An empty
+board is accepted and terminal. The rule classifier itself is not overridden
+for terminal positions; a terminal position involving a bar can still have
+contact labels. These are board-only labels, with no score, cube, confidence
+or engine-strength claim. The GNUbg analysis engine is unaffected.
+
+Reference fixtures and parity verification
+-----------------------------------------
+
+backend/tests/fixtures/game_plan_reference.json contains small synthetic
+regression fixtures with labels emitted by the pinned C++ reference. They
+cover all five classes and all 17 possible class pairs (pure race plus the
+16 contact pairs), both bar signs, terminal states, contact separation,
+equal pip counts and the exact 0.1 pip-difference threshold on either side.
+The tests also reflect every fixture to verify absolute color identities.
+
+A temporary native C++ oracle compiled the exact classify_game_plan function
+from pinned encoding.cpp, pinned board.cpp and pinned moves.cpp with the
+pinned encoding.h, board.h, moves.h and types.h headers. Only unrelated
+encoding functions were omitted to avoid neural-network dependencies. The
+classification function and board helpers were compiled unchanged.
+
+A local harness used std::mt19937 seed 20261109. For each of 200 games it
+started at STARTING_BOARD, emitted the position, stopped at check_game_over,
+otherwise chose dice 1 + random()%6 twice, selected a result with
+possible_boards(board, die1, die2)[random()%moves.size()], and flipped for
+the next player. A 1000-ply cap applied per game. Each emitted board was
+converted to BG Tutor's index-0 sign, and expected labels were obtained by
+classify_game_plan(board) and classify_game_plan(flip(board)).
+
+The Rust port matched all 18,743 emitted legal positions for both colors,
+and for each reflected position, including 7,529 positions with checkers on
+a bar. The first encountered position for each class pair supplied the
+corresponding compact fixture (using a nonterminal example for pure race).
+Additional boundary and bar fixtures were sent through the same C++ oracle.
+The large temporary corpus, downloaded sources and executable are not
+repository artifacts or runtime dependencies. No upstream scripts ran.
+
+When updating the reference, pin the new full commit, verify each file's
+SPDX header and LICENSE, regenerate the C++ expectations, rerun both-color
+and reflection parity, and update SOURCE_REVISION and these provenance hashes.
+Keep classifier "opensage_rules_v1" tied to these rule semantics; a deliberate
+rule change requires an explicit version decision.

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { POSITION_COLUMNS } from '../src/position-table-columns';
 test.use({ actionTimeout: 10000 });
 test('header omits import while the match database retains working file import', async ({
   page,
@@ -25,7 +26,11 @@ test('header omits import while the match database retains working file import',
   await expect(page.locator('.analysis-workspace .board')).toBeVisible();
 });
 
-async function fixture(page: import('@playwright/test').Page, games = 1) {
+async function fixture(
+  page: import('@playwright/test').Page,
+  games = 1,
+  matchLength = 7,
+) {
   const suffix = crypto.randomUUID();
   const database = await (
     await page.request.post('/api/databases', {
@@ -35,7 +40,7 @@ async function fixture(page: import('@playwright/test').Page, games = 1) {
   const sgf = Array.from(
     { length: games },
     () =>
-      `(;GM[6]PW[Browser ${suffix}]PB[Opponent]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])`,
+      `(;GM[6]PW[Browser ${suffix}]PB[Opponent]MI[length:${matchLength}][ws:0][bs:0];W[31hefe];B[42qusu])`,
   ).join('');
   const response = await page.request.post(
     `/api/imports?database_id=${database.id}`,
@@ -58,6 +63,11 @@ async function fixture(page: import('@playwright/test').Page, games = 1) {
       )
     ).json()
   ).items;
+  for (const position of positions) {
+    expect(
+      (await page.request.put(`/api/positions/${position.id}/bookmark`)).ok(),
+    ).toBe(true);
+  }
   return { database, match: imported.match, positions };
 }
 async function openBrowser(
@@ -75,6 +85,129 @@ async function openBrowser(
     .click();
   return pane;
 }
+
+test('deck memberships refresh on later result pages and retain existing column widths', async ({
+  page,
+}) => {
+  const legacyWidths = Object.fromEntries(
+    POSITION_COLUMNS.filter((column) => column.id !== 'decks').map((column) => [
+      column.id,
+      column.id === 'player' ? 221 : 180,
+    ]),
+  );
+  await page.addInitScript((widths) => {
+    localStorage.setItem('bgtutor.locale', 'en');
+    if (!localStorage.getItem('bgtutor.positions.columns'))
+      localStorage.setItem(
+        'bgtutor.positions.columns',
+        JSON.stringify({ version: 1, widths }),
+      );
+  }, legacyWidths);
+  const f = await fixture(page, 14, 43);
+  const target = f.positions[26];
+  const initial = await (
+    await page.request.get(
+      `/api/position-browser?limit=100&filters=${encodeURIComponent(JSON.stringify({ schema_version: 1, database_id: f.database.id }))}`,
+    )
+  ).json();
+  const priorDecks: { id: string; name: string }[] = initial.items.find(
+    (hit: { position: { id: string } }) => hit.position.id === target.id,
+  ).decks;
+  const job = await (
+    await page.request.post('/api/jobs', {
+      data: { position_id: target.id, kind: 'analysis', plies: 0 },
+    })
+  ).json();
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/jobs/${job.id}`)).json()).status,
+    )
+    .toBe('completed');
+  const pane = await openBrowser(page, f.database.id);
+  await expect(pane.locator('.position-table tbody tr')).toHaveCount(25);
+  await pane
+    .getByRole('button', { name: 'Load more positions', exact: true })
+    .click();
+  await expect(pane.locator('.position-table tbody tr')).toHaveCount(3);
+  const row = pane.locator(`tr[data-position-id="${target.id}"]`);
+  await row.locator('.position-player').click();
+  await row.getByRole('checkbox').check();
+  await expect(row.locator('.position-row-decks')).toHaveText(
+    priorDecks.length ? priorDecks.map((deck) => deck.name).join(', ') : '—',
+  );
+  if (!priorDecks.length)
+    await expect(pane.locator('.position-preview-decks')).toContainText(
+      'Not in a deck yet',
+    );
+  const suffix = crypto.randomUUID(),
+    names = [`Zulu ${suffix}`, `Alpha ${suffix}`];
+  for (const name of names) {
+    await pane.getByLabel('New deck name', { exact: true }).fill(name);
+    await pane
+      .getByRole('button', { name: 'Create deck', exact: true })
+      .click();
+    await expect(
+      pane
+        .getByRole('combobox', { name: 'Choose deck', exact: true })
+        .locator('option:checked'),
+    ).toHaveText(name);
+    await pane
+      .getByRole('button', { name: 'Add selected positions', exact: true })
+      .click();
+    await expect(row.locator('.position-row-decks')).toContainText(name);
+    await expect(row.getByRole('checkbox')).toBeChecked();
+    await expect(row).toHaveClass(/position-preview-selected/);
+    await expect(pane.locator('.position-pagination')).toContainText('Page 2');
+    await expect(pane.locator('.position-preview-decks')).toContainText(name);
+  }
+  const expected = [...priorDecks.map((deck) => deck.name), ...names]
+    .sort()
+    .join(', ');
+  await expect(row.locator('.position-row-decks')).toHaveText(expected);
+  await expect(row).toHaveAttribute('title', new RegExp('Decks: Alpha'));
+  await pane
+    .getByRole('button', { name: 'Add selected positions', exact: true })
+    .click();
+  await expect(pane.locator('[data-transfer-status="duplicate"]')).toHaveCount(
+    1,
+  );
+  await expect(row.locator('.position-row-decks')).toHaveText(expected);
+  expect((await row.boundingBox())!.height).toBeLessThanOrEqual(40);
+  const player = pane.locator('th[data-column="player"]'),
+    decks = pane.locator('th[data-column="decks"]');
+  expect((await player.boundingBox())!.width).toBeCloseTo(221, 0);
+  expect((await decks.boundingBox())!.width).toBeCloseTo(144, 0);
+  await decks.getByRole('separator').focus();
+  await page.keyboard.press('ArrowRight');
+  const resized = (await decks.boundingBox())!.width;
+  expect(resized).toBeGreaterThan(144);
+  await pane.locator('button[data-sort="decks"]').click();
+  await expect(decks).toHaveAttribute('aria-sort', 'ascending');
+  await expect(
+    pane
+      .locator('.position-table tbody tr')
+      .first()
+      .locator('.position-row-decks'),
+  ).toHaveText(expected);
+  // Persisted membership and a newly added column coexist with the old layout profile.
+  await page.reload();
+  await page.getByRole('tab', { name: 'Positions', exact: true }).click();
+  await pane
+    .getByRole('combobox', { name: 'Database', exact: true })
+    .selectOption(f.database.id);
+  await pane
+    .getByRole('button', { name: 'Search positions', exact: true })
+    .click();
+  await expect(pane.locator('.position-table tbody tr')).toHaveCount(25);
+  await expect(
+    pane.locator(
+      `tr[data-position-id="${f.positions[0].id}"] .position-row-decks`,
+    ),
+  ).toHaveText(expected);
+  expect((await player.boundingBox())!.width).toBeCloseTo(221, 0);
+  expect((await decks.boundingBox())!.width).toBeCloseTo(resized, 0);
+});
 
 test('position notes filter exact decisions, search definitions persist, and pagination stays contextual', async ({
   page,
@@ -161,8 +294,9 @@ test('position notes filter exact decisions, search definitions persist, and pag
     .click();
   await expect(rows).toHaveCount(15);
   await expect(rows.first()).toContainText('Opponent');
-  await rows
-    .first()
+  await rows.first().locator('.position-player').click();
+  await pane
+    .locator('.position-preview')
     .getByRole('button', { name: 'Open analysis', exact: true })
     .click();
   await expect(page.locator('.board-heading')).toContainText('Move 2');
@@ -205,8 +339,9 @@ test('found positions flow through real analysis, partial card transfer, Anki ex
       exact: true,
     }),
   ).toBeDisabled();
-  await rows
-    .first()
+  await rows.first().locator('.position-player').click();
+  await pane
+    .locator('.position-preview')
     .getByRole('button', { name: 'Open analysis', exact: true })
     .click();
   await expect(page.locator('.position-code code')).toHaveText(
@@ -408,13 +543,23 @@ test('saved-search conflicts retain drafts and deleted database scopes never bro
 test('positions keep a readable active tab and contain wide results on mobile', async ({
   page,
 }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
   const f = await fixture(page);
   const pane = await openBrowser(page, f.database.id);
   await expect(pane.locator('.position-table tbody tr')).toHaveCount(2);
   const tab = page.getByRole('tab', { name: 'Positions', exact: true });
   await tab.hover();
-  await expect.soft(tab).toHaveCSS('background-color', 'rgb(53, 93, 66)');
+  const activeHover = await tab.evaluate((element) => {
+    const probe = document.createElement('span');
+    probe.style.backgroundColor = 'var(--ui-accent-hover)';
+    element.append(probe);
+    const color = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return color;
+  });
+  await expect.soft(tab).toHaveCSS('background-color', activeHover);
+  await expect.soft(tab).toHaveCSS('color', 'rgb(255, 255, 255)');
   await page.setViewportSize({ width: 390, height: 844 });
   await expect
     .poll(() =>

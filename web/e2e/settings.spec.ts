@@ -48,7 +48,7 @@ async function settingsBackend(
           name: 'GNU Backgammon',
           available: true,
           version: 'GNUbg 1.08',
-          plies: [0, 1, 2, 3],
+          plies: [0, 1, 2, 3, 4],
         },
         {
           id: 'bgsage',
@@ -269,66 +269,117 @@ test('load errors offer retry and the mobile dialog has reachable actions', asyn
   ).toBe(true);
 });
 
-test('two-ply defaults and three-ply selections persist through settings and submit real analysis', async ({
-  page,
-}) => {
-  test.setTimeout(120000);
-  page.setDefaultTimeout(10000);
-  const backend = await settingsBackend(page, 2);
-  await page.goto('/');
-  await page.getByLabel('Match file', { exact: true }).setInputFiles({
-    name: 'depth.sgf',
-    mimeType: 'application/octet-stream',
-    buffer: Buffer.from(
-      `(;GM[6]PW[Depth ${crypto.randomUUID()}]PB[Opponent]MI[length:7];W[31hefe])`,
-    ),
+for (const plies of [3, 4]) {
+  test(`two-ply defaults and ${plies}-ply selections persist through settings and submit real analysis`, async ({
+    page,
+  }) => {
+    test.setTimeout(300000);
+    page.setDefaultTimeout(10000);
+    const backend = await settingsBackend(page, 2);
+    await page.goto('/');
+    await page.getByLabel('Match file', { exact: true }).setInputFiles({
+      name: 'depth.sgf',
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.from(
+        `(;GM[6]PW[Depth ${crypto.randomUUID()}]PB[Opponent]MI[length:7];W[31hefe])`,
+      ),
+    });
+    await expect(page.getByLabel('Search depth', { exact: true })).toHaveValue(
+      '2',
+    );
+    await expect(
+      page.getByLabel('Match analysis depth', { exact: true }),
+    ).toHaveValue('2');
+    const { dialog } = await openSettings(page);
+    await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
+    const profile = dialog.getByLabel('Default analysis profile', {
+      exact: true,
+    });
+    await expect(profile).toHaveValue('2');
+    await profile.selectOption(String(plies));
+    await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(dialog).not.toBeVisible();
+    expect(backend.writes.at(-1)?.analysis_plies).toBe(plies);
+    await expect(page.getByLabel('Search depth', { exact: true })).toHaveValue(
+      String(plies),
+    );
+    await expect(
+      page.getByLabel('Match analysis depth', { exact: true }),
+    ).toHaveValue(String(plies));
+    const submitted = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === '/api/jobs' &&
+        response.request().method() === 'POST',
+    );
+    await page
+      .getByRole('button', { name: 'Analyze position', exact: true })
+      .click();
+    const response = await submitted;
+    expect(response.status()).toBe(202);
+    expect(response.request().postDataJSON().plies).toBe(plies);
+    const job = await response.json();
+    await expect
+      .poll(
+        async () =>
+          (await (await page.request.get(`/api/jobs/${job.id}`)).json()).status,
+        { timeout: 90000 },
+      )
+      .toBe('completed');
+    await expect(
+      page.locator('.analysis-panel .candidates tbody tr').first(),
+    ).toBeVisible();
+    if (plies === 4) {
+      for (const scope of ['dice', 'game', 'match']) {
+        if (scope !== 'dice')
+          await page
+            .getByLabel('Analysis scope', { exact: true })
+            .selectOption(scope);
+        const submitted = page.waitForResponse(
+          (response) =>
+            response.request().method() === 'POST' &&
+            (scope === 'dice'
+              ? new URL(response.url()).pathname === '/api/jobs'
+              : /\/api\/matches\/[^/]+\/analysis$/.test(
+                  new URL(response.url()).pathname,
+                )),
+        );
+        await page
+          .getByRole('button', {
+            name:
+              scope === 'dice'
+                ? 'Dice distribution'
+                : scope === 'game'
+                  ? 'Analyze game'
+                  : 'Analyze entire match',
+            exact: true,
+          })
+          .click();
+        const response = await submitted;
+        expect(response.status()).toBe(202);
+        const request = response.request().postDataJSON();
+        expect(request.plies).toBe(4);
+        if (scope === 'dice') expect(request.kind).toBe('dice');
+        else expect(request.game_no).toBe(scope === 'game' ? 1 : undefined);
+        const job = await response.json();
+        await expect
+          .poll(
+            async () =>
+              (await (await page.request.get(`/api/jobs/${job.id}`)).json())
+                .status,
+            { timeout: 180000 },
+          )
+          .toBe('completed');
+        const completed = await (
+          await page.request.get(`/api/jobs/${job.id}`)
+        ).json();
+        expect(completed.result.plies).toBe(4);
+        if (scope === 'dice') expect(completed.result.rolls).toHaveLength(21);
+        else expect(completed.completed_games).toBe(1);
+      }
+    }
+    await page.reload();
+    await expect(page.getByLabel('Search depth', { exact: true })).toHaveValue(
+      String(plies),
+    );
   });
-  await expect(page.getByLabel('Search depth', { exact: true })).toHaveValue(
-    '2',
-  );
-  await expect(
-    page.getByLabel('Match analysis depth', { exact: true }),
-  ).toHaveValue('2');
-  const { dialog } = await openSettings(page);
-  await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
-  const profile = dialog.getByLabel('Default analysis profile', {
-    exact: true,
-  });
-  await expect(profile).toHaveValue('2');
-  await profile.selectOption('3');
-  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(dialog).not.toBeVisible();
-  expect(backend.writes.at(-1)?.analysis_plies).toBe(3);
-  await expect(page.getByLabel('Search depth', { exact: true })).toHaveValue(
-    '3',
-  );
-  await expect(
-    page.getByLabel('Match analysis depth', { exact: true }),
-  ).toHaveValue('3');
-  const submitted = page.waitForResponse(
-    (response) =>
-      new URL(response.url()).pathname === '/api/jobs' &&
-      response.request().method() === 'POST',
-  );
-  await page
-    .getByRole('button', { name: 'Analyze position', exact: true })
-    .click();
-  const response = await submitted;
-  expect(response.status()).toBe(202);
-  expect(response.request().postDataJSON().plies).toBe(3);
-  const job = await response.json();
-  await expect
-    .poll(
-      async () =>
-        (await (await page.request.get(`/api/jobs/${job.id}`)).json()).status,
-      { timeout: 90000 },
-    )
-    .toBe('completed');
-  await expect(
-    page.locator('.analysis-panel .candidates tbody tr').first(),
-  ).toBeVisible();
-  await page.reload();
-  await expect(page.getByLabel('Search depth', { exact: true })).toHaveValue(
-    '3',
-  );
-});
+}
