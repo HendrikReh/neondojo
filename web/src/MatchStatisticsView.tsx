@@ -4,6 +4,7 @@ import { useI18n } from './i18n';
 import {
   nativePerformanceRating,
   type JobAnalysisStatistics,
+  type PlayerErrorBreakdown,
   type StatisticsAction,
   type StatisticsMetric,
 } from './match-statistics-api';
@@ -20,6 +21,7 @@ function PlayerStatisticsCard({
   gameNo,
   onSelect,
   compact = false,
+  errorBreakdown,
 }: {
   summary: MatchAnalysisSummary;
   stats: PlayerStats;
@@ -27,6 +29,7 @@ function PlayerStatisticsCard({
   gameNo?: number;
   onSelect: SelectMetric;
   compact?: boolean;
+  errorBreakdown?: PlayerErrorBreakdown;
 }) {
   const text = useStatisticsText();
   const { formatNumber } = useI18n();
@@ -35,28 +38,63 @@ function PlayerStatisticsCard({
   const metric = (
     key: StatisticsMetric,
     label: string,
-    value: string | number,
-  ) => (
-    <button
-      type="button"
-      className="statistics-metric"
-      data-statistics-metric={key}
-      aria-label={
-        gameNo === undefined
-          ? text('metricAction', { player: name, metric: label })
-          : text('metricGameAction', {
-              game: gameNo,
-              player: name,
-              metric: label,
-            })
-      }
-      onClick={() => onSelect({ player: stats.player, metric: key, gameNo })}
-    >
-      <span>{label}</span>
-      <strong>{typeof value === 'number' ? formatNumber(value) : value}</strong>
-    </button>
-  );
+    value: string | number | undefined,
+    kind?: 'checker' | 'cube',
+    cell = false,
+  ) => {
+    const actionLabel = kind ? `${text(kind)} · ${label}` : label;
+    const accessibleLabel =
+      gameNo === undefined
+        ? text('metricAction', { player: name, metric: actionLabel })
+        : text('metricGameAction', {
+            game: gameNo,
+            player: name,
+            metric: actionLabel,
+          });
+    if (value === undefined)
+      return (
+        <span
+          className="statistics-error-unavailable"
+          role="img"
+          title={text('typedUnavailable')}
+          aria-label={`${accessibleLabel}: ${text('typedUnavailable')}`}
+        >
+          —
+        </span>
+      );
+    return (
+      <button
+        type="button"
+        className="statistics-metric"
+        data-statistics-metric={key}
+        data-statistics-kind={kind}
+        aria-label={accessibleLabel}
+        onClick={() =>
+          onSelect({
+            player: stats.player,
+            metric: key,
+            gameNo,
+            ...(kind ? { kind } : {}),
+          })
+        }
+      >
+        {!cell && <span>{label}</span>}
+        <strong>
+          {typeof value === 'number' ? formatNumber(value) : value}
+        </strong>
+      </button>
+    );
+  };
   const rating = nativePerformanceRating(summary, stats.player);
+  const errorTotals = errorBreakdown
+    ? {
+        doubtful:
+          errorBreakdown.checker.doubtful + errorBreakdown.cube.doubtful,
+        bad: errorBreakdown.checker.bad + errorBreakdown.cube.bad,
+        very_bad:
+          errorBreakdown.checker.very_bad + errorBreakdown.cube.very_bad,
+      }
+    : stats;
   return (
     <article
       className={`statistics-player${compact ? ' statistics-player-compact' : ''}`}
@@ -75,14 +113,6 @@ function PlayerStatisticsCard({
           text('loss'),
           decimal(stats.checker_equity_loss + stats.cube_equity_loss),
         )}
-        {metric(
-          'inaccuracies',
-          text('inaccuracies'),
-          stats.doubtful + stats.bad + stats.very_bad,
-        )}
-        {metric('doubtful', text('doubtful'), stats.doubtful)}
-        {metric('bad', text('bad'), stats.bad)}
-        {metric('very_bad', text('veryBad'), stats.very_bad)}
         {rating === undefined ? (
           <div className="statistics-metric statistics-metric-unavailable">
             <span>{text('pr')}</span>
@@ -91,6 +121,54 @@ function PlayerStatisticsCard({
         ) : (
           metric('pr', text('pr'), decimal(rating))
         )}
+      </div>
+      <div
+        role="table"
+        className="statistics-error-matrix"
+        aria-label={text('errorsByKind')}
+      >
+        <div role="rowgroup">
+          <div role="row">
+            <span role="columnheader">{text('errors')}</span>
+            <span role="columnheader">{text('total')}</span>
+            <span role="columnheader">{text('checker')}</span>
+            <span role="columnheader">{text('cube')}</span>
+          </div>
+        </div>
+        <div role="rowgroup">
+          {(
+            [
+              [
+                'inaccuracies',
+                text('inaccuracies'),
+                errorTotals.doubtful + errorTotals.bad + errorTotals.very_bad,
+              ],
+              ['doubtful', text('doubtful'), errorTotals.doubtful],
+              ['bad', text('bad'), errorTotals.bad],
+              ['very_bad', text('veryBad'), errorTotals.very_bad],
+            ] as const
+          ).map(([key, label, count]) => (
+            <div role="row" key={key}>
+              <span role="rowheader">{label}</span>
+              <div role="cell">
+                {metric(key, label, count, undefined, true)}
+              </div>
+              {(['checker', 'cube'] as const).map((kind) => {
+                const counts = errorBreakdown?.[kind];
+                const value =
+                  counts &&
+                  (key === 'inaccuracies'
+                    ? counts.doubtful + counts.bad + counts.very_bad
+                    : counts[key]);
+                return (
+                  <div role="cell" key={kind}>
+                    {metric(key, label, value, kind, true)}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
       </div>
       {(stats.forced_moves > 0 || stats.unavailable > 0) && (
         <p className="statistics-footnote">
@@ -117,11 +195,13 @@ export function PlayerStatisticsSummary({
   names,
   onSelect,
   gameNo,
+  errorBreakdown,
 }: {
   summary: MatchAnalysisSummary;
   names: string[];
   onSelect: SelectMetric;
   gameNo?: number;
+  errorBreakdown?: PlayerErrorBreakdown[] | null;
 }) {
   return (
     <div className="match-analysis-summary statistics-summary">
@@ -133,6 +213,9 @@ export function PlayerStatisticsSummary({
           name={names[stats.player]}
           onSelect={onSelect}
           gameNo={gameNo}
+          errorBreakdown={errorBreakdown?.find(
+            (entry) => entry.player === stats.player,
+          )}
         />
       ))}
     </div>
@@ -206,6 +289,7 @@ export default function MatchStatisticsView({
               </p>
               <PlayerStatisticsSummary
                 summary={summary}
+                errorBreakdown={current?.error_breakdown}
                 names={names}
                 onSelect={onSelect}
                 gameNo={job.game_no ?? undefined}
@@ -266,6 +350,9 @@ export default function MatchStatisticsView({
                             {game.analyzed && game.summary && stats ? (
                               <PlayerStatisticsCard
                                 compact
+                                errorBreakdown={game.error_breakdown?.find(
+                                  (entry) => entry.player === player,
+                                )}
                                 summary={game.summary}
                                 stats={stats}
                                 name={name}

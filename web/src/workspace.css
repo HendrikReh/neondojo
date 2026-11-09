@@ -9,37 +9,27 @@
 .app-header {
   display: flex;
   align-items: center;
-  gap: 28px;
-  padding: 17px 28px;
+  gap: 26px;
+  padding: 12px 24px;
   background: var(--ui-surface);
   border-bottom: 1px solid var(--ui-border);
 }
 .app-header .brand {
   margin: 0;
-  font-size: 23px;
-  gap: 10px;
+  font-size: 18px;
+  gap: 8px;
   flex-shrink: 0;
 }
 .app-header .brand-mark {
-  width: 38px;
-  height: 38px;
-  font-size: 29px;
+  width: 30px;
+  height: 30px;
+  font-size: 24px;
 }
 .app-tabs {
   display: flex;
-  gap: 5px;
+  gap: 20px;
   flex: 1;
   flex-wrap: wrap;
-}
-.app-tabs button {
-  border-color: transparent;
-  background: transparent;
-  padding: 9px 15px;
-}
-.app-tabs button[aria-selected='true'],
-.app-tabs button[aria-selected='true']:hover:not(:disabled) {
-  color: var(--ui-accent-text);
-  background: var(--ui-accent-hover);
 }
 .app-header-actions {
   display: flex;
@@ -50,6 +40,19 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 7px 0;
+  border: 0;
+  background: transparent;
+  color: var(--ui-muted);
+  font-size: var(--font-size-body);
+}
+.settings-trigger:hover:not(:disabled) {
+  color: var(--ui-accent);
+  background: transparent;
+}
+.settings-trigger svg {
+  width: 16px;
+  height: 16px;
 }
 .app-body {
   max-width: 1800px;
@@ -74,7 +77,7 @@
   gap: 14px;
   padding: 20px 2px 0;
   color: var(--ui-muted);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .app-footer > span {
   display: flex;
@@ -89,15 +92,15 @@
   margin-bottom: 18px;
 }
 .analysis-heading h1 {
-  font-size: 27px;
+  font-size: var(--font-size-page);
   overflow-wrap: anywhere;
 }
 .analysis-heading h1 span {
   color: var(--ui-muted);
-  font-size: 19px;
+  font-size: var(--font-size-body);
 }
 .analysis-heading p {
-  font-size: 12px;
+  font-size: var(--font-size-table);
   color: var(--ui-muted);
   margin-top: 7px;
 }
@@ -131,7 +134,7 @@
   gap: 6px;
 }
 .analysis-commandbar .game-selector-controls label {
-  font-size: 11px;
+  font-size: var(--font-size-label);
 }
 .analysis-commandbar .game-selector-controls button {
   padding: 9px 10px;
@@ -153,24 +156,27 @@
   flex-wrap: wrap;
 }
 .workspace-analysis-command .match-analysis-controls label {
-  font-size: 11px;
+  font-size: var(--font-size-label);
   flex: 1 1 130px;
 }
 .workspace-analysis-command select {
   width: 100%;
-  font-size: 12px;
+  font-size: var(--font-size-control);
 }
 .workspace-analysis-command button {
   white-space: nowrap;
 }
 .workspace-analysis-command .analysis-error {
   color: var(--ui-danger-text);
-  font-size: 12px;
+  font-size: var(--font-size-table);
   margin-top: 9px;
 }
 .analysis-grid {
   display: grid;
-  grid-template-columns: 175px minmax(0, 1fr) minmax(320px, 370px);
+  grid-template-columns: clamp(230px, 15vw, 320px) minmax(0, 1fr) minmax(
+      320px,
+      370px
+    );
   gap: 16px;
   align-items: start;
 }
@@ -187,10 +193,10 @@
 .analysis-workspace .moves-list button {
   gap: 5px;
   padding: 9px 3px;
-  font-size: 10px;
+  font-size: var(--font-size-micro);
 }
 .analysis-workspace .moves-list strong {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   white-space: normal;
   overflow-wrap: anywhere;
 }
@@ -204,10 +210,10 @@
 }
 .analysis-workspace .moves-panel .next-error {
   margin-top: 14px;
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .analysis-workspace .moves-panel > p {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   padding: 10px 3px;
 }
 .analysis-workspace .board-panel {
@@ -263,17 +269,6 @@
   padding-bottom: 11px;
   margin-bottom: 14px;
 }
-.inspector-tabs button {
-  flex: 1;
-  border: 0;
-  padding: 8px 6px;
-  font-size: 11px;
-}
-.inspector-tabs button[aria-selected='true'],
-.inspector-tabs button[aria-selected='true']:hover:not(:disabled) {
-  background: var(--ui-accent-hover);
-  color: var(--ui-accent-text);
-}
 .position-inspector .analysis-panel,
 .position-inspector .match-analysis,
 .position-inspector .annotation-panel,
@@ -296,7 +291,7 @@
 }
 .position-inspector .analysis-controls button {
   flex: 1;
-  font-size: 11px;
+  font-size: var(--font-size-control);
   padding: 9px 8px;
 }
 .position-inspector .analysis-controls button span {
@@ -307,11 +302,8 @@
   justify-content: space-between;
   flex-wrap: wrap;
 }
-.position-inspector .tabs button {
-  font-size: 10px;
-}
 .position-inspector .candidates {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   width: 100%;
 }
 .position-inspector .candidates td,
@@ -323,7 +315,7 @@
 }
 .position-inspector .best-label {
   display: block;
-  font-size: 9px;
+  font-size: var(--font-size-label);
   margin-top: 3px;
 }
 .position-inspector .fineprint {
@@ -333,10 +325,10 @@
   padding: 24px 5px;
 }
 .position-inspector .panel-empty h3 {
-  font-size: 15px;
+  font-size: var(--font-size-panel);
 }
 .position-inspector .panel-empty p {
-  font-size: 12px;
+  font-size: var(--font-size-table);
 }
 .position-inspector .distribution {
   min-width: 0;
@@ -349,7 +341,7 @@
   min-width: 0;
 }
 .position-inspector .dice-grid b {
-  font-size: 10px;
+  font-size: var(--font-size-micro);
 }
 .position-inspector .match-analysis-progress {
   margin-top: 0;
@@ -386,8 +378,11 @@
 }
 .position-inspector .match-moves-table th,
 .position-inspector .match-moves-table td {
-  font-size: 11px;
+  font-size: var(--font-size-table);
   padding: 9px 7px;
+}
+.position-inspector .match-moves-table th {
+  font-size: var(--font-size-table-heading);
 }
 .position-inspector .notes-panel {
   margin: 0;
@@ -396,7 +391,7 @@
   margin-bottom: 13px;
 }
 .position-inspector .annotation-panel h3 {
-  font-size: 17px;
+  font-size: var(--font-size-panel);
 }
 .position-inspector .annotation-fields {
   grid-template-columns: 1fr;
@@ -410,7 +405,7 @@
   border: 0;
 }
 .position-inspector .learning-add h3 {
-  font-size: 17px;
+  font-size: var(--font-size-panel);
 }
 .position-inspector .learning-inline-form,
 .position-inspector .learning-add-controls {
@@ -448,10 +443,10 @@
   margin-bottom: 22px;
 }
 .database-heading h1 {
-  font-size: 30px;
+  font-size: var(--font-size-page);
 }
 .database-heading p {
-  font-size: 13px;
+  font-size: var(--font-size-body);
   color: var(--ui-muted);
   margin-top: 7px;
 }
@@ -474,7 +469,7 @@
   margin-top: 0;
 }
 .database-count {
-  font-size: 12px;
+  font-size: var(--font-size-table);
   color: var(--ui-muted);
   margin: 18px 0 10px;
 }
@@ -498,15 +493,15 @@
 }
 .database-table th {
   padding: 12px 16px;
-  font-size: 11px;
-  font-weight: 550;
+  font-size: var(--font-size-table-heading);
+  font-weight: var(--font-weight-medium);
   color: var(--ui-muted);
   background: var(--ui-surface-alt);
 }
 .database-table td {
   padding: 12px 16px;
   border-top: 1px solid var(--ui-border);
-  font-size: 12px;
+  font-size: var(--font-size-table);
   vertical-align: middle;
 }
 .database-table tr.selected {
@@ -558,10 +553,10 @@
   background: var(--ui-surface);
 }
 .database-details h2 {
-  font-size: 20px;
+  font-size: var(--font-size-panel);
 }
 .database-details h3 {
-  font-size: 14px;
+  font-size: var(--font-size-panel);
   margin: 15px 0 10px;
 }
 .database-comment {
@@ -593,13 +588,10 @@
     padding-left: 31px;
   }
   .analysis-heading h1 {
-    font-size: 24px;
+    font-size: var(--font-size-page);
   }
 }
 @media (max-width: 960px) {
-  .app-tabs button {
-    padding: 8px 10px;
-  }
   .analysis-grid {
     grid-template-columns: 155px minmax(0, 1fr);
   }
@@ -642,17 +634,12 @@
     margin-left: auto;
   }
   .settings-trigger {
-    font-size: 11px;
+    font-size: var(--font-size-meta);
     padding: 8px;
   }
   .app-tabs {
     flex-basis: 100%;
     order: 3;
-  }
-  .app-tabs button {
-    flex: 1;
-    padding: 9px 8px;
-    font-size: 12px;
   }
   .app-body {
     padding: 17px 12px 12px;
@@ -662,13 +649,13 @@
     gap: 10px;
   }
   .analysis-heading h1 {
-    font-size: 21px;
+    font-size: var(--font-size-page);
   }
   .analysis-heading h1 span {
-    font-size: 15px;
+    font-size: var(--font-size-body);
   }
   .analysis-heading > button {
-    font-size: 11px;
+    font-size: var(--font-size-control);
     padding: 8px;
     flex-shrink: 0;
   }
@@ -740,13 +727,13 @@
     gap: 12px;
   }
   .database-heading h1 {
-    font-size: 25px;
+    font-size: var(--font-size-page);
   }
   .database-heading p {
-    font-size: 12px;
+    font-size: var(--font-size-table);
   }
   .database-heading > button {
-    font-size: 11px;
+    font-size: var(--font-size-control);
     padding: 8px;
   }
   .database-details {
@@ -760,7 +747,7 @@
     margin: 15px auto;
   }
   .analysis-welcome h1 {
-    font-size: 28px;
+    font-size: var(--font-size-page);
   }
 }
 
@@ -780,7 +767,7 @@
     margin-bottom: 12px;
   }
   .analysis-heading h1 {
-    font-size: 25px;
+    font-size: var(--font-size-page);
   }
   .analysis-heading p {
     margin-top: 5px;

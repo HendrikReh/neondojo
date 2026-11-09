@@ -25,7 +25,7 @@ export default function DatabaseSidebar({
           ＋
         </button>
       </div>
-      <div className="database-collections">
+      <div className="database-collections text-navigation text-navigation--stacked">
         <button
           className={!selected ? 'active' : ''}
           onClick={() => onSelect('')}

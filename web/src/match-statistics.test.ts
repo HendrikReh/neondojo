@@ -218,6 +218,7 @@ it('renders native source, partial coverage, precise games and missing legacy ga
     }),
   );
   expect(html).toContain('id="inspector-panel-statistics"');
+  expect(html.match(/<table/g)).toHaveLength(1);
   expect(html).toContain('aria-labelledby="inspector-tab-statistics"');
   expect(html).toContain('GNU Backgammon 1.08');
   expect(html).toContain('1 of 2 games');
@@ -266,5 +267,94 @@ it('single-game native summaries carry their source game in metric actions', () 
       player: 'Alice',
       metric: statisticsText('en', 'veryBad'),
     }),
+  );
+});
+
+it('typed error actions intersect kind, severity, player and source game', () => {
+  expect(
+    buildStatisticsFilter({
+      metric: 'bad',
+      kind: 'cube',
+      player: 1,
+      gameNo: 7,
+    }),
+  ).toEqual({
+    player: '1',
+    kind: 'cube',
+    severity: 'bad',
+    game_no: 7,
+    errors_only: true,
+  });
+  expect(
+    buildStatisticsFilter({
+      metric: 'inaccuracies',
+      kind: 'checker',
+      player: 0,
+    }),
+  ).toEqual({
+    player: '0',
+    kind: 'checker',
+    severity: '',
+    game_no: undefined,
+    errors_only: true,
+  });
+});
+
+it('renders a compact typed matrix with actionable zeros and preserves total metric labels', () => {
+  const html = renderToStaticMarkup(
+    createElement(I18nProvider, {
+      children: createElement(MatchStatisticsView, {
+        job,
+        names: ['Alice', 'Bob'],
+        onSelect: () => {},
+        statistics: {
+          job_id: job.id,
+          summary,
+          games: [],
+          error_breakdown: [0, 1].map((player) => ({
+            player,
+            checker: { doubtful: 1, bad: 0, very_bad: 0 },
+            cube: { doubtful: 0, bad: 1, very_bad: 0 },
+          })),
+        },
+      }),
+    }),
+  );
+  expect(html).toContain('class="statistics-error-matrix"');
+  expect(html).toContain('data-statistics-kind="checker"');
+  expect(html).toContain('data-statistics-kind="cube"');
+  expect(html).toContain('Show Alice: Bad');
+  expect(html).toContain('Show Alice: Cube · Bad');
+  expect(html).toMatch(
+    /data-statistics-kind="checker"[^>]*aria-label="Show Alice: Checker · Bad"[^>]*><strong>0<\/strong>/,
+  );
+});
+
+it('typed totals equal checker plus cube even when legacy summary severity counts differ', () => {
+  const html = renderToStaticMarkup(
+    createElement(I18nProvider, {
+      children: createElement(MatchStatisticsView, {
+        job,
+        names: ['Alice', 'Bob'],
+        onSelect: () => {},
+        statistics: {
+          job_id: job.id,
+          summary: {
+            ...summary,
+            players: summary.players.map((p) => ({ ...p, bad: 9 })),
+          },
+          games: [],
+          error_breakdown: [0, 1].map((player) => ({
+            player,
+            checker: { doubtful: 0, bad: 1, very_bad: 0 },
+            cube: { doubtful: 0, bad: 2, very_bad: 0 },
+          })),
+        },
+      }),
+    }),
+  );
+  expect(html).toMatch(/aria-label="Show Alice: Bad"[^>]*><strong>3<\/strong>/);
+  expect(html).not.toMatch(
+    /aria-label="Show Alice: Bad"[^>]*><strong>9<\/strong>/,
   );
 });

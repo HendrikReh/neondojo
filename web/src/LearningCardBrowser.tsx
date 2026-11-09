@@ -3,7 +3,10 @@ import Board, { type Theme } from './Board';
 import { matchContext } from './boardMath';
 import { useI18n } from './i18n';
 import { useLearningText } from './learning-messages';
-import type { CardQuestion } from './learning-api';
+import type { CardQuestion, Deck } from './learning-api';
+import type { CardBrowseContext } from './card-search-api';
+import { useCardSearchText } from './card-search-messages';
+import { usePositionText } from './position-browser-messages';
 import './learning-card-browser.css';
 
 export default function LearningCardBrowser({
@@ -13,14 +16,24 @@ export default function LearningCardBrowser({
   moreLoading,
   onMore,
   visible = true,
+  total,
+  loading = false,
+  decks = [],
 }: {
-  cards: readonly CardQuestion[];
+  cards: readonly (CardQuestion & { browse?: CardBrowseContext })[];
+  total?: number;
+  loading?: boolean;
+  decks?: readonly Pick<Deck, 'id' | 'name'>[];
   theme: Theme;
   hasMore: boolean;
   moreLoading: boolean;
   onMore: () => void;
   visible?: boolean;
 }) {
+  const searchT = useCardSearchText(),
+    p = usePositionText();
+  const deckName = (deck: { id: string; name: string }) =>
+    decks.find((item) => item.id === deck.id)?.name ?? deck.name;
   const t = useLearningText(),
     { t: uiT, formatNumber } = useI18n();
   const [selectedId, setSelectedId] = useState<string>();
@@ -52,12 +65,20 @@ export default function LearningCardBrowser({
   return (
     <div className="learning-card-browser">
       <div className="learning-card-list">
-        <h3>{t('cardList')}</h3>
+        <div className="learning-results-heading">
+          <h3>{p('results')}</h3>
+          <span role="status">
+            {searchT('found', { count: total ?? cards.length })}
+          </span>
+        </div>
         <div className="learning-card-table-scroll">
           <table>
             <thead>
               <tr>
                 <th scope="col">{t('question')}</th>
+                <th scope="col">{p('player')}</th>
+                <th scope="col">{p('opponent')}</th>
+                <th scope="col">{p('decks')}</th>
                 <th scope="col">{t('reviews')}</th>
               </tr>
             </thead>
@@ -67,6 +88,16 @@ export default function LearningCardBrowser({
                   key={card.id}
                   id={`learning-card-${card.id}`}
                   data-card-id={card.id}
+                  title={[
+                    question(card),
+                    card.players.join(' · '),
+                    card.position.position_id,
+                    card.browse?.decks.map(deckName).join(', '),
+                    card.browse?.tags.join(', '),
+                    card.browse?.comment_excerpt,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
                   tabIndex={0}
                   aria-selected={selected?.id === card.id}
                   className={
@@ -91,12 +122,24 @@ export default function LearningCardBrowser({
                     </button>
                     <small>{card.position.position_id}</small>
                   </td>
+                  <td>{card.players[card.position.player]}</td>
+                  <td>{card.players[1 - card.position.player]}</td>
+                  <td>
+                    {card.browse?.decks.length
+                      ? card.browse.decks.map(deckName).join(', ')
+                      : p('noDecks')}
+                  </td>
                   <td>{formatNumber(card.review_count)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        {!loading && !cards.length && (
+          <p className="learning-no-results" role="status">
+            {searchT('noResults')}
+          </p>
+        )}
         {hasMore && (
           <button disabled={moreLoading} onClick={onMore}>
             {t(moreLoading ? 'loading' : 'more')}
@@ -123,6 +166,11 @@ export default function LearningCardBrowser({
                 player: selected.players[selected.position.player],
               })}
             </p>
+            {selected.browse?.decks.length ? (
+              <p className="learning-preview-decks">
+                {p('decks')}: {selected.browse.decks.map(deckName).join(', ')}
+              </p>
+            ) : null}
             {selected.kind === 'cube_response' && (
               <p>{t('offeredCube', { value: context.cube * 2 })}</p>
             )}
@@ -134,6 +182,18 @@ export default function LearningCardBrowser({
                 theme={theme}
                 previewLabel={t('cardPreview')}
               />
+            )}
+            {!!selected.browse?.tags.length && (
+              <div className="learning-preview-tags">
+                {selected.browse.tags.map((tag) => (
+                  <span key={tag}>{tag}</span>
+                ))}
+              </div>
+            )}
+            {!!selected.browse?.comment_excerpt && (
+              <p className="learning-preview-comment">
+                {selected.browse.comment_excerpt}
+              </p>
             )}
           </>
         )}

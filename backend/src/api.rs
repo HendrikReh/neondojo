@@ -601,7 +601,7 @@ struct MoveAnalysisQuery {
     after: Option<i64>,
     /// Page size 1–100, defaults to 50.
     limit: Option<i64>,
-    /// Only decisions losing at least 0.04 normalized equity.
+    /// Exclude forced/unavailable decisions and require at least 0.04 normalized equity loss.
     #[serde(default)]
     errors_only: bool,
     /// 0 = White, 1 = Black.
@@ -646,21 +646,22 @@ async fn move_analyses(
         .await?;
     }
     if let Some(after) = query.after.filter(|n| *n > 0) {
-        let row: Option<(Uuid, i32, i32, String, f64, String)> = sqlx::query_as(
-            "SELECT job_id,game_no,player,kind,equity_loss,data->>'severity' FROM move_analyses WHERE id=$1",
+        let row: Option<(Uuid, i32, i32, String, f64, String, String)> = sqlx::query_as(
+            "SELECT job_id,game_no,player,kind,equity_loss,data->>'severity',COALESCE(data->>'evaluation_status','') FROM move_analyses WHERE id=$1",
         )
         .bind(after)
         .fetch_optional(&state.pool)
         .await
         .map_err(anyhow::Error::from)?;
-        let Some((job_id, game_no, player, kind, loss, severity)) = row else {
+        let Some((job_id, game_no, player, kind, loss, severity, evaluation_status)) = row else {
             return Err(ApiError::invalid("Unknown cursor"));
         };
         if job_id != id
             || query.game_no.is_some_and(|n| n != game_no)
             || query.player.is_some_and(|n| n != player)
             || query.kind.as_ref().is_some_and(|k| *k != kind)
-            || (query.errors_only && loss < 0.04)
+            || (query.errors_only
+                && (loss < 0.04 || matches!(evaluation_status.as_str(), "forced" | "unavailable")))
             || query.severity.is_some_and(|s| s.as_str() != severity)
         {
             return Err(ApiError::invalid("Cursor does not match the filters"));

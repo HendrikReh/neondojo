@@ -1,0 +1,54 @@
+.deck-management-dialog {
+  width: min(520px, calc(100vw - 32px));
+  padding: 24px;
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  box-shadow: 0 20px 80px var(--ui-shadow);
+}
+.deck-management-dialog::backdrop {
+  background: var(--ui-overlay);
+}
+.deck-management-dialog h2 {
+  margin: 0 0 12px;
+  font-size: var(--font-size-dialog);
+}
+.deck-management-dialog p {
+  line-height: 1.5;
+}
+.deck-management-details {
+  color: var(--ui-muted);
+  overflow-wrap: anywhere;
+}
+.deck-management-name {
+  display: grid;
+  gap: 8px;
+}
+.deck-management-name input {
+  width: 100%;
+}
+.deck-management-confirm {
+  display: flex;
+  align-items: start;
+  gap: 10px;
+  line-height: 1.5;
+}
+.deck-management-confirm input {
+  flex: none;
+  margin-top: 4px;
+}
+.deck-management-dialog [role='alert'] {
+  color: var(--ui-danger-text);
+}
+.deck-management-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 24px;
+}
+.deck-management-dialog .deck-management-delete {
+  background: var(--ui-danger-button);
+  color: var(--ui-danger-button-text);
+  border-color: var(--ui-danger-button);
+}

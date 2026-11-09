@@ -20,6 +20,8 @@ pub struct JobAnalysisStatistics {
     pub summary: Option<MatchAnalysisSummary>,
     /// Ordered source games in this job's scope. Coverage requires a committed game checkpoint.
     pub games: Vec<GameAnalysisStatistics>,
+    /// Typed errors in checkpointed games; null when durable decision coverage cannot be verified.
+    pub error_breakdown: Option<[PlayerErrorBreakdown; 2]>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -32,6 +34,22 @@ pub struct GameAnalysisStatistics {
     pub analyzed: bool,
     /// Null before checkpointing. Legacy checkpoints provide decision totals but no native game PR.
     pub summary: Option<MatchAnalysisSummary>,
+    /// Typed errors for this complete checkpoint; null for missing or inconsistent durable coverage.
+    pub error_breakdown: Option<[PlayerErrorBreakdown; 2]>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
+pub struct ErrorSeverityCounts {
+    pub doubtful: i32,
+    pub bad: i32,
+    pub very_bad: i32,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
+pub struct PlayerErrorBreakdown {
+    pub player: i32,
+    pub checker: ErrorSeverityCounts,
+    pub cube: ErrorSeverityCounts,
 }
 
 #[derive(FromRow)]
@@ -57,6 +75,9 @@ struct DecisionTotals {
     bad: i32,
     very_bad: i32,
     loss: f64,
+    errors_doubtful: i32,
+    errors_bad: i32,
+    errors_very_bad: i32,
 }
 
 pub fn routes() -> Router<AppState> {
@@ -137,12 +158,21 @@ async fn statistics(
             })
             .collect();
     }
-    let totals: Vec<DecisionTotals> = sqlx::query_as("SELECT m.game_no,m.player,m.kind,count(*)::integer AS decisions,count(*) FILTER(WHERE m.data->>'evaluation_status'='forced')::integer AS forced,count(*) FILTER(WHERE m.data->>'evaluation_status'='unavailable')::integer AS unavailable,count(*) FILTER(WHERE m.data->>'severity'='doubtful')::integer AS doubtful,count(*) FILTER(WHERE m.data->>'severity'='bad')::integer AS bad,count(*) FILTER(WHERE m.data->>'severity'='very_bad')::integer AS very_bad,sum(m.equity_loss) AS loss FROM move_analyses m JOIN match_analysis_games c ON c.job_id=m.job_id AND c.game_no=m.game_no WHERE m.job_id=$1 AND c.summary IS NULL AND ($2::integer IS NULL OR m.game_no=$2) GROUP BY m.game_no,m.player,m.kind")
+    let totals: Vec<DecisionTotals> = sqlx::query_as("SELECT m.game_no,m.player,m.kind,count(*)::integer AS decisions,count(*) FILTER(WHERE m.data->>'evaluation_status'='forced')::integer AS forced,count(*) FILTER(WHERE m.data->>'evaluation_status'='unavailable')::integer AS unavailable,count(*) FILTER(WHERE m.data->>'severity'='doubtful')::integer AS doubtful,count(*) FILTER(WHERE m.data->>'severity'='bad')::integer AS bad,count(*) FILTER(WHERE m.data->>'severity'='very_bad')::integer AS very_bad,sum(m.equity_loss) AS loss,count(*) FILTER(WHERE m.equity_loss>0 AND COALESCE(m.data->>'evaluation_status','') NOT IN ('forced','unavailable') AND m.data->>'severity'='doubtful')::integer AS errors_doubtful,count(*) FILTER(WHERE m.equity_loss>0 AND COALESCE(m.data->>'evaluation_status','') NOT IN ('forced','unavailable') AND m.data->>'severity'='bad')::integer AS errors_bad,count(*) FILTER(WHERE m.equity_loss>0 AND COALESCE(m.data->>'evaluation_status','') NOT IN ('forced','unavailable') AND m.data->>'severity'='very_bad')::integer AS errors_very_bad FROM move_analyses m JOIN match_analysis_games c ON c.job_id=m.job_id AND c.game_no=m.game_no WHERE m.job_id=$1 AND ($2::integer IS NULL OR m.game_no=$2) GROUP BY m.game_no,m.player,m.kind")
         .bind(id).bind(job.game_no).fetch_all(&mut *tx).await.map_err(anyhow::Error::from)?;
     tx.commit().await.map_err(anyhow::Error::from)?;
+    let all_totals: Vec<_> = totals.iter().collect();
+    // Legacy checkpoints have no per-game cube declaration. Their typed data
+    // is safe only while the job's declared coverage verifies all stored rows.
+    let legacy_coverage = summary.as_ref().is_some_and(|summary| {
+        summary.completed_games > 0
+            && summary.completed_games as usize == rows.iter().filter(|row| row.analyzed).count()
+            && covers_summary(summary, &all_totals)
+    });
     let games = rows
         .into_iter()
         .map(|row| {
+            let saved_summary = row.summary.is_some();
             let game_summary = if !row.analyzed {
                 None
             } else if let Some(saved) = row.summary {
@@ -185,6 +215,23 @@ async fn statistics(
                 }
                 Some(legacy)
             };
+            let game_totals: Vec<_> = totals.iter().filter(|t| t.game_no == row.game_no).collect();
+            let error_breakdown = game_summary.as_ref().and_then(|summary| {
+                let complete = if saved_summary {
+                    summary.total_games == 1
+                        && summary.completed_games == 1
+                        && covers_summary(summary, &game_totals)
+                } else {
+                    legacy_coverage
+                        && game_totals
+                            .iter()
+                            .filter(|t| t.kind == "checker")
+                            .map(|t| t.decisions)
+                            .sum::<i32>()
+                            == row.position_count
+                };
+                complete.then(|| typed_errors(&game_totals))
+            });
             Ok(GameAnalysisStatistics {
                 game_no: row.game_no,
                 white_score: row.white_score,
@@ -192,19 +239,88 @@ async fn statistics(
                 crawford: row.crawford,
                 analyzed: row.analyzed,
                 summary: game_summary,
+                error_breakdown,
             })
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
+    let checkpointed: Vec<_> = games.iter().filter(|game| game.analyzed).collect();
+    let error_breakdown = summary.as_ref().and_then(|summary| {
+        (summary.completed_games > 0
+            && summary.completed_games as usize == checkpointed.len()
+            && checkpointed
+                .iter()
+                .all(|game| game.error_breakdown.is_some())
+            && covers_summary(summary, &all_totals))
+        .then(|| typed_errors(&all_totals))
+    });
     Ok(Json(JobAnalysisStatistics {
         job_id: id,
         summary,
         games,
+        error_breakdown,
     }))
+}
+
+/// A saved summary is authoritative: incomplete decision storage must never
+/// turn a missing typed count into an apparently valid zero.
+fn covers_summary(summary: &MatchAnalysisSummary, totals: &[&DecisionTotals]) -> bool {
+    if summary.players.iter().map(|p| p.player).collect::<Vec<_>>() != [0, 1] {
+        return false;
+    }
+    let checker_count: i32 = totals
+        .iter()
+        .filter(|t| t.kind == "checker")
+        .map(|t| t.decisions)
+        .sum();
+    summary.analyzed_moves == checker_count
+        && summary.players.iter().all(|player| {
+            [
+                ("checker", player.checker_decisions),
+                ("cube", player.cube_decisions),
+            ]
+            .into_iter()
+            .all(|(kind, count)| {
+                count >= 0
+                    && totals
+                        .iter()
+                        .filter(|t| t.player == player.player && t.kind == kind)
+                        .map(|t| t.decisions)
+                        .sum::<i32>()
+                        == count
+            })
+        })
+}
+
+fn typed_errors(totals: &[&DecisionTotals]) -> [PlayerErrorBreakdown; 2] {
+    let mut players = [
+        PlayerErrorBreakdown::default(),
+        PlayerErrorBreakdown {
+            player: 1,
+            ..Default::default()
+        },
+    ];
+    for total in totals {
+        let player = &mut players[total.player as usize];
+        let counts = if total.kind == "checker" {
+            &mut player.checker
+        } else {
+            &mut player.cube
+        };
+        counts.doubtful += total.errors_doubtful;
+        counts.bad += total.errors_bad;
+        counts.very_bad += total.errors_very_bad;
+    }
+    players
 }
 
 #[derive(OpenApi)]
 #[openapi(
     paths(statistics),
-    components(schemas(JobAnalysisStatistics, GameAnalysisStatistics))
+    components(schemas(
+        JobAnalysisStatistics,
+        GameAnalysisStatistics,
+        PlayerErrorBreakdown,
+        ErrorSeverityCounts
+    ))
 )]
 pub struct StatisticsDoc;

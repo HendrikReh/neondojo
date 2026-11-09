@@ -3,11 +3,11 @@
 }
 .match-statistics h3 {
   margin-top: 0;
-  font-size: 17px;
+  font-size: var(--font-size-panel);
 }
 .statistics-source,
 .statistics-coverage {
-  font-size: 12px;
+  font-size: var(--font-size-table);
   line-height: 1.6;
   color: var(--ui-muted);
 }
@@ -34,7 +34,7 @@
   line-height: 1.35;
 }
 .statistics-metric span {
-  font-size: 10px;
+  font-size: var(--font-size-micro);
   overflow-wrap: anywhere;
 }
 .statistics-metric strong {
@@ -54,8 +54,8 @@
   background: transparent;
 }
 .statistics-metric-unavailable strong {
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--font-size-meta);
+  font-weight: var(--font-weight-medium);
 }
 .statistics-footnote {
   display: flex;
@@ -71,12 +71,12 @@
 .statistics-games-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 11px;
+  font-size: var(--font-size-table);
 }
 .statistics-games-table caption {
   text-align: left;
-  font-size: 14px;
-  font-weight: 650;
+  font-size: var(--font-size-panel);
+  font-weight: var(--font-weight-semibold);
   padding-bottom: 10px;
 }
 .statistics-games-table th,
@@ -93,7 +93,7 @@
   display: block;
   margin-top: 5px;
   white-space: nowrap;
-  font-weight: 400;
+  font-weight: var(--font-weight-normal);
 }
 .statistics-games-table .position-link {
   white-space: nowrap;
@@ -105,21 +105,123 @@
   padding: 5px;
 }
 .statistics-player-compact .statistics-metric strong {
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .statistics-player-compact .statistics-metric-unavailable strong {
-  font-size: 10px;
+  font-size: var(--font-size-micro);
 }
 .statistics-player-compact .statistics-footnote {
-  font-size: 10px;
+  font-size: var(--font-size-micro);
   color: var(--ui-muted);
 }
 .match-analysis-filters .statistics-reset {
   padding: 7px 10px;
-  font-size: 11px;
+  font-size: var(--font-size-control);
 }
 @media (max-width: 500px) {
   .statistics-metrics {
     gap: 5px;
+  }
+}
+
+/* Keep decision types visible together without repeating the severity labels. */
+.statistics-error-matrix {
+  display: grid;
+  grid-template-columns: minmax(min-content, 1.6fr) repeat(
+      3,
+      minmax(min-content, 1fr)
+    );
+  column-gap: 3px;
+  width: 100%;
+  margin-top: 7px;
+  font-size: var(--font-size-meta);
+  font-variant-numeric: tabular-nums;
+}
+.statistics-error-matrix [role='rowgroup'] {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+}
+.statistics-error-matrix [role='row'] {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 3px;
+  margin-top: 3px;
+}
+.statistics-error-matrix [role='columnheader'],
+.statistics-error-matrix [role='rowheader'] {
+  min-width: 0;
+  color: var(--ui-muted);
+  font-weight: var(--font-weight-medium);
+  text-align: center;
+  overflow-wrap: normal;
+}
+.statistics-error-matrix [role='columnheader'] {
+  font-size: var(--font-size-table-heading);
+  font-weight: var(--font-weight-semibold);
+}
+.statistics-error-matrix [role='rowheader'] {
+  font-weight: var(--font-weight-normal);
+}
+.statistics-error-matrix [role='rowheader'],
+.statistics-error-matrix [role='columnheader']:first-child {
+  text-align: left;
+}
+.match-statistics
+  .statistics-player
+  .statistics-error-matrix
+  .statistics-metric {
+  width: 100%;
+  min-height: 25px;
+  padding: 3px 1px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  line-height: 1.25;
+}
+.match-statistics .statistics-player .statistics-error-matrix strong {
+  font-size: var(--font-size-table);
+}
+.statistics-error-unavailable {
+  display: block;
+  padding: 4px 0;
+  color: var(--ui-muted);
+  text-align: center;
+  cursor: help;
+}
+.match-statistics .statistics-player-compact .statistics-metrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+}
+.match-statistics
+  .statistics-player-compact
+  .statistics-metrics
+  .statistics-metric {
+  min-height: 27px;
+  gap: 3px;
+}
+.match-statistics .statistics-player-compact .statistics-error-matrix {
+  margin-top: 4px;
+}
+@media (min-width: 1280px) {
+  .analysis-workspace.analysis-overview
+    .match-statistics
+    .statistics-player-compact
+    .statistics-metrics
+    .statistics-metric {
+    flex-direction: column;
+    align-items: flex-start;
+    min-height: 38px;
+  }
+  .analysis-workspace.analysis-overview
+    .match-statistics
+    .statistics-player-compact
+    .statistics-metrics
+    .statistics-metric
+    span {
+    font-size: var(--font-size-micro);
+    line-height: 1.2;
   }
 }

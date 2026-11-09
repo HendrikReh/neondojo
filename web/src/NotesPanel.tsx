@@ -83,7 +83,7 @@ export default function NotesPanel({
   return (
     <div className="notes-panel">
       <div
-        className="notes-scope-tabs"
+        className="notes-scope-tabs text-navigation text-navigation--compact"
         role="tablist"
         aria-label={t('scopeLabel')}
       >

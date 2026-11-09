@@ -345,6 +345,18 @@ fn openapi_documents_statistics_and_severity_values() {
         doc["components"]["schemas"]["GameAnalysisStatistics"]["properties"]["analyzed"]
             .is_object()
     );
+    for schema in ["JobAnalysisStatistics", "GameAnalysisStatistics"] {
+        let field = &doc["components"]["schemas"][schema]["properties"]["error_breakdown"];
+        assert!(
+            field.to_string().contains("PlayerErrorBreakdown"),
+            "{field}"
+        );
+    }
+    assert!(
+        doc["components"]["schemas"]["PlayerErrorBreakdown"]["properties"]["checker"]
+            .to_string()
+            .contains("ErrorSeverityCounts")
+    );
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -377,4 +389,191 @@ async fn statistics_read_legacy_source_catalog_without_writes(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(count, 0, "statistics reads do not mutate legacy catalogs");
+}
+
+fn breakdown(checker: [i32; 3], cube: [i32; 3], player: i32) -> Value {
+    json!({"player":player,"checker":{"doubtful":checker[0],"bad":checker[1],"very_bad":checker[2]},"cube":{"doubtful":cube[0],"bad":cube[1],"very_bad":cube[2]}})
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn typed_errors_use_all_checkpointed_games_and_preserve_legacy_json(pool: PgPool) {
+    let (_, app, match_id) = setup(&pool).await;
+    let job = store::create_match_job(&pool, match_id, 0, 3)
+        .await
+        .unwrap();
+    // Legacy checkpoint with no saved summary, plus a modern saved checkpoint.
+    decision(&pool, &job, 1, 1, 0, "checker", "doubtful", 0.04).await;
+    decision(&pool, &job, 1, 2, 0, "cube", "bad", 0.08).await;
+    decision(&pool, &job, 1, 3, 1, "checker", "none", 0.0).await;
+    decision(&pool, &job, 2, 1, 1, "cube", "very_bad", 0.2).await;
+    let good = decision(&pool, &job, 2, 2, 0, "checker", "none", 0.0).await;
+    let unavailable = decision(&pool, &job, 2, 3, 1, "checker", "bad", 0.1).await;
+    let forced = decision(&pool, &job, 2, 4, 0, "checker", "bad", 0.08).await;
+    let zero = decision(&pool, &job, 2, 5, 0, "cube", "very_bad", 0.0).await;
+    for (id, status) in [
+        (good, "evaluated"),
+        (unavailable, "unavailable"),
+        (forced, "forced"),
+        (zero, "evaluated"),
+    ] {
+        sqlx::query("UPDATE move_analyses SET data=jsonb_set(data,'{evaluation_status}',to_jsonb($2::text)) WHERE id=$1")
+            .bind(id).bind(status).execute(&pool).await.unwrap();
+    }
+    // A newer uncheckpointed game must never appear in any breakdown.
+    decision(&pool, &job, 3, 1, 0, "cube", "very_bad", 0.3).await;
+    let mut second = summary();
+    second["total_games"] = json!(1);
+    second["completed_games"] = json!(1);
+    second["analyzed_moves"] = json!(3);
+    second["players"] = json!([
+        {"player":0,"checker_decisions":2,"cube_decisions":1,"forced_moves":1,"unavailable":0,"doubtful":0,"bad":1,"very_bad":1,"checker_equity_loss":0.08,"cube_equity_loss":0.0},
+        {"player":1,"checker_decisions":1,"cube_decisions":1,"forced_moves":0,"unavailable":1,"doubtful":0,"bad":1,"very_bad":1,"checker_equity_loss":0.1,"cube_equity_loss":0.2}
+    ]);
+    second.as_object_mut().unwrap().remove("performance_rating");
+    sqlx::query(
+        "INSERT INTO match_analysis_games(job_id,game_no,summary) VALUES($1,1,NULL),($1,2,$2)",
+    )
+    .bind(job.id)
+    .bind(&second)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let mut saved = summary();
+    saved["completed_games"] = json!(2);
+    saved["analyzed_moves"] = json!(5);
+    saved["players"][0]["checker_decisions"] = json!(3);
+    saved["players"][0]["cube_decisions"] = json!(2);
+    saved["players"][1]["checker_decisions"] = json!(2);
+    saved["players"][1]["cube_decisions"] = json!(1);
+    sqlx::query("UPDATE jobs SET completed_games=2,result=$2 WHERE id=$1")
+        .bind(job.id)
+        .bind(&saved)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let uri = format!("/api/jobs/{}/statistics", job.id);
+    let (status, data) = get(app.clone(), &uri).await;
+    assert_eq!(status, 200, "{data}");
+    assert_eq!(
+        data["summary"], saved,
+        "existing aggregates remain authoritative"
+    );
+    assert_eq!(
+        data["error_breakdown"],
+        json!([
+            breakdown([1, 0, 0], [0, 1, 0], 0),
+            breakdown([0, 0, 0], [0, 0, 1], 1)
+        ])
+    );
+    assert_eq!(
+        data["games"][0]["error_breakdown"],
+        json!([
+            breakdown([1, 0, 0], [0, 1, 0], 0),
+            breakdown([0, 0, 0], [0, 0, 0], 1)
+        ])
+    );
+    assert_eq!(
+        data["games"][1]["error_breakdown"],
+        json!([
+            breakdown([0, 0, 0], [0, 0, 0], 0),
+            breakdown([0, 0, 0], [0, 0, 1], 1)
+        ])
+    );
+    assert!(data["games"][2]["error_breakdown"].is_null());
+    assert!(data["games"][1]["summary"]["performance_rating"].is_null());
+    let persisted: Value = sqlx::query_scalar(
+        "SELECT summary FROM match_analysis_games WHERE job_id=$1 AND game_no=2",
+    )
+    .bind(job.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        persisted, second,
+        "statistics must not migrate persisted JSON"
+    );
+    // Error drilldowns exclude forced/unavailable decisions, but history retains them.
+    let base = format!("/api/jobs/{}/moves", job.id);
+    let (_, errors) = get(app.clone(), &format!("{base}?errors_only=true&game_no=2")).await;
+    let ids: Vec<_> = errors["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["id"].as_i64().unwrap())
+        .collect();
+    assert!(!ids.contains(&forced));
+    assert!(!ids.contains(&unavailable));
+    assert!(!ids.contains(&zero));
+    for cursor in [forced, unavailable] {
+        assert_eq!(
+            get(
+                app.clone(),
+                &format!("{base}?errors_only=true&game_no=2&after={cursor}")
+            )
+            .await
+            .0,
+            422
+        );
+    }
+    let (_, history) = get(app.clone(), &format!("{base}?errors_only=false&game_no=2")).await;
+    assert_eq!(history["items"].as_array().unwrap().len(), 5);
+    // Missing durable coverage makes a typed value unavailable, rather than zero.
+    sqlx::query("DELETE FROM move_analyses WHERE id=$1")
+        .bind(good)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (_, inconsistent) = get(app, &uri).await;
+    assert!(inconsistent["error_breakdown"].is_null());
+    assert!(inconsistent["games"][1]["error_breakdown"].is_null());
+    assert!(
+        inconsistent["games"][0]["error_breakdown"].is_null(),
+        "legacy per-game cube coverage depends on the verified job declaration"
+    );
+    assert_eq!(inconsistent["summary"], saved);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn legacy_cube_only_checkpoint_needs_declared_durable_coverage(pool: PgPool) {
+    let (_, app, match_id) = setup(&pool).await;
+    let job = store::create_match_job_scoped(&pool, match_id, 0, 1, Some(2))
+        .await
+        .unwrap();
+    let cube = decision(&pool, &job, 2, 1, 1, "cube", "bad", 0.08).await;
+    let mut saved = summary();
+    saved["total_games"] = json!(1);
+    saved["analyzed_moves"] = json!(0);
+    saved["total_moves"] = json!(0);
+    saved["players"][0]["checker_decisions"] = json!(0);
+    saved["players"][0]["cube_decisions"] = json!(0);
+    saved["players"][1]["checker_decisions"] = json!(0);
+    saved["players"][1]["cube_decisions"] = json!(1);
+    sqlx::query("INSERT INTO match_analysis_games(job_id,game_no) VALUES($1,2)")
+        .bind(job.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE jobs SET completed_games=1,result=$2 WHERE id=$1")
+        .bind(job.id)
+        .bind(&saved)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let uri = format!("/api/jobs/{}/statistics", job.id);
+    let (_, before) = get(app.clone(), &uri).await;
+    assert_eq!(before["games"][0]["error_breakdown"][1]["cube"]["bad"], 1);
+    sqlx::query("DELETE FROM move_analyses WHERE id=$1")
+        .bind(cube)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (_, after) = get(app, &uri).await;
+    assert!(after["error_breakdown"].is_null());
+    assert!(
+        after["games"][0]["error_breakdown"].is_null(),
+        "a missing cube decision must not become a legacy per-game zero"
+    );
+    assert_eq!(after["summary"], saved);
 }

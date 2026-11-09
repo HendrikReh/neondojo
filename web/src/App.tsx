@@ -341,7 +341,11 @@ export default function App() {
           </span>
           <span>BG Tutor</span>
         </a>
-        <nav className="app-tabs" role="tablist" aria-label={w('navigation')}>
+        <nav
+          className="app-tabs text-navigation"
+          role="tablist"
+          aria-label={w('navigation')}
+        >
           {views.map((tab) => (
             <button
               key={tab}
@@ -370,7 +374,18 @@ export default function App() {
             className="settings-trigger"
             onClick={() => setSettingsOpen(true)}
           >
-            <span aria-hidden="true">⚙</span>
+            <svg
+              aria-hidden="true"
+              focusable="false"
+              viewBox="0 0 20 20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
+              <path d="M2 5h4m4 0h8M2 15h8m4 0h4" />
+              <circle cx="8" cy="5" r="2" />
+              <circle cx="12" cy="15" r="2" />
+            </svg>
             {w('settings')}
           </button>
         </div>
@@ -384,9 +399,7 @@ export default function App() {
           onChange={(event) => void upload(event.target.files ?? undefined)}
         />
       </header>
-      <main
-        className={`app-body${view === 'analysis' ? ' app-body-analysis' : view === 'database' ? ' app-body-database' : view === 'positions' ? ' app-body-positions' : ''}`}
-      >
+      <main className={`app-body app-body-${view}`}>
         {!!(error || navigation.error) && (
           <div className="error" role="alert">
             {formatError(error || navigation.error)}
@@ -461,7 +474,6 @@ export default function App() {
             theme={theme}
             defaultPlies={settings?.analysis_plies ?? DEFAULT_ANALYSIS_PLIES}
             sourceRevision={bookRevision}
-            onBookSettings={() => setBookOpen(true)}
             configured={!!settings}
             detail={detail}
             onDetail={setDetail}

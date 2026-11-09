@@ -354,6 +354,7 @@ export default function MatchAnalysisPanel({
                 <>
                   <PlayerStatisticsSummary
                     summary={summary}
+                    errorBreakdown={statistics?.error_breakdown}
                     names={names}
                     onSelect={selectMetric}
                     gameNo={job.game_no ?? undefined}

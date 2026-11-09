@@ -8,18 +8,18 @@
 }
 .position-browser h1 {
   margin: 0;
-  font-size: 27px;
+  font-size: var(--font-size-page);
 }
 .position-browser-heading p {
   color: var(--ui-muted);
   margin: 8px 0 22px;
 }
 .position-browser h2 {
-  font-size: 17px;
+  font-size: var(--font-size-panel);
   margin: 0 0 12px;
 }
 .position-browser h3 {
-  font-size: 15px;
+  font-size: var(--font-size-panel);
 }
 .position-browser .visually-hidden {
   position: absolute;
@@ -55,7 +55,7 @@
   display: grid;
   gap: 5px;
   color: var(--ui-text);
-  font-size: 12px;
+  font-size: var(--font-size-label);
 }
 .position-controls input,
 .position-controls select,
@@ -69,7 +69,7 @@
   min-width: 0;
   width: 100%;
   font: inherit;
-  font-size: 14px;
+  font-size: var(--font-size-control);
 }
 .position-saved-searches {
   border-bottom: 1px solid var(--ui-border);
@@ -79,8 +79,8 @@
 .position-controls summary {
   cursor: pointer;
   color: var(--ui-text);
-  font-size: 13px;
-  font-weight: 650;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
 }
 .position-saved-controls {
   display: flex;
@@ -93,7 +93,7 @@
   flex: 1 1 200px;
 }
 .position-saved-searches p {
-  font-size: 13px;
+  font-size: var(--font-size-body);
   margin-bottom: 0;
 }
 .position-unsaved {
@@ -147,7 +147,7 @@
   gap: 12px;
 }
 .position-result-heading span {
-  font-size: 12px;
+  font-size: var(--font-size-table);
   color: var(--ui-muted);
 }
 .position-selection-summary {
@@ -156,7 +156,7 @@
   flex-wrap: wrap;
   gap: 8px 12px;
   margin-bottom: 9px;
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .position-selection-summary small {
   width: 100%;
@@ -174,7 +174,7 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  font-size: 13px;
+  font-size: var(--font-size-label);
   color: var(--ui-text);
   cursor: pointer;
 }
@@ -196,7 +196,7 @@
   table-layout: fixed;
   border-collapse: collapse;
   text-align: left;
-  font-size: 12px;
+  font-size: var(--font-size-table);
   line-height: 20px;
 }
 .position-browser .position-table-played {
@@ -250,10 +250,10 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
   background: var(--ui-surface-alt);
   color: var(--ui-muted);
-  font-size: 11px;
+  font-size: var(--font-size-table-heading);
   padding: 5px 8px;
   white-space: nowrap;
   border-bottom: 1px solid var(--ui-border);
@@ -304,7 +304,7 @@
   background: transparent;
   color: var(--ui-text);
   text-align: left;
-  font-size: 12px;
+  font-size: var(--font-size-table);
   line-height: 24px;
 }
 .position-match-number {
@@ -315,10 +315,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--ui-muted);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .position-player {
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
   color: var(--ui-text);
 }
 .position-row-notes,
@@ -342,7 +342,7 @@
   color: var(--ui-accent);
   border-radius: 3px;
   padding: 0 5px;
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .position-row-comment {
   min-width: 0;
@@ -365,7 +365,7 @@
 .position-page-select .position-width-reset {
   margin-left: auto;
   padding: 4px 8px;
-  font-size: 11px;
+  font-size: var(--font-size-control);
   background: transparent;
 }
 .position-hit-notes {
@@ -374,14 +374,14 @@
 }
 .position-hit-notes p {
   margin: 5px 0;
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .position-hit-notes .annotation-tags {
   margin: 0;
   gap: 4px;
 }
 .position-hit-notes .tag-chip {
-  font-size: 10px;
+  font-size: var(--font-size-micro);
   padding: 2px 6px;
 }
 .position-native-error {
@@ -391,29 +391,29 @@
 .position-native-error small {
   display: block;
   overflow-wrap: anywhere;
-  font-size: 10px;
+  font-size: var(--font-size-micro);
   color: var(--ui-danger-text);
 }
 .position-unknown {
   color: var(--ui-muted);
-  font-size: 12px;
+  font-size: var(--font-size-table);
 }
 .position-analysis-needed {
   color: var(--ui-warning-text);
-  font-size: 12px;
+  font-size: var(--font-size-table);
   line-height: 1.5;
 }
 .position-preview-players {
   display: grid;
   gap: 4px;
-  font-size: 12px;
+  font-size: var(--font-size-table);
   margin: 10px 0;
 }
 .position-preview-players span {
   color: var(--ui-muted);
 }
 .position-preview-played {
-  font-size: 12px;
+  font-size: var(--font-size-table);
   padding: 8px;
   background: var(--ui-surface-alt);
   border-radius: 5px;
@@ -433,7 +433,7 @@
 }
 .position-preview-context {
   color: var(--ui-muted);
-  font-size: 12px;
+  font-size: var(--font-size-table);
   margin: 6px 0 16px;
   overflow-wrap: anywhere;
 }
@@ -443,13 +443,13 @@
 .position-before-label {
   text-align: center;
   color: var(--ui-muted);
-  font-size: 11px;
+  font-size: var(--font-size-label);
   margin: 10px 0 16px;
 }
 .position-context-details {
   display: grid;
   gap: 5px;
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   margin: 14px 0;
 }
 .position-context-details div {
@@ -474,10 +474,10 @@
 }
 .position-pagination span {
   color: var(--ui-muted);
-  font-size: 12px;
+  font-size: var(--font-size-table);
 }
 .position-pagination button {
-  font-size: 12px;
+  font-size: var(--font-size-control);
 }
 .position-empty {
   padding: 38px 20px;
@@ -493,7 +493,7 @@
   padding: 17px;
 }
 .position-deck-panel > p {
-  font-size: 12px;
+  font-size: var(--font-size-table);
   color: var(--ui-muted);
   line-height: 1.5;
 }
@@ -511,7 +511,7 @@
 }
 .position-deck-controls button,
 .position-create-deck button {
-  font-size: 12px;
+  font-size: var(--font-size-control);
 }
 .position-deck-export {
   display: flex;
@@ -522,7 +522,7 @@
   border-top: 1px solid var(--ui-border);
 }
 .position-deck-export small {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   color: var(--ui-muted);
 }
 .position-transfer-results {
@@ -545,7 +545,7 @@
   background: var(--ui-surface);
   border: 1px solid var(--ui-border);
   border-radius: 7px;
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .position-transfer-results li > span {
   flex: 1 1 160px;
@@ -572,7 +572,7 @@
 }
 @media (max-width: 700px) {
   .position-browser h1 {
-    font-size: 23px;
+    font-size: var(--font-size-page);
   }
   .position-search-row {
     grid-template-columns: minmax(0, 1fr);
@@ -630,7 +630,7 @@
 
 .position-source-removed {
   color: var(--ui-muted);
-  font-size: 12px;
+  font-size: var(--font-size-table);
   line-height: 1.4;
   margin: 8px 0;
 }

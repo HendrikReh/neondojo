@@ -19,7 +19,6 @@ export default function AnalysisPanel({
   defaultPlies = DEFAULT_ANALYSIS_PLIES,
   positionId,
   sourceRevision = 0,
-  onBookSettings,
   onPreview,
   selectedPreview,
 }: {
@@ -31,7 +30,6 @@ export default function AnalysisPanel({
   defaultPlies?: number;
   positionId?: string;
   sourceRevision?: number;
-  onBookSettings: () => void;
   onPreview?: (candidate: PreviewCandidate | null) => void;
   selectedPreview?: PreviewCandidate;
 }) {
@@ -184,7 +182,11 @@ export default function AnalysisPanel({
           {t('analysis.retryHint')}
         </div>
       )}
-      <div className="tabs" role="tablist" aria-label={t('analysis.views')}>
+      <div
+        className="tabs text-navigation text-navigation--compact"
+        role="tablist"
+        aria-label={t('analysis.views')}
+      >
         <button
           role="tab"
           aria-selected={view === 'analysis'}
@@ -211,12 +213,9 @@ export default function AnalysisPanel({
         <>
           <div className="analysis-source-tools">
             <span className="eyebrow">{l('sources')}</span>
-            <button type="button" onClick={onBookSettings}>
-              {l('books')}
-            </button>
           </div>
           <div
-            className="analysis-source-tabs"
+            className="analysis-source-tabs text-navigation text-navigation--compact"
             role="tablist"
             aria-label={l('sources')}
           >

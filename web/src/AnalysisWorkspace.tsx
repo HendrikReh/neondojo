@@ -26,7 +26,7 @@ import { useI18n } from './i18n';
 import { useWorkspaceText } from './workspace-messages';
 import type { AnnotationKind } from './annotation-api';
 import { useMoveAssessments } from './useMoveAssessments';
-import { useSourceText } from './analysis-source-messages';
+import MoveHistoryRow from './MoveHistoryRow';
 import AnalysisMatchHeader from './AnalysisMatchHeader';
 import { hasMatchSource } from './match-source';
 import { useAnalysisMatchHeaderText } from './analysis-match-header-messages';
@@ -36,12 +36,6 @@ import { displayedBoardPosition } from './displayed-board';
 
 export type AnalysisDetail =
   'overview' | 'evaluation' | 'statistics' | 'errors' | 'notes' | 'cards';
-const severityLabels = {
-  none: 'severity.none',
-  doubtful: 'severity.doubtful',
-  bad: 'severity.bad',
-  very_bad: 'severity.very_bad',
-} as const;
 const detailTabs: AnalysisDetail[] = [
   'overview',
   'evaluation',
@@ -60,7 +54,6 @@ export default function AnalysisWorkspace({
   metadataRevision,
   bookmarkRevision,
   onBookmarkChanged,
-  onBookSettings,
   configured,
   detail: requestedDetail,
   onDetail,
@@ -85,7 +78,6 @@ export default function AnalysisWorkspace({
   metadataRevision?: number;
   bookmarkRevision: number;
   onBookmarkChanged: () => void;
-  onBookSettings: () => void;
   configured: boolean;
   detail: AnalysisDetail;
   onDetail: (detail: AnalysisDetail) => void;
@@ -101,12 +93,10 @@ export default function AnalysisWorkspace({
   welcome: ReactNode;
   active?: boolean;
 }) {
-  const { t, formatNumber, formatEquity, formatDecision, formatError } =
-    useI18n();
+  const { t, formatNumber, formatDecision, formatError } = useI18n();
   const w = useWorkspaceText();
   const review = useBoardReviewText();
   const statistics = useStatisticsText();
-  const sourceText = useSourceText();
   const headerText = useAnalysisMatchHeaderText();
   const { match, game, games, positions, position, index, loading, stats } =
     navigation;
@@ -282,7 +272,7 @@ export default function AnalysisWorkspace({
         )}
       </div>
       <div
-        className="inspector-tabs analysis-detail-navigation"
+        className="inspector-tabs analysis-detail-navigation text-navigation text-navigation--compact"
         role="tablist"
         aria-label={w('positionDetails')}
       >
@@ -316,49 +306,17 @@ export default function AnalysisWorkspace({
             <span>{formatNumber(game?.position_count ?? 0)}</span>
           </div>
           <div className="moves-list" ref={moveList}>
-            {positions.map((p, i) => {
-              const assessment = moveAssessments.assessments[p.id];
-              const description = assessment
-                ? `${t(severityLabels[assessment.severity])} · Δ ${formatEquity(assessment.equity_loss)} · ${sourceText(assessment.source === 'imported' ? 'imported' : 'engine')} · ${assessment.engine}${assessment.depth ? ` · ${assessment.depth}` : ''}`
-                : undefined;
-              return (
-                <button
-                  key={p.id}
-                  ref={i === index ? currentMove : undefined}
-                  className={`${i === index ? 'current' : ''}${assessment ? ` move-assessment-${assessment.severity}` : ''}`}
-                  data-position-id={p.id}
-                  data-assessment-source={assessment?.source}
-                  aria-current={i === index ? 'step' : undefined}
-                  onClick={() => navigation.selectIndex(i)}
-                >
-                  <span className="move-no">
-                    {p.game_no}.{p.ply}
-                  </span>
-                  <i
-                    className={`player-dot ${p.player === 0 ? 'white' : 'black'}`}
-                  />
-                  <span className="move-dice">{p.dice.join('–')}</span>
-                  <strong>{formatDecision(p.notation)}</strong>
-                  {assessment && (
-                    <span
-                      className="move-assessment-marker"
-                      title={description}
-                    >
-                      <span aria-hidden="true">
-                        {assessment.severity === 'none'
-                          ? '✓'
-                          : assessment.severity === 'doubtful'
-                            ? '?!'
-                            : assessment.severity === 'bad'
-                              ? '?'
-                              : '??'}
-                      </span>
-                      <span className="sr-only">{description}</span>
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+            {positions.map((p, i) => (
+              <MoveHistoryRow
+                key={p.id}
+                position={p}
+                players={[match.white, match.black]}
+                assessment={moveAssessments.assessments[p.id]}
+                current={i === index}
+                buttonRef={i === index ? currentMove : undefined}
+                onSelect={() => navigation.selectIndex(i)}
+              />
+            ))}
           </div>
           {!!moveAssessments.error && (
             <p className="move-assessment-error" role="alert">
@@ -508,7 +466,6 @@ export default function AnalysisWorkspace({
               defaultPlies={defaultPlies}
               positionId={position?.id}
               sourceRevision={sourceRevision}
-              onBookSettings={onBookSettings}
               onPreview={onPreview}
               selectedPreview={selectedPreview}
               disabled={!position || jobs.submitting || !configured}

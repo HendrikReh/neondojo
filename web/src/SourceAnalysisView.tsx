@@ -101,7 +101,7 @@ export default function SourceAnalysisView({
             : 'backgammondb'));
   const bookControls =
     source === 'book' ? (
-      <div className="source-book-selector">
+      <div className="source-book-selector text-navigation text-navigation--compact">
         <button
           type="button"
           aria-pressed={selectedBook === 'backgammondb'}
@@ -194,7 +194,7 @@ export default function SourceAnalysisView({
             </p>
           )}
           {book?.hit ? (
-            <div className="source-decision-buttons">
+            <div className="source-decision-buttons text-navigation text-navigation--compact">
               <button
                 aria-pressed={selectedDecision === 'checker'}
                 disabled={!book.checker}

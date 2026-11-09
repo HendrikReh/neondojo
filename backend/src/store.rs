@@ -511,7 +511,7 @@ pub async fn move_analyses_filtered(
         q.push(" AND game_no=").push_bind(game_no);
     }
     if errors_only {
-        q.push(" AND equity_loss>=0.04");
+        q.push(" AND equity_loss>=0.04 AND COALESCE(data->>'evaluation_status','') NOT IN ('forced','unavailable')");
     }
     if let Some(player) = player {
         q.push(" AND player=").push_bind(player);

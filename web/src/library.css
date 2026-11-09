@@ -20,7 +20,7 @@
   background: var(--ui-surface);
 }
 .database-sidebar h2 {
-  font-size: 16px;
+  font-size: var(--font-size-panel);
   margin: 0;
 }
 .database-sidebar .section-heading {
@@ -36,13 +36,6 @@
   gap: 8px;
   text-align: left;
   width: 100%;
-  padding: 11px 9px;
-  border: 0;
-  background: transparent;
-}
-.database-collections button.active {
-  background: var(--ui-selected);
-  color: var(--ui-accent);
 }
 .database-collections button span {
   overflow-wrap: anywhere;
@@ -60,14 +53,14 @@
   gap: 7px;
 }
 .database-collection-actions p {
-  font-size: 12px;
+  font-size: var(--font-size-table);
   color: var(--ui-muted);
   overflow-wrap: anywhere;
   margin: 4px 0;
 }
 .database-collection-actions button {
   text-align: left;
-  font-size: 12px;
+  font-size: var(--font-size-control);
 }
 .library-search-toolbar {
   display: flex;
@@ -93,7 +86,7 @@
 .move-notes-selector {
   display: grid;
   gap: 5px;
-  font-size: 12px;
+  font-size: var(--font-size-label);
   color: var(--ui-text);
 }
 .library-filters input,
@@ -128,7 +121,7 @@
   margin-bottom: 12px;
 }
 .library-batch-bar strong {
-  font-size: 12px;
+  font-size: var(--font-size-table);
   margin-right: auto;
 }
 .library-action-result {
@@ -137,7 +130,7 @@
   border-radius: 8px;
   padding: 12px;
   margin-bottom: 12px;
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .library-content,
 .library-content > div {
@@ -159,7 +152,7 @@
   padding: 4px 8px;
   border: 1px solid var(--ui-border);
   border-radius: 5px;
-  font-size: 12px;
+  font-size: var(--font-size-table);
   background: var(--ui-surface);
 }
 .library-column-menu {
@@ -173,7 +166,7 @@
   border: 1px solid var(--ui-border);
   border-radius: 8px;
   box-shadow: 0 8px 24px var(--ui-shadow);
-  font-size: 12px;
+  font-size: var(--font-size-table);
 }
 .library-column-options {
   display: grid;
@@ -192,7 +185,7 @@
 .library-column-menu small,
 .library-hidden-sort {
   color: var(--ui-muted);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .library-column-menu-actions {
   display: flex;
@@ -201,11 +194,11 @@
 }
 .library-column-menu-actions button {
   padding: 4px 8px;
-  font-size: 11px;
+  font-size: var(--font-size-control);
 }
 .library-width-reset {
   padding: 4px 8px;
-  font-size: 11px;
+  font-size: var(--font-size-control);
   background: transparent;
 }
 .library-column-resizer {
@@ -250,7 +243,7 @@
   min-width: 1400px;
   width: 100%;
   table-layout: fixed;
-  font-size: 12px;
+  font-size: var(--font-size-table);
   line-height: 20px;
 }
 .library-col-select {
@@ -302,7 +295,7 @@
   z-index: 1;
   white-space: nowrap;
   padding: 5px 8px;
-  font-size: 11px;
+  font-size: var(--font-size-table-heading);
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -336,7 +329,7 @@
 }
 .database-table th button[aria-pressed='true'] {
   color: var(--ui-accent);
-  font-weight: 650;
+  font-weight: var(--font-weight-semibold);
 }
 .database-table th button[aria-pressed='true'] .library-sort-indicator {
   color: inherit;
@@ -372,7 +365,7 @@
   gap: 5px;
   overflow: hidden;
   line-height: 20px;
-  font-size: 12px;
+  font-size: var(--font-size-table);
 }
 .library-match-player,
 .library-match-title {
@@ -387,13 +380,13 @@
 .library-match-title {
   flex: 0 2 auto;
   color: var(--ui-muted);
-  font-weight: 400;
-  font-size: 11px;
+  font-weight: var(--font-weight-normal);
+  font-size: var(--font-size-meta);
 }
 .match-database .database-table .library-id-cell,
 .match-database .database-table .library-pr-cell {
   text-align: right;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
 }
 .match-database .database-table tr:focus-within td {
   background: var(--ui-selected);
@@ -440,7 +433,7 @@
   padding: 0 5px;
   color: var(--ui-accent);
   background: var(--ui-selected);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   line-height: 20px;
 }
 .library-note-comment {
@@ -472,11 +465,11 @@
 .match-database .library-row-actions a {
   display: block;
   margin: 0;
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   white-space: nowrap;
 }
 .library-pr-help {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   line-height: 1.5;
   color: var(--ui-muted);
   margin-top: 12px;
@@ -508,7 +501,7 @@
   max-width: 560px;
 }
 .library-dialog h2 {
-  font-size: 20px;
+  font-size: var(--font-size-dialog);
   margin: 0 0 14px;
 }
 .library-dialog-form {
@@ -516,7 +509,7 @@
   gap: 15px;
 }
 .library-dialog-form label {
-  font-size: 13px;
+  font-size: var(--font-size-label);
 }
 .library-dialog-form textarea {
   min-height: 90px;
@@ -540,7 +533,7 @@
   border-color: var(--ui-danger-button);
 }
 .library-dialog p {
-  font-size: 13px;
+  font-size: var(--font-size-body);
   line-height: 1.6;
 }
 .move-notes-content {
@@ -562,7 +555,7 @@
   padding-top: 10px;
 }
 .notes-game-actions button {
-  font-size: 12px;
+  font-size: var(--font-size-control);
 }
 .import-results {
   margin: 12px 0;
@@ -574,10 +567,10 @@
 .import-results ul {
   margin: 8px 0 0;
   padding-left: 20px;
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .import-results .section-heading h2 {
-  font-size: 15px;
+  font-size: var(--font-size-panel);
   margin: 0;
 }
 .database-heading > div:last-child {
@@ -587,7 +580,7 @@
   align-items: center;
 }
 .database-heading small {
-  font-size: 12px;
+  font-size: var(--font-size-table);
   color: var(--ui-muted);
 }
 @media (max-width: 1200px) {
@@ -635,7 +628,7 @@
     grid-template-columns: minmax(0, 1fr);
   }
   .library-batch-bar button {
-    font-size: 11px;
+    font-size: var(--font-size-control);
   }
   .library-search-toolbar .search-box {
     min-width: 0;
@@ -647,13 +640,13 @@
   align-items: center;
   gap: 9px;
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--font-size-table);
   color: var(--ui-muted);
 }
 .library-position-filter code {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .library-position-filter button {
   padding: 4px 7px;
-  font-size: 11px;
+  font-size: var(--font-size-control);
 }

@@ -1,7 +1,7 @@
 .analysis-retained-context {
   margin: 0 0 9px;
   color: var(--ui-muted);
-  font-size: 12px;
+  font-size: var(--font-size-table);
 }
 
 @media (min-width: 961px) {

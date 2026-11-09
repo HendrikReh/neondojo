@@ -323,7 +323,10 @@ export default function SettingsDialog({
           </button>
         </header>
         <div className="settings-layout">
-          <nav className="settings-categories" aria-label={t('categories')}>
+          <nav
+            className="settings-categories text-navigation text-navigation--stacked"
+            aria-label={t('categories')}
+          >
             {(
               ['general', 'appearance', 'analysis', 'play', 'board'] as const
             ).map((name) => (

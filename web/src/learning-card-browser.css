@@ -65,11 +65,11 @@
   background: var(--ui-surface);
 }
 .learning-card-preview h4 {
-  font-size: 16px;
+  font-size: var(--font-size-subject);
   margin: 0 0 8px;
 }
 .learning-card-preview p {
-  font-size: 12px;
+  font-size: var(--font-size-table);
   line-height: 1.5;
   color: var(--ui-muted);
 }

@@ -143,7 +143,7 @@ textarea:focus-visible {
 }
 .ui-appearance-preview figcaption {
   padding: 10px 16px;
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   color: var(--ui-muted);
   border-bottom: 1px solid var(--ui-border);
 }
@@ -154,13 +154,16 @@ textarea:focus-visible {
   padding: 14px 16px;
   background: var(--ui-surface);
   border-bottom: 1px solid var(--ui-border);
-  font-size: 12px;
+  font-size: var(--font-size-table);
 }
 .ui-preview-tab {
-  padding: 6px 10px;
-  border-radius: 5px;
-  color: var(--ui-accent-text);
-  background: var(--ui-accent);
+  padding: 6px 0;
+  border: 0;
+  border-bottom: 2px solid var(--ui-accent);
+  border-radius: 0;
+  color: var(--ui-accent);
+  background: transparent;
+  font-weight: var(--font-weight-semibold);
 }
 .ui-preview-content {
   padding: 18px;
@@ -173,14 +176,14 @@ textarea:focus-visible {
 }
 .ui-preview-heading > span {
   color: var(--ui-muted);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .ui-preview-card {
   padding: 14px;
   border: 1px solid var(--ui-border);
   border-radius: 7px;
   background: var(--ui-surface);
-  font-size: 12px;
+  font-size: var(--font-size-table);
 }
 .ui-preview-card table {
   width: 100%;
@@ -191,7 +194,7 @@ textarea:focus-visible {
 .ui-preview-card th {
   color: var(--ui-muted);
   background: var(--ui-surface-alt);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 .ui-preview-card td,
 .ui-preview-card th {
@@ -211,7 +214,7 @@ textarea:focus-visible {
   padding: 2px 5px;
   margin-left: 8px;
   border-radius: 3px;
-  font-size: 10px;
+  font-size: var(--font-size-table);
 }
 .ui-preview-success {
   color: var(--ui-success-text);

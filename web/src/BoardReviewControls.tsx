@@ -21,7 +21,11 @@ export default function BoardReviewControls({
     { formatDecision } = useI18n();
   return (
     <div className="board-review-controls">
-      <div className="board-view-buttons" role="group" aria-label={l('views')}>
+      <div
+        className="board-view-buttons text-navigation text-navigation--compact"
+        role="group"
+        aria-label={l('views')}
+      >
         {(['before', 'arrows', 'after'] as const).map((mode) => (
           <button
             type="button"

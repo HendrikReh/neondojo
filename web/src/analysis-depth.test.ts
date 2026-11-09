@@ -28,7 +28,6 @@ it('defaults position search to two plies and offers three and four plies', () =
         stats: null,
         disabled: false,
         onAnalyze: () => {},
-        onBookSettings: () => {},
       }),
     }),
   );

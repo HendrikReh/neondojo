@@ -118,7 +118,8 @@ test('flashcard browsing previews the selected question without changing learnin
   await study
     .getByLabel('Choose deck', { exact: true })
     .selectOption(decks[1].id);
-  await expect(preview).toHaveCount(0);
+  await expect(preview.locator('.board')).toHaveCount(0);
+  await expect(preview).not.toHaveAttribute('data-card-id', questions[1].id);
   release();
   await expect(preview).toHaveAttribute('data-card-id', other.id);
   await expect(preview.locator('.board')).toBeVisible();

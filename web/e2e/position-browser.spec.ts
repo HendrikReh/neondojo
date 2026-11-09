@@ -552,14 +552,15 @@ test('positions keep a readable active tab and contain wide results on mobile', 
   await tab.hover();
   const activeHover = await tab.evaluate((element) => {
     const probe = document.createElement('span');
-    probe.style.backgroundColor = 'var(--ui-accent-hover)';
+    probe.style.color = 'var(--ui-accent)';
     element.append(probe);
-    const color = getComputedStyle(probe).backgroundColor;
+    const color = getComputedStyle(probe).color;
     probe.remove();
     return color;
   });
-  await expect.soft(tab).toHaveCSS('background-color', activeHover);
-  await expect.soft(tab).toHaveCSS('color', 'rgb(255, 255, 255)');
+  await expect.soft(tab).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect.soft(tab).toHaveCSS('color', activeHover);
+  await expect.soft(tab).toHaveCSS('border-bottom-color', activeHover);
   await page.setViewportSize({ width: 390, height: 844 });
   await expect
     .poll(() =>

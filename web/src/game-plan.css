@@ -7,7 +7,7 @@
   padding: 3px 0;
   color: var(--ui-text);
   border-bottom: 1px solid var(--ui-border);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   line-height: 1.35;
 }
 
@@ -47,12 +47,12 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 10px;
+  font-size: var(--font-size-micro);
 }
 .game-plan-players dd {
   margin: 0;
   color: var(--ui-text);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   overflow-wrap: anywhere;
 }
 .game-plan-loading {

@@ -9,7 +9,7 @@
   .analysis-workspace {
     --analysis-gap: 10px;
     --analysis-pane-border: var(--ui-border);
-    font-size: 13px;
+    font-size: var(--font-size-body);
   }
 
   .analysis-workspace .analysis-heading {
@@ -17,17 +17,17 @@
   }
 
   .analysis-workspace .analysis-heading h1 {
-    font-size: 23px;
+    font-size: var(--font-size-page);
     line-height: 1.15;
   }
 
   .analysis-workspace .analysis-heading h1 span {
-    font-size: 16px;
+    font-size: var(--font-size-body);
   }
 
   .analysis-workspace .analysis-heading p {
     margin-top: 3px;
-    font-size: 12px;
+    font-size: var(--font-size-table);
   }
 
   .analysis-workspace .analysis-commandbar {
@@ -62,7 +62,7 @@
   .analysis-workspace .analysis-commandbar select,
   .analysis-workspace .analysis-commandbar button {
     padding: 6px 9px;
-    font-size: 12px;
+    font-size: var(--font-size-control);
     line-height: 1.5;
   }
 
@@ -94,7 +94,7 @@
     > div {
     flex-direction: row;
     gap: 5px 12px;
-    font-size: 11px;
+    font-size: var(--font-size-meta);
   }
 
   .analysis-workspace
@@ -109,22 +109,15 @@
     .workspace-analysis-command
     .match-analysis-progress
     small {
-    font-size: 11px;
+    font-size: var(--font-size-meta);
   }
 
   .analysis-workspace .analysis-detail-navigation.inspector-tabs {
     position: static;
     justify-content: flex-start;
-    gap: 4px;
     padding: 0 0 8px;
     margin: 0 0 9px;
     background: transparent;
-  }
-
-  .analysis-workspace .analysis-detail-navigation.inspector-tabs button {
-    flex: 0 1 auto;
-    padding: 6px 13px;
-    font-size: 12px;
   }
 
   /* An explicit grid gives each view a stable area without remounting it. */
@@ -135,7 +128,10 @@
 
   .analysis-workspace.analysis-overview .analysis-grid {
     display: grid;
-    grid-template-columns: 175px minmax(0, 1.3fr) minmax(325px, 1fr);
+    grid-template-columns: clamp(200px, 16vw, 250px) minmax(0, 1.3fr) minmax(
+        325px,
+        1fr
+      );
     grid-template-rows: minmax(0, var(--analysis-overview-top)) minmax(
         220px,
         1fr
@@ -194,8 +190,8 @@
   .analysis-workspace.analysis-overview .overview-statistics > h3 {
     margin: 0 0 8px;
     font: inherit;
-    font-size: 14px;
-    font-weight: 650;
+    font-size: var(--font-size-panel);
+    font-weight: var(--font-weight-semibold);
     color: var(--ui-text);
   }
 
@@ -211,7 +207,7 @@
   }
 
   .analysis-workspace .moves-panel h3 {
-    font-size: 13px;
+    font-size: var(--font-size-panel);
   }
 
   .analysis-workspace.analysis-overview .moves-list {
@@ -230,28 +226,28 @@
     gap: 4px;
     padding: 6px 3px;
     min-height: 33px;
-    font-size: 12px;
+    font-size: var(--font-size-table);
     line-height: 1.35;
   }
 
   .analysis-workspace .moves-list strong {
     min-width: 0;
     padding-left: 0;
-    font-size: 12px;
+    font-size: var(--font-size-table);
     line-height: 1.35;
     overflow-wrap: anywhere;
   }
 
   .analysis-workspace .move-no {
     width: auto;
-    font-size: 10px;
+    font-size: var(--font-size-micro);
     color: var(--ui-muted);
     font-variant-numeric: tabular-nums;
   }
 
   .analysis-workspace .move-dice {
     padding: 1px 2px;
-    font-size: 10px;
+    font-size: var(--font-size-micro);
     text-align: center;
   }
 
@@ -259,7 +255,7 @@
     flex-shrink: 0;
     margin-top: 8px;
     padding: 7px 5px;
-    font-size: 12px;
+    font-size: var(--font-size-table);
   }
 
   .analysis-workspace .moves-list button.move-assessment-doubtful {
@@ -291,8 +287,8 @@
     display: inline-flex;
     justify-content: center;
     min-width: 12px;
-    font-size: 11px;
-    font-weight: 750;
+    font-size: var(--font-size-meta);
+    font-weight: var(--font-weight-bold);
     color: var(--ui-warning-text);
   }
 
@@ -327,10 +323,9 @@
     background: transparent;
   }
 
-  .analysis-workspace.analysis-overview .board-view-buttons button,
   .analysis-workspace.analysis-overview .played-preview-button {
     padding: 4px 9px;
-    font-size: 11px;
+    font-size: var(--font-size-control);
     line-height: 1.4;
   }
 
@@ -365,7 +360,7 @@
 
   .analysis-workspace.analysis-overview .player-bar {
     gap: 10px;
-    font-size: 11px;
+    font-size: var(--font-size-meta);
     line-height: 1.4;
   }
 
@@ -376,7 +371,7 @@
 
   .analysis-workspace.analysis-overview .theme-credit {
     padding-bottom: 3px;
-    font-size: 10px;
+    font-size: var(--font-size-micro);
   }
 
   .analysis-workspace.analysis-overview .board-navigation {
@@ -407,12 +402,12 @@
     gap: 8px;
     margin: 0 -10px;
     padding: 4px 8px;
-    font-size: 9px;
+    font-size: var(--font-size-micro);
   }
 
   .analysis-workspace.analysis-overview .board-focus-toggle {
     padding: 5px;
-    font-size: 11px;
+    font-size: var(--font-size-control);
   }
 
   .analysis-workspace.analysis-overview .position-inspector .analysis-controls {
@@ -427,14 +422,14 @@
     gap: 7px;
     width: auto;
     flex: 1 1 100%;
-    font-size: 11px;
+    font-size: var(--font-size-label);
   }
 
   .analysis-workspace.analysis-overview .depth-label select {
     flex: 1;
     min-width: 0;
     padding: 5px 7px;
-    font-size: 12px;
+    font-size: var(--font-size-control);
   }
 
   .analysis-workspace.analysis-overview
@@ -442,37 +437,23 @@
     .analysis-controls
     button {
     padding: 6px 8px;
-    font-size: 12px;
+    font-size: var(--font-size-control);
   }
 
   .analysis-workspace.analysis-overview .position-inspector .tabs {
-    gap: 12px;
     justify-content: flex-start;
   }
 
-  .analysis-workspace.analysis-overview .position-inspector .tabs button {
-    padding: 7px 0;
-    font-size: 12px;
-  }
-
   .analysis-workspace.analysis-overview .analysis-source-tabs {
-    gap: 4px;
     padding: 7px 0;
     margin-bottom: 7px;
-  }
-
-  .analysis-workspace.analysis-overview .analysis-source-tabs button,
-  .analysis-workspace.analysis-overview .source-book-selector button,
-  .analysis-workspace.analysis-overview .source-decision-buttons button {
-    padding: 5px 7px;
-    font-size: 11px;
   }
 
   .analysis-workspace.analysis-overview .source-provenance {
     gap: 3px;
     padding: 8px;
     margin-bottom: 7px;
-    font-size: 12px;
+    font-size: var(--font-size-table);
     border-radius: 5px;
   }
 
@@ -483,7 +464,7 @@
 
   .analysis-workspace.analysis-overview .source-record select {
     padding: 5px 7px;
-    font-size: 12px;
+    font-size: var(--font-size-control);
   }
 
   .analysis-workspace.analysis-overview .source-candidates {
@@ -493,19 +474,19 @@
 
   .analysis-workspace.analysis-overview .position-inspector .candidates {
     margin-top: 6px;
-    font-size: 13px;
+    font-size: var(--font-size-body);
   }
 
   .analysis-workspace.analysis-overview .position-inspector .candidates th,
   .analysis-workspace.analysis-overview .position-inspector .candidates td {
     padding: 7px 5px;
-    font-size: 12px;
+    font-size: var(--font-size-table);
     line-height: 1.4;
   }
 
   .analysis-workspace.analysis-overview .position-inspector .candidates th {
-    font-size: 10px;
-    letter-spacing: 0.5px;
+    font-size: var(--font-size-table-heading);
+    letter-spacing: normal;
   }
 
   .analysis-workspace.analysis-overview
@@ -538,13 +519,13 @@
     display: inline-block;
     margin: 2px 0 0 4px;
     padding: 1px 4px;
-    font-size: 9px;
+    font-size: var(--font-size-label);
   }
 
   .analysis-workspace.analysis-overview .fineprint,
   .analysis-workspace.analysis-overview .source-attribution {
     margin: 7px 0;
-    font-size: 11px;
+    font-size: var(--font-size-meta);
     line-height: 1.5;
   }
 
@@ -560,7 +541,7 @@
 
   .analysis-workspace.analysis-overview .match-move-overview > summary {
     padding: 3px 0;
-    font-size: 12px;
+    font-size: var(--font-size-table);
   }
 
   .analysis-workspace.analysis-overview
@@ -569,7 +550,7 @@
     gap: 6px;
     margin: 6px 0 9px;
     align-items: center;
-    font-size: 11px;
+    font-size: var(--font-size-meta);
   }
 
   .analysis-workspace.analysis-overview
@@ -588,7 +569,7 @@
     flex: 1 1 100px;
     min-width: 0;
     padding: 5px 7px;
-    font-size: 12px;
+    font-size: var(--font-size-control);
     border-radius: 5px;
   }
 
@@ -596,7 +577,7 @@
     .match-analysis-filters
     .statistics-reset {
     padding: 5px 7px;
-    font-size: 11px;
+    font-size: var(--font-size-control);
   }
 
   /* The pane itself scrolls, keeping a single scrollbar per long result list. */
@@ -617,8 +598,15 @@
     .match-moves-table
     td {
     padding: 6px 8px;
-    font-size: 12px;
+    font-size: var(--font-size-table);
     line-height: 1.4;
+  }
+
+  .analysis-workspace.analysis-overview
+    .position-inspector
+    .match-moves-table
+    th {
+    font-size: var(--font-size-table-heading);
   }
 
   .analysis-workspace.analysis-overview .match-moves-table td:nth-child(3),
@@ -629,12 +617,12 @@
 
   .analysis-workspace.analysis-overview .match-moves-table small {
     margin-top: 2px;
-    font-size: 10px;
+    font-size: var(--font-size-micro);
   }
 
   .analysis-workspace.analysis-overview .match-moves-table .position-link {
     padding: 3px 6px;
-    font-size: 12px;
+    font-size: var(--font-size-table);
   }
 
   .analysis-workspace.analysis-overview
@@ -649,7 +637,7 @@
 
   .analysis-workspace.analysis-overview .statistics-source,
   .analysis-workspace.analysis-overview .statistics-coverage {
-    font-size: 12px;
+    font-size: var(--font-size-table);
     line-height: 1.5;
   }
 
@@ -672,7 +660,7 @@
 
   .analysis-workspace.analysis-overview .statistics-summary h4 {
     margin: 0 0 7px;
-    font-size: 12px;
+    font-size: var(--font-size-table);
     line-height: 1.4;
   }
 
@@ -695,47 +683,48 @@
 
   .analysis-workspace.analysis-overview .statistics-metric span {
     min-width: 0;
-    font-size: 11px;
+    font-size: var(--font-size-meta);
   }
 
   .analysis-workspace.analysis-overview .statistics-metric strong {
     flex-shrink: 0;
-    font-size: 13px;
+    font-size: var(--font-size-body);
     text-align: right;
   }
 
   .analysis-workspace.analysis-overview .statistics-metric-unavailable strong {
     flex-shrink: 1;
-    font-size: 10px;
+    font-size: var(--font-size-micro);
   }
 
   .analysis-workspace.analysis-overview .statistics-footnote {
     gap: 2px;
     margin-top: 5px;
-    font-size: 10px;
+    font-size: var(--font-size-micro);
     line-height: 1.4;
   }
 
   .analysis-workspace.analysis-overview .analysis-method {
     margin-top: 7px;
-    font-size: 10px;
+    font-size: var(--font-size-meta);
     line-height: 1.5;
   }
 
   .analysis-workspace.analysis-overview .statistics-games-scroll {
     max-width: 100%;
     margin-top: 14px;
-    overflow: visible;
+    overflow-x: auto;
   }
 
   .analysis-workspace.analysis-overview .statistics-games-table {
-    table-layout: fixed;
-    font-size: 11px;
+    table-layout: auto;
+    min-width: 580px;
+    font-size: var(--font-size-table);
   }
 
   .analysis-workspace.analysis-overview .statistics-games-table caption {
     padding-bottom: 6px;
-    font-size: 13px;
+    font-size: var(--font-size-panel);
   }
 
   .analysis-workspace.analysis-overview .statistics-games-table th,
@@ -756,18 +745,18 @@
 
   .analysis-workspace.analysis-overview .statistics-games-table th small {
     margin-top: 3px;
-    font-size: 10px;
+    font-size: var(--font-size-micro);
     white-space: normal;
   }
 
   .analysis-workspace.analysis-overview .statistics-games-table .position-link {
     padding: 3px 0;
-    font-size: 11px;
+    font-size: var(--font-size-table);
     white-space: normal;
   }
 
   .analysis-workspace.analysis-overview .statistics-player-compact {
-    min-width: 0;
+    min-width: 180px;
   }
 
   .analysis-workspace.analysis-overview
@@ -782,19 +771,20 @@
     .statistics-player-compact
     .statistics-metric
     span {
-    font-size: 10px;
+    font-size: var(--font-size-micro);
   }
 
   .analysis-workspace.analysis-overview
     .statistics-player-compact
     .statistics-metric
     strong {
-    font-size: 12px;
+    font-size: var(--font-size-table);
   }
 
-  /* Full metric sets remain available in the focused Statistics view. */
+  /* Compact ordinary metrics; severity matrices stay visible in the overview. */
   .analysis-workspace.analysis-overview
     .statistics-player-compact
+    .statistics-metrics
     .statistics-metric:not([data-statistics-metric='pr']):not(
       [data-statistics-metric='loss']
     ):not([data-statistics-metric='inaccuracies']):not(
@@ -818,7 +808,7 @@
 @media (min-width: 1600px) {
   .analysis-workspace.analysis-overview .analysis-grid {
     grid-template-columns:
-      clamp(190px, 11.1vw, 280px)
+      clamp(240px, 15vw, 320px)
       minmax(440px, 1.35fr)
       minmax(340px, 0.95fr)
       minmax(350px, 1fr);
@@ -851,11 +841,11 @@
 
   .analysis-workspace.analysis-overview .statistics-metric span,
   .analysis-workspace.analysis-overview .statistics-summary h4 {
-    font-size: 13px;
+    font-size: var(--font-size-body);
   }
 
   .analysis-workspace.analysis-overview .statistics-metric strong {
-    font-size: 14px;
+    font-size: var(--font-size-body);
   }
 
   .analysis-workspace.analysis-overview .position-inspector .candidates td,
@@ -863,7 +853,7 @@
     .position-inspector
     .match-moves-table
     td {
-    font-size: 13px;
+    font-size: var(--font-size-table);
   }
 
   .analysis-workspace.analysis-overview

@@ -32,15 +32,16 @@
   border-bottom: 1px solid var(--ui-border);
 }
 .settings-header h2 {
-  font:
-    28px/1.2 Georgia,
-    serif;
+  font-family: var(--font-ui);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.25;
+  font-size: var(--font-size-dialog);
   letter-spacing: -0.4px;
 }
 .settings-header p {
   margin-top: 6px;
   color: var(--ui-muted);
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .settings-close {
   flex-shrink: 0;
@@ -66,13 +67,6 @@
 }
 .settings-categories button {
   text-align: left;
-  border-color: transparent;
-  background: transparent;
-}
-.settings-categories button.active {
-  background: var(--ui-selected);
-  border-color: var(--ui-accent);
-  color: var(--ui-accent);
 }
 .settings-content {
   min-width: 0;
@@ -93,15 +87,15 @@
 .settings-section > legend {
   padding: 0;
   margin: 0 0 22px;
-  font-size: 20px;
-  font-weight: 550;
+  font-size: var(--font-size-panel);
+  font-weight: var(--font-weight-semibold);
 }
 .settings-field {
   display: grid;
   gap: 7px;
   margin-top: 22px;
   max-width: 560px;
-  font-weight: 550;
+  font-weight: var(--font-weight-medium);
 }
 .settings-field:first-of-type {
   margin-top: 0;
@@ -110,14 +104,14 @@
 .settings-field select {
   width: 100%;
   min-width: 0;
-  font-weight: 400;
+  font-weight: var(--font-weight-normal);
 }
 .settings-field input[aria-invalid='true'] {
   border-color: var(--ui-danger-text);
 }
 .settings-help {
   color: var(--ui-muted);
-  font-size: 12px;
+  font-size: var(--font-size-table);
   line-height: 1.6;
   margin-top: 8px;
   max-width: 610px;
@@ -137,7 +131,7 @@
   margin: 14px 0;
   display: grid;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--font-size-table);
   overflow-wrap: anywhere;
 }
 .settings-success {
@@ -145,7 +139,7 @@
 }
 .settings-error {
   color: var(--ui-danger-text);
-  font-size: 13px;
+  font-size: var(--font-size-body);
   overflow-wrap: anywhere;
 }
 .settings-error button {
@@ -191,14 +185,14 @@
   margin-bottom: 10px;
 }
 .settings-preview .player-bar {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .settings-preview .board {
   max-height: 340px;
   margin: 8px 0;
 }
 .settings-preview .theme-credit {
-  font-size: 10px;
+  font-size: var(--font-size-micro);
 }
 .settings-theme-gallery {
   display: grid;
@@ -256,13 +250,13 @@
   filter: none;
 }
 .settings-theme-name {
-  font-size: 12px;
+  font-size: var(--font-size-table);
   line-height: 1.3;
   overflow-wrap: anywhere;
 }
 .settings-selected {
   color: var(--ui-accent);
-  font-size: 10px;
+  font-size: var(--font-size-micro);
   line-height: 1.2;
 }
 @media (max-width: 650px) {
@@ -276,10 +270,10 @@
     padding: 17px 16px;
   }
   .settings-header h2 {
-    font-size: 25px;
+    font-size: var(--font-size-dialog);
   }
   .settings-header p {
-    font-size: 11px;
+    font-size: var(--font-size-meta);
   }
   .settings-layout {
     display: flex;
@@ -296,8 +290,6 @@
   }
   .settings-categories button {
     white-space: nowrap;
-    padding: 9px 11px;
-    font-size: 12px;
   }
   .settings-content {
     flex: 1;

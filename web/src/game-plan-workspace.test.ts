@@ -117,7 +117,6 @@ function props(player: 0 | 1 = 0) {
     configured: true,
     detail: 'overview',
     onDetail: noop,
-    onBookSettings: noop,
     onOpenDatabase: noop,
     onTrackJob: noop,
     onNotesSaved: noop,

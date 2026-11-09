@@ -3,6 +3,7 @@ import type { Job, MatchAnalysisSummary } from './api';
 import type { components } from './generated-api';
 
 type Schema = components['schemas'];
+export type PlayerErrorBreakdown = Schema['PlayerErrorBreakdown'];
 export type GameAnalysisStatistics = Schema['GameAnalysisStatistics'];
 export type JobAnalysisStatistics = Schema['JobAnalysisStatistics'];
 export interface MatchDecisionFilter {
@@ -24,6 +25,7 @@ export type StatisticsMetric =
   | 'pr';
 export interface StatisticsAction {
   metric: StatisticsMetric;
+  kind?: 'checker' | 'cube';
   player: number;
   gameNo?: number;
 }
@@ -39,7 +41,7 @@ export function buildStatisticsFilter(
     kind:
       action.metric === 'checker' || action.metric === 'cube'
         ? action.metric
-        : '',
+        : (action.kind ?? ''),
     severity,
     game_no: action.gameNo,
     errors_only: !!severity || action.metric === 'inaccuracies',

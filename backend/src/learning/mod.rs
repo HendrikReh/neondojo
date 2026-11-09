@@ -2,6 +2,10 @@
 mod apkg;
 mod content;
 mod scheduler;
+mod search;
+pub use search::{
+    CardBrowseContext, CardBrowseItem, CardDeck, CardKind, CardQuery, CardReviewState,
+};
 
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
@@ -11,10 +15,11 @@ use crate::{
 };
 use axum::{
     Json, Router,
+    extract::rejection::{PathRejection, QueryRejection},
     extract::{FromRequest, Path, Query, Request, State},
     http::{StatusCode, header},
     response::IntoResponse,
-    routing::{get, post},
+    routing::{get, post, put},
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -45,13 +50,31 @@ where
 pub struct Deck {
     pub id: Uuid,
     pub name: String,
+    /// Changes when the deck is renamed or gains memberships.
+    #[schema(minimum = 0)]
+    pub version: i64,
     pub card_count: i64,
     pub due_count: i64,
     pub created_at: DateTime<Utc>,
 }
 #[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct CreateDeck {
     pub name: String,
+}
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RenameDeck {
+    pub name: String,
+    #[schema(minimum = 0)]
+    pub expected_version: i64,
+}
+#[derive(Debug, Deserialize, IntoParams)]
+#[serde(deny_unknown_fields)]
+#[into_params(parameter_in = Query)]
+pub struct DeleteDeckQuery {
+    #[param(minimum = 0)]
+    pub expected_version: i64,
 }
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct AddCards {
@@ -140,8 +163,10 @@ pub struct CardQuestion {
 }
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct CardPage {
-    pub items: Vec<CardQuestion>,
+    pub items: Vec<CardBrowseItem>,
     pub next_cursor: Option<Uuid>,
+    /// Matching cards before applying the cursor; a shared card appears once.
+    pub total: i64,
 }
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct ReviewCounts {
@@ -213,12 +238,6 @@ pub struct ExportQuery {
     pub locale: Option<String>,
 }
 
-#[derive(Debug, Deserialize, IntoParams)]
-pub struct CardQuery {
-    pub after: Option<Uuid>,
-    pub limit: Option<i64>,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct CardContent {
     kind: String,
@@ -266,6 +285,8 @@ impl CardRow {
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/decks", get(decks).post(create_deck))
+        .route("/api/cards", get(search::all_cards))
+        .route("/api/decks/{id}", put(rename_deck).delete(delete_deck))
         .route("/api/decks/{id}/cards", get(cards).post(add_cards))
         .route("/api/decks/{id}/positions", post(add_positions))
         .route("/api/decks/{id}/export.apkg", get(export_deck))
@@ -279,7 +300,10 @@ pub fn routes() -> Router<AppState> {
     paths(
         decks,
         create_deck,
+        rename_deck,
+        delete_deck,
         cards,
+        search::all_cards,
         add_cards,
         add_positions,
         export_deck,
@@ -290,6 +314,7 @@ pub fn routes() -> Router<AppState> {
     components(schemas(
         Deck,
         CreateDeck,
+        RenameDeck,
         AddCards,
         AddCardsResult,
         AddPositions,
@@ -301,6 +326,11 @@ pub fn routes() -> Router<AppState> {
         CardAnswer,
         CardQuestion,
         CardPage,
+        CardBrowseItem,
+        CardBrowseContext,
+        CardDeck,
+        CardKind,
+        CardReviewState,
         ReviewCounts,
         NextCard,
         RevealCard,
@@ -330,47 +360,90 @@ async fn require_deck(pool: &PgPool, id: Uuid) -> ApiResult<()> {
 
 #[utoipa::path(get,path="/api/decks",responses((status=200,body=Vec<Deck>)),tag="Learning")]
 async fn decks(State(state): State<AppState>) -> ApiResult<Json<Vec<Deck>>> {
-    Ok(Json(sqlx::query_as("SELECT d.id,d.name,d.created_at,count(c.id) AS card_count,count(c.id) FILTER (WHERE c.due_at<=now()) AS due_count FROM decks d LEFT JOIN deck_cards dc ON dc.deck_id=d.id LEFT JOIN learning_cards c ON c.id=dc.card_id GROUP BY d.id ORDER BY d.created_at,d.id").fetch_all(&state.pool).await.map_err(anyhow::Error::from)?))
+    Ok(Json(sqlx::query_as("SELECT d.id,d.name,d.version,d.created_at,count(c.id) AS card_count,count(c.id) FILTER (WHERE c.due_at<=now()) AS due_count FROM decks d LEFT JOIN deck_cards dc ON dc.deck_id=d.id LEFT JOIN learning_cards c ON c.id=dc.card_id GROUP BY d.id ORDER BY d.created_at,d.id").fetch_all(&state.pool).await.map_err(anyhow::Error::from)?))
+}
+fn deck_name(name: &str) -> ApiResult<&str> {
+    let name = name.trim();
+    if name.is_empty() || name.len() > 120 || name.chars().any(char::is_control) {
+        return Err(ApiError::invalid(
+            "Deck name must be 1–120 bytes without control characters",
+        ));
+    }
+    Ok(name)
 }
 #[utoipa::path(post,path="/api/decks",request_body=CreateDeck,responses((status=201,body=Deck),(status=422,body=ErrorBody)),tag="Learning")]
 async fn create_deck(
     State(state): State<AppState>,
     LearningJson(body): LearningJson<CreateDeck>,
 ) -> ApiResult<(StatusCode, Json<Deck>)> {
-    let name = body.name.trim();
-    if name.is_empty() || name.len() > 120 || name.chars().any(char::is_control) {
-        return Err(ApiError::invalid(
-            "Deck name must be 1–120 bytes without control characters",
-        ));
-    }
-    let deck=sqlx::query_as("INSERT INTO decks(id,name) VALUES($1,$2) RETURNING id,name,created_at,0::bigint AS card_count,0::bigint AS due_count").bind(Uuid::new_v4()).bind(name).fetch_one(&state.pool).await.map_err(anyhow::Error::from)?;
+    let name = deck_name(&body.name)?;
+    let deck=sqlx::query_as("INSERT INTO decks(id,name) VALUES($1,$2) RETURNING id,name,version,created_at,0::bigint AS card_count,0::bigint AS due_count").bind(Uuid::new_v4()).bind(name).fetch_one(&state.pool).await.map_err(anyhow::Error::from)?;
     Ok((StatusCode::CREATED, Json(deck)))
+}
+
+async fn lock_deck_version(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    id: Uuid,
+    expected_version: i64,
+) -> ApiResult<()> {
+    if expected_version < 0 {
+        return Err(ApiError::invalid("expected_version must be nonnegative"));
+    }
+    // Match membership writes' deck-first lock order. Cards and FSRS rows remain untouched.
+    let version: i64 = sqlx::query_scalar("SELECT version FROM decks WHERE id=$1 FOR UPDATE")
+        .bind(id)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(anyhow::Error::from)?
+        .ok_or_else(ApiError::missing)?;
+    if version != expected_version {
+        return Err(conflict("Deck changed; reload it before trying again"));
+    }
+    Ok(())
+}
+
+#[utoipa::path(put,path="/api/decks/{id}",params(("id"=Uuid,Path)),request_body=RenameDeck,responses((status=200,body=Deck),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
+async fn rename_deck(
+    State(state): State<AppState>,
+    path: Result<Path<Uuid>, PathRejection>,
+    LearningJson(body): LearningJson<RenameDeck>,
+) -> ApiResult<Json<Deck>> {
+    let Path(id) = path.map_err(|error| ApiError::invalid(error.body_text()))?;
+    let name = deck_name(&body.name)?;
+    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
+    lock_deck_version(&mut tx, id, body.expected_version).await?;
+    let deck = sqlx::query_as("UPDATE decks d SET name=$2,version=version+1 WHERE id=$1 RETURNING d.id,d.name,d.version,d.created_at,(SELECT count(*) FROM deck_cards WHERE deck_id=d.id) AS card_count,(SELECT count(*) FROM deck_cards dc JOIN learning_cards c ON c.id=dc.card_id WHERE dc.deck_id=d.id AND c.due_at<=now()) AS due_count")
+        .bind(id).bind(name).fetch_one(&mut *tx).await.map_err(anyhow::Error::from)?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    Ok(Json(deck))
+}
+
+#[utoipa::path(delete,path="/api/decks/{id}",params(("id"=Uuid,Path),DeleteDeckQuery),responses((status=204,description="Deck and its memberships deleted; shared cards and history retained"),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
+async fn delete_deck(
+    State(state): State<AppState>,
+    path: Result<Path<Uuid>, PathRejection>,
+    query: Result<Query<DeleteDeckQuery>, QueryRejection>,
+) -> ApiResult<StatusCode> {
+    let Path(id) = path.map_err(|error| ApiError::invalid(error.body_text()))?;
+    let Query(query) = query.map_err(|error| ApiError::invalid(error.body_text()))?;
+    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
+    lock_deck_version(&mut tx, id, query.expected_version).await?;
+    // deck_cards cascades from decks; learning_cards, reviews and saved positions do not.
+    sqlx::query("DELETE FROM decks WHERE id=$1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    Ok(StatusCode::NO_CONTENT)
 }
 #[utoipa::path(get,path="/api/decks/{id}/cards",params(("id"=Uuid,Path),CardQuery),responses((status=200,body=CardPage),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
 async fn cards(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    Query(q): Query<CardQuery>,
+    query: Result<Query<CardQuery>, QueryRejection>,
 ) -> ApiResult<Json<CardPage>> {
-    require_deck(&state.pool, id).await?;
-    let limit = q.limit.unwrap_or(50);
-    if !(1..=100).contains(&limit) {
-        return Err(ApiError::invalid("limit must be 1..100"));
-    }
-    let mut rows:Vec<CardRow>=sqlx::query_as("SELECT c.* FROM learning_cards c JOIN deck_cards dc ON dc.card_id=c.id WHERE dc.deck_id=$1 AND ($2::uuid IS NULL OR c.id>$2) ORDER BY c.id LIMIT $3").bind(id).bind(q.after).bind(limit+1).fetch_all(&state.pool).await.map_err(anyhow::Error::from)?;
-    let next_cursor = if rows.len() > limit as usize {
-        rows.truncate(limit as usize);
-        rows.last().map(|r| r.id)
-    } else {
-        None
-    };
-    Ok(Json(CardPage {
-        items: rows
-            .iter()
-            .map(CardRow::question)
-            .collect::<anyhow::Result<_>>()?,
-        next_cursor,
-    }))
+    search::load(&state, Some(id), query).await
 }
 #[utoipa::path(post,path="/api/decks/{id}/cards",params(("id"=Uuid,Path)),request_body=AddCards,responses((status=200,body=AddCardsResult),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
 async fn add_cards(
@@ -593,6 +666,13 @@ async fn write_cards(
         return Err(ApiError::invalid(
             "Deck exceeds 1000 cards; use another deck or narrow the filter",
         ));
+    }
+    if cards.values().any(|card| card.added) {
+        sqlx::query("UPDATE decks SET version=version+1 WHERE id=$1")
+            .bind(deck_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(anyhow::Error::from)?;
     }
     tx.commit().await.map_err(anyhow::Error::from)?;
     Ok(WrittenCards { cards, total })

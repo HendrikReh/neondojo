@@ -109,7 +109,6 @@ function props(
     detail,
     onDetail: noop,
     onBookmarkChanged: noop,
-    onBookSettings: noop,
     onOpenDatabase: noop,
     onTrackJob: noop,
     onNotesSaved: noop,

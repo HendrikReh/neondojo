@@ -117,6 +117,137 @@
         }
       }
     },
+    "/api/cards": {
+      "get": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "all_cards",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "maximum": 100,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "deck_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Literal substring of players, question, IDs, deck names, tags or comments.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "player",
+            "in": "query",
+            "description": "Literal substring of the name of the player on roll.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "comment",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "position_id",
+            "in": "query",
+            "description": "Exact 14-character GNUbg checker position ID.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/CardKind"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "New and due may overlap. Reviewed means at least one completed review.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/CardReviewState"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/cards/{id}/reveal": {
       "post": {
         "tags": [
@@ -481,6 +612,139 @@
         }
       }
     },
+    "/api/decks/{id}": {
+      "put": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "rename_deck",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameDeck"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deck"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "delete_deck",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "expected_version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deck and its memberships deleted; shared cards and history retained"
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/decks/{id}/cards": {
       "get": {
         "tags": [
@@ -502,10 +766,7 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ],
+              "type": "string",
               "format": "uuid"
             }
           },
@@ -514,11 +775,79 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "int64"
+              "type": "integer",
+              "format": "int64",
+              "maximum": 100,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "deck_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Literal substring of players, question, IDs, deck names, tags or comments.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "player",
+            "in": "query",
+            "description": "Literal substring of the name of the player on roll.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "comment",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "position_id",
+            "in": "query",
+            "description": "Exact 14-character GNUbg checker position ID.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/CardKind"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "New and due may overlap. Reviewed means at least one completed review.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/CardReviewState"
             }
           }
         ],
@@ -1319,7 +1648,7 @@
           {
             "name": "errors_only",
             "in": "query",
-            "description": "Only decisions losing at least 0.04 normalized equity.",
+            "description": "Exclude forced/unavailable decisions and require at least 0.04 normalized equity loss.",
             "required": false,
             "schema": {
               "type": "boolean"
@@ -4681,16 +5010,85 @@
           }
         }
       },
+      "CardBrowseContext": {
+        "type": "object",
+        "required": [
+          "decks",
+          "tags",
+          "comment_excerpt"
+        ],
+        "properties": {
+          "comment_excerpt": {
+            "type": "string"
+          },
+          "decks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CardDeck"
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CardBrowseItem": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CardQuestion"
+          },
+          {
+            "type": "object",
+            "required": [
+              "browse"
+            ],
+            "properties": {
+              "browse": {
+                "$ref": "#/components/schemas/CardBrowseContext",
+                "description": "Library metadata only; engine answers remain behind explicit reveal."
+              }
+            }
+          }
+        ]
+      },
+      "CardDeck": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "CardKind": {
+        "type": "string",
+        "enum": [
+          "checker",
+          "cube_offer",
+          "cube_response"
+        ]
+      },
       "CardPage": {
         "type": "object",
         "required": [
-          "items"
+          "items",
+          "total"
         ],
         "properties": {
           "items": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/CardQuestion"
+              "$ref": "#/components/schemas/CardBrowseItem"
             }
           },
           "next_cursor": {
@@ -4699,6 +5097,11 @@
               "null"
             ],
             "format": "uuid"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Matching cards before applying the cursor; a shared card appears once."
           }
         }
       },
@@ -4753,6 +5156,14 @@
             "format": "int64"
           }
         }
+      },
+      "CardReviewState": {
+        "type": "string",
+        "enum": [
+          "new",
+          "due",
+          "reviewed"
+        ]
       },
       "CardSolution": {
         "type": "object",
@@ -4836,7 +5247,8 @@
           "name": {
             "type": "string"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "CreatePositionFilter": {
         "type": "object",
@@ -5168,6 +5580,7 @@
         "required": [
           "id",
           "name",
+          "version",
           "card_count",
           "due_count",
           "created_at"
@@ -5191,6 +5604,12 @@
           },
           "name": {
             "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Changes when the deck is renamed or gains memberships.",
+            "minimum": 0
           }
         }
       },
@@ -5361,6 +5780,28 @@
           }
         }
       },
+      "ErrorSeverityCounts": {
+        "type": "object",
+        "required": [
+          "doubtful",
+          "bad",
+          "very_bad"
+        ],
+        "properties": {
+          "bad": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "doubtful": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "very_bad": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "ExportRequest": {
         "type": "object",
         "required": [
@@ -5400,6 +5841,16 @@
           },
           "crawford": {
             "type": "boolean"
+          },
+          "error_breakdown": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PlayerErrorBreakdown"
+            },
+            "description": "Typed errors for this complete checkpoint; null for missing or inconsistent durable coverage."
           },
           "game_no": {
             "type": "integer",
@@ -5902,6 +6353,16 @@
           "games"
         ],
         "properties": {
+          "error_breakdown": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PlayerErrorBreakdown"
+            },
+            "description": "Typed errors in checkpointed games; null when durable decision coverage cannot be verified."
+          },
           "games": {
             "type": "array",
             "items": {
@@ -6581,6 +7042,26 @@
           }
         }
       },
+      "PlayerErrorBreakdown": {
+        "type": "object",
+        "required": [
+          "player",
+          "checker",
+          "cube"
+        ],
+        "properties": {
+          "checker": {
+            "$ref": "#/components/schemas/ErrorSeverityCounts"
+          },
+          "cube": {
+            "$ref": "#/components/schemas/ErrorSeverityCounts"
+          },
+          "player": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "PlayerPerformanceRating": {
         "type": "object",
         "required": [
@@ -7219,6 +7700,24 @@
             "format": "int64"
           }
         }
+      },
+      "RenameDeck": {
+        "type": "object",
+        "required": [
+          "name",
+          "expected_version"
+        ],
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       },
       "RevealCard": {
         "type": "object",

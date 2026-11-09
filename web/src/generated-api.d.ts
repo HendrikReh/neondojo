@@ -20,6 +20,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["all_cards"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cards/{id}/reveal": {
         parameters: {
             query?: never;
@@ -95,6 +111,22 @@ export interface paths {
         put?: never;
         post: operations["create_deck"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/decks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["rename_deck"];
+        post?: never;
+        delete: operations["delete_deck"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1110,10 +1142,31 @@ export interface components {
             solution: components["schemas"]["CardSolution"];
             tags: string[];
         };
+        CardBrowseContext: {
+            comment_excerpt: string;
+            decks: components["schemas"]["CardDeck"][];
+            tags: string[];
+        };
+        CardBrowseItem: components["schemas"]["CardQuestion"] & {
+            /** @description Library metadata only; engine answers remain behind explicit reveal. */
+            browse: components["schemas"]["CardBrowseContext"];
+        };
+        CardDeck: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        /** @enum {string} */
+        CardKind: "checker" | "cube_offer" | "cube_response";
         CardPage: {
-            items: components["schemas"]["CardQuestion"][];
+            items: components["schemas"]["CardBrowseItem"][];
             /** Format: uuid */
             next_cursor?: string | null;
+            /**
+             * Format: int64
+             * @description Matching cards before applying the cursor; a shared card appears once.
+             */
+            total: number;
         };
         CardQuestion: {
             /** Format: date-time */
@@ -1132,6 +1185,8 @@ export interface components {
             /** Format: int64 */
             version: number;
         };
+        /** @enum {string} */
+        CardReviewState: "new" | "due" | "reviewed";
         CardSolution: {
             candidates: components["schemas"]["Candidate"][];
             decision?: null | components["schemas"]["Decision"];
@@ -1286,6 +1341,11 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+            /**
+             * Format: int64
+             * @description Changes when the deck is renamed or gains memberships.
+             */
+            version: number;
         };
         DiceCount: {
             /** Format: int64 */
@@ -1331,6 +1391,14 @@ export interface components {
         ErrorBody: {
             error: string;
         };
+        ErrorSeverityCounts: {
+            /** Format: int32 */
+            bad: number;
+            /** Format: int32 */
+            doubtful: number;
+            /** Format: int32 */
+            very_bad: number;
+        };
         ExportRequest: {
             format: string;
             match_ids: string[];
@@ -1341,6 +1409,8 @@ export interface components {
             /** Format: int32 */
             black_score: number;
             crawford: boolean;
+            /** @description Typed errors for this complete checkpoint; null for missing or inconsistent durable coverage. */
+            error_breakdown?: components["schemas"]["PlayerErrorBreakdown"][] | null;
             /** Format: int32 */
             game_no: number;
             summary?: null | components["schemas"]["MatchAnalysisSummary"];
@@ -1489,6 +1559,8 @@ export interface components {
             updated_at: string;
         };
         JobAnalysisStatistics: {
+            /** @description Typed errors in checkpointed games; null when durable decision coverage cannot be verified. */
+            error_breakdown?: components["schemas"]["PlayerErrorBreakdown"][] | null;
             /** @description Ordered source games in this job's scope. Coverage requires a committed game checkpoint. */
             games: components["schemas"]["GameAnalysisStatistics"][];
             /** Format: uuid */
@@ -1712,6 +1784,12 @@ export interface components {
             /** Format: int32 */
             very_bad: number;
         };
+        PlayerErrorBreakdown: {
+            checker: components["schemas"]["ErrorSeverityCounts"];
+            cube: components["schemas"]["ErrorSeverityCounts"];
+            /** Format: int32 */
+            player: number;
+        };
         PlayerPerformanceRating: {
             /** Format: int32 */
             close_cube_decisions: number;
@@ -1898,6 +1976,11 @@ export interface components {
             good: number;
             /** Format: int64 */
             hard: number;
+        };
+        RenameDeck: {
+            /** Format: int64 */
+            expected_version: number;
+            name: string;
         };
         RevealCard: {
             /** Format: int64 */
@@ -2094,6 +2177,56 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AnnotationPage"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    all_cards: {
+        parameters: {
+            query?: {
+                after?: string;
+                limit?: number;
+                deck_id?: string;
+                /** @description Literal substring of players, question, IDs, deck names, tags or comments. */
+                q?: string;
+                /** @description Literal substring of the name of the player on roll. */
+                player?: string;
+                tag?: string;
+                comment?: string;
+                /** @description Exact 14-character GNUbg checker position ID. */
+                position_id?: string;
+                kind?: components["schemas"]["CardKind"];
+                /** @description New and due may overlap. Reviewed means at least one completed review. */
+                status?: components["schemas"]["CardReviewState"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardPage"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             422: {
@@ -2366,11 +2499,118 @@ export interface operations {
             };
         };
     };
+    rename_deck: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameDeck"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Deck"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_deck: {
+        parameters: {
+            query: {
+                expected_version: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deck and its memberships deleted; shared cards and history retained */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     cards: {
         parameters: {
             query?: {
-                after?: string | null;
-                limit?: number | null;
+                after?: string;
+                limit?: number;
+                deck_id?: string;
+                /** @description Literal substring of players, question, IDs, deck names, tags or comments. */
+                q?: string;
+                /** @description Literal substring of the name of the player on roll. */
+                player?: string;
+                tag?: string;
+                comment?: string;
+                /** @description Exact 14-character GNUbg checker position ID. */
+                position_id?: string;
+                kind?: components["schemas"]["CardKind"];
+                /** @description New and due may overlap. Reviewed means at least one completed review. */
+                status?: components["schemas"]["CardReviewState"];
             };
             header?: never;
             path: {
@@ -2927,7 +3167,7 @@ export interface operations {
                 after?: number;
                 /** @description Page size 1–100, defaults to 50. */
                 limit?: number;
-                /** @description Only decisions losing at least 0.04 normalized equity. */
+                /** @description Exclude forced/unavailable decisions and require at least 0.04 normalized equity loss. */
                 errors_only?: boolean;
                 /** @description 0 = White, 1 = Black. */
                 player?: number;

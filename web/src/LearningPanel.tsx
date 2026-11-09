@@ -5,6 +5,13 @@ import { useI18n } from './i18n';
 import { useLearningText } from './learning-messages';
 import Board, { type Theme } from './Board';
 import LearningCardBrowser from './LearningCardBrowser';
+import CardSearchControls from './CardSearchControls';
+import { ALL_CARDS, cardListPath, emptyCardFilters } from './card-search-api';
+import { useCardSearchText } from './card-search-messages';
+import './learning-workspace.css';
+import DeckManagementDialog from './DeckManagementDialog';
+import { useDeckManagementText } from './deck-management-messages';
+import type { VersionedDeck } from './deck-management-api';
 import { matchContext } from './boardMath';
 import type {
   Deck,
@@ -17,44 +24,81 @@ import type {
 
 function savedDeck() {
   try {
-    return localStorage.getItem('bgtutor.deck') || '';
+    return localStorage.getItem('bgtutor.deck') || ALL_CARDS;
   } catch {
-    return '';
+    return ALL_CARDS;
   }
 }
 function rememberDeck(id: string) {
   try {
-    localStorage.setItem('bgtutor.deck', id);
+    if (id) localStorage.setItem('bgtutor.deck', id);
+    else localStorage.removeItem('bgtutor.deck');
   } catch {
     /* Selection works without storage. */
   }
 }
-function useDecks(revision: number) {
-  const [decks, setDecks] = useState<Deck[]>([]);
+export function useDecks(revision: number) {
+  const [decks, setDecks] = useState<VersionedDeck[]>([]);
   const [ready, setReady] = useState(false);
+  const [settledRevision, setSettledRevision] = useState<number>();
   const [error, setError] = useState<unknown>(null);
+  const requestId = useRef(0);
+  const live = useRef(true);
+  async function refresh(signal?: AbortSignal) {
+    const id = ++requestId.current;
+    try {
+      const data = await request<VersionedDeck[]>('/decks', { signal });
+      if (live.current && !signal?.aborted && id === requestId.current) {
+        setDecks(data);
+        setReady(true);
+        setSettledRevision(revision);
+        setError(null);
+      }
+      return data;
+    } catch (error) {
+      if (live.current && !signal?.aborted && id === requestId.current)
+        setError(error);
+      throw error;
+    }
+  }
   useEffect(() => {
+    live.current = true;
     const abort = new AbortController();
-    void request<Deck[]>('/decks', { signal: abort.signal })
-      .then((data) => {
-        if (!abort.signal.aborted) {
-          setDecks(data);
-          setReady(true);
-          setError(null);
-        }
-      })
-      .catch((error) => {
-        if (!abort.signal.aborted) setError(error);
-      });
-    return () => abort.abort();
+    void refresh(abort.signal).catch(() => {});
+    return () => {
+      live.current = false;
+      abort.abort();
+      ++requestId.current;
+    };
   }, [revision]);
-  const addDeck = (deck: Deck) =>
+  const addDeck = (deck: Deck) => {
+    ++requestId.current;
     setDecks((previous) =>
       previous.some((item) => item.id === deck.id)
         ? previous
         : [...previous, deck],
     );
-  return { decks, error, addDeck, ready };
+  };
+  const replaceDeck = (deck: VersionedDeck) => {
+    ++requestId.current;
+    setDecks((previous) =>
+      previous.map((item) => (item.id === deck.id ? deck : item)),
+    );
+  };
+  const removeDeck = (id: string) => {
+    ++requestId.current;
+    setDecks((previous) => previous.filter((item) => item.id !== id));
+  };
+  return {
+    decks,
+    error,
+    addDeck,
+    replaceDeck,
+    removeDeck,
+    refresh,
+    ready,
+    settled: ready && settledRevision === revision,
+  };
 }
 function CreateDeckForm({ onCreated }: { onCreated: (deck: Deck) => void }) {
   const t = useLearningText();
@@ -302,6 +346,15 @@ export default function LearningWorkspace({
   requestedDeck?: { id: string; token: number };
 }) {
   const t = useLearningText();
+  const searchT = useCardSearchText();
+  const [draftFilters, setDraftFilters] = useState(emptyCardFilters);
+  const [filters, setFilters] = useState(emptyCardFilters);
+  const [listLoading, setListLoading] = useState(false);
+  const managementT = useDeckManagementText();
+  const [management, setManagement] = useState<{
+    mode: 'rename' | 'delete';
+    deck: VersionedDeck;
+  } | null>(null);
   const {
     t: uiT,
     locale,
@@ -310,7 +363,16 @@ export default function LearningWorkspace({
     formatEquity,
     formatDecision,
   } = useI18n();
-  const { decks, error: deckError, addDeck, ready } = useDecks(revision);
+  const {
+    decks,
+    error: deckError,
+    addDeck,
+    replaceDeck,
+    removeDeck,
+    refresh,
+    ready,
+    settled,
+  } = useDecks(revision);
   const [deckId, setDeckId] = useState(savedDeck);
   const [appliedDeckToken, setAppliedDeckToken] = useState<number>();
   const [studying, setStudying] = useState(false);
@@ -319,6 +381,7 @@ export default function LearningWorkspace({
   const [page, setPage] = useState<CardPage & { owner?: string }>({
     items: [],
     next_cursor: null,
+    total: 0,
   });
   const [moreLoading, setMoreLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -333,36 +396,51 @@ export default function LearningWorkspace({
     rating: Rating;
     id: string;
   } | null>(null);
-  const current = useRef(deckId);
-  current.current = deckId;
-  const listKey = JSON.stringify([deckId, revision]);
+  const current = useRef({ deckId, session: {} });
+  if (current.current.deckId !== deckId) {
+    generation.current++;
+    current.current = { deckId, session: {} };
+  }
+  const session = current.current.session;
+  const [questionOwner, setQuestionOwner] = useState<object | null>(null);
+  const metadataOnlyRevision = useRef<number | null>(null);
+  const listRevision = useRef({ revision, value: 0 });
+  if (listRevision.current.revision !== revision) {
+    if (revision !== metadataOnlyRevision.current) listRevision.current.value++;
+    metadataOnlyRevision.current = null;
+    listRevision.current.revision = revision;
+  }
+  const contentRevision = listRevision.current.value;
+  const listKey = JSON.stringify([deckId, contentRevision, filters]);
   const listContext = useRef({ key: listKey });
   if (listContext.current.key !== listKey)
     listContext.current = { key: listKey };
   const moreRequest = useRef<AbortController | undefined>(undefined);
   useEffect(() => {
     if (!ready) return;
-    if (!decks.some((d) => d.id === deckId)) setDeckId(decks[0]?.id || '');
+    if (deckId !== ALL_CARDS && !decks.some((d) => d.id === deckId))
+      setDeckId(decks[0]?.id || ALL_CARDS);
   }, [decks, deckId, ready]);
   useEffect(() => {
     generation.current++;
-    if (deckId) rememberDeck(deckId);
+    if (ready) rememberDeck(deckId);
     setRevealed(null);
     setNext(null);
     setError(null);
     setBusy(false);
     setReviewResult(null);
     setLoading(false);
-    setPage({ items: [], next_cursor: null });
+    setExporting(false);
+    setPage({ items: [], next_cursor: null, total: 0 });
   }, [deckId]);
   useEffect(() => {
-    if (
-      !requestedDeck ||
-      appliedDeckToken === requestedDeck.token ||
-      !ready ||
-      !decks.some((deck) => deck.id === requestedDeck.id)
-    )
+    if (!requestedDeck || appliedDeckToken === requestedDeck.token || !settled)
       return;
+    setAppliedDeckToken(requestedDeck.token);
+    if (!decks.some((deck) => deck.id === requestedDeck.id)) {
+      setStudying(false);
+      return;
+    }
     generation.current++;
     setDeckId(requestedDeck.id);
     setStudying(true);
@@ -373,14 +451,16 @@ export default function LearningWorkspace({
     setBusy(false);
     setQueueRevision((value) => value + 1);
     setAppliedDeckToken(requestedDeck.token);
-  }, [requestedDeck, appliedDeckToken, ready, decks]);
+  }, [requestedDeck, appliedDeckToken, settled, decks]);
   useEffect(() => {
     if (!deckId) return;
     const abort = new AbortController();
     const context = listContext.current;
+    setListLoading(true);
+    setError(null);
     moreRequest.current?.abort();
     setMoreLoading(false);
-    void request<CardPage>(`/decks/${deckId}/cards?limit=50`, {
+    void request<CardPage>(cardListPath(deckId, filters), {
       signal: abort.signal,
     })
       .then((data) => {
@@ -390,33 +470,41 @@ export default function LearningWorkspace({
       .catch((error) => {
         if (!abort.signal.aborted && listContext.current === context)
           setError(error);
+      })
+      .finally(() => {
+        if (!abort.signal.aborted && listContext.current === context)
+          setListLoading(false);
       });
     return () => {
       abort.abort();
       moreRequest.current?.abort();
     };
-  }, [deckId, revision]);
+  }, [deckId, contentRevision, filters]);
   useEffect(() => {
     if (!deckId || !studying) return;
+    const owner = session;
     const abort = new AbortController();
     setLoading(true);
     setNext(null);
     setRevealed(null);
     void request<NextCard>(`/decks/${deckId}/next`, { signal: abort.signal })
       .then((data) => {
-        if (!abort.signal.aborted) {
+        if (!abort.signal.aborted && current.current.session === owner) {
+          setQuestionOwner(owner);
           setNext(data);
           setError(null);
         }
       })
       .catch((error) => {
-        if (!abort.signal.aborted) setError(error);
+        if (!abort.signal.aborted && current.current.session === owner)
+          setError(error);
       })
       .finally(() => {
-        if (!abort.signal.aborted) setLoading(false);
+        if (!abort.signal.aborted && current.current.session === owner)
+          setLoading(false);
       });
     return () => abort.abort();
-  }, [deckId, studying, queueRevision]);
+  }, [deckId, studying, queueRevision, session]);
   async function reveal() {
     if (!next?.card) return;
     const version = ++generation.current;
@@ -488,7 +576,7 @@ export default function LearningWorkspace({
     setMoreLoading(true);
     try {
       const data = await request<CardPage>(
-        `/decks/${id}/cards?limit=50&after=${page.next_cursor}`,
+        cardListPath(id, filters, page.next_cursor),
         { signal: abort.signal },
       );
       if (!abort.signal.aborted && listContext.current === context)
@@ -511,6 +599,7 @@ export default function LearningWorkspace({
   }
   async function download() {
     const id = deckId;
+    const owner = session;
     setExporting(true);
     setError(null);
     try {
@@ -530,16 +619,18 @@ export default function LearningWorkspace({
           details,
         );
       }
-      const url = URL.createObjectURL(await response.blob());
+      // An explicitly started download completes even when another deck is selected.
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
       anchor.download = `${(decks.find((d) => d.id === id)?.name || 'BG Tutor').replace(/[^\p{L}\p{N}_ -]/gu, '_')}.apkg`;
       anchor.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (error) {
-      if (current.current === id) setError(error);
+      if (current.current.session === owner) setError(error);
     } finally {
-      setExporting(false);
+      if (current.current.session === owner) setExporting(false);
     }
   }
   function interval(seconds: number) {
@@ -553,14 +644,15 @@ export default function LearningWorkspace({
       },
     );
   }
-  const card = next?.card;
+  const activeNext = questionOwner === session ? next : null;
+  const card = activeNext?.card;
   const context = card ? matchContext(card.position.gnubg_match_id) : null;
   const decision = revealed?.answer.solution.decision;
   const name = decks.find((deck) => deck.id === deckId)?.name;
   if (requestedDeck && requestedDeck.token !== appliedDeckToken)
     return (
       <section className="learning-workspace" aria-label={t('study')}>
-        <h2>{t('study')}</h2>
+        <h1>{t('study')}</h1>
         <p role="status">{t('loading')}</p>
         {!!deckError && (
           <>
@@ -574,7 +666,7 @@ export default function LearningWorkspace({
     <section className="learning-workspace" aria-label={t('study')}>
       <div className="learning-heading">
         <div>
-          <h2>{t('title')}</h2>
+          <h1>{t('title')}</h1>
           <p>{t('description')}</p>
         </div>
         <CreateDeckForm
@@ -585,51 +677,74 @@ export default function LearningWorkspace({
           }}
         />
       </div>
-      <div className="learning-controls">
-        <label>
-          {t('chooseDeck')}{' '}
-          <select
-            aria-label={t('chooseDeck')}
-            value={deckId}
-            onChange={(e) => {
-              setDeckId(e.target.value);
-              setStudying(false);
+      <div className="learning-deck-panel">
+        <div className="learning-controls">
+          <label>
+            {t('chooseDeck')}{' '}
+            <select
+              aria-label={t('chooseDeck')}
+              value={deckId}
+              onChange={(e) => {
+                setDeckId(e.target.value);
+                setStudying(false);
+              }}
+            >
+              <option value={ALL_CARDS}>{searchT('allCards')}</option>
+              {decks.map((deck) => (
+                <option value={deck.id} key={deck.id}>
+                  {deck.name} · {t('cards', { count: deck.card_count })}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            disabled={!decks.some((deck) => deck.id === deckId)}
+            onClick={() => {
+              const deck = decks.find((deck) => deck.id === deckId);
+              if (deck) setManagement({ mode: 'rename', deck });
             }}
           >
-            {!decks.length && <option value="">—</option>}
-            {decks.map((deck) => (
-              <option value={deck.id} key={deck.id}>
-                {deck.name} · {t('cards', { count: deck.card_count })}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          className="primary"
-          disabled={!deckId || loading || busy}
-          onClick={() => {
-            generation.current++;
-            setRevealed(null);
-            setStudying(true);
-            setQueueRevision((n) => n + 1);
-          }}
-        >
-          {t('studyNow')}
-        </button>
-        <button
-          disabled={
-            !deckId ||
-            !decks.find((d) => d.id === deckId)?.card_count ||
-            exporting
-          }
-          onClick={() => void download()}
-        >
-          {exporting ? t('exporting') : t('export')}
-        </button>
+            {managementT('rename')}
+          </button>
+          <button
+            disabled={!decks.some((deck) => deck.id === deckId)}
+            onClick={() => {
+              const deck = decks.find((deck) => deck.id === deckId);
+              if (deck) setManagement({ mode: 'delete', deck });
+            }}
+          >
+            {managementT('delete')}
+          </button>
+          <button
+            className="primary"
+            disabled={
+              !decks.some((deck) => deck.id === deckId) || loading || busy
+            }
+            onClick={() => {
+              generation.current++;
+              setRevealed(null);
+              setStudying(true);
+              setQueueRevision((n) => n + 1);
+            }}
+          >
+            {t('studyNow')}
+          </button>
+          <button
+            disabled={
+              !decks.find((d) => d.id === deckId)?.card_count || exporting
+            }
+            onClick={() => void download()}
+          >
+            {exporting ? t('exporting') : t('export')}
+          </button>
+        </div>
+        <p className="learning-explainer">
+          {t('separateProgress')} {t('retention')}
+        </p>
+        {deckId === ALL_CARDS && (
+          <p className="learning-scope-hint">{searchT('chooseScope')}</p>
+        )}
       </div>
-      <p className="learning-explainer">
-        {t('separateProgress')} {t('retention')}
-      </p>
       {!!(error || deckError) && (
         <p role="alert">{formatError(error || deckError)}</p>
       )}
@@ -660,13 +775,13 @@ export default function LearningWorkspace({
             {t('back')}
           </button>
           {loading && <p role="status">{t('loading')}</p>}
-          {next && (
+          {activeNext && (
             <p className="learning-counts">
-              {t('due', { count: next.counts.due })} ·{' '}
-              {t('newCards', { count: next.counts.new })}
+              {t('due', { count: activeNext.counts.due })} ·{' '}
+              {t('newCards', { count: activeNext.counts.new })}
             </p>
           )}
-          {next && !card && <p role="status">{t('noDue')}</p>}
+          {activeNext && !card && <p role="status">{t('noDue')}</p>}
           {card && (
             <article className="study-card" data-card-id={card.id}>
               <span className="eyebrow">
@@ -792,18 +907,77 @@ export default function LearningWorkspace({
           )}
         </>
       ) : (
-        page.owner === listKey &&
-        !!page.items.length && (
+        <>
+          <CardSearchControls
+            filters={draftFilters}
+            onChange={setDraftFilters}
+            onSearch={() => setFilters({ ...draftFilters })}
+            onClear={() => {
+              const empty = emptyCardFilters();
+              setDraftFilters(empty);
+              setFilters(empty);
+            }}
+          />
+          {listLoading && <p role="status">{t('loading')}</p>}
           <LearningCardBrowser
-            key={deckId}
+            key={JSON.stringify([deckId, filters])}
             visible={visible}
-            cards={page.items}
+            cards={page.owner === listKey ? page.items : []}
+            total={
+              page.owner === listKey ? (page.total ?? page.items.length) : 0
+            }
+            loading={listLoading || page.owner !== listKey}
+            decks={decks}
             theme={theme}
-            hasMore={!!page.next_cursor}
+            hasMore={page.owner === listKey && !!page.next_cursor}
             moreLoading={moreLoading}
             onMore={() => void more()}
           />
-        )
+        </>
+      )}
+      {management && (
+        <DeckManagementDialog
+          mode={management.mode}
+          deck={management.deck}
+          onClose={() => setManagement(null)}
+          onRefresh={async () => {
+            const latest = await refresh();
+            onChanged();
+            return latest;
+          }}
+          onRenamed={(deck) => {
+            replaceDeck(deck);
+            if (!filters.q.trim()) metadataOnlyRevision.current = revision + 1;
+            setManagement(null);
+            onChanged();
+          }}
+          onDeleted={(id) => {
+            generation.current++;
+            current.current = { deckId: '', session: {} };
+            listContext.current = { key: '' };
+            moreRequest.current?.abort();
+            removeDeck(id);
+            const replacement =
+              decks.find((deck) => deck.id !== id)?.id || ALL_CARDS;
+            rememberDeck(replacement);
+            setDeckId(replacement);
+            setStudying(false);
+            setNext(null);
+            setRevealed(null);
+            setQuestionOwner(null);
+            setReviewResult(null);
+            setPage({ items: [], next_cursor: null, total: 0 });
+            setMoreLoading(false);
+            setLoading(false);
+            setBusy(false);
+            setExporting(false);
+            setError(null);
+            postRequest.current = null;
+            if (requestedDeck) setAppliedDeckToken(requestedDeck.token);
+            setManagement(null);
+            onChanged();
+          }}
+        />
       )}
     </section>
   );

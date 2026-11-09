@@ -11,7 +11,7 @@
 }
 .position-bookmark-control {
   padding: 10px 12px;
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   color: var(--ui-muted);
 }
 .position-bookmark-control p {
