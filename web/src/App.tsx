@@ -15,7 +15,7 @@ import {
 } from 'react';
 import { request, type Match, type Position } from './api';
 import AnalysisWorkspace, { type AnalysisDetail } from './AnalysisWorkspace';
-import MatchDatabase from './MatchDatabase';
+import MatchDatabase, { type PositionSearchRequest } from './MatchDatabase';
 import StudyWorkspace from './StudyWorkspace';
 import PositionBrowser from './PositionBrowser';
 import { usePositionText } from './position-browser-messages';
@@ -95,6 +95,8 @@ export default function App() {
     token: number;
   }>();
   const [databaseId, setDatabaseId] = useState(readDatabase);
+  const [requestedPositionSearch, setRequestedPositionSearch] =
+    useState<PositionSearchRequest>();
   const [moveNotes, setMoveNotes] = useState<MoveNotesTarget>();
   const [importResults, setImportResults] = useState<
     {
@@ -105,7 +107,7 @@ export default function App() {
   >([]);
   const annotationNavigation = useRef<AbortController | undefined>(undefined);
   useEffect(() => {
-    if (!configuration && databaseId) saveDatabase(databaseId);
+    if (!configuration) saveDatabase(databaseId);
   }, [databaseId, !!configuration]);
   useEffect(() => () => annotationNavigation.current?.abort(), []);
   const [view, setView] = useState<View>('analysis');
@@ -332,6 +334,16 @@ export default function App() {
     void (gameNo
       ? navigation.openMatch(match.id, gameNo)
       : navigation.selectMatch(match));
+  }
+  function searchCurrentPosition() {
+    const positionId = navigation.position?.position_id;
+    if (!positionId) return;
+    changeDatabase('');
+    setRequestedPositionSearch((previous) => ({
+      positionId,
+      token: (previous?.token ?? 0) + 1,
+    }));
+    setView('database');
   }
   function openPosition(position: Position | string) {
     setView('analysis');
@@ -586,7 +598,7 @@ export default function App() {
             configured={!!settings && (!configuration || configuration.ready)}
             detail={detail}
             onDetail={setDetail}
-            onOpenDatabase={() => setView('database')}
+            onOpenDatabase={searchCurrentPosition}
             onTrackJob={track}
             onNotesSaved={notesSaved}
             notesSuspended={!!moveNotes || view !== 'analysis'}
@@ -649,6 +661,7 @@ export default function App() {
             }}
             annotationRevision={annotationRevision}
             currentPosition={navigation.position}
+            requestedPositionSearch={requestedPositionSearch}
             selectedMatchId={navigation.match?.id}
             onOpen={openMatch}
             onPosition={openPosition}

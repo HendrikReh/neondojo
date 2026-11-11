@@ -59,6 +59,7 @@ vi.mock('./i18n', () => ({
   }),
 }));
 import PositionBookmarkButton from './PositionBookmarkButton';
+import ActionButton from './ActionButton';
 import { positionBookmarkMessages } from './position-bookmark-messages';
 import AnalysisWorkspace from './AnalysisWorkspace';
 import AnalysisPanel from './AnalysisPanel';
@@ -81,15 +82,19 @@ function elements(node: ReactNode): Element[] {
 }
 function text(node: ReactNode): string {
   if (Array.isArray(node)) return node.map(text).join('');
-  if (isValidElement<{ children?: ReactNode }>(node))
-    return text(node.props.children);
+  if (isValidElement<{ children?: ReactNode; label?: string }>(node))
+    return node.type === ActionButton
+      ? (node.props.label ?? '')
+      : text(node.props.children);
   return typeof node === 'string' || typeof node === 'number'
     ? String(node)
     : '';
 }
 function button(tree: ReactNode, label: string) {
   const result = elements(tree).find(
-    (node) => node.type === 'button' && text(node) === label,
+    (node) =>
+      (node.type === 'button' || node.type === ActionButton) &&
+      text(node) === label,
   );
   expect(result, label).toBeDefined();
   return result!;

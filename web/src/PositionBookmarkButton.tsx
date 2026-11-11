@@ -1,3 +1,4 @@
+import ActionButton from './ActionButton';
 import { useEffect, useRef, useState } from 'react';
 import {
   loadPositionBookmark,
@@ -101,14 +102,9 @@ export default function PositionBookmarkButton({
   return (
     <div className="position-bookmark-control" aria-busy={busy}>
       {status.saved !== undefined ? (
-        <button
-          type="button"
-          className="played-preview-button"
-          aria-pressed={status.saved}
-          disabled={busy}
-          onClick={() => void change(status.saved ? 'remove' : 'save')}
-        >
-          {l(
+        <ActionButton
+          icon={status.saved ? 'unbookmark' : 'bookmark'}
+          label={l(
             status.pending === 'save'
               ? 'saving'
               : status.pending === 'remove'
@@ -117,7 +113,13 @@ export default function PositionBookmarkButton({
                   ? 'remove'
                   : 'save',
           )}
-        </button>
+          compact
+          type="button"
+          className="played-preview-button"
+          aria-pressed={status.saved}
+          disabled={busy}
+          onClick={() => void change(status.saved ? 'remove' : 'save')}
+        />
       ) : busy ? (
         <span role="status">{l('loading')}</span>
       ) : null}

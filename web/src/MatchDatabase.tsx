@@ -47,6 +47,11 @@ import LibraryFilters from './LibraryFilters';
 import LibraryDialogs, { type LibraryDialogState } from './LibraryDialogs';
 import './library.css';
 
+export interface PositionSearchRequest {
+  positionId: string;
+  token: number;
+}
+
 const resultKey: Record<string, LibraryMessageKey> = {
   copied: 'copied',
   moved: 'moved',
@@ -63,6 +68,7 @@ export default function MatchDatabase({
   revision,
   annotationRevision,
   currentPosition,
+  requestedPositionSearch,
   selectedMatchId,
   databaseId,
   onDatabase,
@@ -77,6 +83,7 @@ export default function MatchDatabase({
   visible: boolean;
   annotationRevision: number;
   currentPosition?: Position;
+  requestedPositionSearch?: PositionSearchRequest;
   selectedMatchId?: string;
   databaseId: string;
   onDatabase: (id: string) => void;
@@ -167,7 +174,15 @@ export default function MatchDatabase({
   const resultNames = useRef<Record<string, string>>({});
   const [exact, setExact] = useState(''),
     [positionInputError, setPositionInputError] = useState(false);
-  const matchScope = JSON.stringify([databaseId, filters, sort, direction]);
+  const positionSearchForm = useRef<HTMLDetailsElement>(null);
+  const consumedPositionSearch = useRef<number | undefined>(undefined);
+  const matchScope = JSON.stringify([
+    databaseId,
+    filters,
+    sort,
+    direction,
+    requestedPositionSearch?.token,
+  ]);
   const matchOpening = useLibraryMatchOpening({
     scope: matchScope,
     positionId: filters.position_id.trim(),
@@ -179,6 +194,21 @@ export default function MatchDatabase({
     setExact(filters.position_id);
     setPositionInputError(false);
   }, [filters.position_id]);
+  useEffect(() => {
+    if (
+      !requestedPositionSearch ||
+      consumedPositionSearch.current === requestedPositionSearch.token
+    )
+      return;
+    consumedPositionSearch.current = requestedPositionSearch.token;
+    setExact(requestedPositionSearch.positionId);
+    setPositionInputError(false);
+    setFilters({
+      ...emptyFilters(),
+      position_id: requestedPositionSearch.positionId,
+    });
+    if (positionSearchForm.current) positionSearchForm.current.open = true;
+  }, [requestedPositionSearch]);
   const databaseCallback = useRef(onDatabase);
   databaseCallback.current = onDatabase;
   const databaseCurrent = useRef(databaseId);
@@ -203,14 +233,14 @@ export default function MatchDatabase({
   useEffect(() => {
     setSelected(new Set());
     setResult(undefined);
-  }, [databaseId, filters, sort, direction]);
+  }, [matchScope]);
   useEffect(() => {
     const abort = new AbortController(),
       version = ++queryVersion.current;
     moreRequest.current?.abort();
     setLoading(true);
     setError(undefined);
-    const scope = JSON.stringify([databaseId, filters, sort, direction]);
+    const scope = matchScope;
     if (queryScope.current !== scope) {
       setCursor(null);
       setMatches([]);
@@ -240,6 +270,7 @@ export default function MatchDatabase({
     filters,
     sort,
     direction,
+    matchScope,
     revision,
     localRevision,
     annotationRevision,
@@ -538,7 +569,7 @@ export default function MatchDatabase({
               databaseId={databaseId}
               onOpen={onAnnotation}
             />
-            <details className="position-search">
+            <details ref={positionSearchForm} className="position-search">
               <summary>
                 ⌕ {t('app.findPosition')} <span>{t('app.positionId')}</span>
               </summary>
