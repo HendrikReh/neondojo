@@ -1,16 +1,16 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './test';
 
 test.use({ viewport: { width: 1800, height: 1169 }, actionTimeout: 5000 });
 const initial = () => [
   {
-    id: 'deck-a',
+    id: '11111111-1111-4111-8111-111111111111',
     name: 'Race practice',
     card_count: 2,
     version: 3,
     created_at: '2026-11-09T00:00:00Z',
   },
   {
-    id: 'deck-b',
+    id: '22222222-2222-4222-8222-222222222222',
     name: 'Cube practice',
     card_count: 0,
     version: 0,
@@ -25,7 +25,10 @@ async function setup(page: Page) {
   };
   await page.addInitScript(() => {
     localStorage.setItem('bgtutor.locale', 'en');
-    localStorage.setItem('bgtutor.deck', 'deck-a');
+    localStorage.setItem(
+      'bgtutor.deck',
+      '11111111-1111-4111-8111-111111111111',
+    );
   });
   await page.route('**/api/decks', (route) =>
     route.fulfill({ json: state.decks }),
@@ -33,35 +36,38 @@ async function setup(page: Page) {
   await page.route('**/api/decks/*/cards?*', (route) =>
     route.fulfill({ json: { items: [], next_cursor: null } }),
   );
-  await page.route(/\/api\/decks\/deck-[ab](\?.*)?$/, async (route) => {
-    const request = route.request(),
-      method = request.method(),
-      url = request.url();
-    state.writes.push({ method, url, body: request.postDataJSON() });
-    const deck = state.decks.find((item) => url.includes(item.id))!;
-    if (state.conflict)
-      return route.fulfill({
-        status: 409,
-        json: { error: 'deck changed elsewhere' },
-      });
-    if (method === 'PUT') {
-      const body = request.postDataJSON();
-      expect(body.expected_version).toBe(deck.version);
-      deck.name = body.name;
-      deck.version++;
-      return route.fulfill({ json: deck });
-    }
-    expect(new URL(url).searchParams.get('expected_version')).toBe(
-      String(deck.version),
-    );
-    state.decks = state.decks.filter((item) => item.id !== deck.id);
-    return route.fulfill({ status: 204 });
-  });
+  await page.route(
+    /\/api\/decks\/(?:11111111-1111-4111-8111-111111111111|22222222-2222-4222-8222-222222222222)(\?.*)?$/,
+    async (route) => {
+      const request = route.request(),
+        method = request.method(),
+        url = request.url();
+      state.writes.push({ method, url, body: request.postDataJSON() });
+      const deck = state.decks.find((item) => url.includes(item.id))!;
+      if (state.conflict)
+        return route.fulfill({
+          status: 409,
+          json: { error: 'deck changed elsewhere' },
+        });
+      if (method === 'PUT') {
+        const body = request.postDataJSON();
+        expect(body.expected_version).toBe(deck.version);
+        deck.name = body.name;
+        deck.version++;
+        return route.fulfill({ json: deck });
+      }
+      expect(new URL(url).searchParams.get('expected_version')).toBe(
+        String(deck.version),
+      );
+      state.decks = state.decks.filter((item) => item.id !== deck.id);
+      return route.fulfill({ status: 204 });
+    },
+  );
   await page.goto('/');
   await page.getByRole('tab', { name: 'Study & Anki', exact: true }).click();
   const study = page.getByRole('region', { name: 'Study & Anki', exact: true });
   await expect(study.getByLabel('Choose deck', { exact: true })).toHaveValue(
-    'deck-a',
+    '11111111-1111-4111-8111-111111111111',
   );
   return { state, study };
 }
@@ -148,13 +154,16 @@ test('deleting the selected deck clears study and late next-card replies, then p
   const waiting = new Promise<void>((resolve) => {
     started = resolve;
   });
-  await page.route('**/api/decks/deck-a/next', async (route) => {
-    started();
-    await held;
-    await route
-      .fulfill({ json: { card: null, counts: { due: 999, new: 999 } } })
-      .catch(() => {});
-  });
+  await page.route(
+    '**/api/decks/11111111-1111-4111-8111-111111111111/next',
+    async (route) => {
+      started();
+      await held;
+      await route
+        .fulfill({ json: { card: null, counts: { due: 999, new: 999 } } })
+        .catch(() => {});
+    },
+  );
   await study.getByRole('button', { name: 'Study now', exact: true }).click();
   await waiting;
   await study.getByRole('button', { name: 'Delete deck', exact: true }).click();
@@ -165,7 +174,7 @@ test('deleting the selected deck clears study and late next-card replies, then p
     .click();
   await expect(dialog).toHaveCount(0);
   await expect(study.getByLabel('Choose deck', { exact: true })).toHaveValue(
-    'deck-b',
+    '22222222-2222-4222-8222-222222222222',
   );
   release();
   await expect(study.locator('.study-card')).toHaveCount(0);
@@ -175,8 +184,14 @@ test('deleting the selected deck clears study and late next-card replies, then p
   await expect(study).not.toContainText('999');
   expect(state.writes).toHaveLength(1);
   await expect
-    .poll(() => page.evaluate(() => localStorage.getItem('bgtutor.deck')))
-    .toBe('deck-b');
+    .poll(() =>
+      page.evaluate(
+        async () =>
+          (await (await fetch('/api/configuration')).json())
+            .current_configuration.learning.deck_id,
+      ),
+    )
+    .toBe('22222222-2222-4222-8222-222222222222');
   await study.getByRole('button', { name: 'Delete deck', exact: true }).click();
   const last = page.getByRole('dialog', { name: 'Delete deck', exact: true });
   await last.getByRole('checkbox').check();
@@ -188,7 +203,13 @@ test('deleting the selected deck clears study and late next-card replies, then p
     study.getByRole('button', { name: 'Study now', exact: true }),
   ).toBeDisabled();
   await expect
-    .poll(() => page.evaluate(() => localStorage.getItem('bgtutor.deck')))
+    .poll(() =>
+      page.evaluate(
+        async () =>
+          (await (await fetch('/api/configuration')).json())
+            .current_configuration.learning.deck_id,
+      ),
+    )
     .toBe('__all__');
 });
 
@@ -227,16 +248,18 @@ test('rename keeps a later-page preview and a pending study answer, and modal ke
 }) => {
   const { study } = await setup(page);
   const firstPage = Array.from({ length: 50 }, (_, i) => question(`card-${i}`));
-  await page.route('**/api/decks/deck-a/cards?*', (route) =>
-    route.fulfill({
-      json: new URL(route.request().url()).searchParams.has('after')
-        ? { items: [question('card-50')], next_cursor: null }
-        : { items: firstPage, next_cursor: 'later' },
-    }),
+  await page.route(
+    '**/api/decks/11111111-1111-4111-8111-111111111111/cards?*',
+    (route) =>
+      route.fulfill({
+        json: new URL(route.request().url()).searchParams.has('after')
+          ? { items: [question('card-50')], next_cursor: null }
+          : { items: firstPage, next_cursor: 'later' },
+      }),
   );
   const chooser = study.getByLabel('Choose deck', { exact: true });
-  await chooser.selectOption('deck-b');
-  await chooser.selectOption('deck-a');
+  await chooser.selectOption('22222222-2222-4222-8222-222222222222');
+  await chooser.selectOption('11111111-1111-4111-8111-111111111111');
   await expect(study.locator('.learning-card-list tbody tr')).toHaveCount(50);
   await study.getByRole('button', { name: 'More cards', exact: true }).click();
   await expect(study.locator('.learning-card-list tbody tr')).toHaveCount(51);
@@ -258,10 +281,12 @@ test('rename keeps a later-page preview and a pending study answer, and modal ke
     'data-card-id',
     'card-50',
   );
-  await page.route('**/api/decks/deck-a/next', (route) =>
-    route.fulfill({
-      json: { card: question('card-50'), counts: { due: 1, new: 0 } },
-    }),
+  await page.route(
+    '**/api/decks/11111111-1111-4111-8111-111111111111/next',
+    (route) =>
+      route.fulfill({
+        json: { card: question('card-50'), counts: { due: 1, new: 0 } },
+      }),
   );
   let release!: () => void, started!: () => void;
   const held = new Promise<void>((resolve) => {
@@ -337,7 +362,7 @@ test('a stale delete requires refreshed counts and a new explicit confirmation',
     .click();
   await expect(dialog).toHaveCount(0);
   await expect(study.getByLabel('Choose deck', { exact: true })).toHaveValue(
-    'deck-b',
+    '22222222-2222-4222-8222-222222222222',
   );
 });
 

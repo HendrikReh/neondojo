@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 
 test('collections, independent copies, filters and metadata work together', async ({
   page,

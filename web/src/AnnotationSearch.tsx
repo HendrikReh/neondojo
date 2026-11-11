@@ -1,3 +1,5 @@
+import { useProfileValue } from './useProfileValue';
+import { useOptionalConfiguration } from './ConfigurationProvider';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import {
   normalizeAnnotationTag,
@@ -22,13 +24,26 @@ export default function AnnotationSearch({
   databaseId?: string;
   onOpen: (hit: AnnotationHit) => void;
 }) {
+  const profile = useOptionalConfiguration();
   const { t, formatError } = useAnnotationI18n();
   const l = useLibraryText();
   const htmlId = useId();
   const [q, setQuery] = useState('');
   const [tag, setTag] = useState('');
   const [kind, setKind] = useState<AnnotationKind | ''>('');
-  const [submitted, setSubmitted] = useState<AnnotationFilters | null>(null);
+  const [submitted, setSubmitted] = useProfileValue<AnnotationFilters | null>(
+    (c) => c.annotations.filters,
+    (c, filters) => ({ ...c, annotations: { ...c.annotations, filters } }),
+    null,
+  );
+  useEffect(() => {
+    if (!profile?.current) return;
+    const filters = profile.current.annotations.filters;
+    setQuery(filters?.q ?? '');
+    setTag(filters?.tag ?? '');
+    setKind(filters?.kind ?? '');
+    setValidation(null);
+  }, [profile?.generation, profile?.ready]);
   const [items, setItems] = useState<AnnotationHit[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -39,7 +54,15 @@ export default function AnnotationSearch({
   const moreController = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    if (!submitted) return;
+    if (!submitted) {
+      moreController.current?.abort();
+      setItems([]);
+      setCursor(null);
+      setComplete(false);
+      setLoading(false);
+      setLoadingMore(false);
+      return;
+    }
     const controller = new AbortController();
     moreController.current?.abort();
     setItems([]);
@@ -49,7 +72,7 @@ export default function AnnotationSearch({
     setComplete(false);
     setError(null);
     void searchAnnotations(
-      { ...submitted, database_id: databaseId },
+      { ...submitted, database_id: submitted.database_id ?? databaseId },
       null,
       controller.signal,
     )
@@ -76,7 +99,12 @@ export default function AnnotationSearch({
     const issue = searchValidation(q, tag);
     setValidation(issue);
     if (issue) return;
-    setSubmitted({ q: q.trim(), tag: normalizeAnnotationTag(tag), kind });
+    setSubmitted({
+      q: q.trim(),
+      tag: normalizeAnnotationTag(tag),
+      kind,
+      ...(databaseId ? { database_id: databaseId } : {}),
+    });
   };
 
   const more = async () => {
@@ -87,7 +115,7 @@ export default function AnnotationSearch({
     setError(null);
     try {
       const result = await searchAnnotations(
-        { ...submitted, database_id: databaseId },
+        { ...submitted, database_id: submitted.database_id ?? databaseId },
         cursor,
         controller.signal,
       );
@@ -111,7 +139,12 @@ export default function AnnotationSearch({
     setQuery('');
     setTag(value);
     setValidation(null);
-    setSubmitted({ q: '', tag: value, kind });
+    setSubmitted({
+      q: '',
+      tag: value,
+      kind,
+      ...(databaseId ? { database_id: databaseId } : {}),
+    });
   };
 
   return (

@@ -254,7 +254,7 @@ def load_archive(path, output, used):
         )
 
 
-def prepare(source, output, manifest):
+def prepare(source, output, manifest, options_manifest=None):
     used = set()
     catalog = []
     archives = sorted(source.glob("*.zip"))
@@ -272,6 +272,12 @@ def prepare(source, output, manifest):
     write_changed(
         manifest, (json.dumps(catalog, ensure_ascii=False, indent=2) + "\n").encode()
     )
+    if options_manifest is not None:
+        write_changed(
+            options_manifest,
+            (json.dumps({"board_themes": ["forest", "walnut", "slate"]
+                         + [theme["id"] for theme in catalog]}, indent=2) + "\n").encode(),
+        )
     return catalog
 
 
@@ -281,6 +287,7 @@ if __name__ == "__main__":
             ROOT / "themes",
             ROOT / "web/public/themes",
             ROOT / "web/src/generated-themes.json",
+            ROOT / "shared/configuration-options.json",
         )
         print(f"Prepared {len(result)} local BGBlitz themes")
     except (ValueError, OSError) as error:

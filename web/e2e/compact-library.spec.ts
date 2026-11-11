@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './test';
 
 const databaseId = '00000000-0000-0000-0000-000000000001';
 const entries = Array.from({ length: 50 }, (_, index) => ({

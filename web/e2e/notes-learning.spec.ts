@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './test';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -535,7 +535,7 @@ test('a whole-match deck trains checker, double and response cards with the sele
   await settings.getByRole('button', { name: 'Brett', exact: true }).click();
   await settings.getByRole('button', { name: 'Walnut', exact: true }).click();
   await settings
-    .getByRole('button', { name: 'Speichern', exact: true })
+    .getByRole('button', { name: 'Anwenden', exact: true })
     .click();
   await expect(settings).not.toBeVisible();
   await page.getByRole('tab', { name: 'Lernen & Anki', exact: true }).click();

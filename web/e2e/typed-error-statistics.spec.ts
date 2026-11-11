@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 
 test.use({ actionTimeout: 10000, viewport: { width: 1800, height: 1169 } });
 

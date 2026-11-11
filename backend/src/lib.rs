@@ -11,7 +11,9 @@ mod analysis_timing;
 mod match_jobs;
 
 pub mod annotations;
+pub mod configuration;
 pub mod learning;
+pub mod profiles;
 
 pub mod settings;
 

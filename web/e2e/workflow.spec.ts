@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './test';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -45,7 +45,7 @@ test('real import, search, GNUbg analysis, distribution, themes and mobile layou
   await settings.getByRole('button', { name: 'Brett', exact: true }).click();
   await settings.getByRole('button', { name: 'Walnut', exact: true }).click();
   await settings
-    .getByRole('button', { name: 'Speichern', exact: true })
+    .getByRole('button', { name: 'Anwenden', exact: true })
     .click();
   await expect(settings).not.toBeVisible();
   await expect(page.locator('.analysis-workspace .theme-walnut')).toBeVisible();

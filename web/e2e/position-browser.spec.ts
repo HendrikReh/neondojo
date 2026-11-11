@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 import { POSITION_COLUMNS } from '../src/position-table-columns';
 test.use({ actionTimeout: 10000 });
 test('header omits import while the match database retains working file import', async ({

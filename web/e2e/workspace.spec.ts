@@ -1,4 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
+import { profileBackend } from './profile-backend';
+import { defaultConfiguration } from '../src/configuration-model';
 
 test('analysis-first tabs preserve the selected game, notes and database navigation', async ({
   page,
@@ -51,7 +53,14 @@ test('a delayed initial settings response cannot replace a newer saved profile',
   page,
 }) => {
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
-  const original = await (await page.request.get('/api/settings')).json();
+  const configuration = structuredClone(defaultConfiguration);
+  configuration.general.locale = 'de';
+  configuration.analysis.plies = 1;
+  const profiles = await profileBackend(page, { configuration });
+  const original = {
+    ...(await (await page.request.get('/api/settings')).json()),
+    analysis_plies: 1,
+  };
   let dialogOpening = false,
     release = () => {},
     requested = () => {};
@@ -62,18 +71,12 @@ test('a delayed initial settings response cannot replace a newer saved profile',
     requested = resolve;
   });
   await page.route('**/api/settings', async (route) => {
-    if (route.request().method() === 'PUT')
-      return route.fulfill({
-        json: {
-          ...route.request().postDataJSON(),
-          version: original.version + 1,
-        },
-      });
     if (!dialogOpening) {
       requested();
       await gate;
     }
-    await route.fulfill({ json: original });
+    // The first startup read can be aborted and replayed by StrictMode.
+    await route.fulfill({ json: original }).catch(() => {});
   });
   await page.goto('/');
   await started;
@@ -93,17 +96,16 @@ test('a delayed initial settings response cannot replace a newer saved profile',
   await dialog
     .getByLabel('Standardprofil für Analysen', { exact: true })
     .selectOption('2');
-  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Anwenden', exact: true }).click();
   await expect(dialog).not.toBeVisible();
   await expect(
     page
       .locator('.workspace-analysis-command')
       .getByLabel('Partie-Analysetiefe', { exact: true }),
   ).toHaveValue('2');
+  expect(profiles.state.current_configuration.analysis.plies).toBe(2);
   release();
   await page.unrouteAll({ behavior: 'wait' });
-  // Give a late response time to reach React before asserting retained state.
-  await page.waitForTimeout(100);
   await expect(
     page
       .locator('.workspace-analysis-command')

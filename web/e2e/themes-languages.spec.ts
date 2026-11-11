@@ -1,4 +1,5 @@
-import { test, expect, type Locator, type Page } from '@playwright/test';
+import { profileText } from '../src/profile-messages';
+import { test, expect, type Locator, type Page } from './test';
 import { readFileSync } from 'node:fs';
 import { catalogs } from '../src/i18n-catalogs';
 import type { Locale } from '../src/i18n-core';
@@ -58,7 +59,7 @@ async function openSettings(page: Page) {
 
 async function saveDialog(dialog: Locator, locale: Locale) {
   await dialog
-    .getByRole('button', { name: settingsText(locale, 'save'), exact: true })
+    .getByRole('button', { name: profileText(locale, 'apply'), exact: true })
     .click();
   await expect(dialog).not.toBeVisible();
 }

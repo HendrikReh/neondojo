@@ -15,6 +15,9 @@ interface EffectSlot {
 }
 vi.mock('react', async (original) => ({
   ...(await original<typeof import('react')>()),
+  useContext(context: { _currentValue: unknown }) {
+    return context._currentValue;
+  },
   useState(initial: unknown) {
     const index = hooks.index++;
     if (!(index in hooks.slots))

@@ -1,4 +1,10 @@
+import { useOptionalConfiguration } from './ConfigurationProvider';
+import { useProfileValue } from './useProfileValue';
 import {
+  Children,
+  type HTMLAttributes,
+  type ReactNode,
+  type SetStateAction,
   useEffect,
   useMemo,
   useRef,
@@ -29,10 +35,7 @@ import {
   libraryAnalysisStatus,
 } from './library-match-summary';
 import { LIBRARY_COLUMNS, type LibraryColumn } from './library-columns';
-import {
-  LIBRARY_DATA_COLUMNS,
-  type LibraryDataColumn,
-} from './library-column-preferences';
+import { type LibraryDataColumn } from './library-column-preferences';
 import LibraryColumnPicker from './LibraryColumnPicker';
 import LibraryFilters from './LibraryFilters';
 import LibraryDialogs, { type LibraryDialogState } from './LibraryDialogs';
@@ -80,7 +83,43 @@ export default function MatchDatabase({
   const { t, locale, formatNumber, formatError } = useI18n(),
     w = useWorkspaceText(),
     l = useLibraryText();
+  const profile = useOptionalConfiguration();
+  const [filters, setAppliedFilters] = useProfileValue<Filters>(
+    (c) => c.library.filters,
+    (c, filters) => ({ ...c, library: { ...c.library, filters } }),
+    emptyFilters,
+  );
   const columns = useLibraryColumns(visible);
+  const [draftFilters, setDraftFilters] = useState<Filters>(filters);
+  const filterDraft = useRef(draftFilters);
+  filterDraft.current = draftFilters;
+  // Preserve editable whitespace while canonical filters drive persisted queries.
+  // Only a profile replacement rebases a user's still-editable filter inputs.
+  useEffect(() => {
+    if (!profile?.current) return;
+    filterDraft.current = profile.current.library.filters;
+    setDraftFilters(profile.current.library.filters);
+  }, [profile?.generation, profile?.ready]);
+  const setFilters = (next: SetStateAction<Filters>) => {
+    const value = typeof next === 'function' ? next(filterDraft.current) : next;
+    filterDraft.current = value;
+    setDraftFilters(value);
+    try {
+      setAppliedFilters(value);
+    } catch {
+      // A partially edited invalid field remains a draft until it is valid.
+    }
+  };
+  const [sort, setSort] = useProfileValue<LibrarySort>(
+    (c) => c.library.sort,
+    (c, sort) => ({ ...c, library: { ...c.library, sort } }),
+    'created_at',
+  );
+  const [direction, setDirection] = useProfileValue<'asc' | 'desc'>(
+    (c) => c.library.direction,
+    (c, direction) => ({ ...c, library: { ...c.library, direction } }),
+    'desc',
+  );
   const columnNames: Record<LibraryDataColumn, string> = {
     id: 'ID',
     white: l('white'),
@@ -101,15 +140,12 @@ export default function MatchDatabase({
   const compactActions = !showColumn('white') && !showColumn('black');
   const [databases, setDatabases] = useState<Database[]>([]),
     [localRevision, setRevision] = useState(0),
-    [filters, setFilters] = useState<Filters>(emptyFilters),
     [expanded, setExpanded] = useState(false),
     [matches, setMatches] = useState<LibraryMatch[]>([]),
     [matchResultScope, setMatchResultScope] = useState(''),
     [cursor, setCursor] = useState<string | null>(null),
     [loading, setLoading] = useState(false),
     [error, setError] = useState<unknown>(),
-    [sort, setSort] = useState<LibrarySort>('created_at'),
-    [direction, setDirection] = useState<'asc' | 'desc'>('desc'),
     [selected, setSelected] = useState<Set<string>>(new Set()),
     [dialog, setDialog] = useState<LibraryDialogState>(),
     [result, setResult] = useState<ActionResponse>();
@@ -438,7 +474,8 @@ export default function MatchDatabase({
               <input
                 aria-label={t('app.searchMatches')}
                 placeholder={t('app.searchPlaceholder')}
-                value={filters.q}
+                value={draftFilters.q}
+                disabled={!!profile && !profile.ready}
                 onChange={(e) =>
                   setFilters((f) => ({ ...f, q: e.target.value }))
                 }
@@ -453,7 +490,7 @@ export default function MatchDatabase({
           </div>
           {expanded && (
             <LibraryFilters
-              filters={filters}
+              filters={draftFilters}
               onChange={setFilters}
               onClear={() => setFilters(emptyFilters())}
               currentPosition={currentPosition}
@@ -545,7 +582,7 @@ export default function MatchDatabase({
               </span>
             )}
             <LibraryColumnPicker
-              options={LIBRARY_DATA_COLUMNS.map((id) => ({
+              options={columns.order.map((id) => ({
                 id,
                 label: columnNames[id],
               }))}
@@ -553,6 +590,7 @@ export default function MatchDatabase({
               onToggle={columns.toggle}
               onAll={columns.showAll}
               onReset={columns.resetSelection}
+              onMove={columns.move}
             />
             <button
               type="button"
@@ -644,22 +682,24 @@ export default function MatchDatabase({
                   }
                 >
                   <colgroup>
-                    {LIBRARY_COLUMNS.filter((column) =>
-                      showColumn(column.id),
-                    ).map((column) => (
-                      <col
-                        key={column.id}
-                        className={column.className}
-                        style={
-                          columns.widths
-                            ? { width: columns.widths[column.id] }
-                            : undefined
-                        }
-                      />
-                    ))}
+                    {columns.activeColumns
+                      .map((id) =>
+                        LIBRARY_COLUMNS.find((column) => column.id === id)!,
+                      )
+                      .map((column) => (
+                        <col
+                          key={column.id}
+                          className={column.className}
+                          style={
+                            columns.widths
+                              ? { width: columns.widths[column.id] }
+                              : undefined
+                          }
+                        />
+                      ))}
                   </colgroup>
                   <thead>
-                    <tr>
+                    <OrderedLibraryRow columns={columns.activeColumns}>
                       <th scope="col" data-column="select">
                         <input
                           type="checkbox"
@@ -693,11 +733,12 @@ export default function MatchDatabase({
                         {l('actions')}
                         {columns.handle('actions', l('actions'))}
                       </th>
-                    </tr>
+                    </OrderedLibraryRow>
                   </thead>
                   <tbody>
                     {matches.map((m, index) => (
-                      <tr
+                      <OrderedLibraryRow
+                        columns={columns.activeColumns}
                         key={m.id}
                         id={`library-row-${m.id}`}
                         title={summaries.get(m.id)}
@@ -842,7 +883,7 @@ export default function MatchDatabase({
                             </a>
                           </div>
                         </td>
-                      </tr>
+                      </OrderedLibraryRow>
                     ))}
                   </tbody>
                 </table>
@@ -876,4 +917,19 @@ export default function MatchDatabase({
       )}
     </section>
   );
+}
+
+function OrderedLibraryRow({
+  columns,
+  children,
+  ...props
+}: HTMLAttributes<HTMLTableRowElement> & {
+  columns: readonly LibraryColumn[];
+  children: ReactNode;
+}) {
+  const natural = LIBRARY_COLUMNS.map((column) => column.id).filter((id) =>
+    columns.includes(id),
+  );
+  const cells = Children.toArray(children);
+  return <tr {...props}>{columns.map((id) => cells[natural.indexOf(id)])}</tr>;
 }

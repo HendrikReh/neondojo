@@ -1,3 +1,5 @@
+import { useI18n } from './i18n';
+import ActionButton from './ActionButton';
 import { useEffect, useRef } from 'react';
 import { useLibraryText } from './library-messages';
 import type { LibraryDataColumn } from './library-column-preferences';
@@ -8,13 +10,24 @@ export default function LibraryColumnPicker({
   onToggle,
   onAll,
   onReset,
+  onMove,
 }: {
   options: readonly { id: LibraryDataColumn; label: string }[];
   shown: readonly LibraryDataColumn[];
   onToggle: (id: LibraryDataColumn, checked: boolean) => void;
   onAll: () => void;
   onReset: () => void;
+  onMove?: (id: LibraryDataColumn, delta: -1 | 1) => void;
 }) {
+  const { locale } = useI18n();
+  const labels = {
+    de: ['Nach oben', 'Nach unten'],
+    en: ['Move up', 'Move down'],
+    es: ['Mover arriba', 'Mover abajo'],
+    fr: ['Monter', 'Descendre'],
+    it: ['Sposta su', 'Sposta giù'],
+    pl: ['Przenieś w górę', 'Przenieś w dół'],
+  }[locale];
   const l = useLibraryText(),
     root = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
@@ -49,16 +62,40 @@ export default function LibraryColumnPicker({
       >
         <strong>{l('chooseColumns')}</strong>
         <div className="library-column-options">
-          {options.map((option) => (
-            <label key={option.id}>
-              <input
-                type="checkbox"
-                checked={shown.includes(option.id)}
-                disabled={shown.length === 1 && shown.includes(option.id)}
-                onChange={(event) => onToggle(option.id, event.target.checked)}
-              />
-              <span>{option.label}</span>
-            </label>
+          {options.map((option, index) => (
+            <div className="library-column-option" key={option.id}>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={shown.includes(option.id)}
+                  disabled={shown.length === 1 && shown.includes(option.id)}
+                  onChange={(event) =>
+                    onToggle(option.id, event.target.checked)
+                  }
+                />
+                <span>{option.label}</span>
+              </label>
+              {onMove && (
+                <span className="library-column-order-controls">
+                  <ActionButton
+                    icon="sort-up"
+                    compact
+                    label={`${labels[0]}: ${option.label}`}
+                    type="button"
+                    disabled={index === 0}
+                    onClick={() => onMove(option.id, -1)}
+                  />
+                  <ActionButton
+                    icon="sort-down"
+                    compact
+                    label={`${labels[1]}: ${option.label}`}
+                    type="button"
+                    disabled={index === options.length - 1}
+                    onClick={() => onMove(option.id, 1)}
+                  />
+                </span>
+              )}
+            </div>
           ))}
         </div>
         <small>{l('columnSelectionHint')}</small>

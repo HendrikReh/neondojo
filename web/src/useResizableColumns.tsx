@@ -28,6 +28,9 @@ export type ResizableColumnsOptions<Id extends string> = {
   visible: boolean;
   activeColumns?: readonly Id[];
   resizeLabel: (label: string) => string;
+  widths?: Partial<ColumnWidths<Id>> | null;
+  onWidthsChange?: (widths: ColumnWidths<Id> | undefined) => void;
+  configurationGeneration?: number;
 };
 
 export function useResizableColumns<Id extends string>(
@@ -35,10 +38,21 @@ export function useResizableColumns<Id extends string>(
   options: ResizableColumnsOptions<Id>,
 ) {
   const tableRef = useRef<HTMLTableElement>(null);
-  const [widths, setWidths] = useState(layout.read);
+  const [localWidths, setWidths] = useState(layout.read);
   const [measured, setMeasured] = useState<ColumnWidths<Id>>();
   const [dragging, setDragging] = useState(false);
   const active = useRef<Drag<Id> | undefined>(undefined);
+  const widths =
+    options.onWidthsChange && !dragging
+      ? options.widths
+        ? (Object.fromEntries(
+            layout.columns.map((column) => [
+              column.id,
+              options.widths?.[column.id] ?? column.defaultWidth ?? column.min,
+            ]),
+          ) as ColumnWidths<Id>)
+        : undefined
+      : localWidths;
   const current = useRef({ layout, options, widths });
   current.current = { layout, options, widths };
   const activeKey = JSON.stringify(
@@ -97,7 +111,13 @@ export function useResizableColumns<Id extends string>(
   }, [updateWidths]);
   useEffect(() => {
     cancel();
-  }, [options.visible, activeKey, layout.storageKey, cancel]);
+  }, [
+    options.visible,
+    activeKey,
+    layout.storageKey,
+    options.configurationGeneration,
+    cancel,
+  ]);
   useEffect(
     () => () => {
       const drag = active.current;
@@ -154,7 +174,7 @@ export function useResizableColumns<Id extends string>(
     setDragging(false);
     if (drag.latest[drag.column] === drag.base[drag.column])
       updateWidths(drag.before);
-    else layout.save(drag.latest);
+    else persist(drag.latest);
     if (event.currentTarget.hasPointerCapture(event.pointerId))
       event.currentTarget.releasePointerCapture(event.pointerId);
   }
@@ -180,7 +200,7 @@ export function useResizableColumns<Id extends string>(
           : base[column] + delta;
     const next = layout.resize(base, column, value);
     updateWidths(next);
-    layout.save(next);
+    persist(next);
   }
   function handle(column: Id, label: string) {
     const resizeLabel = options.resizeLabel(label);
@@ -206,10 +226,15 @@ export function useResizableColumns<Id extends string>(
       />
     );
   }
+  function persist(value: ColumnWidths<Id> | undefined) {
+    if (current.current.options.onWidthsChange)
+      current.current.options.onWidthsChange(value);
+    else layout.save(value);
+  }
   function reset() {
     cancel();
     updateWidths(undefined);
-    layout.save(undefined);
+    persist(undefined);
   }
   const total = widths && layout.total(widths, options.activeColumns);
   return {

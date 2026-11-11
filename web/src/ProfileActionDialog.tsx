@@ -1,0 +1,66 @@
+import { createPortal } from 'react-dom';
+import type { ReactNode } from 'react';
+import LibraryDialog from './LibraryDialog';
+import { useProfileText } from './profile-messages';
+import { ConfigurationApiError } from './configuration-api';
+import { profileFieldKey } from './profile-messages';
+
+export default function ProfileActionDialog({
+  title,
+  message,
+  children,
+  choices,
+  onCancel,
+  busy = false,
+  error,
+}: {
+  title: string;
+  message: string;
+  children?: ReactNode;
+  choices: { label: string; action: () => void }[];
+  onCancel: () => void;
+  busy?: boolean;
+  error?: unknown;
+}) {
+  const t = useProfileText();
+  return createPortal(
+    <LibraryDialog title={title} onClose={onCancel} busy={busy} native>
+      <p>{message}</p>
+      {children}
+      {!!error && (
+        <div role="alert" className="error">
+          <p>{error instanceof Error ? error.message : String(error)}</p>
+          {error instanceof ConfigurationApiError &&
+            error.issues.length > 0 && (
+              <ul>
+                {error.issues.map((issue, index) => (
+                  <li key={index}>
+                    {profileFieldKey(issue.path)
+                      ? t(profileFieldKey(issue.path)!)
+                      : issue.path}
+                    : {issue.message}
+                  </li>
+                ))}
+              </ul>
+            )}
+        </div>
+      )}
+      <div className="profile-actions">
+        {choices.map((choice) => (
+          <button
+            key={choice.label}
+            type="button"
+            disabled={busy}
+            onClick={choice.action}
+          >
+            {choice.label}
+          </button>
+        ))}
+        <button type="button" disabled={busy} onClick={onCancel}>
+          {t('cancel')}
+        </button>
+      </div>
+    </LibraryDialog>,
+    document.body,
+  );
+}

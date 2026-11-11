@@ -12,6 +12,7 @@ const en = {
   no_checker_moves:
     'No checker moves in this scope; cube analysis may still be needed.',
   network: 'The estimate could not be loaded.',
+  configuration: 'Waiting for the analysis settings to be applied.',
   game: 'Select a game to estimate its duration.',
   moves: '{moves} checker moves · {plies} Ply',
   basis: 'Benchmark {date} · {engine}',
@@ -29,6 +30,7 @@ const de: Record<Key, string> = {
   no_checker_moves:
     'Keine Checkerzüge in diesem Umfang; Cube-Analyse kann dennoch nötig sein.',
   network: 'Die Schätzung konnte nicht geladen werden.',
+  configuration: 'Wartet, bis die Analyseeinstellungen angewendet sind.',
   game: 'Wähle ein Spiel für die Laufzeitschätzung.',
   moves: '{moves} Checkerzüge · {plies} Ply',
   basis: 'Benchmark {date} · {engine}',

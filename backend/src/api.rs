@@ -77,6 +77,8 @@ pub(crate) type ApiResult<T> = Result<T, ApiError>;
 pub fn router(state: AppState) -> Router {
     Router::new()
         .merge(crate::settings::routes())
+        .merge(crate::configuration::routes())
+        .merge(crate::profiles::routes())
         .merge(crate::benchmarks::routes())
         .merge(crate::play::routes())
         .merge(crate::study::routes())
@@ -827,6 +829,8 @@ impl OpenApi for ApiDoc {
     fn openapi() -> utoipa::openapi::OpenApi {
         let mut doc = BaseApiDoc::openapi();
         doc.merge(crate::settings::SettingsDoc::openapi());
+        doc.merge(crate::configuration::ConfigurationDoc::openapi());
+        doc.merge(crate::profiles::ProfilesDoc::openapi());
         doc.merge(crate::benchmarks::BenchmarkDoc::openapi());
         doc.merge(crate::benchmarks::estimate::EstimateDoc::openapi());
         doc.merge(crate::analysis_timing::TimingDoc::openapi());

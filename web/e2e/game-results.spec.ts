@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './test';
 const id = 'dbbd7d27-41a3-4003-b5d4-e86309f55f64';
 const result = {
   winner: 1,

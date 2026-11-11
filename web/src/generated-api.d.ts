@@ -132,6 +132,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/configuration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_configuration"];
+        put: operations["put_configuration"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/configuration/availability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["configuration_availability"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/configuration/initialize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["initialize_configuration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/configuration/restore-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["restore_configuration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/databases": {
         parameters: {
             query?: never;
@@ -1092,6 +1156,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_profiles"];
+        put?: never;
+        post: operations["create_profile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/profiles/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_profile"];
+        put?: never;
+        post?: never;
+        delete: operations["delete_profile"];
+        options?: never;
+        head?: never;
+        patch: operations["rename_profile"];
+        trace?: never;
+    };
+    "/api/profiles/{id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["activate_profile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/profiles/{id}/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["save_profile"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/profiles/{id}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["validate_profile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings": {
         parameters: {
             query?: never;
@@ -1188,6 +1332,16 @@ export interface components {
         };
         ActionResponse: {
             results: components["schemas"]["ActionItem"][];
+        };
+        ActivateConfigurationProfile: {
+            current_configuration: components["schemas"]["ProfileConfiguration"];
+            /** Format: int64 */
+            expected_source_revision: number;
+            /** Format: int64 */
+            expected_state_revision: number;
+            /** Format: int64 */
+            expected_target_revision: number;
+            source_action: components["schemas"]["ProfileSourceAction"];
         };
         AddCards: {
             /**
@@ -1598,6 +1752,185 @@ export interface components {
             /** Format: uuid */
             position_id?: string | null;
         };
+        ConfigurationAnalysis: {
+            engine: components["schemas"]["ConfigurationEngine"];
+            /** Format: int32 */
+            plies: number;
+            scope: components["schemas"]["ConfigurationScope"];
+            search_filter: components["schemas"]["ConfigurationSearchFilter"];
+        };
+        ConfigurationAnnotationFilters: {
+            database_id?: string | null;
+            kind: string;
+            q: string;
+            tag: string;
+        };
+        ConfigurationAnnotations: {
+            filters?: null | components["schemas"]["ConfigurationAnnotationFilters"];
+        };
+        ConfigurationAppearance: {
+            bearoff_direction: components["schemas"]["ConfigurationDirection"];
+            board_theme: string;
+            board_view: components["schemas"]["ConfigurationBoardView"];
+            mode: components["schemas"]["ConfigurationMode"];
+            ui_theme: components["schemas"]["ConfigurationUiTheme"];
+        };
+        ConfigurationAvailability: {
+            issues: components["schemas"]["ConfigurationIssue"][];
+            /** Format: int64 */
+            revision: number;
+            valid: boolean;
+        };
+        /** @enum {string} */
+        ConfigurationBoardView: "Before" | "Arrows" | "After";
+        ConfigurationBook: {
+            path: string;
+            provider: components["schemas"]["ConfigurationBookProvider"];
+            xg_path: string;
+        };
+        /** @enum {string} */
+        ConfigurationBookProvider: "Off" | "Automatic" | "Backgammondb" | "Xg";
+        ConfigurationCardFilters: {
+            comment: string;
+            kind: string;
+            player: string;
+            position_id: string;
+            q: string;
+            status: string;
+            tag: string;
+        };
+        ConfigurationDifference: {
+            current: unknown;
+            path: string;
+            saved: unknown;
+        };
+        /** @enum {string} */
+        ConfigurationDirection: "Left" | "Right";
+        /** @enum {string} */
+        ConfigurationEngine: "Gnubg";
+        ConfigurationErrorBody: {
+            code: string;
+            error: string;
+            issues: components["schemas"]["ConfigurationIssue"][];
+        };
+        ConfigurationGeneral: {
+            locale: components["schemas"]["ConfigurationLocale"];
+            play_sounds: boolean;
+            player_name: string;
+        };
+        ConfigurationGeneration: {
+            /** Format: double */
+            min_loss: number;
+            player: string;
+        };
+        ConfigurationIssue: {
+            code: string;
+            message: string;
+            path: string;
+        };
+        ConfigurationLearning: {
+            deck_id: string;
+            filters: components["schemas"]["ConfigurationCardFilters"];
+            generation: components["schemas"]["ConfigurationGeneration"];
+        };
+        ConfigurationLibrary: {
+            column_order: string[];
+            column_widths?: {
+                [key: string]: number;
+            } | null;
+            database_id: string;
+            direction: components["schemas"]["ConfigurationSortDirection"];
+            filters: components["schemas"]["ConfigurationLibraryFilters"];
+            sort: string;
+            visible_columns: string[];
+        };
+        ConfigurationLibraryFilters: {
+            comment: string;
+            date_field: string;
+            date_from: string;
+            date_to: string;
+            match_name: string;
+            match_points_max: string;
+            match_points_min: string;
+            match_type: string;
+            player: string;
+            position_id: string;
+            q: string;
+            result: string;
+            round: string;
+            tag: string;
+            tournament: string;
+        };
+        /** @enum {string} */
+        ConfigurationLocale: "De" | "En" | "Es" | "Fr" | "It" | "Pl";
+        /** @enum {string} */
+        ConfigurationMode: "Light" | "Dark" | "System";
+        ConfigurationPlay: {
+            default_mode: components["schemas"]["PlayMode"];
+            engine: components["schemas"]["ConfigurationEngine"];
+            /** Format: int32 */
+            human_player: number;
+            /** Format: int32 */
+            match_length: number;
+            /** Format: int32 */
+            plies: number;
+            training_auto_analysis: boolean;
+            /** Format: double */
+            tutor_threshold: number;
+        };
+        ConfigurationPositions: {
+            column_widths?: {
+                [key: string]: number;
+            } | null;
+            definition: components["schemas"]["PositionFilterDefinition"];
+            show_played: boolean;
+        };
+        ConfigurationProfile: {
+            configuration: components["schemas"]["ProfileConfiguration"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: int64 */
+            revision: number;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ConfigurationReview: {
+            errors_only: boolean;
+            kind: string;
+            player: string;
+            severity: string;
+        };
+        /** @enum {string} */
+        ConfigurationScope: "Game" | "Match";
+        /** @enum {string} */
+        ConfigurationSearchFilter: "EngineDefault";
+        /** @enum {string} */
+        ConfigurationSortDirection: "Asc" | "Desc";
+        ConfigurationState: {
+            active_profile: components["schemas"]["ConfigurationProfile"];
+            current_configuration: components["schemas"]["ProfileConfiguration"];
+            differences: components["schemas"]["ConfigurationDifference"][];
+            dirty: boolean;
+            initialization_warnings?: components["schemas"]["ConfigurationIssue"][];
+            profile?: null | components["schemas"]["ConfigurationProfile"];
+            /** Format: int64 */
+            revision: number;
+        };
+        /** @enum {string} */
+        ConfigurationUiTheme: "Graphite" | "Club" | "Paper";
+        ConfigurationValidation: {
+            issues: components["schemas"]["ConfigurationIssue"][];
+            valid: boolean;
+        };
+        CreateConfigurationProfile: {
+            configuration: components["schemas"]["ProfileConfiguration"];
+            /** Format: int64 */
+            expected_state_revision: number;
+            name: string;
+        };
         CreateDeck: {
             name: string;
         };
@@ -1750,6 +2083,12 @@ export interface components {
              * @description Changes when the deck is renamed or gains memberships.
              */
             version: number;
+        };
+        DeleteConfigurationProfile: {
+            /** Format: int64 */
+            expected_profile_revision: number;
+            /** Format: int64 */
+            expected_state_revision: number;
         };
         DiceCount: {
             /** Format: int64 */
@@ -1967,6 +2306,13 @@ export interface components {
             /** Format: int32 */
             rank: number;
             raw: unknown;
+        };
+        InitializeConfiguration: {
+            configuration: components["schemas"]["ProfileConfiguration"];
+            /** Format: int64 */
+            expected_book_version: number;
+            /** Format: int64 */
+            expected_settings_version: number;
         };
         Job: {
             /** Format: int32 */
@@ -2661,6 +3007,22 @@ export interface components {
              */
             next_cursor?: string | null;
         };
+        ProfileConfiguration: {
+            analysis: components["schemas"]["ConfigurationAnalysis"];
+            annotations: components["schemas"]["ConfigurationAnnotations"];
+            appearance: components["schemas"]["ConfigurationAppearance"];
+            general: components["schemas"]["ConfigurationGeneral"];
+            learning: components["schemas"]["ConfigurationLearning"];
+            library: components["schemas"]["ConfigurationLibrary"];
+            opening_book: components["schemas"]["ConfigurationBook"];
+            play: components["schemas"]["ConfigurationPlay"];
+            positions: components["schemas"]["ConfigurationPositions"];
+            review: components["schemas"]["ConfigurationReview"];
+            /** Format: int32 */
+            schema_version: number;
+        };
+        /** @enum {string} */
+        ProfileSourceAction: "keep" | "save_current";
         /** @enum {string} */
         Rating: "again" | "hard" | "good" | "easy";
         RatingIntervals: {
@@ -2680,10 +3042,23 @@ export interface components {
         RemainingTimeBasis: "benchmark" | "observed";
         /** @enum {string} */
         RemainingTimeState: "queued" | "waiting" | "estimated" | "reestimating" | "unavailable" | "finishing" | "completed" | "failed";
+        RenameConfigurationProfile: {
+            /** Format: int64 */
+            expected_profile_revision: number;
+            /** Format: int64 */
+            expected_state_revision: number;
+            name: string;
+        };
         RenameDeck: {
             /** Format: int64 */
             expected_version: number;
             name: string;
+        };
+        RestoreConfiguration: {
+            /** Format: int64 */
+            expected_profile_revision: number;
+            /** Format: int64 */
+            expected_state_revision: number;
         };
         RevealCard: {
             /** Format: int64 */
@@ -2729,6 +3104,13 @@ export interface components {
             stability: number;
             /** Format: int64 */
             version: number;
+        };
+        SaveConfigurationProfile: {
+            configuration: components["schemas"]["ProfileConfiguration"];
+            /** Format: int64 */
+            expected_profile_revision: number;
+            /** Format: int64 */
+            expected_state_revision: number;
         };
         SavedPositionFilter: {
             /** Format: date-time */
@@ -2808,6 +3190,11 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        UpdateConfiguration: {
+            configuration: components["schemas"]["ProfileConfiguration"];
+            /** Format: int64 */
+            expected_revision: number;
+        };
         UpdatePositionFilter: {
             definition: components["schemas"]["PositionFilterDefinition"];
             /** Format: int64 */
@@ -2820,6 +3207,10 @@ export interface components {
              * @description One MAT, SGF, binary XG, or BGBlitz BGF file, at most 16 MiB including multipart envelope.
              */
             file: string;
+        };
+        ValidateConfigurationProfile: {
+            /** Format: int64 */
+            expected_profile_revision: number;
         };
         XgBookStatus: {
             available: boolean;
@@ -3195,6 +3586,177 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_configuration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationState"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                };
+            };
+        };
+    };
+    put_configuration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateConfiguration"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationState"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                };
+            };
+        };
+    };
+    configuration_availability: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationAvailability"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                };
+            };
+        };
+    };
+    initialize_configuration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InitializeConfiguration"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationState"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                };
+            };
+        };
+    };
+    restore_configuration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreConfiguration"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationState"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationErrorBody"];
                 };
             };
         };
@@ -6041,6 +6603,282 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_profiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationProfile"][];
+                };
+            };
+        };
+    };
+    create_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateConfigurationProfile"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationState"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                };
+            };
+        };
+    };
+    get_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationProfile"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                };
+            };
+        };
+    };
+    delete_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteConfigurationProfile"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationState"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                };
+            };
+        };
+    };
+    rename_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameConfigurationProfile"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationState"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                };
+            };
+        };
+    };
+    activate_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivateConfigurationProfile"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationState"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                };
+            };
+        };
+    };
+    save_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveConfigurationProfile"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationState"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                };
+            };
+        };
+    };
+    validate_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ValidateConfigurationProfile"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationValidation"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationErrorBody"];
                 };
             };
         };

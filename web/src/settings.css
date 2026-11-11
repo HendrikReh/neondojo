@@ -327,3 +327,29 @@
     gap: 10px;
   }
 }
+
+.settings-play-sounds {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 1rem 0 0.5rem;
+}
+.settings-play-sounds input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--ui-accent);
+}
+
+.settings-actions[hidden] {
+  display: none;
+}
+.profile-draft-guard {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+.profile-draft-guard h3,
+.profile-draft-guard p {
+  flex-basis: 100%;
+}

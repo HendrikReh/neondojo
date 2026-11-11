@@ -1,3 +1,5 @@
+import { useProfileValue } from './useProfileValue';
+import { useOptionalConfiguration } from './ConfigurationProvider';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { request } from './api';
 import { removePositionBookmark } from './position-bookmark-api';
@@ -53,12 +55,23 @@ export default function PositionBrowser({
   onDeckChanged: () => void;
   onStudy: (deckId: string) => void;
 }) {
+  const profile = useOptionalConfiguration();
   const p = usePositionText(),
     { formatError } = useI18n();
-  const [draft, setDraft] = useState<PositionFilterDraft>(emptyPositionFilters),
-    [definition, setDefinition] = useState<PositionFilterDefinition>(() =>
-      positionDefinition(emptyPositionFilters()),
-    );
+  const [definition, setDefinition] = useProfileValue<PositionFilterDefinition>(
+    (c) => c.positions.definition,
+    (c, definition) => ({ ...c, positions: { ...c.positions, definition } }),
+    () => positionDefinition(emptyPositionFilters()),
+  );
+  const [draft, setDraft] = useState<PositionFilterDraft>(() =>
+    positionDraft(definition),
+  );
+  useEffect(() => {
+    if (profile?.current) {
+      setDraft(positionDraft(profile.current.positions.definition));
+      setInvalid(false);
+    }
+  }, [profile?.generation, profile?.ready]);
   const [databases, setDatabases] = useState<Database[]>([]),
     [items, setItems] = useState<PositionBrowserHit[]>([]),
     [cursor, setCursor] = useState<string | null>(null),
@@ -74,7 +87,14 @@ export default function PositionBrowser({
     [databaseError, setDatabaseError] = useState<unknown>(),
     [invalid, setInvalid] = useState(false),
     [refresh, setRefresh] = useState(0),
-    [showPlayed, setShowPlayed] = useState(readPositionPlayed);
+    [showPlayed, setShowPlayed] = useProfileValue<boolean>(
+      (c) => c.positions.show_played,
+      (c, show_played) => ({
+        ...c,
+        positions: { ...c.positions, show_played },
+      }),
+      readPositionPlayed,
+    );
   const identity = useRef(0),
     scopeRef = useRef(''),
     loadedPages = useRef(1),
@@ -355,7 +375,7 @@ export default function PositionBrowser({
               showPlayed={showPlayed}
               onShowPlayed={(value) => {
                 setShowPlayed(value);
-                savePositionPlayed(value);
+                if (!profile) savePositionPlayed(value);
               }}
               sort={definition.sort ?? 'match'}
               direction={

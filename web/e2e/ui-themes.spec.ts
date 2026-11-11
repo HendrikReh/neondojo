@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './test';
 import { readFileSync } from 'node:fs';
 
 test.use({ viewport: { width: 1800, height: 1169 } });
@@ -30,6 +30,30 @@ async function setup(page: Page) {
       return route.fulfill({ status: 409, json: { error: 'Version changed' } });
     saved = { ...route.request().postDataJSON(), version: saved.version + 1 };
     return route.fulfill({ json: saved });
+  });
+  await page.route('**/api/configuration', async (route) => {
+    if (route.request().method() !== 'PUT') return route.fallback();
+    const c = route.request().postDataJSON().configuration;
+    const proposed = {
+      ...saved,
+      player_name: c.general.player_name,
+      analysis_engine: c.analysis.engine,
+      analysis_plies: c.analysis.plies,
+      play_engine: c.play.engine,
+      play_plies: c.play.plies,
+    };
+    writes.push(proposed);
+    if (conflict)
+      return route.fulfill({
+        status: 409,
+        json: {
+          error: 'Version changed',
+          code: 'revision_conflict',
+          issues: [],
+        },
+      });
+    saved = { ...proposed, version: saved.version + 1 };
+    return route.fallback();
   });
   await page.route('**/api/engines', (route) =>
     route.fulfill({
@@ -87,7 +111,13 @@ for (const theme of ['graphite', 'club', 'paper'] as const) {
     }) => {
       await setup(page);
       await page.emulateMedia({ colorScheme: 'light' });
+      const initialized = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname ===
+            '/api/configuration/initialize' && response.ok(),
+      );
       await page.goto('/');
+      await initialized;
       const dialog = await appearanceSettings(page);
       await dialog
         .getByRole('combobox', { name: 'Interface theme', exact: true })
@@ -113,7 +143,7 @@ for (const theme of ['graphite', 'club', 'paper'] as const) {
       await expect(
         dialog.locator('.settings-preview .theme-walnut'),
       ).toBeVisible();
-      await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+      await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
       await expect(dialog).not.toBeVisible();
       await expect(page.locator('html')).toHaveAttribute(
         'data-ui-theme',
@@ -179,7 +209,7 @@ test('interface appearance preserves selected original ZIP artwork', async ({
     .locator('.settings-preview .bgblitz-board image')
     .first()
     .getAttribute('href');
-  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
   dialog = await appearanceSettings(page);
   await dialog
     .getByRole('combobox', { name: 'Interface theme', exact: true })
@@ -187,7 +217,7 @@ test('interface appearance preserves selected original ZIP artwork', async ({
   await dialog
     .getByRole('combobox', { name: 'Display mode', exact: true })
     .selectOption('dark');
-  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
   dialog = await appearanceSettings(page);
   await dialog.getByRole('button', { name: 'Board', exact: true }).click();
   await expect(
@@ -217,8 +247,12 @@ test('cancel and save conflicts retain the applied appearance and board preferen
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   expect(backend.writes).toHaveLength(0);
   expect(
-    await page.evaluate(() => localStorage.getItem('bgtutor.ui-appearance')),
-  ).toBeNull();
+    JSON.parse(
+      (await page.evaluate(() =>
+        localStorage.getItem('bgtutor.ui-appearance'),
+      ))!,
+    ),
+  ).toEqual({ version: 1, theme: 'graphite', mode: 'system' });
   dialog = await appearanceSettings(page);
   await expect(
     dialog.getByRole('combobox', { name: 'Interface theme', exact: true }),
@@ -230,7 +264,7 @@ test('cancel and save conflicts retain the applied appearance and board preferen
     .getByRole('combobox', { name: 'Display mode', exact: true })
     .selectOption('dark');
   backend.conflict(true);
-  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(dialog.getByRole('alert')).toContainText(
     'Settings changed elsewhere',
   );
@@ -269,7 +303,7 @@ test('System follows changes while explicit light remains fixed', async ({
   await dialog
     .getByRole('combobox', { name: 'Display mode', exact: true })
     .selectOption('light');
-  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
   await page.emulateMedia({ colorScheme: 'dark' });
   await expect(page.locator('html')).toHaveAttribute('data-ui-mode', 'light');
 });
@@ -287,7 +321,7 @@ test('loading errors prevent saving appearance before settings are available', a
     'Settings could not be loaded',
   );
   await expect(
-    dialog.getByRole('button', { name: 'Save', exact: true }),
+    dialog.getByRole('button', { name: 'Apply', exact: true }),
   ).toBeDisabled();
   await expect(
     dialog.getByRole('combobox', { name: 'Interface theme', exact: true }),

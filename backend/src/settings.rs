@@ -187,11 +187,20 @@ async fn put_settings(
         .check_installation()
         .await
         .map_err(|e| ApiError::invalid(format!("GNUbg installation check failed: {e:#}")))?;
+    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
+    crate::configuration::store::lock(&mut tx)
+        .await
+        .map_err(anyhow::Error::from)?;
     let saved: Option<AppSettings> = sqlx::query_as("UPDATE app_settings SET version=version+1,player_name=$2,analysis_engine=$3,analysis_plies=$4,play_engine=$5,play_plies=$6,gnubg_path=$7,gnubg_version=$8,bearoff_direction=$9,default_play_mode=$10,tutor_threshold=$11,training_auto_analysis=$12 WHERE singleton=true AND version=$1 RETURNING *")
         .bind(settings.version).bind(settings.player_name).bind(settings.analysis_engine).bind(settings.analysis_plies)
         .bind(settings.play_engine).bind(settings.play_plies).bind(settings.gnubg_path).bind(version).bind(settings.bearoff_direction).bind(settings.default_play_mode).bind(settings.tutor_threshold).bind(settings.training_auto_analysis)
-        .fetch_optional(&state.pool).await.map_err(anyhow::Error::from)?;
-    Ok(Json(saved.ok_or_else(conflict)?))
+        .fetch_optional(&mut *tx).await.map_err(anyhow::Error::from)?;
+    let saved = saved.ok_or_else(conflict)?;
+    crate::configuration::store::legacy_app(&mut tx, &saved)
+        .await
+        .map_err(crate::configuration::store::legacy_error)?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    Ok(Json(saved))
 }
 fn conflict() -> ApiError {
     ApiError(

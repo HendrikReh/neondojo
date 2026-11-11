@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './test';
 import { historyFixture } from './play-history-review-helpers';
 test('rapid selection, cancelled fetch and late response never change live play', async ({
   page,

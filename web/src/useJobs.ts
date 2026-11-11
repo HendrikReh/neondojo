@@ -1,3 +1,4 @@
+import { useOptionalConfiguration } from './ConfigurationProvider';
 import { useEffect, useRef, useState } from 'react';
 import { request, terminal, mergeJob, type Job } from './api';
 
@@ -20,6 +21,7 @@ export function useJobs(
   positionId: string | undefined,
   onAccepted?: (job: Job) => void,
 ) {
+  const configuration = useOptionalConfiguration();
   const [jobs, setJobs] = useState<Jobs>({});
   const [revision, setRevision] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -90,11 +92,15 @@ export function useJobs(
     setSubmitting(true);
     setError(null);
     try {
-      const job = await request<Job>('/jobs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ position_id: positionId, kind, plies }),
-      });
+      const start = () =>
+        request<Job>('/jobs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ position_id: positionId, kind, plies }),
+        });
+      const job = configuration
+        ? await configuration.runWithConfiguration(start)
+        : await start();
       onAccepted?.(job);
       const ids = { ...saved(positionId), [kind]: job.id };
       sessionIds.set(positionId, ids);

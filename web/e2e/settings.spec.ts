@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './test';
 import { readFileSync } from 'node:fs';
 
 const themes: { id: string; name: string }[] = [
@@ -39,6 +39,30 @@ async function settingsBackend(
       return route.fulfill({ status: 409, json: { error: 'Version changed' } });
     saved = { ...body, version: saved.version + 1 };
     await route.fulfill({ json: saved });
+  });
+  await page.route('**/api/configuration', async (route) => {
+    if (route.request().method() !== 'PUT') return route.fallback();
+    const c = route.request().postDataJSON().configuration;
+    const proposed = {
+      ...saved,
+      player_name: c.general.player_name,
+      analysis_engine: c.analysis.engine,
+      analysis_plies: c.analysis.plies,
+      play_engine: c.play.engine,
+      play_plies: c.play.plies,
+    };
+    writes.push(proposed);
+    if (conflict)
+      return route.fulfill({
+        status: 409,
+        json: {
+          error: 'Version changed',
+          code: 'revision_conflict',
+          issues: [],
+        },
+      });
+    saved = { ...proposed, version: saved.version + 1 };
+    return route.fallback();
   });
   await page.route('**/api/engines', (route) =>
     route.fulfill({
@@ -106,7 +130,7 @@ test('English default, alphabetical languages, draft cancellation, focus trap an
   );
   await dialog.getByRole('button', { name: 'Walnut', exact: true }).click();
   await expect(dialog.locator('.settings-preview .theme-walnut')).toBeVisible();
-  await dialog.getByRole('button', { name: 'Save', exact: true }).focus();
+  await dialog.getByRole('button', { name: 'Apply', exact: true }).focus();
   await page.keyboard.press('Tab');
   await expect(
     dialog.getByRole('button', { name: 'Close settings' }),
@@ -165,7 +189,7 @@ test('real artwork previews, independent profiles and settings persist only afte
       '1',
     );
   }
-  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(dialog).not.toBeVisible();
   expect(backend.writes).toHaveLength(1);
   expect(backend.writes[0]).toMatchObject({
@@ -205,7 +229,7 @@ test('installation failures and save conflicts retain drafts and do not apply pr
     dialog.getByLabel('GNUbg executable path', { exact: true }),
   ).toHaveValue('/missing/gnubg');
   backend.conflict(true);
-  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(
     dialog.getByRole('alert').filter({ hasText: 'Settings changed elsewhere' }),
   ).toBeVisible();
@@ -245,7 +269,7 @@ test('load errors offer retry and the mobile dialog has reachable actions', asyn
     'Settings could not be loaded',
   );
   await expect(
-    dialog.getByRole('button', { name: 'Save', exact: true }),
+    dialog.getByRole('button', { name: 'Apply', exact: true }),
   ).toBeDisabled();
   await expect(dialog.getByLabel('Player name', { exact: true })).toHaveCount(
     0,
@@ -260,7 +284,7 @@ test('load errors offer retry and the mobile dialog has reachable actions', asyn
     dialog.getByRole('button', { name: 'Cancel', exact: true }),
   ).toBeInViewport();
   await expect(
-    dialog.getByRole('button', { name: 'Save', exact: true }),
+    dialog.getByRole('button', { name: 'Apply', exact: true }),
   ).toBeInViewport();
   expect(
     await page.evaluate(
@@ -280,8 +304,9 @@ for (const plies of [3, 4]) {
     await page.getByLabel('Match file', { exact: true }).setInputFiles({
       name: 'depth.sgf',
       mimeType: 'application/octet-stream',
+      // Both players are bearing off, with multiple legal ways to play 3–1.
       buffer: Buffer.from(
-        `(;GM[6]PW[Depth ${crypto.randomUUID()}]PB[Opponent]MI[length:7];W[31hefe])`,
+        `(;GM[6]PW[Depth ${crypto.randomUUID()}]PB[Opponent]MI[length:7]AE[a:y]AW[d][e][f]AB[s][t][u]PL[W];W[31fccb])`,
       ),
     });
     await expect(page.getByLabel('Search depth', { exact: true })).toHaveValue(
@@ -297,7 +322,7 @@ for (const plies of [3, 4]) {
     });
     await expect(profile).toHaveValue('2');
     await profile.selectOption(String(plies));
-    await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
     await expect(dialog).not.toBeVisible();
     expect(backend.writes.at(-1)?.analysis_plies).toBe(plies);
     await expect(page.getByLabel('Search depth', { exact: true })).toHaveValue(

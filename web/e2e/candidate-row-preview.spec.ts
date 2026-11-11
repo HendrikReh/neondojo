@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './test';
 const matchId = '8216b2ea-7fe8-4d57-88c0-111111111111',
   positionId = '8216b2ea-7fe8-4d57-88c0-222222222222',
   jobId = '8216b2ea-7fe8-4d57-88c0-333333333333';

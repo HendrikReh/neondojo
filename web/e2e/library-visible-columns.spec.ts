@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './test';
 import { LIBRARY_COLUMNS } from '../src/library-columns';
 test.use({ actionTimeout: 10000, viewport: { width: 1800, height: 1169 } });
 

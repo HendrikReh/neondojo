@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 import { readFileSync } from 'node:fs';
 
 test('imported GNUbg analysis remains available independently from new engine jobs', async ({
@@ -142,7 +142,7 @@ test('opening-book preferences and a real opening lookup expose source and depth
   );
 });
 
-test('opening-book dialog keeps unsaved engine profile changes', async ({
+test('opening-book navigation explicitly applies or preserves an engine draft', async ({
   page,
 }) => {
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
@@ -153,6 +153,7 @@ test('opening-book dialog keeps unsaved engine profile changes', async ({
           version: 0,
           provider: 'automatic',
           path: '/local/book.sqlite',
+          xg_path: '/local/XG.ob',
         },
         status: {
           available: false,
@@ -180,6 +181,16 @@ test('opening-book dialog keeps unsaved engine profile changes', async ({
   await settings
     .getByRole('button', { name: 'Opening books', exact: true })
     .click();
+  const guard = settings.getByRole('alertdialog');
+  await expect(guard).toBeVisible();
+  await guard.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(profile).toHaveValue('1');
+  await settings
+    .getByRole('button', { name: 'Opening books', exact: true })
+    .click();
+  await guard
+    .getByRole('button', { name: 'Apply and continue', exact: true })
+    .click();
   const books = page.getByRole('dialog', {
     name: 'Opening books',
     exact: true,
@@ -188,7 +199,9 @@ test('opening-book dialog keeps unsaved engine profile changes', async ({
     books.getByLabel('Opening-book source', { exact: true }),
   ).toBeVisible();
   await books.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(settings).toBeVisible();
+  await expect(settings).not.toBeVisible();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await settings.getByRole('button', { name: 'Analysis', exact: true }).click();
   await expect(profile).toHaveValue('1');
   await page.keyboard.press('Escape');
   await expect(settings).not.toBeVisible();

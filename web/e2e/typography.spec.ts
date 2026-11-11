@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './test';
 
 test.use({ viewport: { width: 1800, height: 1169 }, actionTimeout: 10000 });
 
@@ -55,24 +55,36 @@ async function fixture(
     ).ok(),
   ).toBe(true);
   await page.addInitScript(
-    ({ id, deck, theme, mode, locale }) => {
+    ({ id, deck, theme, mode, locale, positionId, jobId }) => {
       if (!localStorage.getItem('bgtutor.locale'))
         localStorage.setItem('bgtutor.locale', locale);
       localStorage.setItem(
         'bgtutor.workspace',
-        JSON.stringify({ matchId: id, gameNo: 1 }),
+        JSON.stringify({ matchId: id, gameNo: 1, positionId }),
       );
       localStorage.setItem('bgtutor.deck', deck);
+      localStorage.setItem(
+        `bgtutor.jobs.${positionId}`,
+        JSON.stringify({ analysis: jobId }),
+      );
       localStorage.setItem(
         'bgtutor.ui-appearance',
         JSON.stringify({ version: 1, theme, mode }),
       );
     },
-    { id: imported.match.id, deck: deck.id, theme, mode, locale },
+    {
+      id: imported.match.id,
+      deck: deck.id,
+      theme,
+      mode,
+      locale,
+      positionId: position.id,
+      jobId: job.id,
+    },
   );
   await page.goto('/');
   await expect(page.locator('.analysis-workspace .board')).toBeVisible();
-  return deck;
+  return position.id as string;
 }
 
 const views = [
@@ -152,10 +164,9 @@ for (const theme of ['graphite', 'club', 'paper'])
             '14px',
           );
         if (id === 'analysis') {
-          await expect(panel.locator('.preview-best')).toHaveCSS(
-            'font-size',
-            '13px',
-          );
+          await expect(
+            panel.locator('.candidate-preview-button').first(),
+          ).toHaveCSS('font-size', '12px');
           await expect(
             panel.locator('.board-view-buttons button').first(),
           ).toHaveCSS('font-size', '13px');
@@ -217,10 +228,7 @@ test('comment editors, modal titles and study questions follow their roles while
     .locator('.library-dialog')
     .getByRole('button', { name: 'Cancel', exact: true })
     .click();
-  await page
-    .locator('.settings-dialog')
-    .getByRole('button', { name: 'Cancel', exact: true })
-    .click();
+  await expect(page.locator('.settings-dialog')).not.toBeVisible();
   await page.getByRole('tab', { name: 'Notes', exact: true }).click();
   await expect(page.locator('textarea:visible').first()).toHaveCSS(
     'font-family',
@@ -389,12 +397,28 @@ test('the shared role scale stays stable across desktop widths and every locale'
   page,
 }, info) => {
   await fixture(page);
-  for (const locale of ['en', 'de', 'es', 'fr', 'pl', 'it']) {
-    await page.evaluate(
-      (locale) => localStorage.setItem('bgtutor.locale', locale),
-      locale,
-    );
+  async function reloadWithLocale(locale: string) {
+    await page.evaluate(async (locale) => {
+      const state = await (await fetch('/api/configuration')).json();
+      const response = await fetch('/api/configuration', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          expected_revision: state.revision,
+          configuration: {
+            ...state.current_configuration,
+            general: { ...state.current_configuration.general, locale },
+          },
+        }),
+      });
+      if (!response.ok) throw new Error(await response.text());
+    }, locale);
     await page.reload();
+    await expect(page.locator('html')).toHaveAttribute('lang', locale);
+    await expect(page.locator('.analysis-workspace .board')).toBeVisible();
+  }
+  for (const locale of ['en', 'de', 'es', 'fr', 'pl', 'it']) {
+    await reloadWithLocale(locale);
     await expect(page.locator('html')).toHaveAttribute('lang', locale);
     for (const [id, , title, table] of views) {
       await page.locator(`#workspace-tab-${id}`).click();
@@ -411,8 +435,7 @@ test('the shared role scale stays stable across desktop widths and every locale'
       ),
     ).toBe(true);
   }
-  await page.evaluate(() => localStorage.setItem('bgtutor.locale', 'en'));
-  await page.reload();
+  await reloadWithLocale('en');
   for (const viewport of [
     { width: 1800, height: 1169 },
     { width: 2560, height: 1440 },

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 
 test('error lists exclude good zero-loss decisions after reset and label explicit decision drilldowns', async ({
   page,

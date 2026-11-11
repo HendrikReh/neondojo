@@ -1,3 +1,5 @@
+import { useProfileValue } from './useProfileValue';
+import { useOptionalConfiguration } from './ConfigurationProvider';
 import { useEffect, useRef, useState } from 'react';
 import { request, type Job } from './api';
 import { AppError } from './i18n-core';
@@ -168,12 +170,42 @@ export function AddCardsPanel({
   onChanged: () => void;
   allowBatch?: boolean;
 }) {
+  const profile = useOptionalConfiguration();
   const t = useLearningText();
   const { formatError, t: baseT } = useI18n();
   const { decks, error: deckError, addDeck, ready } = useDecks(revision);
-  const [deckId, setDeckId] = useState(savedDeck);
-  const [minLoss, setMinLoss] = useState('0.04');
-  const [player, setPlayer] = useState('');
+  const [deckId, setDeckId] = useProfileValue<string>(
+    (c) => c.learning.deck_id,
+    (c, deck_id) => ({ ...c, learning: { ...c.learning, deck_id } }),
+    savedDeck,
+  );
+  const [minLoss, setMinLossDraft] = useState('0.04');
+  const [player, setPlayer] = useProfileValue<string>(
+    (c) => c.learning.generation.player,
+    (c, player) => ({
+      ...c,
+      learning: {
+        ...c.learning,
+        generation: { ...c.learning.generation, player },
+      },
+    }),
+    '',
+  );
+  useEffect(() => {
+    if (profile?.current)
+      setMinLossDraft(String(profile.current.learning.generation.min_loss));
+  }, [profile?.generation, profile?.ready]);
+  const setMinLoss = (value: string) => {
+    setMinLossDraft(value);
+    if (value.trim() && Number.isFinite(Number(value)) && Number(value) >= 0)
+      profile?.updateCurrent((c) => ({
+        ...c,
+        learning: {
+          ...c.learning,
+          generation: { ...c.learning.generation, min_loss: Number(value) },
+        },
+      }));
+  };
   const [busy, setBusy] = useState(false);
   const [needsAnalysis, setNeedsAnalysis] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -187,14 +219,18 @@ export function AddCardsPanel({
     setBusy(false);
   }, [positionId, matchId, gameNo, allowBatch]);
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || profile) return;
     if (!decks.some((d) => d.id === deckId)) setDeckId(decks[0]?.id || '');
   }, [decks, deckId, ready]);
   useEffect(() => {
-    if (deckId) rememberDeck(deckId);
+    if (deckId && !profile) rememberDeck(deckId);
   }, [deckId]);
   async function add(kind: 'position' | 'match') {
-    if (!deckId || (kind === 'match' && !allowBatch)) return;
+    if (
+      !decks.some((deck) => deck.id === deckId) ||
+      (kind === 'match' && !allowBatch)
+    )
+      return;
     const version = ++generation.current;
     setBusy(true);
     setError(null);
@@ -261,10 +297,17 @@ export function AddCardsPanel({
                 {deck.name}
               </option>
             ))}
+            {deckId === ALL_CARDS && (
+              <option value={ALL_CARDS} disabled>
+                {t('chooseDeck')}
+              </option>
+            )}
           </select>
         </label>
         <button
-          disabled={!positionId || !deckId || busy}
+          disabled={
+            !positionId || !decks.some((deck) => deck.id === deckId) || busy
+          }
           onClick={() => void add('position')}
         >
           {t('addPosition')}
@@ -305,7 +348,7 @@ export function AddCardsPanel({
           </label>
           <button
             disabled={
-              !deckId ||
+              !decks.some((deck) => deck.id === deckId) ||
               gameNo === undefined ||
               busy ||
               minLoss === '' ||
@@ -347,8 +390,16 @@ export default function LearningWorkspace({
 }) {
   const t = useLearningText();
   const searchT = useCardSearchText();
+  const profile = useOptionalConfiguration();
   const [draftFilters, setDraftFilters] = useState(emptyCardFilters);
-  const [filters, setFilters] = useState(emptyCardFilters);
+  const [filters, setFilters] = useProfileValue(
+    (c) => c.learning.filters,
+    (c, filters) => ({ ...c, learning: { ...c.learning, filters } }),
+    emptyCardFilters,
+  );
+  useEffect(() => {
+    if (profile?.current) setDraftFilters(profile.current.learning.filters);
+  }, [profile?.generation, profile?.ready]);
   const [listLoading, setListLoading] = useState(false);
   const managementT = useDeckManagementText();
   const [management, setManagement] = useState<{
@@ -373,9 +424,21 @@ export default function LearningWorkspace({
     ready,
     settled,
   } = useDecks(revision);
-  const [deckId, setDeckId] = useState(savedDeck);
+  const [deckId, setLocalDeckId] = useState(savedDeck);
+  const setDeckId = (deck_id: string) => {
+    setLocalDeckId(deck_id);
+    profile?.updateCurrent((c) => ({
+      ...c,
+      learning: { ...c.learning, deck_id },
+    }));
+  };
   const [appliedDeckToken, setAppliedDeckToken] = useState<number>();
   const [studying, setStudying] = useState(false);
+  useEffect(() => {
+    // A profile changes browser defaults, not the context of an active card.
+    if (!studying && profile?.current)
+      setLocalDeckId(profile.current.learning.deck_id);
+  }, [studying, profile?.current?.learning.deck_id, profile?.generation]);
   const [next, setNext] = useState<NextCard | null>(null);
   const [revealed, setRevealed] = useState<RevealedCard | null>(null);
   const [page, setPage] = useState<CardPage & { owner?: string }>({
@@ -417,13 +480,13 @@ export default function LearningWorkspace({
     listContext.current = { key: listKey };
   const moreRequest = useRef<AbortController | undefined>(undefined);
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || profile) return;
     if (deckId !== ALL_CARDS && !decks.some((d) => d.id === deckId))
       setDeckId(decks[0]?.id || ALL_CARDS);
   }, [decks, deckId, ready]);
   useEffect(() => {
     generation.current++;
-    if (ready) rememberDeck(deckId);
+    if (ready && !profile) rememberDeck(deckId);
     setRevealed(null);
     setNext(null);
     setError(null);
@@ -959,7 +1022,7 @@ export default function LearningWorkspace({
             removeDeck(id);
             const replacement =
               decks.find((deck) => deck.id !== id)?.id || ALL_CARDS;
-            rememberDeck(replacement);
+            if (!profile) rememberDeck(replacement);
             setDeckId(replacement);
             setStudying(false);
             setNext(null);

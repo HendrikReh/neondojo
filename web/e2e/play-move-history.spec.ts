@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './test';
 const id = '8c390ba7-76a1-44f0-a041-ae982f6d1363';
 for (const config of [
   { human: 0, direction: 'right', theme: 'forest', width: 1440 },

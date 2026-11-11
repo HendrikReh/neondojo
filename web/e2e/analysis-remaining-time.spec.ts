@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './test';
 const timing = (overrides: Record<string, unknown> = {}) => ({
   job_id: 'fixture',
   status: 'running',

@@ -1,3 +1,4 @@
+import { useOptionalConfiguration } from './ConfigurationProvider';
 import { useMemo, type KeyboardEvent } from 'react';
 import Board from './Board';
 import LibrarySortHeading from './LibrarySortHeading';
@@ -118,6 +119,7 @@ export function PositionBrowserResults({
   onSort,
   sortDisabled = false,
 }: PositionResultsProps) {
+  const profile = useOptionalConfiguration();
   const p = usePositionText(),
     l = useLibraryText(),
     { formatNumber, formatDecision, locale } = useI18n();
@@ -131,6 +133,20 @@ export function PositionBrowserResults({
   const columns = useResizableColumns(POSITION_COLUMN_LAYOUT, {
     visible,
     activeColumns,
+    ...(profile?.current
+      ? {
+          widths: profile.current.positions.column_widths,
+          configurationGeneration: profile.generation,
+          onWidthsChange: (column_widths: Record<string, number> | undefined) =>
+            profile.updateCurrent((c) => ({
+              ...c,
+              positions: {
+                ...c.positions,
+                column_widths: column_widths ?? null,
+              },
+            })),
+        }
+      : {}),
     resizeLabel: (column) => l('resizeColumn', { column }),
   });
   const summaries = useMemo(() => {

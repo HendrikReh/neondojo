@@ -1,4 +1,5 @@
 import Tooltip from './Tooltip';
+import { useOptionalConfiguration } from './ConfigurationProvider';
 import ActionButton from './ActionButton';
 import {
   useEffect,
@@ -123,10 +124,37 @@ export default function PlayWorkspace({
     [setup, setSetup] = useState(true);
   const review = usePlayReview(session, visible && !setup);
   const reviewText = useBoardReviewText();
-  const [human, setHuman] = useState(0);
-  const [length, setLength] = useState(7);
-  const [mode, setMode] = useState<PlayMode>('coach');
-  const [threshold, setThreshold] = useState(0.04);
+  const configuration = useOptionalConfiguration();
+  const [localHuman, setLocalHuman] = useState(0),
+    [localLength, setLocalLength] = useState(7);
+  const [localMode, setLocalMode] = useState<PlayMode>('coach');
+  const [localThreshold, setThreshold] = useState(0.04);
+  const human = configuration?.current?.play.human_player ?? localHuman;
+  const length = configuration?.current?.play.match_length ?? localLength;
+  const mode = configuration?.current?.play.default_mode ?? localMode;
+  const threshold =
+    configuration?.current?.play.tutor_threshold ?? localThreshold;
+  const setHuman = (value: number) => {
+    setLocalHuman(value);
+    configuration?.updateCurrent((c) => ({
+      ...c,
+      play: { ...c.play, human_player: value as 0 | 1 },
+    }));
+  };
+  const setLength = (value: number) => {
+    setLocalLength(value);
+    configuration?.updateCurrent((c) => ({
+      ...c,
+      play: { ...c.play, match_length: value },
+    }));
+  };
+  const setMode = (value: PlayMode) => {
+    setLocalMode(value);
+    configuration?.updateCurrent((c) => ({
+      ...c,
+      play: { ...c.play, default_mode: value },
+    }));
+  };
   const [liveThreshold, setLiveThreshold] = useState('0.04');
   const [thresholdStatus, setThresholdStatus] = useState<
     'idle' | 'saving' | 'saved'
@@ -139,11 +167,20 @@ export default function PlayWorkspace({
     const timer = window.setTimeout(() => setThresholdStatus('idle'), 3000);
     return () => window.clearTimeout(timer);
   }, [thresholdStatus]);
-  const [automatic, setAutomatic] = useState(true);
+  const [localAutomatic, setLocalAutomatic] = useState(true);
+  const automatic =
+    configuration?.current?.play.training_auto_analysis ?? localAutomatic;
+  const setAutomatic = (value: boolean) => {
+    setLocalAutomatic(value);
+    configuration?.updateCurrent((c) => ({
+      ...c,
+      play: { ...c.play, training_auto_analysis: value },
+    }));
+  };
   const [defaultsLoading, setDefaultsLoading] = useState(false);
   const [defaultsError, setDefaultsError] = useState(false);
   useEffect(() => {
-    if (!visible || !setup) return;
+    if (configuration || !visible || !setup) return;
     const abort = new AbortController();
     setDefaultsLoading(true);
     setDefaultsError(false);
@@ -161,7 +198,7 @@ export default function PlayWorkspace({
         if (!abort.signal.aborted) setDefaultsLoading(false);
       });
     return () => abort.abort();
-  }, [visible, setup]);
+  }, [visible, setup, !!configuration]);
   const [steps, setSteps] = useState<CheckerStep[]>([]);
   const [hovered, setHovered] = useState<number | null>(null);
   const [swapped, setSwapped] = useState(false);
@@ -307,11 +344,19 @@ export default function PlayWorkspace({
   function create(event: FormEvent) {
     event.preventDefault();
     void run(() =>
-      createPlaySession(human, length, {
-        play_mode: mode,
-        tutor_threshold: threshold,
-        training_auto_analysis: automatic,
-      }),
+      configuration
+        ? configuration.runWithConfiguration((c) =>
+            createPlaySession(c.play.human_player, c.play.match_length, {
+              play_mode: c.play.default_mode,
+              tutor_threshold: c.play.tutor_threshold,
+              training_auto_analysis: c.play.training_auto_analysis,
+            }),
+          )
+        : createPlaySession(human, length, {
+            play_mode: mode,
+            tutor_threshold: threshold,
+            training_auto_analysis: automatic,
+          }),
     );
   }
   function action(
@@ -420,7 +465,8 @@ export default function PlayWorkspace({
       ? (session?.legal_moves[pending.move_index]?.steps ?? [])
       : steps;
   const uiBusy = busy || playback.animating;
-  const setupDisabled = uiBusy || defaultsLoading;
+  const setupDisabled =
+    uiBusy || defaultsLoading || (!!configuration && !configuration.ready);
   useEffect(() => {
     if (!visible || setup) {
       restoreResignFocus.current = false;

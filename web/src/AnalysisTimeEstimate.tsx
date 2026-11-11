@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useOptionalConfiguration } from './ConfigurationProvider';
 import { useI18n } from './i18n';
 import {
   loadAnalysisTimeEstimate,
@@ -25,18 +26,33 @@ export default function AnalysisTimeEstimate({
   configured: boolean;
   installationKey?: string;
 }) {
+  const profile = useOptionalConfiguration();
   const { locale, formatNumber } = useI18n();
   const text = (
     key: Parameters<typeof analysisEstimateText>[1],
     values?: Parameters<typeof analysisEstimateText>[2],
   ) => analysisEstimateText(locale, key, values);
-  // GNUbg is the only supported analysis engine in the installation settings.
-  const engineId = 'gnubg';
+  const current = profile?.current?.analysis;
+  const confirmed = profile?.confirmed?.current_configuration.analysis;
+  const engineId = current?.engine ?? 'gnubg';
+  // `ready` remains true during the save debounce. Compare the actual engine
+  // inputs with the server snapshot, without flushing or writing on a read.
+  const pending =
+    !!profile &&
+    (!profile.ready ||
+      profile.busy ||
+      !current ||
+      !confirmed ||
+      current.engine !== confirmed.engine ||
+      current.plies !== confirmed.plies ||
+      current.search_filter !== confirmed.search_filter);
   const unavailable = !configured
     ? 'engine_unavailable'
     : scoped && gameNo === undefined
       ? 'game'
-      : null;
+      : pending
+        ? 'configuration'
+        : null;
   const selectedGame = scoped ? gameNo : undefined;
   const key = JSON.stringify([
     matchId,
@@ -44,6 +60,10 @@ export default function AnalysisTimeEstimate({
     scoped,
     plies,
     installationKey,
+    current,
+    confirmed,
+    profile?.confirmed?.revision,
+    profile?.generation,
     unavailable,
   ]);
   const [result, setResult] = useState<{

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './test';
 import { historyFixture } from './play-history-review-helpers';
 
 test('move-history titles reveal only clipped labels', async ({ page }) => {

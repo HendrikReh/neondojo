@@ -186,14 +186,22 @@ async fn put_settings(
         validate_path(path)?;
     }
     load(&state.pool).await?;
+    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
+    crate::configuration::store::lock(&mut tx)
+        .await
+        .map_err(anyhow::Error::from)?;
     let saved:Option<BookConfig>=sqlx::query_as("UPDATE opening_book_settings SET version=version+1,provider=$2,path=$3,xg_path=coalesce($4,xg_path) WHERE singleton=true AND version=$1 RETURNING version,provider,path,xg_path")
-        .bind(config.version).bind(config.provider).bind(config.path).bind(config.xg_path).fetch_optional(&state.pool).await.map_err(anyhow::Error::from)?;
+        .bind(config.version).bind(config.provider).bind(config.path).bind(config.xg_path).fetch_optional(&mut *tx).await.map_err(anyhow::Error::from)?;
     let config = saved.ok_or_else(|| {
         ApiError(
             StatusCode::CONFLICT,
             "Opening book settings changed; reload before saving".into(),
         )
     })?;
+    crate::configuration::store::legacy_book(&mut tx, &config)
+        .await
+        .map_err(crate::configuration::store::legacy_error)?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
     let status = status(&config).await;
     let xg_status = crate::xg_book::status(&config.xg_path).await;
     Ok(Json(BookSettings {

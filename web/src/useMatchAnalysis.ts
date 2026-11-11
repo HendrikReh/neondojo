@@ -1,3 +1,4 @@
+import { useOptionalConfiguration } from './ConfigurationProvider';
 import { useEffect, useRef, useState } from 'react';
 import { mergeJob, request, terminal, type Job } from './api';
 
@@ -8,6 +9,7 @@ export function useMatchAnalysis(
   enabled = true,
   onAccepted?: (job: Job) => void,
 ) {
+  const configuration = useOptionalConfiguration();
   const scope = `${matchId}:${gameNo ?? 'match'}`;
   const [stored, setStored] = useState<{ scope: string; job: Job }>();
   const [failure, setFailure] = useState<{ scope: string; error: unknown }>();
@@ -97,11 +99,15 @@ export function useMatchAnalysis(
     setFailure(undefined);
     try {
       // Accepted work survives navigation; only its local display is scoped.
-      const incoming = await request<Job>(`/matches/${matchId}/analysis`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plies, game_no: gameNo }),
-      });
+      const start = () =>
+        request<Job>(`/matches/${matchId}/analysis`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ plies, game_no: gameNo }),
+        });
+      const incoming = configuration
+        ? await configuration.runWithConfiguration(start)
+        : await start();
       onAccepted?.(incoming);
       if (
         !mounted.current ||

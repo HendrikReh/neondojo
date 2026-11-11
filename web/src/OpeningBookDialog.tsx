@@ -1,3 +1,7 @@
+import { ConfigurationApiError } from './configuration-api';
+import ProfileActionDialog from './ProfileActionDialog';
+import { useOptionalConfiguration } from './ConfigurationProvider';
+import { useProfileText } from './profile-messages';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import LibraryDialog from './LibraryDialog';
 import { request } from './api';
@@ -18,6 +22,8 @@ export default function OpeningBookDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const configuration = useOptionalConfiguration();
+  const profileT = useProfileText();
   const l = useSourceText(),
     { formatError, formatNumber } = useI18n();
   const [xgChecked, setXgChecked] = useState<XgBookStatus>();
@@ -28,6 +34,7 @@ export default function OpeningBookDialog({
     [loading, setLoading] = useState(true),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>();
+  const [confirmReload, setConfirmReload] = useState(false);
   const task = useRef<AbortController | undefined>(undefined);
   useEffect(() => {
     const abort = new AbortController();
@@ -37,7 +44,11 @@ export default function OpeningBookDialog({
       .then((data) => {
         if (abort.signal.aborted) return;
         setSaved(data);
-        setDraft(data.config);
+        setDraft(
+          configuration?.current
+            ? { ...data.config, ...configuration.current.opening_book }
+            : data.config,
+        );
         setChecked(undefined);
       })
       .catch((e) => {
@@ -64,7 +75,8 @@ export default function OpeningBookDialog({
         ? saved?.xg_status
         : undefined;
   const conflict =
-    error instanceof AppError && String(error.params.status) === '409';
+    (error instanceof AppError && String(error.params.status) === '409') ||
+    (error instanceof ConfigurationApiError && error.status === 409);
   async function check() {
     if (!draft || busy) return;
     const abort = new AbortController();
@@ -113,12 +125,24 @@ export default function OpeningBookDialog({
     setBusy(true);
     setError(undefined);
     try {
-      await request<BookSettings>('/opening-book', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(draft),
-        signal: abort.signal,
-      });
+      if (configuration) {
+        await configuration.applyCurrent((c) => ({
+          ...c,
+          opening_book: {
+            provider: draft.provider as
+              'off' | 'automatic' | 'backgammondb' | 'xg',
+            path: draft.path,
+            xg_path: draft.xg_path,
+          },
+        }));
+      } else {
+        await request<BookSettings>('/opening-book', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(draft),
+          signal: abort.signal,
+        });
+      }
       if (!abort.signal.aborted) {
         onSaved();
         onClose();
@@ -131,6 +155,30 @@ export default function OpeningBookDialog({
   }
   return (
     <LibraryDialog native title={l('books')} onClose={onClose} busy={busy}>
+      {confirmReload && (
+        <ProfileActionDialog
+          title={profileT('reloadServer')}
+          message={profileT('reloadConfirm')}
+          busy={busy}
+          onCancel={() => setConfirmReload(false)}
+          choices={[
+            {
+              label: profileT('discard'),
+              action: () => {
+                setBusy(true);
+                void configuration
+                  ?.reloadServer()
+                  .then(() => {
+                    setConfirmReload(false);
+                    setReload((n) => n + 1);
+                  })
+                  .catch(setError)
+                  .finally(() => setBusy(false));
+              },
+            },
+          ]}
+        />
+      )}
       {loading ? (
         <p role="status">{l('loading')}</p>
       ) : draft ? (
@@ -235,7 +283,12 @@ export default function OpeningBookDialog({
             </p>
           )}
           {conflict && (
-            <button type="button" onClick={() => setReload((n) => n + 1)}>
+            <button
+              type="button"
+              onClick={() =>
+                configuration ? setConfirmReload(true) : setReload((n) => n + 1)
+              }
+            >
               {l('retry')}
             </button>
           )}
@@ -244,7 +297,11 @@ export default function OpeningBookDialog({
               {l('cancel')}
             </button>
             <button className="primary" disabled={busy || conflict}>
-              {busy ? l('loading') : l('save')}
+              {busy
+                ? l('loading')
+                : configuration
+                  ? profileT('apply')
+                  : l('save')}
             </button>
           </div>
         </form>

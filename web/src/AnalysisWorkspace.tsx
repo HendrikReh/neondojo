@@ -1,3 +1,4 @@
+import { useProfileValue } from './useProfileValue';
 import {
   useCallback,
   useMemo,
@@ -145,7 +146,11 @@ export default function AnalysisWorkspace({
     severity?: string;
     game_no?: number;
   }>({ player: '', kind: '' });
-  const [boardView, setBoardView] = useState<BoardView>('arrows');
+  const [boardView, setBoardView] = useProfileValue<BoardView>(
+    (c) => c.appearance.board_view,
+    (c, board_view) => ({ ...c, appearance: { ...c.appearance, board_view } }),
+    'arrows',
+  );
   const [candidate, setCandidate] = useState<
     PreviewCandidate & { positionId: string }
   >();

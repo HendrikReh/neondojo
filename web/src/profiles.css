@@ -1,0 +1,180 @@
+.profile-selector {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  font-size: 0.85rem;
+  flex-wrap: wrap;
+}
+.profile-selector > button:first-child {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 0;
+  max-width: 100%;
+}
+.profile-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 16rem;
+}
+.profile-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-width: 14rem;
+  max-width: min(24rem, 90vw);
+  max-height: 60vh;
+  overflow: auto;
+  padding: 0.35rem;
+  background: var(--ui-surface, #fff);
+  color: var(--ui-text, #222);
+  border: 1px solid var(--ui-border, #aaa);
+  border-radius: 0.4rem;
+  box-shadow: 0 4px 20px #0003;
+}
+.profile-menu button {
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.profile-menu [aria-checked='true'] {
+  font-weight: 700;
+}
+.profile-settings {
+  min-width: 0;
+}
+.profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 1rem;
+  max-height: 14rem;
+  overflow: auto;
+}
+.profile-list > button {
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.profile-list [aria-pressed='true'] {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+.profile-list small {
+  display: block;
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+.profile-name-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.profile-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 1rem 0;
+}
+.profile-actions button {
+  white-space: normal;
+}
+.profile-help {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+.profile-summary details {
+  border-top: 1px solid var(--ui-border, #ccc);
+  padding: 0.5rem 0;
+}
+.profile-summary summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.profile-summary dl {
+  margin: 0.5rem 0;
+}
+.profile-summary dl > div {
+  display: grid;
+  grid-template-columns: minmax(7rem, 1fr) minmax(0, 1.5fr);
+  gap: 1rem;
+  padding: 0.2rem 0;
+}
+.profile-summary dt {
+  font-weight: 500;
+}
+.profile-summary dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.profile-differences {
+  overflow: auto;
+}
+.library-dialog:has(.profile-summary--differences) .section-heading h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.library-dialog:has(.profile-summary--differences) .section-heading > button {
+  flex-shrink: 0;
+}
+.profile-summary--differences table {
+  table-layout: fixed;
+}
+.profile-summary--differences thead th:first-child {
+  width: 45%;
+}
+.profile-current-value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.profile-current-value > span {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.profile-field-reset.action-button--compact {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+}
+.profile-differences table {
+  width: 100%;
+  font-size: 0.85rem;
+}
+.profile-differences th,
+.profile-differences td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.4rem;
+  overflow-wrap: anywhere;
+}
+.profile-conflict {
+  border: 1px solid var(--ui-border, #aaa);
+  padding: 0.6rem;
+}
+@media (max-width: 600px) {
+  .profile-name {
+    max-width: 9rem;
+  }
+  .profile-summary dl > div {
+    grid-template-columns: 1fr;
+    gap: 0.1rem;
+    margin-bottom: 0.5rem;
+  }
+  .profile-menu {
+    right: auto;
+    left: 0;
+  }
+  .profile-actions {
+    gap: 0.35rem;
+  }
+}

@@ -1,0 +1,232 @@
+{
+  "base": {
+    "schema_version": 1,
+    "general": {
+      "player_name": "",
+      "locale": "en",
+      "play_sounds": true
+    },
+    "analysis": {
+      "engine": "gnubg",
+      "plies": 2,
+      "scope": "game",
+      "search_filter": "engine_default"
+    },
+    "play": {
+      "engine": "gnubg",
+      "plies": 0,
+      "default_mode": "coach",
+      "tutor_threshold": 0.04,
+      "training_auto_analysis": true,
+      "human_player": 0,
+      "match_length": 7
+    },
+    "appearance": {
+      "ui_theme": "graphite",
+      "mode": "system",
+      "board_theme": "forest",
+      "bearoff_direction": "right",
+      "board_view": "arrows"
+    },
+    "opening_book": {
+      "provider": "off",
+      "path": "/books/bgdb.sqlite",
+      "xg_path": "/books/xg.ob"
+    },
+    "library": {
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "filters": {
+        "q": "",
+        "player": "",
+        "date_from": "",
+        "date_to": "",
+        "date_field": "played",
+        "tag": "",
+        "comment": "",
+        "position_id": "",
+        "tournament": "",
+        "round": "",
+        "match_name": "",
+        "match_type": "",
+        "result": "",
+        "match_points_min": "",
+        "match_points_max": ""
+      },
+      "sort": "created_at",
+      "direction": "desc",
+      "visible_columns": [
+        "id",
+        "white",
+        "white_pr",
+        "black",
+        "black_pr",
+        "match_length",
+        "score",
+        "played_at",
+        "created_at",
+        "tournament",
+        "position_count",
+        "analysis_status",
+        "tags",
+        "comment"
+      ],
+      "column_order": [
+        "id",
+        "white",
+        "white_pr",
+        "black",
+        "black_pr",
+        "match_length",
+        "score",
+        "played_at",
+        "created_at",
+        "tournament",
+        "position_count",
+        "analysis_status",
+        "tags",
+        "comment"
+      ],
+      "column_widths": null
+    },
+    "positions": {
+      "definition": {
+        "schema_version": 1,
+        "sort": "match"
+      },
+      "show_played": false,
+      "column_widths": null
+    },
+    "learning": {
+      "deck_id": "__all__",
+      "filters": {
+        "q": "",
+        "player": "",
+        "tag": "",
+        "comment": "",
+        "position_id": "",
+        "kind": "",
+        "status": ""
+      },
+      "generation": {
+        "min_loss": 0.04,
+        "player": ""
+      }
+    },
+    "annotations": {
+      "filters": null
+    },
+    "review": {
+      "player": "",
+      "kind": "",
+      "severity": "",
+      "errors_only": true
+    }
+  },
+  "cases": [
+    {
+      "name": "identical",
+      "changes": [],
+      "expected_paths": []
+    },
+    {
+      "name": "optional_null_is_absent",
+      "changes": [
+        {
+          "path": "positions.definition.q",
+          "value": null
+        }
+      ],
+      "expected_paths": []
+    },
+    {
+      "name": "empty_position_text_is_absent",
+      "changes": [
+        {
+          "path": "positions.definition.q",
+          "value": "  "
+        }
+      ],
+      "expected_paths": []
+    },
+    {
+      "name": "visible_columns_are_a_set",
+      "changes": [
+        {
+          "path": "library.visible_columns",
+          "value": [
+            "comment",
+            "tags",
+            "analysis_status",
+            "position_count",
+            "tournament",
+            "created_at",
+            "played_at",
+            "score",
+            "match_length",
+            "black_pr",
+            "black",
+            "white_pr",
+            "white",
+            "id"
+          ]
+        }
+      ],
+      "expected_paths": []
+    },
+    {
+      "name": "column_order_is_meaningful",
+      "changes": [
+        {
+          "path": "library.column_order",
+          "value": [
+            "comment",
+            "tags",
+            "analysis_status",
+            "position_count",
+            "tournament",
+            "created_at",
+            "played_at",
+            "score",
+            "match_length",
+            "black_pr",
+            "black",
+            "white_pr",
+            "white",
+            "id"
+          ]
+        }
+      ],
+      "expected_paths": [
+        "library.column_order",
+        "library.visible_columns"
+      ]
+    },
+    {
+      "name": "changed_depth",
+      "changes": [
+        {
+          "path": "analysis.plies",
+          "value": 4
+        }
+      ],
+      "expected_paths": [
+        "analysis.plies"
+      ]
+    },
+    {
+      "name": "system_preference_is_stable",
+      "changes": [],
+      "expected_paths": []
+    },
+    {
+      "name": "trimmed_empty_library_query",
+      "changes": [
+        {
+          "path": "library.filters.q",
+          "value": "   "
+        }
+      ],
+      "expected_paths": []
+    }
+  ]
+}

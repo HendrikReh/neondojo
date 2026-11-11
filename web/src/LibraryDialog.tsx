@@ -7,12 +7,14 @@ export default function LibraryDialog({
   busy = false,
   children,
   native = false,
+  initialFocus = 'first-control',
 }: {
   title: string;
   onClose: () => void;
   busy?: boolean;
   children: ReactNode;
   native?: boolean;
+  initialFocus?: 'first-control' | 'dialog';
 }) {
   const id = useId(),
     box = useRef<HTMLDivElement>(null),
@@ -31,7 +33,10 @@ export default function LibraryDialog({
           'button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href],[tabindex="0"]',
         ) ?? [],
       ).filter((el) => el.getClientRects().length > 0);
-    (controls()[0] ?? box.current)?.focus();
+    (initialFocus === 'dialog'
+      ? box.current
+      : (controls()[0] ?? box.current)
+    )?.focus();
     function key(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -71,7 +76,7 @@ export default function LibraryDialog({
       if (native) nativeLayer.current?.close();
       if (previous?.isConnected) previous.focus();
     };
-  }, [native]);
+  }, [native, initialFocus]);
   const content = (
     <div
       className="library-modal-overlay"

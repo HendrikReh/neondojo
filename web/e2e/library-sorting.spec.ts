@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 
 test('numeric IDs and every data column sort through the API and reset paged selections', async ({
   page,

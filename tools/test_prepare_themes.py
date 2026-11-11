@@ -9,6 +9,18 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ThemePreparationTests(unittest.TestCase):
+    def test_configuration_options_include_builtin_and_generated_theme_ids(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)
+            source = target / "source"
+            source.mkdir()
+            prepare(source, target / "public", target / "catalog.json",
+                    target / "configuration-options.json")
+            self.assertEqual(
+                json.loads((target / "configuration-options.json").read_text()),
+                {"board_themes": ["forest", "walnut", "slate"]},
+            )
+
     @unittest.skipUnless(
         list((ROOT / "themes").glob("*.zip")), "optional local artwork"
     )

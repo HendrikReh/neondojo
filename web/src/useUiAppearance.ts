@@ -1,3 +1,4 @@
+import { useOptionalConfiguration } from './ConfigurationProvider';
 import { useLayoutEffect, useState, useSyncExternalStore } from 'react';
 import {
   applyUiAppearance,
@@ -27,7 +28,14 @@ export function useResolvedUiMode(mode: UiMode) {
 }
 
 export function useUiAppearance() {
-  const [appearance, setAppearance] = useState(readUiAppearance);
+  const configuration = useOptionalConfiguration();
+  const [localAppearance, setAppearance] = useState(readUiAppearance);
+  const appearance = configuration?.current
+    ? {
+        theme: configuration.current.appearance.ui_theme,
+        mode: configuration.current.appearance.mode,
+      }
+    : localAppearance;
   const resolvedMode = useResolvedUiMode(appearance.mode);
   useLayoutEffect(() => {
     applyUiAppearance(appearance, resolvedMode === 'dark');

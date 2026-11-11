@@ -1,3 +1,6 @@
+import { useOptionalConfiguration } from './ConfigurationProvider';
+import ProfileSelector from './ProfileSelector';
+import { settingsFromConfiguration } from './configuration-settings';
 import { loadBenchmarkStatus } from './benchmark-api';
 import BenchmarkWorkspace from './BenchmarkWorkspace';
 import { useBenchmarkText } from './benchmark-messages';
@@ -54,6 +57,10 @@ const views: View[] = [
   'extras',
 ];
 export default function App() {
+  const configuration = useOptionalConfiguration();
+  const [settingsCategory, setSettingsCategory] = useState<
+    'general' | 'profiles'
+  >('general');
   const { t, setLocale, formatError } = useI18n();
   const w = useWorkspaceText(),
     learnT = useLearningText();
@@ -98,17 +105,33 @@ export default function App() {
   >([]);
   const annotationNavigation = useRef<AbortController | undefined>(undefined);
   useEffect(() => {
-    if (databaseId) saveDatabase(databaseId);
-  }, [databaseId]);
+    if (!configuration && databaseId) saveDatabase(databaseId);
+  }, [databaseId, !!configuration]);
   useEffect(() => () => annotationNavigation.current?.abort(), []);
   const [view, setView] = useState<View>('analysis');
   const [detail, setDetail] = useState<AnalysisDetail>('overview');
-  const [theme, setTheme] = useState<Theme>(readTheme);
-  const [settings, setSettings] = useState<AppSettings>();
+  const [localTheme, setTheme] = useState<Theme>(readTheme);
+  const theme = configuration?.current?.appearance.board_theme ?? localTheme;
+  const [installedSettings, setInstalledSettings] = useState<AppSettings>();
+  const settings =
+    configuration?.current && installedSettings
+      ? settingsFromConfiguration(configuration.current, installedSettings)
+      : installedSettings;
   const [settingsError, setSettingsError] = useState<unknown>();
   const [settingsRevision, setSettingsRevision] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [bookOpen, setBookOpen] = useState(false);
+  useEffect(() => {
+    if (configuration?.current)
+      setDatabaseId(configuration.current.library.database_id);
+  }, [configuration?.current?.library.database_id]);
+  const changeDatabase = (id: string) => {
+    setDatabaseId(id);
+    configuration?.updateCurrent((c) => ({
+      ...c,
+      library: { ...c.library, database_id: id },
+    }));
+  };
   const [bookRevision, setBookRevision] = useState(0);
   const [health, setHealth] = useState<'checking' | 'ok' | 'degraded'>(
     'checking',
@@ -131,7 +154,21 @@ export default function App() {
   const settingsLoad = useRef<AbortController | undefined>(undefined);
   const input = useRef<HTMLInputElement>(null);
   const tabs = useRef<Partial<Record<View, HTMLButtonElement | null>>>({});
-  useEffect(() => saveTheme(theme), [theme]);
+  useEffect(() => {
+    if (!configuration) saveTheme(theme);
+  }, [theme, !!configuration]);
+  useEffect(() => {
+    const current = configuration?.current;
+    if (!current) return;
+    setLocale(current.general.locale);
+  }, [configuration?.current?.general.locale, setLocale]);
+  useEffect(() => {
+    if (configuration?.current) setBookRevision((n) => n + 1);
+  }, [
+    configuration?.current?.opening_book.provider,
+    configuration?.current?.opening_book.path,
+    configuration?.current?.opening_book.xg_path,
+  ]);
   useEffect(() => {
     Object.values(jobs.jobs).forEach(track);
   }, [jobs.jobs, track]);
@@ -141,7 +178,7 @@ export default function App() {
     void loadSettings(abort.signal)
       .then((value) => {
         if (abort.signal.aborted) return;
-        setSettings((current) =>
+        setInstalledSettings((current) =>
           current && current.version > value.version ? current : value,
         );
         setSettingsError(undefined);
@@ -410,9 +447,18 @@ export default function App() {
           ))}
         </nav>
         <div className="app-header-actions">
+          <ProfileSelector
+            onManage={() => {
+              setSettingsCategory('profiles');
+              setSettingsOpen(true);
+            }}
+          />
           <button
             className="settings-trigger"
-            onClick={() => setSettingsOpen(true)}
+            onClick={() => {
+              setSettingsCategory('general');
+              setSettingsOpen(true);
+            }}
           >
             <svg
               aria-hidden="true"
@@ -530,14 +576,14 @@ export default function App() {
             jobs={jobs}
             theme={theme}
             defaultPlies={settings?.analysis_plies ?? DEFAULT_ANALYSIS_PLIES}
-            sourceRevision={bookRevision}
             analysisInstallationKey={JSON.stringify([
-              settings?.version,
-              settings?.gnubg_path,
-              settings?.analysis_engine,
+              installedSettings?.version,
+              installedSettings?.gnubg_path,
+              installedSettings?.analysis_engine,
               settingsRevision,
             ])}
-            configured={!!settings}
+            sourceRevision={bookRevision}
+            configured={!!settings && (!configuration || configuration.ready)}
             detail={detail}
             onDetail={setDetail}
             onOpenDatabase={() => setView('database')}
@@ -567,7 +613,7 @@ export default function App() {
           <MatchDatabase
             revision={revision}
             databaseId={databaseId}
-            onDatabase={setDatabaseId}
+            onDatabase={changeDatabase}
             visible={view === 'database'}
             onChanged={(deletedIds = [], validateSelection = false) => {
               setRevision((n) => n + 1);
@@ -689,6 +735,7 @@ export default function App() {
         />
       )}
       <SettingsDialog
+        initialCategory={settingsCategory}
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         onBookSettings={() => setBookOpen(true)}
@@ -703,7 +750,7 @@ export default function App() {
           setTheme(applied.theme);
           setLocale(applied.locale);
           applyAppearance(applied.appearance);
-          setSettings(applied.settings);
+          setInstalledSettings(applied.settings);
           setSettingsError(undefined);
         }}
       />

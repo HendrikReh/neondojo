@@ -410,6 +410,24 @@ mehrere Stufen werden gemeinsam vor Beginn angelegt. Nicht verfügbare Engines
 und ungültige Ply-Auswahlen ergeben HTTP 422. Benchmark-Endpunkte und Datentypen
 sind Bestandteil der generierten OpenAPI-Spezifikation.
 
+## Konfigurationsprofile
+
+Die Kopfzeile zeigt das aktive Profil und kennzeichnet Abweichungen mit „geändert“. Über die Auswahl kann ein anderer vollständiger Konfigurationsstand aktiviert oder die Verwaltung unter **Einstellungen → Profile** geöffnet werden.
+
+Bei „geändert“ öffnet **Profilmenü → Änderungen anzeigen** eine Übersicht der abweichenden Einstellungen: jeweils Bereich/Feld, gespeicherter Wert und aktueller Wert. Der Rückpfeil neben einem aktuellen Wert setzt diese Einstellung auf ihren gespeicherten Profilwert zurück und sichert die aktuelle Konfiguration. Andere Änderungen und der gespeicherte Profilstand bleiben erhalten. Zusammengehörige Filter wie Würfelpaare und Werte-/Datumsbereiche werden als eine Einstellung zurückgesetzt. Fehler werden im Dialog angezeigt; nach der letzten Rücksetzung verschwindet „geändert“. Das bloße Öffnen und Schließen verändert nichts. Escape oder der Schließen-Knopf schließen die Übersicht.
+
+**Alle Änderungen zurücksetzen** stellt nach einer Bestätigung direkt in derselben Übersicht den vollständigen gespeicherten Profilstand wieder her. **Abbrechen** oder Escape schließt zunächst die Bestätigung ohne Änderungen. Die Wiederherstellung erfolgt atomar; bei Fehlern bleibt der bisherige Stand erhalten. Nach Erfolg bleibt die leere Änderungsübersicht geöffnet und die Markierung „geändert“ entfällt.
+
+Profile umfassen Engine-Auswahl und Standardtiefen, Spiel-/Trainingseinstellungen, Sprache und Sound, UI-/Boarddarstellung, Opening-Book-Referenzen sowie angewendete Suchfilter, Sortierung und Tabellenlayouts. Die Zusammenfassung zeigt den gespeicherten Stand und die Unterschiede zur aktuellen Konfiguration.
+
+**Anwenden** übernimmt Einstellungen in die aktuelle Konfiguration. Diese wird automatisch dauerhaft gesichert, auch wenn sie vom Profil abweicht. **Profil überschreiben** aktualisiert dagegen ausdrücklich den benannten Profilstand. Beim Wechsel mit Änderungen stehen „Speichern und wechseln“, „Verwerfen und wechseln“ und „Abbrechen“ zur Verfügung. Neue Profile werden aus der aktuellen Konfiguration erstellt und aktiviert; aktive Profile müssen vor dem Löschen durch ein anderes ersetzt werden.
+
+Beim ersten Start nach dem Update werden vorhandene Backend- und Browserpräferenzen einmalig in „Standard“ übernommen. Profile und aktuelle Konfiguration gelten für die gesamte Installation; weitere Browser lesen denselben Serverstand. Versionskonflikte behalten lokale Änderungen und bieten ausdrücklich das Laden des Serverstands oder das Sichern als neues Profil an. Ausstehende lokale Änderungen werden zusätzlich in einem Wiederherstellungsjournal geschützt.
+
+Laufende Analysen und Matches behalten ihre erfasste Konfiguration. Neue Aufträge und neue Matches verwenden die aktuelle Konfiguration. Ein Profilwechsel startet keine Analyse, Partie, Lernrunde oder Book-Installation. Engine-Installationspfade bleiben gerätespezifisch; Book-Dateien werden als Referenzen gespeichert. Fehlende Ressourcen werden angezeigt und bei der Profilaktivierung geprüft.
+
+Fachlicher Vertrag und Umsetzungsschritte: [Spezifikation](docs/superpowers/specs/2026-11-10-profiles-design.md), [Implementierungsplan](docs/superpowers/plans/2026-11-10-profiles.md).
+
 ### Voraussichtliche Analysezeit
 
 Vor dem Start einer Spiel- oder Matchanalyse steht unter Umfang und Ply-Auswahl
@@ -417,7 +435,7 @@ Vor dem Start einer Spiel- oder Matchanalyse steht unter Umfang und Ply-Auswahl
 gewählten Umfang multipliziert mit der durchschnittlichen Zeit pro Zug aus dem
 neuesten vollständig abgeschlossenen passenden Benchmark. Die Anzeige nennt
 Benchmarkdatum, Engine-Version, Ply und Zuganzahl. Ein Wechsel von Match, Spiel,
-Umfang, Ply oder Engine-Installation verwirft alte Antworten.
+Umfang, Ply, angewendetem Profil oder Engine-Installation verwirft alte Antworten.
 Während der Übermittlung und Ausführung wird keine Prognose vor dem Start gezeigt.
 
 Passend bedeutet gleiche lokale Maschine und Hardware, gleiche Engine-Installation

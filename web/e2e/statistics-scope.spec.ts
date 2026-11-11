@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 
 test.use({ actionTimeout: 10000 });
 test('single-game statistics pin errors to their source game across views, reset and navigation', async ({
@@ -86,7 +86,18 @@ test('single-game statistics pin errors to their source game across views, reset
   );
   await expect(
     page.getByLabel('Filter analysis by player', { exact: true }),
-  ).toHaveValue('');
+  ).toHaveValue('0');
+  // Review preferences belong to the current configuration; only the concrete
+  // game context is reset by navigation.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        async () =>
+          (await (await fetch('/api/configuration')).json())
+            .current_configuration.review.player,
+      ),
+    )
+    .toBe('0');
   await expect(page.locator('.board-heading')).toContainText('Game 2');
   await expect
     .poll(() =>

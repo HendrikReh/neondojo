@@ -542,6 +542,214 @@
         }
       }
     },
+    "/api/configuration": {
+      "get": {
+        "tags": [
+          "Configuration"
+        ],
+        "operationId": "get_configuration",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationState"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Configuration"
+        ],
+        "operationId": "put_configuration",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateConfiguration"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationState"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/configuration/availability": {
+      "get": {
+        "tags": [
+          "Configuration"
+        ],
+        "operationId": "configuration_availability",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationAvailability"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/configuration/initialize": {
+      "post": {
+        "tags": [
+          "Configuration"
+        ],
+        "operationId": "initialize_configuration",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitializeConfiguration"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationState"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/configuration/restore-profile": {
+      "post": {
+        "tags": [
+          "Configuration"
+        ],
+        "operationId": "restore_configuration",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreConfiguration"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationState"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/databases": {
       "get": {
         "tags": [
@@ -4922,6 +5130,399 @@
         }
       }
     },
+    "/api/profiles": {
+      "get": {
+        "tags": [
+          "Profiles"
+        ],
+        "operationId": "list_profiles",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ConfigurationProfile"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Profiles"
+        ],
+        "operationId": "create_profile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateConfigurationProfile"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationState"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/profiles/{id}": {
+      "get": {
+        "tags": [
+          "Profiles"
+        ],
+        "operationId": "get_profile",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationProfile"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Profiles"
+        ],
+        "operationId": "delete_profile",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteConfigurationProfile"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationState"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Profiles"
+        ],
+        "operationId": "rename_profile",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameConfigurationProfile"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationState"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/profiles/{id}/activate": {
+      "post": {
+        "tags": [
+          "Profiles"
+        ],
+        "operationId": "activate_profile",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActivateConfigurationProfile"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationState"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/profiles/{id}/snapshot": {
+      "put": {
+        "tags": [
+          "Profiles"
+        ],
+        "operationId": "save_profile",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveConfigurationProfile"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationState"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/profiles/{id}/validate": {
+      "post": {
+        "tags": [
+          "Profiles"
+        ],
+        "operationId": "validate_profile",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateConfigurationProfile"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationValidation"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigurationErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/settings": {
       "get": {
         "tags": [
@@ -5281,6 +5882,37 @@
             }
           }
         }
+      },
+      "ActivateConfigurationProfile": {
+        "type": "object",
+        "required": [
+          "expected_state_revision",
+          "expected_target_revision",
+          "expected_source_revision",
+          "source_action",
+          "current_configuration"
+        ],
+        "properties": {
+          "current_configuration": {
+            "$ref": "#/components/schemas/ProfileConfiguration"
+          },
+          "expected_source_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expected_state_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expected_target_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "source_action": {
+            "$ref": "#/components/schemas/ProfileSourceAction"
+          }
+        },
+        "additionalProperties": false
       },
       "AddCards": {
         "type": "object",
@@ -6715,6 +7347,703 @@
           }
         }
       },
+      "ConfigurationAnalysis": {
+        "type": "object",
+        "required": [
+          "engine",
+          "plies",
+          "scope",
+          "search_filter"
+        ],
+        "properties": {
+          "engine": {
+            "$ref": "#/components/schemas/ConfigurationEngine"
+          },
+          "plies": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ConfigurationScope"
+          },
+          "search_filter": {
+            "$ref": "#/components/schemas/ConfigurationSearchFilter"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConfigurationAnnotationFilters": {
+        "type": "object",
+        "required": [
+          "q",
+          "tag",
+          "kind"
+        ],
+        "properties": {
+          "database_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "type": "string"
+          },
+          "q": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConfigurationAnnotations": {
+        "type": "object",
+        "properties": {
+          "filters": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ConfigurationAnnotationFilters"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConfigurationAppearance": {
+        "type": "object",
+        "required": [
+          "ui_theme",
+          "mode",
+          "board_theme",
+          "bearoff_direction",
+          "board_view"
+        ],
+        "properties": {
+          "bearoff_direction": {
+            "$ref": "#/components/schemas/ConfigurationDirection"
+          },
+          "board_theme": {
+            "type": "string"
+          },
+          "board_view": {
+            "$ref": "#/components/schemas/ConfigurationBoardView"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/ConfigurationMode"
+          },
+          "ui_theme": {
+            "$ref": "#/components/schemas/ConfigurationUiTheme"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConfigurationAvailability": {
+        "type": "object",
+        "required": [
+          "revision",
+          "valid",
+          "issues"
+        ],
+        "properties": {
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConfigurationIssue"
+            }
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "valid": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ConfigurationBoardView": {
+        "type": "string",
+        "enum": [
+          "Before",
+          "Arrows",
+          "After"
+        ]
+      },
+      "ConfigurationBook": {
+        "type": "object",
+        "required": [
+          "provider",
+          "path",
+          "xg_path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ConfigurationBookProvider"
+          },
+          "xg_path": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConfigurationBookProvider": {
+        "type": "string",
+        "enum": [
+          "Off",
+          "Automatic",
+          "Backgammondb",
+          "Xg"
+        ]
+      },
+      "ConfigurationCardFilters": {
+        "type": "object",
+        "required": [
+          "q",
+          "player",
+          "tag",
+          "comment",
+          "position_id",
+          "kind",
+          "status"
+        ],
+        "properties": {
+          "comment": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "player": {
+            "type": "string"
+          },
+          "position_id": {
+            "type": "string"
+          },
+          "q": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConfigurationDifference": {
+        "type": "object",
+        "required": [
+          "path",
+          "saved",
+          "current"
+        ],
+        "properties": {
+          "current": {},
+          "path": {
+            "type": "string"
+          },
+          "saved": {}
+        }
+      },
+      "ConfigurationDirection": {
+        "type": "string",
+        "enum": [
+          "Left",
+          "Right"
+        ]
+      },
+      "ConfigurationEngine": {
+        "type": "string",
+        "enum": [
+          "Gnubg"
+        ]
+      },
+      "ConfigurationErrorBody": {
+        "type": "object",
+        "required": [
+          "error",
+          "code",
+          "issues"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConfigurationIssue"
+            }
+          }
+        }
+      },
+      "ConfigurationGeneral": {
+        "type": "object",
+        "required": [
+          "player_name",
+          "locale",
+          "play_sounds"
+        ],
+        "properties": {
+          "locale": {
+            "$ref": "#/components/schemas/ConfigurationLocale"
+          },
+          "play_sounds": {
+            "type": "boolean"
+          },
+          "player_name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConfigurationGeneration": {
+        "type": "object",
+        "required": [
+          "min_loss",
+          "player"
+        ],
+        "properties": {
+          "min_loss": {
+            "type": "number",
+            "format": "double"
+          },
+          "player": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConfigurationIssue": {
+        "type": "object",
+        "required": [
+          "path",
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        }
+      },
+      "ConfigurationLearning": {
+        "type": "object",
+        "required": [
+          "deck_id",
+          "filters",
+          "generation"
+        ],
+        "properties": {
+          "deck_id": {
+            "type": "string"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/ConfigurationCardFilters"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/ConfigurationGeneration"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConfigurationLibrary": {
+        "type": "object",
+        "required": [
+          "database_id",
+          "filters",
+          "sort",
+          "direction",
+          "visible_columns",
+          "column_order"
+        ],
+        "properties": {
+          "column_order": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "column_widths": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "database_id": {
+            "type": "string"
+          },
+          "direction": {
+            "$ref": "#/components/schemas/ConfigurationSortDirection"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/ConfigurationLibraryFilters"
+          },
+          "sort": {
+            "type": "string"
+          },
+          "visible_columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConfigurationLibraryFilters": {
+        "type": "object",
+        "required": [
+          "q",
+          "player",
+          "date_from",
+          "date_to",
+          "date_field",
+          "tag",
+          "comment",
+          "position_id",
+          "tournament",
+          "round",
+          "match_name",
+          "match_type",
+          "result",
+          "match_points_min",
+          "match_points_max"
+        ],
+        "properties": {
+          "comment": {
+            "type": "string"
+          },
+          "date_field": {
+            "type": "string"
+          },
+          "date_from": {
+            "type": "string"
+          },
+          "date_to": {
+            "type": "string"
+          },
+          "match_name": {
+            "type": "string"
+          },
+          "match_points_max": {
+            "type": "string"
+          },
+          "match_points_min": {
+            "type": "string"
+          },
+          "match_type": {
+            "type": "string"
+          },
+          "player": {
+            "type": "string"
+          },
+          "position_id": {
+            "type": "string"
+          },
+          "q": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string"
+          },
+          "round": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          },
+          "tournament": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConfigurationLocale": {
+        "type": "string",
+        "enum": [
+          "De",
+          "En",
+          "Es",
+          "Fr",
+          "It",
+          "Pl"
+        ]
+      },
+      "ConfigurationMode": {
+        "type": "string",
+        "enum": [
+          "Light",
+          "Dark",
+          "System"
+        ]
+      },
+      "ConfigurationPlay": {
+        "type": "object",
+        "required": [
+          "engine",
+          "plies",
+          "default_mode",
+          "tutor_threshold",
+          "training_auto_analysis",
+          "human_player",
+          "match_length"
+        ],
+        "properties": {
+          "default_mode": {
+            "$ref": "#/components/schemas/PlayMode"
+          },
+          "engine": {
+            "$ref": "#/components/schemas/ConfigurationEngine"
+          },
+          "human_player": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "match_length": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "plies": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "training_auto_analysis": {
+            "type": "boolean"
+          },
+          "tutor_threshold": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConfigurationPositions": {
+        "type": "object",
+        "required": [
+          "definition",
+          "show_played"
+        ],
+        "properties": {
+          "column_widths": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "definition": {
+            "$ref": "#/components/schemas/PositionFilterDefinition"
+          },
+          "show_played": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConfigurationProfile": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "revision",
+          "configuration",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "configuration": {
+            "$ref": "#/components/schemas/ProfileConfiguration"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ConfigurationReview": {
+        "type": "object",
+        "required": [
+          "player",
+          "kind",
+          "severity",
+          "errors_only"
+        ],
+        "properties": {
+          "errors_only": {
+            "type": "boolean"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "player": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConfigurationScope": {
+        "type": "string",
+        "enum": [
+          "Game",
+          "Match"
+        ]
+      },
+      "ConfigurationSearchFilter": {
+        "type": "string",
+        "enum": [
+          "EngineDefault"
+        ]
+      },
+      "ConfigurationSortDirection": {
+        "type": "string",
+        "enum": [
+          "Asc",
+          "Desc"
+        ]
+      },
+      "ConfigurationState": {
+        "type": "object",
+        "required": [
+          "revision",
+          "active_profile",
+          "current_configuration",
+          "dirty",
+          "differences"
+        ],
+        "properties": {
+          "active_profile": {
+            "$ref": "#/components/schemas/ConfigurationProfile"
+          },
+          "current_configuration": {
+            "$ref": "#/components/schemas/ProfileConfiguration"
+          },
+          "differences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConfigurationDifference"
+            }
+          },
+          "dirty": {
+            "type": "boolean"
+          },
+          "initialization_warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConfigurationIssue"
+            }
+          },
+          "profile": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ConfigurationProfile"
+              }
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ConfigurationUiTheme": {
+        "type": "string",
+        "enum": [
+          "Graphite",
+          "Club",
+          "Paper"
+        ]
+      },
+      "ConfigurationValidation": {
+        "type": "object",
+        "required": [
+          "valid",
+          "issues"
+        ],
+        "properties": {
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConfigurationIssue"
+            }
+          },
+          "valid": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CreateConfigurationProfile": {
+        "type": "object",
+        "required": [
+          "name",
+          "expected_state_revision",
+          "configuration"
+        ],
+        "properties": {
+          "configuration": {
+            "$ref": "#/components/schemas/ProfileConfiguration"
+          },
+          "expected_state_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "CreateDeck": {
         "type": "object",
         "required": [
@@ -7135,6 +8464,24 @@
             "minimum": 0
           }
         }
+      },
+      "DeleteConfigurationProfile": {
+        "type": "object",
+        "required": [
+          "expected_state_revision",
+          "expected_profile_revision"
+        ],
+        "properties": {
+          "expected_profile_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expected_state_revision": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
       },
       "DiceCount": {
         "type": "object",
@@ -7872,6 +9219,28 @@
           },
           "raw": {}
         }
+      },
+      "InitializeConfiguration": {
+        "type": "object",
+        "required": [
+          "expected_settings_version",
+          "expected_book_version",
+          "configuration"
+        ],
+        "properties": {
+          "configuration": {
+            "$ref": "#/components/schemas/ProfileConfiguration"
+          },
+          "expected_book_version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expected_settings_version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
       },
       "Job": {
         "type": "object",
@@ -10200,6 +11569,66 @@
           }
         }
       },
+      "ProfileConfiguration": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "general",
+          "analysis",
+          "play",
+          "appearance",
+          "opening_book",
+          "library",
+          "positions",
+          "learning",
+          "annotations",
+          "review"
+        ],
+        "properties": {
+          "analysis": {
+            "$ref": "#/components/schemas/ConfigurationAnalysis"
+          },
+          "annotations": {
+            "$ref": "#/components/schemas/ConfigurationAnnotations"
+          },
+          "appearance": {
+            "$ref": "#/components/schemas/ConfigurationAppearance"
+          },
+          "general": {
+            "$ref": "#/components/schemas/ConfigurationGeneral"
+          },
+          "learning": {
+            "$ref": "#/components/schemas/ConfigurationLearning"
+          },
+          "library": {
+            "$ref": "#/components/schemas/ConfigurationLibrary"
+          },
+          "opening_book": {
+            "$ref": "#/components/schemas/ConfigurationBook"
+          },
+          "play": {
+            "$ref": "#/components/schemas/ConfigurationPlay"
+          },
+          "positions": {
+            "$ref": "#/components/schemas/ConfigurationPositions"
+          },
+          "review": {
+            "$ref": "#/components/schemas/ConfigurationReview"
+          },
+          "schema_version": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProfileSourceAction": {
+        "type": "string",
+        "enum": [
+          "keep",
+          "save_current"
+        ]
+      },
       "Rating": {
         "type": "string",
         "enum": [
@@ -10257,6 +11686,28 @@
           "failed"
         ]
       },
+      "RenameConfigurationProfile": {
+        "type": "object",
+        "required": [
+          "name",
+          "expected_state_revision",
+          "expected_profile_revision"
+        ],
+        "properties": {
+          "expected_profile_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expected_state_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "RenameDeck": {
         "type": "object",
         "required": [
@@ -10271,6 +11722,24 @@
           },
           "name": {
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RestoreConfiguration": {
+        "type": "object",
+        "required": [
+          "expected_state_revision",
+          "expected_profile_revision"
+        ],
+        "properties": {
+          "expected_profile_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expected_state_revision": {
+            "type": "integer",
+            "format": "int64"
           }
         },
         "additionalProperties": false
@@ -10401,6 +11870,28 @@
             "format": "int64"
           }
         }
+      },
+      "SaveConfigurationProfile": {
+        "type": "object",
+        "required": [
+          "expected_state_revision",
+          "expected_profile_revision",
+          "configuration"
+        ],
+        "properties": {
+          "configuration": {
+            "$ref": "#/components/schemas/ProfileConfiguration"
+          },
+          "expected_profile_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expected_state_revision": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
       },
       "SavedPositionFilter": {
         "type": "object",
@@ -10639,6 +12130,23 @@
           }
         }
       },
+      "UpdateConfiguration": {
+        "type": "object",
+        "required": [
+          "expected_revision",
+          "configuration"
+        ],
+        "properties": {
+          "configuration": {
+            "$ref": "#/components/schemas/ProfileConfiguration"
+          },
+          "expected_revision": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
       "UpdatePositionFilter": {
         "type": "object",
         "required": [
@@ -10672,6 +12180,19 @@
             "description": "One MAT, SGF, binary XG, or BGBlitz BGF file, at most 16 MiB including multipart envelope."
           }
         }
+      },
+      "ValidateConfigurationProfile": {
+        "type": "object",
+        "required": [
+          "expected_profile_revision"
+        ],
+        "properties": {
+          "expected_profile_revision": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
       },
       "XgBookStatus": {
         "type": "object",

@@ -1,5 +1,7 @@
 import AnalysisRemainingTime from './AnalysisRemainingTime';
 import AnalysisTimeEstimate from './AnalysisTimeEstimate';
+import { useProfileValue } from './useProfileValue';
+import { useOptionalConfiguration } from './ConfigurationProvider';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -81,6 +83,7 @@ export default function MatchAnalysisPanel({
     game_no?: number;
   }) => void;
 }) {
+  const profile = useOptionalConfiguration();
   const {
     t,
     formatNumber,
@@ -92,7 +95,11 @@ export default function MatchAnalysisPanel({
   const text = useStatisticsText();
   const decimal = (value: number) =>
     formatNumber(value, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
-  const [scope, setScope] = useState<'game' | 'match'>('game');
+  const [scope, setScope] = useProfileValue<'game' | 'match'>(
+    (c) => c.analysis.scope,
+    (c, scope) => ({ ...c, analysis: { ...c.analysis, scope } }),
+    'game',
+  );
   const scoped = scope === 'game';
   const { job, error, submitting, run } = useMatchAnalysis(
     match.id,
@@ -104,16 +111,21 @@ export default function MatchAnalysisPanel({
   useEffect(() => setPlies(defaultPlies), [defaultPlies]);
   useEffect(() => onJob?.(job), [job, onJob]);
   const filterScope = `${match.id}:${scoped ? (gameNo ?? 'none') : 'match'}`;
-  const [selection, setSelection] = useState<{
+  const [selection, setLocalSelection] = useState<{
     scope: string;
     filter: MatchDecisionFilter;
   }>({ scope: filterScope, filter: defaultFilter });
   useEffect(
-    () => setSelection({ scope: filterScope, filter: defaultFilter }),
+    () => setLocalSelection({ scope: filterScope, filter: defaultFilter }),
     [filterScope],
   );
   const selected = {
-    ...(selection.scope === filterScope ? selection.filter : defaultFilter),
+    ...(profile?.current?.review ??
+      (selection.scope === filterScope ? selection.filter : defaultFilter)),
+    ...(selection.scope === filterScope &&
+    selection.filter.game_no !== undefined
+      ? { game_no: selection.filter.game_no }
+      : {}),
     // A single-game job always has this scope, including after reset or a
     // metric action. Keep the visible selection and request explicit.
     ...(scoped ? { game_no: gameNo } : {}),
@@ -125,6 +137,21 @@ export default function MatchAnalysisPanel({
     game_no: filteredGame,
     errors_only: errorsOnly,
   } = selected;
+  const setSelection = (next: {
+    scope: string;
+    filter: MatchDecisionFilter;
+  }) => {
+    setLocalSelection(next);
+    profile?.updateCurrent((c) => ({
+      ...c,
+      review: {
+        player: next.filter.player,
+        kind: next.filter.kind,
+        severity: next.filter.severity ?? '',
+        errors_only: next.filter.errors_only,
+      },
+    }));
+  };
   const updateFilter = (patch: Partial<MatchDecisionFilter>) =>
     setSelection({ scope: filterScope, filter: { ...selected, ...patch } });
   function selectMetric(action: StatisticsAction) {

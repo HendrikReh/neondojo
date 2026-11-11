@@ -1,7 +1,23 @@
+import { ConfigurationApiError } from './configuration-api';
+import { useOptionalConfiguration } from './ConfigurationProvider';
+import ProfileSettingsPanel from './ProfileSettingsPanel';
+import { useProfileText } from './profile-messages';
+import {
+  applySettingsDraft,
+  settingsFromConfiguration,
+  saveInstallationPath,
+} from './configuration-settings';
 import { useBenchmarkText } from './benchmark-messages';
 import { ANALYSIS_PLIES, isAnalysisDepth } from './analysis-depth';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import Board from './Board';
+import { readPlaySounds, savePlaySounds } from './play-audio';
+import { usePlayText } from './play-messages';
+import {
+  playModes,
+  usePlayModeText,
+  type PlayMode,
+} from './play-mode-messages';
 import type { Position } from './api';
 import { useI18n, languages, type Locale } from './i18n';
 import { saveLocale } from './i18n-core';
@@ -30,6 +46,7 @@ import UiAppearancePreview from './UiAppearancePreview';
 
 export interface SettingsDialogProps {
   open: boolean;
+  initialCategory?: 'general' | 'profiles';
   onClose: () => void;
   onBookSettings: () => void;
   onBenchmark?: () => void;
@@ -62,7 +79,8 @@ const previewPosition: Position = {
   notation: '',
 };
 
-type Category = 'general' | 'appearance' | 'analysis' | 'play' | 'board';
+type Category =
+  'general' | 'appearance' | 'analysis' | 'play' | 'board' | 'profiles';
 type CheckState =
   { path: string; version: string } | { path: string; error: unknown } | null;
 
@@ -74,17 +92,29 @@ export default function SettingsDialog({
   onApply,
   onBookSettings,
   onBenchmark,
+  initialCategory = 'general',
 }: SettingsDialogProps) {
+  const configuration = useOptionalConfiguration();
+  const configurationRef = useRef(configuration);
+  configurationRef.current = configuration;
+  const profileT = useProfileText();
   const { locale } = useI18n();
+  const [pendingSection, setPendingSection] = useState<
+    Category | 'book' | null
+  >(null);
   const t = useSettingsText();
-  const benchmarkT = useBenchmarkText();
+  const playT = usePlayText();
+  const modeT = usePlayModeText();
   const sourceT = useSourceText();
+  const benchmarkT = useBenchmarkText();
   const appearanceT = useUiAppearanceText();
   const id = useId();
   const dialog = useRef<HTMLDialogElement>(null);
   const preferences = useRef({ theme, locale, appearance });
   preferences.current = { theme, locale, appearance };
   const [category, setCategory] = useState<Category>('general');
+  const [draftSounds, setDraftSounds] = useState(readPlaySounds);
+  const [initialSounds, setInitialSounds] = useState(readPlaySounds);
   const [draftTheme, setDraftTheme] = useState(theme);
   const [draftLocale, setDraftLocale] = useState(locale);
   const [draftAppearance, setDraftAppearance] = useState(appearance);
@@ -111,7 +141,10 @@ export default function SettingsDialog({
         ? document.activeElement
         : null;
     const bodyOverflow = document.body.style.overflow;
-    setCategory('general');
+    setCategory(initialCategory);
+    setPendingSection(null);
+    setDraftSounds(readPlaySounds());
+    setInitialSounds(readPlaySounds());
     setDraftTheme(preferences.current.theme);
     setDraftLocale(preferences.current.locale);
     setDraftAppearance(preferences.current.appearance);
@@ -122,7 +155,7 @@ export default function SettingsDialog({
       document.body.style.overflow = bodyOverflow;
       if (active?.isConnected) active.focus();
     };
-  }, [open]);
+  }, [open, initialCategory]);
 
   useEffect(() => {
     if (!open) return;
@@ -141,8 +174,22 @@ export default function SettingsDialog({
     Promise.all([loadSettings(abort.signal), loadEngines(abort.signal)])
       .then(([settings, catalog]) => {
         if (abort.signal.aborted || session.current !== currentSession) return;
-        setDraft(settings);
-        setInitial(settings);
+        const latest = configurationRef.current?.current;
+        const effective = latest
+          ? settingsFromConfiguration(latest, settings)
+          : settings;
+        if (latest) {
+          setDraftTheme(latest.appearance.board_theme);
+          setDraftLocale(latest.general.locale);
+          setDraftAppearance({
+            theme: latest.appearance.ui_theme,
+            mode: latest.appearance.mode,
+          });
+          setDraftSounds(latest.general.play_sounds);
+          setInitialSounds(latest.general.play_sounds);
+        }
+        setDraft(effective);
+        setInitial(effective);
         setEngines(catalog);
       })
       .catch((error: unknown) => {
@@ -164,14 +211,37 @@ export default function SettingsDialog({
   const dirty = Boolean(
     draft &&
     initial &&
-    (JSON.stringify(draft) !== JSON.stringify(initial) ||
+    (draftSounds !== initialSounds ||
+      JSON.stringify(draft) !== JSON.stringify(initial) ||
       draftTheme !== theme ||
       draftAppearance.theme !== appearance.theme ||
       draftAppearance.mode !== appearance.mode ||
       draftLocale !== locale),
   );
   const conflict =
-    saveError instanceof SettingsApiError && saveError.status === 409;
+    (saveError instanceof SettingsApiError ||
+      saveError instanceof ConfigurationApiError) &&
+    saveError.status === 409;
+  useEffect(() => {
+    const current = configuration?.current;
+    // Profile actions happen inside this category only after the draft guard.
+    // Rebase the settings form before returning to its other categories.
+    if (!open || category !== 'profiles' || !current) return;
+    setDraft((previous) =>
+      previous ? settingsFromConfiguration(current, previous) : previous,
+    );
+    setInitial((previous) =>
+      previous ? settingsFromConfiguration(current, previous) : previous,
+    );
+    setDraftTheme(current.appearance.board_theme);
+    setDraftLocale(current.general.locale);
+    setDraftAppearance({
+      theme: current.appearance.ui_theme,
+      mode: current.appearance.mode,
+    });
+    setDraftSounds(current.general.play_sounds);
+    setInitialSounds(current.general.play_sounds);
+  }, [open, configuration?.generation]);
   const engine = engines.find(({ id }) => id === 'gnubg');
   const selectedTheme = themes.find(({ id }) => id === draftTheme) ?? themes[0];
   const plies = engine?.plies.filter(isAnalysisDepth) ?? [];
@@ -214,9 +284,25 @@ export default function SettingsDialog({
     }
   }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!draft || loading || checking || conflict || savingRef.current) return;
+  async function applyDraft(closeAfter = true): Promise<boolean> {
+    if (
+      !draft ||
+      loading ||
+      checking ||
+      conflict ||
+      savingRef.current ||
+      (configuration && !configuration.ready)
+    )
+      return false;
+    if (
+      draft.tutor_threshold !== undefined &&
+      (!Number.isFinite(draft.tutor_threshold) ||
+        draft.tutor_threshold <= 0 ||
+        draft.tutor_threshold > 1)
+    ) {
+      setSaveError(new Error(modeT('thresholdHelp')));
+      return false;
+    }
     savingRef.current = true;
     setSaving(true);
     setSaveError(null);
@@ -225,17 +311,36 @@ export default function SettingsDialog({
     const currentSession = session.current;
     let settings: AppSettings;
     try {
-      settings = await saveSettings(draft, abort.signal);
+      if (configuration) {
+        // Machine installation is separate from the profile snapshot.
+        if (initial && draft.gnubg_path !== initial.gnubg_path) {
+          await saveInstallationPath(initial, draft.gnubg_path, abort.signal);
+          await configuration.refresh();
+        }
+        await configuration.applyCurrent((current) =>
+          applySettingsDraft(current, {
+            settings: draft,
+            locale: draftLocale,
+            theme: draftTheme,
+            appearance: draftAppearance,
+            sounds: draftSounds,
+          }),
+        );
+        settings = draft;
+      } else settings = await saveSettings(draft, abort.signal);
     } catch (error) {
       if (!abort.signal.aborted && session.current === currentSession) {
         setSaveError(error);
         setSaving(false);
         savingRef.current = false;
       }
-      return;
+      return false;
     }
-    if (abort.signal.aborted || session.current !== currentSession) return;
+    if (abort.signal.aborted || session.current !== currentSession)
+      return false;
     saveTheme(draftTheme);
+    savePlaySounds(draftSounds);
+    setInitialSounds(draftSounds);
     saveLocale(draftLocale);
     setInitial(settings);
     setDraft(settings);
@@ -247,7 +352,53 @@ export default function SettingsDialog({
       settings,
       appearance: draftAppearance,
     });
-    onClose();
+    if (closeAfter) onClose();
+    return true;
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await applyDraft();
+  }
+
+  function enterSection(next: Category | 'book') {
+    const current = configurationRef.current?.current;
+    if (category === 'profiles' && next !== 'profiles' && current) {
+      setDraft((previous) =>
+        previous ? settingsFromConfiguration(current, previous) : previous,
+      );
+      setInitial((previous) =>
+        previous ? settingsFromConfiguration(current, previous) : previous,
+      );
+      setDraftTheme(current.appearance.board_theme);
+      setDraftLocale(current.general.locale);
+      setDraftAppearance({
+        theme: current.appearance.ui_theme,
+        mode: current.appearance.mode,
+      });
+      setDraftSounds(current.general.play_sounds);
+      setInitialSounds(current.general.play_sounds);
+    }
+
+    if (next === 'profiles' || next === 'book') {
+      if (dirty) {
+        setPendingSection(next);
+        return;
+      }
+    }
+    if (next === 'book') {
+      onClose();
+      onBookSettings();
+    } else setCategory(next);
+  }
+
+  function continueToPending() {
+    const next = pendingSection;
+    setPendingSection(null);
+    if (next === 'book') {
+      onClose();
+      onBookSettings();
+    } else if (next) setCategory(next);
   }
 
   function engineSelect(label: SettingsMessageKey, name: string) {
@@ -332,22 +483,76 @@ export default function SettingsDialog({
             aria-label={t('categories')}
           >
             {(
-              ['general', 'appearance', 'analysis', 'play', 'board'] as const
+              [
+                'general',
+                'appearance',
+                'analysis',
+                'play',
+                'board',
+                ...(configuration ? ['profiles' as const] : []),
+              ] as const
             ).map((name) => (
               <button
                 key={name}
                 type="button"
                 aria-current={category === name ? 'page' : undefined}
                 className={category === name ? 'active' : ''}
-                onClick={() => setCategory(name)}
-                disabled={saving}
+                onClick={() => enterSection(name)}
+                disabled={saving || !!pendingSection}
               >
-                {name === 'appearance' ? appearanceT('appearance') : t(name)}
+                {name === 'profiles'
+                  ? profileT('profiles')
+                  : name === 'appearance'
+                    ? appearanceT('appearance')
+                    : t(name)}
               </button>
             ))}
           </nav>
           <div className="settings-content" aria-busy={loading}>
             {loading && <p role="status">{t('loading')}</p>}
+            {pendingSection && (
+              <div
+                role="alertdialog"
+                aria-label={profileT('draftGuardTitle')}
+                className="profile-draft-guard"
+              >
+                <h3>{profileT('draftGuardTitle')}</h3>
+                <p>{profileT('draftGuardMessage')}</p>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={async () => {
+                    if (await applyDraft(false)) continueToPending();
+                  }}
+                >
+                  {profileT('applyAndContinue')}
+                </button>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => {
+                    setDraft(initial);
+                    setDraftLocale(locale);
+                    setDraftTheme(theme);
+                    setDraftAppearance(appearance);
+                    setDraftSounds(initialSounds);
+                    continueToPending();
+                  }}
+                >
+                  {profileT('discardDraft')}
+                </button>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => setPendingSection(null)}
+                >
+                  {profileT('cancel')}
+                </button>
+              </div>
+            )}
+            {category === 'profiles' && !pendingSection && (
+              <ProfileSettingsPanel />
+            )}
             {Boolean(loadError) && (
               <div className="settings-error" role="alert">
                 <p>
@@ -361,7 +566,7 @@ export default function SettingsDialog({
                 </button>
               </div>
             )}
-            {draft && (
+            {draft && !pendingSection && (
               <>
                 <fieldset
                   className="settings-section"
@@ -507,9 +712,7 @@ export default function SettingsDialog({
                   <button
                     type="button"
                     className="settings-book-button"
-                    onClick={() => {
-                      onBookSettings();
-                    }}
+                    onClick={() => enterSection('book')}
                   >
                     {sourceT('books')}
                   </button>
@@ -595,8 +798,81 @@ export default function SettingsDialog({
                 >
                   <legend>{t('play')}</legend>
                   <p className="settings-help settings-intro">
-                    {t('playHelp')}
+                    {playT('playHelp')}
                   </p>
+                  <label className="settings-play-sounds">
+                    <input
+                      type="checkbox"
+                      checked={draftSounds}
+                      onChange={(event) => setDraftSounds(event.target.checked)}
+                    />
+                    <span>{playT('sounds')}</span>
+                  </label>
+                  <p className="settings-help">{playT('soundsHelp')}</p>
+                  <label className="settings-field">
+                    <span>{modeT('defaultMode')}</span>
+                    <select
+                      aria-label={modeT('defaultMode')}
+                      value={draft.default_play_mode ?? 'coach'}
+                      onChange={(event) =>
+                        update({
+                          default_play_mode: event.target.value as PlayMode,
+                        })
+                      }
+                    >
+                      {playModes.map((mode) => (
+                        <option key={mode} value={mode}>
+                          {modeT(mode)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="settings-help">
+                    {modeT(`${draft.default_play_mode ?? 'coach'}Help`)}
+                  </p>
+                  <label className="settings-field">
+                    <span>{modeT('threshold')}</span>
+                    <input
+                      type="number"
+                      min="0.001"
+                      max="1"
+                      step="0.001"
+                      value={draft.tutor_threshold ?? 0.04}
+                      onChange={(event) =>
+                        update({ tutor_threshold: event.target.valueAsNumber })
+                      }
+                    />
+                  </label>
+                  <p className="settings-help">{modeT('thresholdHelp')}</p>
+                  <label className="settings-play-sounds">
+                    <input
+                      type="checkbox"
+                      checked={draft.training_auto_analysis ?? true}
+                      onChange={(event) =>
+                        update({ training_auto_analysis: event.target.checked })
+                      }
+                    />
+                    <span>{modeT('automatic')}</span>
+                  </label>
+                  <p className="settings-help">{modeT('automaticHelp')}</p>
+                  <label className="settings-field" htmlFor={`${id}-bearoff`}>
+                    <span>{playT('direction')}</span>
+                    <select
+                      id={`${id}-bearoff`}
+                      aria-label={playT('direction')}
+                      value={draft.bearoff_direction ?? 'right'}
+                      onChange={(event) =>
+                        update({
+                          bearoff_direction: event.target.value as
+                            'left' | 'right',
+                        })
+                      }
+                    >
+                      <option value="right">{playT('right')}</option>
+                      <option value="left">{playT('left')}</option>
+                    </select>
+                  </label>
+                  <p className="settings-help">{playT('directionHelp')}</p>
                   {engineSelect('playEngine', 'play-engine')}
                   <label
                     className="settings-field"
@@ -728,10 +1004,16 @@ export default function SettingsDialog({
                 {conflict && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setDraftTheme(theme);
-                      setDraftLocale(locale);
-                      setDraftAppearance(appearance);
+                    onClick={async () => {
+                      if (configuration) {
+                        await configuration.reloadServer();
+                      } else {
+                        setDraftSounds(readPlaySounds());
+                        setInitialSounds(readPlaySounds());
+                        setDraftTheme(theme);
+                        setDraftLocale(locale);
+                        setDraftAppearance(appearance);
+                      }
                       setReload((value) => value + 1);
                     }}
                   >
@@ -744,7 +1026,10 @@ export default function SettingsDialog({
               <p className="settings-help">{t('unsaved')}</p>
             )}
           </div>
-          <div className="settings-actions">
+          <div
+            className="settings-actions"
+            hidden={category === 'profiles' || !!pendingSection}
+          >
             <button type="button" onClick={close} disabled={saving}>
               {t('cancel')}
             </button>
@@ -753,7 +1038,11 @@ export default function SettingsDialog({
               className="settings-save"
               disabled={!draft || loading || saving || checking || conflict}
             >
-              {t(saving ? 'saving' : 'save')}
+              {saving
+                ? t('saving')
+                : configuration
+                  ? profileT('apply')
+                  : t('save')}
             </button>
           </div>
         </footer>

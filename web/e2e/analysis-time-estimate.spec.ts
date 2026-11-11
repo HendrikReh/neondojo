@@ -1,4 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './test';
+import { profileBackend } from './profile-backend';
+import { defaultConfiguration } from '../src/configuration-model';
 // Keep cleanup scoped to the exact imports owned by this test, including when
 // an assertion fails after import. APIRequestContext bypasses browser mocks.
 const importedMatchIds = new WeakMap<Page, Set<string>>();
@@ -221,8 +223,29 @@ for (const reason of [
     ).toBeEnabled();
   });
 }
-// Mount the real panel to change installation identity and source size without
-// replacing the selected match, game or depth.
+test('rechecks confirmed profile revisions at same depth without writes', async ({
+  page,
+}) => {
+  const config = structuredClone(defaultConfiguration);
+  config.general.locale = 'en';
+  const backend = await profileBackend(page, { configuration: config });
+  let calls = 0;
+  await page.route('**/api/matches/*/analysis/estimate?*', (r) => {
+    calls++;
+    return r.fulfill({
+      json: result(r.request().url(), calls === 1 ? 40_000 : 80_000),
+    });
+  });
+  await openMatch(page);
+  await expect(estimate(page)).toContainText('approx. 40s');
+  backend.updateRemote(config);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(estimate(page)).toContainText('approx. 1m 20s');
+  expect(backend.calls.filter((c) => c.method !== 'GET')).toEqual([]);
+});
+
+// Mount the real component and configuration store in the browser to exercise
+// the 300ms unsaved window, including when status still reads "ready".
 async function mountEstimateHarness(page: Page) {
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
   await page.route('**/api/matches/fixture/analysis?*', (route) =>
@@ -231,15 +254,54 @@ async function mountEstimateHarness(page: Page) {
   await page.goto('/');
   await page.evaluate(async () => {
     const { React: react, createRoot } = await import('/e2e/react-fixture.ts');
+    const { ConfigurationStore } = await import('/src/configuration-store.ts');
+    const { ConfigurationProvider } =
+      await import('/src/ConfigurationProvider.tsx');
+    const { defaultConfiguration } =
+      await import('/src/configuration-model.ts');
     const { default: MatchPanel } = await import('/src/MatchAnalysisPanel.tsx');
+    const config = structuredClone(defaultConfiguration);
+    const profile = {
+      id: 'fixture',
+      name: 'Fixture',
+      revision: 1,
+      configuration: config,
+    };
+    let state = {
+      revision: 1,
+      current_configuration: config,
+      active_profile: profile,
+      differences: [],
+      dirty: false,
+    };
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const store = new ConfigurationStore(
+      {
+        read: async () => state,
+        listProfiles: async () => [profile],
+        write: async (_revision: number, configuration: typeof config) => {
+          await gate;
+          state = {
+            ...state,
+            revision: 2,
+            current_configuration: configuration,
+          };
+          return state;
+        },
+      },
+      { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+    );
     const root = document.createElement('div');
     document.body.append(root);
     function Harness() {
       const [installationKey, setInstallation] = react.useState('/old/gnubg');
       const [positionCount, setPositionCount] = react.useState(1000);
       return react.createElement(
-        react.Fragment,
-        null,
+        ConfigurationProvider,
+        { store },
         react.createElement(MatchPanel, {
           match: {
             id: 'fixture',
@@ -255,6 +317,22 @@ async function mountEstimateHarness(page: Page) {
         }),
         react.createElement(
           'button',
+          {
+            onClick: () =>
+              store.updateCurrent((c: typeof config) => ({
+                ...c,
+                analysis: { ...c.analysis, plies: 3 },
+              })),
+          },
+          'Unsaved engine edit',
+        ),
+        react.createElement(
+          'button',
+          { onClick: release },
+          'Confirm engine edit',
+        ),
+        react.createElement(
+          'button',
           { onClick: () => setInstallation('/new/gnubg') },
           'Replace engine installation',
         ),
@@ -268,6 +346,34 @@ async function mountEstimateHarness(page: Page) {
     createRoot(root).render(react.createElement(Harness));
   });
 }
+
+test('suppresses old estimate during unsaved configuration debounce and delayed confirmation', async ({
+  page,
+}) => {
+  let calls = 0;
+  await page.route('**/api/matches/fixture/analysis/estimate?*', (route) => {
+    calls++;
+    return route.fulfill({
+      json: result(route.request().url(), calls === 1 ? 40_000 : 80_000),
+    });
+  });
+  await mountEstimateHarness(page);
+  await expect(estimate(page)).toContainText('approx. 40s');
+  await page
+    .getByRole('button', { name: 'Unsaved engine edit', exact: true })
+    .click();
+  await expect(estimate(page)).toContainText(
+    'Waiting for the analysis settings',
+  );
+  await expect(estimate(page)).not.toContainText('40s');
+  // A fresh GET during the debounce would still see the old applied settings.
+  expect(calls).toBe(1);
+  await page
+    .getByRole('button', { name: 'Confirm engine edit', exact: true })
+    .click();
+  await expect(estimate(page)).toContainText('approx. 1m 20s');
+  expect(calls).toBe(2);
+});
 
 test('invalidates when installation changes while depth stays the same', async ({
   page,

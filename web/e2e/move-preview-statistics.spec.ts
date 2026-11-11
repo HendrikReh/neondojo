@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 import { readFileSync } from 'node:fs';
 test.use({ actionTimeout: 10000 });
 
@@ -319,10 +319,33 @@ test('all board themes render the same arrows and projected checker counts', asy
     ),
   ];
   for (const theme of themes) {
-    await page.evaluate(
-      (value) => localStorage.setItem('bgtutor.theme', value),
-      theme,
-    );
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          localStorage.getItem('bgtutor.configuration-pending.v1'),
+        ),
+      )
+      .toBeNull();
+    await page.evaluate(async (theme) => {
+      const state = await (await fetch('/api/configuration')).json();
+      const configuration = {
+        ...state.current_configuration,
+        appearance: {
+          ...state.current_configuration.appearance,
+          board_theme: theme,
+          board_view: 'arrows',
+        },
+      };
+      const response = await fetch('/api/configuration', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          expected_revision: state.revision,
+          configuration,
+        }),
+      });
+      if (!response.ok) throw new Error(await response.text());
+    }, theme);
     await page.reload();
     const board = page.locator('.analysis-workspace .board-shell');
     await expect(board).toHaveAttribute('data-preview-mode', 'arrows');

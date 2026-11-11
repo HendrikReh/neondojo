@@ -100,7 +100,7 @@ impl Default for PositionFilterDefinition {
 }
 
 impl PositionFilterDefinition {
-    fn validate(mut self) -> ApiResult<Self> {
+    pub(crate) fn validate(mut self) -> ApiResult<Self> {
         if self.schema_version != 1 {
             return Err(ApiError::invalid(
                 "Unsupported position filter schema_version; expected 1",

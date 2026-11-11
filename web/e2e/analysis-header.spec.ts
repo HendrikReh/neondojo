@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './test';
 
 test.use({ actionTimeout: 10000 });
 const header = (page: Page) => page.locator('.analysis-heading');
@@ -187,7 +187,6 @@ test('metadata failures retain the names and offer retry instead of false unknow
   let fail = true;
   await page.route('**/api/matches/*/metadata', (route) => {
     if (route.request().method() === 'GET' && fail) {
-      fail = false;
       return route.fulfill({
         status: 503,
         json: { error: 'Temporary metadata failure' },
@@ -201,6 +200,7 @@ test('metadata failures retain the names and offer retry instead of false unknow
   );
   await expect(header(page).getByRole('alert')).toBeVisible();
   await expect(field(page, 'result')).not.toContainText('n/a');
+  fail = false;
   await header(page)
     .getByRole('button', { name: /Retry|Try again/ })
     .click();

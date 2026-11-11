@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './test';
 
 test.use({ actionTimeout: 10000, viewport: { width: 1800, height: 1169 } });
 
@@ -107,43 +107,58 @@ test('late board responses cannot replace a newer Initial selection after Final 
   await initialize(page);
   const initialGate = gate(),
     finalGate = gate();
-  const started: number[][] = [];
+  let initialBoard: number[] | undefined;
+  let finalBoard: number[] | undefined;
+  let returnedBoard: number[] | undefined;
+  let returning = false;
+  let delayed = 0;
   let finished = 0;
   await page.route('**/api/game-plans', async (route) => {
-    started.push(route.request().postDataJSON().board);
-    const call = started.length;
-    if (call === 1) await initialGate.waiting;
-    if (call === 2) await finalGate.waiting;
-    const result =
-      call === 1
-        ? response('attacking', 'priming')
-        : call === 2
-          ? response('priming', 'attacking')
-          : response('anchoring', 'racing');
+    const { board } = route.request().postDataJSON() as { board: number[] };
+    initialBoard ??= board;
+    const isInitial = board.every(
+      (count, point) => count === initialBoard![point],
+    );
+    if (isInitial && returning) {
+      returnedBoard = board;
+      await route.fulfill({ json: response('anchoring', 'racing') });
+      return;
+    }
+    // React may cancel and repeat a request for the same board on mount.
+    // Hold every response for the old selection, regardless of request count.
+    delayed++;
+    if (!isInitial) finalBoard = board;
+    await (isInitial ? initialGate.waiting : finalGate.waiting);
+    const result = isInitial
+      ? response('attacking', 'priming')
+      : response('priming', 'attacking');
     await route.fulfill({ json: result }).catch(() => {});
     finished++;
   });
-  const names = await imported(page);
   const panel = page.getByRole('region', { name: 'Game plan', exact: true });
-  await expect.poll(() => started.length).toBe(1);
-  await expect(panel).toContainText('Loading game plan');
-  await expect(panel.locator('[data-game-plan]')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Final', exact: true }).click();
-  await expect.poll(() => started.length).toBe(2);
-  await expect(panel.locator('[data-game-plan]')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Initial', exact: true }).click();
-  await expect.poll(() => started.length).toBe(3);
-  await expect(panel.locator('[data-game-plan="white"]')).toContainText(
-    'Anchoring',
-  );
-  await expect(panel.locator('[data-game-plan="black"]')).toContainText(
-    'Racing (contact)',
-  );
-  expect(started[0]).toEqual(started[2]);
-  expect(started[1]).not.toEqual(started[0]);
-  initialGate.release();
-  finalGate.release();
-  await expect.poll(() => finished).toBe(3);
+  const names = await imported(page);
+  try {
+    await expect.poll(() => initialBoard).toEqual(await displayedBoard(page));
+    await expect(panel).toContainText('Loading game plan');
+    await expect(panel.locator('[data-game-plan]')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Final', exact: true }).click();
+    await expect.poll(() => finalBoard).toEqual(await displayedBoard(page));
+    expect(finalBoard).not.toEqual(initialBoard);
+    await expect(panel.locator('[data-game-plan]')).toHaveCount(0);
+    returning = true;
+    await page.getByRole('button', { name: 'Initial', exact: true }).click();
+    await expect.poll(() => returnedBoard).toEqual(initialBoard);
+    await expect(panel.locator('[data-game-plan="white"]')).toContainText(
+      'Anchoring',
+    );
+    await expect(panel.locator('[data-game-plan="black"]')).toContainText(
+      'Racing (contact)',
+    );
+  } finally {
+    initialGate.release();
+    finalGate.release();
+  }
+  await expect.poll(() => finished === delayed).toBe(true);
   await expect(panel.locator('[data-game-plan="white"]')).toContainText(
     'Anchoring',
   );
@@ -163,12 +178,12 @@ test('an unavailable plan leaves navigation usable and can be retried', async ({
   page,
 }) => {
   await initialize(page);
-  let calls = 0;
+  let available = false;
   await page.route('**/api/game-plans', (route) =>
     route.fulfill(
-      ++calls === 1
-        ? { status: 503, json: { error: 'Unavailable' } }
-        : { json: response('pure_race', 'pure_race', true) },
+      available
+        ? { json: response('pure_race', 'pure_race', true) }
+        : { status: 503, json: { error: 'Unavailable' } },
     ),
   );
   await imported(page);
@@ -177,6 +192,7 @@ test('an unavailable plan leaves navigation usable and can be retried', async ({
   await expect(
     page.getByRole('button', { name: 'Next move', exact: true }),
   ).toBeEnabled();
+  available = true;
   await panel.getByRole('button', { name: 'Retry', exact: true }).click();
   await expect(panel).toContainText('Game finished');
   await expect(panel).not.toContainText('Pure race');

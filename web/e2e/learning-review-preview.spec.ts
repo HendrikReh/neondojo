@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './test';
 import { applySteps } from '../src/play-state';
 import { nativeSteps } from '../src/play-sound-events';
 import { summary, id } from './study-report-fixture';
