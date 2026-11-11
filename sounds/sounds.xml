@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sounds>
+    <sound type="rollDice"     name="rollingDice.au"/>
+    <sound type="move"         name="move.au"/>
+    <sound type="double"       name="double.au"/>
+    <sound type="dance"        name="dance.au"/>
+    <sound type="start"        name="startup.au"/>
+    <sound type="winMatch"     name="applause.au"/>
+    <sound type="jobFinished"  name="rollout_end.au"/>
+    <sound type="hitChecker"   name="hit22.wav"/>
+
+    <sound type="tutorWarning" name="boing.mp3"/>
+
+    <sound type="clockBell"    name="beep1.au"/>
+    <sound type="clockTicker"  name="pulsar.au"/>
+
+<!--  no sounds for this:
+    <sound type="winGame"       name="some.au"/>
+    <sound type="looseGame"     name="some.au"/>
+    <sound type="looseMatch"    name="some.au"/>
+    <sound type="end"           name="some.au"/>
+    <sound type="accept"        name="some.au"/>
+    <sound type="resign"        name="some.au"/>
+-->
+</sounds>
