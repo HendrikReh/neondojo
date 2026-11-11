@@ -21,6 +21,8 @@ import {
   emptyFilters,
   loadLibrary,
   defaultDatabaseId,
+  libraryRowKey,
+  isOccurrenceSort,
   type Database,
   type LibraryMatch,
   type LibrarySort,
@@ -34,7 +36,11 @@ import {
   createMatchSummaryFormatter,
   libraryAnalysisStatus,
 } from './library-match-summary';
-import { LIBRARY_COLUMNS, type LibraryColumn } from './library-columns';
+import {
+  LIBRARY_COLUMNS,
+  OCCURRENCE_COLUMNS,
+  type LibraryColumn,
+} from './library-columns';
 import { type LibraryDataColumn } from './library-column-preferences';
 import LibraryColumnPicker from './LibraryColumnPicker';
 import LibraryFilters from './LibraryFilters';
@@ -89,7 +95,7 @@ export default function MatchDatabase({
     (c, filters) => ({ ...c, library: { ...c.library, filters } }),
     emptyFilters,
   );
-  const columns = useLibraryColumns(visible);
+  const columns = useLibraryColumns(visible, !!filters.position_id);
   const [draftFilters, setDraftFilters] = useState<Filters>(filters);
   const filterDraft = useRef(draftFilters);
   filterDraft.current = draftFilters;
@@ -110,11 +116,17 @@ export default function MatchDatabase({
       // A partially edited invalid field remains a draft until it is valid.
     }
   };
-  const [sort, setSort] = useProfileValue<LibrarySort>(
+  const [preferredSort, setSort] = useProfileValue<LibrarySort>(
     (c) => c.library.sort,
     (c, sort) => ({ ...c, library: { ...c.library, sort } }),
     'created_at',
   );
+  // Keep the remembered result sort, but use a match sort while its context
+  // columns are absent. The API requires a position filter for occurrence keys.
+  const sort =
+    !filters.position_id && isOccurrenceSort(preferredSort)
+      ? 'created_at'
+      : preferredSort;
   const [direction, setDirection] = useProfileValue<'asc' | 'desc'>(
     (c) => c.library.direction,
     (c, direction) => ({ ...c, library: { ...c.library, direction } }),
@@ -257,8 +269,11 @@ export default function MatchDatabase({
       );
       if (version === queryVersion.current && !abort.signal.aborted) {
         setMatches((previous) => {
-          const ids = new Set(previous.map((m) => m.id));
-          return [...previous, ...page.items.filter((m) => !ids.has(m.id))];
+          const ids = new Set(previous.map(libraryRowKey));
+          return [
+            ...previous,
+            ...page.items.filter((m) => !ids.has(libraryRowKey(m))),
+          ];
         });
         setCursor(page.next_cursor);
       }
@@ -298,10 +313,11 @@ export default function MatchDatabase({
       return next;
     });
   }
+  const selectableMatchIds = [
+    ...new Set(matches.map((match) => match.id)),
+  ].slice(0, 100);
   function selectAll(checked: boolean) {
-    setSelected(
-      checked ? new Set(matches.slice(0, 100).map((m) => m.id)) : new Set(),
-    );
+    setSelected(new Set(checked ? selectableMatchIds : []));
   }
   function actionResult(response: ActionResponse) {
     setResult(response);
@@ -337,8 +353,10 @@ export default function MatchDatabase({
     onChanged([], databaseDeleted);
   }
   function sortBy(key: LibrarySort) {
-    if (sort === key) setDirection((d) => (d === 'asc' ? 'desc' : 'asc'));
-    else {
+    if (sort === key) {
+      setSort(key);
+      setDirection((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
       setSort(key);
       setDirection('asc');
     }
@@ -362,14 +380,20 @@ export default function MatchDatabase({
     if (matchResultScope !== matchScope) return;
     void matchOpening.open(match);
   }
+  function isCurrentRow(match: LibraryMatch) {
+    return match.occurrence
+      ? match.occurrence.id === currentPosition?.id
+      : match.id === selectedMatchId;
+  }
   function matchName(match: LibraryMatch, player: 'white' | 'black') {
     return (
       <button
-        className={`match-card ${match.id === selectedMatchId ? 'active' : ''}`}
+        className={`match-card ${isCurrentRow(match) ? 'active' : ''}`}
         disabled={
-          matchResultScope !== matchScope || matchOpening.openingId === match.id
+          matchResultScope !== matchScope ||
+          matchOpening.openingId === libraryRowKey(match)
         }
-        aria-busy={matchOpening.openingId === match.id}
+        aria-busy={matchOpening.openingId === libraryRowKey(match)}
         onClick={(event) => {
           event.stopPropagation();
           openMatchRow(match);
@@ -401,7 +425,9 @@ export default function MatchDatabase({
         matches.length - 1,
         Math.max(0, index + (e.key === 'ArrowDown' ? 1 : -1)),
       );
-      document.getElementById(`library-row-${matches[next].id}`)?.focus();
+      document
+        .getElementById(`library-row-${libraryRowKey(matches[next])}`)
+        ?.focus();
     }
   }
   useEffect(() => {
@@ -553,7 +579,8 @@ export default function MatchDatabase({
               {loading
                 ? t('app.searching')
                 : `${formatNumber(matches.length)}${cursor ? '+' : ''}`}{' '}
-              {t('app.matches')} · {active?.name ?? l('allDatabases')}
+              {filters.position_id ? l('occurrences') : t('app.matches')} ·{' '}
+              {active?.name ?? l('allDatabases')}
             </div>
             {filters.position_id.trim() && (
               <span className="library-position-filter">
@@ -571,7 +598,7 @@ export default function MatchDatabase({
                 </button>
               </span>
             )}
-            {!showColumn(sort as LibraryColumn) && (
+            {!isOccurrenceSort(sort) && !showColumn(sort as LibraryColumn) && (
               <span className="library-hidden-sort">
                 {l('sortedBy', {
                   column: columnNames[sort as LibraryDataColumn] ?? sort,
@@ -682,6 +709,18 @@ export default function MatchDatabase({
                   }
                 >
                   <colgroup>
+                    {filters.position_id &&
+                      OCCURRENCE_COLUMNS.map((column) => (
+                        <col
+                          key={column.id}
+                          className={column.className}
+                          style={{
+                            width:
+                              columns.widths?.[column.id] ??
+                              column.defaultWidth,
+                          }}
+                        />
+                      ))}
                     {columns.activeColumns
                       .map((id) =>
                         LIBRARY_COLUMNS.find((column) => column.id === id)!,
@@ -699,16 +738,70 @@ export default function MatchDatabase({
                       ))}
                   </colgroup>
                   <thead>
-                    <OrderedLibraryRow columns={columns.activeColumns}>
+                    <OrderedLibraryRow
+                      columns={columns.activeColumns}
+                      leadingCells={
+                        filters.position_id && (
+                          <>
+                            <LibrarySortHeading
+                              fields={[
+                                {
+                                  key: 'occurrence_database',
+                                  label: l('database'),
+                                },
+                              ]}
+                              sort={sort}
+                              direction={direction}
+                              onSort={sortBy}
+                              column="occurrence_database"
+                              resizeHandle={columns.handle(
+                                'occurrence_database',
+                                l('database'),
+                              )}
+                            />
+                            <LibrarySortHeading
+                              fields={[
+                                {
+                                  key: 'occurrence_game',
+                                  label: l('occurrenceGame'),
+                                },
+                              ]}
+                              sort={sort}
+                              direction={direction}
+                              onSort={sortBy}
+                              column="occurrence_game"
+                              resizeHandle={columns.handle(
+                                'occurrence_game',
+                                l('occurrenceGame'),
+                              )}
+                            />
+                            <LibrarySortHeading
+                              fields={[
+                                {
+                                  key: 'occurrence_move',
+                                  label: l('occurrenceMove'),
+                                },
+                              ]}
+                              sort={sort}
+                              direction={direction}
+                              onSort={sortBy}
+                              column="occurrence_move"
+                              resizeHandle={columns.handle(
+                                'occurrence_move',
+                                l('occurrenceMove'),
+                              )}
+                            />
+                          </>
+                        )
+                      }
+                    >
                       <th scope="col" data-column="select">
                         <input
                           type="checkbox"
                           aria-label={l('selectAll')}
                           checked={
-                            matches.length > 0 &&
-                            matches
-                              .slice(0, 100)
-                              .every((m) => selected.has(m.id))
+                            selectableMatchIds.length > 0 &&
+                            selectableMatchIds.every((id) => selected.has(id))
                           }
                           disabled={!matches.length}
                           onChange={(e) => selectAll(e.target.checked)}
@@ -739,13 +832,13 @@ export default function MatchDatabase({
                     {matches.map((m, index) => (
                       <OrderedLibraryRow
                         columns={columns.activeColumns}
-                        key={m.id}
-                        id={`library-row-${m.id}`}
+                        key={libraryRowKey(m)}
+                        id={`library-row-${libraryRowKey(m)}`}
+                        data-match-id={m.id}
+                        data-position-id={m.occurrence?.id}
                         title={summaries.get(m.id)}
                         tabIndex={0}
-                        className={
-                          m.id === selectedMatchId ? 'selected' : undefined
-                        }
+                        className={isCurrentRow(m) ? 'selected' : undefined}
                         onClick={(event) => event.currentTarget.focus()}
                         onDoubleClick={(event) => {
                           if (
@@ -756,11 +849,37 @@ export default function MatchDatabase({
                             openMatchRow(m);
                         }}
                         onKeyDown={(e) => rowKey(e, m, index)}
+                        leadingCells={
+                          filters.position_id && (
+                            <>
+                              <td data-column="occurrence_database">
+                                {m.occurrence?.database_name ??
+                                  databases.find((d) => d.id === m.database_id)
+                                    ?.name ??
+                                  '—'}
+                              </td>
+                              <td data-column="occurrence_game">
+                                {m.occurrence
+                                  ? formatNumber(m.occurrence.game_no)
+                                  : '—'}
+                              </td>
+                              <td data-column="occurrence_move">
+                                {m.occurrence
+                                  ? formatNumber(m.occurrence.move_no)
+                                  : '—'}
+                              </td>
+                            </>
+                          )
+                        }
                       >
                         <td onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
-                            aria-label={l('select', { name: m.display_name })}
+                            aria-label={l('select', {
+                              name: m.occurrence
+                                ? `${m.display_name} · ${l('occurrenceGame')} ${m.occurrence.game_no} · ${l('occurrenceMove')} ${m.occurrence.move_no}`
+                                : m.display_name,
+                            })}
                             checked={selected.has(m.id)}
                             onChange={(e) => toggle(m.id, e.target.checked)}
                             disabled={
@@ -844,7 +963,7 @@ export default function MatchDatabase({
                                 aria-label={`${w('openMatch')}: ${m.display_name}`}
                                 disabled={
                                   matchResultScope !== matchScope ||
-                                  matchOpening.openingId === m.id
+                                  matchOpening.openingId === libraryRowKey(m)
                                 }
                                 onClick={(event) => {
                                   event.stopPropagation();
@@ -897,7 +1016,9 @@ export default function MatchDatabase({
                   disabled={loading}
                   onClick={() => void more()}
                 >
-                  {t('app.moreMatches')}
+                  {filters.position_id
+                    ? l('moreOccurrences')
+                    : t('app.moreMatches')}
                 </button>
               )}
               <p className="fineprint library-pr-help">{l('prHelp')}</p>
@@ -922,14 +1043,21 @@ export default function MatchDatabase({
 function OrderedLibraryRow({
   columns,
   children,
+  leadingCells,
   ...props
 }: HTMLAttributes<HTMLTableRowElement> & {
   columns: readonly LibraryColumn[];
   children: ReactNode;
+  leadingCells?: ReactNode;
 }) {
   const natural = LIBRARY_COLUMNS.map((column) => column.id).filter((id) =>
     columns.includes(id),
   );
   const cells = Children.toArray(children);
-  return <tr {...props}>{columns.map((id) => cells[natural.indexOf(id)])}</tr>;
+  return (
+    <tr {...props}>
+      {leadingCells}
+      {columns.map((id) => cells[natural.indexOf(id)])}
+    </tr>
+  );
 }

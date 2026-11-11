@@ -67,15 +67,46 @@ describe('configuration comparison', () => {
   });
 });
 
-it('preserves saved column widths and rejects invalid widths', () => {
+it('preserves each position-occurrence sort choice in a profile', () => {
+  for (const sort of [
+    'occurrence_database',
+    'occurrence_game',
+    'occurrence_move',
+  ]) {
+    const configuration = structuredClone(defaultConfiguration);
+    const input = {
+      ...configuration,
+      library: { ...configuration.library, sort },
+    };
+    expect(normalizeConfiguration(input).library.sort).toBe(sort);
+  }
+});
+
+it('preserves position-search widths in old and new profiles and rejects invalid widths', () => {
   const configuration = structuredClone(defaultConfiguration);
   configuration.library.column_widths = { white: 211 };
   expect(normalizeConfiguration(configuration).library.column_widths).toEqual({
     white: 211,
   });
-  for (const width of [0, 2401, 99.5]) {
-    configuration.library.column_widths.white = width;
-    expect(() => normalizeConfiguration(configuration)).toThrow();
+  configuration.library.column_widths = {
+    white: 211,
+    occurrence_database: 240,
+    occurrence_game: 90,
+    occurrence_move: 100,
+  };
+  expect(normalizeConfiguration(configuration).library.column_widths).toEqual(
+    configuration.library.column_widths,
+  );
+  for (const key of [
+    'occurrence_database',
+    'occurrence_game',
+    'occurrence_move',
+  ]) {
+    for (const width of [0, 2401, 99.5]) {
+      const invalid = structuredClone(configuration);
+      invalid.library.column_widths![key] = width;
+      expect(() => normalizeConfiguration(invalid)).toThrow();
+    }
   }
 });
 

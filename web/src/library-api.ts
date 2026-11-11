@@ -5,8 +5,18 @@ type Schema = components['schemas'];
 
 export const defaultDatabaseId = '00000000-0000-0000-0000-000000000001';
 export type Database = Schema['Database'];
-export type LibraryMatch = Required<Schema['DatabaseMatch']>;
+export type LibraryMatch = Required<
+  Omit<Schema['DatabaseMatch'], 'occurrence'>
+> &
+  Pick<Schema['DatabaseMatch'], 'occurrence'>;
+export const libraryRowKey = (match: LibraryMatch): string =>
+  match.occurrence?.id ?? match.id;
+export type OccurrenceSort =
+  'occurrence_database' | 'occurrence_game' | 'occurrence_move';
+export const isOccurrenceSort = (sort: LibrarySort): sort is OccurrenceSort =>
+  ['occurrence_database', 'occurrence_game', 'occurrence_move'].includes(sort);
 export type LibrarySort =
+  | OccurrenceSort
   | 'id'
   | 'name'
   | 'white'

@@ -90,6 +90,9 @@ describe('profile-controlled table widths', () => {
     first.library.column_widths = {
       id: 125,
       white: 201,
+      occurrence_database: 240,
+      occurrence_game: 90,
+      occurrence_move: 100,
     };
     const second = structuredClone(defaultConfiguration);
     second.library.visible_columns = ['black', 'id'];
@@ -100,6 +103,9 @@ describe('profile-controlled table widths', () => {
     second.library.column_widths = {
       black: 255,
       id: 99,
+      occurrence_database: 300,
+      occurrence_game: 110,
+      occurrence_move: 120,
     };
     const state = {
       current: first,
@@ -113,7 +119,7 @@ describe('profile-controlled table widths', () => {
     profile.value = state;
     let controls: ReturnType<typeof useLibraryColumns>;
     function Table() {
-      controls = useLibraryColumns(false);
+      controls = useLibraryColumns(false, true);
       return createElement(
         'p',
         {},
@@ -132,6 +138,9 @@ describe('profile-controlled table widths', () => {
       'actions',
     ]);
     expect(controls!.widths?.id).toBe(125);
+    expect(controls!.widths?.occurrence_database).toBe(240);
+    expect(controls!.widths?.occurrence_game).toBe(90);
+    expect(controls!.widths?.occurrence_move).toBe(100);
     state.current = second;
     state.generation++;
     renderToStaticMarkup(createElement(Table));
@@ -142,6 +151,9 @@ describe('profile-controlled table widths', () => {
       'actions',
     ]);
     expect(controls!.widths?.black).toBe(255);
+    expect(controls!.widths?.occurrence_database).toBe(300);
+    expect(controls!.widths?.occurrence_game).toBe(110);
+    expect(controls!.widths?.occurrence_move).toBe(120);
     state.current = first;
     state.generation++;
     expect(renderToStaticMarkup(createElement(Table))).toBe(firstHtml);

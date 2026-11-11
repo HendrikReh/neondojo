@@ -255,6 +255,26 @@ async fn current_availability_reports_outages_without_changing_configuration(poo
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
+async fn occurrence_sort_choices_are_persisted_in_configuration(pool: PgPool) {
+    let (app, mut state) = profile_support::initialized(&pool, false).await;
+    for sort in ["occurrence_database", "occurrence_game", "occurrence_move"] {
+        let mut config = state["current_configuration"].clone();
+        config["library"]["sort"] = json!(sort);
+        let (code, updated) = call(
+            app.clone(),
+            "PUT",
+            "/api/configuration",
+            json!({"expected_revision":state["revision"],"configuration":config}),
+        )
+        .await;
+        assert_eq!(code, 200, "{updated}");
+        assert_eq!(updated["current_configuration"]["library"]["sort"], sort);
+        state = updated;
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
 async fn unchanged_missing_references_do_not_block_unrelated_configuration_updates(pool: PgPool) {
     let (app, state) = profile_support::initialized(&pool, false).await;
     let deck = uuid::Uuid::new_v4();
@@ -299,6 +319,46 @@ async fn unchanged_missing_references_do_not_block_unrelated_configuration_updat
     .await;
     assert_eq!(code, 422, "{error}");
     assert_eq!(error["issues"][0]["path"], "learning.deck_id");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn occurrence_widths_roundtrip_without_changing_column_visibility_or_order(pool: PgPool) {
+    let (app, state) = profile_support::initialized(&pool, false).await;
+    let mut config = state["current_configuration"].clone();
+    config["library"]["column_widths"] =
+        json!({"white":211,"occurrence_database":240,"occurrence_game":90,"occurrence_move":100});
+    let (code, updated) = call(
+        app.clone(),
+        "PUT",
+        "/api/configuration",
+        json!({"expected_revision":state["revision"],"configuration":config}),
+    )
+    .await;
+    assert_eq!(code, 200, "{updated}");
+    let (code, reloaded) = call(app.clone(), "GET", "/api/configuration", json!(null)).await;
+    assert_eq!(code, 200);
+    assert_eq!(
+        reloaded["current_configuration"]["library"],
+        config["library"]
+    );
+    for key in ["occurrence_database", "occurrence_game", "occurrence_move"] {
+        for width in [0, 2401] {
+            let mut invalid = config.clone();
+            invalid["library"]["column_widths"][key] = json!(width);
+            assert_eq!(
+                call(
+                    app.clone(),
+                    "PUT",
+                    "/api/configuration",
+                    json!({"expected_revision":updated["revision"],"configuration":invalid})
+                )
+                .await
+                .0,
+                422
+            );
+        }
+    }
 }
 
 #[sqlx::test(migrations = "./migrations")]

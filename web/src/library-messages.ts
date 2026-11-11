@@ -3,6 +3,33 @@ import { interpolate, type Locale, type TranslationParams } from './i18n-core';
 
 // Each row is complete in English, German, Spanish, French, Polish and Italian.
 const rows = {
+  moreOccurrences: [
+    'Load more occurrences',
+    'Weitere Vorkommen laden',
+    'Cargar más coincidencias',
+    'Charger d’autres occurrences',
+    'Wczytaj więcej wystąpień',
+    'Carica altre occorrenze',
+  ],
+  database: [
+    'Database',
+    'Datenbank',
+    'Base de datos',
+    'Base de données',
+    'Baza danych',
+    'Database',
+  ],
+  occurrences: [
+    'Occurrences',
+    'Vorkommen',
+    'Coincidencias',
+    'Occurrences',
+    'Wystąpienia',
+    'Occorrenze',
+  ],
+  occurrenceGame: ['Game', 'Partie', 'Partida', 'Partie', 'Partia', 'Partita'],
+  occurrenceMove: ['Move', 'Zug', 'Jugada', 'Coup', 'Ruch', 'Mossa'],
+
   columns: ['Columns', 'Spalten', 'Columnas', 'Colonnes', 'Kolumny', 'Colonne'],
   chooseColumns: [
     'Visible columns',

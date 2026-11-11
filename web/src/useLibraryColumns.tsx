@@ -2,7 +2,11 @@ import { useOptionalConfiguration } from './ConfigurationProvider';
 import { useProfileValue } from './useProfileValue';
 import { useLibraryText } from './library-messages';
 import { useMemo } from 'react';
-import { LIBRARY_COLUMN_LAYOUT, LIBRARY_COLUMNS } from './library-columns';
+import {
+  LIBRARY_RESIZABLE_LAYOUT,
+  LIBRARY_COLUMNS,
+  OCCURRENCE_COLUMNS,
+} from './library-columns';
 import {
   DEFAULT_LIBRARY_COLUMNS,
   LIBRARY_DATA_COLUMNS,
@@ -13,7 +17,7 @@ import {
 } from './library-column-preferences';
 import { useResizableColumns } from './useResizableColumns';
 
-export function useLibraryColumns(visible: boolean) {
+export function useLibraryColumns(visible: boolean, positionSearch = false) {
   const l = useLibraryText();
   const profile = useOptionalConfiguration();
   const [shown, setShown] = useProfileValue<LibraryDataColumn[]>(
@@ -38,9 +42,16 @@ export function useLibraryColumns(visible: boolean) {
       ] as const,
     [shown, order],
   );
-  const resized = useResizableColumns(LIBRARY_COLUMN_LAYOUT, {
+  const resizeColumns = useMemo(
+    () =>
+      positionSearch
+        ? [...OCCURRENCE_COLUMNS.map((column) => column.id), ...activeColumns]
+        : activeColumns,
+    [positionSearch, activeColumns],
+  );
+  const resized = useResizableColumns(LIBRARY_RESIZABLE_LAYOUT, {
     visible,
-    activeColumns,
+    activeColumns: resizeColumns,
     ...(profile?.current
       ? {
           widths: profile.current.library.column_widths,
@@ -73,7 +84,15 @@ export function useLibraryColumns(visible: boolean) {
     },
     minimumWidth: LIBRARY_COLUMNS.filter((column) =>
       activeColumns.includes(column.id),
-    ).reduce((sum, column) => sum + column.defaultWidth, 0),
+    ).reduce(
+      (sum, column) => sum + column.defaultWidth,
+      positionSearch
+        ? OCCURRENCE_COLUMNS.reduce(
+            (sum, column) => sum + column.defaultWidth,
+            0,
+          )
+        : 0,
+    ),
     toggle: (id: LibraryDataColumn, checked: boolean) =>
       apply(toggleVisibleColumn(shown, id, checked)),
     showAll: () => apply([...LIBRARY_DATA_COLUMNS]),

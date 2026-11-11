@@ -108,3 +108,60 @@ export const readColumnWidths = LIBRARY_COLUMN_LAYOUT.read;
 export const saveColumnWidths = LIBRARY_COLUMN_LAYOUT.save;
 export const resizeColumn = LIBRARY_COLUMN_LAYOUT.resize;
 export const totalColumnWidth = LIBRARY_COLUMN_LAYOUT.total;
+
+// Search context columns have widths, but do not participate in the ordinary
+// match-column visibility or ordering preferences.
+export const OCCURRENCE_COLUMNS = [
+  {
+    id: 'occurrence_database',
+    className: 'library-col-occurrence-database',
+    min: 70,
+    defaultWidth: 160,
+  },
+  {
+    id: 'occurrence_game',
+    className: 'library-col-occurrence-game',
+    min: 44,
+    defaultWidth: 70,
+  },
+  {
+    id: 'occurrence_move',
+    className: 'library-col-occurrence-move',
+    min: 44,
+    defaultWidth: 70,
+  },
+] as const;
+export const LIBRARY_WIDTH_COLUMNS = [
+  ...OCCURRENCE_COLUMNS,
+  ...LIBRARY_COLUMNS,
+] as const;
+const resultLayout = createColumnLayout(
+  LIBRARY_WIDTH_COLUMNS,
+  COLUMN_WIDTHS_KEY,
+  Object.fromEntries(
+    OCCURRENCE_COLUMNS.map((column) => [column.id, column.defaultWidth]),
+  ),
+);
+export const LIBRARY_RESIZABLE_LAYOUT: typeof resultLayout = {
+  ...resultLayout,
+  read(storage) {
+    const normal = LIBRARY_COLUMN_LAYOUT.read(storage);
+    if (!normal) return;
+    try {
+      const raw = (storage ?? localStorage).getItem(COLUMN_WIDTHS_KEY);
+      if (!raw || raw.length > 4096) return;
+      const saved = JSON.parse(raw).widths;
+      const occurrence = Object.fromEntries(
+        OCCURRENCE_COLUMNS.filter((column) =>
+          Object.hasOwn(saved, column.id),
+        ).map((column) => [column.id, saved[column.id]]),
+      );
+      return resultLayout.read({
+        getItem: () =>
+          JSON.stringify({ version: 1, widths: { ...normal, ...occurrence } }),
+      });
+    } catch {
+      return;
+    }
+  },
+};

@@ -483,13 +483,18 @@ async fn migration_backfills_existing_rows_without_changing_source_data(pool: Pg
         .collect();
     assert_eq!(numbers.len(), 2);
     assert!(numbers[0] > 0 && numbers[1] > numbers[0]);
-    assert_eq!(
-        sqlx::query_scalar::<_, Value>("SELECT to_jsonb(m)-ARRAY['match_no','collection_only','source_match_id','source_match_no','source_database_id','source_database_name'] FROM matches m ORDER BY id")
-            .fetch_all(&pool)
-            .await
-            .unwrap(),
-        original
-    );
+    let migrated: Vec<Value> = sqlx::query_scalar("SELECT to_jsonb(m) FROM matches m ORDER BY id")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(migrated.len(), original.len());
+    // Later migrations may add columns; all source fields that existed before
+    // the match-number migration must retain their original values.
+    for (after, before) in migrated.iter().zip(&original) {
+        for (field, value) in before.as_object().unwrap() {
+            assert_eq!(after.get(field), Some(value), "source field {field}");
+        }
+    }
     let c = target(&pool, 3).await;
     assert!(
         sqlx::query_scalar::<_, i64>("SELECT match_no FROM matches WHERE id=$1")

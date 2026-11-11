@@ -13,7 +13,7 @@ import {
   LIBRARY_DATA_COLUMNS,
   type LibraryDataColumn,
 } from './library-column-preferences';
-import { LIBRARY_COLUMNS } from './library-columns';
+import { LIBRARY_WIDTH_COLUMNS } from './library-columns';
 import { POSITION_COLUMNS } from './position-table-columns';
 import {
   positionDefinition,
@@ -262,6 +262,9 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
   )
     invalid('library');
   const sorts = [
+    'occurrence_database',
+    'occurrence_game',
+    'occurrence_move',
     'id',
     'name',
     'white',
@@ -303,7 +306,11 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
   c.library.visible_columns = c.library.column_order.filter((id) =>
     c.library.visible_columns.includes(id),
   );
-  widths(c.library.column_widths, LIBRARY_COLUMNS, 'library.column_widths');
+  widths(
+    c.library.column_widths,
+    LIBRARY_WIDTH_COLUMNS,
+    'library.column_widths',
+  );
   widths(
     c.positions.column_widths,
     POSITION_COLUMNS,

@@ -60,8 +60,20 @@ pub struct DatabaseDelete {
     #[serde(default)]
     pub delete_matches: bool,
 }
+/// One stored occurrence of the searched checker position.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct LibraryOccurrence {
+    pub id: Uuid,
+    pub game_no: i32,
+    pub move_no: i32,
+    pub database_name: String,
+}
 #[derive(Debug, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct DatabaseMatch {
+    /// Present in position-filtered results, where every stored occurrence is a row.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[sqlx(skip)]
+    pub occurrence: Option<LibraryOccurrence>,
     pub id: Uuid,
     /// False for independent saved-position context whose source match was deleted.
     pub source_available: bool,
@@ -108,6 +120,7 @@ pub struct LibraryQuery {
     pub date_field: Option<String>,
     pub tag: Option<String>,
     pub comment: Option<String>,
+    /// Search checker Position-ID; returns each occurrence, including repeats in one game.
     pub position_id: Option<String>,
     pub tournament: Option<String>,
     pub round: Option<String>,
@@ -118,7 +131,9 @@ pub struct LibraryQuery {
     pub match_points_max: Option<i32>,
     /// Sort field: id (or match_no), created_at, played_at, name, white, black,
     /// white_pr, black_pr, match_length, score, result, tournament, format,
-    /// position_count, analysis_status, tags, or comment. score compares the
+    /// position_count, analysis_status, tags, or comment. With position_id, also
+    /// occurrence_database (case-insensitive name), occurrence_game, occurrence_move.
+    /// score compares the
     /// visible numeric white/black score pair; result retains result-state order.
     pub sort: Option<String>,
     /// asc or desc (default desc). Missing values sort last in either direction;
@@ -128,7 +143,14 @@ pub struct LibraryQuery {
     pub limit: Option<i64>,
 }
 #[derive(Serialize, Deserialize)]
+struct OccurrenceCursor {
+    id: Uuid,
+    ordinal: i32,
+}
+#[derive(Serialize, Deserialize)]
 struct LibraryCursor {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    occurrence: Option<OccurrenceCursor>,
     scope: String,
     key: Option<String>,
     id: Uuid,
@@ -365,6 +387,9 @@ LEFT JOIN LATERAL (
 const MATCH_COLUMNS: &str = "m.id,NOT m.collection_only AS source_available,coalesce(m.source_match_no,m.match_no) AS match_no,m.filename,m.format,m.white,m.black,m.match_length,m.position_count,m.created_at,coalesce(m.source_database_id,m.database_id) AS database_id,coalesce(nullif(m.display_name,''),m.filename) AS display_name,m.played_on,m.tournament,m.round,m.place,m.result_state,m.white_score,m.black_score,(prj.result #>> '{performance_rating,players,0,value}')::float8 AS white_pr,(prj.result #>> '{performance_rating,players,1,value}')::float8 AS black_pr,prj.result #>> '{performance_rating,method}' AS pr_method,prj.result #>> '{performance_rating,profile}' AS pr_profile,analysis.status AS analysis_status,(SELECT count(*) FROM match_games g WHERE g.match_uuid=m.id) AS game_count,coalesce(a.tags,'{}'::text[]) AS tags,coalesce(a.comment,'') AS comment,m.metadata_version AS version";
 fn sort_spec(sort: &str) -> Option<(&'static str, &'static str)> {
     Some(match sort {
+        "occurrence_database" => ("lower(occurrence_db.name)", "text"),
+        "occurrence_game" => ("hit.game_no", "integer"),
+        "occurrence_move" => ("hit.ply", "integer"),
         "id" | "match_no" => ("m.match_no", "bigint"),
         "created_at" => ("m.created_at", "timestamptz"),
         "played_at" => ("m.played_on", "date"),
@@ -478,9 +503,7 @@ fn library_filters(
         q.push(" AND EXISTS(SELECT 1 FROM annotations n LEFT JOIN positions np ON np.id=n.position_uuid LEFT JOIN match_games ng ON ng.id=n.game_uuid LEFT JOIN match_moves nm ON nm.id=n.move_uuid WHERE coalesce(n.match_uuid,np.match_uuid,ng.match_uuid,nm.match_uuid)=m.id AND lower(n.comment) LIKE ").push_bind(crate::annotations::literal_pattern(v)).push(")");
     }
     if let Some(v) = &p.position_id {
-        q.push(" AND EXISTS(SELECT 1 FROM positions p WHERE p.match_uuid=m.id AND p.position_id=")
-            .push_bind(v.clone())
-            .push(")");
+        q.push(" AND hit.position_id=").push_bind(v.clone());
     }
     if let Some(v) = &p.match_type {
         q.push(if v == "money" {
@@ -516,6 +539,23 @@ async fn library_matches(
 ) -> ApiResult<Json<LibraryPage>> {
     Ok(Json(browse(&s.pool, query(q)?).await?))
 }
+fn occurrence_after(
+    q: &mut QueryBuilder<'_, Postgres>,
+    id: Uuid,
+    occurrence: Option<&OccurrenceCursor>,
+) {
+    if let Some(o) = occurrence {
+        q.push("(m.id,hit.ordinal,hit.id) > (")
+            .push_bind(id)
+            .push(",")
+            .push_bind(o.ordinal)
+            .push(",")
+            .push_bind(o.id)
+            .push(")");
+    } else {
+        q.push("m.id > ").push_bind(id);
+    }
+}
 pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage> {
     for v in [
         &p.q,
@@ -530,6 +570,13 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
         bounded_text(v)?
     }
     let sort = p.sort.clone().unwrap_or("created_at".into());
+    if p.position_id.is_none()
+        && ["occurrence_database", "occurrence_game", "occurrence_move"].contains(&sort.as_str())
+    {
+        return Err(ApiError::invalid(
+            "Occurrence sorting requires a position filter",
+        ));
+    }
     let (expr, cast) = sort_spec(&sort).ok_or_else(|| ApiError::invalid("Unknown sort field"))?;
     let direction = p.direction.clone().unwrap_or("desc".into());
     if !["asc", "desc"].contains(&direction.as_str()) {
@@ -579,6 +626,17 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
         "{:x}",
         Sha256::digest(serde_json::to_vec(&p).map_err(anyhow::Error::from)?)
     );
+    let occurrences = p.position_id.is_some();
+    let occurrence_join = if occurrences {
+        " JOIN positions hit ON hit.match_uuid=m.id JOIN databases occurrence_db ON occurrence_db.id=m.database_id"
+    } else {
+        ""
+    };
+    let occurrence_columns = if occurrences {
+        ",hit.id AS occurrence_id,hit.ordinal AS occurrence_ordinal,hit.game_no AS occurrence_game_no,hit.ply AS occurrence_move_no,occurrence_db.name AS occurrence_database_name"
+    } else {
+        ""
+    };
     let compact = ["tags", "comment"].contains(&sort.as_str());
     let mut cursor = after
         .map(|v| {
@@ -596,19 +654,29 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
         })
         .transpose()?;
     if let Some(c) = &mut cursor {
-        if c.anchor != compact || (c.anchor && c.key.is_some()) {
+        if c.anchor != compact
+            || (c.anchor && c.key.is_some())
+            || c.occurrence.is_some() != occurrences
+            || c.occurrence.as_ref().is_some_and(|o| o.ordinal < 0)
+        {
             return Err(ApiError::invalid("Cursor contains an invalid anchor"));
         }
         if c.anchor {
             // Use the same filters as the page, so a deleted anchor or one that
             // has left the current scope produces a validation error.
             let mut anchor = QueryBuilder::<Postgres>::new(format!(
-                "SELECT ({expr})::text AS cursor_key {MATCH_FROM} WHERE NOT m.collection_only"
+                "SELECT ({expr})::text AS cursor_key {MATCH_FROM}{occurrence_join} WHERE NOT m.collection_only"
             ));
             library_filters(&mut anchor, &p, &date_field)?;
+            anchor.push(" AND m.id=").push_bind(c.id);
+            if let Some(o) = &c.occurrence {
+                anchor
+                    .push(" AND hit.id=")
+                    .push_bind(o.id)
+                    .push(" AND hit.ordinal=")
+                    .push_bind(o.ordinal);
+            }
             let row = anchor
-                .push(" AND m.id=")
-                .push_bind(c.id)
                 .build()
                 .fetch_optional(pool)
                 .await
@@ -645,7 +713,7 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
         }
     }
     let mut q = QueryBuilder::<Postgres>::new(format!(
-        "SELECT {MATCH_COLUMNS},({expr})::text AS cursor_key {MATCH_FROM} WHERE NOT m.collection_only"
+        "SELECT {MATCH_COLUMNS}{occurrence_columns},({expr})::text AS cursor_key {MATCH_FROM}{occurrence_join} WHERE NOT m.collection_only"
     ));
     library_filters(&mut q, &p, &date_field)?;
     if let Some(c) = cursor {
@@ -664,14 +732,13 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
                 .push_bind(key)
                 .push("::")
                 .push(cast)
-                .push(" AND m.id > ")
-                .push_bind(c.id)
-                .push("))");
+                .push(" AND ");
+            occurrence_after(&mut q, c.id, c.occurrence.as_ref());
+            q.push("))");
         } else {
-            q.push(expr)
-                .push(" IS NULL AND m.id > ")
-                .push_bind(c.id)
-                .push(")");
+            q.push(expr).push(" IS NULL AND ");
+            occurrence_after(&mut q, c.id, c.occurrence.as_ref());
+            q.push(")");
         }
     }
     q.push(" ORDER BY ")
@@ -681,8 +748,11 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
         } else {
             " DESC NULLS LAST"
         })
-        .push(",m.id ASC LIMIT ")
-        .push_bind(limit + 1);
+        .push(",m.id ASC");
+    if occurrences {
+        q.push(",hit.ordinal ASC,hit.id ASC");
+    }
+    q.push(" LIMIT ").push_bind(limit + 1);
     let rows = q
         .build()
         .fetch_all(pool)
@@ -692,9 +762,33 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
     let mut items = Vec::new();
     let mut last = None;
     for row in rows.iter().take(limit as usize) {
-        let m = <DatabaseMatch as sqlx::FromRow<sqlx::postgres::PgRow>>::from_row(row)
+        let mut m = <DatabaseMatch as sqlx::FromRow<sqlx::postgres::PgRow>>::from_row(row)
             .map_err(anyhow::Error::from)?;
+        let occurrence = if occurrences {
+            let id = row.try_get("occurrence_id").map_err(anyhow::Error::from)?;
+            m.occurrence = Some(LibraryOccurrence {
+                id,
+                game_no: row
+                    .try_get("occurrence_game_no")
+                    .map_err(anyhow::Error::from)?,
+                move_no: row
+                    .try_get("occurrence_move_no")
+                    .map_err(anyhow::Error::from)?,
+                database_name: row
+                    .try_get("occurrence_database_name")
+                    .map_err(anyhow::Error::from)?,
+            });
+            Some(OccurrenceCursor {
+                id,
+                ordinal: row
+                    .try_get("occurrence_ordinal")
+                    .map_err(anyhow::Error::from)?,
+            })
+        } else {
+            None
+        };
         last = Some(LibraryCursor {
+            occurrence,
             scope: scope.clone(),
             key: if compact {
                 None
@@ -1158,7 +1252,7 @@ async fn export(
 }
 
 #[derive(OpenApi)]
-#[openapi(paths(list_databases,create_database,update_database,delete_database,library_matches,get_metadata,update_metadata,actions,export),components(schemas(Database,DatabaseWrite,DatabaseMatch,LibraryPage,MetadataWrite,LibraryAction,ActionItem,ActionResponse,ExportRequest)),tags((name="Databases",description="Independent match databases and library management")))]
+#[openapi(paths(list_databases,create_database,update_database,delete_database,library_matches,get_metadata,update_metadata,actions,export),components(schemas(Database,DatabaseWrite,DatabaseMatch,LibraryOccurrence,LibraryPage,MetadataWrite,LibraryAction,ActionItem,ActionResponse,ExportRequest)),tags((name="Databases",description="Independent match databases and library management")))]
 pub struct DatabaseDoc;
 
 #[derive(Debug)]

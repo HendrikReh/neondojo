@@ -1992,6 +1992,7 @@ export interface components {
              * @description Persistent numeric library entry ID; UUID remains the action identity.
              */
             match_no: number;
+            occurrence?: null | components["schemas"]["LibraryOccurrence"];
             place?: string | null;
             /** Format: date */
             played_on?: string | null;
@@ -2405,6 +2406,16 @@ export interface components {
             remove_tags?: string[];
             /** Format: uuid */
             target_database_id?: string | null;
+        };
+        /** @description One stored occurrence of the searched checker position. */
+        LibraryOccurrence: {
+            database_name: string;
+            /** Format: int32 */
+            game_no: number;
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            move_no: number;
         };
         LibraryPage: {
             items: components["schemas"]["DatabaseMatch"][];
@@ -4800,6 +4811,7 @@ export interface operations {
                 date_field: string | null;
                 tag: string | null;
                 comment: string | null;
+                /** @description Search checker Position-ID; returns each occurrence, including repeats in one game. */
                 position_id: string | null;
                 tournament: string | null;
                 round: string | null;
@@ -4811,7 +4823,9 @@ export interface operations {
                 /**
                  * @description Sort field: id (or match_no), created_at, played_at, name, white, black,
                  *     white_pr, black_pr, match_length, score, result, tournament, format,
-                 *     position_count, analysis_status, tags, or comment. score compares the
+                 *     position_count, analysis_status, tags, or comment. With position_id, also
+                 *     occurrence_database (case-insensitive name), occurrence_game, occurrence_move.
+                 *     score compares the
                  *     visible numeric white/black score pair; result retains result-state order.
                  */
                 sort: string | null;

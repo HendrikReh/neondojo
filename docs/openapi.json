@@ -2376,6 +2376,7 @@
           {
             "name": "position_id",
             "in": "path",
+            "description": "Search checker Position-ID; returns each occurrence, including repeats in one game.",
             "required": true,
             "schema": {
               "type": [
@@ -2466,7 +2467,7 @@
           {
             "name": "sort",
             "in": "path",
-            "description": "Sort field: id (or match_no), created_at, played_at, name, white, black,\nwhite_pr, black_pr, match_length, score, result, tournament, format,\nposition_count, analysis_status, tags, or comment. score compares the\nvisible numeric white/black score pair; result retains result-state order.",
+            "description": "Sort field: id (or match_no), created_at, played_at, name, white, black,\nwhite_pr, black_pr, match_length, score, result, tournament, format,\nposition_count, analysis_status, tags, or comment. With position_id, also\noccurrence_database (case-insensitive name), occurrence_game, occurrence_move.\nscore compares the\nvisible numeric white/black score pair; result retains result-state order.",
             "required": true,
             "schema": {
               "type": [
@@ -8244,6 +8245,17 @@
             "format": "int64",
             "description": "Persistent numeric library entry ID; UUID remains the action identity."
           },
+          "occurrence": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LibraryOccurrence",
+                "description": "Present in position-filtered results, where every stored occurrence is a row."
+              }
+            ]
+          },
           "place": {
             "type": [
               "string",
@@ -9554,6 +9566,33 @@
               "null"
             ],
             "format": "uuid"
+          }
+        }
+      },
+      "LibraryOccurrence": {
+        "type": "object",
+        "description": "One stored occurrence of the searched checker position.",
+        "required": [
+          "id",
+          "game_no",
+          "move_no",
+          "database_name"
+        ],
+        "properties": {
+          "database_name": {
+            "type": "string"
+          },
+          "game_no": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "move_no": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },

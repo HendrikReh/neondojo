@@ -10,7 +10,7 @@ import { readTheme, saveTheme } from './ui-preferences';
 import { readUiAppearance, saveUiAppearance } from './ui-appearance';
 import { readPlaySounds, savePlaySounds } from './play-audio';
 import { readVisibleColumns } from './library-column-preferences';
-import { LIBRARY_COLUMN_LAYOUT } from './library-columns';
+import { LIBRARY_RESIZABLE_LAYOUT as LIBRARY_COLUMN_LAYOUT } from './library-columns';
 import {
   POSITION_COLUMN_LAYOUT,
   POSITION_PLAYED_KEY,

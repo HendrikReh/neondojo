@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { request, type Match, type Page, type Position } from './api';
-import type { LibraryMatch } from './library-api';
+import { libraryRowKey, type LibraryMatch } from './library-api';
 import { AppError } from './i18n-core';
 
-/** Filtered rows open their first exact occurrence; newer user intent wins. */
+/** Filtered rows open their exact stored occurrence; newer user intent wins. */
 export function useLibraryMatchOpening({
   scope,
   positionId,
@@ -50,7 +50,7 @@ export function useLibraryMatchOpening({
     const controller = new AbortController();
     const current = { epoch, controller };
     operation.current = current;
-    setPending({ epoch, id: match.id });
+    setPending({ epoch, id: libraryRowKey(match) });
     const live = () =>
       !controller.signal.aborted &&
       context.current.epoch === epoch &&
@@ -61,15 +61,25 @@ export function useLibraryMatchOpening({
         position_id: positionId,
         limit: '1',
       });
-      const page = await request<Page<Position>>(`/positions?${params}`, {
-        signal: controller.signal,
-      });
+      const occurrence = match.occurrence;
+      const position = occurrence
+        ? await request<Position>(`/positions/${occurrence.id}`, {
+            signal: controller.signal,
+          })
+        : (
+            await request<Page<Position>>(`/positions?${params}`, {
+              signal: controller.signal,
+            })
+          ).items[0];
       if (!live()) return;
-      const position = page.items[0];
       if (!position) throw new AppError('error.positionMissing');
       if (
         position.match_uuid !== match.id ||
-        position.position_id !== positionId
+        position.position_id !== positionId ||
+        (occurrence &&
+          (position.id !== occurrence.id ||
+            position.game_no !== occurrence.game_no ||
+            position.ply !== occurrence.move_no))
       )
         throw new AppError('error.invalidResponse');
       callbacks.current.onPosition(position);

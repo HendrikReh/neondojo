@@ -90,3 +90,52 @@ it('migrates the old notes width to tags without resetting other custom widths',
   expect(restored.tags).toBe(199);
   expect(restored.comment).toBe(220);
 });
+
+it('restores search widths alongside legacy match widths without requiring new keys in old profiles', async () => {
+  const { LIBRARY_RESIZABLE_LAYOUT } = await import('./library-columns');
+  const legacy = JSON.stringify({
+    version: 1,
+    widths: { ...widths, white: 211 },
+  });
+  const restored = LIBRARY_RESIZABLE_LAYOUT.read({ getItem: () => legacy });
+  expect(restored).toEqual({
+    ...widths,
+    white: 211,
+    occurrence_database: 160,
+    occurrence_game: 70,
+    occurrence_move: 70,
+  });
+  const customized = {
+    ...restored!,
+    occurrence_database: 240,
+    occurrence_game: 90,
+    occurrence_move: 100,
+  };
+  let stored = '';
+  LIBRARY_RESIZABLE_LAYOUT.save(customized, {
+    setItem: (_key, value) => {
+      stored = value;
+    },
+    removeItem: () => {},
+  });
+  expect(LIBRARY_RESIZABLE_LAYOUT.read({ getItem: () => stored })).toEqual(
+    customized,
+  );
+  expect(
+    LIBRARY_RESIZABLE_LAYOUT.total(customized, [
+      'occurrence_database',
+      'occurrence_game',
+      'occurrence_move',
+    ]),
+  ).toBe(430);
+  for (const occurrence_database of [0, 2401, 99.5])
+    expect(
+      LIBRARY_RESIZABLE_LAYOUT.read({
+        getItem: () =>
+          JSON.stringify({
+            version: 1,
+            widths: { ...customized, occurrence_database },
+          }),
+      }),
+    ).toBeUndefined();
+});

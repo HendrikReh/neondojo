@@ -158,6 +158,9 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
         "library.sort",
         &config.library.sort,
         &[
+            "occurrence_database",
+            "occurrence_game",
+            "occurrence_move",
             "id",
             "name",
             "white",
@@ -208,7 +211,13 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
         .cloned()
         .collect();
     let mut library_widths = LIBRARY_COLUMNS.to_vec();
-    library_widths.extend([("select", 32), ("actions", 88)]);
+    library_widths.extend([
+        ("select", 32),
+        ("actions", 88),
+        ("occurrence_database", 70),
+        ("occurrence_game", 44),
+        ("occurrence_move", 44),
+    ]);
     widths(
         "library.column_widths",
         &config.library.column_widths,
