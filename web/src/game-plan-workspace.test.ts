@@ -121,6 +121,7 @@ function props(player: 0 | 1 = 0) {
     detail: 'overview',
     onDetail: noop,
     onOpenDatabase: noop,
+    onFindSimilar: noop,
     onTrackJob: noop,
     onNotesSaved: noop,
     onMoveNotes: noop,

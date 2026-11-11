@@ -9,6 +9,7 @@ pub mod store;
 
 mod analysis_timing;
 mod match_jobs;
+mod similar_positions;
 
 pub mod annotations;
 pub mod configuration;

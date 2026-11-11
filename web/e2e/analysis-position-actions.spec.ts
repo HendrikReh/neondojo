@@ -142,6 +142,98 @@ test('one click opens the database and runs the current source-position search',
   expect((await response).ok()).toBe(true);
 });
 
+test('similar search opens from the analysis board with the current match excluded', async ({
+  page,
+}) => {
+  const position = await fixture(page);
+  const { items } = await (
+    await page.request.get(
+      `/api/positions?match_id=${position.match_uuid}&limit=100`,
+    )
+  ).json();
+  const neighbor = items[1];
+  const requests: URLSearchParams[] = [];
+  await page.route(`**/api/positions/${position.id}/similar*`, (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    requests.push(params);
+    return route.fulfill({
+      json: {
+        items:
+          params.get('include_current_match') === 'true'
+            ? [
+                {
+                  position: neighbor,
+                  match_name: 'Same match',
+                  white: 'White',
+                  black: 'Black',
+                  distance: 4,
+                },
+              ]
+            : [],
+      },
+    });
+  });
+  await page
+    .getByRole('button', { name: 'Find similar positions', exact: true })
+    .click();
+  const results = page.getByRole('region', {
+    name: 'Similar positions',
+    exact: true,
+  });
+  await expect(results.getByText('No similar positions found.')).toBeVisible();
+  const include = results.getByRole('checkbox', {
+    name: 'Include current match',
+  });
+  await expect(include).not.toBeChecked();
+  expect(requests.every((params) => params.size === 0)).toBe(true);
+  const labels = ['Same dice', 'Same match score', 'Same cube value and owner'];
+  for (const name of labels) {
+    const filter = results.getByRole('checkbox', { name, exact: true });
+    await expect(filter).not.toBeChecked();
+    await filter.check();
+  }
+  await expect
+    .poll(() => Object.fromEntries(requests.at(-1) ?? []))
+    .toEqual({
+      same_dice: 'true',
+      same_score: 'true',
+      same_cube: 'true',
+    });
+  await expect(include).not.toBeChecked();
+  await include.check();
+  await expect(
+    results.getByRole('button', { name: 'Same match' }),
+  ).toBeVisible();
+  expect(Object.fromEntries(requests.at(-1) ?? [])).toEqual({
+    same_dice: 'true',
+    same_score: 'true',
+    same_cube: 'true',
+    include_current_match: 'true',
+  });
+  await expect(results.getByRole('img')).toBeVisible();
+  await results
+    .getByRole('button', { name: 'Open analysis', exact: true })
+    .click();
+  await expect(
+    page.getByRole('tab', { name: 'Analysis', exact: true }),
+  ).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.position-code code')).toHaveText(
+    neighbor.position_id,
+  );
+  await page
+    .getByRole('button', { name: 'Find similar positions', exact: true })
+    .click();
+  await expect(include).not.toBeChecked();
+  for (const name of labels)
+    await expect(
+      results.getByRole('checkbox', { name, exact: true }),
+    ).not.toBeChecked();
+  await results
+    .getByRole('button', { name: 'Back to saved positions', exact: true })
+    .click();
+  await expect(results).toBeHidden();
+});
+
 test('search remains available when bookmark status cannot be loaded', async ({
   page,
 }) => {

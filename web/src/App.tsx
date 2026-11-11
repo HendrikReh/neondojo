@@ -18,6 +18,7 @@ import AnalysisWorkspace, { type AnalysisDetail } from './AnalysisWorkspace';
 import MatchDatabase, { type PositionSearchRequest } from './MatchDatabase';
 import StudyWorkspace from './StudyWorkspace';
 import PositionBrowser from './PositionBrowser';
+import SimilarPositions from './SimilarPositions';
 import { usePositionText } from './position-browser-messages';
 import SettingsDialog from './SettingsDialog';
 import { loadSettings, type AppSettings } from './settings-api';
@@ -97,6 +98,11 @@ export default function App() {
   const [databaseId, setDatabaseId] = useState(readDatabase);
   const [requestedPositionSearch, setRequestedPositionSearch] =
     useState<PositionSearchRequest>();
+  const [similarTarget, setSimilarTarget] = useState<{
+    source: Position;
+    matchName: string;
+    token: number;
+  }>();
   const [moveNotes, setMoveNotes] = useState<MoveNotesTarget>();
   const [importResults, setImportResults] = useState<
     {
@@ -344,6 +350,16 @@ export default function App() {
       token: (previous?.token ?? 0) + 1,
     }));
     setView('database');
+  }
+  function searchSimilarPositions() {
+    const { position, match } = navigation;
+    if (!position || !match) return;
+    setSimilarTarget((previous) => ({
+      source: position,
+      matchName: match.filename,
+      token: (previous?.token ?? 0) + 1,
+    }));
+    setView('positions');
   }
   function openPosition(position: Position | string) {
     setView('analysis');
@@ -599,6 +615,7 @@ export default function App() {
             detail={detail}
             onDetail={setDetail}
             onOpenDatabase={searchCurrentPosition}
+            onFindSimilar={searchSimilarPositions}
             onTrackJob={track}
             onNotesSaved={notesSaved}
             notesSuspended={!!moveNotes || view !== 'analysis'}
@@ -675,24 +692,44 @@ export default function App() {
           aria-labelledby="workspace-tab-positions"
           hidden={view !== 'positions'}
         >
-          <PositionBrowser
-            visible={view === 'positions'}
-            bookmarkRevision={bookmarkRevision}
-            onBookmarkChanged={bookmarkChanged}
-            revision={revision}
-            annotationRevision={annotationRevision}
-            deckRevision={deckRevision}
-            theme={theme}
-            onOpenPosition={(id) => {
-              setDetail('overview');
-              openPosition(id);
-            }}
-            onDeckChanged={deckChanged}
-            onStudy={(id) => {
-              setRequestedDeck((old) => ({ id, token: (old?.token ?? 0) + 1 }));
-              setView('learning');
-            }}
-          />
+          <div hidden={!!similarTarget}>
+            <PositionBrowser
+              visible={view === 'positions' && !similarTarget}
+              bookmarkRevision={bookmarkRevision}
+              onBookmarkChanged={bookmarkChanged}
+              revision={revision}
+              annotationRevision={annotationRevision}
+              deckRevision={deckRevision}
+              theme={theme}
+              onOpenPosition={(id) => {
+                setDetail('overview');
+                openPosition(id);
+              }}
+              onDeckChanged={deckChanged}
+              onStudy={(id) => {
+                setRequestedDeck((old) => ({
+                  id,
+                  token: (old?.token ?? 0) + 1,
+                }));
+                setView('learning');
+              }}
+            />
+          </div>
+          {similarTarget && (
+            <SimilarPositions
+              key={similarTarget.token}
+              source={similarTarget.source}
+              matchName={similarTarget.matchName}
+              visible={view === 'positions'}
+              revision={revision}
+              theme={theme}
+              onClose={() => setSimilarTarget(undefined)}
+              onOpen={(id) => {
+                setDetail('overview');
+                openPosition(id);
+              }}
+            />
+          )}
         </div>
         <div
           id="workspace-panel-learning"

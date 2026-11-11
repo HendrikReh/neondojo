@@ -110,6 +110,7 @@ function props(
     onDetail: noop,
     onBookmarkChanged: noop,
     onOpenDatabase: noop,
+    onFindSimilar: noop,
     onTrackJob: noop,
     onNotesSaved: noop,
     onMoveNotes: noop,

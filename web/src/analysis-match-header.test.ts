@@ -107,6 +107,7 @@ it('integrates the match header with identity and loading fields while omitting 
     onDetail: noop,
     onBookmarkChanged: noop,
     onOpenDatabase: noop,
+    onFindSimilar: noop,
     onTrackJob: noop,
     onNotesSaved: noop,
     onMoveNotes: noop,

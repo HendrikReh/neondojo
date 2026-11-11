@@ -368,6 +368,7 @@ it('uses the real source occurrence beside review controls during candidate and 
     detail: 'overview',
     onDetail: noop,
     onOpenDatabase: noop,
+    onFindSimilar: noop,
     onTrackJob: noop,
     onNotesSaved: noop,
     onMoveNotes: noop,
