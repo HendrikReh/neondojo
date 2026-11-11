@@ -5982,6 +5982,96 @@
         }
       }
     },
+    "/api/study/similar-practice": {
+      "get": {
+        "tags": [
+          "Study"
+        ],
+        "operationId": "list_similar_practice_history",
+        "parameters": [
+          {
+            "name": "before",
+            "in": "query",
+            "description": "Pass next_cursor to continue from the previous page.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimilarPracticeHistory"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Study"
+        ],
+        "operationId": "save_similar_practice_summary",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveSimilarPracticeSummary"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimilarPracticeSummary"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/tags": {
       "get": {
         "tags": [
@@ -12226,6 +12316,48 @@
         },
         "additionalProperties": false
       },
+      "SaveSimilarPracticeSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "completed_at",
+          "total_positions",
+          "losses",
+          "is_retry"
+        ],
+        "properties": {
+          "completed_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Time the user finished the round, preserved across save retries."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Stable round ID for safe retries after a lost response."
+          },
+          "is_retry": {
+            "type": "boolean"
+          },
+          "losses": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "description": "One loss for every scored move, including correct plays with zero loss.",
+            "maxItems": 50,
+            "minItems": 1
+          },
+          "total_positions": {
+            "type": "integer",
+            "format": "int32",
+            "maximum": 50,
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
+      },
       "SavedPositionFilter": {
         "type": "object",
         "required": [
@@ -12306,6 +12438,73 @@
               "$ref": "#/components/schemas/SimilarHit"
             },
             "description": "Up to 50 checker occurrences, nearest first."
+          }
+        }
+      },
+      "SimilarPracticeHistory": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SimilarPracticeSummary"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "SimilarPracticeSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "completed_at",
+          "total_positions",
+          "scored_moves",
+          "missed_moves",
+          "total_equity_loss",
+          "average_equity_loss",
+          "is_retry"
+        ],
+        "properties": {
+          "average_equity_loss": {
+            "type": "number",
+            "format": "double"
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "is_retry": {
+            "type": "boolean"
+          },
+          "missed_moves": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "scored_moves": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total_equity_loss": {
+            "type": "number",
+            "format": "double"
+          },
+          "total_positions": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },

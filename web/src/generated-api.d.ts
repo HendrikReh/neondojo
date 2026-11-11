@@ -1348,6 +1348,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/study/similar-practice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_similar_practice_history"];
+        put?: never;
+        post: operations["save_similar_practice_summary"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tags": {
         parameters: {
             query?: never;
@@ -3192,6 +3208,23 @@ export interface components {
             /** Format: int64 */
             expected_state_revision: number;
         };
+        SaveSimilarPracticeSummary: {
+            /**
+             * Format: date-time
+             * @description Time the user finished the round, preserved across save retries.
+             */
+            completed_at: string;
+            /**
+             * Format: uuid
+             * @description Stable round ID for safe retries after a lost response.
+             */
+            id: string;
+            is_retry: boolean;
+            /** @description One loss for every scored move, including correct plays with zero loss. */
+            losses: number[];
+            /** Format: int32 */
+            total_positions: number;
+        };
         SavedPositionFilter: {
             /** Format: date-time */
             created_at: string;
@@ -3219,6 +3252,28 @@ export interface components {
         SimilarPositions: {
             /** @description Up to 50 checker occurrences, nearest first. */
             items: components["schemas"]["SimilarHit"][];
+        };
+        SimilarPracticeHistory: {
+            items: components["schemas"]["SimilarPracticeSummary"][];
+            /** Format: uuid */
+            next_cursor?: string | null;
+        };
+        SimilarPracticeSummary: {
+            /** Format: double */
+            average_equity_loss: number;
+            /** Format: date-time */
+            completed_at: string;
+            /** Format: uuid */
+            id: string;
+            is_retry: boolean;
+            /** Format: int32 */
+            missed_moves: number;
+            /** Format: int32 */
+            scored_moves: number;
+            /** Format: double */
+            total_equity_loss: number;
+            /** Format: int32 */
+            total_positions: number;
         };
         StoredMove: {
             board: number[];
@@ -7276,6 +7331,75 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_similar_practice_history: {
+        parameters: {
+            query?: {
+                /** @description Pass next_cursor to continue from the previous page. */
+                before?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimilarPracticeHistory"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    save_similar_practice_summary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveSimilarPracticeSummary"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimilarPracticeSummary"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

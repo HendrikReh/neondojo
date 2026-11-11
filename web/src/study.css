@@ -64,6 +64,142 @@
   border-radius: 10px;
   background: var(--ui-surface);
 }
+.practice-history-chart {
+  margin: 0 0 16px;
+  padding: clamp(12px, 2vw, 20px);
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--ui-surface);
+}
+.practice-history-chart figcaption,
+.practice-chart-heading,
+.practice-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+.practice-history-chart figcaption {
+  margin-bottom: 20px;
+}
+.practice-chart-heading {
+  flex: 1 0 100%;
+  justify-content: space-between;
+}
+.practice-chart-window {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  color: var(--ui-muted);
+  font-size: var(--font-size-meta);
+}
+.practice-chart-legend {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  color: var(--ui-muted);
+  font-size: var(--font-size-meta);
+}
+.practice-chart-legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.practice-chart-rolling-key {
+  display: inline-block;
+  flex: 0 0 20px;
+  border-top: 2px dashed var(--ui-text);
+}
+.practice-chart-grid {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 12px 16px;
+  margin-inline-end: 10px;
+}
+.practice-chart-scale,
+.practice-chart-plot {
+  position: relative;
+  height: clamp(144px, 24vw, 216px);
+}
+.practice-chart-scale {
+  display: grid;
+  text-align: end;
+}
+.practice-chart-scale span {
+  position: relative;
+  grid-area: 1 / 1;
+  align-self: start;
+  transform: translateY(-50%);
+}
+.practice-chart-scale,
+.practice-chart-dates {
+  color: var(--ui-muted);
+  font-size: var(--font-size-meta);
+  font-variant-numeric: tabular-nums;
+}
+.practice-chart-plot svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.practice-chart-plot line {
+  stroke: var(--ui-border);
+}
+.practice-chart-plot polyline {
+  fill: none;
+  stroke: var(--ui-accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.practice-chart-plot .practice-chart-rolling {
+  stroke: var(--ui-text);
+  stroke-dasharray: 6 4;
+}
+.practice-chart-point {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+}
+.practice-chart-point:focus-visible {
+  z-index: 1;
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 1px;
+}
+.practice-chart-symbol {
+  display: inline-block;
+  box-sizing: border-box;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ui-accent);
+}
+.practice-chart-symbol--retry {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--ui-text);
+  border-radius: 0;
+  background: transparent;
+  transform: rotate(45deg);
+}
+.practice-chart-dates {
+  grid-column: 2;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.practice-chart-dates time:last-child {
+  text-align: end;
+}
+.practice-chart-dates time:only-child {
+  margin-inline: auto;
+  text-align: center;
+}
 @media (max-width: 700px) {
   .study-reports-heading {
     flex-direction: column;

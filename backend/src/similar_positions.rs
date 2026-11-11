@@ -23,6 +23,9 @@ use std::collections::BinaryHeap;
 use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
 
+mod history;
+pub(crate) use history::SimilarPracticeHistoryDoc;
+
 const RESULT_LIMIT: usize = 50;
 // Serialize on-demand practice evaluations without holding a database lock.
 static EVALUATION: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -107,6 +110,7 @@ pub(crate) fn routes() -> Router<AppState> {
         .route("/api/positions/{id}/similar", get(search))
         .route("/api/positions/{id}/practice-answer", post(reveal))
         .route("/api/positions/{id}/practice-score", post(score))
+        .merge(history::routes())
 }
 
 #[utoipa::path(get, path="/api/positions/{id}/similar",

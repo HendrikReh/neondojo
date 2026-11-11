@@ -29,14 +29,29 @@ import {
   type CheckerStep,
 } from './play-state';
 import { usePositionText } from './position-browser-messages';
+import {
+  savePracticeSummary,
+  type PracticeSummaryInput,
+} from './similar-practice-history-api';
 import type { Theme } from './themes';
 
 type Hit = components['schemas']['SimilarHit'];
 type Answer = components['schemas']['CheckerPracticeAnswer'];
 type Score = components['schemas']['CheckerPracticeScore'];
 type ScoredMove = { item: Hit; loss: number };
-function startRound(items: Hit[]) {
-  return { items, index: 0, scored: [] as ScoredMove[] };
+type PendingSave = {
+  summary: PracticeSummaryInput;
+  failure?: { error: unknown };
+};
+
+function startRound(items: Hit[], isRetry = false) {
+  return {
+    id: crypto.randomUUID(),
+    items,
+    index: 0,
+    scored: [] as ScoredMove[],
+    isRetry,
+  };
 }
 
 export default function SimilarPositionPractice({
@@ -51,8 +66,10 @@ export default function SimilarPositionPractice({
   onClose: () => void;
 }) {
   const p = usePositionText();
-  const { formatNumber } = useI18n();
+  const { formatNumber, formatError } = useI18n();
   const [round, setRound] = useState(() => startRound(items));
+  const [pendingSaves, setPendingSaves] = useState<PendingSave[]>([]);
+  const saving = useRef(new Set<string>());
   const { items: roundItems, index, scored } = round;
   const item = roundItems[index];
   const progress = useRef<HTMLParagraphElement>(null);
@@ -63,6 +80,9 @@ export default function SimilarPositionPractice({
   }, [item, index, roundItems, items]);
 
   const missed = scored.filter(({ loss }) => loss > 0).map(({ item }) => item);
+  const currentSave = pendingSaves.find(
+    ({ summary }) => summary.id === round.id,
+  );
   const closeButton = (
     <ActionButton
       type="button"
@@ -85,6 +105,40 @@ export default function SimilarPositionPractice({
           }
         : current,
     );
+    if (index + 1 === roundItems.length && nextScores.length) {
+      void persist({
+        id: round.id,
+        completed_at: new Date().toISOString(),
+        total_positions: roundItems.length,
+        losses: nextScores.map(({ loss }) => loss),
+        is_retry: round.isRetry,
+      });
+    }
+  }
+
+  async function persist(summary: PracticeSummaryInput) {
+    if (saving.current.has(summary.id)) return;
+    saving.current.add(summary.id);
+    setPendingSaves((pending) => [
+      ...pending.filter((save) => save.summary.id !== summary.id),
+      { summary },
+    ]);
+    try {
+      await savePracticeSummary(summary);
+      setPendingSaves((pending) =>
+        pending.filter((save) => save.summary.id !== summary.id),
+      );
+    } catch (error) {
+      setPendingSaves((pending) =>
+        pending.map((save) =>
+          save.summary.id === summary.id
+            ? { summary, failure: { error } }
+            : save,
+        ),
+      );
+    } finally {
+      saving.current.delete(summary.id);
+    }
   }
 
   return (
@@ -95,6 +149,22 @@ export default function SimilarPositionPractice({
       onClose={onClose}
       returnFocus={returnFocus}
     >
+      {pendingSaves.map(
+        ({ summary, failure }) =>
+          failure && (
+            <div key={summary.id} role="alert">
+              <p>
+                {p('practiceSaveFailed')} {formatError(failure.error)}
+              </p>
+              <ActionButton
+                type="button"
+                icon="refresh"
+                label={p('practiceRetrySave')}
+                onClick={() => void persist(summary)}
+              />
+            </div>
+          ),
+      )}
       {item ? (
         <>
           <p ref={progress} tabIndex={-1} role="status">
@@ -136,6 +206,15 @@ export default function SimilarPositionPractice({
                   {formatNumber(roundItems.length)}
                 </strong>
               </p>
+              {!currentSave?.failure && (
+                <p role="status">
+                  {p(
+                    currentSave
+                      ? 'practiceSavingSummary'
+                      : 'practiceSavedSummary',
+                  )}
+                </p>
+              )}
             </>
           ) : (
             <p>{p('practiceNoScores')}</p>
@@ -146,7 +225,7 @@ export default function SimilarPositionPractice({
                 type="button"
                 icon="reset"
                 label={p('practiceRetryMissed')}
-                onClick={() => setRound(startRound(missed))}
+                onClick={() => setRound(startRound(missed, true))}
               />
             )}
             {closeButton}

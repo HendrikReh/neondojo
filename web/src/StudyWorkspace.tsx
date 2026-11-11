@@ -7,14 +7,17 @@ import {
 } from 'react';
 import LearningWorkspace from './LearningPanel';
 import StudyReports from './StudyReports';
+import SimilarPracticeHistory from './SimilarPracticeHistory';
+import { usePositionText } from './position-browser-messages';
 import { useStudyText } from './study-messages';
 import './study.css';
-type Area = 'cards' | 'reports';
-const areas: Area[] = ['cards', 'reports'];
+type Area = 'cards' | 'reports' | 'practice';
+const areas: Area[] = ['cards', 'reports', 'practice'];
 export default function StudyWorkspace(
   props: ComponentProps<typeof LearningWorkspace>,
 ) {
   const t = useStudyText();
+  const p = usePositionText();
   const [area, setArea] = useState<Area>('cards');
   const tabs = useRef<Partial<Record<Area, HTMLButtonElement | null>>>({});
   const token = props.requestedDeck?.token;
@@ -61,7 +64,7 @@ export default function StudyWorkspace(
             onClick={() => setArea(item)}
             onKeyDown={(event) => navigate(event, item)}
           >
-            {t(item)}
+            {item === 'practice' ? p('practiceHistory') : t(item)}
           </button>
         ))}
       </nav>
@@ -83,6 +86,14 @@ export default function StudyWorkspace(
           visible={visible && area === 'reports'}
           theme={props.theme}
         />
+      </div>
+      <div
+        role="tabpanel"
+        id="study-panel-practice"
+        aria-labelledby="study-tab-practice"
+        hidden={area !== 'practice'}
+      >
+        {visible && area === 'practice' && <SimilarPracticeHistory />}
       </div>
     </div>
   );

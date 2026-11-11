@@ -414,6 +414,17 @@ test('practice summarizes scored moves and retries only missed positions', async
   page,
 }) => {
   const source = await fixture(page);
+  const saveRequests: unknown[] = [];
+  await page.route('**/api/study/similar-practice', (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    saveRequests.push(route.request().postDataJSON());
+    return [1, 3].includes(saveRequests.length)
+      ? route.fulfill({
+          status: 503,
+          json: { error: 'Temporarily unavailable' },
+        })
+      : route.continue();
+  });
   const hits = ['First miss', 'Correct play', 'Reveal only', 'Second miss'].map(
     (match_name, distance) => ({
       match_name,
@@ -479,6 +490,9 @@ test('practice summarizes scored moves and retries only missed positions', async
   ).toBeVisible();
   await expect(dialog.getByText('0.150', { exact: true })).toBeVisible();
   await expect(dialog.getByText('3 / 4', { exact: true })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Retry save', exact: true }).click();
+  await expect(dialog.getByText('Saved to practice history.')).toBeVisible();
+  expect(saveRequests).toEqual([saveRequests[0], saveRequests[0]]);
   const retry = dialog.getByRole('button', {
     name: 'Retry missed moves',
     exact: true,
@@ -493,10 +507,79 @@ test('practice summarizes scored moves and retries only missed positions', async
   await playMove([8, 6]);
   await advance('Finish');
   await expect(dialog.getByText('0.000', { exact: true })).toBeVisible();
+  await expect(
+    dialog.getByRole('button', { name: 'Retry save', exact: true }),
+  ).toBeVisible();
   await expect(retry).toHaveCount(0);
   expect(scored).toEqual(
     [0, 1, 3, 0, 3].map((index) => hits[index].position.id),
   );
+  await page.reload();
+  await page.getByRole('tab', { name: 'Study & Anki', exact: true }).click();
+  await page
+    .getByRole('tab', { name: 'Practice history', exact: true })
+    .click();
+  const history = page.getByRole('table', { name: 'Practice history' });
+  await expect(
+    history.getByRole('row').filter({ hasText: '0.150' }),
+  ).toContainText('3 / 4');
+  await expect(
+    history.getByRole('row').filter({ hasText: '0.000' }),
+  ).toContainText('Retry');
+  expect(saveRequests).toHaveLength(4);
+  expect(saveRequests[3]).toEqual(saveRequests[2]);
+});
+
+test('practice history charts initial rounds and lets the keyboard reach retries and earlier rounds', async ({
+  page,
+}) => {
+  const round = (day: number, loss: number, is_retry = false) => ({
+    id: crypto.randomUUID(),
+    completed_at: new Date(Date.UTC(2026, 0, day, 12)).toISOString(),
+    total_positions: 1,
+    scored_moves: 1,
+    missed_moves: 1,
+    total_equity_loss: loss,
+    average_equity_loss: loss,
+    is_retry,
+  });
+  const original = [1, 2, 3, 4, 5, 6].map((day) => round(day, day / 10));
+  const retry = round(7, 0.9, true);
+  const cursor = original[1].id;
+  await page.route('**/api/study/similar-practice*', (route) => {
+    const before = new URL(route.request().url()).searchParams.get('before');
+    return route.fulfill({
+      json:
+        before === cursor
+          ? { items: [original[0]], next_cursor: null }
+          : {
+              items: [retry, ...original.slice(1).reverse()],
+              next_cursor: cursor,
+            },
+    });
+  });
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Study & Anki', exact: true }).click();
+  await page
+    .getByRole('tab', { name: 'Practice history', exact: true })
+    .click();
+  const history = page.getByRole('region', { name: 'Practice history' });
+  await history.getByRole('button', { name: 'Load older rounds' }).click();
+  const chart = history.getByRole('figure', {
+    name: 'Average equity loss over time',
+  });
+  await expect(chart.getByRole('img')).toHaveCount(7);
+  const last = chart.getByRole('img', { name: /^Retry .*0\.900$/ });
+  await last.focus();
+  await last.press('ArrowLeft');
+  const latest = chart.getByRole('img', { name: /0\.600.*0\.400$/ });
+  await expect(latest).toBeFocused();
+  await expect(page.getByRole('tooltip')).toContainText('0.400');
+  await chart.getByLabel('Rolling average window').selectOption('10');
+  await expect(
+    chart.getByRole('img', { name: /0\.600.*0\.350$/ }),
+  ).toBeVisible();
+  await expect(last).toHaveAccessibleName(/^Retry .*0\.900$/);
 });
 
 test('search remains available when bookmark status cannot be loaded', async ({

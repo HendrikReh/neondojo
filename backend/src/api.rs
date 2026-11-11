@@ -846,6 +846,7 @@ impl OpenApi for ApiDoc {
         doc.merge(crate::analysis_statistics::StatisticsDoc::openapi());
         doc.merge(crate::position_browser::PositionBrowserDoc::openapi());
         doc.merge(crate::similar_positions::SimilarPositionsDoc::openapi());
+        doc.merge(crate::similar_positions::SimilarPracticeHistoryDoc::openapi());
         doc.merge(crate::position_bookmarks::PositionBookmarksDoc::openapi());
         doc.merge(crate::move_assessments::MoveAssessmentsDoc::openapi());
         doc.merge(crate::game_plan::GamePlanDoc::openapi());
