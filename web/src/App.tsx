@@ -10,7 +10,7 @@ import {
 import { request, type Match, type Position } from './api';
 import AnalysisWorkspace, { type AnalysisDetail } from './AnalysisWorkspace';
 import MatchDatabase from './MatchDatabase';
-import LearningWorkspace from './LearningPanel';
+import StudyWorkspace from './StudyWorkspace';
 import PositionBrowser from './PositionBrowser';
 import { usePositionText } from './position-browser-messages';
 import SettingsDialog from './SettingsDialog';
@@ -595,7 +595,7 @@ export default function App() {
           aria-labelledby="workspace-tab-learning"
           hidden={view !== 'learning'}
         >
-          <LearningWorkspace
+          <StudyWorkspace
             visible={view === 'learning'}
             requestedDeck={requestedDeck}
             theme={theme}

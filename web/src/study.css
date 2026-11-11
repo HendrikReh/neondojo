@@ -1,0 +1,115 @@
+.study-tabs {
+  margin: 0 0 24px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--ui-border);
+}
+.study-reports-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+.study-reports-heading h1 {
+  margin: 0 0 8px;
+}
+.study-reports-heading p,
+.study-report-empty p {
+  color: var(--ui-muted);
+  max-width: 75ch;
+  line-height: 1.5;
+}
+.study-reports-heading > button {
+  flex-shrink: 0;
+}
+.study-report-table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+.study-report-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--ui-surface);
+  font-size: var(--font-size-body);
+}
+.study-report-table th,
+.study-report-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--ui-border);
+  text-align: left;
+}
+.study-report-table th {
+  color: var(--ui-muted);
+  font-size: var(--font-size-meta);
+  font-weight: 600;
+}
+.study-report-table td:first-child,
+.study-report-table td:nth-child(3) {
+  white-space: nowrap;
+}
+.study-report-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.study-report-selected {
+  background: var(--ui-accent-soft, var(--ui-bg));
+}
+.study-report-table button[aria-pressed='true'] {
+  color: var(--ui-accent);
+}
+.study-report-empty {
+  padding: 28px;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--ui-surface);
+}
+@media (max-width: 700px) {
+  .study-reports-heading {
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+.study-money-session {
+  margin-bottom: 20px;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--ui-surface);
+  min-width: 0;
+}
+.study-money-session-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px 24px;
+  padding: 16px;
+  overflow-wrap: anywhere;
+}
+.study-money-session-header h2 {
+  margin: 0 0 8px;
+  font-size: var(--font-size-body);
+}
+.study-money-session-header p {
+  margin: 0;
+  color: var(--ui-muted);
+  font-size: var(--font-size-meta);
+}
+.study-money-session-header > div {
+  min-width: 0;
+}
+.study-money-session-total {
+  display: grid;
+  gap: 4px;
+}
+.study-money-session-total span {
+  color: var(--ui-muted);
+  font-size: var(--font-size-meta);
+}
+.study-money-session .study-report-table-scroll {
+  border: 0;
+  border-top: 1px solid var(--ui-border);
+  border-radius: 0 0 10px 10px;
+  margin-bottom: 0;
+}
