@@ -3,6 +3,7 @@ mod apkg;
 mod content;
 mod scheduler;
 mod search;
+pub(crate) use content::saved_checker_move;
 pub use search::{
     CardBrowseContext, CardBrowseItem, CardDeck, CardKind, CardQuery, CardReviewState,
 };

@@ -5131,6 +5131,228 @@
         }
       }
     },
+    "/api/positions/{id}/practice-answer": {
+      "post": {
+        "tags": [
+          "Positions"
+        ],
+        "operationId": "reveal",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Checker occurrence to reveal",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckerPracticeAnswer"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/positions/{id}/practice-score": {
+      "post": {
+        "tags": [
+          "Positions"
+        ],
+        "operationId": "score",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Checker occurrence to score",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckerPracticeMove"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckerPracticeScore"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/positions/{id}/similar": {
+      "get": {
+        "tags": [
+          "Positions"
+        ],
+        "operationId": "search",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Target checker occurrence",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "include_current_match",
+            "in": "query",
+            "description": "Include other occurrences from the source match and its copies. Defaults to false.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "same_dice",
+            "in": "query",
+            "description": "Require the same unordered dice pair as the target.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "same_score",
+            "in": "query",
+            "description": "Require the same match length, score from the mover's perspective, and Crawford state.\nFor a money game target, require a money game.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "same_cube",
+            "in": "query",
+            "description": "Require the same cube value and ownership relative to the player on roll.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimilarPositions"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/profiles": {
       "get": {
         "tags": [
@@ -7347,6 +7569,78 @@
             "format": "uuid"
           }
         }
+      },
+      "CheckerPracticeAnswer": {
+        "type": "object",
+        "required": [
+          "best",
+          "engine"
+        ],
+        "properties": {
+          "best": {
+            "type": "string"
+          },
+          "depth": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "engine": {
+            "type": "string"
+          }
+        }
+      },
+      "CheckerPracticeMove": {
+        "type": "object",
+        "required": [
+          "steps"
+        ],
+        "properties": {
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlayStep"
+            },
+            "description": "Complete ordered checker steps in board coordinates. An empty list is a forced pass.",
+            "maxItems": 4
+          }
+        },
+        "additionalProperties": false
+      },
+      "CheckerPracticeScore": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CheckerPracticeAnswer"
+          },
+          {
+            "type": "object",
+            "required": [
+              "played",
+              "best_equity",
+              "played_equity",
+              "equity_loss"
+            ],
+            "properties": {
+              "best_equity": {
+                "type": "number",
+                "format": "double"
+              },
+              "equity_loss": {
+                "type": "number",
+                "format": "double",
+                "description": "Best minus played normalized cubeful equity, from the mover's perspective."
+              },
+              "played": {
+                "type": "string"
+              },
+              "played_equity": {
+                "type": "number",
+                "format": "double"
+              }
+            }
+          }
+        ]
       },
       "ConfigurationAnalysis": {
         "type": "object",
@@ -11968,6 +12262,50 @@
           "version": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "SimilarHit": {
+        "type": "object",
+        "required": [
+          "position",
+          "match_name",
+          "white",
+          "black",
+          "distance"
+        ],
+        "properties": {
+          "black": {
+            "type": "string"
+          },
+          "distance": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Minimum checker-pips needed to transform one arrangement into the other."
+          },
+          "match_name": {
+            "type": "string"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "white": {
+            "type": "string"
+          }
+        }
+      },
+      "SimilarPositions": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SimilarHit"
+            },
+            "description": "Up to 50 checker occurrences, nearest first."
           }
         }
       },

@@ -9,6 +9,18 @@
   min-width: 0;
   border-bottom: 0;
 }
+.board-position-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  flex-shrink: 0;
+  max-width: 100%;
+  padding: 10px 12px;
+}
+.board-position-actions > .position-bookmark-control {
+  min-width: 0;
+  padding: 0;
+}
 .position-bookmark-control {
   padding: 10px 12px;
   font-size: var(--font-size-meta);
@@ -27,7 +39,11 @@
   .board-review-toolbar > .board-review-controls {
     flex-basis: 100%;
   }
-  .position-bookmark-control {
+  .position-bookmark-control,
+  .board-position-actions {
     padding: 7px 9px;
+  }
+  .board-position-actions > .position-bookmark-control {
+    padding: 0;
   }
 }

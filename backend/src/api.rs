@@ -90,6 +90,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::learning::routes())
         .merge(crate::analysis_statistics::routes())
         .merge(crate::position_browser::routes())
+        .merge(crate::similar_positions::routes())
         .merge(crate::position_bookmarks::routes())
         .merge(crate::move_assessments::routes())
         .merge(crate::game_plan::routes())
@@ -844,6 +845,7 @@ impl OpenApi for ApiDoc {
         doc.merge(crate::learning::LearningDoc::openapi());
         doc.merge(crate::analysis_statistics::StatisticsDoc::openapi());
         doc.merge(crate::position_browser::PositionBrowserDoc::openapi());
+        doc.merge(crate::similar_positions::SimilarPositionsDoc::openapi());
         doc.merge(crate::position_bookmarks::PositionBookmarksDoc::openapi());
         doc.merge(crate::move_assessments::MoveAssessmentsDoc::openapi());
         doc.merge(crate::game_plan::GamePlanDoc::openapi());

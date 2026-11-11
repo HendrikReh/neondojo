@@ -309,6 +309,35 @@ impl Engine {
             candidates,
         })
     }
+
+    /// Evaluate all legal root moves at the requested depth, including plays
+    /// that would be absent from or pruned in a normal hint.
+    pub(crate) async fn analyze_checker_choices(
+        &self,
+        position_id: &str,
+        match_id: &str,
+        plies: i32,
+        forced_pass: bool,
+    ) -> Result<Analysis> {
+        if forced_pass {
+            return self.analyze(position_id, match_id, plies, None).await;
+        }
+        let commands = decision_hint_commands(position_id, match_id, plies)? + "hint 10000\n";
+        let directory = tempfile::tempdir()?;
+        let output = self
+            .run_with_timeout(directory.path(), &commands, Duration::from_secs(180))
+            .await?;
+        let (candidates, evaluated_plies) = parse_full_checker_hints(&output, plies)?;
+        Ok(Analysis {
+            engine: output
+                .lines()
+                .find(|line| line.starts_with("GNU Backgammon "))
+                .unwrap_or("GNU Backgammon")
+                .to_owned(),
+            plies: evaluated_plies,
+            candidates,
+        })
+    }
 }
 
 pub(crate) fn decision_hint_commands(
@@ -512,6 +541,9 @@ mod tests {
         assert_eq!(hints[0].equity, 0.219);
         assert_eq!(hints[0].probabilities[0], 0.551);
         assert!(super::parse_hints("No game in progress").is_err());
+        assert!(super::parse_full_checker_hints(output, 2).is_err());
+        let single = output.split("    2.").next().unwrap();
+        assert_eq!(super::parse_full_checker_hints(single, 2).unwrap().1, 0);
     }
 
     #[cfg(unix)]

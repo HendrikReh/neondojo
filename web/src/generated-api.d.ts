@@ -1156,6 +1156,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/positions/{id}/practice-answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reveal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/positions/{id}/practice-score": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["score"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/positions/{id}/similar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["search"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/profiles": {
         parameters: {
             query?: never;
@@ -1751,6 +1799,27 @@ export interface components {
             match_id: string;
             /** Format: uuid */
             position_id?: string | null;
+        };
+        CheckerPracticeAnswer: {
+            best: string;
+            depth?: string | null;
+            engine: string;
+        };
+        CheckerPracticeMove: {
+            /** @description Complete ordered checker steps in board coordinates. An empty list is a forced pass. */
+            steps: components["schemas"]["PlayStep"][];
+        };
+        CheckerPracticeScore: components["schemas"]["CheckerPracticeAnswer"] & {
+            /** Format: double */
+            best_equity: number;
+            /**
+             * Format: double
+             * @description Best minus played normalized cubeful equity, from the mover's perspective.
+             */
+            equity_loss: number;
+            played: string;
+            /** Format: double */
+            played_equity: number;
         };
         ConfigurationAnalysis: {
             engine: components["schemas"]["ConfigurationEngine"];
@@ -3135,6 +3204,21 @@ export interface components {
             updated_at: string;
             /** Format: int64 */
             version: number;
+        };
+        SimilarHit: {
+            black: string;
+            /**
+             * Format: int32
+             * @description Minimum checker-pips needed to transform one arrangement into the other.
+             */
+            distance: number;
+            match_name: string;
+            position: components["schemas"]["Position"];
+            white: string;
+        };
+        SimilarPositions: {
+            /** @description Up to 50 checker occurrences, nearest first. */
+            items: components["schemas"]["SimilarHit"][];
         };
         StoredMove: {
             board: number[];
@@ -6601,6 +6685,152 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BookLookup"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    reveal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Checker occurrence to reveal */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckerPracticeAnswer"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    score: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Checker occurrence to score */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckerPracticeMove"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckerPracticeScore"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    search: {
+        parameters: {
+            query?: {
+                /** @description Include other occurrences from the source match and its copies. Defaults to false. */
+                include_current_match?: boolean;
+                /** @description Require the same unordered dice pair as the target. */
+                same_dice?: boolean;
+                /**
+                 * @description Require the same match length, score from the mover's perspective, and Crawford state.
+                 *     For a money game target, require a money game.
+                 */
+                same_score?: boolean;
+                /** @description Require the same cube value and ownership relative to the player on roll. */
+                same_cube?: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description Target checker occurrence */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimilarPositions"];
                 };
             };
             404: {

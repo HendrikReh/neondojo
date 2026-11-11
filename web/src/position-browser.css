@@ -137,6 +137,54 @@
   align-items: start;
   gap: 20px;
 }
+.similar-position-controls,
+.similar-position-controls label {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.similar-position-controls {
+  margin-bottom: 16px;
+}
+.play-interruption-dialog.similar-practice-dialog {
+  width: min(860px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+}
+.similar-practice-board {
+  width: min(100%, 680px);
+  margin: 12px auto;
+}
+.similar-practice-dialog .board-view-buttons {
+  justify-content: center;
+}
+.similar-position-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: var(--font-size-table);
+}
+.similar-position-table th,
+.similar-position-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ui-border);
+}
+.similar-position-table th,
+.similar-position-selected {
+  background: var(--ui-surface-alt);
+}
+.similar-position-table td button {
+  padding: 4px 0;
+  background: transparent;
+  border: 0;
+  color: var(--ui-accent);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.similar-positions .position-preview > .action-button {
+  margin-top: 14px;
+}
 .position-browser-main {
   min-width: 0;
 }

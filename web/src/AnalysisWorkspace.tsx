@@ -1,3 +1,5 @@
+import ActionButton from './ActionButton';
+import { usePositionText } from './position-browser-messages';
 import { useProfileValue } from './useProfileValue';
 import {
   useCallback,
@@ -61,6 +63,7 @@ export default function AnalysisWorkspace({
   detail: requestedDetail,
   onDetail,
   onOpenDatabase,
+  onFindSimilar,
   onTrackJob,
   onNotesSaved,
   onMoveNotes,
@@ -86,6 +89,7 @@ export default function AnalysisWorkspace({
   detail: AnalysisDetail;
   onDetail: (detail: AnalysisDetail) => void;
   onOpenDatabase: () => void;
+  onFindSimilar: () => void;
   onTrackJob: (job: Job | undefined) => void;
   onNotesSaved: () => void;
   onMoveNotes: () => void;
@@ -102,6 +106,7 @@ export default function AnalysisWorkspace({
   const review = useBoardReviewText();
   const statistics = useStatisticsText();
   const headerText = useAnalysisMatchHeaderText();
+  const positionText = usePositionText();
   const { match, game, games, positions, position, index, loading, stats } =
     navigation;
   const sourceAvailable = hasMatchSource(match);
@@ -425,11 +430,27 @@ export default function AnalysisWorkspace({
                     }}
                   />
                 )}
-                <PositionBookmarkButton
-                  positionId={position.id}
-                  revision={bookmarkRevision}
-                  onChanged={onBookmarkChanged}
-                />
+                <div className="board-position-actions">
+                  <PositionBookmarkButton
+                    positionId={position.id}
+                    revision={bookmarkRevision}
+                    onChanged={onBookmarkChanged}
+                  />
+                  <ActionButton
+                    type="button"
+                    icon="search"
+                    label={t('app.prepareSearch')}
+                    compact
+                    onClick={onOpenDatabase}
+                  />
+                  <ActionButton
+                    type="button"
+                    icon="similar"
+                    label={positionText('findSimilar')}
+                    compact
+                    onClick={onFindSimilar}
+                  />
+                </div>
               </div>
               <Board
                 position={position}
@@ -481,9 +502,6 @@ export default function AnalysisWorkspace({
               <div className="position-code">
                 <span>{t('app.positionCode')}</span>
                 <code>{position.position_id}</code>
-                <button title={t('app.prepareSearch')} onClick={onOpenDatabase}>
-                  ⌕
-                </button>
               </div>
             </>
           ) : (
