@@ -30,6 +30,21 @@ focus states in all six light/dark theme variants, actual spacing between labels
 and the established desktop viewports. Related workflow tests cover settings,
 notes, sources, board views and header navigation.
 
+## Study areas
+
+Study contains Flashcards & Anki, Reports, My recurring mistakes, and Practice
+history. Left/Right wrap between all four tabs; Home and End choose the first and last. Opening a
+deck from another workspace still selects Flashcards & Anki.
+
+My recurring mistakes requires a player selection and offers database, game-plan
+and minimum-loss filters. Practice opens a modal from the selected group, with
+the original board and a separate Reveal action. Next hides the solution again.
+Escape closes practice and returns focus to its trigger. Leaving the area or
+changing its filters dismisses practice and cancels outstanding requests.
+Completed local analyses take precedence per game; comparable imported XG and
+BGBlitz analyses cover games without one. Practice displays the original source,
+engine and search/rollout depth; unknown depth remains explicitly unknown.
+
 ## Profile in der Navigation
 
 Die globale Kopfzeile enthält die Profilauswahl mit aktivem Namen, Änderungsmarkierung und Sicherungsstatus. „Profile verwalten“ öffnet direkt die Kategorie „Profile“ im Einstellungsdialog.

@@ -1,0 +1,7 @@
+# Game sounds
+
+Add short, quiet recorded board sounds for checker moves, dice rolls, hits and bearing off in Playing. Human feedback happens when a legal checker step is placed; selecting/hovering, undo/reset, confirmation and loading a saved state are silent. Hits and bear-offs replace the ordinary move sound. Bot moves use newly appended native history, replayed against the previous board so color and intermediate hits/bear-offs are correct; opening dice are heard once, not again when acknowledging the result. Cube actions and forced passes have no checker sound.
+
+Use the supplied project recordings (rollingDice.au, move.au, hit22.wav), converted without sample changes to bundled PCM WAV and decoded through Web Audio. Bear-off reuses the movement recording; there is no dedicated source. No synthesized fallback or external audio service is used. Unlock audio from the user's interaction before awaiting engine work. Missing or blocked audio never interrupts gameplay. A saved browser preference in Settings → Playing enables/disables sounds, default on; Cancel leaves it unchanged, successful Save applies immediately to existing matches, and muting stops queued sounds. Resume/reload never replays history.
+
+Verify sound classification/replay and generated samples with unit tests, then real browser audio nodes for legal clicks, opening/normal dice, bot responses, mute persistence, cancellation, failures and silent reload. Publish only the verified frontend bundle; no engine, database or match changes are needed.

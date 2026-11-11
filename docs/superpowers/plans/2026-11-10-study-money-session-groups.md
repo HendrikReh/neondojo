@@ -1,0 +1,15 @@
+# Group Study money reports by session
+
+Goal: Study shows one group per money session, its current/final cumulative native score and ended/ongoing status, then all its game reports in ascending game order. Point-match reports stay individual. Existing report dialogs and immutable previews remain unchanged.
+
+Design: Extend compact report summaries with session UUID, authoritative live session scores and explicit money-session-ended status. Add opt-in `group_by=session` pagination to the report list; paginate complete sessions (point reports count individually), with a cursor bound to the grouping mode. Sort groups by latest archived report and include all their game summaries so a page boundary never splits a session. Group by UUID, never player name or the nullable library link. No migration or report recalculation is needed.
+
+Frontend: Extract the reusable report table. Render contiguous point reports as before and money sessions as sections with a responsive header outside their horizontally scrollable game table. Header identifies players, total score and status. Each game still opens the shared movable review dialog with original history and focus return. Refresh/re-entry and loading, retry and pagination retain the existing behavior.
+
+- [x] Add and run failing PostgreSQL regression for complete group pagination, same-name session separation, native cumulative total (not summed report totals), ended/ongoing status, legacy sources and cursor scope.
+- [x] Add and run failing grouping unit/browser tests for separate sessions, chronological games, per-game reports and mobile header visibility.
+- [x] Implement SQL projection/group-aware pagination and regenerate API schemas.
+- [x] Extract report table, implement session grouping/header and localized labels; update list fixtures for the grouped API.
+- [x] Verify archive/native Money, frontend/build and relevant browser regressions, scoped code review, docs and local app refresh.
+
+Validation: PostgreSQL red regression demonstrated that report pagination split a money session; browser red regressions demonstrated missing session sections. Final results: 5 archive tests (including legacy money sources, same-name sessions, independent point reports, whole-session cursor pagination and authoritative cumulative totals), 5 native Money regressions, 43 browser regressions and 410 frontend tests passed. OpenAPI generation and production builds passed. Desktop and German mobile screenshots verified; headers stay visible outside horizontally scrollable game tables. After the final copy adjustment the 7 archive browser cases were rerun successfully. Review found and verified a SQL materialization issue; lightweight report keys now determine group/page boundaries before loading report JSON. Independent EXPLAIN checks confirmed SGF pruning and no full report-source materialization for grouped or flat lists. No further concrete review findings. Local app refreshed; existing Money and point reports are available under their original IDs.
