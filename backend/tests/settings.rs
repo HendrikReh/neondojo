@@ -73,7 +73,7 @@ async fn defaults_use_injected_engine_and_survive_new_app_states(pool: PgPool) {
     assert_eq!(status, 200, "{settings}");
     assert_eq!(
         settings,
-        json!({"version":0,"player_name":"","analysis_engine":"gnubg","analysis_plies":2,"play_engine":"gnubg","play_plies":0,"gnubg_path":"/missing/injected-gnubg"})
+        json!({"version":0,"player_name":"","analysis_engine":"gnubg","analysis_plies":2,"play_engine":"gnubg","play_plies":0,"gnubg_path":"/missing/injected-gnubg","bearoff_direction":"right","default_play_mode":"coach","tutor_threshold":0.04,"training_auto_analysis":true})
     );
     let second = api::router(AppState::new(pool.clone(), Engine::new("different".into())));
     assert_eq!(
@@ -943,4 +943,87 @@ async fn snapshot_rejects_output_if_the_version_changes_during_evaluation() {
     );
     let error = format!("{:#}", result.unwrap_err());
     assert!(error.contains("version changed"), "{error}");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL and local GNUbg"]
+async fn bearoff_direction_is_persisted_validated_and_defaulted(pool: PgPool) {
+    let app = api::router(AppState::new(pool.clone(), Engine::new(binary())));
+    let (_, mut settings) = call(app.clone(), "GET", "/api/settings", Value::Null).await;
+    assert_eq!(settings["bearoff_direction"], "right");
+    for direction in ["left", "right"] {
+        settings["bearoff_direction"] = json!(direction);
+        let (status, saved) = call(app.clone(), "PUT", "/api/settings", settings.clone()).await;
+        assert_eq!(status, 200, "{saved}");
+        assert_eq!(saved["bearoff_direction"], direction);
+        settings = saved;
+    }
+    let mut invalid = settings.clone();
+    invalid["bearoff_direction"] = json!("sideways");
+    assert_eq!(
+        call(app.clone(), "PUT", "/api/settings", invalid).await.0,
+        422
+    );
+    assert_eq!(
+        call(app, "GET", "/api/settings", Value::Null).await.1,
+        settings
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL and native GNUbg"]
+async fn playing_mode_defaults_roundtrip_and_invalid_thresholds_are_atomic(pool: PgPool) {
+    let app = api::router(AppState::new(pool.clone(), Engine::new(binary())));
+    let (_, mut settings) = call(app.clone(), "GET", "/api/settings", Value::Null).await;
+    for mode in ["competition", "training", "coach", "tutor"] {
+        settings["default_play_mode"] = json!(mode);
+        settings["tutor_threshold"] = json!(0.123);
+        settings["training_auto_analysis"] = json!(false);
+        let (status, saved) = call(app.clone(), "PUT", "/api/settings", settings).await;
+        assert_eq!(status, 200, "{saved}");
+        settings = saved;
+        let fresh = api::router(AppState::new(
+            pool.clone(),
+            Engine::new("ignored-new-default".into()),
+        ));
+        assert_eq!(
+            call(fresh, "GET", "/api/settings", Value::Null).await.1,
+            settings
+        );
+        let (status, session) = call(
+            app.clone(),
+            "POST",
+            "/api/play/sessions",
+            json!({"human_player":0,"match_length":5}),
+        )
+        .await;
+        assert_eq!(status, 201, "{session}");
+        assert_eq!(session["play_mode"], mode);
+        assert_eq!(session["tutor_threshold"], 0.123);
+        assert_eq!(session["training_auto_analysis"], false);
+    }
+    for threshold in [0.0, -0.1, 1.001] {
+        let mut invalid = settings.clone();
+        invalid["tutor_threshold"] = json!(threshold);
+        assert_eq!(
+            call(app.clone(), "PUT", "/api/settings", invalid).await.0,
+            422
+        );
+        assert_eq!(
+            call(app.clone(), "GET", "/api/settings", Value::Null)
+                .await
+                .1,
+            settings
+        );
+    }
+    let mut invalid = settings.clone();
+    invalid["default_play_mode"] = json!("unexpected");
+    assert_eq!(
+        call(app.clone(), "PUT", "/api/settings", invalid).await.0,
+        422
+    );
+    assert_eq!(
+        call(app, "GET", "/api/settings", Value::Null).await.1,
+        settings
+    );
 }

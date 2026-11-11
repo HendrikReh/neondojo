@@ -94,8 +94,16 @@ async fn full_match_analysis_is_persisted_paginated_and_replayable(pool: PgPool)
             .all(|v| v["equity_loss"].as_f64().unwrap() >= 0.04)
     );
     let events = store::events(&pool, job.id, 0).await.unwrap();
-    let checkpoints: Vec<_> = events.iter().filter(|e| e.event == "progress").collect();
-    assert_eq!(checkpoints.len(), 2);
+    // Timing-ready/start updates are ordinary progress events too. Select the
+    // first confirmation of each completed game for the durable SSE assertions.
+    let checkpoints: Vec<_> = (1..=2)
+        .map(|completed| {
+            events
+                .iter()
+                .find(|e| e.event == "progress" && e.data["completed_games"] == completed)
+                .unwrap()
+        })
+        .collect();
     assert_eq!(checkpoints[0].data["completed_games"], 1);
     assert_eq!(checkpoints[0].data["progress"], 50);
     assert_eq!(checkpoints[1].data["completed_games"], 2);
@@ -217,6 +225,23 @@ async fn heartbeat_renews_lease_during_a_long_game(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
+    tokio::time::timeout(Duration::from_secs(4), async {
+        loop {
+            let elapsed: Option<f64> = sqlx::query_scalar(
+                "SELECT active_elapsed_ms FROM match_analysis_timing WHERE job_id=$1",
+            )
+            .bind(job.id)
+            .fetch_optional(&pool)
+            .await
+            .unwrap();
+            if elapsed.is_some_and(|ms| ms >= 1000.0) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .expect("monotonic samples must persist while a silent native process is running");
     tokio::time::timeout(Duration::from_secs(24), async {
         loop {
             let lease: Option<chrono::DateTime<chrono::Utc>> =
@@ -239,4 +264,10 @@ async fn heartbeat_renews_lease_during_a_long_game(pool: PgPool) {
     assert_eq!(done.status, "failed");
     assert!(done.error.unwrap().contains("process failed"));
     assert_eq!(done.attempts, 1);
+    let timing: (i64,f64,f64)=sqlx::query_as("SELECT timed_moves,measured_elapsed_ms,active_elapsed_ms FROM match_analysis_timing WHERE job_id=$1").bind(job.id).fetch_one(&pool).await.unwrap();
+    assert_eq!(
+        timing,
+        (0, 0.0, 0.0),
+        "interrupted sections never become confirmed time and active samples reset at failure"
+    );
 }

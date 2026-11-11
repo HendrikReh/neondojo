@@ -68,9 +68,9 @@ async fn game_catalog_preserves_all_games_and_queries_stay_inside_selected_game(
     assert_eq!(
         games,
         json!([
-            {"game_no":1,"position_count":2,"white_score":0,"black_score":0,"crawford":false},
-            {"game_no":2,"position_count":0,"white_score":1,"black_score":0,"crawford":false},
-            {"game_no":3,"position_count":0,"white_score":6,"black_score":0,"crawford":true},
+            {"game_no":1,"position_count":2,"white_score":0,"black_score":0,"crawford":false,"result":{"winner":0,"points":1,"cube":1,"multiplier":null,"reason":"recorded","scores_after":[1,0]}},
+            {"game_no":2,"position_count":0,"white_score":1,"black_score":0,"crawford":false,"result":{"winner":0,"points":1,"cube":1,"multiplier":1,"reason":"drop","scores_after":[2,0]}},
+            {"game_no":3,"position_count":0,"white_score":6,"black_score":0,"crawford":true,"result":{"winner":1,"points":1,"cube":1,"multiplier":null,"reason":"recorded","scores_after":[6,1]}},
             {"game_no":4,"position_count":2,"white_score":6,"black_score":1,"crawford":false}
         ])
     );
@@ -427,7 +427,10 @@ async fn selected_game_analysis_is_isolated_deduplicated_and_recoverable(pool: P
         422
     );
     let events = store::events(&pool, job.id, 0).await.unwrap();
-    let progress = events.iter().find(|e| e.event == "progress").unwrap();
+    let progress = events
+        .iter()
+        .find(|e| e.event == "progress" && e.data["completed_games"] == 1)
+        .unwrap();
     assert_eq!(progress.data["completed_games"], 1);
     assert_eq!(progress.data["total_games"], 1);
     assert_eq!(progress.data["progress"], 100);
@@ -457,13 +460,22 @@ async fn legacy_catalog_backfills_once_under_concurrent_requests(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(rows, 4);
-    // A warm catalog is independent of parsing the immutable source again.
+    // A warm catalog remains readable if source result projection is unavailable.
     sqlx::query("UPDATE matches SET sgf='not SGF' WHERE id=$1")
         .bind(id)
         .execute(&pool)
         .await
         .unwrap();
-    assert_eq!(call(app.clone(), "GET", &endpoint, Value::Null).await, a);
+    let (status, mut unavailable) = call(app.clone(), "GET", &endpoint, Value::Null).await;
+    assert_eq!(status, 200);
+    let mut expected = a.1.clone();
+    for game in expected.as_array_mut().unwrap() {
+        game.as_object_mut().unwrap().remove("result");
+    }
+    for game in unavailable.as_array_mut().unwrap() {
+        assert!(game["result"].is_null());
+    }
+    assert_eq!(unavailable, expected);
     let (status, positions) = call(
         app,
         "GET",
