@@ -20,6 +20,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/benchmarks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["history"];
+        put?: never;
+        post: operations["create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/benchmarks/reference": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_reference"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/benchmarks/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/benchmarks/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["cancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cards": {
         parameters: {
             query?: never;
@@ -1222,6 +1286,73 @@ export interface components {
         };
         /** @enum {string} */
         AssessmentSource: "native" | "imported";
+        BenchmarkHistory: {
+            active: boolean;
+            runs: components["schemas"]["BenchmarkRun"][];
+        };
+        BenchmarkProtocol: {
+            cubeful: boolean;
+            deterministic: boolean;
+            /** Format: int32 */
+            game_timeout_seconds?: number | null;
+            id: string;
+            luck_analysis: boolean;
+            move_filter: string;
+            /** Format: int32 */
+            noise: number;
+            process_strategy: string;
+            timing_scope: string;
+        };
+        BenchmarkReference: {
+            id: string;
+            /** Format: int32 */
+            match_length: number;
+            name: string;
+            protocol: components["schemas"]["BenchmarkProtocol"];
+            sha256: string;
+            /** Format: int32 */
+            total_games: number;
+            /** Format: int32 */
+            total_moves: number;
+            /** Format: int32 */
+            version: number;
+        };
+        BenchmarkRequest: {
+            engine_id: string;
+            plies: number[];
+        };
+        BenchmarkRun: {
+            /** Format: int32 */
+            analyzed_moves: number;
+            /** Format: double */
+            average_move_ms?: number | null;
+            /** Format: int32 */
+            completed_games: number;
+            /** Format: date-time */
+            created_at: string;
+            engine_id: string;
+            engine_name: string;
+            engine_path: string;
+            engine_version: string;
+            error?: string | null;
+            /** Format: date-time */
+            finished_at?: string | null;
+            /** Format: uuid */
+            id: string;
+            machine: components["schemas"]["Machine"];
+            /** Format: int32 */
+            plies: number;
+            protocol: components["schemas"]["BenchmarkProtocol"];
+            reference: components["schemas"]["BenchmarkReference"];
+            /** Format: date-time */
+            started_at?: string | null;
+            status: string;
+            /** Format: double */
+            total_elapsed_ms?: number | null;
+        };
+        BenchmarkStatus: {
+            active: boolean;
+        };
         BookChecker: {
             candidates: components["schemas"]["Candidate"][];
             /** Format: int32 */
@@ -1849,6 +1980,18 @@ export interface components {
         LibraryPage: {
             items: components["schemas"]["DatabaseMatch"][];
             next_cursor?: string | null;
+        };
+        Machine: {
+            architecture: string;
+            cpu_model?: string | null;
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            logical_cpus?: number | null;
+            /** Format: int64 */
+            memory_bytes?: number | null;
+            name: string;
+            os: string;
         };
         MatchAnalysisRequest: {
             /**
@@ -2687,6 +2830,131 @@ export interface operations {
                 };
             };
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    history: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarkHistory"];
+                };
+            };
+        };
+    };
+    create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BenchmarkRequest"];
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarkRun"][];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_reference: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarkReference"];
+                };
+            };
+        };
+    };
+    status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarkStatus"];
+                };
+            };
+        };
+    };
+    cancel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarkRun"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4224,6 +4492,14 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     get_match: {
@@ -4424,6 +4700,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

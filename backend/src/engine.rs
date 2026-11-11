@@ -5,6 +5,31 @@ use std::{path::Path, process::Stdio, sync::OnceLock, time::Duration};
 use tokio::{io::AsyncReadExt, process::Command};
 use utoipa::ToSchema;
 
+// Every application-created engine subprocess shares this gate. The benchmark
+// owns the writer for its entire run; its task-local scope avoids recursive reads.
+static ENGINE_WORK: tokio::sync::RwLock<()> = tokio::sync::RwLock::const_new(());
+tokio::task_local! { static ENGINE_ACCESS: (); }
+
+async fn engine_permit() -> Option<tokio::sync::RwLockReadGuard<'static, ()>> {
+    if ENGINE_ACCESS.try_with(|_| ()).is_ok() {
+        None
+    } else {
+        Some(ENGINE_WORK.read().await)
+    }
+}
+
+/// Acquire the ordinary shared gate before entering a timed pipeline. The task
+/// scope lets nested version/export commands reuse it even if a writer queues.
+pub(crate) async fn with_shared_access<F: std::future::Future>(work: F) -> F::Output {
+    let _permit = engine_permit().await;
+    ENGINE_ACCESS.scope((), work).await
+}
+
+pub(crate) async fn benchmark_exclusive<F: std::future::Future>(work: F) -> F::Output {
+    let _exclusive = ENGINE_WORK.write().await;
+    ENGINE_ACCESS.scope((), work).await
+}
+
 #[derive(Clone)]
 pub struct Engine {
     binary: String,
@@ -64,26 +89,36 @@ impl Engine {
     /// Check both the executable and its evaluation data. Dropping the timed-out
     /// evaluation kills its GNUbg child through `kill_on_drop`.
     pub async fn check_installation(&self) -> Result<String> {
-        tokio::time::timeout(Duration::from_secs(10), async {
-            let version = self.version().await?;
-            ensure!(
-                version.starts_with("GNU Backgammon "),
-                "Executable is not GNUbg"
-            );
-            let analysis = self
-                .analyze("4HPwATDgc/ABMA", "cInlAAAAAAAE", 0, None)
-                .await?;
-            ensure!(
-                !analysis.candidates.is_empty(),
-                "GNUbg returned no evaluated moves"
-            );
-            Ok(version)
-        })
-        .await
-        .context("GNUbg installation check timed out after 10 seconds")?
+        let _permit = engine_permit().await;
+        ENGINE_ACCESS
+            .scope((), async {
+                tokio::time::timeout(Duration::from_secs(10), async {
+                    let version = self.version().await?;
+                    ensure!(
+                        version.starts_with("GNU Backgammon "),
+                        "Executable is not GNUbg"
+                    );
+                    let analysis = self
+                        .analyze("4HPwATDgc/ABMA", "cInlAAAAAAAE", 0, None)
+                        .await?;
+                    ensure!(
+                        !analysis.candidates.is_empty(),
+                        "GNUbg returned no evaluated moves"
+                    );
+                    Ok(version)
+                })
+                .await
+                .context("GNUbg installation check timed out after 10 seconds")?
+            })
+            .await
     }
 
     pub async fn version(&self) -> Result<String> {
+        let _permit = engine_permit().await;
+        self.version_unlocked().await
+    }
+
+    async fn version_unlocked(&self) -> Result<String> {
         let result = tokio::time::timeout(
             Duration::from_secs(5),
             Command::new(&self.binary)
@@ -120,10 +155,21 @@ impl Engine {
         commands: &str,
         timeout: Duration,
     ) -> Result<String> {
+        self.run_with_limit(directory, commands, Some(timeout))
+            .await
+    }
+
+    pub(crate) async fn run_with_limit(
+        &self,
+        directory: &Path,
+        commands: &str,
+        timeout: Option<Duration>,
+    ) -> Result<String> {
+        let _permit = engine_permit().await;
         // A job may outlive an upgrade at the same path. Fence every native
         // invocation, including later games, dice rolls and forced-pass calls.
         if self.expected_version.is_some() {
-            self.version()
+            self.version_unlocked()
                 .await
                 .context("Cannot execute the saved GNUbg job configuration")?;
         }
@@ -167,17 +213,21 @@ impl Engine {
             ensure!(err.trim().is_empty(), "GNUbg: {}", err.trim());
             Ok::<_, anyhow::Error>(String::from_utf8_lossy(&out).into_owned())
         };
-        let output = match tokio::time::timeout(timeout, work).await {
-            Ok(result) => result?,
-            Err(_) => {
-                let _ = child.kill().await;
-                bail!("GNUbg timed out after {} seconds", timeout.as_secs())
+        let output = if let Some(timeout) = timeout {
+            match tokio::time::timeout(timeout, work).await {
+                Ok(result) => result?,
+                Err(_) => {
+                    let _ = child.kill().await;
+                    bail!("GNUbg timed out after {} seconds", timeout.as_secs())
+                }
             }
+        } else {
+            work.await?
         };
         // Discard output if an installation replacement raced the invocation;
         // no checkpoint or completed result may incorporate another version.
         if self.expected_version.is_some() {
-            self.version()
+            self.version_unlocked()
                 .await
                 .context("GNUbg changed during execution; discarding the result")?;
         }
@@ -595,5 +645,101 @@ mod tests {
             engine.normalize_mat(invalid_move).await.is_err(),
             "must reject a semantically invalid final move"
         );
+    }
+}
+
+#[cfg(test)]
+mod benchmark_gate_tests {
+    use super::*;
+    #[tokio::test]
+    async fn exclusive_benchmark_blocks_normal_invocations_but_allows_its_own_checks() {
+        let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = tokio::sync::oneshot::channel();
+        let owner = tokio::spawn(benchmark_exclusive(async move {
+            entered_tx.send(()).unwrap();
+            assert!(
+                Engine::new("/missing-engine".into())
+                    .version()
+                    .await
+                    .is_err()
+            );
+            release_rx.await.unwrap();
+        }));
+        entered_rx.await.unwrap();
+        let normal = Engine::new("/missing-engine".into());
+        let waiting = normal.version();
+        tokio::pin!(waiting);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(40), &mut waiting)
+                .await
+                .is_err()
+        );
+        release_tx.send(()).unwrap();
+        owner.await.unwrap();
+        assert!(
+            tokio::time::timeout(Duration::from_secs(1), waiting)
+                .await
+                .unwrap()
+                .is_err()
+        );
+    }
+    #[tokio::test]
+    async fn shared_pipeline_waits_before_start_and_reuses_access_with_a_writer_queued() {
+        let (exclusive_tx, exclusive_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = tokio::sync::oneshot::channel();
+        let exclusive = tokio::spawn(benchmark_exclusive(async move {
+            exclusive_tx.send(()).unwrap();
+            release_rx.await.unwrap();
+        }));
+        exclusive_rx.await.unwrap();
+        let (started_tx, mut started_rx) = tokio::sync::oneshot::channel();
+        let pipeline = tokio::spawn(with_shared_access(async move {
+            started_tx.send(()).unwrap();
+            // The writer must queue behind our shared permit before nested access.
+            let writer = tokio::spawn(benchmark_exclusive(async {}));
+            tokio::task::yield_now().await;
+            assert!(
+                Engine::new("/missing-engine".into())
+                    .version()
+                    .await
+                    .is_err()
+            );
+            writer
+        }));
+        assert!(
+            tokio::time::timeout(Duration::from_millis(40), &mut started_rx)
+                .await
+                .is_err()
+        );
+        release_tx.send(()).unwrap();
+        exclusive.await.unwrap();
+        let writer = tokio::time::timeout(Duration::from_secs(2), pipeline)
+            .await
+            .expect("nested engine access must not deadlock behind queued writer")
+            .unwrap();
+        writer.await.unwrap();
+    }
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn benchmark_invocation_can_disable_deadline_without_changing_bounded_calls() {
+        use std::os::unix::fs::PermissionsExt;
+        let directory = tempfile::tempdir().unwrap();
+        let binary = directory.path().join("slow-native-test");
+        std::fs::write(
+            &binary,
+            "#!/usr/bin/env python3\nimport time\ntime.sleep(0.1)\nprint('finished')\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let engine = Engine::new(binary.to_string_lossy().into_owned());
+        let bounded = engine
+            .run_with_limit(directory.path(), "", Some(Duration::from_millis(5)))
+            .await;
+        assert!(bounded.unwrap_err().to_string().contains("timed out"));
+        let unlimited = engine
+            .run_with_limit(directory.path(), "", None)
+            .await
+            .unwrap();
+        assert_eq!(unlimited.trim(), "finished");
     }
 }

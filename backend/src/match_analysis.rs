@@ -125,6 +125,22 @@ pub fn game_count(sgf: &str) -> Result<i32> {
 
 impl Engine {
     pub async fn analyze_game(&self, sgf: &str, game_no: i32, plies: i32) -> Result<AnalyzedGame> {
+        crate::engine::with_shared_access(self.analyze_game_with_limit(
+            sgf,
+            game_no,
+            plies,
+            Some(std::time::Duration::from_secs(600)),
+        ))
+        .await
+    }
+
+    pub(crate) async fn analyze_game_with_limit(
+        &self,
+        sgf: &str,
+        game_no: i32,
+        plies: i32,
+        timeout: Option<std::time::Duration>,
+    ) -> Result<AnalyzedGame> {
         ensure!((0..=4).contains(&plies), "plies must be 0..4");
         ensure!(
             (1..=game_count(sgf)?).contains(&game_no),
@@ -154,9 +170,7 @@ impl Engine {
             commands.push_str(&format!("next game {}\n", game_no - 1));
         }
         commands.push_str("analyse clear game\nanalyse game\nsave game analyzed.sgf\nexport game text analyzed.txt\n");
-        let output = self
-            .run_with_timeout(temp.path(), &commands, std::time::Duration::from_secs(600))
-            .await?;
+        let output = self.run_with_limit(temp.path(), &commands, timeout).await?;
         for line in output.lines() {
             let lower = line.trim().to_ascii_lowercase();
             ensure!(

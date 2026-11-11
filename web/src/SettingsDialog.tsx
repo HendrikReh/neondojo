@@ -1,3 +1,4 @@
+import { useBenchmarkText } from './benchmark-messages';
 import { ANALYSIS_PLIES, isAnalysisDepth } from './analysis-depth';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import Board from './Board';
@@ -31,6 +32,7 @@ export interface SettingsDialogProps {
   open: boolean;
   onClose: () => void;
   onBookSettings: () => void;
+  onBenchmark?: () => void;
   theme: Theme;
   appearance: UiAppearance;
   onApply: (value: {
@@ -71,9 +73,11 @@ export default function SettingsDialog({
   appearance,
   onApply,
   onBookSettings,
+  onBenchmark,
 }: SettingsDialogProps) {
   const { locale } = useI18n();
   const t = useSettingsText();
+  const benchmarkT = useBenchmarkText();
   const sourceT = useSourceText();
   const appearanceT = useUiAppearanceText();
   const id = useId();
@@ -509,6 +513,24 @@ export default function SettingsDialog({
                   >
                     {sourceT('books')}
                   </button>
+                  {onBenchmark && (
+                    <div>
+                      <button
+                        type="button"
+                        className="settings-book-button"
+                        onClick={() => {
+                          if (!savingRef.current) onBenchmark();
+                        }}
+                      >
+                        {benchmarkT('open')}
+                      </button>
+                      {dirty && (
+                        <p className="settings-help">
+                          {benchmarkT('draftHelp')}
+                        </p>
+                      )}
+                    </div>
+                  )}
                   <h3 className="settings-subheading">{t('installation')}</h3>
                   <label className="settings-field" htmlFor={`${id}-path`}>
                     <span>{t('path')}</span>

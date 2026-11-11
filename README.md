@@ -360,3 +360,52 @@ Dieser Stand analysiert ausgewählte Positionen, einzelne Spiele und vollständi
 
 
 Für isolierte Browserprüfungen kann `BGTUTOR_TEST_URL` auf einen separaten Backend-Server mit eigenem PostgreSQL-Testbestand und gebautem Frontend zeigen. Ohne Variable bleibt die lokale Vite-Adresse unverändert. Die privaten Demo-Bestände müssen dafür nicht verändert werden.
+
+## Engine-Benchmark
+
+Unter **Extras → Benchmark** lässt sich die Analysegeschwindigkeit der verfügbaren
+Engine mit einer oder mehreren Ply-Stufen messen. GNUbg unterstützt derzeit
+0–4 Ply. Die gewählten Stufen laufen einzeln und in Auswahlreihenfolge im
+Hintergrund; das Verlassen der Ansicht beendet keinen Lauf. **Abbrechen** beendet
+auch den aktiven Engine-Prozess. Während der Messung warten andere von BG Tutor
+veranlasste Engine-Aufrufe; ein Hinweis bleibt auch in anderen Arbeitsbereichen
+sichtbar. Andere Programme auf dem Rechner können die Messung beeinflussen.
+
+Die feste Referenz **WC2014 v1** ist das 11-Punkte-Match Akiko Yazawa gegen
+Douglas Mayfield mit zehn Spielen und 460 Checkerzügen. Grundlage ist die
+vorhandene unanalysierte GNUbg-SGF-Fixture; Herkunft und Reproduktion sind in
+`backend/tests/fixtures/README.md` dokumentiert. Die Anwendung liefert eine eigene
+unveränderliche Kopie mit ID, Version und SHA-256-Prüfsumme mit. Vorhandene
+Bewertungen werden vor der tatsächlichen Analyse gelöscht.
+
+Gemessen wird die Summe der vollständigen Spielanalyse-Pipelines einschließlich
+Prozessstarts, Laden, Checker- und Cube-Analyse sowie Ergebnisaufbereitung.
+Wartezeit, Installations-/Versionsprüfungen und Datenbankschreibvorgänge zählen
+nicht dazu. **Ø Analysezeit pro Zug** ist diese Gesamtzeit geteilt durch alle
+460 Checkerzüge, einschließlich erzwungener Züge; sie ist keine einzeln gemessene
+Zuglatenz. Neue Benchmarkläufe verwenden das Messprotokoll
+`gnubg-match-v2-unlimited` ohne feste Zeitgrenze. Ein manueller Abbruch beendet
+weiterhin den aktiven Engine-Prozess. Ältere Ergebnisse behalten ihren damals
+gespeicherten Timeout im unveränderlichen Protokoll-Snapshot.
+
+Jeder Versuch speichert Datum, Backend-Maschine mit Hardwareangaben, Engine und
+Version, Programmpfad, Ply, Referenz, Messprotokoll, Fortschritt und Status.
+Erfolgreiche Läufe erhalten zusätzlich Gesamtzeit und Durchschnitt in
+Millisekunden. Die Historie bleibt unabhängig von Bibliotheksmatches und
+Einstellungsprofilen erhalten. Nach einem Backend-Neustart werden unterbrochene
+Läufe als fehlgeschlagen gekennzeichnet; Teilzeiten werden niemals fortgesetzt.
+Die Engine-Verfügbarkeitsanzeige nutzt während der Messung den bereits geprüften
+Snapshot, damit sie keinen konkurrierenden Probeprozess startet.
+
+| Methode | Endpoint | Wirkung |
+| --- | --- | --- |
+| GET | `/api/benchmarks/reference` | Versionierte Referenz und Messprotokoll |
+| GET | `/api/benchmarks/status` | Kompakter Aktivstatus für den globalen Hinweis |
+| GET | `/api/benchmarks` | Letzte 1.000 Versuche, neueste zuerst |
+| POST | `/api/benchmarks` | Neue Versuche mit `{ "engine_id": "gnubg", "plies": [0, 2] }` |
+| POST | `/api/benchmarks/{id}/cancel` | Wartenden/laufenden Versuch abbrechen; terminale Ergebnisse unverändert |
+
+Neue Versuche während einer laufenden Messung werden mit HTTP 409 abgewiesen;
+mehrere Stufen werden gemeinsam vor Beginn angelegt. Nicht verfügbare Engines
+und ungültige Ply-Auswahlen ergeben HTTP 422. Benchmark-Endpunkte und Datentypen
+sind Bestandteil der generierten OpenAPI-Spezifikation.

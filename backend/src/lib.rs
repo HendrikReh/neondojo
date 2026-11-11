@@ -36,3 +36,5 @@ pub mod play;
 mod game_result;
 
 pub mod study;
+
+pub mod benchmarks;

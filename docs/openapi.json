@@ -117,6 +117,158 @@
         }
       }
     },
+    "/api/benchmarks": {
+      "get": {
+        "tags": [
+          "Benchmark"
+        ],
+        "operationId": "history",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenchmarkHistory"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Benchmark"
+        ],
+        "operationId": "create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BenchmarkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BenchmarkRun"
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/benchmarks/reference": {
+      "get": {
+        "tags": [
+          "Benchmark"
+        ],
+        "operationId": "get_reference",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenchmarkReference"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/benchmarks/status": {
+      "get": {
+        "tags": [
+          "Benchmark"
+        ],
+        "operationId": "status",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenchmarkStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/benchmarks/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Benchmark"
+        ],
+        "operationId": "cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenchmarkRun"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/cards": {
       "get": {
         "tags": [
@@ -2646,6 +2798,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -2945,6 +3107,16 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "",
             "content": {
               "application/json": {
@@ -5373,6 +5545,242 @@
           "imported"
         ]
       },
+      "BenchmarkHistory": {
+        "type": "object",
+        "required": [
+          "runs",
+          "active"
+        ],
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "runs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BenchmarkRun"
+            }
+          }
+        }
+      },
+      "BenchmarkProtocol": {
+        "type": "object",
+        "required": [
+          "id",
+          "cubeful",
+          "deterministic",
+          "noise",
+          "luck_analysis",
+          "process_strategy",
+          "timing_scope",
+          "move_filter"
+        ],
+        "properties": {
+          "cubeful": {
+            "type": "boolean"
+          },
+          "deterministic": {
+            "type": "boolean"
+          },
+          "game_timeout_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "id": {
+            "type": "string"
+          },
+          "luck_analysis": {
+            "type": "boolean"
+          },
+          "move_filter": {
+            "type": "string"
+          },
+          "noise": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "process_strategy": {
+            "type": "string"
+          },
+          "timing_scope": {
+            "type": "string"
+          }
+        }
+      },
+      "BenchmarkReference": {
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "name",
+          "sha256",
+          "match_length",
+          "total_games",
+          "total_moves",
+          "protocol"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "match_length": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "name": {
+            "type": "string"
+          },
+          "protocol": {
+            "$ref": "#/components/schemas/BenchmarkProtocol"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "total_games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total_moves": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "BenchmarkRequest": {
+        "type": "object",
+        "required": [
+          "engine_id",
+          "plies"
+        ],
+        "properties": {
+          "engine_id": {
+            "type": "string"
+          },
+          "plies": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        }
+      },
+      "BenchmarkRun": {
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "created_at",
+          "machine",
+          "engine_id",
+          "engine_name",
+          "engine_version",
+          "engine_path",
+          "plies",
+          "reference",
+          "protocol",
+          "completed_games",
+          "analyzed_moves"
+        ],
+        "properties": {
+          "analyzed_moves": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "average_move_ms": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "completed_games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "engine_id": {
+            "type": "string"
+          },
+          "engine_name": {
+            "type": "string"
+          },
+          "engine_path": {
+            "type": "string"
+          },
+          "engine_version": {
+            "type": "string"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "finished_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "machine": {
+            "$ref": "#/components/schemas/Machine"
+          },
+          "plies": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "protocol": {
+            "$ref": "#/components/schemas/BenchmarkProtocol"
+          },
+          "reference": {
+            "$ref": "#/components/schemas/BenchmarkReference"
+          },
+          "started_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string"
+          },
+          "total_elapsed_ms": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          }
+        }
+      },
+      "BenchmarkStatus": {
+        "type": "object",
+        "required": [
+          "active"
+        ],
+        "properties": {
+          "active": {
+            "type": "boolean"
+          }
+        }
+      },
       "BookChecker": {
         "type": "object",
         "required": [
@@ -7482,6 +7890,50 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "Machine": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "os",
+          "architecture"
+        ],
+        "properties": {
+          "architecture": {
+            "type": "string"
+          },
+          "cpu_model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "logical_cpus": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "memory_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "os": {
+            "type": "string"
           }
         }
       },

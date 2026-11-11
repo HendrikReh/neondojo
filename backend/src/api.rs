@@ -77,6 +77,7 @@ pub(crate) type ApiResult<T> = Result<T, ApiError>;
 pub fn router(state: AppState) -> Router {
     Router::new()
         .merge(crate::settings::routes())
+        .merge(crate::benchmarks::routes())
         .merge(crate::play::routes())
         .merge(crate::study::routes())
         .merge(crate::opening_book::routes())
@@ -144,7 +145,14 @@ pub struct Health {
 async fn health(State(state): State<AppState>) -> (StatusCode, Json<Health>) {
     let database = sqlx::query("SELECT 1").execute(&state.pool).await.is_ok();
     let gnubg = match crate::settings::load(&state).await {
-        Ok(settings) => Engine::new(settings.gnubg_path).version().await.ok(),
+        Ok(settings) => {
+            match crate::benchmarks::running_engine_version(&state.pool, &settings.gnubg_path).await
+            {
+                Ok(Some(version)) => Some(version),
+                Ok(None) => Engine::new(settings.gnubg_path).version().await.ok(),
+                Err(_) => None,
+            }
+        }
         Err(_) => None,
     };
     let ready = database && gnubg.is_some();
@@ -818,6 +826,7 @@ impl OpenApi for ApiDoc {
     fn openapi() -> utoipa::openapi::OpenApi {
         let mut doc = BaseApiDoc::openapi();
         doc.merge(crate::settings::SettingsDoc::openapi());
+        doc.merge(crate::benchmarks::BenchmarkDoc::openapi());
         doc.merge(crate::play::PlayDoc::openapi());
         doc.merge(crate::study::StudyDoc::openapi());
         doc.merge(crate::opening_book::OpeningBookDoc::openapi());

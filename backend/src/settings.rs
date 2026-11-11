@@ -203,10 +203,14 @@ fn conflict() -> ApiError {
 #[utoipa::path(get, path="/api/engines", responses((status=200,body=Vec<EngineInfo>)), tag="Settings")]
 async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo>>> {
     let settings = load(&state).await?;
-    let version = Engine::new(settings.gnubg_path)
-        .check_installation()
-        .await
-        .ok();
+    let version =
+        match crate::benchmarks::running_engine_version(&state.pool, &settings.gnubg_path).await? {
+            Some(version) => Some(version),
+            None => Engine::new(settings.gnubg_path)
+                .check_installation()
+                .await
+                .ok(),
+        };
     Ok(Json(vec![
         EngineInfo {
             id: "gnubg".into(),

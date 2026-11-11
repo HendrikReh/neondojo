@@ -156,7 +156,7 @@ test('header keyboard navigation and history navigation retain selection, focus 
   ).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('End');
   await expect(
-    page.getByRole('tab', { name: 'Study & Anki', exact: true }),
+    page.getByRole('tab', { name: 'Extras', exact: true }),
   ).toBeFocused();
   await page.keyboard.press('Home');
   await expect(tab).toBeFocused();

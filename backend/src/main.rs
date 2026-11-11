@@ -33,6 +33,7 @@ async fn main() -> anyhow::Result<()> {
         );
     }
     sqlx::migrate!().run(&pool).await?;
+    bgtutor::benchmarks::recover_interrupted(&pool).await?;
     while bgtutor::databases::backfill_source_metadata(&pool).await? > 0 {}
     while bgtutor::play::backfill_library_matches(&pool).await? > 0 {}
     let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or_else(|_| "gnubg".into()));

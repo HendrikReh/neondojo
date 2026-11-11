@@ -32,6 +32,9 @@ pub async fn worker(state: AppState, stop: CancellationToken) {
 }
 
 pub async fn run_one(state: &AppState) -> Result<bool> {
+    if crate::benchmarks::run_one(state).await? {
+        return Ok(true);
+    }
     let token = Uuid::new_v4();
     let mut tx = state.pool.begin().await?;
     let expired: Vec<Uuid> = sqlx::query_scalar("UPDATE jobs SET status=CASE WHEN attempts>=3 THEN 'failed' ELSE 'queued' END, error=CASE WHEN attempts>=3 THEN 'Worker lease expired after 3 attempts' ELSE NULL END, lease_token=NULL, lease_until=NULL, progress=CASE WHEN kind='match' THEN progress ELSE 0 END, updated_at=now() WHERE status='running' AND lease_until<now() RETURNING id")

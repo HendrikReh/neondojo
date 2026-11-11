@@ -1,3 +1,6 @@
+import { loadBenchmarkStatus } from './benchmark-api';
+import BenchmarkWorkspace from './BenchmarkWorkspace';
+import { useBenchmarkText } from './benchmark-messages';
 import PlayWorkspace from './PlayWorkspace';
 import { usePlayText } from './play-messages';
 import {
@@ -40,8 +43,16 @@ import { DEFAULT_ANALYSIS_PLIES } from './analysis-depth';
 import MoveNotesDialog, { type MoveNotesTarget } from './MoveNotesDialog';
 import { useUiAppearance } from './useUiAppearance';
 
-type View = 'analysis' | 'database' | 'positions' | 'play' | 'learning';
-const views: View[] = ['analysis', 'database', 'positions', 'play', 'learning'];
+type View =
+  'analysis' | 'database' | 'positions' | 'play' | 'learning' | 'extras';
+const views: View[] = [
+  'analysis',
+  'database',
+  'positions',
+  'play',
+  'learning',
+  'extras',
+];
 export default function App() {
   const { t, setLocale, formatError } = useI18n();
   const w = useWorkspaceText(),
@@ -49,6 +60,28 @@ export default function App() {
   const l = useLibraryText();
   const positionText = usePositionText();
   const playT = usePlayText();
+  const benchmarkT = useBenchmarkText();
+  const [benchmarkActive, setBenchmarkActive] = useState(false);
+  useEffect(() => {
+    const abort = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    async function pollBenchmarkStatus() {
+      try {
+        const status = await loadBenchmarkStatus(abort.signal);
+        if (!abort.signal.aborted) setBenchmarkActive(status.active === true);
+      } catch {
+        // Status is advisory; a temporary failure must not block the app.
+      } finally {
+        if (!abort.signal.aborted)
+          timer = setTimeout(() => void pollBenchmarkStatus(), 2000);
+      }
+    }
+    void pollBenchmarkStatus();
+    return () => {
+      abort.abort();
+      clearTimeout(timer);
+    };
+  }, []);
   const { appearance, applyAppearance } = useUiAppearance();
   const [requestedDeck, setRequestedDeck] = useState<{
     id: string;
@@ -370,7 +403,9 @@ export default function App() {
                   ? positionText('title')
                   : tab === 'play'
                     ? playT('title')
-                    : w(tab)}
+                    : tab === 'extras'
+                      ? benchmarkT('extras')
+                      : w(tab)}
             </button>
           ))}
         </nav>
@@ -404,6 +439,11 @@ export default function App() {
           onChange={(event) => void upload(event.target.files ?? undefined)}
         />
       </header>
+      {benchmarkActive && (
+        <p className="benchmark-global-status" role="status">
+          {benchmarkT('globalBusy')}
+        </p>
+      )}
       <main className={`app-body app-body-${view}`}>
         <div
           id="workspace-panel-play"
@@ -603,6 +643,17 @@ export default function App() {
             onChanged={deckChanged}
           />
         </div>
+        <div
+          id="workspace-panel-extras"
+          role="tabpanel"
+          aria-labelledby="workspace-tab-extras"
+          hidden={view !== 'extras'}
+        >
+          <BenchmarkWorkspace
+            visible={view === 'extras'}
+            defaultPlies={settings?.analysis_plies ?? DEFAULT_ANALYSIS_PLIES}
+          />
+        </div>
         <footer className="app-footer">
           <span>
             <span className={`status-dot ${health === 'ok' ? 'ready' : ''}`} />
@@ -635,6 +686,10 @@ export default function App() {
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         onBookSettings={() => setBookOpen(true)}
+        onBenchmark={() => {
+          setSettingsOpen(false);
+          setView('extras');
+        }}
         theme={theme}
         appearance={appearance}
         onApply={(applied) => {
