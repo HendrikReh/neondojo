@@ -977,6 +977,33 @@ async fn loss_pagination_covers_known_losses_and_unknowns_once(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
+async fn generated_position_context_works_with_the_restore_search_path(pool: PgPool) {
+    let (_, _, positions) = setup(&pool).await;
+    let mut tx = pool.begin().await.unwrap();
+    sqlx::query("SET LOCAL search_path = ''")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let context: (
+        Option<i32>,
+        Option<i32>,
+        Option<bool>,
+        Option<i32>,
+        Option<i32>,
+    ) = sqlx::query_as(
+        "UPDATE public.positions SET gnubg_match_id='QYkGAAAAAAAA' WHERE id=$1
+             RETURNING source_white_score, source_black_score, source_crawford,
+                       source_cube_value, source_cube_owner",
+    )
+    .bind(positions[0].id)
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap();
+    assert_eq!(context, (Some(0), Some(0), Some(false), Some(2), Some(0)));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
 async fn malformed_legacy_ids_remain_unknown_and_saved_filter_count_is_bounded(pool: PgPool) {
     let (app, _, positions) = setup(&pool).await;
     sqlx::query("UPDATE positions SET gnubg_match_id='legacy-dummy' WHERE id=$1")
