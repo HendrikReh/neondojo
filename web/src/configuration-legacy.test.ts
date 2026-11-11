@@ -82,4 +82,25 @@ describe('legacy preferences import', () => {
     expect(result.appearance.board_theme).toBe('forest');
     expect(result.library.visible_columns.length).toBeGreaterThan(0);
   });
+
+  it('uses legacy defaults when older backend settings omit play options', () => {
+    const result = readLegacyConfiguration(
+      {
+        ...settings,
+        default_play_mode: undefined,
+        tutor_threshold: undefined,
+        training_auto_analysis: undefined,
+        bearoff_direction: undefined,
+      },
+      book,
+      storage({}),
+    );
+
+    expect(result.play).toMatchObject({
+      default_mode: 'coach',
+      tutor_threshold: 0.04,
+      training_auto_analysis: true,
+    });
+    expect(result.appearance.bearoff_direction).toBe('right');
+  });
 });

@@ -196,7 +196,7 @@ pub(crate) async fn initialize(
         .as_ref()
         .and_then(|s| s["engine_id"].as_str())
         .unwrap_or("gnubg");
-    let benchmark = match crate::benchmarks::resolve_binary(engine.binary()) {
+    let benchmark = match crate::engine::resolve_binary(engine.binary()) {
         Ok(path) => {
             crate::benchmarks::estimate::matching_benchmark(
                 pool, engine_id, &path, version, job.plies,

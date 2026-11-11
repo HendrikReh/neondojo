@@ -1,5 +1,6 @@
 //! Reproducible, append-only engine timing; independent of the match library.
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
+use crate::engine::resolve_binary;
 use axum::{
     Json, Router,
     extract::{Path, State},
@@ -174,19 +175,6 @@ pub(crate) async fn running_engine_version(
     }))
 }
 
-pub(crate) fn resolve_binary(binary: &str) -> anyhow::Result<String> {
-    let path = std::path::PathBuf::from(binary);
-    let resolved = if path.is_absolute() || path.components().count() > 1 {
-        std::fs::canonicalize(path)?
-    } else {
-        std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
-            .map(|p| p.join(&path))
-            .filter(|p| p.is_file())
-            .find_map(|p| std::fs::canonicalize(p).ok())
-            .ok_or_else(|| anyhow::anyhow!("GNUbg executable not found"))?
-    };
-    Ok(resolved.to_string_lossy().into_owned())
-}
 #[utoipa::path(post, path="/api/benchmarks",request_body=BenchmarkRequest,responses((status=202,body=Vec<BenchmarkRun>),(status=422,body=ErrorBody),(status=409,body=ErrorBody)),tag="Benchmark")]
 async fn create(
     State(state): State<AppState>,
@@ -220,7 +208,7 @@ async fn create(
     }
     let settings = crate::settings::load(&state).await?;
     let path = resolve_binary(&settings.gnubg_path)
-        .map_err(|e| ApiError::invalid(format!("GNUbg unavailable: {e}")))?;
+        .map_err(|e| ApiError::invalid(format!("GNUbg unavailable: {e:#}")))?;
     let engine = crate::engine::Engine::new(path.clone());
     let version = engine
         .check_installation()

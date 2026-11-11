@@ -227,7 +227,7 @@ test('more cards preserve the preview and a late page cannot survive a deck roun
   await rows.nth(10).click();
   const selected = await rows.nth(10).getAttribute('data-card-id');
   await study.getByRole('button', { name: 'More cards', exact: true }).click();
-  await expect(rows).toHaveCount(52);
+  await expect(rows).toHaveCount(2);
   await expect(preview).toHaveAttribute('data-card-id', selected!);
   await rows.last().focus();
   await page.keyboard.press('End');
@@ -273,5 +273,5 @@ test('more cards preserve the preview and a late page cannot survive a deck roun
   await expect(preview).toHaveAttribute('data-card-id', fresh!);
   await page.unroute(`**/api/decks/${deck.id}/cards?*`);
   await study.getByRole('button', { name: 'More cards', exact: true }).click();
-  await expect(rows).toHaveCount(52);
+  await expect(rows).toHaveCount(2);
 });

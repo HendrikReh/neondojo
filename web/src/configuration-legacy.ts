@@ -3,6 +3,7 @@ import {
   normalizeConfiguration,
   type ProfileConfiguration,
 } from './configuration-model';
+import { applySettingsDraft } from './configuration-settings';
 import type { AppSettings } from './settings-api';
 import type { BookConfig } from './source-analysis-api';
 import { readLocale, saveLocale } from './i18n-core';
@@ -21,30 +22,13 @@ export function readLegacyConfiguration(
   book: BookConfig,
   storage?: Storage,
 ): ProfileConfiguration {
-  const c = structuredClone(defaultConfiguration);
-  c.general = {
-    player_name: settings.player_name,
+  const c = applySettingsDraft(structuredClone(defaultConfiguration), {
+    settings,
     locale: readLocale(storage),
-    play_sounds: readPlaySounds(storage),
-  };
-  c.analysis.plies = settings.analysis_plies;
-  c.analysis.engine = settings.analysis_engine;
-  c.play = {
-    ...c.play,
-    engine: settings.play_engine,
-    plies: settings.play_plies,
-    default_mode: settings.default_play_mode ?? 'coach',
-    tutor_threshold: settings.tutor_threshold ?? 0.04,
-    training_auto_analysis: settings.training_auto_analysis ?? true,
-  };
-  const appearance = readUiAppearance(storage);
-  c.appearance = {
-    ...c.appearance,
-    ui_theme: appearance.theme,
-    mode: appearance.mode,
-    board_theme: readTheme(storage),
-    bearoff_direction: settings.bearoff_direction ?? 'right',
-  };
+    sounds: readPlaySounds(storage),
+    appearance: readUiAppearance(storage),
+    theme: readTheme(storage),
+  });
   c.opening_book = {
     provider: book.provider as ProfileConfiguration['opening_book']['provider'],
     path: book.path,

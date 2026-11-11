@@ -6,6 +6,34 @@ pub(crate) type Node = BTreeMap<String, Vec<String>>;
 const MAX_SGF_BYTES: usize = 32 * 1024 * 1024;
 const MAX_NODES: usize = 100_000;
 
+pub(crate) fn escape_value(value: &str) -> String {
+    value.replace('\\', "\\\\").replace(']', "\\]")
+}
+
+pub(crate) fn write_property(output: &mut String, key: &str, values: &[String]) {
+    output.push_str(key);
+    for value in values {
+        output.push('[');
+        output.push_str(&escape_value(value));
+        output.push(']');
+    }
+}
+
+pub(crate) fn serialize_trees(trees: &[Vec<Node>]) -> String {
+    let mut output = String::new();
+    for nodes in trees {
+        output.push('(');
+        for node in nodes {
+            output.push(';');
+            for (key, values) in node {
+                write_property(&mut output, key, values);
+            }
+        }
+        output.push_str(")\n");
+    }
+    output
+}
+
 struct Parser<'a> {
     bytes: &'a [u8],
     pos: usize,
@@ -539,22 +567,7 @@ pub(crate) fn normalize_mat_sgf(input: &str) -> Result<String> {
             }
         }
     }
-    let mut output = String::new();
-    for nodes in trees {
-        output.push('(');
-        for node in nodes {
-            output.push(';');
-            for (property, values) in node {
-                output.push_str(&property);
-                for value in values {
-                    output.push('[');
-                    output.push_str(&value.replace('\\', "\\\\").replace(']', "\\]"));
-                    output.push(']');
-                }
-            }
-        }
-        output.push_str(")\n");
-    }
+    let output = serialize_trees(&trees);
     // Check turns, cube state and match context as well as checker legality
     // before any native artifact is returned for persistence.
     parse_sgf(&output)?;

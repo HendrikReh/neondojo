@@ -1,4 +1,72 @@
 import { expect, test } from './test';
+import type { Database } from '../src/library-api';
+
+test('system databases keep their names and can be emptied', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  const response = await page.request.get('/api/databases');
+  expect(response.ok()).toBeTruthy();
+  const databases: Database[] = await response.json();
+  for (const name of ['Unsorted', 'Bot Matches']) {
+    const database = databases.find((entry) => entry.name === name);
+    if (!database) throw new Error(`Missing system database: ${name}`);
+    expect(database.is_system).toBe(true);
+    const player = `System fixture ${crypto.randomUUID()}`;
+    const path = database.is_default
+      ? '/api/imports'
+      : `/api/imports?database_id=${database.id}`;
+    const imported = await page.request.post(path, {
+      multipart: {
+        file: {
+          name: 'system.sgf',
+          mimeType: 'application/octet-stream',
+          buffer: Buffer.from(
+            `(;GM[6]PW[${player}]PB[Opponent]MI[length:7];W[31hefe])`,
+          ),
+        },
+      },
+    });
+    expect(imported.status()).toBe(201);
+
+    await page.goto('/');
+    await page
+      .getByRole('tab', { name: 'Match database', exact: true })
+      .click();
+    const sidebar = page.locator('.database-sidebar');
+    const collection = sidebar.getByRole('button', { name: new RegExp(name) });
+    await collection.click();
+    await expect(page.locator('.database-table')).toContainText(player);
+    await expect(
+      sidebar.getByRole('button', { name: 'Delete database' }),
+    ).toHaveCount(0);
+    await sidebar
+      .getByRole('button', { name: 'Edit database', exact: true })
+      .click();
+    const dialog = page.getByRole('dialog');
+    const input = dialog.getByLabel('Name', { exact: true });
+    await expect(input).toHaveValue(name);
+    await expect(input).toHaveJSProperty('readOnly', true);
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+
+    const empty = sidebar.getByRole('button', {
+      name: 'Empty database',
+      exact: true,
+    });
+    await empty.click();
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(page.locator('.database-table')).toContainText(player);
+    await empty.click();
+    await dialog
+      .getByRole('button', { name: 'Empty database', exact: true })
+      .click();
+    await expect(dialog).toHaveCount(0);
+    await expect(collection).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.database-table tbody tr')).toHaveCount(0);
+    await expect(empty).toBeDisabled();
+  }
+});
 
 test('collections, independent copies, filters and metadata work together', async ({
   page,

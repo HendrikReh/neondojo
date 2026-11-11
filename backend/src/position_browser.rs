@@ -2,6 +2,7 @@
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     model::{MatchSummary, MoveSeverity, Position},
+    search::literal_pattern,
 };
 use axum::{
     Json, Router,
@@ -350,21 +351,12 @@ fn json<T>(value: Result<Json<T>, JsonRejection>) -> ApiResult<T> {
 fn conflict(message: &str) -> ApiError {
     ApiError(StatusCode::CONFLICT, message.into())
 }
-fn literal(text: &str) -> String {
-    format!(
-        "%{}%",
-        text.to_lowercase()
-            .replace('\\', "\\\\")
-            .replace('%', "\\%")
-            .replace('_', "\\_")
-    )
-}
 fn text_filter(q: &mut QueryBuilder<'_, Postgres>, column: &str, text: &Option<String>) {
     if let Some(text) = text {
         q.push(" AND lower(")
             .push(column)
             .push(") LIKE ")
-            .push_bind(literal(text))
+            .push_bind(literal_pattern(text))
             .push(" ESCAPE '\\'");
     }
 }
@@ -581,13 +573,13 @@ async fn search(
         }
         if let Some(comment) = &filters.comment {
             sql.push(" AND lower(a.comment) LIKE ")
-                .push_bind(literal(comment))
+                .push_bind(literal_pattern(comment))
                 .push(" ESCAPE '\\'");
         }
         sql.push(")");
     }
     if let Some(q) = &filters.q {
-        let pattern = literal(q);
+        let pattern = literal_pattern(q);
         sql.push(" AND (lower(m.white || ' ' || m.black || ' ' || m.filename || ' ' || m.display_name || ' ' || coalesce(m.tournament,'') || ' ' || coalesce(m.round,'') || ' ' || p.position_id) LIKE ").push_bind(pattern.clone()).push(" ESCAPE '\\' OR EXISTS(SELECT 1 FROM annotations a WHERE ").push(NOTE_SCOPE).push(" AND a.search_text LIKE ").push_bind(pattern).push(" ESCAPE '\\'))");
     }
     if let Some(state) = filters.analysis_state {
@@ -677,15 +669,7 @@ async fn search(
                 engine: row.get("engine"),
                 plies: row.get("plies"),
                 equity_loss: loss,
-                severity: if loss >= 0.16 {
-                    MoveSeverity::VeryBad
-                } else if loss >= 0.08 {
-                    MoveSeverity::Bad
-                } else if loss >= 0.04 {
-                    MoveSeverity::Doubtful
-                } else {
-                    MoveSeverity::None
-                },
+                severity: MoveSeverity::from_normalized_loss(loss),
             }
         });
         let context: serde_json::Value = row.get("position");

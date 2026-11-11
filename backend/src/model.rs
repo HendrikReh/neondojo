@@ -260,6 +260,20 @@ pub enum MoveSeverity {
 }
 
 impl MoveSeverity {
+    pub(crate) const DOUBTFUL_MIN_LOSS: f64 = 0.04;
+
+    pub(crate) fn from_normalized_loss(loss: f64) -> Self {
+        if loss >= 0.16 {
+            Self::VeryBad
+        } else if loss >= 0.08 {
+            Self::Bad
+        } else if loss >= Self::DOUBTFUL_MIN_LOSS {
+            Self::Doubtful
+        } else {
+            Self::None
+        }
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::None => "none",

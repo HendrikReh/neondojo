@@ -1,23 +1,11 @@
 import { request } from './api';
 
-export interface AnalysisTimeEstimateResult {
-  match_id: string;
-  game_no: number | null;
-  engine_id: string;
-  engine_version: string | null;
-  plies: number;
-  position_count: number;
-  estimated_ms: number | null;
-  unavailable_reason:
-    'no_matching_benchmark' | 'engine_unavailable' | 'no_checker_moves' | null;
-  benchmark: {
-    id: string;
-    finished_at: string;
-    reference_name: string;
-    average_move_ms: number;
-    protocol_id: string;
-  } | null;
-}
+import type { components } from './generated-api';
+
+export type AnalysisTimeEstimateResult = Required<
+  components['schemas']['AnalysisTimeEstimate']
+>;
+
 export async function loadAnalysisTimeEstimate(
   matchId: string,
   plies: number,

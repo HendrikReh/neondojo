@@ -1,5 +1,6 @@
 //! Decoder for the public XG2 RichGame/ZLIBArchive container and TSaveRec.
 //! Format references and fixture provenance live in tests/fixtures/README.md.
+use super::sgf::escape_value;
 use anyhow::{Context, Result, bail, ensure};
 use flate2::read::ZlibDecoder;
 use std::io::Read;
@@ -176,9 +177,6 @@ pub(crate) fn xg_beaver_rule(input: &[u8]) -> Result<bool> {
         .context("XG: truncated match header")?;
     ensure!(header[8] == 0, "XG: match header must be the first record");
     bool_at(header, 102)
-}
-fn escape(s: &str) -> String {
-    s.replace('\\', "\\\\").replace(']', "\\]")
 }
 fn name(record: &[u8], unicode_at: usize, ansi_at: usize) -> Result<String> {
     let words: Vec<u16> = record[unicode_at..unicode_at + 258]
@@ -404,7 +402,7 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
                 if jacoby && length == 0 {
                     rules.push("Jacoby");
                 }
-                out.push_str(&format!("(;FF[4]GM[6]CA[UTF-8]AP[BGTutor:XG2]PW[{}]PB[{}]MI[length:{length}][game:{game_count}][ws:{white_score}][bs:{black_score}]",escape(&players[0]),escape(&players[1])));
+                out.push_str(&format!("(;FF[4]GM[6]CA[UTF-8]AP[BGTutor:XG2]PW[{}]PB[{}]MI[length:{length}][game:{game_count}][ws:{white_score}][bs:{black_score}]",escape_value(&players[0]),escape_value(&players[1])));
                 if !rules.is_empty() {
                     out.push_str(&format!("RU[{}]", rules.join(":")));
                 }

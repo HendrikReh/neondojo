@@ -1,3 +1,4 @@
+import { cursorSearchParams } from './cursor-search';
 import { request } from './api';
 import { AppError } from './i18n-core';
 import type { GamePlan } from './game-plan-api';
@@ -35,6 +36,7 @@ export type PositionBrowserPage = Required<Schema['PositionBrowserPage']>;
 export type PositionTransferStatus = Schema['PositionAddStatus'];
 export type PositionTransferResult = Schema['AddPositionsResult'];
 export const positionSelectionLimit = 200;
+export const POSITION_PAGE_SIZE = 25;
 const textFields = [
   'database_id',
   'q',
@@ -146,13 +148,13 @@ export function positionDraft(
 export function positionParams(
   definition: PositionFilterDefinition,
   after?: string,
-  limit = 25,
+  limit = POSITION_PAGE_SIZE,
 ) {
-  return new URLSearchParams({
-    filters: JSON.stringify(positionDefinition(positionDraft(definition))),
-    limit: String(limit),
-    ...(after ? { after } : {}),
-  });
+  return cursorSearchParams(
+    limit,
+    { filters: JSON.stringify(positionDefinition(positionDraft(definition))) },
+    after,
+  );
 }
 export function samePositionDefinition(
   a: PositionFilterDefinition,
@@ -173,14 +175,6 @@ export function togglePositionSelection(
     if (!checked) next.delete(id);
     else if (next.size < positionSelectionLimit) next.add(id);
   return next;
-}
-export function mergePositionPages(
-  previous: PositionBrowserHit[],
-  incoming: PositionBrowserHit[],
-) {
-  const merged = new Map(previous.map((hit) => [hit.position.id, hit]));
-  for (const hit of incoming) merged.set(hit.position.id, hit);
-  return [...merged.values()];
 }
 export const loadPositionPage = (
   definition: PositionFilterDefinition,

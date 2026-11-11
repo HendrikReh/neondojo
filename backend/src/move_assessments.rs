@@ -213,18 +213,6 @@ fn rounded_loss(played: f64, best: f64) -> Option<f64> {
     (played.is_finite() && best.is_finite() && loss.is_finite() && loss >= 0.0).then_some(loss)
 }
 
-fn severity(loss: f64) -> MoveSeverity {
-    if loss >= 0.16 {
-        MoveSeverity::VeryBad
-    } else if loss >= 0.08 {
-        MoveSeverity::Bad
-    } else if loss >= 0.04 {
-        MoveSeverity::Doubtful
-    } else {
-        MoveSeverity::None
-    }
-}
-
 fn native_assessment(position: &Position, row: NativeRow) -> Option<MoveAssessment> {
     let data = &row.data;
     if data["kind"] != "checker"
@@ -258,7 +246,7 @@ fn native_assessment(position: &Position, row: NativeRow) -> Option<MoveAssessme
     }
     Some(MoveAssessment {
         position_id: position.id,
-        severity: severity(loss),
+        severity: MoveSeverity::from_normalized_loss(loss),
         equity_loss: loss,
         source: AssessmentSource::Native,
         engine: row.engine,
@@ -292,7 +280,7 @@ fn hint_assessment(position: &Position, row: HintRow) -> Option<MoveAssessment> 
     let loss = rounded_loss(played.equity, best.equity)?;
     Some(MoveAssessment {
         position_id: position.id,
-        severity: severity(loss),
+        severity: MoveSeverity::from_normalized_loss(loss),
         equity_loss: loss,
         source: AssessmentSource::Native,
         engine: analysis.engine,
@@ -338,7 +326,7 @@ fn imported_assessment(
         );
     Some(MoveAssessment {
         position_id: position.id,
-        severity: severity(loss),
+        severity: MoveSeverity::from_normalized_loss(loss),
         equity_loss: loss,
         source: AssessmentSource::Imported,
         engine,

@@ -1,3 +1,4 @@
+import { cursorSearchParams } from './cursor-search';
 import { request, type Page, type Position } from './api';
 import { AppError } from './i18n-core';
 import type { components } from './generated-api';
@@ -104,13 +105,11 @@ export function libraryParams(
   direction: string,
   after?: string,
 ) {
-  const params = new URLSearchParams({ sort, direction, limit: '50' });
-  if (databaseId) params.set('database_id', databaseId);
-  Object.entries(filters).forEach(([key, value]) => {
-    if (value.trim()) params.set(key, value.trim());
-  });
-  if (after) params.set('after', after);
-  return params;
+  return cursorSearchParams(
+    50,
+    { sort, direction, database_id: databaseId, ...filters },
+    after,
+  );
 }
 export const loadLibrary = (
   databaseId: string,

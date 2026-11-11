@@ -6,6 +6,7 @@ import {
 } from './play-api';
 import { AppError } from './i18n-core';
 import type { BoardView } from './move-preview';
+import { useBoardReviewShortcuts } from './useBoardReviewShortcuts';
 
 /** History snapshots never replace the live checkpoint or unconfirmed steps. */
 export function usePlayReview(session: PlaySession | null, enabled: boolean) {
@@ -72,40 +73,11 @@ export function usePlayReview(session: PlaySession | null, enabled: boolean) {
     index !== null && result.key === key
       ? result.data?.items[index]
       : undefined;
-  useEffect(() => {
-    if (!active || !enabled) return;
-    function changeView(event: KeyboardEvent) {
-      if (
-        event.defaultPrevented ||
-        !['ArrowLeft', 'ArrowRight'].includes(event.key) ||
-        event.altKey ||
-        event.ctrlKey ||
-        event.metaKey ||
-        event.shiftKey
-      )
-        return;
-      const target = event.target instanceof Element ? event.target : null;
-      if (
-        document.querySelector('dialog[open]') ||
-        target?.closest(
-          'input,textarea,select,a,[contenteditable="true"],[contenteditable=""],[role="tablist"],[role="dialog"]',
-        )
-      )
-        return;
-      const button = target?.closest('button');
-      if (
-        button &&
-        !button.matches('.play-history .move-history-row') &&
-        !button.closest('.board-view-buttons')
-      )
-        return;
-      event.preventDefault();
-      event.stopPropagation();
-      setView(event.key === 'ArrowLeft' ? 'before' : 'after');
-    }
-    window.addEventListener('keydown', changeView, true);
-    return () => window.removeEventListener('keydown', changeView, true);
-  }, [active, enabled]);
+  useBoardReviewShortcuts(
+    active && enabled,
+    '.play-history .move-history-row',
+    setView,
+  );
   return {
     active,
     index,

@@ -131,6 +131,15 @@ test('compact position rows retain a right-hand board preview at desktop sizes',
     path: '/tmp/bgtutor-desktop-positions-1800.png',
     fullPage: true,
   });
+  const positionPanel = page.locator('#workspace-panel-positions');
+  const previewBoard = positionPanel.locator('.position-preview .board');
+  const selectedRow = positionPanel.locator('tr.position-preview-selected');
+  const selectedId = await selectedRow.getAttribute('data-position-id');
+  await page.getByRole('tab', { name: 'Study', exact: true }).click();
+  await expect(previewBoard).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Positions', exact: true }).click();
+  await expect(previewBoard).toBeVisible();
+  await expect(selectedRow).toHaveAttribute('data-position-id', selectedId!);
 });
 
 test('position widths persist independently and optional played-move widths survive toggling', async ({

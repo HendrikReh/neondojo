@@ -1,10 +1,8 @@
 //! Read-only scope estimates calibrated by complete local native measurements.
-use super::{
-    BenchmarkRun, Machine, machine, protocol, reference, resolve_binary, running_engine_version,
-};
+use super::{BenchmarkRun, Machine, machine, protocol, reference, running_engine_version};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
-    engine::Engine,
+    engine::{Engine, resolve_binary},
     store,
 };
 use axum::{

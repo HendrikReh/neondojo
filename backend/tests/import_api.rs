@@ -34,7 +34,7 @@ async fn import_uses_unsorted_unless_a_database_is_selected(pool: PgPool) {
     .await
     .unwrap();
     for (uri, expected_name) in [
-        ("/api/imports".to_owned(), "Unsortiert"),
+        ("/api/imports".to_owned(), "Unsorted"),
         (format!("/api/imports?database_id={selected}"), "Demo BGF"),
     ] {
         let mut request = upload("match.sgf", original);

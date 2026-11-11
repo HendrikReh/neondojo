@@ -54,10 +54,32 @@ async fn database(pool: &PgPool, name: &str) -> Uuid {
 async fn default_database_and_optimistic_update(pool: PgPool) {
     let (status, list) = request(&pool, "GET", "/api/databases", None).await;
     assert_eq!(status, 200, "{list}");
-    assert_eq!(list[0]["name"], "Unsortiert");
+    assert_eq!(list[0]["name"], "Unsorted");
     assert_eq!(list[0]["is_default"], true);
+    assert_eq!(list[0]["is_system"], true);
     let default_id = list[0]["id"].as_str().unwrap();
     let default_version = list[0]["version"].as_i64().unwrap();
+    assert_eq!(
+        request(
+            &pool,
+            "PUT",
+            &format!("/api/databases/{default_id}"),
+            Some(json!({"name":"Renamed system database","version":default_version}))
+        )
+        .await
+        .0,
+        409
+    );
+    let (status, updated) = request(
+        &pool,
+        "PUT",
+        &format!("/api/databases/{default_id}"),
+        Some(json!({"name":"Unsorted","description":"Imports","version":default_version})),
+    )
+    .await;
+    assert_eq!(status, 200, "{updated}");
+    assert_eq!(updated["description"], "Imports");
+    let default_version = updated["version"].as_i64().unwrap();
     let id = database(&pool, "Tournament").await;
     assert_eq!(
         request(
@@ -93,6 +115,137 @@ async fn default_database_and_optimistic_update(pool: PgPool) {
         409
     );
 }
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn bot_matches_is_provisioned_and_protected_before_play(pool: PgPool) {
+    let (_, databases) = request(&pool, "GET", "/api/databases", None).await;
+    let bot = databases
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|database| database["name"] == "Bot Matches")
+        .unwrap();
+    assert_eq!(bot["id"], bgtutor::play::BOT_DATABASE_ID.to_string());
+    assert_eq!(bot["is_system"], true);
+    assert_eq!(bot["is_default"], false);
+    let id = bot["id"].as_str().unwrap();
+    let version = bot["version"].as_i64().unwrap();
+    let path = format!("/api/databases/{id}");
+    assert_eq!(
+        request(
+            &pool,
+            "PUT",
+            &path,
+            Some(json!({"name":"Renamed","version":version}))
+        )
+        .await
+        .0,
+        409
+    );
+    assert_eq!(
+        request(
+            &pool,
+            "DELETE",
+            &format!("{path}?version={version}&delete_matches=true"),
+            None
+        )
+        .await
+        .0,
+        409
+    );
+    let imported = target(&pool, "Bot fixture").await;
+    sqlx::query("UPDATE matches SET database_id=$1 WHERE id=$2")
+        .bind(bgtutor::play::BOT_DATABASE_ID)
+        .bind(imported)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        request(
+            &pool,
+            "DELETE",
+            &format!("{path}/matches?version={version}"),
+            None
+        )
+        .await
+        .0,
+        204
+    );
+    let (_, databases) = request(&pool, "GET", "/api/databases", None).await;
+    let bot = databases
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|database| database["id"] == id)
+        .unwrap();
+    assert_eq!(bot["match_count"], 0);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn clearing_unsorted_preserves_the_system_database_and_other_matches(pool: PgPool) {
+    let (_, databases) = request(&pool, "GET", "/api/databases", None).await;
+    let system = &databases[0];
+    let id = system["id"].as_str().unwrap();
+    let version = system["version"].as_i64().unwrap();
+    let clear = format!("/api/databases/{id}/matches?version={version}");
+    let unsorted = target(&pool, "Unsorted match").await;
+    let other = target(&pool, "Sorted match").await;
+    let custom = database(&pool, "Tournament").await;
+    let (status, moved) = request(
+        &pool,
+        "POST",
+        "/api/library/actions",
+        Some(json!({"action":"move","match_ids":[other],"target_database_id":custom})),
+    )
+    .await;
+    assert_eq!(status, 200, "{moved}");
+    assert_eq!(moved["results"][0]["status"], "moved");
+    let owner: Uuid = sqlx::query_scalar("SELECT database_id FROM matches WHERE id=$1")
+        .bind(unsorted)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(owner.to_string(), id);
+
+    let job = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO jobs(id,match_uuid,kind,plies,status) VALUES($1,$2,'match',0,'queued')",
+    )
+    .bind(job)
+    .bind(unsorted)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(request(&pool, "DELETE", &clear, None).await.0, 409);
+    assert_eq!(
+        request(&pool, "GET", &format!("/api/matches/{unsorted}"), None)
+            .await
+            .0,
+        200
+    );
+
+    sqlx::query("DELETE FROM jobs WHERE id=$1")
+        .bind(job)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(request(&pool, "DELETE", &clear, None).await.0, 204);
+    let (_, after) = request(&pool, "GET", "/api/databases", None).await;
+    assert_eq!(after[0]["id"], id);
+    assert_eq!(after[0]["name"], "Unsorted");
+    assert_eq!(after[0]["is_default"], true);
+    assert_eq!(after[0]["match_count"], 0);
+    assert!(after[0]["version"].as_i64().unwrap() > version);
+    assert_eq!(request(&pool, "DELETE", &clear, None).await.0, 409);
+    assert_eq!(
+        request(&pool, "GET", &format!("/api/matches/{other}"), None)
+            .await
+            .0,
+        200
+    );
+}
+
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
 async fn filters_metadata_and_scope_bound_cursor(pool: PgPool) {

@@ -61,6 +61,49 @@ async function search(page: Page, id: string) {
 }
 const rows = (page: Page) => page.locator('.database-table tbody tr');
 
+test('retrying a failed match page clears the error and keeps the loaded rows', async ({
+  page,
+}) => {
+  const { database } = await fixture(page);
+  const first = await (
+    await page.request.get(`/api/library/matches?database_id=${database.id}`)
+  ).json();
+  let attempts = 0;
+  await page.route('**/api/library/matches?*', (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    if (params.get('database_id') !== database.id) return route.fallback();
+    if (!params.has('after'))
+      return route.fulfill({
+        json: { items: first.items.slice(0, 1), next_cursor: 'second' },
+      });
+    if (++attempts === 1)
+      return route.fulfill({
+        status: 503,
+        json: { error: 'Page unavailable' },
+      });
+    return route.fulfill({
+      json: { items: first.items.slice(1), next_cursor: null },
+    });
+  });
+  await page.reload();
+  await page.getByRole('tab', { name: 'Match database', exact: true }).click();
+  await expect(rows(page)).toHaveCount(1);
+  const more = page.getByRole('button', {
+    name: 'Load more matches',
+    exact: true,
+  });
+  const error = page
+    .locator('.library-search-toolbar')
+    .locator('..')
+    .getByRole('alert');
+  await more.click();
+  await expect(error).toBeVisible();
+  await expect(rows(page)).toHaveCount(1);
+  await more.click();
+  await expect(rows(page)).toHaveCount(3);
+  await expect(error).toHaveCount(0);
+});
+
 test('position matches use the common table, preserve other filters and open the exact occurrence', async ({
   page,
 }) => {

@@ -118,18 +118,6 @@ pub struct PlayFeedbackRequest {
     pub operation: FeedbackOperation,
     pub decision_id: Option<Uuid>,
 }
-fn severity(loss: f64) -> String {
-    if loss >= 0.16 {
-        "very_bad"
-    } else if loss >= 0.08 {
-        "bad"
-    } else if loss >= 0.04 {
-        "doubtful"
-    } else {
-        "none"
-    }
-    .into()
-}
 pub(super) fn empty_decision(alternatives: Vec<PlayAlternative>) -> PlayDecision {
     PlayDecision {
         first_rating_decisions: None,
@@ -173,7 +161,7 @@ pub(super) fn stage_choice(
         .find(|a| a.action == action && a.move_index == move_index)
         .ok_or_else(|| ApiError::invalid("Analysis did not cover the selected decision"))?;
     let loss = chosen.loss;
-    let mark = severity(loss);
+    let mark = crate::model::MoveSeverity::from_normalized_loss(loss).as_str();
     let rating_decisions = chosen.rating_decisions;
     let assisted = decision.assisted;
     if decision.original_action.is_none() {
@@ -182,7 +170,7 @@ pub(super) fn stage_choice(
         decision.original_notation = Some(chosen.notation.clone());
         decision.first_rating_decisions = Some(rating_decisions);
         decision.first_loss = Some(loss);
-        decision.first_severity = Some(mark.clone());
+        decision.first_severity = Some(mark.into());
     }
     decision.attempts.push(PlayAttempt {
         rating_decisions: Some(rating_decisions),
@@ -190,7 +178,7 @@ pub(super) fn stage_choice(
         action: action.into(),
         move_index,
         loss: Some(loss),
-        severity: Some(mark.clone()),
+        severity: Some(mark.into()),
         assisted,
     });
     decision.rating_decisions = Some(rating_decisions);
@@ -198,7 +186,7 @@ pub(super) fn stage_choice(
     decision.move_index = move_index;
     decision.notation = Some(chosen.notation.clone());
     decision.loss = Some(loss);
-    decision.severity = Some(mark);
+    decision.severity = Some(mark.into());
     decision.warning = session.play_mode == PlayMode::Tutor && loss >= session.tutor_threshold;
     if session.play_mode == PlayMode::Coach
         || (session.play_mode == PlayMode::Training && session.training_auto_analysis)
@@ -309,8 +297,14 @@ pub(super) fn build_review(
         final_choice_loss,
         first_attempt_count,
         retry_count: session.decisions.iter().map(|d| d.retry_count).sum(),
-        first_attempt_rating: (has_coverage && relevant > 0)
-            .then(|| 500.0 * (native_loss + delta).max(0.0) / relevant as f64),
+        first_attempt_rating: if has_coverage {
+            crate::match_analysis::performance_rating_value(
+                (native_loss + delta).max(0.0),
+                relevant,
+            )
+        } else {
+            None
+        },
         first_attempt_rating_decisions: i32::try_from(relevant)
             .ok()
             .filter(|n| *n >= 0)

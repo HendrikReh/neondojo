@@ -316,8 +316,10 @@ fn accumulate_performance_rating(summary: &mut MatchAnalysisSummary, game: &Anal
         player.unforced_checker_moves += native.unforced_checker_moves;
         player.close_cube_decisions += native.close_cube_decisions;
         let decisions = player.unforced_checker_moves + player.close_cube_decisions;
-        player.value =
-            (decisions > 0).then(|| 500.0 * player.normalized_equity_loss / decisions as f64);
+        player.value = crate::match_analysis::performance_rating_value(
+            player.normalized_equity_loss,
+            i64::from(decisions),
+        );
     }
     rating.games += 1;
 }

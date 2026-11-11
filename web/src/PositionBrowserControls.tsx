@@ -1,4 +1,8 @@
 import ActionButton from './ActionButton';
+import SearchFilterForm, {
+  SearchFilterInput,
+  SearchFilterSelect,
+} from './SearchFilterForm';
 import { useGamePlanText } from './game-plan-messages';
 import { mistakeGamePlans } from './recurring-mistakes-api';
 import { useEffect, useRef, useState } from 'react';
@@ -46,143 +50,97 @@ export default function PositionBrowserControls({
     min = 0,
     max?: number,
   ) => (
-    <label key={key}>
-      <span>{p(label)}</span>
-      <input
-        type={type}
-        min={type === 'number' ? min : undefined}
-        max={max}
-        step={
-          key === 'min_loss' || key === 'max_loss'
-            ? 'any'
-            : type === 'number'
-              ? 1
-              : undefined
-        }
-        value={filters[key]}
-        onChange={(event) =>
-          onChange({ ...filters, [key]: event.target.value })
-        }
-      />
-    </label>
+    <SearchFilterInput
+      label={p(label)}
+      type={type}
+      min={type === 'number' ? min : undefined}
+      max={max}
+      step={
+        key === 'min_loss' || key === 'max_loss'
+          ? 'any'
+          : type === 'number'
+            ? 1
+            : undefined
+      }
+      value={filters[key]}
+      onChange={(value) => onChange({ ...filters, [key]: value })}
+    />
   );
   const select = (
     key: keyof PositionFilterDraft,
     label: PositionMessageKey,
     options: [string, PositionMessageKey][],
   ) => (
-    <label>
-      <span>{p(label)}</span>
-      <select
-        value={filters[key]}
-        onChange={(event) =>
-          onChange({ ...filters, [key]: event.target.value })
-        }
-      >
-        {options.map(([value, text]) => (
-          <option key={value} value={value}>
-            {p(text)}
-          </option>
-        ))}
-      </select>
-    </label>
+    <SearchFilterSelect
+      label={p(label)}
+      value={filters[key]}
+      onChange={(value) => onChange({ ...filters, [key]: value })}
+    >
+      {options.map(([value, text]) => (
+        <option key={value} value={value}>
+          {p(text)}
+        </option>
+      ))}
+    </SearchFilterSelect>
   );
   const databaseMissing =
     !!filters.database_id &&
     !databases.some((database) => database.id === filters.database_id);
   return (
-    <div className="position-controls">
-      <SavedPositionSearches
-        filters={filters}
-        onLoad={onLoad}
-        revision={revision}
-      />
-      <form
-        className="position-filter-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSearch();
-        }}
-      >
-        <div className="position-search-row">
-          {field('q', 'q')}
-          {field('player', 'player')}
-          <label>
-            <span>{p('database')}</span>
-            <select
-              value={filters.database_id}
-              onChange={(event) =>
-                onChange({ ...filters, database_id: event.target.value })
-              }
-            >
-              <option value="">{p('allDatabases')}</option>
-              {databaseMissing && (
-                <option value={filters.database_id}>
-                  {p('missing')} ({filters.database_id})
-                </option>
-              )}
-              {databases.map((database) => (
-                <option key={database.id} value={database.id}>
-                  {database.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <ActionButton
-            icon="search"
-            label={p('search')}
-            compact
-            className="primary"
-            disabled={busy}
-          />
-        </div>
-        <details className="position-filter-details">
-          <summary>{p('filters')}</summary>
-          <div className="position-filter-grid">
-            <label>
-              <span>{planText('title')}</span>
-              <select
-                value={filters.game_plan ?? ''}
-                onChange={(event) =>
-                  onChange({ ...filters, game_plan: event.target.value })
-                }
-              >
-                <option value="">{p('any')}</option>
-                {mistakeGamePlans.map((plan) => (
-                  <option key={plan} value={plan}>
-                    {planText(plan)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {field('match_name', 'matchName')}
-            {field('tournament', 'tournament')}
-            {field('round', 'round')}
-            {field('tag', 'tag')}
-            {field('comment', 'comment')}
-            {field('position_id', 'checkerId')}
-            {field('match_points_min', 'minPoints', 'number')}
-            {field('match_points_max', 'maxPoints', 'number')}
-            {field('die1', 'die1', 'number', 1, 6)}
-            {field('die2', 'die2', 'number', 1, 6)}
-            {field('white_score', 'whiteScore', 'number')}
-            {field('black_score', 'blackScore', 'number')}
-            {select('crawford', 'crawford', [
-              ['', 'any'],
-              ['true', 'yes'],
-              ['false', 'no'],
-            ])}
-            {field('cube_value', 'cube', 'number', 1, 32768)}
-            {select('analysis_state', 'analysis', [
-              ['', 'any'],
-              ['ready', 'ready'],
-              ['missing', 'missing'],
-            ])}
-            {field('min_loss', 'minLoss', 'number')}
-            {field('max_loss', 'maxLoss', 'number')}
-          </div>
-        </details>
-        <div className="position-filter-footer">
+    <SearchFilterForm
+      filters={filters}
+      onChange={onChange}
+      onSearch={onSearch}
+      onClear={onClear}
+      searchLabel={p('search')}
+      searchDisabled={busy}
+      savedSearches={
+        <SavedPositionSearches
+          filters={filters}
+          onLoad={onLoad}
+          revision={revision}
+        />
+      }
+      scope={
+        <SearchFilterSelect
+          label={p('database')}
+          value={filters.database_id}
+          onChange={(database_id) => onChange({ ...filters, database_id })}
+        >
+          <option value="">{p('allDatabases')}</option>
+          {databaseMissing && (
+            <option value={filters.database_id}>
+              {p('missing')} ({filters.database_id})
+            </option>
+          )}
+          {databases.map((database) => (
+            <option key={database.id} value={database.id}>
+              {database.name}
+            </option>
+          ))}
+        </SearchFilterSelect>
+      }
+      beforeTextFilters={
+        <>
+          <SearchFilterSelect
+            label={planText('title')}
+            value={filters.game_plan ?? ''}
+            onChange={(game_plan) => onChange({ ...filters, game_plan })}
+          >
+            <option value="">{p('any')}</option>
+            {mistakeGamePlans.map((plan) => (
+              <option key={plan} value={plan}>
+                {planText(plan)}
+              </option>
+            ))}
+          </SearchFilterSelect>
+          {field('match_name', 'matchName')}
+          {field('tournament', 'tournament')}
+          {field('round', 'round')}
+        </>
+      }
+      footer={
+        <>
           {select('sort', 'sort', [
             ['match', 'sortMatch'],
             ['loss', 'sortLoss'],
@@ -205,16 +163,29 @@ export default function PositionBrowserControls({
             ['asc', 'ascending'],
             ['desc', 'descending'],
           ])}
-          <ActionButton
-            icon="clear"
-            label={p('clear')}
-            compact
-            type="button"
-            onClick={onClear}
-          />
-        </div>
-      </form>
-    </div>
+        </>
+      }
+    >
+      {field('match_points_min', 'minPoints', 'number')}
+      {field('match_points_max', 'maxPoints', 'number')}
+      {field('die1', 'die1', 'number', 1, 6)}
+      {field('die2', 'die2', 'number', 1, 6)}
+      {field('white_score', 'whiteScore', 'number')}
+      {field('black_score', 'blackScore', 'number')}
+      {select('crawford', 'crawford', [
+        ['', 'any'],
+        ['true', 'yes'],
+        ['false', 'no'],
+      ])}
+      {field('cube_value', 'cube', 'number', 1, 32768)}
+      {select('analysis_state', 'analysis', [
+        ['', 'any'],
+        ['ready', 'ready'],
+        ['missing', 'missing'],
+      ])}
+      {field('min_loss', 'minLoss', 'number')}
+      {field('max_loss', 'maxLoss', 'number')}
+    </SearchFilterForm>
   );
 }
 

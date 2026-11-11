@@ -58,8 +58,11 @@
   overflow-wrap: anywhere;
   margin: 4px 0;
 }
-.database-collection-actions button {
-  justify-self: start;
+.database-collection-buttons {
+  display: flex;
+  gap: 7px;
+}
+.database-collection-buttons button {
   text-align: left;
   font-size: var(--font-size-control);
 }

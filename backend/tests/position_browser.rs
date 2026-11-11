@@ -848,6 +848,7 @@ async fn native_loss_uses_highest_completed_depth_and_hints_only_mark_ready(pool
         authoritative.to_string()
     );
     assert_eq!(ready["items"][0]["native_error"]["equity_loss"], 0.09);
+    assert_eq!(ready["items"][0]["native_error"]["severity"], "bad");
     assert_eq!(ready["items"][1]["native_error"], Value::Null);
     assert_eq!(
         search(app.clone(), json!({"min_loss":0.1})).await["items"],
@@ -984,13 +985,14 @@ async fn generated_position_context_works_with_the_restore_search_path(pool: PgP
         .execute(&mut *tx)
         .await
         .unwrap();
-    let context: (
+    type GeneratedContext = (
         Option<i32>,
         Option<i32>,
         Option<bool>,
         Option<i32>,
         Option<i32>,
-    ) = sqlx::query_as(
+    );
+    let context: GeneratedContext = sqlx::query_as(
         "UPDATE public.positions SET gnubg_match_id='QYkGAAAAAAAA' WHERE id=$1
              RETURNING source_white_score, source_black_score, source_crawford,
                        source_cube_value, source_cube_owner",

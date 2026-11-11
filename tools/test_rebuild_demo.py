@@ -162,13 +162,15 @@ class DemoPostgresGuardTests(unittest.TestCase):
         self.database = 'demo_guard_test_'+uuid.uuid4().hex
         subprocess.run(['docker', 'exec', demo.CONTAINER, 'createdb', '-U', 'bgtutor', self.database], check=True, capture_output=True)
         self.addCleanup(lambda: subprocess.run(['docker', 'exec', demo.CONTAINER, 'dropdb', '-U', 'bgtutor', '--force', self.database], check=True, capture_output=True))
-        self.run_sql('''CREATE TABLE databases(id uuid PRIMARY KEY,name text,description text,version bigint DEFAULT 0,is_default boolean NOT NULL DEFAULT false);
+        self.run_sql('''CREATE TABLE databases(id uuid PRIMARY KEY,name text,description text,version bigint DEFAULT 0,is_system boolean NOT NULL DEFAULT false);
 CREATE TABLE matches(id uuid PRIMARY KEY,database_id uuid REFERENCES databases(id),sha256 text);
 CREATE TABLE learning_history(id integer);
 INSERT INTO learning_history VALUES(1);''')
         self.report['database_identity'] = json.loads(self.run_sql(demo.IDENTITY_SQL+';'))
         for id in [demo.DEFAULT, *self.report['databases'].values()]:
             self.run_sql(f"INSERT INTO databases(id,name) VALUES('{id}','Collection');")
+        self.bot = str(uuid.UUID(int=3))
+        self.run_sql(f"INSERT INTO databases(id,name,is_system) VALUES('{self.bot}','Bot Matches',true);")
         self.old_match = str(uuid.uuid4())
         self.run_sql(f"INSERT INTO matches VALUES('{self.old_match}','{demo.DEFAULT}','{'b'*64}');")
         for item in self.report['files']:
@@ -217,7 +219,8 @@ INSERT INTO learning_history VALUES(1);''')
         statement = demo.activation_statement(self.report)
         self.run_sql(statement)
         self.assertEqual(self.run_sql('SELECT count(*) FROM matches;').strip(), '3')
-        self.assertEqual(self.run_sql('SELECT count(*) FROM databases;').strip(), '3')
+        self.assertEqual(self.run_sql('SELECT count(*) FROM databases;').strip(), '4')
+        self.assertEqual(self.run_sql(f"SELECT name FROM databases WHERE id='{self.bot}';").strip(), 'Bot Matches')
         self.assertEqual(self.run_sql('SELECT count(*) FROM learning_history;').strip(), '1')
         self.assertEqual(self.run_sql(f"SELECT count(*) FROM matches WHERE database_id='{demo.DEFAULT}';").strip(), '1')
         self.assert_rejected_without_changes(self.report)

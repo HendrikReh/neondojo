@@ -1,15 +1,26 @@
-import Tooltip from './Tooltip';
-import ActionButton from './ActionButton';
-import { useState, type KeyboardEvent } from 'react';
-import Board, { type Theme } from './Board';
+import { useState, type ReactNode } from 'react';
+import type { Theme } from './themes';
+import SearchPagination, { useSearchResultPage } from './SearchPagination';
+import {
+  SearchResultList,
+  SearchResultNotes,
+  SearchResultPlayers,
+  SearchResultRow,
+  SearchResultTable,
+  SearchResultTags,
+} from './SearchResultList';
+import {
+  SearchPreviewBoard,
+  SearchPreviewDetails,
+  SearchResultPreview,
+} from './SearchResultPreview';
 import { matchContext } from './boardMath';
 import { useI18n } from './i18n';
 import { useLearningText } from './learning-messages';
 import type { CardQuestion, Deck } from './learning-api';
-import type { CardBrowseContext } from './card-search-api';
+import { CARD_PAGE_SIZE, type CardBrowseContext } from './card-search-api';
 import { useCardSearchText } from './card-search-messages';
 import { usePositionText } from './position-browser-messages';
-import './learning-card-browser.css';
 
 export default function LearningCardBrowser({
   cards,
@@ -21,6 +32,7 @@ export default function LearningCardBrowser({
   total,
   loading = false,
   decks = [],
+  children,
 }: {
   cards: readonly (CardQuestion & { browse?: CardBrowseContext })[];
   total?: number;
@@ -29,8 +41,9 @@ export default function LearningCardBrowser({
   theme: Theme;
   hasMore: boolean;
   moreLoading: boolean;
-  onMore: () => void;
+  onMore: () => Promise<boolean>;
   visible?: boolean;
+  children?: ReactNode;
 }) {
   const searchT = useCardSearchText(),
     p = usePositionText();
@@ -39,6 +52,13 @@ export default function LearningCardBrowser({
   const t = useLearningText(),
     { t: uiT, formatNumber } = useI18n();
   const [selectedId, setSelectedId] = useState<string>();
+  const [pageIndex, setPageIndex] = useState(0);
+  const { page, lastPage, start, rows } = useSearchResultPage(
+    cards,
+    CARD_PAGE_SIZE,
+    pageIndex,
+  );
+  const ids = rows.map((card) => card.id);
   const selected = cards.find((card) => card.id === selectedId) ?? cards[0];
   const context = selected
     ? matchContext(selected.position.gnubg_match_id)
@@ -51,162 +71,153 @@ export default function LearningCardBrowser({
           ? 'questionResponse'
           : 'questionOffer',
     );
-  function rowKey(event: KeyboardEvent<HTMLTableRowElement>, index: number) {
-    if (event.target !== event.currentTarget) return;
-    let next = index;
-    if (event.key === 'ArrowDown') next++;
-    else if (event.key === 'ArrowUp') next--;
-    else if (event.key === 'Home') next = 0;
-    else if (event.key === 'End') next = cards.length - 1;
-    else if (event.key !== 'Enter' && event.key !== ' ') return;
-    event.preventDefault();
-    next = Math.max(0, Math.min(cards.length - 1, next));
-    setSelectedId(cards[next].id);
-    document.getElementById(`learning-card-${cards[next].id}`)?.focus();
-  }
-  return (
-    <div className="learning-card-browser">
-      <div className="learning-card-list">
-        <div className="learning-results-heading">
-          <h3>{p('results')}</h3>
-          <span role="status">
-            {searchT('found', { count: total ?? cards.length })}
-          </span>
-        </div>
-        <div className="learning-card-table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">{t('question')}</th>
-                <th scope="col">{p('player')}</th>
-                <th scope="col">{p('opponent')}</th>
-                <th scope="col">{p('decks')}</th>
-                <th scope="col">{t('reviews')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {cards.map((card, index) => (
-                <Tooltip
-                  as="tr"
-                  key={card.id}
-                  id={`learning-card-${card.id}`}
-                  data-card-id={card.id}
-                  text={[
-                    question(card),
-                    card.players.join(' · '),
-                    card.position.position_id,
-                    card.browse?.decks.map(deckName).join(', '),
-                    card.browse?.tags.join(', '),
-                    card.browse?.comment_excerpt,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                  tabIndex={0}
-                  aria-selected={selected?.id === card.id}
-                  className={
-                    selected?.id === card.id
-                      ? 'learning-card-selected'
-                      : undefined
-                  }
-                  onClick={(event) => {
-                    event.currentTarget.focus();
-                    setSelectedId(card.id);
-                  }}
-                  onKeyDown={(event) => rowKey(event, index)}
-                >
-                  <td>
-                    <button
-                      type="button"
-                      className="learning-card-select"
-                      aria-label={t('previewCard', { number: index + 1 })}
-                      onClick={() => setSelectedId(card.id)}
-                    >
-                      {question(card)}
-                    </button>
-                    <small>{card.position.position_id}</small>
-                  </td>
-                  <td>{card.players[card.position.player]}</td>
-                  <td>{card.players[1 - card.position.player]}</td>
-                  <td>
-                    {card.browse?.decks.length
-                      ? card.browse.decks.map(deckName).join(', ')
-                      : p('noDecks')}
-                  </td>
-                  <td>{formatNumber(card.review_count)}</td>
-                </Tooltip>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {!loading && !cards.length && (
-          <p className="learning-no-results" role="status">
-            {searchT('noResults')}
+  const preview = (
+    <SearchResultPreview
+      className="learning-card-preview"
+      title={t('cardPreview')}
+      hint={t('previewHint')}
+      data-card-id={selected?.id}
+    >
+      {selected && context && (
+        <>
+          <h4>{question(selected)}</h4>
+          <p className="position-preview-context">
+            {context.length
+              ? uiT('app.matchLength', { count: context.length })
+              : `${uiT('common.moneyGame')} · Jacoby ${context.jacoby ? '✓' : '✗'}`}
           </p>
-        )}
-        {hasMore && (
-          <ActionButton
-            icon="more"
-            label={t(moreLoading ? 'loading' : 'more')}
-            compact
-            disabled={moreLoading}
-            onClick={onMore}
+          <SearchPreviewBoard
+            position={selected.position}
+            white={selected.players[0]}
+            black={selected.players[1]}
+            theme={theme}
+            label={t('cardPreview')}
+            visible={visible}
           >
-            {t(moreLoading ? 'loading' : 'more')}
-          </ActionButton>
-        )}
-      </div>
-      <aside
-        className="learning-card-preview"
-        aria-label={t('cardPreview')}
-        data-card-id={selected?.id}
-      >
-        <h3>{t('cardPreview')}</h3>
-        {!selected || !context ? (
-          <p>{t('previewHint')}</p>
-        ) : (
-          <>
-            <h4>{question(selected)}</h4>
-            <p className="study-context">
-              {context.length
-                ? uiT('app.matchLength', { count: context.length })
-                : `${uiT('common.moneyGame')} · Jacoby ${context.jacoby ? '✓' : '✗'}`}{' '}
-              ·{' '}
-              {uiT('app.toMove', {
-                player: selected.players[selected.position.player],
-              })}
-            </p>
-            {selected.browse?.decks.length ? (
-              <p className="learning-preview-decks">
-                {p('decks')}: {selected.browse.decks.map(deckName).join(', ')}
-              </p>
-            ) : null}
             {selected.kind === 'cube_response' && (
               <p>{t('offeredCube', { value: context.cube * 2 })}</p>
             )}
-            {visible && (
-              <Board
-                position={selected.position}
-                white={selected.players[0]}
-                black={selected.players[1]}
-                theme={theme}
-                previewLabel={t('cardPreview')}
-              />
-            )}
-            {!!selected.browse?.tags.length && (
-              <div className="learning-preview-tags">
-                {selected.browse.tags.map((tag) => (
-                  <span key={tag}>{tag}</span>
-                ))}
-              </div>
-            )}
-            {!!selected.browse?.comment_excerpt && (
-              <p className="learning-preview-comment">
-                {selected.browse.comment_excerpt}
-              </p>
-            )}
-          </>
-        )}
-      </aside>
-    </div>
+          </SearchPreviewBoard>
+          <SearchPreviewDetails
+            positionId={selected.position.position_id}
+            decks={selected.browse?.decks.map(deckName).join(', ')}
+          />
+          {!!selected.browse?.tags.length && (
+            <div className="annotation-tags">
+              <SearchResultTags tags={selected.browse.tags} />
+            </div>
+          )}
+          {!!selected.browse?.comment_excerpt && (
+            <p className="learning-preview-comment">
+              {selected.browse.comment_excerpt}
+            </p>
+          )}
+        </>
+      )}
+    </SearchResultPreview>
+  );
+  return (
+    <SearchResultList
+      className="learning-card-browser"
+      listClassName="learning-card-list"
+      busy={loading || moreLoading}
+      count={
+        <span role="status">
+          {searchT('found', { count: total ?? cards.length })}
+        </span>
+      }
+      preview={preview}
+    >
+      {loading && <p role="status">{p('loading')}</p>}
+      {rows.length > 0 && (
+        <SearchResultTable
+          key={page}
+          scrollClassName="learning-card-table-scroll"
+        >
+          <thead>
+            <tr>
+              <th scope="col">{t('question')}</th>
+              <th scope="col">{p('player')}</th>
+              <th scope="col">{p('opponent')}</th>
+              <th scope="col">{p('decks')}</th>
+              <th scope="col">{p('notes')}</th>
+              <th scope="col">{t('reviews')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((card, index) => (
+              <SearchResultRow
+                key={card.id}
+                ids={ids}
+                index={index}
+                idPrefix="learning-card-"
+                data-card-id={card.id}
+                text={[
+                  question(card),
+                  card.players.join(' · '),
+                  card.position.position_id,
+                  card.browse?.decks.map(deckName).join(', '),
+                  card.browse?.tags.join(', '),
+                  card.browse?.comment_excerpt,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+                aria-selected={selected?.id === card.id}
+                active={selected?.id === card.id}
+                selectedClassName="learning-card-selected"
+                jumpToEdges
+                onPreview={setSelectedId}
+              >
+                <td>
+                  <button
+                    type="button"
+                    className="position-preview-link"
+                    aria-label={t('previewCard', {
+                      number: start + index + 1,
+                    })}
+                    onClick={() => setSelectedId(card.id)}
+                  >
+                    <strong>{question(card)}</strong>
+                    <small className="position-match-name">
+                      {card.position.position_id}
+                    </small>
+                  </button>
+                </td>
+                <SearchResultPlayers
+                  player={card.players[card.position.player]}
+                  opponent={card.players[1 - card.position.player]}
+                />
+                <td>
+                  {card.browse?.decks.length
+                    ? card.browse.decks.map(deckName).join(', ')
+                    : p('noDecks')}
+                </td>
+                <td>
+                  <SearchResultNotes
+                    tags={card.browse?.tags}
+                    comment={card.browse?.comment_excerpt}
+                  />
+                </td>
+                <td>{formatNumber(card.review_count)}</td>
+              </SearchResultRow>
+            ))}
+          </tbody>
+        </SearchResultTable>
+      )}
+      {!loading && !cards.length && (
+        <p className="position-empty" role="status">
+          {searchT('noResults')}
+        </p>
+      )}
+      <SearchPagination
+        page={page}
+        lastPage={lastPage}
+        busy={loading || moreLoading}
+        onPageChange={setPageIndex}
+        onMore={hasMore ? onMore : undefined}
+        moreLabel={t(moreLoading ? 'loading' : 'more')}
+      />
+      {children}
+    </SearchResultList>
   );
 }

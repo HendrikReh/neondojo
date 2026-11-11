@@ -1,4 +1,5 @@
 //! Native BGBlitz BGF 1.0 transport and played-match conversion.
+use super::sgf::escape_value;
 use anyhow::{Context, Result, bail, ensure};
 use flate2::bufread::GzDecoder;
 use serde::Deserialize;
@@ -93,9 +94,6 @@ fn payload(header: &Header, bytes: &[u8], limit: usize) -> Result<Vec<u8>> {
         "BGF: trailing bytes after gzip payload"
     );
     Ok(out)
-}
-fn escape(value: &str) -> String {
-    value.replace('\\', "\\\\").replace(']', "\\]")
 }
 fn player(value: i32) -> Result<i32> {
     match value {
@@ -251,7 +249,7 @@ pub fn bgf_to_sgf(input: &[u8]) -> Result<String> {
         if data.use_jacoby && data.matchlen == 0 {
             rules.push("Jacoby");
         }
-        out.push_str(&format!("(;FF[4]GM[6]CA[UTF-8]AP[BGTutor:BGF1]PW[{}]PB[{}]MI[length:{}][game:{game_index}][ws:{}][bs:{}]",escape(names[0]),escape(names[1]),data.matchlen,scores[0],scores[1]));
+        out.push_str(&format!("(;FF[4]GM[6]CA[UTF-8]AP[BGTutor:BGF1]PW[{}]PB[{}]MI[length:{}][game:{game_index}][ws:{}][bs:{}]",escape_value(names[0]),escape_value(names[1]),data.matchlen,scores[0],scores[1]));
         if !rules.is_empty() {
             out.push_str(&format!("RU[{}]", rules.join(":")));
         }

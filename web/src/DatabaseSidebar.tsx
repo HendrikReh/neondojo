@@ -62,20 +62,21 @@ export default function DatabaseSidebar({
       {active && (
         <div className="database-collection-actions">
           <p>{active.description}</p>
-          <ActionButton
-            icon="edit"
-            label={l('editDatabase')}
-            compact
-            onClick={() => onEdit(active)}
-          />
-          {!active.is_default && (
+          <div className="database-collection-buttons">
+            <ActionButton
+              icon="edit"
+              label={l('editDatabase')}
+              compact
+              onClick={() => onEdit(active)}
+            />
             <ActionButton
               icon="delete"
-              label={l('deleteDatabase')}
+              label={l(active.is_system ? 'clearDatabase' : 'deleteDatabase')}
               compact
+              disabled={active.is_system && active.match_count === 0}
               onClick={() => onDelete(active)}
             />
-          )}
+          </div>
         </div>
       )}
     </aside>

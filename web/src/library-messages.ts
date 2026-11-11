@@ -199,6 +199,14 @@ const rows = {
     'Usuń bazę',
     'Elimina database',
   ],
+  clearDatabase: [
+    'Empty database',
+    'Datenbank leeren',
+    'Vaciar base de datos',
+    'Vider la base',
+    'Opróżnij bazę',
+    'Svuota database',
+  ],
   name: ['Name', 'Name', 'Nombre', 'Nom', 'Nazwa', 'Nome'],
   description: [
     'Description',
@@ -558,6 +566,14 @@ const rows = {
     'Supprimer cette base et ses {count} matchs et notes ?',
     'Usunąć tę bazę oraz {count} meczów z notatkami?',
     'Eliminare questo database e tutti i {count} match con note?',
+  ],
+  clearDatabaseWarning: [
+    'Delete all {count} matches and their notes from this database?',
+    'Alle {count} Matches und ihre Notizen aus dieser Datenbank löschen?',
+    '¿Eliminar los {count} matches y sus notas de esta base de datos?',
+    'Supprimer les {count} matchs et leurs notes de cette base ?',
+    'Usunąć wszystkie mecze ({count}) i ich notatki z tej bazy?',
+    'Eliminare tutti i {count} match e le loro note da questo database?',
   ],
   copyHelp: [
     'Copies have independent tags and notes. Existing duplicates are skipped.',

@@ -1,4 +1,7 @@
-import type { ProfileConfiguration } from './configuration-model';
+import {
+  defaultConfiguration,
+  type ProfileConfiguration,
+} from './configuration-model';
 import type { AppSettings } from './settings-api';
 import { loadSettings, saveSettings, SettingsApiError } from './settings-api';
 import type { Locale } from './i18n-core';
@@ -64,16 +67,22 @@ export function applySettingsDraft(
       ...current.play,
       engine: settings.play_engine,
       plies: settings.play_plies,
-      default_mode: settings.default_play_mode ?? 'coach',
-      tutor_threshold: settings.tutor_threshold ?? 0.04,
-      training_auto_analysis: settings.training_auto_analysis ?? true,
+      default_mode:
+        settings.default_play_mode ?? defaultConfiguration.play.default_mode,
+      tutor_threshold:
+        settings.tutor_threshold ?? defaultConfiguration.play.tutor_threshold,
+      training_auto_analysis:
+        settings.training_auto_analysis ??
+        defaultConfiguration.play.training_auto_analysis,
     },
     appearance: {
       ...current.appearance,
       ui_theme: draft.appearance.theme,
       mode: draft.appearance.mode,
       board_theme: draft.theme,
-      bearoff_direction: settings.bearoff_direction ?? 'right',
+      bearoff_direction:
+        settings.bearoff_direction ??
+        defaultConfiguration.appearance.bearoff_direction,
     },
   };
 }

@@ -1,5 +1,6 @@
 //! Personal plaintext Markdown notes and tags, addressed by imported target UUIDs.
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
+use crate::search::literal_pattern;
 use anyhow::{Result, bail};
 use axum::{
     Json, Router,
@@ -241,7 +242,7 @@ async fn get_move_annotation(
     get_target_annotation(state, AnnotationKind::Move, id).await
 }
 
-fn normalize_tag(tag: &str) -> ApiResult<String> {
+pub(crate) fn normalize_tag(tag: &str) -> ApiResult<String> {
     if tag.chars().any(char::is_control) {
         return Err(ApiError::invalid("Tags cannot contain control characters"));
     }
@@ -374,17 +375,6 @@ fn limit(value: Option<i64>) -> ApiResult<i64> {
         return Err(ApiError::invalid("limit must be between 1 and 100"));
     }
     Ok(limit)
-}
-
-pub(crate) fn literal_pattern(value: &str) -> String {
-    format!(
-        "%{}%",
-        value
-            .to_lowercase()
-            .replace('\\', "\\\\")
-            .replace('%', "\\%")
-            .replace('_', "\\_")
-    )
 }
 
 #[utoipa::path(get, path="/api/annotations/search", params(SearchQuery), responses((status=200,body=AnnotationPage),(status=422,body=ErrorBody)), tag="Annotations")]

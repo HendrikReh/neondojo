@@ -123,7 +123,7 @@ pub async fn install_from_path(destination: &str, source: &str) -> Result<XgBook
     let destination = destination.to_owned();
     let source = source.to_owned();
     tokio::task::spawn_blocking(move || {
-        use std::{fs, io::Write, path::Path};
+        use std::{fs, path::Path};
         let source = Path::new(&source);
         let destination = Path::new(&destination);
         load(source.to_str().context("Invalid XG source path")?)?;
@@ -139,13 +139,10 @@ pub async fn install_from_path(destination: &str, source: &str) -> Result<XgBook
         let parent = destination
             .parent()
             .context("Invalid XG destination directory")?;
-        fs::create_dir_all(parent)?;
-        let mut file = tempfile::NamedTempFile::new_in(parent)?;
-        std::io::copy(&mut fs::File::open(source)?, file.as_file_mut())?;
-        file.flush()?;
-        file.as_file().sync_all()?;
-        load(file.path().to_str().context("Invalid temporary XG path")?)?;
-        file.persist(destination).map_err(|error| error.error)?;
+        crate::opening_book::install_validated_copy(source, destination, parent, |path| {
+            load(path.to_str().context("Invalid temporary XG path")?)?;
+            Ok(())
+        })?;
         Ok(
             load(destination.to_str().context("Invalid XG destination")?)?
                 .status

@@ -88,6 +88,7 @@ async function fixture(
           name: 'Profile test',
           description: '',
           is_default: true,
+          is_system: true,
           version: 0,
           match_count: 1,
           created_at: '2026-11-10T12:00:00Z',

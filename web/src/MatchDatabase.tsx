@@ -5,6 +5,7 @@ import { useProfileValue } from './useProfileValue';
 import ActionButton, { ActionLink } from './ActionButton';
 import { Search } from 'lucide-react';
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -13,6 +14,7 @@ import {
   type SetStateAction,
 } from 'react';
 import { request, type Match, type Position } from './api';
+import { useCursorSearch } from './useCursorSearch';
 import { useLibraryMatchOpening } from './useLibraryMatchOpening';
 import AnnotationSearch, { type AnnotationHit } from './AnnotationSearch';
 import { useI18n } from './i18n';
@@ -123,11 +125,7 @@ export default function MatchDatabase({
   const [databases, setDatabases] = useState<Database[]>([]),
     [localRevision, setRevision] = useState(0),
     [expanded, setExpanded] = useState(false),
-    [matches, setMatches] = useState<LibraryMatch[]>([]),
-    [matchResultScope, setMatchResultScope] = useState(''),
-    [cursor, setCursor] = useState<string | null>(null),
-    [loading, setLoading] = useState(false),
-    [error, setError] = useState<unknown>(),
+    [databaseError, setDatabaseError] = useState<unknown>(),
     [selected, setSelected] = useState<Set<string>>(new Set()),
     [dialog, setDialog] = useState<LibraryDialogState>(),
     [result, setResult] = useState<ActionResponse>();
@@ -175,9 +173,6 @@ export default function MatchDatabase({
     (c, direction) => ({ ...c, library: { ...c.library, direction } }),
     'desc',
   );
-  const queryScope = useRef('');
-  const queryVersion = useRef(0),
-    moreRequest = useRef<AbortController | undefined>(undefined);
   const resultNames = useRef<Record<string, string>>({});
   const [exact, setExact] = useState(''),
     [positionInputError, setPositionInputError] = useState(false);
@@ -230,6 +225,7 @@ export default function MatchDatabase({
       .then((value) => {
         if (abort.signal.aborted) return;
         setDatabases(value);
+        setDatabaseError(undefined);
         if (
           databaseCurrent.current &&
           !value.some((d) => d.id === databaseCurrent.current)
@@ -237,7 +233,7 @@ export default function MatchDatabase({
           databaseCallback.current('');
       })
       .catch((e) => {
-        if (!abort.signal.aborted) setError(e);
+        if (!abort.signal.aborted) setDatabaseError(e);
       });
     return () => abort.abort();
   }, [revision, localRevision]);
@@ -245,88 +241,33 @@ export default function MatchDatabase({
     setSelected(new Set());
     setResult(undefined);
   }, [matchScope]);
-  useEffect(() => {
-    const abort = new AbortController(),
-      version = ++queryVersion.current;
-    moreRequest.current?.abort();
-    setLoading(true);
-    setError(undefined);
-    const scope = matchScope;
-    if (queryScope.current !== scope) {
-      setCursor(null);
-      setMatches([]);
-      queryScope.current = scope;
-    }
-    const timer = setTimeout(() => {
-      void loadLibrary(databaseId, filters, sort, direction, abort.signal)
-        .then((page) => {
-          if (version !== queryVersion.current || abort.signal.aborted) return;
-          setMatches(page.items);
-          setMatchResultScope(scope);
-          setCursor(page.next_cursor);
-        })
-        .catch((e) => {
-          if (!abort.signal.aborted) setError(e);
-        })
-        .finally(() => {
-          if (!abort.signal.aborted) setLoading(false);
-        });
-    }, 250);
-    return () => {
-      abort.abort();
-      clearTimeout(timer);
-    };
-  }, [
-    databaseId,
-    filters,
-    sort,
-    direction,
-    matchScope,
-    revision,
-    localRevision,
-    annotationRevision,
-    visible,
-  ]);
-  useEffect(
-    () => () => {
-      moreRequest.current?.abort();
-    },
-    [],
+  const loadMatches = useCallback(
+    (signal: AbortSignal, after?: string) =>
+      loadLibrary(databaseId, filters, sort, direction, signal, after),
+    [databaseId, filters, sort, direction],
   );
-  async function more() {
-    if (!cursor || loading) return;
-    moreRequest.current?.abort();
-    const abort = new AbortController();
-    moreRequest.current = abort;
-    const version = queryVersion.current;
-    setLoading(true);
-    try {
-      const page = await loadLibrary(
-        databaseId,
-        filters,
-        sort,
-        direction,
-        abort.signal,
-        cursor,
-      );
-      if (version === queryVersion.current && !abort.signal.aborted) {
-        setMatches((previous) => {
-          const ids = new Set(previous.map(libraryRowKey));
-          return [
-            ...previous,
-            ...page.items.filter((m) => !ids.has(libraryRowKey(m))),
-          ];
-        });
-        setCursor(page.next_cursor);
-      }
-    } catch (e) {
-      if (version === queryVersion.current && !abort.signal.aborted)
-        setError(e);
-    } finally {
-      if (version === queryVersion.current && !abort.signal.aborted)
-        setLoading(false);
-    }
-  }
+  const {
+    items: matches,
+    resultScope: matchResultScope,
+    cursor,
+    loading: matchLoading,
+    moreLoading,
+    error: searchError,
+    more,
+  } = useCursorSearch({
+    scope: matchScope,
+    revision: JSON.stringify([
+      revision,
+      localRevision,
+      annotationRevision,
+      visible,
+    ]),
+    loadPage: loadMatches,
+    itemKey: libraryRowKey,
+    debounceMs: 250,
+  });
+  const loading = matchLoading || moreLoading;
+  const error = searchError || databaseError;
   function searchPosition() {
     const positionId = exact.trim();
     if (!/^[A-Za-z0-9+/]{14}$/.test(positionId)) {
@@ -343,8 +284,6 @@ export default function MatchDatabase({
   function changeDatabase(id: string) {
     onDatabase(id);
     setSelected(new Set());
-    setMatches([]);
-    setCursor(null);
   }
   function toggle(id: string, checked: boolean) {
     setSelected((previous) => {
@@ -388,10 +327,10 @@ export default function MatchDatabase({
     setRevision((n) => n + 1);
     onChanged(deleted);
   }
-  function changed(id?: string, databaseDeleted = false) {
+  function changed(id?: string, validateSelection = false) {
     if (id !== undefined) changeDatabase(id);
     setRevision((n) => n + 1);
-    onChanged([], databaseDeleted);
+    onChanged([], validateSelection);
   }
   function sortBy(key: LibrarySort) {
     if (sort === key) {

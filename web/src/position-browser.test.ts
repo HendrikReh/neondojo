@@ -1,3 +1,4 @@
+import { mergeSearchItems } from './cursor-search';
 import { expect, test } from 'vitest';
 import {
   emptyPositionFilters,
@@ -7,7 +8,6 @@ import {
   positionParams,
   samePositionDefinition,
   togglePositionSelection,
-  mergePositionPages,
   type PositionBrowserHit,
 } from './position-browser-api';
 
@@ -96,7 +96,11 @@ test('merges repeated UUIDs while retaining identical boards in distinct game co
     second = hit('two', 2),
     refreshed = { ...first, card_ready: true };
   expect(
-    mergePositionPages([first, second], [refreshed, hit('three', 3)]),
+    mergeSearchItems(
+      [first, second],
+      [refreshed, hit('three', 3)],
+      (hit) => hit.position.id,
+    ),
   ).toEqual([refreshed, second, hit('three', 3)]);
 });
 

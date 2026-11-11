@@ -45,16 +45,18 @@ function render(cards = [card]) {
         theme: 'walnut',
         hasMore: true,
         moreLoading: false,
-        onMore: () => {},
+        onMore: async () => true,
       }),
     }),
   );
 }
 test('the first flashcard has one question-side board preview beside the compact list', () => {
   const html = render();
-  expect(html).toContain('class="learning-card-browser"');
-  expect(html).toContain('class="learning-card-list"');
-  expect(html).toContain('class="learning-card-preview"');
+  expect(html).toContain(
+    'class="learning-card-browser position-browser-layout"',
+  );
+  expect(html).toContain('class="learning-card-list position-browser-main"');
+  expect(html).toContain('class="learning-card-preview position-preview"');
   expect(html.match(/class="board-shell /g)).toHaveLength(1);
   expect(html).toContain('theme-walnut');
   expect(html).toContain('data-card-id="card-one"');
@@ -86,11 +88,11 @@ test('an inactive workspace retains the list without creating a hidden board', (
         theme: 'forest',
         hasMore: false,
         moreLoading: false,
-        onMore: () => {},
+        onMore: async () => false,
         visible: false,
       }),
     }),
   );
-  expect(html).toContain('class="learning-card-list"');
+  expect(html).toContain('class="learning-card-list position-browser-main"');
   expect(html).not.toContain('class="board-shell ');
 });

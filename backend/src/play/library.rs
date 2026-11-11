@@ -7,16 +7,10 @@ use uuid::Uuid;
 
 pub const BOT_DATABASE_ID: Uuid = Uuid::from_u128(3);
 
-pub async fn ensure_database(tx: &mut Transaction<'_, Postgres>) -> Result<()> {
-    sqlx::query(
-        "INSERT INTO databases(id,name) VALUES($1,'Bot Matches') ON CONFLICT(id) DO NOTHING",
-    )
-    .bind(BOT_DATABASE_ID)
-    .execute(&mut **tx)
-    .await?;
-    sqlx::query("SELECT id FROM databases WHERE id=$1 FOR UPDATE")
+pub async fn lock_bot_database(tx: &mut Transaction<'_, Postgres>) -> Result<()> {
+    sqlx::query_scalar::<_, Uuid>("SELECT id FROM databases WHERE id=$1 FOR UPDATE")
         .bind(BOT_DATABASE_ID)
-        .execute(&mut **tx)
+        .fetch_one(&mut **tx)
         .await?;
     Ok(())
 }
@@ -108,22 +102,7 @@ pub(super) fn normalize_native_setup_turn(source: String) -> Result<String> {
         return Ok(source);
     }
     let (_, native_context) = crate::import::sgf::parse_native_sgf_with_context(&source)?;
-    let mut output = String::new();
-    for nodes in trees {
-        output.push('(');
-        for node in nodes {
-            output.push(';');
-            for (property, values) in node {
-                output.push_str(&property);
-                for value in values {
-                    output.push('[');
-                    output.push_str(&value.replace('\\', "\\\\").replace(']', "\\]"));
-                    output.push(']');
-                }
-            }
-        }
-        output.push_str(")\n");
-    }
+    let output = crate::import::sgf::serialize_trees(&trees);
     let (_, strict_context) = crate::import::sgf::parse_sgf_with_context(&output)?;
     ensure!(
         native_context == strict_context,
@@ -217,7 +196,7 @@ pub async fn backfill(pool: &PgPool) -> Result<usize> {
     let mut count = 0;
     for id in ids {
         let mut tx = pool.begin().await?;
-        ensure_database(&mut tx).await?;
+        lock_bot_database(&mut tx).await?;
         let row: Option<(sqlx::types::Json<PlaySession>, String)> = sqlx::query_as("SELECT state,sgf FROM play_sessions WHERE id=$1 AND NOT library_archived AND library_match_id IS NULL FOR UPDATE")
             .bind(id).fetch_optional(&mut *tx).await?;
         if let Some((session, sgf)) = row {

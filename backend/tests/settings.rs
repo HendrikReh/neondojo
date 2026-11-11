@@ -439,6 +439,59 @@ async fn validates_installation_updates_atomically_and_rejects_stale_writes(pool
     );
 }
 
+#[cfg(unix)]
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL and native GNUbg"]
+async fn configured_relative_gnubg_path_is_shared_by_analysis_play_and_benchmark(pool: PgPool) {
+    let app = api::router(AppState::new(
+        pool.clone(),
+        Engine::new("/missing/default".into()),
+    ));
+    let directory = tempfile::tempdir_in(".").unwrap();
+    let executable = absolute_binary();
+    let alias = directory.path().join("GNUbg für Tests");
+    std::os::unix::fs::symlink(&executable, &alias).unwrap();
+    let relative_path = std::path::Path::new(directory.path().file_name().unwrap())
+        .join(alias.file_name().unwrap());
+    let (_, mut settings) = call(app.clone(), "GET", "/api/settings", Value::Null).await;
+    settings["gnubg_path"] = json!(relative_path.to_str().unwrap());
+    let (status, saved) = call(app.clone(), "PUT", "/api/settings", settings).await;
+    assert_eq!(status, 200, "{saved}");
+
+    let analysis = Engine::new(saved["gnubg_path"].as_str().unwrap().into())
+        .analyze("4HPwATDgc/ABMA", "cInlAAAAAAAE", 0, None)
+        .await
+        .unwrap();
+    assert!(!analysis.candidates.is_empty());
+
+    let (status, session) = call(
+        app.clone(),
+        "POST",
+        "/api/play/sessions",
+        json!({"human_player":0,"match_length":5}),
+    )
+    .await;
+    assert_eq!(status, 201, "{session}");
+    let id = uuid::Uuid::parse_str(session["id"].as_str().unwrap()).unwrap();
+    let play_path: String = sqlx::query_scalar("SELECT gnubg_path FROM play_sessions WHERE id=$1")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    let (status, benchmark) = call(
+        app,
+        "POST",
+        "/api/benchmarks",
+        json!({"engine_id":"gnubg","plies":[0]}),
+    )
+    .await;
+    assert_eq!(status, 202, "{benchmark}");
+    assert_eq!(play_path, executable.to_str().unwrap());
+    assert_eq!(benchmark[0]["engine_path"], play_path);
+    assert_eq!(benchmark[0]["engine_version"], session["engine"]["version"]);
+}
+
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL and GNUbg"]
 async fn jobs_use_saved_defaults_snapshot_installations_and_deduplicate_by_configuration(

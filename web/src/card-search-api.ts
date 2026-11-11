@@ -1,5 +1,7 @@
+import { cursorSearchParams } from './cursor-search';
 import type { components } from './generated-api';
 export const ALL_CARDS = '__all__';
+export const CARD_PAGE_SIZE = 50;
 export type CardBrowseContext = components['schemas']['CardBrowseContext'];
 export type CardFilters = {
   q: string;
@@ -24,9 +26,6 @@ export function cardListPath(
   filters: CardFilters,
   after?: string,
 ) {
-  const params = new URLSearchParams({ limit: '50' });
-  for (const [key, value] of Object.entries(filters))
-    if (value.trim()) params.set(key, value.trim());
-  if (after) params.set('after', after);
+  const params = cursorSearchParams(CARD_PAGE_SIZE, filters, after);
   return `${deck === ALL_CARDS ? '/cards' : `/decks/${encodeURIComponent(deck)}/cards`}?${params}`;
 }

@@ -59,6 +59,7 @@ async function library(page: Page) {
           name: 'Compact demo',
           description: '',
           is_default: true,
+          is_system: true,
           version: 0,
           match_count: entries.length,
           created_at: entries[0].created_at,

@@ -12,6 +12,7 @@ use axum::{
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
+use std::{fs, io::Write, path::Path as FsPath};
 use utoipa::{OpenApi, ToSchema};
 use uuid::Uuid;
 
@@ -144,7 +145,7 @@ fn validate_path(path: &str) -> ApiResult<()> {
     if path.is_empty()
         || path.len() > 4096
         || path.chars().any(char::is_control)
-        || !std::path::Path::new(path).is_absolute()
+        || !FsPath::new(path).is_absolute()
     {
         return Err(ApiError::invalid(
             "Opening book path must be absolute, nonempty, at most 4096 bytes and contain no control characters",
@@ -633,9 +634,8 @@ pub async fn install_from_path(config: &BookConfig, source_path: &str) -> Result
         config.path.clone()
     };
     tokio::task::spawn_blocking(move || {
-        use std::{fs, io::Write, path::Path};
-        let source = Path::new(&source);
-        let destination = Path::new(&destination);
+        let source = FsPath::new(&source);
+        let destination = FsPath::new(&destination);
         Book::open(source.to_str().context("Invalid book path")?)?;
         if fs::canonicalize(source).ok() == fs::canonicalize(destination).ok()
             && destination.exists()
@@ -648,24 +648,33 @@ pub async fn install_from_path(config: &BookConfig, source_path: &str) -> Result
             .parent()
             .filter(|path| !path.as_os_str().is_empty())
             .context("Opening book needs an absolute destination path")?;
-        fs::create_dir_all(parent)?;
-        let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
-        std::io::copy(&mut fs::File::open(source)?, temporary.as_file_mut())?;
-        temporary.flush()?;
-        temporary.as_file().sync_all()?;
-        Book::open(
-            temporary
-                .path()
-                .to_str()
-                .context("Invalid temporary book path")?,
-        )?;
-        temporary
-            .persist(destination)
-            .map_err(|error| error.error)?;
+        install_validated_copy(source, destination, parent, |path| {
+            Book::open(path.to_str().context("Invalid temporary book path")?)?;
+            Ok(())
+        })?;
         Ok(Book::open(destination.to_str().context("Invalid destination path")?)?.status)
     })
     .await
     .context("Opening book installer task failed")?
+}
+
+/// Validate the copied bytes in the destination directory before replacing the book.
+pub(crate) fn install_validated_copy(
+    source: &FsPath,
+    destination: &FsPath,
+    parent: &FsPath,
+    validate: impl FnOnce(&FsPath) -> Result<()>,
+) -> Result<()> {
+    fs::create_dir_all(parent)?;
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+    std::io::copy(&mut fs::File::open(source)?, temporary.as_file_mut())?;
+    temporary.flush()?;
+    temporary.as_file().sync_all()?;
+    validate(temporary.path())?;
+    temporary
+        .persist(destination)
+        .map_err(|error| error.error)?;
+    Ok(())
 }
 
 struct Book {

@@ -1,7 +1,9 @@
 //! Read-only foreign analysis validation against the original played source.
 use crate::{
-    import::sgf::SourceMove, imported_analysis::ImportedAnalysisData, match_analysis::Decision,
-    model::Position,
+    import::sgf::SourceMove,
+    imported_analysis::ImportedAnalysisData,
+    match_analysis::{Decision, cube_options},
+    model::{MoveSeverity, Position},
 };
 use uuid::Uuid;
 
@@ -172,15 +174,6 @@ pub(super) fn project(
             record.depth_plies,
         )
     };
-    let severity = if equity_loss >= 0.16 {
-        "very_bad"
-    } else if equity_loss >= 0.08 {
-        "bad"
-    } else if equity_loss >= 0.04 {
-        "doubtful"
-    } else {
-        "none"
-    };
     Some(Projection {
         decision: Decision {
             decision_no: source.move_no,
@@ -192,7 +185,9 @@ pub(super) fn project(
             played_equity,
             best_equity,
             equity_loss,
-            severity: severity.into(),
+            severity: MoveSeverity::from_normalized_loss(equity_loss)
+                .as_str()
+                .into(),
             dice: checker.then_some(dice),
             evaluation_status: "evaluated".into(),
         },
@@ -233,25 +228,6 @@ fn checker_equity(c: &crate::imported_analysis::ImportedCandidate, format: &str)
 fn loss(best: f64, played: f64) -> Option<f64> {
     let difference = best - played;
     (difference.is_finite() && difference >= -0.000001).then_some(difference.max(0.0))
-}
-/// The response values are already in the responder's perspective here.
-fn cube_options(played: &str, nd: f64, dt: f64, dp: f64) -> Option<(&'static str, f64, f64)> {
-    match played {
-        "take" | "drop" => Some((
-            if dt >= dp { "take" } else { "drop" },
-            if played == "take" { dt } else { dp },
-            dt.max(dp),
-        )),
-        "no double" | "double" => {
-            let double = dt.min(dp);
-            Some((
-                if nd >= double { "no double" } else { "double" },
-                if played == "double" { double } else { nd },
-                nd.max(double),
-            ))
-        }
-        _ => None,
-    }
 }
 fn bgblitz_cube(
     record: &ImportedAnalysisData,

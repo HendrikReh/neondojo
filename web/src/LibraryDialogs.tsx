@@ -32,12 +32,14 @@ export default function LibraryDialogs({
   state: LibraryDialogState;
   databases: Database[];
   onClose: () => void;
-  onChanged: (databaseId?: string, databaseDeleted?: boolean) => void;
+  onChanged: (databaseId?: string, validateSelection?: boolean) => void;
   onAction: (result: ActionResponse) => void;
 }) {
   const l = useLibraryText(),
     { formatError } = useI18n();
   const db = state.kind === 'database' ? state.database : undefined;
+  const clearDatabase =
+    state.kind === 'deleteDatabase' && state.database.is_system;
   const match = state.kind === 'metadata' ? state.match : undefined;
   const [name, setName] = useState(db?.name ?? match?.display_name ?? ''),
     [description, setDescription] = useState(db?.description ?? '');
@@ -61,7 +63,7 @@ export default function LibraryDialogs({
     state.kind === 'database'
       ? l(db ? 'editDatabase' : 'newDatabase')
       : state.kind === 'deleteDatabase'
-        ? l('deleteDatabase')
+        ? l(clearDatabase ? 'clearDatabase' : 'deleteDatabase')
         : state.kind === 'metadata'
           ? l('editMatch')
           : l(state.action);
@@ -89,15 +91,15 @@ export default function LibraryDialogs({
         );
         onChanged(saved.id);
       } else if (state.kind === 'deleteDatabase') {
-        const response = await fetch(
-          `/api/databases/${state.database.id}?version=${state.database.version}&delete_matches=true`,
+        const path = `/databases/${state.database.id}`;
+        const version = state.database.version;
+        await request<void>(
+          clearDatabase
+            ? `${path}/matches?version=${version}`
+            : `${path}?version=${version}&delete_matches=true`,
           { method: 'DELETE' },
         );
-        if (!response.ok) {
-          const body = await response.json();
-          throw new Error(body.error ?? String(response.status));
-        }
-        onChanged('', true);
+        onChanged(clearDatabase ? state.database.id : '', true);
       } else if (state.kind === 'metadata') {
         await request(`/matches/${state.match.id}/metadata`, {
           method: 'PUT',
@@ -161,6 +163,7 @@ export default function LibraryDialogs({
               required
               maxLength={state.kind === 'database' ? 120 : 240}
               value={name}
+              readOnly={db?.is_system}
               onChange={(e) => setName(e.target.value)}
               disabled={busy}
             />
@@ -260,7 +263,9 @@ export default function LibraryDialogs({
         )}
         {state.kind === 'deleteDatabase' && (
           <p>
-            {l('databaseWarning', { count: state.database.match_count })}{' '}
+            {l(clearDatabase ? 'clearDatabaseWarning' : 'databaseWarning', {
+              count: state.database.match_count,
+            })}{' '}
             <strong>{state.database.name}</strong>
           </p>
         )}
@@ -373,7 +378,7 @@ export default function LibraryDialogs({
               busy
                 ? l('loading')
                 : state.kind === 'deleteDatabase'
-                  ? l('delete')
+                  ? l(clearDatabase ? 'clearDatabase' : 'delete')
                   : action
                     ? l(action)
                     : l('save')

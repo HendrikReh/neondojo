@@ -1,35 +1,44 @@
 # BG Tutor
 
-Lokale Backgammon-Bibliothek mit einem eigenständigen **Rust/Tokio/Axum-Backend**, **PostgreSQL/SQLx**, **GNUbg** und einem **React/TypeScript-Client**. Das Backend läuft ohne Browser und ohne Tauri. Der Client verwendet ausschließlich REST und SSE; Tauri kann später denselben Client als Desktop-App hosten.
+BG Tutor is a local backgammon application for importing matches, finding positions, analyzing decisions with GNU Backgammon (GNUbg), playing, and studying. Its headless Rust backend uses Tokio, Axum, PostgreSQL, and SQLx. The React and TypeScript client connects through REST and server-sent events (SSE).
 
-## Starten
+[Quick start](#quick-start) · [Analyze a match](#analyze-your-first-match) · [Match databases](#match-databases) · [Playing](#playing-against-gnubg) · [Study](#study) · [API](#api-reference) · [Verification](#verification)
 
-Voraussetzungen: Rust (getestet mit 1.94.1), Node.js 22+ und npm, Docker Compose sowie ein lokales `gnubg` **einschließlich Netzgewichten**. Der Spielmodus benötigt außerdem GNUbgs **eingebettetes Python-Modul**. Analyse und Spielmodus wurden mit GNUbg 1.08.003 auf macOS geprüft; frühere Analyseprüfungen verwendeten 1.05.002. `gnubg --version` muss funktionieren. Der GNUbg-Pfad lässt sich in **Einstellungen** wählen; `GNUBG_BIN` in `.env` dient als Vorgabe für eine neue Installation. Auf diesem Rechner ist `/Users/hendrik/.local/opt/gnubg/bin/gnubg` konfiguriert.
+## Quick start
 
-Im Repository:
+- Rust, tested with 1.94.1
+- Node.js 22.12+ and npm
+- Docker Compose
+- Python 3.10 or later for the frontend build and development scripts
+- A local GNUbg installation with its neural network weights. Playing also requires GNUbg's embedded Python module. Analysis and playing were tested with GNUbg 1.08.003 on macOS. Earlier analysis checks used 1.05.002.
+
+From the repository root, create `.env` if needed, then start PostgreSQL and the backend.
 
 ```sh
-cp .env.example .env
+[ -f .env ] || cp .env.example .env
 docker compose up -d --wait db
 cargo run -p bgtutor
 ```
 
-In einem zweiten Terminal:
+The backend applies migrations at startup. Cargo can compile with PostgreSQL stopped. The backend reads `.env` from its working directory. See [.env.example](.env.example) for available settings.
+
+Check that `gnubg --version` works. If the executable is outside the backend's `PATH`, set `GNUBG_BIN` in `.env` before the first launch or configure the executable under **Settings → Analysis**. Use **Check installation** to verify that GNUbg can evaluate a position with its installed weights.
+
+In a second terminal at the repository root, start the development client.
 
 ```sh
-cd web
-npm ci
-npm run dev
+npm ci --prefix web
+npm run dev --prefix web
 ```
 
-- Oberfläche: <http://127.0.0.1:5173>
-- API/Health: <http://127.0.0.1:8787/api/health>
-- OpenAPI 3.1: <http://127.0.0.1:8787/api/openapi.json>
-- PostgreSQL: `127.0.0.1:54329`; Docker-Volume `bgtutor_postgres_data`
+| Service     | Address                                                                |
+| ----------- | ---------------------------------------------------------------------- |
+| Web client  | <http://127.0.0.1:5173>                                                |
+| API health  | <http://127.0.0.1:8787/api/health>                                     |
+| OpenAPI 3.1 | <http://127.0.0.1:8787/api/openapi.json>                               |
+| PostgreSQL  | `127.0.0.1:54329`, backed by the `bgtutor_postgres_data` Docker volume |
 
-Migrationen laufen beim Backend-Start automatisch. Cargo benötigt zum Kompilieren keine laufende Datenbank. Nur die `.env` im Startverzeichnis wird geladen; `.env`-Dateien übergeordneter Projekte bleiben außen vor. Konfiguration siehe [.env.example](.env.example).
-
-Alternativ kann das Backend auch den gebauten Client ausliefern:
+To serve the built client from the backend, keep PostgreSQL running and start the backend with `BGTUTOR_WEB_DIR` set.
 
 ```sh
 npm ci --prefix web
@@ -37,282 +46,517 @@ npm run build --prefix web
 BGTUTOR_WEB_DIR=web/dist cargo run -p bgtutor --release
 ```
 
-Dann genügt <http://127.0.0.1:8787>. Der Dienst und die Datenbank binden standardmäßig nur an Loopback. Dieser erste Stand besitzt keine Benutzerverwaltung; eine Netzwerkfreigabe benötigt eine eigene Zugriffskontrolle.
+Open <http://127.0.0.1:8787>. By default the services listen on loopback. BG Tutor has no built-in user accounts, so network access requires separate access control.
 
-## Durchgängiger Ablauf
+## Analyze your first match
 
-1. `backend/tests/fixtures/tutorial.mat` über **Partie importieren** laden, oder die echte Referenzpartie `WC2014.xg` im selben Verzeichnis verwenden.
-2. Im Tab **Matchdatenbank** nach Spieler oder Dateiname suchen (mindestens drei Zeichen). Suchtreffer werden mit stabilen Cursorn seitenweise geladen.
-3. Im Tab **Analyse** unter **Spiel auswählen** ein einzelnes Spiel des Matches wählen; die Pfeile daneben wechseln zum vorherigen/nächsten Spiel. Die Auswahl zeigt Spielnummer, Startspielstand und Zuganzahl, gegebenenfalls Crawford. Der Zugverlauf und seine Pfeile bleiben innerhalb dieses Spiels; lange Spiele laden ihre Seiten automatisch. Eine Position im Zugverlauf wählen. Das Brett zeigt die Stellung **vor** dem gespielten Zug; Spielstand und Doppler werden mit angezeigt. Punktnummern und Zugnotation folgen dem Spieler am Zug; die Pip-Zahlen berücksichtigen die Bar.
-4. In **Übersicht → Bewertung** oder im einzelnen Reiter **Bewertung** startet **Position analysieren** einen echten dauerhaften GNUbg-Auftrag mit 0, 1, 2, 3 oder 4 Ply. Standard ist 2-Ply. Die Ausgabe enthält bis zu fünf Zugkandidaten, Cubeful Equity und Gewinnwahrscheinlichkeiten.
-5. Unter **Bewertung → Dice Distribution** berechnet GNUbg dieselbe Stellung mit allen 21 ungeordneten Würfelpaaren. Die Matrix zeigt alle 36 geordneten Würfe; ein Pasch erhält Gewicht 1, andere Paare Gewicht 2. Das gewichtete Mittel ist die erwartete Equity. Blockierte Würfe werden als echter Zugaussetzer bewertet.
-6. **Spiel analysieren** wertet standardmäßig nur das ausgewählte Spiel mit 0–4 Ply aus; Standard ist 2-Ply. Unter **Analyseumfang → Gesamtes Match** bleibt **Gesamte Partie analysieren** für alle Spiele verfügbar. Aufträge, Fortschritt, Statistiken und Fehlerübersicht gehören zum gewählten Umfang. Auch leere Spiele und reine Dopplerentscheidungen sind auswählbar und analysierbar. Die **Übersicht** zeigt Fortschritt, Spielerstatistik und filterbare Fehler gleichzeitig; der einzelne Reiter **Fehler** bleibt verfügbar. Jede Checker-Entscheidung zeigt den gespielten Zug, den besten Zug, beide Equities und den Verlust; Cube-Entscheidungen enthalten auch nicht genutzte Doppelangebote sowie Double/Take/Drop. Ein Klick auf die Zugnummer öffnet die zugehörige Brettstellung.
-7. **Spielwürfe** zeigt separat die tatsächlich aufgezeichneten Würfe des ausgewählten Spiels. **Matchdatenbank → Position finden** sucht nach einer exakten GNUbg Position-ID. **Einstellungen → Brett** wählt mit Vorschau zwischen Forest/Walnut/Slate und den lokalen BGBlitz-Themes aus `themes/*.zip`. **Einstellungen → Allgemein → Sprache** schaltet zwischen Deutsch, English, Español, Français, Italiano und Polski um; die Einträge sind alphabetisch sortiert. Neue Installationen starten auf Englisch; vorhandene explizite Sprachwahlen bleiben erhalten.
+1. In **Match database**, choose **Import match** and open [tutorial.mat](backend/tests/fixtures/tutorial.mat) or the reference match [WC2014.xg](backend/tests/fixtures/WC2014.xg). You can also drop a file on the welcome screen. Search by player or file name to find an imported match. Results load in pages using stable cursors.
+2. In **Analysis**, use **Select game** or its adjacent arrows to choose a game. The selector shows the game number, starting score, move count, and Crawford status when applicable. The move history stays within the selected game and loads more moves as needed.
+3. Select a move. The board shows the decision position before the recorded play, together with the score and doubling cube. Point numbering and notation follow the player on roll. Pip counts include checkers on the bar.
+4. In **Overview** or **Evaluation**, choose **Analyze position** to queue a persistent GNUbg job. Choose 0–4 ply, with 2-ply as the default. The result includes up to five candidate moves, cubeful equity, and win probabilities.
+5. Use **Analyze game** to evaluate the selected game, or set **Analysis scope → Entire match** and choose **Analyze entire match**. Both accept 0–4 ply. The chosen scope determines the jobs, progress, statistics, and errors shown. Games with no checker moves, including cube-only games, can also be selected and analyzed.
+6. Open **Evaluation → Dice distribution** to evaluate all 21 unordered dice pairs. The matrix represents 36 equally likely ordered rolls, with weight 1 for doubles and 2 for other pairs. The weighted mean gives the expected equity. When a player has no legal play for a roll, GNUbg evaluates the forced pass. **Game rolls** shows the rolls recorded in the selected game.
 
-Die Positionssuche identifiziert die Brettstellung aus Sicht des Spielers am Zug. Spielstand, Doppler und Würfel stehen in der zusätzlichen GNUbg Match-ID und werden für die Analyse berücksichtigt. In der Matchdatenbank erscheint jedes Vorkommen als eigene Zeile mit Datenbank, Partie und Zugnummer; beim Öffnen wird genau dieses Vorkommen ausgewählt. Das gilt auch für mehrfach auftretende Stellungen innerhalb derselben Partie. Die Sammlung gespeicherter Positionen kann dieselbe Brettstellung in unterschiedlichen Matchsituationen enthalten. Ähnlichkeitssuche und ein grafischer Positionseditor sind nicht Bestandteil dieses Standes.
+**Match database → Find a position in the library** searches for an exact GNUbg position ID, which represents the checker arrangement from the perspective of the player on roll. Analysis also uses the GNUbg match ID for context such as the score, cube, and dice. Each occurrence in the library has its own row with the database, game, and move. Opening a row selects that exact occurrence, even when the same position appears more than once in a match. Use **Find similar positions** beside the analysis board to search for related positions.
 
-## Analysearbeitsplatz und Einstellungen
+## Analysis workspace
 
-BG Tutor ist für die informationsdichte Partieanalyse am Desktop ausgelegt. Brett, Zugliste, Kandidaten, Bewertungen und Statistiken sollen auf großen Fenstern möglichst gleichzeitig sichtbar und mit Maus und Tastatur effizient bedienbar sein. Desktop-Nutzbarkeit und Informationsdichte bestimmen die weitere UX-Entwicklung und deren Abnahmekriterien. Mobilgeräte sind keine Zielplattform; zusätzliche mobile Layouts und mobile Testanforderungen gehören nicht zum Projektumfang.
+The top navigation opens **Playing**, **Analysis**, **Match database**, **Positions**, **Study**, and **Extras**, with **Settings** on the right. Arrow keys and Home/End navigate the main and detail tabs. The app restores the last match, game, and position locally. Switching tabs preserves filters, note drafts, and SSE subscriptions. A submitted job continues to be tracked if you change the selected game or position while the request is pending.
 
-Alle vier Arbeitsbereiche verwenden eine gemeinsame Sans-Serif-Schrift und dieselbe [Typografieskala](docs/typography.md): Seitentitel 24 px, Bereichstitel 14 px, Bedienelemente und Fließtext 13 px sowie Tabelleninhalt 12 px. Schriftgrößen und Gewichte werden zentral über CSS-Tokens gepflegt; Positionskennungen bleiben in Monospace, Brettgrafik und Markenlogo behalten ihre eigenen Schriften. Vorschau, Dialoge und Lernfragen besitzen klar definierte eigene Titelgrößen.
+The desktop **Overview** places move history on the left, the board and candidates above the errors in the center, and player and game statistics on the right. Long lists scroll independently and keep the current move visible. Dedicated tabs include **Evaluation**, **Statistics**, **Errors**, **Notes**, and **Study cards**. The header shows the players, match ID and length, saved score, date, event, and PR per player. Date and event come from saved metadata and show `n/a` when unavailable. Match PR updates when a complete native match analysis finishes.
 
-Die [Navigationsgestaltung](docs/ui-navigation.md) gilt durchgehend: dezente Textreiter auf transparentem Hintergrund, farbiger 2-px-Unterstrich und hervorgehobene Schrift beim aktiven Bereich. Dasselbe Muster verwenden Analyse-Reiter, Quellen- und Buchauswahl, Checker/Cube, Initial/Arrows/Final, Notizbereiche, Einstellungskategorien und Datenbankauswahl. Hover, Tastaturfokus und deaktivierte Einträge sind gemeinsam definiert und folgen dem gewählten UI-Theme. Aktionsbuttons und inhaltliche Markierungen behalten ihre jeweiligen visuellen Rollen.
+### Moves, errors, and statistics
 
-Die kompakte Hauptnavigation trennt **Analyse**, **Matchdatenbank**, **Positionen** und **Study**. Der aktive Bereich erhält eine farbige Textmarkierung mit Unterstrich; die Einstellungen stehen dezent rechts. Die Analyse-Kopfzeile zeigt Spielernamen prominent sowie Match-ID, Matchlänge, gespeicherten Spielstand/Endstand, Spieldatum, Event und PR je Spieler dezent in einer Desktop-Zeile. Datum und Event kommen aus gespeicherten Metadaten; fehlende Werte bleiben n/a. Die Match-PR folgt derselben vollständigen nativen Matchanalyse wie in der Datenbank und wird nach deren Abschluss aktualisiert. Dateiformat und Quellexport entfallen in der Kopfzeile. Die Standardansicht **Übersicht** zeigt Zugliste, Brett, Kandidaten, Fehler und Statistiken gleichzeitig. Der Analysearbeitsplatz nutzt die volle Fensterbreite: links die Zugliste, in der Mitte Brett und Kandidaten mit Fehlerliste darunter, rechts Spieler- und Partiestatistik. Lange Listen scrollen in ihrem Bereich; der aktive Zug wird im Verlauf sichtbar gehalten. Die Zugliste bleibt Teil der Analyseansicht; die separate Funktion „Board Focus“ wurde entfernt. Bewertung, Statistik, Fehler, Notizen und Lernkarten behalten ihre einzelnen Reiter. Die Haupt- und Detailreiter sind mit Pfeiltasten sowie Home/End bedienbar. Die letzte Match-/Spiel-/Positionsauswahl wird lokal wiederhergestellt, ohne eine neue Analyse zu starten.
+Move history shows notation, player, dice, and localized equity loss to three decimal places. Green indicates a good move. Yellow, orange, and red mark losses from 0.04, 0.08, and 0.16 respectively. A zero loss is shown as `0.000` in English, and a dash indicates that no evaluation is available. Move assessments load for the selected game, identify the analysis source and depth, and update when a job finishes.
 
-Die **Fehlerübersicht pro Zug** startet in allen Ansichten mit **Nur Auffälligkeiten (≥ 0,04)**; **Filter zurücksetzen** stellt diesen Fehlerfilter wieder her. Korrekte beziehungsweise erzwungene Entscheidungen mit 0,000 Verlust sind damit keine Fehlerlistentreffer. Wird ausdrücklich die vollständige Entscheidungsliste gewählt, etwa über die Gesamtzahlen in der Statistik oder durch Ausschalten des Fehlerfilters, heißt sie **Entscheidungen pro Zug**. Bei einer Einzelspielanalyse zeigt der Spielfilter ausdrücklich das aktuelle Spiel, auch nach einem Statistik-Klick oder dem Zurücksetzen der Filter. Statistik-Klicks im bereits geöffneten Spiel behalten den Brettzug bei. Bei der gesamten Matchanalyse bleiben „Alle Spiele“ und gezielte Filter einzelner Spiele verfügbar. Bestehende Analysewerte werden dabei nicht verändert.
+**Errors by move** defaults to **Inaccuracies only (≥ 0.04)**. **Reset filters** restores that threshold. Turning off the threshold or selecting an overall decision count in **Statistics** opens **Decisions by move**. Statistics can filter the visible list by player, checker or cube decision, severity, and game. Single-game analysis keeps the game filter scoped to that game, including after a reset. For a full match, choose all games or an individual game. Filtering within the current game preserves the board selection.
 
-Die Layoutgrößen beziehen sich auf die nutzbare logische Fensterfläche, auch unter macOS **More Space**. Die Desktopprüfung umfasst 1800×1169, 2560×1440 und 3840×2160; es wird keine physische Pixelauflösung als CSS-Auflösung vorausgesetzt. Kennzahlen filtern in der Übersicht die bereits sichtbare Fehlerliste; die Herkunft und Abdeckung der Statistik bleiben erkennbar.
+Checker rows show the played and best moves, their equities, and the loss. Cube rows include missed doubles and double, take, and drop decisions. Selecting a move number opens the corresponding board position. Game buttons in **Statistics** open that game, and changing a decision filter restarts pagination. Native PR uses GNUbg job statistics. New jobs save complete per-game statistics atomically. Older jobs can show totals reconstructed from their decisions, with per-game PR shown as unavailable where it was never saved.
 
-Der Zugverlauf zeigt pro Zug zwei kompakte Zeilen: die Notation und darunter Spielernamen sowie Würfel. Rechts steht der lokalisierte Equity-Verlust mit drei Nachkommastellen. **Grün**, **Gelb**, **Orange** und **Rot** unterscheiden gute Züge, Ungenauigkeiten, Fehler und Blunder; die Fehlergrenzen bleiben 0,04 / 0,08 / 0,16. Ein echter Nullverlust erscheint als 0,000, ein noch nicht ausgewerteter Zug als neutraler Strich. Zugängliche Quellen-/Tiefenangaben bleiben erhalten. Der ausgewählte Zug erhält unabhängig von seiner Bewertung einen dezenten Hintergrund und einen Akzent am linken Rand. Die Werte werden gesammelt für das ausgewählte Spiel geladen, mit nativen Aufträgen und importierten Analysen als getrennt erkennbaren Quellen. Ein verspätetes Ergebnis darf kein anderes Spiel einfärben.
+### Preview a move
 
-Ansichten bleiben beim Tabwechsel eingebunden: Suchfilter, ungespeicherte Notizen und SSE-Abonnements bleiben erhalten. Akzeptierte Aufträge werden auch dann im Hintergrund weiterverfolgt, wenn während der POST-Antwort die Position oder das Spiel gewechselt wird. Die redundante globale Laufanzeige entfällt; Fortschritt und Fehler bleiben beim jeweiligen Analyseumfang sichtbar. Abschlüsse aktualisieren weiterhin die Zugbewertungen.
+**Initial**, **Arrows**, and **Final** show the starting position, the move path, and the resulting position. The default view uses outlined green arrows for the played move and shows legal intermediate points. Select a candidate row from an import, BackgammonDB, or local analysis to preview it. Use Enter or Space on the move name. Up/Down selects the previous or next candidate and keeps it in view. Left shows **Initial**, Right shows **Final**, and other controls keep their normal keyboard behavior. The selected board view persists when changing candidates. **Reset preview** returns to the recorded move.
 
-**Einstellungen** öffnet einen eigenen modalen Dialog mit den Bereichen Allgemein, Analyse, Spielen und Brett. Neben Sprache und Theme enthält er einen persönlichen Spielernamen, den GNUbg-Programmpfad sowie ein Analyseprofil (0–4 Ply, Standard 2-Ply) und ein getrenntes Spielprofil (0–2 Ply) und die Ausspielrichtung. Neue Matches unter Playing übernehmen diese Einstellungen; gespeicherte Matches behalten ihr ursprüngliches Profil. BGSage ist weiterhin nicht verfügbar. Die vorhandene Engineauswahl zeigt GNUbg und kennzeichnet BGSage als geplant/nicht verfügbar.
+The board identifies the candidate source and rank. **Final** keeps the board orientation and hides the dice. All themes use the same legality checks for bar entry, hits, multi-step moves, doubles, and bear-off. Unrecognized or illegal notation shows the starting position. Analysis, notes, position IDs, and study cards continue to use the pre-move decision. Changing position or source clears the previous candidate preview.
 
-Enginepfad, Spielername und Profile werden mit Revisionsprüfung in PostgreSQL gespeichert. Eine gleichzeitige Änderung liefert einen sichtbaren Konflikt und erhält den Entwurf. **Installation prüfen** und Speichern prüfen die Version und eine echte GNUbg-Positionsbewertung einschließlich Netzgewichten mit insgesamt zehn Sekunden Zeitlimit. Der Pfad gehört zum Rechner des Rust-Backends. Ungültige Einstellungen ersetzen keine funktionierende Konfiguration. Sprache und Theme bleiben lokale Browserpräferenzen.
+### Search from the analysis board
 
-Migration 0019 erweitert die Analysetiefe auf 3-Ply und setzt den ursprünglichen, nie gespeicherten Standard auf 2-Ply. Explizit gespeicherte Profile bleiben erhalten. Bestehende Aufträge und Ergebnisse behalten ihre ursprüngliche Tiefe und Enginekonfiguration. Die Engine kann bei eindeutigem Ergebnis die Suche früh beenden; die eingestellte Tiefe ist das Suchprofil. Migration 0020 ergänzt 4-Ply für Positionen, einzelne Spiele, ganze Matches und Dice Distribution; sie ändert weder gespeicherte Profile noch den 2-Ply-Standard. Höhere Tiefen benötigen insbesondere bei kompletten Matches und allen 21 Würfelpaaren mehr Rechenzeit. Native Tiefentests prüfen tatsächliche GNUbg-Ausgaben und Partieexporte statt nur der angeforderten Tiefe in den Auftragsmetadaten.
+In Analysis, **Save position** and the magnifying glass share a toolbar above the board. The magnifying glass to the right of the bookmark shows **Search this position** on hover or keyboard focus. On narrow screens both icons move to the next line together.
 
-Jeder neue Analyseauftrag erhält eine unveränderliche Enginekonfiguration; explizite oder gespeicherte Ply stehen am Auftrag. Aktive Deduplizierung berücksichtigt neben Ziel/Umfang/Ply auch den Enginepfad und die Version. Läuft ein älterer Auftrag nach einer externen Ersetzung des Binary am gleichen Pfad weiter, schlägt er mit Diagnose fehl, statt Ergebnisse verschiedener Versionen zu mischen. Bereits gespeicherte Match-Checkpoints bleiben erhalten. Legacy-Aufträge ohne Snapshot verwenden weiterhin die beim Backendstart konfigurierte Engine. MAT-Importe verwenden den aktuell gespeicherten GNUbg-Pfad.
+Select **Search this position** to open Match database and run an exact search for the displayed position. The position ID appears in the expanded search form and as an active filter. The action selects **All databases**, clears the other filters, and keeps the current sort order. Selecting the action again reruns the search. Switching tabs preserves any subsequent decision to remove the filter.
 
-## Position Browser und gespeicherte Suchen
+### Desktop layout
 
-**Positionen** ist die persönliche Sammlung bewusst gemerkter Stellungen. Importierte Partien füllen sie nicht automatisch. **Position merken** neben dem Brett im Analysearbeitsplatz übernimmt die konkrete Entscheidung mit ihrem Kontext; **Aus Sammlung entfernen** entfernt nur diese Markierung. Ursprüngliche Matchdaten, Notizen, Analysen und Lernkarten bleiben beim Entfernen erhalten. Die Sammlung startet leer; bestehende Tags oder Analysen werden nicht als ausdrückliche Auswahl interpretiert. Einzelne oder mehrere ausgewählte Einträge lassen sich in der Sammlung entfernen. Gemerkte Positionen bleiben auch nach dem Löschen ihres Ursprungsmatches oder der Quelldatenbank erhalten: Spieler, Wurf, Spielstand, ursprüngliche Match-ID, zugehörige Notizen und vorhandene Positionsanalysen werden eigenständig aufbewahrt. Sie lassen sich weiterhin einzeln analysieren, kommentieren und in Lernmodus oder Anki verwenden. Originaldateien und übrige Matchzüge werden gelöscht; Match-/Spielanalyse und Quellexport gehören zu weiterhin vorhandenen Originalpartien. Die Suche umfasst Datenbank, Freitext, Spieler am Zug, Matchname, Turnier, Runde, exakte Tags, Kommentare, Checker-ID, Matchpunkte, Wurf, Spielstand, Crawford, Cube-Wert sowie vorhandene lokale Analyse und nativen Equity-Verlust. Ein einzelner Würfel passt auf beide Würfel; ein Paar wird unabhängig von seiner Reihenfolge gesucht. Fehlende Analysewerte bleiben unbekannt. Native Fehlerwerte nennen ihre tatsächliche Engine und Tiefe. Importierte/Buchanalysen werden dafür nicht als lokale Fehlerbewertung ausgegeben.
+The desktop layout is designed for side-by-side review using a mouse or keyboard. Layout checks use logical viewports of 1800×1169, 2560×1440, and 3840×2160, including under macOS **More Space**. The shared type scale uses 24 px page titles, 14 px section titles, 13 px controls and body text, and 12 px tables. CSS tokens define the type scale, with monospace for position IDs and separate type for the board and logo. [Typography](docs/typography.md)
 
-Die kompakte Positionstabelle nutzt die Desktop-Breite mit dauerhaft sichtbarer Brettvorschau rechts. **Spieler am Zug** und **Gegner** stehen in getrennten Spalten; Match-ID und Name, Datenbank, Partie, Zug, Wurf, Spielstand, Doppler, Verlust und Notizen sind direkt vergleichbar. Eine Zeile zeigt genau eine gespeicherte Positionsinstanz; Klick oder Pfeiltasten aktualisieren deren Vorschau, Enter oder Doppelklick öffnet die Analyse. Ein gemeinsamer Hover-Text liefert Kontext und Analyseherkunft. Spalten lassen sich über die Kopfzeilen in beide Richtungen sortieren und an den Rändern vergrößern oder verkleinern. Positionen speichern eigene Spaltenbreiten, unabhängig von der Matchdatenbank; Zurücksetzen stellt die an das Fenster angepasste Ansicht wieder her.
+Text tabs use the active theme's accent and a 2 px underline. The same pattern covers workspace and analysis tabs, board views, analysis sources, checker and cube selection, note scopes, settings, and database selection. [Navigation style](docs/ui-navigation.md)
 
-Die Spalte **Lernstapel** zeigt alphabetisch die Decks, in denen die Lernposition bereits enthalten ist. Sie ist sortierbar und größenveränderbar; vorhandene benutzerdefinierte Spaltenbreiten bleiben beim Ergänzen der Spalte erhalten. Vorschau und Zeilenübersicht zeigen die vollständigen Deck-Namen. Nach einer Übernahme aktualisiert sich die Liste, einschließlich bereits nachgeladener Seiten, Auswahl und Vorschau. Die Zuordnung berücksichtigt Brettstellung, Wurf, Spielstand und Doppler: Gleichwertige Vorkommen teilen ihre Deck-Zugehörigkeit, unterschiedliche Entscheidungskontexte bleiben getrennt. Sie bleibt auch nach dem Löschen des Ursprungsmatches verfügbar.
+## Settings and GNUbg
 
-Für Fragen wie „Wie spielt Mochy diese Position?“ den sichtbaren Filter **Spieler am Zug** mit Checker-ID und Würfeln kombinieren. Beide Spielfarben werden berücksichtigt; Positionen, in denen nur der Gegner am Zug ist, bleiben ausgeschlossen. **Gespielte Züge anzeigen** blendet die tatsächlich aufgezeichnete Entscheidung als zusätzliche Spalte und in der Vorschau ein. Die Einstellung wird lokal gespeichert und ist anfangs ausgeschaltet, damit Lernfragen verdeckt bleiben. Sortierung und Richtung gehören zur gespeicherten Suche.
+**Settings** opens a dialog with **General**, **Appearance**, **Analysis**, **Playing**, **Board**, and **Profiles**. The **General → Language** menu lists Deutsch, English, Español, Français, Italiano, and Polski alphabetically. New installations default to English. **Board** offers previews of Forest, Walnut, Slate, and local BGBlitz themes from `themes/*.zip`. Use **Apply** to use the draft settings. [Configuration profiles](#configuration-profiles)
 
-Treffer behalten ihre vollständigen Positions-/Match-IDs einschließlich Wurf, Score und Cube. Notizen werden nur von passenden Ebenen berücksichtigt: Match, betreffende Partie, Position und zugehöriger Checkerzug. Ein Kommentar zu einem anderen Zug macht nicht das ganze Match zum Treffer. Die erste Version durchsucht gespeicherte Checkerentscheidungen; Cube-Entscheidungen bleiben über Statistik und Cube-/Zugnotizen erreichbar. Eine Vorschau zeigt die Ausgangsstellung; deren Schaltfläche **Analyse öffnen** führt zum exakten Zug im Analysearbeitsplatz. In Tabellenzeilen entfällt diese redundante Schaltfläche; Enter und Doppelklick öffnen die Analyse weiterhin direkt.
+Set a player name, default analysis depth (0–4 ply, default 2), separate playing strength (0–2 ply), and bear-off direction. New matches use the playing settings in effect at creation. The engine selector lists GNUbg and marks BGSage as planned.
 
-Benannte Suchdefinitionen liegen mit Schema- und Änderungsrevision in PostgreSQL. Laden, neu speichern, aktualisieren/umbenennen und löschen stehen unter **Gespeicherte Suchen** bereit. Gleichzeitige Änderungen liefern HTTP 409 und erhalten den Entwurf. Ein Bezug zu einer gelöschten Datenbank wird sichtbar und führt nicht stillschweigend zu einer globalen Suche. Pagination bindet den Cursor an die vollständige Filterdefinition; beim Rückwechsel bleibt die geladene Ergebnisfolge mit Vorschau und Auswahl erhalten und wird aktualisiert.
+The executable path is specific to the backend computer. Installation checks, analysis, playing, and benchmarks use the same resolution rules. An absolute path is resolved directly, a relative path containing a directory separator is resolved from the backend's working directory, and a bare name such as `gnubg` uses the first matching file on the backend's `PATH`. The backend reports an error if resolving or running that file fails. The resolved path must be valid UTF-8.
 
-Bis zu 200 ausgewählte Treffer lassen sich in einen neuen oder bestehenden Lernstapel übernehmen. Jede Position erhält ein Ergebnis: hinzugefügt, aktualisiert, bereits vertreten, Analyse erforderlich oder nicht mehr vorhanden. Nur verwendbare abgeschlossene lokale Lösungen liefern Lernantworten; fehlende oder nicht auswertbare Analysen erzeugen keine erfundene Karte. Identische Lernfragen teilen die vorhandene FSRS-Historie. **Dieses Deck lernen** öffnet den bestehenden Lernmodus ohne eine alte aufgedeckte Antwort mitzunehmen; **Gesamtes Deck als Anki herunterladen** verwendet den vorhandenen Rust-APKG-Export. Das Deck-Limit bleibt 1.000 Karten, ein Grenzverstoß übernimmt keine Teilmenge.
+**Check installation** and saving a changed executable path check the version and run a real position evaluation within a single 10-second time limit. A failed check prevents an invalid path from replacing the saved installation. Installation settings use PostgreSQL revision checks. A concurrent change surfaces a conflict and retains the draft.
 
-Der sichtbare Importknopf wurde aus dem Header entfernt. Import und Mehrfachimport bleiben in der Matchdatenbank verfügbar, ebenso der gemeinsame Dateieingang und Drop auf der Startansicht.
+A new analysis job records its engine configuration and effective ply. Active-job deduplication includes the target, scope, ply, configured executable path, and version. An engine version change at the same path fails a job that expects the original version and preserves completed game checkpoints. Legacy jobs without a snapshot use the engine configured at backend startup. MAT imports use the currently saved executable path.
 
-## Zugvorschau und interaktive Statistiken
+Migration 0019 added 3-ply analysis and changed the original unsaved default to 2-ply. Migration 0020 added 4-ply for positions, games, matches, and dice distributions. Explicit profiles, existing jobs, and completed results retain their recorded depth. The requested depth is the GNUbg search profile, which allows early exit when the result is clear. Higher depths take longer, especially for full matches and dice distributions.
 
-Der Analysearbeitsplatz bietet **Initial**, **Arrows** und **Final**. Standardmäßig zeigen grüne, kontrastreich umrandete Pfeile den gespielten Zug mit legalen Zwischenpunkten. Bei Checker-Kandidaten aus Datei, BackgammonDB oder neuer Engineanalyse zeigt ein Klick auf die gesamte Kandidatenzeile die Zugvorschau. Die ausgewählte Zeile wird hervorgehoben; der Zugname bleibt per Enter und Leertaste bedienbar. Nach Auswahl einer Zeile wechseln Pfeil hoch und runter direkt zur Vorschau des vorherigen oder nächsten Kandidaten; Fokus und sichtbarer Listenbereich folgen der Auswahl. Die gewählte Brettansicht bleibt beim Kandidatenwechsel erhalten. Pfeil links zeigt **Initial**, Pfeil rechts **Final** des ausgewählten Kandidaten; Eingabefelder, Tabs und Dialoge behalten ihre eigene Tastaturbedienung. Quelle und Rang einer Kandidatenvorschau bleiben am Brett sichtbar; **Vorschau zurücksetzen** beendet den Vergleich. Die redundante Zeile mit dem gespielten Zug unter den Brettschaltern entfällt. Die Nachher-Ansicht hält die Brettorientierung fest und blendet die Würfel aus. Bar-Eintritt, Hits, Mehrfachzüge, Doppelwürfe und Bear-off werden vor der Darstellung legal geprüft. Ungültige oder unbekannte Notation fällt auf die gespeicherte Ausgangsstellung zurück. Alle Themes verwenden dieselbe Projektion.
+## Saved positions and searches
 
-Vorschauen ändern keine Stellung-IDs, Analyseziele, Notizen oder Lernkarten: Diese beziehen sich weiter auf die Entscheidung vor dem Zug. Positions- und Quellenwechsel verwerfen fremde Kandidaten.
+In **Analysis**, choose **Save position** to add the specific pre-move decision and its match context to **Positions**. The collection starts empty and fills through explicit saves. **Remove from collection** works for individual or selected entries. A saved decision can survive deletion of its source match or database, retaining player, roll, score, original match ID, related notes, and position analyses. It can still be analyzed, annotated, and used for study or Anki. Full game and match analysis and original-file export require the source match.
 
-Der Reiter **Statistik** zeigt zum gewählten GNUbg-Auftrag Spielerwerte und eine Partieübersicht. Metriken öffnen die sichtbare Entscheidungsliste mit passendem Spieler-, Checker-/Cube-, Fehlerschwere- und Partiefilter. Partie-Schaltflächen öffnen genau das ausgewählte Spiel. Filterwechsel beginnen die Pagination neu. Native PR bleibt von Quellanalysen und Buchwerten getrennt; fehlende native Daten werden als nicht verfügbar angezeigt. Neue Aufträge speichern vollständige Partiestatistiken atomar. Ältere Aufträge erhalten aus ihren Entscheidungen rekonstruierte Summen, jedoch keine erfundene Partie-PR.
+The position table has a fixed preview area on the right. Click or use the arrow keys to select a row, then press Enter, double-click, or use **Open analysis** in the preview to open the exact decision. The table has its own sort and column widths. Its row tooltip gives context and analysis provenance. The sortable **Decks** column shows deck names alphabetically. Equivalent decisions share deck membership when the checker arrangement, roll, score, and cube context match. Membership updates across loaded pages and in the preview after adding positions to a deck.
 
-## Quellanalysen und Opening Books
+Filter by database, search text, player on roll, match name, tournament, round, exact tag, comment, checker position ID, match points, roll, score, Crawford, cube value, local analysis, or native equity loss. One die matches either die in the recorded roll. A pair matches either order. For example, to see how Mochy played a specific position, combine **Player on roll** with the checker position ID and roll. **Show played moves** adds the recorded decision to the table and preview. It starts off so answers stay hidden during study.
 
-Importe behalten vorhandene Analysen in eigenen Datensätzen: Engine/Version soweit aufgezeichnet, originale Tiefen-/Profilbezeichnung, Methode, Kandidaten, Cube-Antworten, Equity-Einheit und unveränderte Rohwerte. XG, native GNUbg-SGF und verfügbare BGBlitz-Informationen werden gelesen. MAT ohne Analysedaten erhält keine erfundene Analyse. Unbekannte Engines oder Cube-Einheiten bleiben unbekannt. GNUbg-MWC wird nicht als normalisierte Equity ausgegeben. Neue Berechnungen und unabhängige Matchkopien überschreiben keine Quellresultate. Auch frühere Importe können die Analyse einmalig aus ihren gespeicherten Originaldateien rekonstruieren.
+Results retain the full GNUbg position and match IDs. Comment filters consider the match, the relevant game, the position, and the matching checker move. Native loss values show their actual engine and depth, with unavailable evaluations shown as unknown. The collection searches checker decisions. Use **Statistics** or **Cube and move notes** to review cube decisions.
 
-Im Analyseinspektor sind **Importierte Analyse**, **Eröffnungsbuch** und **Lokale Engine** getrennte Quellen. Cube-Quellanalysen tatsächlicher Double-/Take-/Drop-Aktionen sind zusätzlich im Dialog „Cube- und Zugnotizen“ zugänglich. Buchabfragen verwenden den vollständigen Kontext; die 80-Bit-Checkerstellung allein reicht nicht.
+**Saved searches** lets you load, save, update, rename, and delete named searches. PostgreSQL stores the filters, sort, direction, and revision. Concurrent edits return HTTP 409 and preserve the draft. A search referencing a deleted database flags the missing database. Pagination ties each cursor to the complete filter definition. Returning to the workspace keeps loaded results, selection, and preview in place while refreshing.
 
-Die Buchverwaltung ist ausschließlich über **Einstellungen → Analyse → Eröffnungsbücher** erreichbar. Im Analysearbeitsplatz bleiben die positionsbezogene Quellenauswahl und Angaben zu Herkunft, Engine und Tiefe sichtbar. Die Buchverwaltung speichert Anbieter und Dateipfade mit Versionsprüfung und erhält ungespeicherte Einstellungen im übergeordneten Dialog. Die Dateipfade gehören zum Backend-Rechner. Automatisch erlaubt den Vergleich beider Bücher; direkte Anbieterwahl und Aus sind ebenfalls verfügbar. Eine manuelle Engineanalyse berechnet weiterhin das gewählte native GNUbg-Profil. Andere Buch-Engines oder -Versionen werden nicht als identischer nativer Cachehit ausgegeben und nicht in Match-PR gemischt.
+Add up to 200 selected positions to a new or existing study deck. Each position reports whether it was added, updated, already in the deck, requires analysis, or is no longer available. Study answers require a usable completed local analysis. Identical questions share FSRS review history. **Study this deck** opens a fresh study view, and **Download entire deck as Anki** uses the Rust APKG export. A deck can hold 1,000 cards. If a batch would exceed that limit, the entire batch is rejected.
 
-- **BackgammonDB:** lokales SQLite-Buch mit 4.230.443 Entscheidungen und 351 Kontexten. Es liefert für Stellung **und Wurf** bis zu acht geordnete Züge, daneben eine separate Cube-Frage ohne Würfel. Die Baumabdeckung ist beschnitten und abhängig vom Spielstand; ein Miss ist normal. Quelle: GNUbg1.08.003, reguläre 3-ply-Bewertungen, keine pauschalen Rollouts. Daten unter CC BY4.0; Attribution erscheint beim Ergebnis. [Daten und Format](https://github.com/chalkstreamdev/bgdb-opening-book), [Buchbeschreibung](https://backgammondb.com/opening-book).
-- **XG Opening Book3.70:** vollständige offizielle `.ob`-Datei, 53.210 Bewertungsdatensätze. Das Buch bewertet erreichte Stellungen **vor einem Wurf**, speichert keine Zugliste und kein Double-/Take-Verdikt. Es wird als Stellungsreferenz angeboten, mit tatsächlicher Engine, ursprünglichem Profil/Rollout und dem Autor jedes Eintrags. Native Werte aus Sicht des vorherigen Ziehenden werden nachvollziehbar auf den Spieler am Zug gespiegelt. Unklare historische Tiefencodes werden nicht erfunden. Die Quelle erlaubt freie Nutzung unter Erhalt und Anzeige der Rollout-Autoren. [Offizielle Quelle und Nutzungsbedingungen](https://www.extremegammon.com/GetOb.aspx).
+## Imported analysis and opening books
 
-Beaver, Jacoby, Crawford, Away-Scores, Cube-Wert und Cube-Besitz werden berücksichtigt. XG-Moneygame-Regeln werden aus dem Originalheader gelesen; eine fehlende oder nicht unterstützte Regel wird nicht durch einen ähnlichen Buchkontext ersetzt. Das BackgammonDB-Buch enthält keine Beaver-Kontexte. Ein XG-Stellungswert ist keine Bewertung des zufällig daneben angezeigten Würfelwurfs; beide Buchansichten sagen ausdrücklich, welche Frage sie beantworten.
+The analysis inspector offers **Imported analysis**, **Opening book**, and **Local engine**. Imported XG, native GNUbg SGF, and available BGBlitz analysis stay in their own records, with the original depth or profile label, method, candidates, cube responses, raw values, equity units, and engine version where known. Missing analysis and unknown engines or units stay unavailable. GNUbg match-winning chances retain their original units. Analysis jobs and independent match copies preserve source results. Older imports can reconstruct analysis once from the stored original file. Source evaluations for recorded double, take, and drop actions also appear in **Cube and move notes**.
 
-Die realen Buchdateien liegen lokal unter `~/Library/Application Support/BG Tutor/`, nicht im Repository. Für andere Installationen die offiziellen Datendateien herunterladen, außerhalb Git ablegen und den Backend-Pfad im Buchdialog eintragen. BGDB-Daten müssen als serving-SQLite-Datei entpackt sein, XG als `OpeningbookV2.ob`. Die Check-/Install-APIs prüfen das jeweilige Format; sie führen keine fremden Programme aus.
+Manage books under **Settings → Analysis → Opening books**. Select **Automatic** to compare available books, choose a provider directly, or select **Off**. The book dialog saves the provider and paths with revision checks while keeping the parent settings draft. Book paths are on the backend computer. The analysis inspector shows the selected source, engine, and depth for the current position. Manually requested analysis uses the selected native GNUbg profile. Book results stay separate from native GNUbg results and match PR.
 
-## Private Demo-Daten neu aufbauen
+- **BackgammonDB** is a local SQLite book with 4,230,443 decisions across 351 contexts. It provides up to eight ranked moves for a position and roll, plus a separate pre-roll cube lookup. Coverage is pruned and score-dependent. Evaluations use GNUbg 1.08.003 at regular 3-ply. The app credits the CC BY 4.0 data at the result. [Data and format](https://github.com/chalkstreamdev/bgdb-opening-book), [book description](https://backgammondb.com/opening-book)
+- **XG Opening Book 3.70** is an official `.ob` file with 53,210 pre-roll position evaluations. It provides a position reference with the original engine, profile or rollout, and author. Values from the previous player's perspective are converted to the player on roll. Historical depth codes that cannot be identified stay unknown. The terms allow free use with attribution to the rollout authors. [Official download and terms](https://www.extremegammon.com/GetOb.aspx)
 
-`games/bgf`, `games/mat` und `games/xg` sind ausdrücklich Git-ignoriert. Die drei Demo-Bestände werden über den normalen REST-Importer vorbereitet. Das Werkzeug erstellt und überprüft vorher einen PostgreSQL-Dump außerhalb Git und schreibt den vollständigen Importbericht ebenfalls dorthin. Es prüft die Übereinstimmung von API- und Containerdatenbank. Vor dem Austausch werden unter Transaktionssperre Cluster-/Datenbankidentität, alle drei Bestände, Match-IDs, Herkunft und SHA256 geprüft. Fehlgeschlagene Validierung verändert die aktive Bibliothek nicht; ein erneuter Aufruf nach bereits erfolgtem Austausch wird verweigert.
+Book lookups use the full decision context, including Crawford, away scores, cube value and ownership, and money-game rules. BackgammonDB has no beaver contexts. The XG book reads money-game rules such as Jacoby and beavers from the original header and requires a supported context. Its pre-roll values apply to the resulting position independently of any displayed dice.
 
-```sh
-python3 tools/rebuild_demo.py stage --allow-rejected
-# Backend anschließend regulär stoppen; den ausgegebenen Manifestpfad verwenden:
-python3 tools/rebuild_demo.py activate '/absoluter/Pfad/zum/demo-import-....json'
-# Backend wieder starten.
-```
+Keep the downloaded book files outside Git, for example in `~/Library/Application Support/BG Tutor/` on macOS, and enter their backend paths in the book dialog. Extract the BackgammonDB serving SQLite file and the XG `OpeningbookV2.ob` file. The check and install endpoints validate the data formats directly.
 
-`--allow-rejected` bedeutet, nach Prüfung der einzeln dokumentierten fehlerhaften Dateien die gültigen Matches zu verwenden. Netzwerk-/Serverfehler führen weiterhin zum Abbruch. Das Werkzeug ersetzt die Matchbestände; Lernkarten und Wiederholungsverlauf sind unabhängige Daten und werden nicht gelöscht. Die Demos liegen in den drei Beständen „Demo BGF“, „Demo MAT“ und „Demo XG“. Öffentliche Quellen und die Produkt-/UX-Empfehlungen stehen in [der BackgammonDB-Auswertung](docs/research/2026-11-08-backgammondb-product-ux.md).
+## Match databases
 
-Die lokale Demo-Neuinitialisierung vom 8. November 2026 ist abgeschlossen: **Demo BGF: 5**, **Demo MAT: 5**, **Demo XG: 23** Matches. 72.959 vorhandene Checker-/Cube-Analysen und 98 zusätzliche Quellstatistik-Datensätze sind gespeichert. Neun XG-Dateien mit ungültigen beziehungsweise inkonsistenten Zugdaten wurden zurückgewiesen und im privaten Importbericht dokumentiert. Die bisherige Bibliothek ist vollständig gesichert; Lernkarten und Wiederholungen blieben unverändert.
+**Match database** organizes named collections within a single PostgreSQL instance. Choose a database to filter the list and target imports, or choose **All databases** to search across the library. Multi-file imports process each file separately and report duplicates and failures per file.
 
-## Datenbanken und Matchverwaltung
+BG Tutor automatically provides **Unsorted** for imports without an explicit target and **Bot Matches** for games played against GNUbg. These system databases have fixed names and are protected from deletion. You can edit their descriptions. **Empty database** requires confirmation and removes the matches from the selected system database. BG Tutor retains the database, saved positions and their relevant notes, flashcards and review history. BG Tutor rejects the operation if any of the database's matches has a queued or running analysis. You can create, describe, rename and delete your own databases.
 
-Über **Spalten** oberhalb der Matchliste lässt sich jede Datenspalte ein- oder ausblenden. **Turnier** und **Kommentar** sind standardmäßig ausgeblendet; **Tags** ist eine eigene, sichtbare Spalte. **Alle Spalten anzeigen** und **Standardspalten** stehen im selben Menü bereit. Auswahl und Aktionen bleiben erreichbar, mindestens eine Datenspalte bleibt sichtbar. Sichtbarkeit und Breiten werden getrennt lokal im Browser gespeichert; ausgeblendete Spalten behalten ihre Breite. Bestehende Breiten der früheren Notizspalte werden auf Tags übernommen. Filter, Sortierung und Mehrfachauswahl bleiben beim Umschalten erhalten; eine ausgeblendete Sortierspalte wird oberhalb der Tabelle genannt. Auch ausgeblendete Angaben bleiben durchsuchbar und Teil der Zeilenzusammenfassung.
+### Filtering and navigating matches
 
-Die Matchdatenbank verwaltet benannte, getrennte Bestände innerhalb derselben PostgreSQL-Instanz. Neue Bestände lassen sich anlegen, beschreiben, umbenennen und löschen. „Unsortiert“ ist der Standardbestand für neue Importe ohne Datenbankauswahl und bleibt erhalten. Die Auswahl „Alle Datenbanken“ erlaubt die gemeinsame Suche. Ist ein konkreter Bestand ausgewählt, bestimmt er das Importziel. Mehrfachimporte verarbeiten Dateien einzeln und melden Duplikate und Fehler je Datei.
+- Combine filters for players, played or import dates, exact tags, comments, position ID, tournament, match name, match or money play, result, winning color or draw, round and match points. Position and note searches respect the selected database.
+- An exact GNUbg Position ID filter shows every occurrence as its own row in the match table, including repeats in the same game. Use the **Database**, **Game** and **Move** columns to locate or sort the occurrences. The count and pagination refer to occurrences. Bulk actions apply once per selected match.
+- Click the match button, press Enter or double-click a row to open Analysis. With a position filter active, this opens the exact occurrence. Use the arrow keys to move between rows or click the pencil icon to edit match metadata.
+- Sorting applies to all results before pagination. Click a data column header to sort ascending, then click again to sort descending. Names sort case-insensitively. IDs, PR, position counts, scores, game numbers and move numbers sort numerically. Scores sort by White, then Black. Missing values appear last in both directions. Changing the sort returns to the first page and clears the selection. Without a position filter, the occurrence-specific sorts fall back to import date.
 
-Die exakte Positionssuche in der Matchdatenbank filtert dieselbe Matchliste; getrennte Trefferboxen entfallen. Jedes einzelne Vorkommen erscheint mit Datenbank, Partie und Zugnummer als eigene Zeile, auch bei Wiederholungen in derselben Partie. Match-Schaltfläche, Enter und Doppelklick öffnen bei aktivem Positionsfilter genau die gewählte Stelle. Die Spalten **Datenbank**, **Partie** und **Zug** lassen sich wie die übrigen Spalten auf- und absteigend sortieren; Datenbanknamen alphabetisch ohne Beachtung der Groß-/Kleinschreibung, Partie und Zug numerisch. Die Sortierung gilt für alle Treffer vor dem Nachladen und bleibt im Profil erhalten. Auch die Breiten dieser drei Suchspalten lassen sich per Ziehen oder Tastatur verändern und werden im Profil gespeichert. Bestehende Breiten der normalen Matchliste bleiben erhalten; Zurücksetzen setzt auch die Suchspalten zurück. Ohne Positionsfilter verwendet die normale Matchliste für diese Suchsortierungen das Importdatum. Die Treffermenge und das Nachladen zählen Vorkommen; Mehrfachaktionen bleiben auf Match-Ebene zusammengefasst. Der Positionsfilter lässt sich einzeln entfernen und mit allen übrigen Filtern, Sortierung und Mehrfachaktionen kombinieren. Die sortierbare Matchliste zeigt Spieler, **PR**, Spielstand, Matchlänge beziehungsweise Moneygame, gespieltes und Importdatum, Turnier, Analysezustand, Tags und Kommentare. Die kompakte Desktop-Tabelle nutzt die gesamte Breite neben der Datenbankauswahl; eine separate Brettvorschau entfällt. Die Spalte **ID** zeigt eine dauerhaft vergebene numerische Match-ID, unabhängig von Datenbank, Zeilenreihenfolge und Filtern. Umbenennen und Verschieben behalten die ID; Kopien erhalten eine eigene. Nummernlücken sind möglich. Die technische UUID bleibt für REST-Zugriffe erhalten. Die Spalte **Positionen** zeigt nur die Anzahl der gespeicherten Stellungen; das Herkunftsformat bleibt für Import und Export gespeichert. Namen, Tags und Kommentare bleiben einzeilig. Jede Matchzeile hat genau einen gemeinsamen Hover-Text mit Match-ID, Spielern, Matchlänge, Ergebnis, verfügbaren PR-Werten, Analyseprofil und Kontext. Tags und Kommentare werden darin als begrenzte Auszüge zusammengefasst; eigene Zell-Tooltips entfallen. Die rechten Ränder der Spaltenköpfe lassen sich ziehen; die gewählten Breiten werden lokal im Browser gespeichert. Auf einen fokussierten Spaltentrenner wirken Pfeiltasten (mit Umschalt in größeren Schritten), Pos1/Ende und Escape zum Abbrechen einer laufenden Größenänderung. **Spaltenbreiten zurücksetzen** stellt die an das aktuelle Fenster angepassten Standardbreiten wieder her. Breite Tabellen bleiben innerhalb der Matchliste horizontal scrollbar. Alle Datenspalten besitzen Sortierknöpfe mit Richtungspfeilen. Erster Klick sortiert aufsteigend, der nächste absteigend. **Tags** und **Kommentar** besitzen eigene Sortierknöpfe; Auswahl- und Aktionsspalten bleiben Bedienelemente. ID, PR, Positionszahl und Spielstand werden numerisch sortiert (Spielstand zuerst Weiß, dann Schwarz), Text ohne Beachtung der Groß-/Kleinschreibung. Fehlende Werte stehen in beiden Richtungen am Ende. Die Sortierung erfolgt vor der serverseitigen Pagination; ein Sortierwechsel beginnt wieder mit der ersten Seite und hebt die Mehrfachauswahl auf. Der Stift pro Zeile öffnet direkt den Metadateneditor. Die Match-Schaltfläche, Enter oder ein Doppelklick öffnet den Analysearbeitsplatz, Pfeiltasten wechseln zwischen den Zeilen. Metadaten wie Anzeigename, Datum, Turnier, Runde, Ort und Ergebnis sind mit Versionsprüfung editierbar; Originaldatei und Analysekontext bleiben erhalten. Gespielte Daten werden nur aus eindeutigen SGF-Quellangaben übernommen. Fehlende Angaben bleiben unbekannt.
+### Table and metadata
 
-Kombinierbare Filter umfassen Spieler, Datum (gespielt/importiert), exakten Tag, Kommentar, Position-ID, Turnier, Matchname, Match/Moneygame, Ergebnisstatus, Gewinnerfarbe beziehungsweise Remis, Runde und Matchpunkte. Notiz- und Positionssuche beachten den gewählten Bestand. Pagination bindet Sortierung und Filter an den Cursor. Angezeigte PR-Werte stammen ausschließlich aus einer vollständigen Matchanalyse mit nativen GNUbg-Statistiken; einzelne Spielanalysen werden als Teilanalyse geführt. PR verwendet normalisierten Equity-Verlust × 500 / (nicht erzwungene Checkerzüge + nahe oder tatsächliche Cube-Entscheidungen). Die Entscheidungszählung unterscheidet sich von XG/BMAB. Fehlende, ältere oder unvollständige Statistiken ergeben keinen erfundenen PR. Siehe [GNUbg-Statistik](https://www.gnu.org/software/gnubg/manual/gnubg.html#gnubg-matches_review_stat_overall).
+The table uses the available width alongside the database selector and scrolls horizontally when needed. It shows players, PR, score, match length or money play, played and import dates, tournament, analysis status, tags and comments. **ID** is a stable match number. It survives a rename or move, copies get new numbers, and gaps are possible. REST uses the match UUID. **Positions** counts stored positions. The source format is available for import and export.
 
-Mehrfachauswahl unterstützt **Kopieren, Verschieben, Tags, Export und Löschen**. Je Aktion sind bis zu 100 Matches möglich, beim Export 50 und insgesamt 64 MiB. Kopieren erzeugt eigenständige Matches einschließlich Positionen, Partie-/Zug-IDs, Tags, Kommentaren und der letzten abgeschlossenen Analyse je Umfang. Lernfortschritt und aktive Aufträge werden nicht kopiert. Duplikate werden je Datenbank anhand des Originaldatei-Hashes erkannt und niemals mit Quellnotizen überschrieben. Verschieben erhält die IDs; bei einem Zielduplikat bleibt das Quellmatch bestehen. Aktionen melden den Ausgang je Eintrag. Löschen erfordert eine konkrete Bestätigung und lässt Matches mit wartender/laufender Analyse unangetastet. Lernkarten und deren Wiederholungsverlauf bleiben eigenständige Datensätze.
+Use **Columns** to choose and reorder data columns, **Show all columns** to reveal them, or **Default columns** to restore the default layout. **Tournament** and **Comment** are hidden by default, and **Tags** is visible. Selection and actions stay available, and the table requires at least one data column. Hidden values remain searchable and are included in the row summary where applicable. The current sort is shown above the table if its column is hidden. Column visibility and widths are saved separately, and a hidden column retains its width.
 
-Export liefert Originaldateien oder kanonische SGF, bei mehreren Matches ein ZIP. Dies ist ein Quellexport; BG-Tutor-Notizen und Lernverlauf sind darin nicht enthalten. Für eine vollständige Sicherung dient weiterhin das PostgreSQL-Backup. Die übernommenen ChessBase-Ideen sind benannte Bestände, sortierbare Listen, Mehrfachverwaltung und eine schnelle Brettvorschau: [Vorschaufenster](https://help.chessbase.com/CBase/16/Eng/preview_window_in_the_database.htm), [Bestände organisieren](https://en.chessbase.com/post/chessbase-18-tips-for-beginners-part-7-organising-databases).
+Drag the right edge of a header to resize it, or focus the divider and use the arrow keys. Shift increases the step, Home and End jump to the width limits, and Escape cancels an in-progress resize. **Reset column widths** restores defaults for the current window, including the occurrence columns. Widths and the occurrence sort follow the active profile. Widths from the former notes column carry over to **Tags**. Each row has a shared hover summary with the match ID, players, match length, result, available PR, analysis profile and excerpts of tags and comments.
 
+The metadata editor supports display name, played date, tournament, round, venue and result, with version checks. Player names and an optional display name identify the match in the table. BG Tutor imports a played date only when the SGF source is unambiguous. XG and BGF imports use the score after the last completed game. Migration `0018` and a bounded backfill correct automatically derived results from original files while preserving manual edits, stored positions, analysis, notes and learning progress. Money game results and results without reliable source data remain unknown.
 
-XG- und BGF-Importe erhalten das Ergebnis der letzten abgeschlossenen Partie. Migration 0018 und die begrenzte Nachbefüllung korrigieren bereits automatisch abgeleitete Ergebnisse aus den unveränderten Originaldateien; manuell gespeicherte Metadaten bleiben erhalten. Die Nachbefüllung verändert weder kanonische SGF noch Positionen, importierte Analyse, Notizen oder Lernfortschritt. Moneygames und nicht belegbare Ergebnisse bleiben unbekannt. Die Matchtabelle zeigt Spielernamen und gegebenenfalls einen eigenen Anzeigenamen statt einer zusätzlichen Dateinamenspalte.
+The library shows PR for a complete match analysis with native GNUbg statistics. Individual game analyses appear as partial coverage. Native PR divides normalized equity loss × 500 by the number of unforced checker decisions plus close or actual cube decisions. GNUbg uses a different decision count from XG and BMAB. Older or incomplete results without qualifying statistics leave PR unavailable. [GNUbg match statistics](https://www.gnu.org/software/gnubg/manual/gnubg.html#gnubg-matches_review_stat_overall)
 
-## Gespeicherte Match- und Positionsdaten
+### Bulk actions and exports
 
-Der Import speichert die Originaldatei, kanonische SGF und eigene normalisierte Positionszeilen gemeinsam in PostgreSQL. Jede Position enthält 26 vorzeichenbehaftete Checker-Anzahlen einschließlich Bar, Spieler am Zug, Würfel, Spielnummer, Zugnummer und gespielten Zug. Ein gesonderter Spielkatalog enthält auch Spiele ohne Checkerzüge samt Startspielstand und Crawford-Status. Bei älteren Importen wird dieser Katalog beim ersten Zugriff einmalig aus der gespeicherten SGF ergänzt.
+Use the selection controls to **Copy**, **Move**, change **Tags**, **Export** or **Delete**. Most actions support up to 100 matches. Exports support up to 50 matches and 64 MiB of combined source data. Each action reports the outcome per match.
 
-Die Brettstellung besitzt zusätzlich die kompakte **80-Bit-GNUbg-Position-ID**, gespeichert als 14 Base64-Zeichen mit B-tree-Index. Sie kodiert Checker-Anzahlen und ist kein reines Belegungs-Bitboard. Die separate **72-Bit-GNUbg-Match-ID** enthält unter anderem Spielstand, Matchlänge, Doppler, Würfel und Regeln. Exakte Positionssuchen verwenden den Index; dafür wird die Ursprungsdatei nicht erneut geparst. Ein weiterer Index auf Match, Spiel und Reihenfolge ermöglicht den direkten Zugriff auf ein spätes Spiel, ohne vorherige Spiele zu laden.
+- Copies get independent match, position, game and move IDs, with copied tags, comments and the latest completed analysis for each scope. Review history and active jobs belong to their original records.
+- Moves preserve IDs. BG Tutor detects duplicates within a database by original-file hash. If the destination already contains that file, it retains both the existing destination record and the source match, including their notes.
+- Deletion requires confirmation and skips matches with queued or running analyses. Saved positions and flashcards can still be used after their source is deleted.
+- Exports return the original file or canonical SGF, with a ZIP for multiple matches. Use a PostgreSQL backup to capture the full library, including BG Tutor notes and review history.
 
-## Board-Themes und Sprachen
+The named collections, sortable tables and bulk actions draw on [ChessBase's database organization](https://en.chessbase.com/post/chessbase-18-tips-for-beginners-part-7-organising-databases). The position preview draws on its [database preview window](https://help.chessbase.com/CBase/16/Eng/preview_window_in_the_database.htm).
 
-Die Originalgrafiken der lokal bereitgestellten BGBlitz-Archive werden automatisch bei `npm run dev` und `npm run build` eingelesen. Dafür wird **Python 3.10+** ohne zusätzliche Pakete benötigt. Die Darstellung verwendet echte Hintergründe, Checker-Varianten, Würfel, Doppler und Nummernleisten. Neue Archive in `themes/` ablegen und den Entwicklungsserver neu starten oder `npm run themes:prepare --prefix web` ausführen. Ohne lokale ZIPs bleiben die drei eingebauten Themes verfügbar. Format, Herkunft und Rechte: [themes/README.md](themes/README.md).
+## How matches and positions are stored
 
-Sprache und Theme werden im eigenen Einstellungsdialog als Entwurf bearbeitet und beim **Speichern** übernommen. **Abbrechen** verwirft die Vorschau. Texte, Status, Fehlermeldungen, Beschriftungen und Zahlenformate wechseln nach dem Speichern; bereits sichtbare Analyseergebnisse bleiben erhalten. Spieler-/Dateinamen und originale GNUbg-Zugnotationen bleiben ihre ursprünglichen Daten. Native technische Engine-Diagnosen erscheinen zusammen mit einer lokalisierten Fehlermeldung. Schlüssel und Platzhalter aller sechs Kataloge werden typisiert und beim Start geprüft. Die Übersetzungen sind noch nicht muttersprachlich lektoriert.
+Imports store the original file, canonical SGF and normalized positions together in PostgreSQL. A position records 26 signed checker counts including the bar, the player on roll, the dice, the game and move numbers, and the played move. The game catalog also records games without checker moves, with their opening score and Crawford status. On first access, older imports build the catalog from stored SGF.
 
-## Oberflächenthemes und Spielplan
+The **80-bit GNUbg Position ID** encodes checker counts as 14 Base64 characters. Exact board searches use its B-tree index without reparsing the original file. The separate **72-bit GNUbg Match ID** records match length, score, cube, dice and rules. A match, game and move-order index gives direct access to a late game without loading earlier games.
 
-Unter **Einstellungen → Darstellung** stehen **Graphite**, **Club** und **Paper** mit **Hell**, **Dunkel** oder **System** zur Auswahl. System folgt den Änderungen des Betriebssystems. Die Vorschau verändert nur ihren eigenen Ausschnitt; erst erfolgreiches Speichern übernimmt den Entwurf. Die Auswahl wird lokal für diesen Browser gespeichert und bereits vor dem ersten Rendern angewandt. Sie ist unabhängig vom BGBlitz-Brett-Theme, der Sprache und dem Analyseprofil. Auch Tabellen, Lernmodus, Dialoge und Fehleranzeigen verwenden die gemeinsamen Oberflächenfarben.
+## Private demo data
 
-Am Analysebrett zeigt **Spielplan** je einen benannten Eintrag für Weiß und Schwarz: reines Rennen, Rennen mit Kontakt, Angriff/Blitz, Prime oder Ankerspiel. **Initial** und **Arrows** verwenden die Ausgangsstellung, **Final** die tatsächlich angezeigte Stellung nach dem Zug; bei einer nicht projizierbaren Zugnotation bleibt die Ausgangsstellung maßgeblich. Die Anzeige benötigt keinen Analyseauftrag. Sie bleibt auch für eigenständig gespeicherte Positionen ohne Ursprungsmatch verfügbar.
+The Git-ignored folders `games/bgf`, `games/mat` and `games/xg` are for private matches. To build a demo library with the current schema, create **Demo BGF**, **Demo MAT** and **Demo XG** in **Match database** and import each folder's files into its corresponding database. The importer reports duplicates and rejected files individually.
 
-Die deterministischen Brettregeln sind in Rust aus der [öffentlichen Open-Sage-Referenz](https://github.com/markbgsage/bgsage/blob/139427d826dd67798226e7d23c003c90315306ba/cpp/src/encoding.cpp) übernommen; Herkunft und MPL-2.0-Lizenz stehen unter `backend/src/game_plan_source.txt` und `backend/licenses/`. `POST /api/game-plans` akzeptiert ausschließlich eine gültige 26-Punkte-Brettdarstellung und liefert beide Farbklassen samt Regelversion. Ein begrenzter Clientcache vermeidet erneute Berechnungen identischer Stellungen. Die Klassen beschreiben den Brettaufbau; Spielstand, Würfel und Dopplerbewertung fließen nicht ein. Konkrete Zug- und Cube-Empfehlungen kommen weiterhin aus der Engineanalyse.
+The legacy helper `tools/rebuild_demo.py` is incompatible with the current schema. Staging compares every PostgreSQL database ID with the public REST list, which omits the internal saved-position collection. The activation SQL can select that collection and its matches for deletion.
 
-## Stand der besprochenen Erweiterungen
+The helper was designed to stage three databases through REST, verify a PostgreSQL dump and record each file's outcome in a manifest outside Git. Its `--allow-rejected` option allows staged matches from valid files to proceed after you review the individual rejections. Network and server errors still abort staging. With the backend stopped, activation checks the PostgreSQL cluster and database identity, all three staging databases, match IDs, their database assignments and SHA-256 hashes under a transaction lock. A failed check leaves the active library intact. Each manifest can be activated once.
 
-| Funktion | Stand |
-| --- | --- |
-| Match-, Spiel- und Positionsanalyse mit GNUbg, SSE, Fehlerliste, 0–4 Ply | Vorhanden; Standard 2-Ply. |
-| Mensch gegen GNUbg, 1–25 Punkte, beide Farben, Cube, Crawford, gespeicherte Matches und SGF-Export | Vorhanden; Spieltiefe 0–2 Ply und Ausspielrichtung aus den Einstellungen. |
-| Mehrere Matchdatenbanken, unabhängige Kopien, Mehrfachverwaltung, numerische IDs, Sortierung, Spaltenauswahl | Vorhanden; Turnier und Kommentar sind optional. |
-| Tags und Kommentare zu Match, Partie, Position und Quellzug; durchsuchbare Notizen | Vorhanden. |
-| Persönliche Positionssammlung, gespeicherte Filter, Spielernamen und Vorschau; Erhalt nach Löschen der Quelle | Vorhanden. |
-| BGBlitz-Brett-Themes, sechs Sprachen, Initial/Arrows/Final, Zugpfeile, anklickbare Statistiken | Vorhanden. |
-| Lernmodus mit FSRS, Rust-Anki-Export, Deck-Zugehörigkeit und Karten-Brettvorschau | Vorhanden. |
-| Graphite/Club/Paper als Oberflächenthemes mit Hell/Dunkel/System | Vorhanden; vom Brett-Theme getrennt, mit Vorschau und lokaler Speicherung. |
-| Zwei getrennte Spielplananzeigen beim Brett, passend zu Initial/Final | Vorhanden; lokale Brettklassifikation, unabhängig von GNUbg. |
-| Decks umbenennen und löschen | Vorhanden; mit Versionsprüfung und Bestätigung, ohne Verlust geteilter Karten oder Lernverläufe. |
-| Fehlerschwere getrennt nach Checker und Cube in der nativen Statistik | Vorhanden; anklickbare Gesamt-/Checker-/Cube-Matrix für Spieler, Match und Partie, auch für vorhandene native Analysen. |
+The local rebuild on November 8, 2026 imported 5 BGF, 5 MAT and 23 XG matches, with 72,959 checker and cube analysis records and 98 additional source-statistics records. The private report lists nine XG files rejected for invalid or inconsistent moves. The previous library was backed up and the rebuild preserved the flashcards and review history. Public sources and product research are listed in the [BackgammonDB comparison](docs/research/2026-11-08-backgammondb-product-ux.md).
 
-Bewusst spätere Ausbaustufen sind Open Sage als vollständige Analyse-/Spielengine, Rollouts und die **Tauri-Hülle**. Die Spielplanklassifikation allein ist keine Integration der kompletten Sage-Engine.
+## Themes and language
 
-Weitere besprochene Produktideen aus dem [BackgammonDB-Vergleich](docs/research/2026-11-08-backgammondb-product-ux.md) sind noch keine vollständig umgesetzten Funktionen: benannte Notebooks und ein Positionseditor/XGID-Eingang, automatische Spielphasen-Tags mit Suchfiltern, gemeinsame Checker-/Cube-Aktionsliste, persönliche langfristige Stärken-/Schwächenstatistik, ein Sitzungsrückblick mit gezielter Fehlerwiederholung sowie ein portables Bibliotheksbackup in der Oberfläche. Die vorhandene eigenständige Positionsaufbewahrung und die neue Spielplananzeige liefern dafür Grundlagen. AnkiConnect, fremde Decks importieren und bidirektionale Synchronisation gehören weiterhin nicht zur ersten Anki-Ausbaustufe.
+### Board artwork
 
-## Getrennte Checker-/Cube-Fehlerstatistik
+`npm run dev` and `npm run build` prepare artwork from locally supplied BGBlitz archives. Preparation requires **Python 3.10+** and uses the original backgrounds, checker variants, dice, cubes and point-number strips. Place new archives in `themes/` and restart the dev server or run `npm run themes:prepare --prefix web`. The three built-in themes are always available. [Board theme formats, sources and rights](themes/README.md)
 
-Die native Analysestatistik zeigt je Spieler eine kompakte Matrix **Gesamt / Checker / Cube** für Ungenauigkeiten, Doubtful, Bad und Very bad. Jeder verfügbare Wert öffnet die Fehlerliste mit passendem Spieler, Entscheidungstyp und Fehlerschwere. Ein Wert aus der Partieübersicht bindet den Filter zusätzlich an genau diese Partie; bestehende Gesamt-Aktionen bleiben erhalten. Auch echte Nullen lassen sich anklicken und ergeben eine leere Trefferliste.
+### Interface appearance and language
 
-Die zusätzlichen Zahlen werden aus den bereits gespeicherten, vollständig checkpointeten Analyseentscheidungen gelesen. Vorhandene Analysen benötigen keinen neuen GNUbg-Auftrag. Gesamtwerte, persistierte Analyse-JSON und native PR werden nicht umgeschrieben. Erzwungene, nicht auswertbare und verlustfreie Entscheidungen erhöhen die Fehlerzahlen nicht. Fehlt bei alten oder unvollständigen Ergebnissen ein belastbarer Nachweis der Entscheidungsabdeckung, erscheint **—** mit Erklärung statt einer erfundenen Null. Die API ergänzt `/api/jobs/{id}/statistics` um `error_breakdown` für Auftrag und Partien; die Fehlerliste berücksichtigt dieselben Einschränkungen einschließlich Cursorprüfung.
+Under **Settings → Appearance**, choose **Graphite**, **Club** or **Paper** and a **Light**, **Dark** or **System** display mode. System follows the operating system. The preview stays in the settings panel until you choose **Apply**. The browser applies its saved appearance before the first render. Tables, review sessions, dialogs and error messages use the same appearance. Choose board artwork separately under **Settings → Board**.
 
-## Tags, Kommentare und Lernen
+Use **Apply** to save draft language and board settings or **Cancel** to discard the preview. BG Tutor localizes the interface, status messages, errors and number formats while preserving visible analysis, player names, filenames and GNUbg move notation. Native engine diagnostics accompany localized errors. All six catalogs are type-checked and their keys and placeholders are validated at startup. The translations are pending native-speaker review.
 
-Unter **Study → Lernkarten & Anki** stehen beim ausgewählten Deck **Umbenennen** und **Löschen** bereit. Umbenennen behält Deck-ID, Karten, Vorschauauswahl und Lernstand. Löschen erfordert eine ausdrückliche Bestätigung mit Deckname und Kartenanzahl; es entfernt nur dieses Deck und seine Zuordnungen. Karten, Wiederholungsverlauf, gespeicherte Positionen und andere Decks bleiben erhalten. Wird dieselbe Entscheidung später erneut in ein Deck übernommen, wird die vorhandene Karte mit ihrem Lernstand wiederverwendet. Der Anki-Download verwendet den aktuellen Decknamen.
+### Action icons and tooltips
 
-Parallele Umbenennungen und neue Kartenzuordnungen ändern die Deckversion. Ein veralteter Dialog überschreibt oder löscht den aktuellen Stand nicht: Der Entwurf bleibt erhalten, **Deckangaben aktualisieren** aktualisiert die Grundlage, und erst eine erneute ausdrückliche Aktion schreibt die Änderung. Nach einer Deckänderung aktualisieren sich auch die Deck-Auswahl und Zugehörigkeitsanzeigen im Positionsbrowser. Eine laufende Lernansicht des gelöschten Decks wird geschlossen; verspätete Antworten können ihre Karten nicht zurückbringen. Die REST-Erweiterung bietet `PUT /api/decks/{id}` mit `name` und `expected_version` sowie `DELETE /api/decks/{id}?expected_version=n` mit Status204 bei Erfolg,409 bei veralteter Version und404 bei fehlendem Deck.
+The app uses a shared Lucide Outline icon set for actions such as saving, undoing, requesting hints, searching, and importing or exporting. Compact actions have localized accessible names and show tooltips on hover and keyboard focus. Key play decisions, **Undo step**, **Hint**, primary form submissions, and study actions also show text labels.
 
-Die Ansicht **Study → Lernkarten & Anki** folgt dem Aufbau der Positionssuche: Überschrift **Lernkarten** außerhalb der Panels, Suchformular oberhalb einer kompakten Ergebnistabelle und Brettvorschau rechts. **Alle Lernkarten** durchsucht die gemeinsame Kartensammlung über alle Decks; die Deckauswahl grenzt den Bestand ein. Mehrfach enthaltene Karten erscheinen einmal und nennen ihre Deckzugehörigkeiten. Auch Karten ohne verbliebene Deckzuordnung bleiben auffindbar. Gespeicherte Deckauswahlen werden weiterhin berücksichtigt.
+Tooltips stay above modal dialogs and remain visible when you move the pointer onto their text. Escape dismisses the tooltip and preserves the dialog's Escape behavior. The shared implementation lives in `web/src/action-icons.tsx`, `web/src/ActionButton.tsx`, and `web/src/useActionTooltip.tsx`. Action buttons preserve native submit and disabled behavior and forward refs. Export controls are download links.
 
-Die serverseitige Suche berücksichtigt Spieler, Fragen, Positionskennungen, Decknamen, Tags und Kommentare vor der Paginierung. **Spieler am Zug**, exakter Tag, Kommentartext, exakte Checker-ID, Entscheidungsart und Lernstatus sind kombinierbare Filter. Neue Karten haben noch keine Wiederholung; fällige Karten können auch neu sein. Bereits wiederholt umfasst alle Karten mit mindestens einer abgeschlossenen Wiederholung. Filter betreffen die Trefferliste; Lernen und Anki-Export verwenden weiterhin das ausdrücklich ausgewählte Deck. Ohne ausgewähltes Deck sind diese Aktionen deaktiviert. Match-, Partie-, Positions- und Zugnotizen werden für die Suche frisch gelesen, auch bei erhaltenen Positionen nach dem Löschen der Quelle. Antworten werden durch die Suche nicht aufgedeckt, Fälligkeiten und Wiederholungsverlauf bleiben unverändert. `GET /api/cards` und `GET /api/decks/{id}/cards` unterstützen dieselben Filter, Gesamtzahl und UUID-Paginierung; alle Parameter und Ergebnistypen stehen in OpenAPI.
+## Game plan
 
-Die Kartenliste unter **Study → Lernkarten & Anki** bietet rechts eine Brettvorschau der ausgewählten Karte mit Fragetyp, Spielern, Würfeln, Spielstand und Doppler im gewählten Board-Theme. Die erste Karte wird automatisch ausgewählt; Klick, Pfeiltasten und Pos1/Ende wechseln die Vorschau. Lange Listen scrollen unabhängig vom sichtbaren Brett. Weitere Karten lassen sich nachladen, ohne die Auswahl zu verlieren. Beim Deckwechsel wird die vorherige Vorschau entfernt. Das Durchsehen zeigt die Frageseite und verändert weder Lernfortschritt noch Fälligkeit; Antworten und Bewertungen gehören zum ausdrücklich gestarteten Lernmodus.
+**Game plan** classifies White's and Black's structures independently as **Pure race**, **Racing (contact)**, **Attacking / blitz**, **Priming** or **Anchoring**. **Initial** and **Arrows** use the starting position. **Final** uses the displayed position after the move and falls back to the starting position if the move notation cannot be applied. The display is also available for saved positions whose source match has been deleted.
 
-Match, einzelne Partie und Checkerposition haben getrennte Notizen. „Cube- und Zugnotizen“ öffnet die tatsächlichen Quellaktionen einschließlich Double, Take, Drop und bestätigter Aufgabe mit ihrer Stellung vor der Aktion. Der angebotene Cube erscheint bei offenen Verdopplungen mit dem angebotenen Wert in der Brettmitte. Auch Partien ohne Checkerzug sind kommentierbar. Die Notizsuche berücksichtigt alle vier Ziele (Match, Partie, Position, expliziter Zug) und kann nach Bestand eingeschränkt werden. Entwürfe bleiben bei Navigation und Dialogwechsel erhalten; Versionskonflikte überschreiben keine parallelen Notizen.
+The classifier uses the board alone. It works without an analysis job, and GNUbg supplies move and cube recommendations. `POST /api/game-plans` validates the 26-entry board and returns both classifications with the rule version. The browser caches a bounded number of identical boards. Source and license information is in [game_plan_source.txt](backend/src/game_plan_source.txt) and [backend/licenses](backend/licenses/). [Open Sage reference implementation](https://github.com/markbgsage/bgsage/blob/139427d826dd67798226e7d23c003c90315306ba/cpp/src/encoding.cpp)
 
-Der gemeinsame Notizbereich unter **Analyse → Notizen** hat die Reiter **Match** und **Position**, mit genau einem sichtbaren Editor. Matches und importierte Positionen haben jeweils eigene **Tags und Kommentare**. „Notizen speichern“ schreibt sie nach PostgreSQL; beim Blättern bleiben ungespeicherte Entwürfe in der aktuellen Sitzung erhalten. Parallele Änderungen erzeugen einen sichtbaren Konflikt, ohne den Entwurf zu überschreiben. Kommentare sind Klartext/Markdown und werden als Text dargestellt. Tags werden vereinheitlicht; Grenzen: 30 Tags zu je 64 Zeichen und 20.000 Kommentarzeichen.
+## Checker and cube error statistics
 
-**Tags & Kommentare durchsuchen** findet beide Zieltypen. Freitext ab drei Zeichen, exakter Tag und Zieltyp sind kombinierbar; Treffer öffnen die betreffende Partie oder Zugposition. Die normale Bibliothekssuche findet ebenfalls Partien über ihre eigenen Notizen und die Notizen ihrer Positionen. Suchindizes erhalten die schnelle Suche auch bei großen Bibliotheken.
+Native statistics show a **Total / Checker / Cube** breakdown per player for **Inaccuracies**, **Doubtful**, **Bad** and **Very bad**. Inaccuracies includes all three severity levels. Click a count to open the decisions with the matching player, decision type and severity. A count in the game overview also filters to that game. A verified zero opens an empty list.
 
-Unter **Analyse → Lernkarten → Positionen als Lernkarten** ein Deck erstellen oder auswählen. Eine bereits analysierte Einzelposition hinzufügen, oder Fehler des ausgewählten Spiels nach Spieler und Mindestverlust übernehmen. Dafür wird dessen abgeschlossene Spielanalyse verwendet; alternativ werden die Ergebnisse einer abgeschlossenen Matchanalyse auf dieses Spiel gefiltert. Checker-Züge, Double-/No-double- und Take-/Pass-Entscheidungen werden unterstützt. Kartenidentität berücksichtigt Brett, vollständigen Matchkontext und Fragetyp; derselbe Lerninhalt kann mehreren Decks angehören. Erneutes Hinzufügen aktualisiert seine Analysequelle und erhält den Lernfortschritt. Die Tags und Kommentare der aktuellen Partie-/Positionsquelle werden beim Aufdecken und Export gelesen. Eine Deckauswahl ist auf 1.000 Karten begrenzt; pro Anfrage werden maximal 100 Karten gelistet.
+BG Tutor reads the breakdown from stored decisions for fully checkpointed games, including those from earlier analyses. Forced, unavailable and loss-free decisions do not contribute to the error counts. If the stored decisions lack verifiable coverage, the UI shows **—** with an explanation. `GET /api/jobs/{id}/statistics` returns `error_breakdown` for the job and its games. The decision list validates its pagination cursor against the selected filters.
 
-**Study → Lernkarten & Anki** zeigt fällige Karten mit dem gewählten Board-Theme, Matchlänge, Spielstand und Spieler am Zug; Money Games nennen zusätzlich den Jacoby-Status. Erst die eigene Antwort überlegen, dann die Lösung aufdecken und mit **Nochmal/Schwer/Gut/Einfach** bewerten. Die Wiederholungsplanung läuft in Rust mit `fsrs`, Zielbehaltensrate **90 %**: Nochmal nach **60 Sekunden**, die erste schwere Bewertung nach **10 Minuten**, spätere Hard-/Good-/Easy-Intervalle aus FSRS in ganzen Tagen. Easy liegt mindestens einen Tag nach Good. Zustand, Bewertungshistorie und Fälligkeit liegen in PostgreSQL. Gleichzeitige oder wiederholte Bewertungsanfragen können denselben Review nicht doppelt anwenden.
+## Tags and comments
 
-**Anki-Deck herunterladen** erzeugt ein eigenständiges `.apkg` vollständig in Rust: stabiles Notizmodell und GUIDs, eigene SVG-Brettdiagramme, Spielstand/Doppler/Würfel, Lösungen, Tags und Kommentare. Es benötigt keine BGBlitz-Bilder und keinen Python-Prozess zur Laufzeit. Die Beschriftung folgt der ausgewählten Sprache. Wiederholter Import aktualisiert vorhandene Notizen; ein persistierter Inhaltsfingerabdruck sorgt auch bei schnellen Kommentar- oder Sprachänderungen für eine neuere Anki-Änderungszeit. Der Export enthält keine BG-Tutor-Review-Historie. **Anki und BG Tutor führen ihre Lernstände getrennt.** Ein bidirektionaler Abgleich, AnkiConnect und der Import fremder Decks gehören nicht zu dieser ersten Ausbaustufe.
+Open **Analysis → Notes** and select **Match** or **Position** to edit its tags and comment. **Cube and move notes** also opens game notes and recorded actions such as doubles, takes, drops and accepted resignations, with the board immediately before each action. A pending double displays the offered cube value in the center. Games without checker moves can have notes too. Checker move notes use the same annotation as the corresponding position.
 
-Der Aufbau orientiert sich an persönlichen/thematischen Fehlerdecks, wie sie [Dirk Schiemann](https://www.dirk-schiemann.de/the-anki-method.html), [XG2Anki](https://xg2anki.de/) und [AnkiGammon](https://ankigammon.com/) beschreiben. Anki-Pakete und Aktualisierungen: [Anki-Handbuch](https://docs.ankiweb.net/manual/importing/packaged-decks). Wiederholungsbibliothek: [FSRS-rs](https://docs.rs/fsrs/latest/fsrs/).
+**Save notes** writes to PostgreSQL. Drafts survive navigation and dialog changes during the current session. If another edit has been saved, BG Tutor shows a version conflict and keeps the draft. Tags are normalized and limited to 30 per note and 64 characters each. Comments are displayed as text and can contain up to 20,000 characters.
 
-Die API bietet Annotationen unter `/api/matches/{id}/annotation` und `/api/positions/{id}/annotation` (GET/PUT), Suche unter `/api/annotations/search`, Tag-Vorschläge unter `/api/tags` sowie Decks, Karten, fällige Karten, Aufdecken und Bewertungen unter `/api/decks` und `/api/cards`. Der vollständige Vertrag steht in OpenAPI; der Client verwendet daraus erzeugte Typen.
+Use **Search tags & comments** to combine free text (3–200 characters), an exact tag, a note type and a database filter. Results link to the relevant match, game, position or move. The regular match search also indexes annotations across those scopes.
 
-Optionaler Test mit Ankis eigener Python-Importbibliothek in einem **temporären, leeren Profil**:
+## Flashcards and Anki
+
+### Create and manage decks
+
+In **Analysis → Study cards**, use **Positions as flashcards** to create or select a deck. Add the current analyzed position or import errors from the selected game by player and minimum equity loss. BG Tutor uses a completed game analysis or the selected game's decisions from a completed match analysis. Cards support checker play, double/no double and take/pass questions.
+
+A card's identity includes the board, full match context and question type. A single card can belong to several decks. Adding the decision again updates the analysis source and preserves its review history. BG Tutor reads current source tags and comments when you reveal or export a card. Each deck holds up to 1,000 cards. Card lists return up to 100 per request.
+
+In **Study → Flashcards & Anki**, use **Rename deck** or **Delete deck** on the selected deck. Renaming keeps the deck ID, cards, preview selection and progress. The Anki download uses the new name. Deleting requires confirmation with the deck name and card count and removes the deck and its memberships. Saved positions, cards, review history and other decks are retained. Adding a decision to another deck reuses its existing card and progress.
+
+Renaming or adding memberships advances the deck version. If the deck changes while a dialog is open, **Refresh deck details** loads the current version and keeps the draft. Confirm again to apply the change. The Position Browser refreshes deck choices and membership labels after a change. Deleting a deck closes its active study session.
+
+### Find and preview cards
+
+**All flashcards** searches the shared collection, including cards without a deck. Select a deck to search within it. Each result appears once and shows its deck memberships. The server searches players, questions, position IDs, deck names, tags and comments before paginating. Combine **Player on roll**, exact tag, comment text, exact checker ID, **Decision type** and **Review status**. **New** means no completed reviews, **Due** can include new cards, and **Reviewed** means at least one completed review. The search reads current match, game, position and move notes, including retained notes after a source match is deleted.
+
+The list selects the first card and shows the question, players, dice, score and cube on the preview board in the chosen theme. Click a row or use the arrow keys, Home or End to preview a different card. The list scrolls independently, and loading more results preserves the selection. Switching decks clears the previous preview. Previewing shows only the question. Choose a deck to enable **Study now** and **Download Anki deck**. These actions use the selected deck, independently of the search filters.
+
+### Review cards and export to Anki
+
+Study shows due cards with the chosen board theme, match length, score and player on roll. Money games also show the Jacoby status. Work out your answer, select **Show answer** and rate it **Again**, **Hard**, **Good** or **Easy**. Rust's `fsrs` library schedules reviews at **90%** target retention. **Again** schedules a review in 60 seconds and the first **Hard** in 10 minutes. Later Hard, Good and Easy intervals use FSRS in whole days. Easy is scheduled at least one day after Good. PostgreSQL stores the card state, rating history and due dates and prevents concurrent or retried requests from applying a review twice.
+
+**Download Anki deck** creates a self-contained `.apkg` in Rust, with a stable note model and GUIDs, SVG diagrams, score, cube, dice, answers, tags and comments. Labels use the selected language. The package has no runtime dependency on BGBlitz artwork or Python. Reimporting updates existing Anki notes. A stored content fingerprint advances Anki's modification time even when comments or the export language change in quick succession. BG Tutor and Anki maintain independent review histories. AnkiConnect, importing external decks and bidirectional sync are future options.
+
+The workflow draws on personal and thematic error decks described by [Dirk Schiemann](https://www.dirk-schiemann.de/the-anki-method.html), [XG2Anki](https://xg2anki.de/) and [AnkiGammon](https://ankigammon.com/). See the [Anki manual](https://docs.ankiweb.net/manual/importing/packaged-decks) and [FSRS-rs](https://docs.rs/fsrs/latest/fsrs/) for package import and scheduling details.
+
+To verify a package in a temporary empty profile, install the official Python `anki` package and run one of these checks. The verifier has been tested with Anki 26.9.4 for import, duplicate detection, HTML escaping and comment and language updates.
 
 ```sh
 python tools/verify_anki_package.py deck.apkg --expected-cards 10
-# Für ein aktualisiertes Paket derselben Karten:
-python tools/verify_anki_package.py vorher.apkg --updated nachher.apkg
+# Verify an updated package containing the same cards.
+python tools/verify_anki_package.py before.apkg --updated after.apkg
 ```
 
-Dafür wird separat das offizielle Python-Paket `anki` benötigt; die Prüfung verändert keine vorhandene Anki-Sammlung. Getestet wurde mit Anki 26.9.4, einschließlich Import, Duplikaterkennung, HTML-Escaping und aktualisiertem Kommentar/Sprachinhalt.
+## Import formats
 
-## Importformate
+| Format | Support                                                                                                                                                                                                                                                                                                    |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.mat` | GNUbg converts Jellyfish MAT to SGF. The importer normalizes recognized resignation lines without shifting columns and expands compound bear-off moves into legal steps. It checks GNUbg diagnostics and replays the full move history before saving.                                                      |
+| `.sgf` | Native UTF-8 parser for standard backgammon, including escapes, multiple games, setup positions, cube actions, scores, Crawford, Jacoby and move reconstruction. Ambiguous variation trees are rejected.                                                                                                   |
+| `.xg`  | Native decoder for XG2 save versions 24–40. It checks the RichGame container and CRC, bounds Zlib decompression and converts to SGF. Supports inactive cube placeholders, open money sessions, compact checker notation and valid in-progress point matches, including an explicitly unfinished last game. |
+| `.bgf` | Native Rust decoder for BGBlitz BGF 1.0 with a JSON header and JSON or Smile payload, optionally Gzip-compressed. It preserves checker moves, forced passes, double/take/drop actions, colors, scores and Crawford or Jacoby rules, then replays the resulting SGF.                                        |
 
-| Format | Verhalten |
-| --- | --- |
-| `.mat` | GNUbg normalisiert Jellyfish-MAT zu SGF. Erkannte Aufgabezeilen werden spaltentreu normalisiert; zusammengesetztes Auswürfeln wird in legale Einzelschritte aufgelöst. Parserdiagnosen und der vollständige Zugverlauf werden geprüft, damit beschädigte Dateien nicht als Teilimport gespeichert werden. |
-| `.sgf` | Nativer Parser für Standard-Backgammon, Escape-Sequenzen, mehrere Spiele, Setup-Positionen, Doppler, Scores, Crawford/Jacoby und Zugrekonstruktion. UTF-8; mehrdeutige Variantenbäume werden abgelehnt. |
-| `.xg` | Nativer Decoder für binäre XG2-Dateien mit Save-Version 24–40: RichGame-Container, begrenzte Zlib-Dekompression, CRC und SGF-Konvertierung. Unterstützt Cube-Platzhalter, offene Money-Sessions, zusammengefasste Checker-Züge und gültige Zwischenstände von Punktpartien, auch mit explizit laufendem letztem Spiel. |
-| `.bgf` | Nativer Rust-Decoder für BGBlitz BGF 1.0: JSON-Kopf, optional Gzip und JSON-/Smile-Nutzdaten. Übernimmt gespielte Züge, Aussetzen, Double/Take/Drop, Farben, Scores und Crawford/Jacoby. Die erzeugte SGF wird vollständig nachgespielt; vorhandene Fremdanalysen werden nicht als GNUbg-Ergebnisse übernommen. |
+The XG importer rejects XG1, edited starting positions, automatic doubles, beavers, raccoons and other variants. BGF variants, custom starting positions and restricted cube rules are also rejected. XG candidate and cube evaluations, depth labels and rollout references, and supported BGF analysis are stored as source analysis. The original artifact retains full XG rollout streams and comments. BG Tutor does not interpret XG RTF comments. [Import fixtures and format references](backend/tests/fixtures/README.md)
 
-XG1, bearbeitete/custom XG-Startstellungen, automatische Doppel, Beavers/Raccoons und andere Spielvarianten werden mit einer Fehlermeldung abgelehnt. Vorhandene XG-/BGF-Analysen, Rollouts und Kommentare werden noch nicht übernommen. BGF-Sondervarianten, veränderte Startstellungen und begrenzte Dopplerregeln werden ausdrücklich abgelehnt. Die Originaldatei bleibt gespeichert. Details und Quellen: [Import-Fixtures](backend/tests/fixtures/README.md).
+An upload takes one file and has a **16 MiB** limit including multipart framing. SHA-256 detects identical files within the target database. The original, canonical SGF and position records are saved in one transaction. Parsers and archives have separate size and record limits. Filenames and file contents are handled as data.
 
-Ein Upload enthält genau eine Datei; Limit: **16 MiB einschließlich Multipart-Rahmen**. SHA-256 erkennt identische Dateien. Original, kanonische SGF und Positionen werden in einer Transaktion gespeichert. Dateinamen und Inhalte werden niemals als Shellbefehle ausgeführt. Parser und Archive haben zusätzliche Mengen-/Größenlimits.
+## Playing against GNUbg
 
-## API und Aufträge
+### Start, resume, or end a match
 
-| Methode | Pfad | Zweck |
-| --- | --- | --- |
-| GET/PUT | `/api/settings` | Persistente Engine-/Spielereinstellungen mit Revisionsschutz |
-| GET | `/api/engines` | Verfügbare Engines, Versionen und Analysestufen |
-| GET/PUT | `/api/opening-book` | Buchanbieter, BGDB-/XG-Dateipfade, Verfügbarkeit und Versionsschutz |
-| POST | `/api/opening-book/check`, `/api/opening-book/install` | Lokale BGDB-Datei prüfen beziehungsweise atomar installieren |
-| POST | `/api/opening-book/xg/check`, `/api/opening-book/xg/install` | Offizielle XG-Buchdatei prüfen/installieren |
-| GET | `/api/positions/{id}/opening-book` | Kontextsensitive Buchantwort oder expliziter Miss; XG ist eine gesonderte Stellungsreferenz |
-| GET | `/api/matches/{id}/imported-analysis` | Analyseherkunft und Abdeckung der Quelldatei |
-| GET | `/api/positions/{id}/imported-analysis`, `/api/moves/{id}/imported-analysis` | Unveränderte Checker-/Cube-Quellanalyse |
-| POST | `/api/engines/gnubg/check` | Installation mit `{ "path": "..." }` prüfen |
-| GET | `/api/health` | PostgreSQL- und GNUbg-Verfügbarkeit |
-| POST | `/api/imports?database_id=` | Multipart-Feld `file`; 201 neu, 200 Duplikat im Zielbestand |
-| GET/POST | `/api/databases` | Bestände mit Matchanzahl auflisten/anlegen |
-| PUT/DELETE | `/api/databases/{id}` | Bearbeiten mit Version; Löschen mit `version` und explizitem `delete_matches=true` |
-| GET | `/api/library/matches` | Erweiterte Bestands-/Metadatenfilter, Sortierung und gebundener Cursor; Limit 1–200 |
-| PUT/PATCH | `/api/matches/{id}/metadata` | Editierbare Matchdetails mit Version |
-| POST | `/api/library/actions` | `action`, `match_ids`, optional Quell-/Zielbestand und Tags; Einzelergebnisse |
-| POST | `/api/library/export` | `match_ids`, `format: original|sgf`; Datei oder ZIP |
-| GET | `/api/matches/{id}/games/{game_no}/decisions` | Stabile Partie-ID und tatsächliche Quellzüge samt Stellung |
-| GET | `/api/moves/{id}` | Quellzug mit Vor-Aktions-Stellung |
-| GET/PUT | `/api/games/{id}/annotation`, `/api/moves/{id}/annotation` | Partie-/Zugnotizen; Checkerzüge verwenden dieselben Positionsnotizen |
-| GET | `/api/matches?q=&after=&limit=` | Partiensuche; Limit 1–100 |
-| GET | `/api/matches/{id}` | Partiemetadaten |
-| GET | `/api/matches/{id}/source` | Kanonische SGF herunterladen |
-| GET | `/api/matches/{id}/games` | Spielkatalog mit Startspielständen, Crawford und Zuganzahl |
-| GET | `/api/matches/{id}/dice?game_no=` | Beobachtete Würfelhäufigkeiten; optional einzelnes Spiel |
-| GET | `/api/positions?database_id=&match_id=&game_no=&position_id=&after=&limit=` | Partiepositionen oder exakte Brettsuche |
-| GET | `/api/matches/{id}/move-assessments?game_no=&job_id=` | Gespeicherte Checkerbewertungen eines Spiels mit Quelle und Tiefe; optional auf gewählten nativen Auftrag begrenzt |
-| GET | `/api/positions/{id}` | Direkter Positionszugriff mit Match- und Spielnummer |
-| POST | `/api/jobs` | `{ "position_id": "<Positions-UUID>", "kind": "analysis", "plies": 0 }` |
-| GET | `/api/jobs/{id}` | Zustand, Fortschritt, Ergebnis oder Fehler |
-| GET | `/api/jobs/{id}/events` | Persistenter SSE-Strom |
-| POST | `/api/matches/{id}/analysis` | Ein Spiel: `{ "plies": 0, "game_no": 2 }`; gesamtes Match ohne `game_no`. Aktive Aufträge werden je Match, Spielumfang und Ply zusammengeführt |
-| GET | `/api/matches/{id}/analysis?game_no=` | Letzter Auftrag des Spielumfangs; ohne `game_no` letzter Matchauftrag, sonst `null` |
-| GET | `/api/jobs/{id}/moves?game_no=&after=&limit=&errors_only=&player=&kind=&severity=` | Paginierte Zugbewertung; kombinierbare Partie-, Spieler-, Checker-/Cube- und Fehlerschwerefilter; Cursorprüfung |
-| GET | `/api/jobs/{id}/statistics` | Native Match-/Partiestatistik mit Analyseabdeckung und vorhandenen PR-Werten |
-| GET | `/api/position-browser?filters=&after=&limit=` | Kontextbezogene Checkerpositionssuche; URL-kodierte JSON-Definition mit schema_version 1 |
-| GET/POST | `/api/position-filters` | Gespeicherte Suchdefinitionen auflisten/anlegen |
-| PUT/DELETE | `/api/position-filters/{id}` | Mit expected_version aktualisieren oder löschen |
-| POST | `/api/decks/{id}/positions` | Bis zu 200 Positions-UUIDs mit einzelnem Übernahmeergebnis in einen Lernstapel übernehmen |
+Open **Playing** to start a 1–25-point match or choose **Money game**. You can play either color. The active profile remembers your selection. GNUbg handles opening rolls, legal moves, doubling, scoring, the Crawford rule, and match completion. BG Tutor automatically declines bot resignation offers, so play continues until a cube or bear-off result.
+
+Money games use the Jacoby rule and ordinary doubling, with beavers disabled and no target score (`match_length: 0` in the API). Playing automatically generates a learning review after each completed money game. **Next game** carries the running score forward once the review is saved. Older single-game money sessions can also continue. **End session** closes a session after a completed game and preserves the final score and reports. A closed session stays finished after reload and opens in Analysis from **Match database**. Individual game reports appear under [Study → Reports](#reports).
+
+BG Tutor automatically archives bot matches, including previously saved sessions, in **Match database → Bot Matches**. Manage individual matches there using the standard controls for names, tags, comments, moves between databases, copies, deletion, export, and analysis. Choose **Resume match** to return to a running original. Completed matches and independent copies open in Analysis. **Playing** restores the last session after reload. **Download SGF** exports the match at any time.
+
+Each new match records the player name, bear-off direction, play engine, resolved GNUbg executable path, installed version, and playing depth from Settings. Existing matches keep those settings. GNUbg must include its embedded Python module. If the executable becomes unavailable, the version changes, or the engine fails or times out, the saved checkpoint remains available for resumption when the engine is restored.
+
+### Rolls, checker moves, and the cube
+
+Each player rolls one die at the start of every game. On a tie, both players roll again. The higher die determines who plays first, and the winner uses that pair for the first checker move. The result and any ties remain visible until you choose **Begin the first move**. Reloading restores that opening checkpoint.
+
+Before each of your regular turns, **Next roll** offers **Roll dice** and **Double**. If the Crawford rule, your opponent's ownership of the cube, or a cube value that already covers your remaining match points prevents doubling, the disabled button explains why. When the bot doubles, the response dialog shows the current and offered cube values.
+
+Your checkers are always at the bottom of the board. Your saved bear-off direction determines the side of your home board. Hover over or focus one of your checkers to see the destination for the first available die. Click the source point to move one checker there. Click either die before moving to swap their order. After your first step, **Undo step** reverses one unconfirmed move at a time. It shows the number of pending steps below **Hint** in the action panel to the right of the board and stays accessible while scrolling. When the turn is legal and complete and animation has finished, click either die to confirm it. Used dice fade. A partly used double fades exactly half of one die.
+
+The move history follows the latest saved action and uses the same row layout as Analysis, with notation, player colors, dice, and neutral analysis markers. It sits to the left of the board and moves below it on narrow screens. The game-end dialog shows the winner, points won, and the calculation when the record supports it. Choose **Next game** to continue. At the end of a match, **New match** opens setup and **Back to board** returns to the finished board.
+
+### Decision dialogs and hints
+
+Opening rolls and their results, pre-roll choices, cube responses, blocking feedback, forced passes, and game or match results use a modal dialog. It opens over the center of the board. Drag its title to see the checkers underneath. The position is retained while the dialog is open and stays within the viewport when the window or dialog changes size. Keyboard focus stays inside, and the dialog requires a decision before you can use the board again. Escape and outside clicks leave it open. Errors and pending acknowledgments appear inside the dialog. Expand **Active mode** to access the mode and [Tutor warning threshold](#playing-feedback-modes).
+
+**Hint** opens a movable dialog with its own loading and error states. Select a checker suggestion with the mouse or Up/Down to see the full saved turn on a separate, read-only board. Use **Initial**, **Arrows**, or **Final** to see the starting position, move arrows, or projected result. Cube hints are text only. **Close** or Escape returns to the game or to the required decision dialog. The live dice order and unconfirmed steps are preserved.
+
+### Resigning
+
+**Resign** appears below **Hint** and **Undo step** and in **Next roll**. Choose a single, gammon, or backgammon resignation in the movable dialog. It uses the current cube to show the points awarded if accepted, the projected score, the target score for point matches, and whether the match would end. GNUbg decides whether to accept and supplies the resulting score, SGF, and move history. Cancellation or refusal preserves the checkpoint and unconfirmed steps. An accepted resignation opens the usual result dialog. Resolve any pending feedback before resigning.
+
+### Animation and game sounds
+
+The opening roll uses the same dice artwork and animation as regular rolls. When the bot opens, the actual opening dice stay visible while its checker moves play in sequence. Hits animate to the bar and bear-offs to the tray. The decision controls wait for playback, rapid legal source clicks queue in order, and each undo animates its reversal. Reload restores the saved checkpoint without replaying old moves. Leaving Playing stops playback, and reduced-motion mode uses short fades.
+
+Apply **Settings → Playing → Game sounds** to update the current configuration and the browser’s playback preference immediately, including for an ongoing game. Both players use recordings from `sounds/`. `rollingDice.au` plays for rolls, `move.au` for moves and bear-offs, and `hit22.wav` for hits. A new bot double plays `double.au` once when the response dialog appears after checker playback. Loading, resuming, hovering, undoing, and confirming steps whose sounds already played are silent. Audio failure does not interrupt play.
+
+The bundled PCM WAV files preserve the recordings' decoded samples. Run `python3 tools/prepare_play_sounds.py` with FFmpeg installed to regenerate them, then build normally. Playback uses the bundled files directly.
+
+### Play API and persistence
+
+| Method | Endpoint                          | Purpose                                                                                                           |
+| ------ | --------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/play/sessions`              | List the 100 most recently updated sessions.                                                                      |
+| POST   | `/api/play/sessions`              | Start a session with a request such as `{ "human_player": 0, "match_length": 5 }`. `0` is white and `1` is black. |
+| GET    | `/api/play/sessions/{id}`         | Read a saved session by ID, including sessions outside the list limit.                                            |
+| POST   | `/api/play/sessions/{id}/actions` | Apply an action using the current `version`.                                                                      |
+| GET    | `/api/play/sessions/{id}/sgf`     | Download the saved SGF, including the escaped player name.                                                        |
+
+Actions include `opening_roll`, `start_opening_move`, `roll`, `move`, `pass`, `double`, `take`, `drop`, `resign`, `next_game`, and `end_session`. For `move`, send the zero-based `move_index` from the returned legal move list. For `resign`, send `resign_level: 1 | 2 | 3` during a human Roll or Move decision. `end_session` applies after a completed money game and retains the final score and reports. Stale or competing actions return HTTP 409. An unavailable decision or declined resignation returns HTTP 422 and preserves the checkpoint.
+
+For native play, BG Tutor restores the saved SGF in an isolated GNUbg subprocess with a three-minute deadline, checks the exact saved GNUbg ID, and runs the bot until the next human decision. It holds no database transaction during engine work. An optimistic revision check saves the SGF and response snapshot together. GNUbg's complete 0-ply legal move list defines the allowed final boards at every bot search depth. The client expands combined notation into individual die steps and checks the result against that list, including maximum dice use, the higher-die rule, and immediate game-winning bear-off.
+
+### Native play tests
+
+With PostgreSQL running and `DATABASE_URL` set as described under [Verification](#verification), run the native integration suite. SQLx creates isolated test databases. The tests cover complete matches, both colors, saved engine settings, forced passes, cube offers and responses, gammons and backgammons, Crawford and post-Crawford games, SGF replay, concurrent actions, and failure recovery.
+
+```sh
+GNUBG_BIN=/absolute/path/to/gnubg \
+cargo test -p bgtutor --test play -- --ignored
+```
+
+The opt-in browser suite uses Playwright's test backend, native GNUbg with seeded randomness, and browser clicks for play actions. Its two full three-point matches use white/bear off right and black/bear off left. They check the hover destination and move for each die, swap dice, use the roll and cube controls, and reload the saved match. Three additional scenarios verify opening rolls and ties across reloads. Three cube scenarios verify real bot offers, taking or passing, and starting the next game. Native SGF evaluations verify 0-, 1-, and 2-ply play after resuming and changing games.
+
+```sh
+cd web
+BGTUTOR_FULL_MATCH_TEST=1 \
+GNUBG_BIN=/absolute/path/to/gnubg \
+npx playwright test e2e/play-full-match.spec.ts --output=/tmp/bgtutor-full-match-results --reporter=line
+```
+
+## Game results in the move history
+
+At the end of each completed game, the move history shows the winner, points won, the calculation from the result and cube, and the new match score. For example, **Gammon (2) × Cube 2 = 4 points** is a four-point win. This applies to imported matches in Analysis and to completed games in ongoing bot matches. Existing matches show results without reimporting or changing stored positions or evaluations.
+
+A declined double uses the cube value before the offer. Resignations and results known only from the game record are labeled accordingly. If the next game's recorded starting score is the only evidence of points won, the calculation shows the difference, such as **6 − 2 = 4 points**. A win type appears only when the game record supports it.
+
+## Playing feedback modes
+
+New matches default to **Coach**. Choose any mode during setup. **Settings → Playing** stores the default mode, **Open training analysis automatically**, and a separate **Tutor warning threshold**. The threshold defaults to 0.04 and accepts values greater than zero and at most one. New matches capture these preferences and the analysis depth independently of the bot's playing strength. Older sessions saved before feedback modes use Competition behavior.
+
+| Mode            | Feedback during play                                                                                                                                                                                                    |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Competition** | Hides analysis, pip counts, error markers, and PR.                                                                                                                                                                      |
+| **Training**    | Shows full equities and win, gammon, and backgammon probabilities. With automatic analysis disabled, use **Hint** to request it.                                                                                        |
+| **Coach**       | Shows equity differences and compact error feedback.                                                                                                                                                                    |
+| **Tutor**       | Warns before a checker or cube decision at or above the threshold. **Try again**, **Show solution**, and **Play anyway** preserve the first attempt. **Show solution** reveals the evaluation and any checker previews. |
+
+**Change play mode** above the board switches an ongoing match immediately and saves the choice for reload. It preserves the current position and partial checker steps. Edit **Tutor warning threshold** beside it, then leave the field or press Enter to save and recheck any pending warning. The saving indicator confirms success for three seconds. These controls also appear under **Active mode** in decision dialogs. Live changes apply to the current match. The default for new matches and the captured analysis depth are managed separately.
+
+Automatic Coach and Training feedback pause before GNUbg commits the choice and plays the bot. Revealed checker alternatives use the same **Initial**, **Arrows**, and **Final** preview as **Hint**. **Continue** or **Play anyway** confirms the saved choice, even after previewing alternatives or switching modes. A Competition confirmation shows only the pending choice. Reload restores pending feedback, and stale requests or engine failures preserve the checkpoint.
+
+The **Play mode** column in Match database shows the mode and use of learning aids. You can hide or resize it independently of existing column profiles. Opening the original of an ongoing Competition match resumes Playing, including at startup. The original match and its positions become available for analysis when the match ends, or after a completed money game. Switching to Competition clears cached analysis for that source. Explicit independent library copies remain available for review.
+
+**Learning review** distinguishes first attempts, played choices, retries, and assistance, including in mixed-mode matches. First-attempt PR uses `500 × original normalized equity loss / native-relevant decisions` at the positions actually reached. It excludes forced checker moves and applies GNUbg's strict close-cube rule to no-double choices. The review identifies its method and profile separately from GNUbg's aggregate rating of the played match. Mode and assistance metadata are retained for originals, copies, and bookmarked occurrences. The match overview omits PR for matches that used learning aids.
+
+To verify mode switching and feedback with the configured GNUbg and an isolated test backend and database, run the native browser suite.
+
+```sh
+cd web
+BGTUTOR_FEEDBACK_NATIVE_TEST=1 \
+  npx playwright test e2e/play-feedback-native.spec.ts
+```
+
+## Engine benchmark
+
+Use **Extras → Benchmark** to measure analysis speed for one or more depths. GNUbg supports 0–4 ply. The selected depths run in selection order in the background and continue when you leave the view. **Cancel run** also stops the active engine process. Other BG Tutor engine work waits while a benchmark is in progress, and a notice appears across workspaces. Other programs on the machine can still affect the measurement.
+
+The fixed **WC2014 v1** reference is the 11-point match between Akiko Yazawa and Douglas Mayfield, with ten games and 460 checker moves. The app bundles an immutable copy of the unanalysed GNUbg SGF fixture, with a reference ID, version, and SHA-256 checksum. See the [fixture documentation](backend/tests/fixtures/README.md) for provenance and reproduction. Existing evaluations are cleared before analysis.
+
+**Total analysis time** sums the full analysis pipeline for each game, including process startup, loading, checker and cube analysis, and result preparation. Each game starts a fresh GNUbg process. The analysis is cubeful and deterministic, with zero noise and luck analysis disabled. The timer excludes waiting, installation and version checks, and database writes. **Ø analysis time / move** divides the total by all 460 checker moves, including forced moves. It represents the match-wide average. New runs use `gnubg-match-v2-unlimited` with no fixed per-game timeout. Older runs retain the timeout recorded in their protocol snapshot.
+
+Every attempt records its date, backend machine and hardware, engine version and executable path, ply depth, reference, protocol, progress, and status. Successful runs add total time and average time per move in milliseconds. History is independent of library matches and profiles. Backend restarts mark interrupted runs as failed. A new run starts its timing from the beginning. During a run, the engine availability indicator reuses the verified installation snapshot to avoid starting a competing probe.
+
+| Method | Endpoint                      | Purpose                                                                            |
+| ------ | ----------------------------- | ---------------------------------------------------------------------------------- |
+| GET    | `/api/benchmarks/reference`   | Read the versioned reference and measurement protocol.                             |
+| GET    | `/api/benchmarks/status`      | Read the active status shown in the global notice.                                 |
+| GET    | `/api/benchmarks`             | List the latest 1,000 attempts, newest first.                                      |
+| POST   | `/api/benchmarks`             | Queue attempts with a request such as `{ "engine_id": "gnubg", "plies": [0, 2] }`. |
+| POST   | `/api/benchmarks/{id}/cancel` | Cancel a queued or running attempt. Finished results are retained.                 |
+
+The server creates all attempts for a multi-depth request together before starting them. New requests during a benchmark return HTTP 409. Unavailable engines and invalid depths return HTTP 422. OpenAPI documents the endpoints and types.
+
+## Study
+
+**Study** contains **Flashcards & Anki**, **Reports**, **My recurring mistakes**, and **Practice history**. Use Left/Right to switch tabs and Home/End to jump to the first or last. Opening a deck from Positions selects **Flashcards & Anki** and preserves your deck selection, cards, and progress.
+
+### Reports
+
+PostgreSQL stores each completed learning review as an immutable snapshot with its SGF. Point-match reports appear individually. Each completed money game has its own report with its game number and cumulative score at the time. The money session header shows the current total from the session, in player order, and its **Ongoing** or **Ended** status. Open individual reports from the games listed beneath the header in game-number order. The archive sorts sessions by their newest report and loads entire sessions a page at a time, including sessions beyond the 100-entry Playing list. It refreshes when you return or select **Refresh reports**.
+
+The overview shows date, match name, score and match length, play mode, learning aids, analysis depth, and first-attempt PR when available. The archive contains finished games with saved reviews and remains accessible after the corresponding library match is deleted.
+
+**Open report** shows first attempts, corrections, and retries in the same movable dialog used at game or match end. In Playing, **Learning review** is next to **Download SGF** in the move history. Creating a review there opens it automatically. In Analysis, **Learning review** appears beside the match name when a saved report exists. It loads the report on demand and preserves the current board. Opening a saved report reads stored values without running the engine or updating the session.
+
+The dialog uses the same title grip and keyboard behavior as **Hint**. Summary statistics sit above the scrollable decisions and attempts. On short screens the full report scrolls below the title. **Close** or Escape returns focus to the control that opened it.
+
+Select a decision to see the original position and the saved recommendation. The board uses your chosen theme. **Initial**, **Arrows**, and **Final** show the starting position, move arrows, and projected result. Use the arrow keys or Home/End to move through decisions, and Enter or Space to select one. On narrow screens the preview is brought into view. **Decisions and attempts** returns you to the selected row.
+
+Checker decisions are matched by game, color, dice, and native checker decision number. A pre-roll no-double decision shows the board with no dice. Cube actions show their original cube context and the recommended action. Missing positions and moves that cannot be projected legally are marked. The first selection loads the versioned archived positions, which later selections reuse. Previewing requires neither a library entry nor a new engine job.
+
+| Method | Endpoint                                    | Purpose                                                                                                                                                                                         |
+| ------ | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/study/reports`                        | List compact summaries with cursor pagination. With `group_by=session`, the limit counts complete money sessions and individual point-match reports. Cursors are specific to the grouping mode. |
+| GET    | `/api/study/reports/{id}`                   | Read a saved report.                                                                                                                                                                            |
+| GET    | `/api/study/reports/{id}/history?version=N` | Read archived board positions with a version check.                                                                                                                                             |
+
+Summaries include `session_id`, the current `session_scores`, and `money_session_ended`.
+
+### My recurring mistakes
+
+**Study → My recurring mistakes** groups a selected player's errors by game plan and decision type. The groups cover checker play, missed doubles, premature doubles, wrong takes, wrong passes, and cube errors that cannot be assigned to one of those types. Player matching uses the full name, ignores case and surrounding spaces, and includes both colors. Combine database, game plan, and minimum-loss filters. The minimum defaults to 0.08 normalized equity. The overview reports occurrence count, distinct match count, and total equity loss separately.
+
+For each game, the deepest completed local analysis with a current source and a saved game checkpoint takes precedence. The newest wins at equal depth. A qualifying local result takes precedence even if it records no errors. This prevents overlapping analyses from counting decisions more than once. Games without a qualifying local result use imported **XG** or **BGBlitz** analysis when available. Source depths keep their own units. Removed source matches, forced or unevaluable decisions, and ongoing Competition games are excluded. Completed money games are eligible.
+
+Imported checker decisions require both the best and played moves to be verifiable legal candidates. Loss is calculated from comparable normalized XG equities or explicit BGBlitz EMG values. Match-winning chances (MWC), unknown units, and BGBlitz placeholders such as −99 are excluded from the calculation. Cube decisions use the perspective of the player making or answering the offer. Engine, source format, method, and original depth remain visible, including XGRoller++ and rollout labels. Missing depth is reported as unknown.
+
+**Practice** opens up to 20 distinct questions from a group, highest loss first. The board shows the original score, dice, and cube for checker decisions. For a take or pass it centers the offered cube. A pre-roll cube question hides the subsequent roll. **Reveal answer** loads the saved best and played decisions, the loss, and the analysis source. **Next** advances to a hidden answer. Closing practice, changing filters, or leaving the tab ends the exercise and discards late responses. This exercise creates no flashcards or FSRS reviews.
+
+**Positions → More filters → Game plan** searches the collection for any of the five game plans from the perspective of the player on roll. Saved searches and profiles retain the filter. BG Tutor classifies older positions in a versioned, indexed cache without engine work. Large collections are prepared in bounded steps, and the app prompts you to search again if preparation is still in progress. Saved positions remain searchable after the source match is removed.
+
+`GET /api/study/mistakes` lists the groups. `POST /api/study/mistakes/practice` returns questions with the answers and played notation hidden. `POST /api/study/mistakes/reveal` checks the source and precedence again before revealing the answer. Local references carry `job_id`, imported references carry `imported_analysis_id`, and both identify the game and decision. Older libraries fill gaps in the import and move catalogs in bounded steps as needed. Current libraries use saved move contexts. OpenAPI documents all parameters and response types.
+
+## Configuration profiles
+
+The header shows the active profile and marks it **modified** when your current settings differ from its saved values. Select a profile to switch or choose **Manage profiles** to open **Settings → Profiles**.
+
+Choose **Show changes** in the profile menu to see each changed setting with its category, saved value, and current value. The arrow next to a current value restores that field from the saved profile and saves the current configuration. Related values such as a dice pair or a numeric or date range are restored together. The dialog shows any errors. The **modified** marker disappears after the last change is reverted. **Close** or Escape dismisses the dialog.
+
+**Reset all changes** restores the entire saved profile in one operation after confirmation. **Cancel** or Escape dismisses the confirmation. A failed restore preserves the current configuration. After success, the changes dialog stays open with an empty list.
+
+Profiles capture engines and default depths, playing and training settings, language, sound, interface and board appearance, opening-book references, and applied search filters, sorts, and table layouts. The profile summary shows saved values and differences from the current settings.
+
+**Apply** saves the current configuration. To replace a named profile's saved values, choose **Overwrite with current configuration** and confirm. When switching with changes, choose **Save and switch**, **Discard and switch**, or **Cancel**. **Save as new profile** creates and activates a profile from the current configuration. Activate a different profile before deleting the active one.
+
+On the first launch after the profiles update, existing server and browser preferences are imported once into **Standard**. Profiles and current settings apply across the installation, including other browsers. On a version conflict, you can load the server version or save your local changes as a new profile. A recovery journal protects pending local changes.
+
+Running analyses and matches retain their captured settings. New jobs and matches use the current configuration. Switching profiles only applies settings. Engine installation paths are device-specific, and book files are stored as references. Activation checks the referenced resources and reports missing items. See the [profile specification](docs/superpowers/specs/2026-11-10-profiles-design.md) and [implementation plan](docs/superpowers/plans/2026-11-10-profiles.md).
+
+## Analysis time estimates
+
+### Before analysis
+
+Before you start a game or match analysis, **Estimated analysis time: approx. …** appears below the scope and depth selectors. It multiplies the number of checker moves in scope by the average time per move from the most recent matching, fully completed benchmark. The UI shows the benchmark date, engine version, ply depth, and checker move count. Changing the match, game, scope, depth, applied profile, or engine installation invalidates an outstanding estimate. The estimate is hidden during submission and execution.
+
+A matching benchmark uses the same local machine and hardware, engine installation and version, and ply depth, with compatible reference and analysis parameters. Completed runs using the former 600-second per-game limit and the current unlimited protocol are both eligible. Calibration requires a successful, complete local run.
+
+The estimate includes process startup and cube analysis. Time spent waiting for other jobs is outside its scope. Different types of positions can take substantially different amounts of time. If the benchmark, checker moves, or engine installation is unavailable, or the request fails, the UI explains the issue and still lets you start analysis. Estimates use existing measurements.
+
+`GET /api/matches/{id}/analysis/estimate?plies=2&game_no=1&engine_id=gnubg` returns the estimate and its measurement basis. Omit `game_no` for the whole match and omit `plies` to use the saved default depth. The endpoint is read-only and observes the source and Competition restrictions.
+
+### During analysis
+
+While a game or match analysis runs, the progress area shows **Estimated time remaining: approx. …**. The initial estimate uses the saved matching benchmark. Once a game completes, the estimate uses confirmed analysis time divided by the number of timed checker moves, multiplied by the number of remaining checker moves. This weights longer games according to their move counts. The display counts down in seconds between completed games, when the engine reports confirmed progress.
+
+Timing uses a monotonic clock and excludes time in the queue or waiting for engine access. Confirmed work is saved with the job and survives reload and resumption. An interrupted game is timed again. Moves already completed by older jobs count toward progress. Only timed moves contribute to the measured average. The job keeps the measurement basis it started with when the user profile changes.
+
+If a game outlasts its estimate, the UI shows **Recalculating time remaining …**. Without a matching benchmark, an estimate can appear after the first usable game measurement. The active estimate disappears when the job completes or fails.
+
+`GET /api/jobs/{id}/remaining-time` returns status, the measurement basis, confirmed and timed move counts, and the current estimate. The read-only endpoint follows the same source and Competition restrictions as the job and starts no engine. Active timing is saved about once per second. The browser counts down monotonically between updates.
+
+## API reference
+
+These endpoints cover common library and analysis operations. The complete contract, including parameter names and result schemas, is in [OpenAPI](docs/openapi.json). Generate it and the TypeScript types used by the client directly from the Rust handlers. The generator runs without a server.
+
+```sh
+npm run api:types --prefix web
+```
+
+### Library and position search
+
+| Method       | Path                                                             | Purpose                                                                                                                                                                       |
+| ------------ | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST         | `/api/imports?database_id=`                                      | Multipart field `file`. HTTP 201 for a new match, 200 for a duplicate in the target database. Omitting `database_id` uses **Unsorted**.                                       |
+| GET / POST   | `/api/databases`                                                 | List databases with match counts or create a database.                                                                                                                        |
+| PUT / DELETE | `/api/databases/{id}`                                            | Edit with `version` or delete a user-created database. Deletion requires `version` and `delete_matches=true` when it contains matches.                                        |
+| DELETE       | `/api/databases/{id}/matches?version=`                           | Empty a system database while retaining it. Returns HTTP 204 on success and 409 for a stale version, an ineligible database or active analysis.                               |
+| GET          | `/api/library/matches`                                           | Filter and sort matches or occurrences before pagination. Limit 1–200. The cursor is bound to the filters and sort.                                                           |
+| GET / PUT    | `/api/matches/{id}/metadata`                                     | Read or update match details with version checks.                                                                                                                             |
+| POST         | `/api/library/actions`                                           | Bulk action with `action`, `match_ids` and optional source or destination database and tags. Returns individual outcomes.                                                     |
+| POST         | `/api/library/export`                                            | Export `match_ids` with `format` set to `original` or `sgf`. Returns a file or ZIP.                                                                                           |
+| GET          | `/api/matches?q=&after=&limit=`                                  | Match search. Limit 1–100.                                                                                                                                                    |
+| GET          | `/api/matches/{id}`, `/api/matches/{id}/source`                  | Match summary or canonical SGF download.                                                                                                                                      |
+| GET          | `/api/matches/{id}/games`                                        | Game catalog with starting scores, Crawford status and move counts.                                                                                                           |
+| GET          | `/api/matches/{id}/dice?game_no=`                                | Observed roll frequencies, optionally for one game.                                                                                                                           |
+| GET          | `/api/matches/{id}/games/{game_no}/decisions`, `/api/moves/{id}` | Stable game and move IDs and recorded actions with their pre-action positions.                                                                                                |
+| GET          | `/api/positions`, `/api/positions/{id}`                          | List match positions or find exact board matches. Filters include `database_id`, `match_id`, `game_no` and `position_id`. A direct lookup includes the match and game number. |
+| GET          | `/api/position-browser?filters=&after=&limit=`                   | Search checker decisions in context. `filters` is URL-encoded JSON with `schema_version` set to 1.                                                                            |
+| GET / POST   | `/api/position-filters`                                          | List or create saved searches.                                                                                                                                                |
+| PUT / DELETE | `/api/position-filters/{id}`                                     | Update or delete a saved search with `expected_version`.                                                                                                                      |
 
 ```sh
 curl -F file=@backend/tests/fixtures/tutorial.mat http://127.0.0.1:8787/api/imports
 curl 'http://127.0.0.1:8787/api/matches?q=Tutor'
 ```
 
-Aufträge durchlaufen `queued → running → completed|failed`. Ein Worker pro Backend begrenzt die parallele Analyse. PostgreSQL `FOR UPDATE SKIP LOCKED` verhindert doppelte Beanspruchung, aktive identische Aufträge werden zusammengeführt. Positionsanalyse und Import haben ein Prozesslimit von 90 Sekunden, die native Analyse eines ganzen Spiels 600 Sekunden. Eine Worker-Lease gilt 120 Sekunden und wird während der Arbeit alle 20 Sekunden erneuert. Verwaiste Aufträge werden nach Ablauf erneut versucht, maximal drei Versuche. Ein normaler Enginefehler beendet den Auftrag als `failed`; die Oberfläche kann einen neuen Auftrag starten.
+### Engines and analysis
 
-SSE-Ereignisse heißen `queued`, `running`, `progress`, `completed` und `failed`. `id:` ist eine dauerhafte Ereignisnummer, `data:` enthält `JobProgress`-JSON. `Last-Event-ID` setzt nach der angegebenen ID fort; ohne Header werden alle bisherigen Ereignisse abgespielt. Es folgen Keepalives, bis der Auftrag endet. SIGINT/SIGTERM beendet auch aktive Streams und laufende Kindprozesse. Der nächste Start übernimmt liegengebliebene Aufträge nach Lease-Ablauf. Der Browser merkt sich die zuletzt gestarteten Aufträge je Position und gleicht SSE zusätzlich durch Polling ab. Den letzten Partieauftrag lädt er direkt aus der Datenbank; die Anzeige bleibt deshalb auch ohne Browser-Cache verfügbar.
+| Method     | Path                                                                         | Purpose                                                                                                                                                                                                                    |
+| ---------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET        | `/api/health`, `/api/engines`                                                | PostgreSQL and GNUbg health, or available engines, versions and depths.                                                                                                                                                    |
+| GET / PUT  | `/api/settings`                                                              | Persistent engine and player settings with revision checks.                                                                                                                                                                |
+| POST       | `/api/engines/gnubg/check`                                                   | Check the installation using `{ "path": "..." }`.                                                                                                                                                                          |
+| GET / PUT  | `/api/opening-book`                                                          | Provider, local BGDB and XG paths, availability and version checks.                                                                                                                                                        |
+| POST       | `/api/opening-book/check`, `/api/opening-book/install`                       | Validate or atomically install a local BGDB file.                                                                                                                                                                          |
+| POST       | `/api/opening-book/xg/check`, `/api/opening-book/xg/install`                 | Validate or install an official XG book file.                                                                                                                                                                              |
+| GET        | `/api/positions/{id}/opening-book`                                           | Context-specific book result or explicit miss, with a separate XG position reference.                                                                                                                                      |
+| GET        | `/api/matches/{id}/imported-analysis`                                        | Source analysis provenance and coverage.                                                                                                                                                                                   |
+| GET        | `/api/positions/{id}/imported-analysis`, `/api/moves/{id}/imported-analysis` | Original checker or cube analysis.                                                                                                                                                                                         |
+| POST       | `/api/jobs`                                                                  | Submit a position analysis with `{ "position_id": "<position UUID>", "kind": "analysis", "plies": 0 }`.                                                                                                                    |
+| GET / POST | `/api/matches/{id}/analysis`                                                 | Get the latest job or submit a new one. Use `game_no` in the query for a game lookup or in the JSON body to submit a game job. Omit it for the whole match. For example, submit `{ "plies": 0, "game_no": 2 }` for game 2. |
+| GET        | `/api/jobs/{id}`, `/api/jobs/{id}/events`                                    | Job state, progress, result and error, or persistent SSE updates.                                                                                                                                                          |
+| GET        | `/api/jobs/{id}/moves`                                                       | Cursor-paginated evaluations filtered by game, player, checker or cube, and severity.                                                                                                                                      |
+| GET        | `/api/jobs/{id}/statistics`                                                  | Native match and game statistics with coverage, PR where available, and `error_breakdown`.                                                                                                                                 |
+| GET        | `/api/matches/{id}/move-assessments?game_no=&job_id=`                        | Stored checker evaluations for a game with source and depth. Optionally restrict to one native job.                                                                                                                        |
 
-Partieaufträge speichern Entscheidungen, Teilstatistik und SSE-Fortschritt nach jedem vollständig analysierten Spiel in einer Transaktion. `Job` und SSE enthalten `completed_games` und `total_games`; der Prozentwert bezieht sich auf Spiele, nicht auf Laufzeit. Während eines langen Spiels bleibt dieser Wert unverändert. Nach einem Neustart wird nach Lease-Ablauf beim nächsten unvollständigen Spiel fortgesetzt. Ein alter Worker kann keine Checkpoints oder Endergebnisse schreiben. Bei einem Enginefehler bleiben fertige Spiele und ihre Fehlerübersicht abrufbar; ein neu gestarteter Auftrag analysiert die Partie erneut.
+### Notes and flashcards
 
-Die Bewertung verwendet GNUbgs native `analyse game`-Ausgabe mit sechs Nachkommastellen, einschließlich der tatsächlich gespielten Alternative außerhalb der besten fünf Kandidaten. Vorhandene Analyseannotationen werden für die Berechnung entfernt. Geerbte Matchdaten und Setup-Stellungen werden für GNUbg explizit normalisiert; Brett- und Matchkontext werden für jede Checker-/Cube-Aktion zurückgeprüft. Gemischte SGF-Sammlungen können auch leere oder reine Cube-Spiele enthalten. Ein fehlender oder unvollständiger nativer Export führt zu einem Fehler; native Exportdateien sind auf jeweils 64 MiB begrenzt. Erzwungenes Aussetzen hat Verlust 0 und keine alternative Equity (`evaluation_status=forced`). Fehlerklassen: ungenau ab 0,04, Fehler ab 0,08, grober Fehler ab 0,16 normierter Equity. Die reinen Equity-Summen pro Spieler sind kein PR; die gesonderte `performance_rating`-Statistik ergänzt native relevante Entscheidungszahlen und den gewichteten GNUbg-PR. Cube-Equities werden aus Sicht des entscheidenden Spielers in Einheiten des Dopplers vor dem Angebot ausgewiesen. Reine Cube-Entscheidungen erhalten eigene stabile Quellzug-IDs und sind über die Zugnotizen samt Stellung vor der Aktion zugänglich.
+| Method       | Path                                                                                                                         | Purpose                                                                                                                                                                                           |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET / PUT    | `/api/matches/{id}/annotation`, `/api/positions/{id}/annotation`, `/api/games/{id}/annotation`, `/api/moves/{id}/annotation` | Read or save versioned annotations.                                                                                                                                                               |
+| GET          | `/api/annotations/search`, `/api/tags`                                                                                       | Search notes or suggest tags.                                                                                                                                                                     |
+| GET / POST   | `/api/decks`                                                                                                                 | List or create decks.                                                                                                                                                                             |
+| PUT / DELETE | `/api/decks/{id}`                                                                                                            | Rename using `name` and `expected_version` in the body, or delete with `expected_version` in the query. Deletion returns HTTP 204 on success, 409 for a stale version and 404 for a missing deck. |
+| GET          | `/api/cards`, `/api/decks/{id}/cards`                                                                                        | Search all cards or a deck with the same filters, total count and UUID pagination.                                                                                                                |
+| POST         | `/api/decks/{id}/cards`, `/api/decks/{id}/positions`                                                                         | Add one decision or errors from a completed analysis, or add up to 200 selected position UUIDs with individual outcomes.                                                                          |
+| GET          | `/api/decks/{id}/next`, `/api/decks/{id}/export.apkg`                                                                        | Fetch the next due card or download an Anki package.                                                                                                                                              |
+| POST         | `/api/cards/{id}/reveal`, `/api/cards/{id}/review`                                                                           | Reveal a card's answer or submit a review.                                                                                                                                                        |
 
-Die OpenAPI-Datei [docs/openapi.json](docs/openapi.json) und die tatsächlich verwendeten TypeScript-Typen werden aus den Rust-Handlern erzeugt, ohne laufenden Server:
+## Analysis jobs
 
-```sh
-npm run api:types --prefix web
-```
+GNUbg supports 0–4 ply for position, game and match analysis. The default analysis depth is 2-ply. A job captures its engine configuration and depth. Identical active jobs are deduplicated by scope, depth and engine configuration. Each backend runs one worker, and PostgreSQL `FOR UPDATE SKIP LOCKED` keeps workers from claiming the same job.
 
-## Verifikation
+Jobs move through `queued → running → completed|failed`. GNUbg has a 90-second process limit for position analysis and MAT conversion and a 600-second limit for a game analysis. The worker's 120-second lease renews every 20 seconds. After expiration, the job can be claimed again, up to three attempts in total. A regular engine error marks the job `failed` and the UI can submit a new job.
 
-Schnelle Tests und Builds:
+SSE event types are `queued`, `running`, `progress`, `completed` and `failed`. The `id:` field is a durable event number and `data:` contains `JobProgress` JSON. `Last-Event-ID` resumes after that event. With no header, the server replays the event history and then sends keepalives until the job ends. SIGINT and SIGTERM close streams and terminate running child processes. On restart, the worker can reclaim expired jobs. The browser remembers recent position jobs and reconciles SSE with polling. It loads the latest match or game job from PostgreSQL, including after a browser reload.
+
+Match analysis checkpoints decisions, partial statistics and SSE progress for each completed game in one transaction. `Job` and SSE report `completed_games` and `total_games`, so the percentage advances when a game finishes. After an expired lease, a replacement worker resumes at the next incomplete game. An expired worker cannot write checkpoints or results. Completed games and their error lists remain accessible after a later game fails. Submitting a new job analyzes the requested scope from the beginning.
+
+Native evaluation uses GNUbg's `analyse game` output at six decimal places and includes the played move even when it falls outside the top five candidates. BG Tutor clears existing analysis annotations before the calculation, normalizes inherited match data and setups, and verifies board and match context for each checker and cube action. Mixed SGF collections can include empty or cube-only games. Missing or incomplete native exports fail the job. Each native export is capped at 64 MiB.
+
+A forced pass has zero loss and no alternative equity (`evaluation_status=forced`). Normalized loss thresholds are 0.04 for `doubtful`, 0.08 for `bad` and 0.16 for `very_bad`. The `performance_rating` field includes the counts of relevant decisions and weighted native GNUbg PR. Cube equities use the deciding player's perspective and the cube value before the offer as their unit. Cube-only decisions have stable source action IDs and are accessible from **Cube and move notes** with their pre-action board.
+
+## Verification
+
+Run the checks relevant to the change from the repository root. Install the frontend dependencies with `npm ci --prefix web` before running frontend checks. The workspace test suite includes non-ignored SQLx tests, so configure `DATABASE_URL` as described below before running it. Use `cargo test --workspace --lib` to run the Rust library tests without those integration targets.
 
 ```sh
 cargo fmt --all --check
@@ -323,262 +567,56 @@ npm run test:themes --prefix web
 npm run build --prefix web
 ```
 
-Echte Engine-, PostgreSQL- und Performancetests (Compose muss laufen). Der optionale lokale Importkorpus enthält inzwischen neun strikt abgewiesene XG-Dateien; dessen Lauf ist separat in [Importprüfung](docs/import-corpus-results.md) dokumentiert. Die übrigen Integrationstests können gezielt mit `--skip all_local_game_files_import_atomically_and_deduplicate` vollständig ausgeführt werden:
+### PostgreSQL and GNUbg integration tests
+
+Start PostgreSQL with `docker compose up -d --wait db` or use a dedicated test server. Set `DATABASE_URL` to a connection on that server with permission to create databases. SQLx creates and drops separate test databases. Set `GNUBG_BIN` to a working GNUbg installation with its neural-network weights and embedded Python support for native play tests.
 
 ```sh
-DATABASE_URL=postgres://bgtutor:bgtutor_local@127.0.0.1:54329/bgtutor cargo test --workspace -- --ignored --nocapture
+cargo test --workspace -- --ignored --nocapture --skip all_local_game_files_import_atomically_and_deduplicate
 ```
 
-Der optionale lokale Dateibestand wird ebenfalls über Multipart-REST in einer eigenen SQLx-Testdatenbank geprüft. Er liest `games/xg`, `games/mat` und `games/bgf` (alternativ `BGTUTOR_GAMES_DIR`). Ohne diese lokalen Dateien wird nur dieser optionale Bestandstest übersprungen. Ergebnis des bereitgestellten Bestands: **37/37 Dateien erfolgreich**, 17 verschiedene Inhalte und 20 korrekt erkannte Duplikate. [Vollständiger Bericht](docs/import-corpus-results.md).
+Use `cargo test -p bgtutor --test <target> -- --ignored --nocapture` for an affected integration test target. Integration coverage includes import and deduplication, game catalogs and older matches, scope-bound cursors, SSE replay, worker claims and lease recovery, Dice Distribution, and native checker and cube analysis. The reference match exercises 10 games and 460 moves. Native depth tests check actual 3- and 4-ply engine output and game and match exports. Parser tests compare XG positions with the same match imported from MAT through GNUbg.
+
+The search performance test builds 50,000 synthetic matches and 250,000 positions in an isolated database. It uses `EXPLAIN (ANALYZE, BUFFERS)` to verify a GIN trigram index for a selective player-name search and a B-tree index for an exact Position ID search. Each query returns one row. On November 8, 2026, the warm test queries took 0.279 ms and 0.036 ms respectively in PostgreSQL. These measurements cover database execution only.
+
+### Optional local import corpus
+
+The corpus test reads `games/xg`, `games/mat`, and `games/bgf` by default. Set `BGTUTOR_GAMES_DIR` to use a different parent directory. It sends the files through the multipart API in its own SQLx test database and skips when the local files are absent.
 
 ```sh
-DATABASE_URL=postgres://bgtutor:bgtutor_local@127.0.0.1:54329/bgtutor BGTUTOR_CORPUS_REPORT=/tmp/bgtutor-import-results.json cargo test -p bgtutor --test import_corpus -- --ignored --nocapture
+BGTUTOR_CORPUS_REPORT=/tmp/bgtutor-import-results.json \
+  cargo test -p bgtutor --test import_corpus -- --ignored --nocapture
 ```
 
-Die SQLx-Tests erstellen und entfernen eigene Datenbanken. Zusätzliche Tests prüfen den Spielkatalog einschließlich Nachbefüllung älterer Matches, direkte Positionszugriffe, Scope-/Cursor-Isolation, echte Einzelspielanalyse, Wiederaufnahme und Lernkarten aus dem ausgewählten Spiel. Sie prüfen Import/Duplikate, REST-Paginierung, echte Analyse, SSE-Replay/Shutdown, aktive Job-Deduplizierung einschließlich gleichzeitigem Abschluss, atomare Beanspruchung durch zwei Worker, Lease-Recovery, 21 Würfelpaare und Gewichte. Die Partieanalyse wird über alle zehn Spiele und 460 Züge der Referenzpartie geprüft, einschließlich schlechter Checker-Züge, erzwungenem Aussetzen, falschem Double/Drop, fortsetzbaren Checkpoints und dem Ausschluss veralteter Worker. Separate native Tiefentests verwenden eine kurze Partie mit einer nicht trivialen Zugwahl: Sie prüfen echte 3-/4-Ply-Ausgaben für Positionen und Dice Distribution sowie Partieexporte für Spiel- und Matchaufträge. API- und Migrationstests sichern den Bereich 0–4, den Standard 2 und bestehende Profile ab. Weitere Regressionstests prüfen geerbte SGF-Matchdaten, leere/Cube-Spiele, Setups mit Schwarz am Zug, stille lange Engine-Prozesse und die gleichzeitige Fortschrittsspeicherung/Lease-Verlängerung. Parser-Tests vergleichen alle 460 Zugpositionen der offiziellen XG-Referenz mit dem unabhängig durch GNUbg importierten MAT.
+The November 8, 2026 rerun imported 33 of 42 files and rejected nine invalid XG files. The earlier 37-of-37 result used a different corpus with 17 distinct contents and 20 recognized duplicates. The corpus test requires every supplied file to pass, so the documented rejected files cause it to fail when present. See the [import corpus report](docs/import-corpus-results.md).
 
-Der Performancetest erzeugt 50.000 Partien und 250.000 Positionen und prüft die tatsächlichen PostgreSQL-Pläne: GIN-Trigrammindex für eine selektive Namenssuche und B-tree für die exakte Position-ID. Eine lokale Messung am 8. November 2026 ergab **0,279 ms / 0,036 ms** Datenbank-Ausführungszeit. Das sind selektive, warme Testabfragen ohne HTTP-/UI-Zeit, kein allgemeines Latenzversprechen.
+### Browser tests
 
-Die Browserprüfung benötigt laufendes PostgreSQL aus Compose, `psql` und installiertes Google Chrome. Playwright erstellt pro Lauf eine frische PostgreSQL-Datenbank und startet einen eigenen BG-Tutor-Prozess sowie Vite auf freien lokalen Ports. Nach dem Lauf stoppt Playwright beide Server und entfernt die Testdatenbank.
+Playwright requires Google Chrome, `psql`, PostgreSQL, and the frontend dependencies. GNUbg workflows require a working local engine. The harness creates a fresh database, verifies that the API is using it, starts a dedicated backend and Vite on local ports, and removes the test database after the run. Screenshots and other test artifacts are written to `web/test-results/`.
 
 ```sh
 npm run test:e2e --prefix web
 ```
 
-Die Browserprüfungen prüfen außerdem direkte Spielauswahl, automatische Seitennavigation innerhalb eines langen Spiels, Grenzen des Zugverlaufs, Spiel-/Matchanalyse, verzögerte Kataloge, Filterrückkehr und einen einzigen Notizeditor mit getrennten Entwürfen. Sie importieren klar benannte Demo-Partien in die Testbibliothek und prüfen Analyse, Würfelmatrix, Suche, alle sechs Sprachen, lokale ZIP-Themes, Wiederaufnahme von Ergebnissen und ein 390 px breites Layout. Weitere Abläufe prüfen Notizen mit Versionskonflikten, direkte Positionssprünge, Deckanlage, verdeckte Lernantworten, persistierte Bewertungen, Checker-/Cube-Karten und Anki-Downloads. Eine verzögerte API-Antwort prüft außerdem, dass beim schnellen Wechsel zwischen analysierten Positionen die zuletzt angeklickte Position ausgewählt bleibt. Screenshots liegen unter `web/test-results/`.
+The default PostgreSQL connection targets the Compose instance. For another server or port, set `BGTUTOR_E2E_POSTGRES_URL` to a connection with `CREATEDB`. For tests that need prepared data, set `BGTUTOR_E2E_POSTGRES_TEMPLATE` to a dedicated fixture database named `bgtutor_e2e_template_*`. The harness copies the template for each run. Unset the obsolete `BGTUTOR_TEST_URL` before running Playwright.
 
-## Struktur und nächste Schritte
+Coverage includes import and analysis, game selection and move pagination, search and filters, saved notes and revision conflicts, deck creation, review and Anki exports, themes and all six locales, and selection changes while responses are in flight.
 
-- `backend/src/import/`: SGF/XG, Regelprüfung und GNUbg-IDs
-- `backend/src/engine.rs`, `match_analysis.rs`: isolierte GNUbg-Prozesse und native Checker-/Cube-Auswertung
-- `backend/src/match_jobs.rs`: dauerhafte Spiel-Checkpoints und Spielerstatistik
-- `backend/src/store.rs`, `jobs.rs`: SQLx-Zugriff, transaktionale Jobzustände und Events
-- `backend/src/api.rs`: REST, SSE, OpenAPI
-- `backend/migrations/`: Schema und Suchindizes
-- `web/src/`: Client, SVG-Brett, Ergebnisse und aus OpenAPI erzeugte Typen
-
-Dieser Stand analysiert ausgewählte Positionen, einzelne Spiele und vollständige Matches einschließlich Cube-Entscheidungen. Rollouts, Analyse-Caching und eine Tauri-Hülle sind Folgeausbau. Ein späterer Tauri-Client kann das Backend als Sidecar starten und dieselben HTTP-Endpunkte verwenden; Rust-Domainlogik liegt nicht im UI.
-
-
-Für einen anderen PostgreSQL-Server setzt `BGTUTOR_E2E_POSTGRES_URL` die Verbindungs-URL für das Anlegen und Entfernen der Testdatenbank. Die Rolle benötigt `CREATEDB`. Tests mit vorbereiteten Fixtures, etwa `BGTUTOR_NATIVE_ESTIMATE_MATCH`, können mit `BGTUTOR_E2E_POSTGRES_TEMPLATE` eine vorhandene Datenbank namens `bgtutor_e2e_template_…` als Vorlage verwenden. Playwright erstellt daraus eine eigene Kopie. Die frühere Variable `BGTUTOR_TEST_URL` wird abgelehnt, damit Tests nicht versehentlich gegen den normalen Bestand laufen.
-
-## Action icons and tooltips
-
-User actions throughout the app use the shared Lucide Outline mapping: save, undo, hint, delete, add, export/import, resume/open, search, edit, copy, refresh, settings and related commands. Compact routine actions retain a localized accessible name and expose their tooltip on mouse hover and keyboard focus. Important play decisions, Undo/Hint, primary form submissions and study actions keep their text beside the icon. Navigation tabs, candidate moves and board dice/cube artwork retain their existing meaning. Native popovers keep tooltips above modal dialogs; Escape dismisses a tooltip while preserving the dialog's existing Escape behavior. Hoverable tooltips remain readable while moving onto their text. Action buttons preserve native submit, disabled and forwarded-ref behavior; export controls remain download links. The common mapping and components are `action-icons.tsx`, `ActionButton.tsx` and `useActionTooltip.tsx`.
-
-## Playing against GNUbg
-
-Open **Playing** to start a 1–25 point match or select **Money game** as white or black. Money games have no point target (API match_length 0), use Jacoby with ordinary doubling and no beavers, and continue through **Next game** after each result with the cumulative native score. Every completed money game is automatically analyzed and archived separately under **Study → Auswertungen**, including its game number, original decisions and board previews. The next game starts only after that report is secured; older single-game money sessions can also continue. **End session** beside **Next game** closes the session after any game while retaining its final score and every per-game report. Closed sessions stay finished after reload and open for analysis from Match database. The selection is retained in the active profile. Bot matches are automatically saved in the dedicated **Bot Matches** database under **Match database**, including existing saved sessions. Manage them there using the same names, tags, comments, moves, copies, deletions, exports and analyses as other matches. Choose **Resume match** on a running original to return to Playing; completed matches and independent copies open for analysis. Playing restores the last session after reload and no longer has a separate Saved Matches list. The move history appears on the left using the same row layout as Analysis, including notation, player colors, dice and neutral analysis markers. Its independent list follows the latest saved action; narrow screens place it below the board. The human remains at the bottom; the saved bear-off direction controls which side holds the home board. Hover over an own checker (or focus it by keyboard) to see subtle destination dots for the first die. Click the point containing your checkers to move one checker using the first available die, without a destination click or selection frame; click either die to swap their order before moving. Use the prominent **Undo step** button in the sticky action rail directly to the right of the board to reverse unconfirmed moves one at a time. Its return-arrow icon, large touch target and pending-step count sit below Hint; it becomes available after the first step and remains reachable while scrolling. Then click either displayed die to confirm the complete native-legal turn. There is no separate Confirm Turn button. Before moving, dice clicks swap their order; partial turns and active animations cannot be confirmed. Before each human pre-roll turn, a mandatory **Next roll** dialog appears in the center of the board with **Roll dice** and **Double**. Double stays visible but is disabled with an explanation when unavailable (Crawford, an opponent-owned cube, or a cube that already covers your remaining match points). Drag a dialog by its title/grip to uncover the checkers beneath it; its chosen position is retained while that dialog remains open and kept inside the viewport after content or window-size changes. New dialogs open centered on the board. Every interruption that requires a decision uses the same native modal: opening roll and its result, cube responses, blocking Coach/Training/Tutor feedback, forced passes, and game/match results. Escape and backdrop clicks cannot dismiss these dialogs; keyboard focus stays inside and checker controls remain inaccessible until the decision is resolved. A bot double shows the current and offered cube values. Hints, errors and any pending-choice acknowledgment stay inside the active dialog. Expand **Active mode** in a dialog to change the mode or its separate Tutor warning threshold; threshold changes still save automatically on blur with saving/saved status. **Hint** opens its own movable modal view with a Close button (Escape also returns to play). Checker suggestions are selectable by mouse or Up/Down keys and have a separate, read-only preview board with Initial, Arrows and Final views. Preview uses the complete saved turn; unconfirmed live steps and dice order remain intact. Cube-only hints stay textual. Closing a hint restores the still-required Cube or Next roll dialog when applicable. Loading and failures stay in the hint view, and closing it never commits a game action. Actual dice/checker animations stay visible without an interrupting modal. Each game begins with a visible one-die-per-side opening roll using the same dice artwork and animation as ordinary turns. Ties reroll both dice; the higher die wins, and that player uses the same pair for the first checker turn without another roll. The result and any ties remain visible until you begin the first move; reloading preserves this exact checkpoint. Game-end dialogs show the winner, points and score calculation when available. Choose **Next game** to continue. After the final result, **New match** opens match setup, while **Back to board** returns to the finished match. GNUbg handles opening rolls, legal plays, cube decisions, gammons, backgammons, game scoring, Crawford and match completion. Bot resignation offers are automatically declined so the game continues to cube or bear-off completion. Download the match as SGF at any time. Playing uses the project recordings from `sounds/`: `rollingDice.au` for dice, `move.au` for checker movement and bearing off, and `hit22.wav` for hits, for both human and bot turns. A new bot cube offer plays `double.au` once when the required response dialog appears, after checker playback. Small PCM WAV conversions preserve the original decoded samples; no synthesized effects are used. Regenerate them with `python3 tools/prepare_play_sounds.py` (FFmpeg), then build normally; the bundled WAVs do not require FFmpeg at runtime. Dice rolls and checker moves are animated, including the bot opening turn: its actual dice remain visible before its sequential checker moves, without rolling the opening pair again. Hits travel to the bar and bearing off travels to the tray. Decision controls wait until playback finishes; rapid legal source clicks queue in order. Undo step animates each reversal. Reload shows the durable native checkpoint without replaying old moves; leaving Playing cancels presentation. Reduced-motion uses short fades. Settings → Playing → Game sounds saves the on/off preference in this browser and applies it immediately to ongoing games. Loading/resuming, hovering, undo and confirming already-heard human steps stay silent; audio failure never prevents play.
-
-A new match captures the player name, direction, play engine, actual resolved GNUbg executable path, installed version and play depth from Settings. Later Settings changes apply to new matches. Saved matches retain their original profile. An unavailable executable, version change, engine error or timeout leaves the saved match unchanged so it can be resumed after the engine is restored. GNUbg must include its embedded Python module.
-
-**Resign** appears below Hint and Undo and is also available in the Next roll dialog. It opens a draggable confirmation dialog for the current game, with single/gammon/backgammon choices and the award calculated from the active cube. The preview updates the resulting match score, shows the target length, and explicitly says whether acceptance ends the match or play continues. GNUbg decides whether to accept the offer and provides the final score, SGF and result history. Declining or cancelling preserves the current checkpoint and unconfirmed steps; accepted resignation continues through the usual game/match result flow. Resignation cannot bypass a pending Coach/Tutor acknowledgment. Dice have no active, consumed, mouse-focus or keyboard-focus frames: consumed artwork fades, with exactly half a die faded for a partly used double.
-
-The play API exposes `GET/POST /api/play/sessions`, `GET /api/play/sessions/{id}`, `POST /api/play/sessions/{id}/actions` and `GET /api/play/sessions/{id}/sgf`. Creation accepts `{ "human_player": 0, "match_length": 5 }` (`0` is white, `1` black). Actions accept the current `version` and one of `opening_roll`, `start_opening_move`, `roll`, `move`, `pass`, `double`, `take`, `drop`, `resign`, `next_game`, `end_session`; `end_session` is available only after a completed money game and preserves the final score and all reports; `move` additionally requires a zero-based `move` index from the returned legal move list. `resign` requires `resign_level: 1 | 2 | 3` and is available only at a human Roll or Move decision. A declined resignation returns `422` without changing the saved checkpoint. Stale or competing actions return `409`; unavailable decisions return `422`. The list returns the 100 most recently updated sessions; existing IDs remain directly accessible.
-
-Each action restores the native SGF checkpoint in an isolated GNUbg subprocess with a three-minute deadline, confirms the exact saved GNUbg ID, and lets GNUbg play the bot until the next human decision. No database transaction remains open while the engine thinks. The SGF and response snapshot are saved together using an optimistic revision check. Legal checker results come from GNUbg's complete zero-ply native move list, independently of the bot's captured search depth; canonical engine notation may combine dice, while the client expands per-die paths and accepts only complete boards from that native legal set, respecting maximum dice use, higher-die rules and immediate game-winning bearoff. Downloaded SGF contains the saved player name, escaped as SGF data.
-
-Run the native play integration suite with PostgreSQL available and the actual GNUbg executable configured:
+The opt-in analysis estimate test covers all five ply depths for both game and match scope. It can reuse compatible benchmark runs from the test database template. When measurements are missing, it runs native benchmarks, which can take substantially longer than the standard browser checks.
 
 ```sh
-DATABASE_URL=postgres://bgtutor:bgtutor_local@127.0.0.1:54329/bgtutor \
-GNUBG_BIN=/absolute/path/to/gnubg \
-cargo test -p bgtutor --test play -- --ignored
+BGTUTOR_NATIVE_ESTIMATE=1 npm run test:e2e --prefix web -- e2e/analysis-time-estimate-native.spec.ts
 ```
 
-These tests use isolated SQLx test databases and cover complete matches, both colors, saved search profiles, checker passes, cube offers and responses, gammons/backgammons, Crawford and post-Crawford, SGF replay, concurrent actions and failure recovery.
+## Repository layout
 
-Die vollständigen Browser-Matches verwenden die von Playwright gestartete Testinstanz. Sie nutzen die echte GNUbg-Engine mit reproduzierbaren nativen Zufallszahlen und führen alle Spielaktionen über echte Browser-Klicks aus:
+| Path                                                                                                               | Responsibility                                                      |
+| ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| [`backend/src/api.rs`](backend/src/api.rs)                                                                         | REST, SSE, and OpenAPI                                              |
+| [`backend/src/import/`](backend/src/import/)                                                                       | Import, rule validation, and GNUbg identifiers                      |
+| [`backend/src/engine.rs`](backend/src/engine.rs), [`backend/src/match_analysis.rs`](backend/src/match_analysis.rs) | Isolated GNUbg processes and native checker and cube analysis       |
+| [`backend/src/jobs.rs`](backend/src/jobs.rs), [`backend/src/match_jobs.rs`](backend/src/match_jobs.rs)             | Job state, progress events, game checkpoints, and player statistics |
+| [`backend/src/store.rs`](backend/src/store.rs), [`backend/migrations/`](backend/migrations/)                       | SQLx persistence, schema, and search indexes                        |
+| [`web/src/`](web/src/)                                                                                             | React client, SVG board, and generated API types                    |
 
-```sh
-cd web
-BGTUTOR_FULL_MATCH_TEST=1 \
-GNUBG_BIN=/absoluter/pfad/zu/gnubg \
-npx playwright test e2e/play-full-match.spec.ts --output=/tmp/bgtutor-full-match-results --reporter=line
-```
-
-Die fünf Fälle spielen vollständige 3-Punkte-Matches als Weiß/rechts und Schwarz/links, prüfen nach jedem einzelnen Würfel die Hover-Ziele und den tatsächlich geklickten Zug, tauschen die Würfelreihenfolge, bedienen den Cube/Würfeln-Dialog und laden gespeicherte Matches mehrfach neu. Native Cube-Stellungen prüfen zusätzlich echte Bot-Angebote, Take/Drop und die nächste Partie. Die Spielstärken 0, 1 und 2 Ply werden anhand tatsächlicher nativer SGF-Auswertungen nach Wiederaufnahme und Partiewechsel belegt. Ohne `BGTUTOR_FULL_MATCH_TEST` bleiben diese Fälle ausgeschaltet.
-
-## Partieergebnisse im Zugverlauf
-
-Am Ende jeder abgeschlossenen Partie zeigt der Zugverlauf den Gewinner, die gewonnenen Punkte, die Rechnung aus Gewinnart und Cube sowie den neuen Matchstand. Beispielsweise bedeutet **Gammon (2) × Cube 2 = 4 Punkte** einen Vier-Punkte-Gewinn. Das gilt für importierte Matches in der Analyse und für die abgeschlossenen Partien eines laufenden Bot-Matches.
-
-Bei abgelehntem Doppler zählt der Cube vor dem Angebot. Aufgaben und nur im Spielprotokoll dokumentierte Ergebnisse werden entsprechend gekennzeichnet; ohne eindeutige Grundlage wird keine Gewinnart oder Rechnung erfunden. Ist nur der Gewinn aus dem expliziten Startstand der nächsten Partie sicher, zeigt die Rechnung diese Differenz, beispielsweise **6 − 2 = 4 Punkte**. Bestehende Matches erhalten die Anzeige ohne erneuten Import. Die Ergebnisanzeige ändert keine Stellungen oder gespeicherten Bewertungen.
-
-## Playing feedback modes
-
-New matches default to **Coach**. Choose **Competition**, **Training**, **Coach**, or **Tutor** in the new-match form. Settings → Playing stores the default mode, the independent Tutor warning threshold (default **0.04**, greater than zero and at most one), and whether Training opens analysis automatically. A match captures those preferences and the analysis depth at creation, independently of the bot's playing strength. Existing saved matches keep Competition behavior.
-
-The active mode is displayed above the playing board. **Change play mode** switches an ongoing match immediately and saves the choice for reload, without advancing the position or discarding partial checker steps. Next to it, **Tutor warning threshold** saves automatically when leaving the field or pressing Enter (greater than zero, at most one), including rechecking a pending Tutor warning. A status beside the field shows saving progress and confirms success for three seconds. The decision still needs explicit confirmation. The global default for new matches and the captured analysis depth remain independent. An already submitted decision also requires explicit confirmation after switching to Competition. Learning-aid use remains recorded when switching back to Competition, and mixed-mode reviews retain both Competition decisions and original learning attempts.
-
-Die Matchdatenbank zeigt Modus und Hilfestatus in der eigenen Spalte **Spielmodus**. Sie ist standardmäßig sichtbar, lässt sich im Spaltenmenü ausblenden und separat in der Breite ändern. Vorhandene Spalten- und Breitenprofile werden dabei erhalten.
-
-Competition hides live analysis, pip counts, error markers and PR. Its original linked match and positions remain unavailable for analysis until the match ends; opening its library row resumes play. Completed matches offer Learning review. Explicit independent library copies remain independently reviewable.
-
-Restoring a previously opened live Competition match at startup resumes Playing directly, using its accessible library metadata rather than requesting restricted analysis. Entering Competition also discards any cached analysis for that linked source.
-
-Training displays full equities and win/gammon/backgammon probabilities; disabling automatic analysis makes hints available on demand. Coach displays only equity differences and compact error feedback. Both automatic modes pause before the engine commits the chosen decision and plays the bot. Revealed checker alternatives in modal Coach, Tutor and Training feedback use the same selectable Initial/Arrows/Final preview board as Hint. Previewing an alternative does not change the pending choice confirmed by Continue or Play anyway; Tutor previews appear only after the solution is revealed, and Competition confirmations never expose analysis. Continue commits precisely the saved pending choice. Tutor warns before checker or cube decisions at or above its captured threshold, initially without revealing the answer. Try again, Show solution and Play anyway preserve the original attempt. Hints preserve any unconfirmed checker steps. Reload restores the pending feedback, and stale requests or native engine failures cannot advance the checkpoint.
-
-Learning review distinguishes original and played choices, retries and assistance. Its first-attempt PR evaluates original choices on actually reached positions: `500 × original normalized equity loss / native-relevant decisions`, with forced checker moves excluded and GNUbg's strict close-cube rule applied to no-double choices. The method/profile identify this scope separately from GNUbg's aggregate rating of the actually played match. Source matches, copies and retained bookmarked occurrences preserve mode and assistance metadata; learning-match overview PR is suppressed so corrected play is not presented as independent performance.
-
-Focused browser verification with the actual configured GNUbg and an isolated backend/database:
-
-```sh
-cd web
-BGTUTOR_FEEDBACK_NATIVE_TEST=1 \
-  npx playwright test e2e/play-feedback-native.spec.ts
-```
-
-## Engine-Benchmark
-
-Unter **Extras → Benchmark** lässt sich die Analysegeschwindigkeit der verfügbaren
-Engine mit einer oder mehreren Ply-Stufen messen. GNUbg unterstützt derzeit
-0–4 Ply. Die gewählten Stufen laufen einzeln und in Auswahlreihenfolge im
-Hintergrund; das Verlassen der Ansicht beendet keinen Lauf. **Abbrechen** beendet
-auch den aktiven Engine-Prozess. Während der Messung warten andere von BG Tutor
-veranlasste Engine-Aufrufe; ein Hinweis bleibt auch in anderen Arbeitsbereichen
-sichtbar. Andere Programme auf dem Rechner können die Messung beeinflussen.
-
-Die feste Referenz **WC2014 v1** ist das 11-Punkte-Match Akiko Yazawa gegen
-Douglas Mayfield mit zehn Spielen und 460 Checkerzügen. Grundlage ist die
-vorhandene unanalysierte GNUbg-SGF-Fixture; Herkunft und Reproduktion sind in
-`backend/tests/fixtures/README.md` dokumentiert. Die Anwendung liefert eine eigene
-unveränderliche Kopie mit ID, Version und SHA-256-Prüfsumme mit. Vorhandene
-Bewertungen werden vor der tatsächlichen Analyse gelöscht.
-
-Gemessen wird die Summe der vollständigen Spielanalyse-Pipelines einschließlich
-Prozessstarts, Laden, Checker- und Cube-Analyse sowie Ergebnisaufbereitung.
-Wartezeit, Installations-/Versionsprüfungen und Datenbankschreibvorgänge zählen
-nicht dazu. **Ø Analysezeit pro Zug** ist diese Gesamtzeit geteilt durch alle
-460 Checkerzüge, einschließlich erzwungener Züge; sie ist keine einzeln gemessene
-Zuglatenz. Neue Benchmarkläufe verwenden das Messprotokoll
-`gnubg-match-v2-unlimited` ohne feste Zeitgrenze. Ein manueller Abbruch beendet
-weiterhin den aktiven Engine-Prozess. Ältere Ergebnisse behalten ihren damals
-gespeicherten Timeout im unveränderlichen Protokoll-Snapshot.
-
-Jeder Versuch speichert Datum, Backend-Maschine mit Hardwareangaben, Engine und
-Version, Programmpfad, Ply, Referenz, Messprotokoll, Fortschritt und Status.
-Erfolgreiche Läufe erhalten zusätzlich Gesamtzeit und Durchschnitt in
-Millisekunden. Die Historie bleibt unabhängig von Bibliotheksmatches und
-Einstellungsprofilen erhalten. Nach einem Backend-Neustart werden unterbrochene
-Läufe als fehlgeschlagen gekennzeichnet; Teilzeiten werden niemals fortgesetzt.
-Die Engine-Verfügbarkeitsanzeige nutzt während der Messung den bereits geprüften
-Snapshot, damit sie keinen konkurrierenden Probeprozess startet.
-
-| Methode | Endpoint | Wirkung |
-| --- | --- | --- |
-| GET | `/api/benchmarks/reference` | Versionierte Referenz und Messprotokoll |
-| GET | `/api/benchmarks/status` | Kompakter Aktivstatus für den globalen Hinweis |
-| GET | `/api/benchmarks` | Letzte 1.000 Versuche, neueste zuerst |
-| POST | `/api/benchmarks` | Neue Versuche mit `{ "engine_id": "gnubg", "plies": [0, 2] }` |
-| POST | `/api/benchmarks/{id}/cancel` | Wartenden/laufenden Versuch abbrechen; terminale Ergebnisse unverändert |
-
-Neue Versuche während einer laufenden Messung werden mit HTTP 409 abgewiesen;
-mehrere Stufen werden gemeinsam vor Beginn angelegt. Nicht verfügbare Engines
-und ungültige Ply-Auswahlen ergeben HTTP 422. Benchmark-Endpunkte und Datentypen
-sind Bestandteil der generierten OpenAPI-Spezifikation.
-
-
-## Study: Auswertungen und Lernkarten
-
-Die Hauptnavigation heißt **Study**. Darunter stehen **Lernkarten & Anki**, **Auswertungen** **Meine wiederkehrenden Fehler** und **Übungsverlauf** als eigene, per Pfeiltasten sowie Home/End bedienbare Bereiche. Beim direkten Öffnen eines Decks aus Positionen wird automatisch der Lernkartenbereich gewählt; Deckauswahl, Karten und Lernfortschritt bleiben erhalten.
-
-**Auswertungen** zeigt alle am Partieende erstellten Lernauswertungen, einschließlich bereits vorhandener Berichte. Die Erstellung speichert den Bericht automatisch als unveränderlichen Stand mit seiner SGF in PostgreSQL. Money Games erhalten für jede abgeschlossene Partie einen eigenen Bericht mit Partienummer und dem damaligen Gesamtpunktestand; spätere Partien überschreiben frühere Berichte und Brettvorschauen nicht. Datum, Partiename, Endstand/Matchlänge, Spielmodus, Lernhilfen, Analysetiefe und Erstversuch-PR stehen in der Übersicht; fehlende PR bleibt unbekannt. Money-Auswertungen stehen nach Sitzung gruppiert: Der Sitzungskopf zeigt den Gesamtpunktestand in Spielerreihenfolge und den Status **Laufend** oder **Beendet**; darunter öffnen die nach Partienummer geordneten Einträge ihre jeweiligen Auswertungen. Der Gesamtstand stammt aus der Spielsitzung, nicht aus addierten Zwischenständen. Die Liste ist nach dem neuesten Bericht einer Sitzung absteigend geordnet und lädt vollständige Sitzungen seitenweise nach, auch über die letzten 100 Spielsitzungen hinaus. Punktmatch-Berichte bleiben einzeln sichtbar. Beim Zurückkehren und über **Auswertungen aktualisieren** wird sie erneut geladen.
-
-**Bericht öffnen** zeigt die vollständige Lernauswertung mit Erstversuchen, Korrekturen und Wiederholungen im selben verschiebbaren Dialog wie am Partieende. Nach erfolgreicher Erstellung am Partieende öffnet sich dieser Dialog automatisch; vorhandene Berichte lassen sich über **Lernauswertung** ohne erneute Berechnung öffnen. Der Auswertungsbutton steht in der Zughistorie direkt neben **SGF herunterladen**; beide verwenden gleich große kompakte Symbole. Beim Betrachten des zugehörigen Matches in der Analyseansicht erscheint außerdem **Spielauswertung** neben dem Partienamen, sofern bereits ein Bericht gespeichert ist. Der Button lädt diesen Bericht erst beim Öffnen in denselben Dialog, ohne Berechnung, Navigation oder Änderung der betrachteten Brettstellung. Der Dialog verwendet dieselbe Titelgriff-, Fokus- und Tastaturbedienung wie **Hint**. Kennzahlen stehen oben; Entscheidungen und ursprüngliche Versuche scrollen darunter. Auf sehr flachen Bildschirmen scrollt der gesamte Bericht unter der weiterhin erreichbaren Titelzeile. **Schließen** oder Escape schließt den Dialog und setzt den Fokus auf den Auslöser zurück. Lesen lädt die gespeicherten Werte ohne erneute Engineanalyse und ohne Änderungen an der Sitzung. Auch nach dem Löschen des zugehörigen Bibliothekseintrags bleibt der Bericht zugänglich. `GET /api/study/reports` liefert kompakte Übersichten mit Cursor-Pagination; mit `group_by=session` zählt das Seitenlimit vollständige Money-Sitzungen beziehungsweise einzelne Punktmatch-Berichte. Die Übersichten enthalten `session_id`, den aktuellen `session_scores` und `money_session_ended`; Cursor sind an den Gruppierungsmodus gebunden. `GET /api/study/reports/{id}` liefert den gespeicherten Bericht einer abgeschlossenen Partie. `GET /api/study/reports/{id}/history?version=N` liefert die dazugehörigen archivierten Brettstellungen mit Versionsprüfung. Unfertige Partien und Sitzungen ohne Auswertung erscheinen nicht im Archiv.
-
-
-Ein Klick auf eine Entscheidungszeile der Lernauswertung markiert die Auswahl und zeigt ihre ursprüngliche Brettstellung mit dem gespeicherten besten Zug. **Initial**, **Arrows** und **Final** zeigen die Ausgangsstellung, Zugpfeile oder das projizierte Ergebnis. Das gewählte Brett-Theme gilt auch hier. Pfeiltasten sowie Home/End wechseln die Entscheidung, Enter und Leertaste wählen sie aus. Auf schmalen Bildschirmen wird die aktualisierte Vorschau sichtbar gemacht; **Entscheidungen und Versuche** führt zur ausgewählten Zeile zurück.
-
-Checker-Entscheidungen werden anhand ihrer Partie, Spielerfarbe, Würfel und nativen Checker-Nummer dem gespeicherten Verlauf zugeordnet. Vorherige No-double-Entscheidungen zeigen die zugehörige Stellung ohne Würfel; tatsächliche Cube-Aktionen behalten ihren eigenen Cube-Kontext und zeigen die empfohlene Aktion. Fehlende Zuordnungen oder nicht legal projizierbare Notation werden sichtbar gekennzeichnet. Die Stellungsfolge wird erst bei der ersten Auswahl einmalig über den bestehenden versionierten Sitzungsverlauf geladen. Spätere Auswahlwechsel verwenden diese Daten; es entstehen keine Engineaufträge oder Änderungen an Partie, Bericht und Lernstand. Der Zugriff benötigt keinen Bibliothekseintrag.
-
-
-In der Analyseansicht stehen **Position merken** und die Positionssuche als gemeinsame Icon-Gruppe oberhalb des Bretts. Die Lupe sitzt rechts neben dem Lesezeichen und zeigt bei Hover oder Tastaturfokus **Diese Stellung suchen**. Auf schmalen Bildschirmen rücken beide Aktionen gemeinsam in eine zweite Zeile. Ein Klick öffnet die Matchdatenbank und startet sofort die exakte Suche nach der aktuell ausgewählten Analyseposition. Die Positionskennung wird im geöffneten Suchformular und als aktiver Filter angezeigt. Die Aktion wählt **Alle Datenbanken** und setzt alle übrigen Suchfilter zurück, sodass nur die aktuelle Stellung die Treffer einschränkt. Die Sortierung bleibt erhalten. Auch ein erneuter Klick auf dieselbe Stellung führt die Suche erneut aus; normale Reiterwechsel setzen einen anschließend entfernten Positionsfilter nicht wieder ein.
-## Wiederkehrende Fehler und gezieltes Üben
-
-**Study → Meine wiederkehrenden Fehler** gruppiert die Fehler eines ausdrücklich ausgewählten Spielers nach dessen Spielplan und nach Zugspiel, verpasstem Doppel, verfrühtem Doppel, falschem Take oder falschem Pass. Nicht zuordenbare Dopplerfehler bleiben als eigene Gruppe sichtbar. Spieler werden über ihren vollständigen Namen ohne Beachtung der Groß-/Kleinschreibung und äußerer Leerzeichen abgeglichen; Entscheidungen beider Spielfarben zählen. Datenbank, Spielplan und Mindestverlust sind kombinierbare Filter; der Standard beträgt 0,08 normalisierte Equity. Vorkommen, Anzahl unterschiedlicher Matches und summierter Verlust bleiben getrennt. Der Verlust ist keine PR und keine Vorhersage gewinnbarer Punkte.
-
-Die Übersicht verwendet abgeschlossene lokale Match-/Partieanalysen mit aktuellem Quellstand und dauerhaft gespeichertem Partie-Checkpoint. Pro Match und Partie hat genau ein lokales Ergebnis Vorrang: zuerst die höchste Ply-Tiefe, bei Gleichstand das neueste. Für Partien ohne ein solches lokales Ergebnis werden vorhandene importierte **XG- und BGBlitz-Analysen** verwendet. Dadurch vervielfachen erneute oder überlappende Analysen die Fehler nicht; auch ein fehlerfreies lokales Ergebnis lässt frühere importierte Fehler nicht wieder aufleben. Fremde Ply-Zahlen werden nicht gegen GNUbg-Tiefen gerankt. Entfernte Quellmatches, erzwungene beziehungsweise nicht auswertbare Entscheidungen und laufende Competition-Partien gehören nicht zur Abdeckung. Abgeschlossene Money-Games bleiben wie in der bestehenden Analyse zugänglich.
-
-Für importierte Checkerentscheidungen müssen bester und tatsächlich gespielter Zug als legale Kandidaten nachweisbar sein. Der Verlust stammt aus vergleichbaren normalisierten XG-Equities beziehungsweise expliziten BGBlitz-EMG-Werten. Matchgewinnwahrscheinlichkeiten (MWC), unbekannte Einheiten und BGBlitz-Platzhalter wie −99 werden nicht als normalisierter Verlust behandelt. Dopplerentscheidungen berücksichtigen die Perspektive von Anbieter beziehungsweise Antwortendem. Engine, Originaltiefe, Methode und Quelldateiformat bleiben sichtbar; XGRoller++ und Rollout-Bezeichnungen werden nicht in erfundene GNUbg-Ply-Zahlen übersetzt. Fehlende Tiefe bleibt unbekannt.
-
-**Üben** startet direkt aus einer Gruppe höchstens 20 unterschiedliche Fragen, die teuersten zuerst. Das Brett zeigt den ursprünglichen Spielstand, Würfel und Doppler; bei Take/Pass steht der angebotene Doppler in der Mitte, bei Doppelentscheidungen vor dem Wurf bleibt der spätere Wurf verdeckt. Erst **Antwort aufdecken** lädt den gespeicherten besten und gespielten Zug sowie Verlust und Analysequelle. **Weiter** verdeckt die Lösung erneut. Schließen, Filterwechsel oder Verlassen des Bereichs beendet die Übung und verwirft verspätete Antworten. Üben erzeugt keine Lernkarten und ändert keine FSRS-Fälligkeiten oder Wiederholungen.
-
-Auch **Positionen → Filter → Spielplan** durchsucht die bestehende Sammlung nach den fünf Spielplänen aus Sicht des Spielers am Zug. Gespeicherte Suchen und Profile übernehmen den Filter. Historische Positionen werden ohne Engineberechnung in einem versionierten, indizierten Cache klassifiziert; große Sammlungen werden pro Anfrage begrenzt vorbereitet und fordern gegebenenfalls ausdrücklich zum erneuten Suchen auf, statt unvollständige Treffer zu zeigen. Gesicherte Positionen behalten diese Suche auch nach Entfernen ihres Quellmatches.
-
-Die dokumentierten REST-Eingänge sind `GET /api/study/mistakes`, `POST /api/study/mistakes/practice` und `POST /api/study/mistakes/reveal`. Fragen enthalten weder Lösung noch gespielte Notation. Native Referenzen enthalten `job_id`; importierte Referenzen stattdessen `imported_analysis_id`, jeweils mit Partie und Entscheidungsnummer. Reveal prüft Quelle und Vorrang erneut. Ältere Bibliotheken ergänzen fehlende Import- und Zugkataloge bei Bedarf in begrenzten Schritten; aktuelle Bibliotheken verwenden die gespeicherten Zugkontexte, ohne große Quelldateien erneut zu parsen. Lernen, Decks und FSRS-Historie werden dabei nicht verändert. Alle Parameter und Antworttypen stehen in OpenAPI.
-
-## Konfigurationsprofile
-
-Die Kopfzeile zeigt das aktive Profil und kennzeichnet Abweichungen mit „geändert“. Über die Auswahl kann ein anderer vollständiger Konfigurationsstand aktiviert oder die Verwaltung unter **Einstellungen → Profile** geöffnet werden.
-
-Bei „geändert“ öffnet **Profilmenü → Änderungen anzeigen** eine Übersicht der abweichenden Einstellungen: jeweils Bereich/Feld, gespeicherter Wert und aktueller Wert. Der Rückpfeil neben einem aktuellen Wert setzt diese Einstellung auf ihren gespeicherten Profilwert zurück und sichert die aktuelle Konfiguration. Andere Änderungen und der gespeicherte Profilstand bleiben erhalten. Zusammengehörige Filter wie Würfelpaare und Werte-/Datumsbereiche werden als eine Einstellung zurückgesetzt. Fehler werden im Dialog angezeigt; nach der letzten Rücksetzung verschwindet „geändert“. Das bloße Öffnen und Schließen verändert nichts. Escape oder der Schließen-Knopf schließen die Übersicht.
-
-**Alle Änderungen zurücksetzen** stellt nach einer Bestätigung direkt in derselben Übersicht den vollständigen gespeicherten Profilstand wieder her. **Abbrechen** oder Escape schließt zunächst die Bestätigung ohne Änderungen. Die Wiederherstellung erfolgt atomar; bei Fehlern bleibt der bisherige Stand erhalten. Nach Erfolg bleibt die leere Änderungsübersicht geöffnet und die Markierung „geändert“ entfällt.
-
-Profile umfassen Engine-Auswahl und Standardtiefen, Spiel-/Trainingseinstellungen, Sprache und Sound, UI-/Boarddarstellung, Opening-Book-Referenzen sowie angewendete Suchfilter, Sortierung und Tabellenlayouts. Die Zusammenfassung zeigt den gespeicherten Stand und die Unterschiede zur aktuellen Konfiguration.
-
-**Anwenden** übernimmt Einstellungen in die aktuelle Konfiguration. Diese wird automatisch dauerhaft gesichert, auch wenn sie vom Profil abweicht. **Profil überschreiben** aktualisiert dagegen ausdrücklich den benannten Profilstand. Beim Wechsel mit Änderungen stehen „Speichern und wechseln“, „Verwerfen und wechseln“ und „Abbrechen“ zur Verfügung. Neue Profile werden aus der aktuellen Konfiguration erstellt und aktiviert; aktive Profile müssen vor dem Löschen durch ein anderes ersetzt werden.
-
-Beim ersten Start nach dem Update werden vorhandene Backend- und Browserpräferenzen einmalig in „Standard“ übernommen. Profile und aktuelle Konfiguration gelten für die gesamte Installation; weitere Browser lesen denselben Serverstand. Versionskonflikte behalten lokale Änderungen und bieten ausdrücklich das Laden des Serverstands oder das Sichern als neues Profil an. Ausstehende lokale Änderungen werden zusätzlich in einem Wiederherstellungsjournal geschützt.
-
-Laufende Analysen und Matches behalten ihre erfasste Konfiguration. Neue Aufträge und neue Matches verwenden die aktuelle Konfiguration. Ein Profilwechsel startet keine Analyse, Partie, Lernrunde oder Book-Installation. Engine-Installationspfade bleiben gerätespezifisch; Book-Dateien werden als Referenzen gespeichert. Fehlende Ressourcen werden angezeigt und bei der Profilaktivierung geprüft.
-
-Fachlicher Vertrag und Umsetzungsschritte: [Spezifikation](docs/superpowers/specs/2026-11-10-profiles-design.md), [Implementierungsplan](docs/superpowers/plans/2026-11-10-profiles.md).
-
-### Voraussichtliche Analysezeit
-
-Vor dem Start einer Spiel- oder Matchanalyse steht unter Umfang und Ply-Auswahl
-**„Geschätzte Analysezeit: ca. …“**. Grundlage ist die Zahl der Checkerzüge im
-gewählten Umfang multipliziert mit der durchschnittlichen Zeit pro Zug aus dem
-neuesten vollständig abgeschlossenen passenden Benchmark. Die Anzeige nennt
-Benchmarkdatum, Engine-Version, Ply und Zuganzahl. Ein Wechsel von Match, Spiel,
-Umfang, Ply, angewendetem Profil oder Engine-Installation verwirft alte Antworten.
-Während der Übermittlung und Ausführung wird keine Prognose vor dem Start gezeigt.
-
-Passend bedeutet gleiche lokale Maschine und Hardware, gleiche Engine-Installation
-und Version, gleicher Ply-Wert sowie kompatible Referenz- und Analyseparameter.
-Die erfolgreich abgeschlossenen Protokolle mit früherem 600-Sekunden-Limit und
-neuem unbegrenzten Zeitlimit sind für diese Hochrechnung kompatibel. Fehlerhafte,
-unvollständige oder fremde Messungen dienen nicht als Kalibrierung.
-
-Die Schätzung enthält wie der Benchmark Cube-Analyse und Prozessstarts; fremde
-Aufträge in der Warteschlange zählen nicht dazu. Unterschiedliche Stellungstypen
-können die tatsächliche Dauer deutlich verändern. Fehlen passende Messdaten oder
-Checkerzüge, ist die Installation nicht ermittelbar oder schlägt die Anfrage fehl,
-zeigt die Oberfläche einen verständlichen Hinweis. Die Analyse kann trotzdem
-normal gestartet werden. Es wird kein neuer Benchmark für die Prognose ausgeführt.
-
-`GET /api/matches/{id}/analysis/estimate?plies=2&game_no=1&engine_id=gnubg`
-liefert die Prognose und ihre Messbasis. Ohne `game_no` gilt das gesamte Match;
-ohne `plies` gilt die gespeicherte Standardtiefe. Die Anfrage ist rein lesend,
-legt weder Jobs noch Metadaten an und beachtet die vorhandenen Quellen- und
-Wettbewerbssperren. Die Schnittstelle ist in OpenAPI dokumentiert.
-
-### Restzeit während der Analyse
-
-Im Fortschrittsbereich einer laufenden Spiel- oder Matchanalyse erscheint zusätzlich
-**„Geschätzte Restzeit: ca. …“**. Anfangs dient der gespeicherte passende Benchmark
-als Grundlage. Nach jedem vollständig analysierten Spiel wird das gemessene
-Analysetempo verwendet: bestätigte Analysezeit pro tatsächlich zeitgemessenem
-Checkerzug × verbleibende Checkerzüge. Dadurch zählen große Spiele entsprechend
-stärker als kurze. Innerhalb eines Spiels läuft ein Sekunden-Countdown; echte
-Fortschrittsdaten liefert die Engine derzeit nach vollständigen Spielen.
-
-Warteschlange und Warten auf die Engine zählen nicht als Analysezeit. Zeitwerte
-werden mit monotoner Uhr gemessen und dauerhaft am Auftrag gespeichert. Neuladen
-und Wiederaufnahme erhalten bestätigte Arbeit; ein unterbrochenes Teilspiel wird
-neu gemessen. Auch ältere Aufträge mit bereits erledigten, aber noch ungemessenen
-Zügen verfälschen den Durchschnitt nicht. Änderungen am Benutzerprofil ändern die
-Messbasis eines gestarteten Auftrags nicht.
-
-Dauert ein Spiel länger als erwartet, steht dort **„Restzeit wird neu geschätzt …“**.
-Ohne passende Messwerte bleibt die Restzeit zunächst unbekannt; nach dem ersten
-verwertbaren Spiel ist eine Prognose trotzdem möglich. Nach Abschluss oder Fehler
-verschwindet die aktive Restzeitanzeige.
-
-`GET /api/jobs/{id}/remaining-time` liefert Zustand, Messbasis, bestätigte und
-zeitgemessene Zugzahlen sowie die aktuelle Restzeit. Die rein lesende Schnittstelle
-beachtet dieselben Quellen- und Wettbewerbssperren wie der Auftrag und startet
-keine Engine. Aktive Messwerte werden ungefähr einmal pro Sekunde gespeichert;
-die Oberfläche ergänzt dazwischen einen monotonen Countdown.
+The Rust backend runs independently of the browser. A future Tauri shell could start it as a sidecar and reuse the HTTP API.

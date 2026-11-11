@@ -13,7 +13,7 @@ pub use library::{BOT_DATABASE_ID, backfill as backfill_library_matches};
 
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
-    engine::Engine,
+    engine::{Engine, resolve_binary},
     model::Position,
 };
 use anyhow::{Context, ensure};
@@ -582,7 +582,7 @@ async fn create_session(
     let sgf = String::new();
     let native_id = String::new();
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
-    library::ensure_database(&mut tx).await?;
+    library::lock_bot_database(&mut tx).await?;
     sqlx::query(
         "INSERT INTO play_sessions(id,state,gnubg_path,sgf,native_id) VALUES($1,$2,$3,$4,$5)",
     )
@@ -661,30 +661,14 @@ async fn probe_engine(session: &PlaySession, path: &str) -> anyhow::Result<()> {
     );
     Ok(())
 }
-fn resolve_binary(path: &str) -> anyhow::Result<String> {
-    let candidate = if std::path::Path::new(path).components().count() > 1 {
-        std::path::PathBuf::from(path)
-    } else {
-        std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
-            .map(|directory| directory.join(path))
-            .find(|candidate| candidate.is_file())
-            .context("Configured GNUbg executable was not found on PATH")?
-    };
-    Ok(std::fs::canonicalize(candidate)
-        .context("Cannot resolve the configured GNUbg executable")?
-        .to_str()
-        .context("GNUbg executable path must be UTF-8")?
-        .to_owned())
-}
 // Internal checkpoints keep native names so old GNUbg's 31-byte name buffer
 // cannot truncate a user's UTF-8 name during restore. Export full saved names
 // by replacing root player properties outside escaped SGF values.
 fn named_export(sgf: &str, human: &str, player: i32) -> String {
-    let escaped = |name: &str| name.replace('\\', "\\\\").replace(']', "\\]");
     let names = if player == 0 {
-        [escaped(human), "GNUbg".into()]
+        [crate::import::sgf::escape_value(human), "GNUbg".into()]
     } else {
-        ["GNUbg".into(), escaped(human)]
+        ["GNUbg".into(), crate::import::sgf::escape_value(human)]
     };
     let bytes = sgf.as_bytes();
     let mut replacements = Vec::new();

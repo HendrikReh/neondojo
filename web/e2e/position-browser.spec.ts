@@ -235,10 +235,9 @@ test('position notes filter exact decisions, search definitions persist, and pag
     .click();
   await expect(rows).toHaveCount(5);
   await pane.locator('.position-filter-details summary').click();
-  await pane.getByLabel('Exact tag', { exact: true }).fill('only-here');
-  await pane
-    .getByRole('button', { name: 'Search positions', exact: true })
-    .click();
+  const tag = pane.getByLabel('Exact tag', { exact: true });
+  await tag.fill('only-here');
+  await tag.press('Enter');
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toHaveAttribute(
     'data-position-id',

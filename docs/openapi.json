@@ -878,7 +878,7 @@
           },
           {
             "name": "version",
-            "in": "path",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "integer",
@@ -887,8 +887,8 @@
           },
           {
             "name": "delete_matches",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": "boolean"
             }
@@ -899,6 +899,69 @@
             "description": ""
           },
           "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/databases/{id}/matches": {
+      "delete": {
+        "tags": [
+          "Databases"
+        ],
+        "operationId": "clear_database",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "",
             "content": {
               "application/json": {
@@ -8667,6 +8730,7 @@
           "description",
           "version",
           "is_default",
+          "is_system",
           "created_at",
           "updated_at",
           "match_count"
@@ -8684,6 +8748,9 @@
             "format": "uuid"
           },
           "is_default": {
+            "type": "boolean"
+          },
+          "is_system": {
             "type": "boolean"
           },
           "match_count": {

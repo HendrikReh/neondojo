@@ -14,7 +14,8 @@
   color: var(--ui-muted);
   margin: 8px 0 22px;
 }
-.position-browser h2 {
+.position-browser h2,
+.learning-card-browser h2 {
   font-size: var(--font-size-panel);
   margin: 0 0 12px;
 }
@@ -238,7 +239,7 @@
   border-radius: 0 0 9px 9px;
   background: var(--ui-surface);
 }
-.position-browser .position-table {
+:is(.position-browser, .learning-card-browser) .position-table {
   width: 100%;
   min-width: 1384px;
   table-layout: fixed;
@@ -294,7 +295,7 @@
 .position-col-actions {
   width: 60px;
 }
-.position-browser .position-table th {
+:is(.position-browser, .learning-card-browser) .position-table th {
   position: sticky;
   top: 0;
   z-index: 1;
@@ -318,7 +319,7 @@
   text-align: left;
   background: transparent;
 }
-.position-browser .position-table td {
+:is(.position-browser, .learning-card-browser) .position-table td {
   padding: 5px 8px;
   vertical-align: middle;
   border-bottom: 1px solid var(--ui-border);
@@ -340,7 +341,9 @@
 .position-table .position-preview-selected {
   background: var(--ui-selected);
 }
-.position-browser .position-table .position-preview-link {
+:is(.position-browser, .learning-card-browser)
+  .position-table
+  .position-preview-link {
   display: flex;
   align-items: baseline;
   gap: 7px;

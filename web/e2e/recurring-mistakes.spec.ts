@@ -6,6 +6,7 @@ const database: Database = {
   name: 'Club matches',
   description: '',
   is_default: false,
+  is_system: false,
   match_count: 2,
   created_at: '2026-11-10T12:00:00Z',
   updated_at: '2026-11-10T12:00:00Z',

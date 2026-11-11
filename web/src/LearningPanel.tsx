@@ -1,7 +1,7 @@
 import { useProfileValue } from './useProfileValue';
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import ActionButton from './ActionButton';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { request, type Job } from './api';
 import { AppError } from './i18n-core';
 import { useI18n } from './i18n';
@@ -9,8 +9,11 @@ import { useLearningText } from './learning-messages';
 import Board, { type Theme } from './Board';
 import LearningCardBrowser from './LearningCardBrowser';
 import CardSearchControls from './CardSearchControls';
+import { SearchFilterSelect } from './SearchFilterForm';
+import { useCursorSearch } from './useCursorSearch';
 import { ALL_CARDS, cardListPath, emptyCardFilters } from './card-search-api';
 import { useCardSearchText } from './card-search-messages';
+import { usePositionText } from './position-browser-messages';
 import './learning-workspace.css';
 import DeckManagementDialog from './DeckManagementDialog';
 import { useDeckManagementText } from './deck-management-messages';
@@ -20,10 +23,13 @@ import type {
   Deck,
   NextCard,
   CardPage,
+  CardQuestion,
   RevealedCard,
   ReviewResult,
   Rating,
 } from './learning-api';
+
+const cardKey = (card: CardQuestion) => card.id;
 
 function savedDeck() {
   try {
@@ -409,7 +415,9 @@ export default function LearningWorkspace({
   const profile = useOptionalConfiguration();
   const t = useLearningText();
   const searchT = useCardSearchText();
+  const p = usePositionText();
   const [draftFilters, setDraftFilters] = useState(emptyCardFilters);
+  const [searchRun, setSearchRun] = useState(0);
   const [filters, setFilters] = useProfileValue(
     (c) => c.learning.filters,
     (c, filters) => ({ ...c, learning: { ...c.learning, filters } }),
@@ -418,7 +426,6 @@ export default function LearningWorkspace({
   useEffect(() => {
     if (profile?.current) setDraftFilters(profile.current.learning.filters);
   }, [profile?.generation, profile?.ready]);
-  const [listLoading, setListLoading] = useState(false);
   const managementT = useDeckManagementText();
   const [management, setManagement] = useState<{
     mode: 'rename' | 'delete';
@@ -452,6 +459,10 @@ export default function LearningWorkspace({
   };
   const [appliedDeckToken, setAppliedDeckToken] = useState<number>();
   const [studying, setStudying] = useState(false);
+  function chooseDeck(id: string) {
+    setDeckId(id);
+    setStudying(false);
+  }
   useEffect(() => {
     // A profile changes browser defaults, not the context of an active card.
     if (!studying && profile?.current)
@@ -459,12 +470,6 @@ export default function LearningWorkspace({
   }, [studying, profile?.current?.learning.deck_id, profile?.generation]);
   const [next, setNext] = useState<NextCard | null>(null);
   const [revealed, setRevealed] = useState<RevealedCard | null>(null);
-  const [page, setPage] = useState<CardPage & { owner?: string }>({
-    items: [],
-    next_cursor: null,
-    total: 0,
-  });
-  const [moreLoading, setMoreLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -492,11 +497,19 @@ export default function LearningWorkspace({
     listRevision.current.revision = revision;
   }
   const contentRevision = listRevision.current.value;
-  const listKey = JSON.stringify([deckId, contentRevision, filters]);
-  const listContext = useRef({ key: listKey });
-  if (listContext.current.key !== listKey)
-    listContext.current = { key: listKey };
-  const moreRequest = useRef<AbortController | undefined>(undefined);
+  const searchKey = JSON.stringify([deckId, filters, searchRun]);
+  const listKey = JSON.stringify([searchKey, contentRevision]);
+  const loadCards = useCallback(
+    (signal: AbortSignal, after?: string) =>
+      request<CardPage>(cardListPath(deckId, filters, after), { signal }),
+    [deckId, filters],
+  );
+  const cardSearch = useCursorSearch({
+    scope: listKey,
+    enabled: !!deckId,
+    loadPage: loadCards,
+    itemKey: cardKey,
+  });
   useEffect(() => {
     if (!ready || profile) return;
     if (deckId !== ALL_CARDS && !decks.some((d) => d.id === deckId))
@@ -512,7 +525,6 @@ export default function LearningWorkspace({
     setReviewResult(null);
     setLoading(false);
     setExporting(false);
-    setPage({ items: [], next_cursor: null, total: 0 });
   }, [deckId]);
   useEffect(() => {
     if (!requestedDeck || appliedDeckToken === requestedDeck.token || !settled)
@@ -534,33 +546,8 @@ export default function LearningWorkspace({
     setAppliedDeckToken(requestedDeck.token);
   }, [requestedDeck, appliedDeckToken, settled, decks]);
   useEffect(() => {
-    if (!deckId) return;
-    const abort = new AbortController();
-    const context = listContext.current;
-    setListLoading(true);
-    setError(null);
-    moreRequest.current?.abort();
-    setMoreLoading(false);
-    void request<CardPage>(cardListPath(deckId, filters), {
-      signal: abort.signal,
-    })
-      .then((data) => {
-        if (!abort.signal.aborted && listContext.current === context)
-          setPage({ ...data, owner: context.key });
-      })
-      .catch((error) => {
-        if (!abort.signal.aborted && listContext.current === context)
-          setError(error);
-      })
-      .finally(() => {
-        if (!abort.signal.aborted && listContext.current === context)
-          setListLoading(false);
-      });
-    return () => {
-      abort.abort();
-      moreRequest.current?.abort();
-    };
-  }, [deckId, contentRevision, filters]);
+    if (deckId) setError(null);
+  }, [listKey]);
   useEffect(() => {
     if (!deckId || !studying) return;
     const owner = session;
@@ -647,37 +634,6 @@ export default function LearningWorkspace({
       if (version === generation.current) setBusy(false);
     }
   }
-  async function more() {
-    const context = listContext.current;
-    if (!page.next_cursor || moreLoading || page.owner !== context.key) return;
-    const id = deckId;
-    const abort = new AbortController();
-    moreRequest.current?.abort();
-    moreRequest.current = abort;
-    setMoreLoading(true);
-    try {
-      const data = await request<CardPage>(
-        cardListPath(id, filters, page.next_cursor),
-        { signal: abort.signal },
-      );
-      if (!abort.signal.aborted && listContext.current === context)
-        setPage((old) => ({
-          ...data,
-          owner: context.key,
-          items: [
-            ...new Map(
-              [...old.items, ...data.items].map((card) => [card.id, card]),
-            ).values(),
-          ],
-        }));
-    } catch (error) {
-      if (!abort.signal.aborted && listContext.current === context)
-        setError(error);
-    } finally {
-      if (!abort.signal.aborted && listContext.current === context)
-        setMoreLoading(false);
-    }
-  }
   async function download() {
     const id = deckId;
     const owner = session;
@@ -750,6 +706,86 @@ export default function LearningWorkspace({
         )}
       </section>
     );
+  const deckSelector = (
+    <SearchFilterSelect
+      label={t('chooseDeck')}
+      value={deckId}
+      onChange={chooseDeck}
+    >
+      <option value={ALL_CARDS}>{searchT('allCards')}</option>
+      {decks.map((deck) => (
+        <option value={deck.id} key={deck.id}>
+          {deck.name} · {t('cards', { count: deck.card_count })}
+        </option>
+      ))}
+    </SearchFilterSelect>
+  );
+  const deckPanel = (
+    <div className="learning-deck-panel position-deck-panel">
+      <h2>{name || p('decks')}</h2>
+      <div className="learning-controls">
+        {studying && deckSelector}
+        <ActionButton
+          icon="edit"
+          label={managementT('rename')}
+          compact
+          disabled={!decks.some((deck) => deck.id === deckId)}
+          onClick={() => {
+            const deck = decks.find((deck) => deck.id === deckId);
+            if (deck) setManagement({ mode: 'rename', deck });
+          }}
+        >
+          {managementT('rename')}
+        </ActionButton>
+        <ActionButton
+          icon="delete"
+          label={managementT('delete')}
+          compact
+          disabled={!decks.some((deck) => deck.id === deckId)}
+          onClick={() => {
+            const deck = decks.find((deck) => deck.id === deckId);
+            if (deck) setManagement({ mode: 'delete', deck });
+          }}
+        >
+          {managementT('delete')}
+        </ActionButton>
+        <ActionButton
+          icon="play"
+          label={t('studyNow')}
+          className="primary"
+          disabled={
+            !decks.some((deck) => deck.id === deckId) || loading || busy
+          }
+          onClick={() => {
+            generation.current++;
+            setRevealed(null);
+            setStudying(true);
+            setQueueRevision((n) => n + 1);
+          }}
+        >
+          {t('studyNow')}
+        </ActionButton>
+        <ActionButton
+          icon="export"
+          label={exporting ? t('exporting') : t('export')}
+          compact
+          disabled={
+            !decks.find((d) => d.id === deckId)?.card_count || exporting
+          }
+          onClick={() => void download()}
+        >
+          {exporting ? t('exporting') : t('export')}
+        </ActionButton>
+      </div>
+      <p className="learning-explainer">
+        {studying
+          ? `${t('separateProgress')} ${t('retention')}`
+          : searchT(deckId === ALL_CARDS ? 'chooseScope' : 'scopeHint')}
+      </p>
+      {!decks.length && <p>{t('empty')}</p>}
+    </div>
+  );
+  const workspaceError = error || cardSearch.error || deckError;
   return (
     <section className="learning-workspace" aria-label={t('study')}>
       <div className="learning-heading">
@@ -765,89 +801,7 @@ export default function LearningWorkspace({
           }}
         />
       </div>
-      <div className="learning-deck-panel">
-        <div className="learning-controls">
-          <label>
-            {t('chooseDeck')}{' '}
-            <select
-              aria-label={t('chooseDeck')}
-              value={deckId}
-              onChange={(e) => {
-                setDeckId(e.target.value);
-                setStudying(false);
-              }}
-            >
-              <option value={ALL_CARDS}>{searchT('allCards')}</option>
-              {decks.map((deck) => (
-                <option value={deck.id} key={deck.id}>
-                  {deck.name} · {t('cards', { count: deck.card_count })}
-                </option>
-              ))}
-            </select>
-          </label>
-          <ActionButton
-            icon="edit"
-            label={managementT('rename')}
-            compact
-            disabled={!decks.some((deck) => deck.id === deckId)}
-            onClick={() => {
-              const deck = decks.find((deck) => deck.id === deckId);
-              if (deck) setManagement({ mode: 'rename', deck });
-            }}
-          >
-            {managementT('rename')}
-          </ActionButton>
-          <ActionButton
-            icon="delete"
-            label={managementT('delete')}
-            compact
-            disabled={!decks.some((deck) => deck.id === deckId)}
-            onClick={() => {
-              const deck = decks.find((deck) => deck.id === deckId);
-              if (deck) setManagement({ mode: 'delete', deck });
-            }}
-          >
-            {managementT('delete')}
-          </ActionButton>
-          <ActionButton
-            icon="play"
-            label={t('studyNow')}
-            className="primary"
-            disabled={
-              !decks.some((deck) => deck.id === deckId) || loading || busy
-            }
-            onClick={() => {
-              generation.current++;
-              setRevealed(null);
-              setStudying(true);
-              setQueueRevision((n) => n + 1);
-            }}
-          >
-            {t('studyNow')}
-          </ActionButton>
-          <ActionButton
-            icon="export"
-            label={exporting ? t('exporting') : t('export')}
-            compact
-            disabled={
-              !decks.find((d) => d.id === deckId)?.card_count || exporting
-            }
-            onClick={() => void download()}
-          >
-            {exporting ? t('exporting') : t('export')}
-          </ActionButton>
-        </div>
-        <p className="learning-explainer">
-          {t('separateProgress')} {t('retention')}
-        </p>
-        {deckId === ALL_CARDS && (
-          <p className="learning-scope-hint">{searchT('chooseScope')}</p>
-        )}
-      </div>
-      {!!(error || deckError) && (
-        <p role="alert">{formatError(error || deckError)}</p>
-      )}
-      {!decks.length && <p>{t('empty')}</p>}
+      {!!workspaceError && <p role="alert">{formatError(workspaceError)}</p>}
       {reviewResult && (
         <p className="learning-review-result" role="status">
           {t('nextDue', {
@@ -860,6 +814,7 @@ export default function LearningWorkspace({
       )}
       {studying ? (
         <>
+          {deckPanel}
           <ActionButton
             icon="back"
             label={t('back')}
@@ -1017,28 +972,33 @@ export default function LearningWorkspace({
           <CardSearchControls
             filters={draftFilters}
             onChange={setDraftFilters}
-            onSearch={() => setFilters({ ...draftFilters })}
+            onSearch={() => {
+              setFilters({ ...draftFilters });
+              setSearchRun((value) => value + 1);
+            }}
             onClear={() => {
               const empty = emptyCardFilters();
               setDraftFilters(empty);
               setFilters(empty);
+              setSearchRun((value) => value + 1);
             }}
-          />
-          {listLoading && <p role="status">{t('loading')}</p>}
+          >
+            {deckSelector}
+          </CardSearchControls>
           <LearningCardBrowser
-            key={JSON.stringify([deckId, filters])}
+            key={searchKey}
             visible={visible}
-            cards={page.owner === listKey ? page.items : []}
-            total={
-              page.owner === listKey ? (page.total ?? page.items.length) : 0
-            }
-            loading={listLoading || page.owner !== listKey}
+            cards={cardSearch.items}
+            total={cardSearch.total ?? cardSearch.items.length}
+            loading={cardSearch.loading}
             decks={decks}
             theme={theme}
-            hasMore={page.owner === listKey && !!page.next_cursor}
-            moreLoading={moreLoading}
-            onMore={() => void more()}
-          />
+            hasMore={!!cardSearch.cursor}
+            moreLoading={cardSearch.moreLoading}
+            onMore={cardSearch.more}
+          >
+            {deckPanel}
+          </LearningCardBrowser>
         </>
       )}
       {management && (
@@ -1060,8 +1020,7 @@ export default function LearningWorkspace({
           onDeleted={(id) => {
             generation.current++;
             current.current = { deckId: '', session: {} };
-            listContext.current = { key: '' };
-            moreRequest.current?.abort();
+            cardSearch.invalidateResults();
             removeDeck(id);
             const replacement =
               decks.find((deck) => deck.id !== id)?.id || ALL_CARDS;
@@ -1072,8 +1031,6 @@ export default function LearningWorkspace({
             setRevealed(null);
             setQuestionOwner(null);
             setReviewResult(null);
-            setPage({ items: [], next_cursor: null, total: 0 });
-            setMoreLoading(false);
             setLoading(false);
             setBusy(false);
             setExporting(false);

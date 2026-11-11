@@ -29,6 +29,15 @@ vi.mock('react', async (original) => ({
   useRef(initial: unknown) {
     return (hooks.slots[hooks.index++] ??= { current: initial });
   },
+  useCallback<T>(callback: T, deps: unknown[]) {
+    const index = hooks.index++;
+    const previous = hooks.slots[index] as
+      { callback: T; deps: unknown[] } | undefined;
+    if (previous && deps.every((dep, i) => Object.is(dep, previous.deps[i])))
+      return previous.callback;
+    hooks.slots[index] = { callback, deps };
+    return callback;
+  },
   useEffect(effect: () => (() => void) | void, deps: unknown[]) {
     const index = hooks.index++,
       previous = hooks.slots[index] as EffectSlot | undefined;
@@ -40,6 +49,7 @@ vi.mock('react', async (original) => ({
 }));
 import LearningWorkspace, { useDecks } from './LearningPanel';
 import ActionButton from './ActionButton';
+import { SearchFilterSelect } from './SearchFilterForm';
 const decks = [
   { id: 'a', name: 'A', card_count: 1, version: 0 },
   { id: 'b', name: 'B', card_count: 0, version: 0 },
@@ -138,12 +148,12 @@ it('hides the old study card synchronously on an A–B–A deck round trip befor
     elements(view).some((element) => element.props?.className === 'study-card'),
   ).toBe(true);
   elements(view)
-    .find((element) => element.type === 'select')!
-    .props.onChange({ target: { value: 'b' } });
+    .find((element) => element.type === SearchFilterSelect)!
+    .props.onChange('b');
   view = render();
   elements(view)
-    .find((element) => element.type === 'select')!
-    .props.onChange({ target: { value: 'a' } });
+    .find((element) => element.type === SearchFilterSelect)!
+    .props.onChange('a');
   view = render();
   elements(view)
     .find(
@@ -197,8 +207,8 @@ it('clears an in-flight export indicator when switching decks', async () => {
     .props.onClick();
   view = render();
   elements(view)
-    .find((element) => element.type === 'select')!
-    .props.onChange({ target: { value: 'b' } });
+    .find((element) => element.type === SearchFilterSelect)!
+    .props.onChange('b');
   render();
   commit();
   view = render();
@@ -246,7 +256,8 @@ it('waits for the current revision before consuming an external deck missing fro
   await settle();
   view = render(requested, 1);
   expect(
-    elements(view).find((element) => element.type === 'select')!.props.value,
+    elements(view).find((element) => element.type === SearchFilterSelect)!.props
+      .value,
   ).toBe('new-deck');
   expect(
     elements(view).some((element) => element.props?.className === 'study-card'),

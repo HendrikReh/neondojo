@@ -1,6 +1,18 @@
 use super::*;
 
 #[test]
+fn mat_normalization_preserves_sgf_values_with_escapes_and_multiple_entries() {
+    let source = r"(;GM[6]FF[4]PW[A\\B\]Ć]PB[Black]MI[length:7][ws:0][bs:0];W[31hefe])";
+    let normalized = sgf::normalize_mat_sgf(source).unwrap();
+
+    assert_eq!(
+        sgf::parse_trees(&normalized).unwrap(),
+        sgf::parse_trees(source).unwrap()
+    );
+    assert!(normalized.contains(r"PW[A\\B\]Ć]"));
+}
+
+#[test]
 fn opening_moves_preserve_absolute_board_and_escaped_names() {
     let m =
         parse_sgf(r"(;GM[6]FF[4]PW[A\]B]PB[Black]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])")

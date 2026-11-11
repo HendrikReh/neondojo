@@ -2,9 +2,10 @@
 use crate::engine::Engine;
 use crate::import::{
     parse_sgf,
-    sgf::{Node, parse_trees},
+    sgf::{Node, parse_trees, write_property},
 };
-use anyhow::{Context, Result, bail, ensure};
+use crate::model::MoveSeverity;
+use anyhow::{Context, Result, ensure};
 use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -13,6 +14,10 @@ use tokio::io::AsyncReadExt;
 use utoipa::ToSchema;
 
 pub const PERFORMANCE_RATING_METHOD: &str = "gnubg_emg_500_v1";
+
+pub(crate) fn performance_rating_value(loss: f64, decisions: i64) -> Option<f64> {
+    (decisions > 0).then(|| 500.0 * loss / decisions as f64)
+}
 
 pub(crate) fn performance_rating_profile(engine: &str, plies: i32) -> String {
     format!("{engine}; {plies}-ply cubeful deterministic")
@@ -50,7 +55,7 @@ pub fn match_performance_rating(
             .unforced_checker_moves
             .checked_add(player.close_cube_decisions)?;
         let expected =
-            (decisions > 0).then(|| 500.0 * player.normalized_equity_loss / decisions as f64);
+            performance_rating_value(player.normalized_equity_loss, i64::from(decisions));
         match (player.value, expected) {
             (Some(value), Some(expected))
                 if value.is_finite() && (value - expected).abs() <= 1e-9 => {}
@@ -308,14 +313,6 @@ fn analysis_input(sgf: &str) -> Result<String> {
     let trees = parse_trees(sgf)?;
     let (_, contexts) = crate::import::sgf::parse_sgf_with_context(sgf)?;
     let mut out = String::new();
-    let property = |out: &mut String, key: &str, values: &[String]| {
-        out.push_str(key);
-        for value in values {
-            out.push('[');
-            out.push_str(&value.replace('\\', "\\\\").replace(']', "\\]"));
-            out.push(']');
-        }
-    };
     for (game_index, nodes) in trees.into_iter().enumerate() {
         let context = &contexts[game_index];
         out.push('(');
@@ -327,15 +324,15 @@ fn analysis_input(sgf: &str) -> Result<String> {
                         if key == "RU" && context.crawford {
                             // Native GNUbg recognizes CrawfordGame only together
                             // with its Crawford rule flag; strict SGF accepts either.
-                            property(&mut out, key, &["Crawford:CrawfordGame".into()]);
+                            write_property(&mut out, key, &["Crawford:CrawfordGame".into()]);
                         } else {
-                            property(&mut out, key, values);
+                            write_property(&mut out, key, values);
                         }
                     }
                 }
                 // The importer inherits omitted scores/length, whereas GNUbg
                 // defaults a missing MI to a fresh money session.
-                property(
+                write_property(
                     &mut out,
                     "MI",
                     &[
@@ -355,7 +352,7 @@ fn analysis_input(sgf: &str) -> Result<String> {
             {
                 out.push(';');
                 if let Some(values) = node.get("CV") {
-                    property(&mut out, "CV", values);
+                    write_property(&mut out, "CV", values);
                 }
                 let owner = node.get("CO").or_else(|| {
                     node.get("CP")
@@ -363,21 +360,21 @@ fn analysis_input(sgf: &str) -> Result<String> {
                 });
                 if let Some(values) = owner {
                     if values.as_slice() == ["n"] {
-                        property(&mut out, "CP", &["c".into()]);
+                        write_property(&mut out, "CP", &["c".into()]);
                     } else {
-                        property(&mut out, "CP", values);
+                        write_property(&mut out, "CP", values);
                     }
                 }
                 for key in ["PL", "AE", "AW", "AB"] {
                     if let Some(values) = node.get(key) {
-                        property(&mut out, key, values);
+                        write_property(&mut out, key, values);
                     }
                 }
             }
             for key in ["W", "B"] {
                 if let Some(values) = node.get(key) {
                     out.push(';');
-                    property(&mut out, key, values);
+                    write_property(&mut out, key, values);
                 }
             }
         }
@@ -397,18 +394,6 @@ fn moves(nodes: &[Node]) -> Result<Vec<(i32, &str, &Node)>> {
         }
     }
     Ok(moves)
-}
-
-fn severity(loss: f64) -> &'static str {
-    if loss >= 0.160 {
-        "very_bad"
-    } else if loss >= 0.080 {
-        "bad"
-    } else if loss >= 0.040 {
-        "doubtful"
-    } else {
-        "none"
-    }
 }
 
 fn decision(
@@ -433,7 +418,7 @@ fn decision(
         played_equity: equities.map(|e| e.0),
         best_equity: equities.map(|e| e.1),
         equity_loss: loss,
-        severity: severity(loss).into(),
+        severity: MoveSeverity::from_normalized_loss(loss).as_str().into(),
         dice: None,
         evaluation_status: if equities.is_some() {
             "evaluated"
@@ -448,6 +433,31 @@ fn number(value: &str) -> Result<f64> {
     let value: f64 = value.parse().context("Invalid native analysis equity")?;
     ensure!(value.is_finite(), "Non-finite native analysis equity");
     Ok(value)
+}
+
+/// The response values are already in the responder's perspective here.
+pub(crate) fn cube_options(
+    played: &str,
+    nd: f64,
+    dt: f64,
+    dp: f64,
+) -> Option<(&'static str, f64, f64)> {
+    match played {
+        "take" | "drop" => Some((
+            if dt >= dp { "take" } else { "drop" },
+            if played == "take" { dt } else { dp },
+            dt.max(dp),
+        )),
+        "no double" | "double" => {
+            let double = dt.min(dp);
+            Some((
+                if nd >= double { "no double" } else { "double" },
+                if played == "double" { double } else { nd },
+                nd.max(double),
+            ))
+        }
+        _ => None,
+    }
 }
 
 fn cube_decision(block: &str, player: i32, played: &str) -> Result<Decision> {
@@ -470,41 +480,16 @@ fn cube_decision(block: &str, player: i32, played: &str) -> Result<Decision> {
         "GNUbg returned incomplete cube analysis"
     );
     let no_double = equities["No double"];
-    let take = equities["Double, take"];
-    let pass = equities["Double, pass"];
-    let (actual, best, label) = match played {
-        "take" | "drop" => {
-            // A pass loses one pre-offer cube unit for the responder. Older
-            // GNUbg exports use the doubler's perspective, where it is positive.
-            let (take, pass) = if pass > 0.0 {
-                (-take, -pass)
-            } else {
-                (take, pass)
-            };
-            (
-                if played == "take" { take } else { pass },
-                take.max(pass),
-                if take >= pass { "take" } else { "drop" },
-            )
-        }
-        "double" | "no double" => {
-            let double = take.min(pass);
-            (
-                if played == "double" {
-                    double
-                } else {
-                    no_double
-                },
-                no_double.max(double),
-                if no_double >= double {
-                    "no double"
-                } else {
-                    "double"
-                },
-            )
-        }
-        _ => bail!("Unsupported native cube decision"),
-    };
+    let mut take = equities["Double, take"];
+    let mut pass = equities["Double, pass"];
+    // A pass loses one pre-offer cube unit for the responder. Older
+    // GNUbg exports use the doubler's perspective, where it is positive.
+    if matches!(played, "take" | "drop") && pass > 0.0 {
+        take = -take;
+        pass = -pass;
+    }
+    let (label, actual, best) =
+        cube_options(played, no_double, take, pass).context("Unsupported native cube decision")?;
     Ok(decision(
         player,
         "cube",

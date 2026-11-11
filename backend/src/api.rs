@@ -693,7 +693,8 @@ async fn move_analyses(
             || query.player.is_some_and(|n| n != player)
             || query.kind.as_ref().is_some_and(|k| *k != kind)
             || (query.errors_only
-                && (loss < 0.04 || matches!(evaluation_status.as_str(), "forced" | "unavailable")))
+                && (loss < MoveSeverity::DOUBTFUL_MIN_LOSS
+                    || matches!(evaluation_status.as_str(), "forced" | "unavailable")))
             || query.severity.is_some_and(|s| s.as_str() != severity)
         {
             return Err(ApiError::invalid("Cursor does not match the filters"));

@@ -262,7 +262,7 @@ test('rename keeps a later-page preview and a pending study answer, and modal ke
   await chooser.selectOption('11111111-1111-4111-8111-111111111111');
   await expect(study.locator('.learning-card-list tbody tr')).toHaveCount(50);
   await study.getByRole('button', { name: 'More cards', exact: true }).click();
-  await expect(study.locator('.learning-card-list tbody tr')).toHaveCount(51);
+  await expect(study.locator('.learning-card-list tbody tr')).toHaveCount(1);
   await study
     .getByRole('button', { name: 'Preview card 51', exact: true })
     .click();
@@ -276,7 +276,7 @@ test('rename keeps a later-page preview and a pending study answer, and modal ke
   await expect(name).toBeFocused();
   await dialog.getByRole('button', { name: 'Save name', exact: true }).click();
   await expect(dialog).toHaveCount(0);
-  await expect(study.locator('.learning-card-list tbody tr')).toHaveCount(51);
+  await expect(study.locator('.learning-card-list tbody tr')).toHaveCount(1);
   await expect(study.locator('.learning-card-preview')).toHaveAttribute(
     'data-card-id',
     'card-50',

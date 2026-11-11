@@ -1,5 +1,7 @@
 //! Independent match databases, indexed library browsing and bounded bulk management.
+use crate::annotations::normalize_tag;
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
+use crate::search::literal_pattern;
 use axum::{
     Json, Router,
     extract::{
@@ -47,6 +49,7 @@ pub struct Database {
     pub description: String,
     pub version: i64,
     pub is_default: bool,
+    pub is_system: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub match_count: i64,
@@ -59,10 +62,16 @@ pub struct DatabaseWrite {
     pub version: Option<i64>,
 }
 #[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct DatabaseDelete {
     pub version: i64,
     #[serde(default)]
     pub delete_matches: bool,
+}
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct DatabaseVersion {
+    pub version: i64,
 }
 /// One stored occurrence of the searched checker position.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -218,6 +227,10 @@ pub fn routes() -> Router<AppState> {
             "/api/databases/{id}",
             axum::routing::put(update_database).delete(delete_database),
         )
+        .route(
+            "/api/databases/{id}/matches",
+            axum::routing::delete(clear_database),
+        )
         .route("/api/library/matches", get(library_matches))
         .route(
             "/api/matches/{id}/metadata",
@@ -289,12 +302,32 @@ async fn update_database(
         .version
         .filter(|v| *v > 0)
         .ok_or_else(|| ApiError::invalid("version is required"))?;
-    let affected=sqlx::query("UPDATE databases SET name=$2,description=$3,version=version+1,updated_at=now() WHERE id=$1 AND version=$4 AND NOT collection_only").bind(id).bind(w.name.trim()).bind(w.description).bind(version).execute(&s.pool).await.map_err(anyhow::Error::from)?.rows_affected();
+    let name = w.name.trim();
+    let affected = sqlx::query(
+        "UPDATE databases SET name=$2,description=$3,version=version+1,updated_at=now()
+         WHERE id=$1 AND version=$4 AND NOT collection_only AND (NOT is_system OR name=$2)",
+    )
+    .bind(id)
+    .bind(name)
+    .bind(w.description)
+    .bind(version)
+    .execute(&s.pool)
+    .await
+    .map_err(anyhow::Error::from)?
+    .rows_affected();
     if affected == 0 {
-        return Err(if database_exists(&s.pool, id).await? {
-            conflict("Database changed; reload before saving")
-        } else {
-            ApiError::missing()
+        let renamed_system: Option<bool> = sqlx::query_scalar(
+            "SELECT is_system AND name<>$2 FROM databases WHERE id=$1 AND NOT collection_only",
+        )
+        .bind(id)
+        .bind(name)
+        .fetch_optional(&s.pool)
+        .await
+        .map_err(anyhow::Error::from)?;
+        return Err(match renamed_system {
+            Some(true) => conflict("System databases cannot be renamed"),
+            Some(false) => conflict("Database changed; reload before saving"),
+            None => ApiError::missing(),
         });
     }
     Ok(Json(
@@ -321,21 +354,59 @@ async fn delete_database(
     q: Result<Query<DatabaseDelete>, QueryRejection>,
 ) -> ApiResult<StatusCode> {
     let q = query(q)?;
-    let mut tx = s.pool.begin().await.map_err(anyhow::Error::from)?;
+    remove_database_content(
+        &s.pool,
+        id,
+        q.version,
+        DatabaseRemoval::Delete {
+            delete_matches: q.delete_matches,
+        },
+    )
+    .await
+}
+
+#[utoipa::path(delete,path="/api/databases/{id}/matches",params(("id"=Uuid,Path),DatabaseVersion),responses((status=204),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Databases")]
+async fn clear_database(
+    State(s): State<AppState>,
+    Path(id): Path<Uuid>,
+    q: Result<Query<DatabaseVersion>, QueryRejection>,
+) -> ApiResult<StatusCode> {
+    remove_database_content(&s.pool, id, query(q)?.version, DatabaseRemoval::Clear).await
+}
+
+#[derive(Clone, Copy)]
+enum DatabaseRemoval {
+    Clear,
+    Delete { delete_matches: bool },
+}
+
+async fn remove_database_content(
+    pool: &PgPool,
+    id: Uuid,
+    expected_version: i64,
+    removal: DatabaseRemoval,
+) -> ApiResult<StatusCode> {
+    let mut tx = pool.begin().await.map_err(anyhow::Error::from)?;
     let d: Option<(i64, bool)> = sqlx::query_as(
-        "SELECT version,is_default FROM databases WHERE id=$1 AND NOT collection_only FOR UPDATE",
+        "SELECT version,is_system FROM databases WHERE id=$1 AND NOT collection_only FOR UPDATE",
     )
     .bind(id)
     .fetch_optional(&mut *tx)
     .await
     .map_err(anyhow::Error::from)?;
-    let Some((version, default)) = d else {
+    let Some((version, is_system)) = d else {
         return Err(ApiError::missing());
     };
-    if default {
-        return Err(conflict("The default database cannot be deleted"));
+    match removal {
+        DatabaseRemoval::Delete { .. } if is_system => {
+            return Err(conflict("System databases cannot be deleted"));
+        }
+        DatabaseRemoval::Clear if !is_system => {
+            return Err(conflict("Only system databases can be cleared"));
+        }
+        _ => {}
     }
-    if version != q.version {
+    if version != expected_version {
         return Err(conflict("Database changed; reload before deleting"));
     }
     // Match locks serialize deletion with bulk operations and job submission FK checks.
@@ -345,7 +416,14 @@ async fn delete_database(
             .fetch_all(&mut *tx)
             .await
             .map_err(anyhow::Error::from)?;
-    if !ids.is_empty() && !q.delete_matches {
+    if !ids.is_empty()
+        && matches!(
+            removal,
+            DatabaseRemoval::Delete {
+                delete_matches: false
+            }
+        )
+    {
         return Err(conflict(
             "Database is not empty; delete_matches=true is required",
         ));
@@ -361,7 +439,13 @@ async fn delete_database(
         .execute(&mut *tx)
         .await
         .map_err(anyhow::Error::from)?;
-    sqlx::query("DELETE FROM databases WHERE id=$1")
+    let finish = match removal {
+        DatabaseRemoval::Clear => {
+            "UPDATE databases SET version=version+1,updated_at=now() WHERE id=$1"
+        }
+        DatabaseRemoval::Delete { .. } => "DELETE FROM databases WHERE id=$1",
+    };
+    sqlx::query(finish)
         .bind(id)
         .execute(&mut *tx)
         .await
@@ -456,7 +540,7 @@ fn like(q: &mut QueryBuilder<'_, Postgres>, expr: &str, value: &Option<String>) 
         q.push(" AND ")
             .push(expr)
             .push(" LIKE ")
-            .push_bind(crate::annotations::literal_pattern(v.trim()));
+            .push_bind(literal_pattern(v.trim()));
     }
 }
 fn library_filters(
@@ -468,11 +552,11 @@ fn library_filters(
         q.push(" AND m.database_id=").push_bind(id);
     }
     if let Some(v) = p.q.as_deref().filter(|v| !v.trim().is_empty()) {
-        let pattern = crate::annotations::literal_pattern(v.trim());
+        let pattern = literal_pattern(v.trim());
         q.push(" AND m.id IN (SELECT id FROM matches WHERE search_text LIKE ").push_bind(pattern.clone()).push(" OR lower(display_name) LIKE ").push_bind(pattern.clone()).push(" OR lower(tournament) LIKE ").push_bind(pattern.clone()).push(" OR lower(round) LIKE ").push_bind(pattern.clone()).push(" UNION SELECT coalesce(n.match_uuid,np.match_uuid,ng.match_uuid,nm.match_uuid) FROM annotations n LEFT JOIN positions np ON np.id=n.position_uuid LEFT JOIN match_games ng ON ng.id=n.game_uuid LEFT JOIN match_moves nm ON nm.id=n.move_uuid WHERE n.search_text LIKE ").push_bind(pattern).push(")");
     }
     if let Some(v) = p.player.as_deref().filter(|v| !v.trim().is_empty()) {
-        let pattern = crate::annotations::literal_pattern(v.trim());
+        let pattern = literal_pattern(v.trim());
         q.push(" AND (lower(m.white) LIKE ")
             .push_bind(pattern.clone())
             .push(" OR lower(m.black) LIKE ")
@@ -511,7 +595,7 @@ fn library_filters(
         q.push(" AND EXISTS(SELECT 1 FROM annotations n LEFT JOIN positions np ON np.id=n.position_uuid LEFT JOIN match_games ng ON ng.id=n.game_uuid LEFT JOIN match_moves nm ON nm.id=n.move_uuid WHERE coalesce(n.match_uuid,np.match_uuid,ng.match_uuid,nm.match_uuid)=m.id AND n.tags @> ").push_bind(vec![tag]).push(")");
     }
     if let Some(v) = p.comment.as_ref() {
-        q.push(" AND EXISTS(SELECT 1 FROM annotations n LEFT JOIN positions np ON np.id=n.position_uuid LEFT JOIN match_games ng ON ng.id=n.game_uuid LEFT JOIN match_moves nm ON nm.id=n.move_uuid WHERE coalesce(n.match_uuid,np.match_uuid,ng.match_uuid,nm.match_uuid)=m.id AND lower(n.comment) LIKE ").push_bind(crate::annotations::literal_pattern(v)).push(")");
+        q.push(" AND EXISTS(SELECT 1 FROM annotations n LEFT JOIN positions np ON np.id=n.position_uuid LEFT JOIN match_games ng ON ng.id=n.game_uuid LEFT JOIN match_moves nm ON nm.id=n.move_uuid WHERE coalesce(n.match_uuid,np.match_uuid,ng.match_uuid,nm.match_uuid)=m.id AND lower(n.comment) LIKE ").push_bind(literal_pattern(v)).push(")");
     }
     if let Some(v) = &p.position_id {
         q.push(" AND (ps.id IS NULL OR coalesce(ps.state->>'play_mode','competition')<>'competition' OR ps.state->>'phase'='match_over' OR (m.match_length=0 AND ps.state->>'phase'='game_over')) AND hit.position_id=")
@@ -878,20 +962,6 @@ async fn update_metadata(
 
 async fn any_active(tx: &mut sqlx::Transaction<'_, Postgres>, ids: &[Uuid]) -> ApiResult<bool> {
     Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM jobs j LEFT JOIN positions p ON p.id=j.position_uuid WHERE coalesce(j.match_uuid,p.match_uuid)=ANY($1) AND j.status IN ('queued','running'))").bind(ids).fetch_one(&mut **tx).await.map_err(anyhow::Error::from)?)
-}
-fn normalize_tag(tag: &str) -> ApiResult<String> {
-    if tag.chars().any(char::is_control) {
-        return Err(ApiError::invalid("Tags cannot contain control characters"));
-    }
-    let tag = tag
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .to_lowercase();
-    if tag.chars().count() > 64 {
-        return Err(ApiError::invalid("Tags must be at most 64 characters"));
-    }
-    Ok(tag)
 }
 #[utoipa::path(post,path="/api/library/actions",request_body=LibraryAction,responses((status=200,body=ActionResponse),(status=422,body=ErrorBody)),tag="Databases")]
 async fn actions(
@@ -1264,7 +1334,7 @@ async fn export(
 }
 
 #[derive(OpenApi)]
-#[openapi(paths(list_databases,create_database,update_database,delete_database,library_matches,get_metadata,update_metadata,actions,export),components(schemas(Database,DatabaseWrite,DatabaseMatch,LibraryOccurrence,LibraryPage,MetadataWrite,LibraryAction,ActionItem,ActionResponse,ExportRequest)),tags((name="Databases",description="Independent match databases and library management")))]
+#[openapi(paths(list_databases,create_database,update_database,delete_database,clear_database,library_matches,get_metadata,update_metadata,actions,export),components(schemas(Database,DatabaseWrite,DatabaseMatch,LibraryOccurrence,LibraryPage,MetadataWrite,LibraryAction,ActionItem,ActionResponse,ExportRequest)),tags((name="Databases",description="Independent match databases and library management")))]
 pub struct DatabaseDoc;
 
 #[derive(Debug)]

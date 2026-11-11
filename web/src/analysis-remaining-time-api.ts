@@ -1,27 +1,11 @@
 import { request } from './api';
-export type RemainingState =
-  | 'queued'
-  | 'waiting'
-  | 'estimated'
-  | 'reestimating'
-  | 'unavailable'
-  | 'finishing'
-  | 'completed'
-  | 'failed';
-export interface RemainingTime {
-  job_id: string;
-  status: 'queued' | 'running' | 'completed' | 'failed';
-  state: RemainingState;
-  basis: 'benchmark' | 'observed' | null;
-  remaining_ms: number | null;
-  total_moves: number;
-  completed_moves: number;
-  timed_moves: number;
-  measured_elapsed_ms: number;
-  current_game_elapsed_ms: number;
-  sampled_at: string;
-  attempt: number;
-}
+import type { components } from './generated-api';
+
+export type RemainingTime = Required<
+  components['schemas']['AnalysisRemainingTime']
+>;
+export type RemainingState = RemainingTime['state'];
+
 const states: RemainingState[] = [
   'queued',
   'waiting',

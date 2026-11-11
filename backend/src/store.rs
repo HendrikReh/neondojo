@@ -1,4 +1,4 @@
-use crate::{import::ImportedMatch, model::*};
+use crate::{import::ImportedMatch, model::*, search::literal_pattern};
 use anyhow::{Result, ensure};
 use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Postgres, QueryBuilder};
@@ -211,7 +211,7 @@ pub async fn matches(pool: &PgPool, q: &str, after: Option<Uuid>, limit: i64) ->
     let mut query =
         QueryBuilder::<Postgres>::new(format!("{MATCH_SUMMARY} WHERE NOT collection_only"));
     if !q.is_empty() {
-        let pattern = crate::annotations::literal_pattern(q);
+        let pattern = literal_pattern(q);
         // UNION collects indexed hits before fetching summaries; avoid an OR with
         // correlated child-position scans across the entire match library.
         query
@@ -571,7 +571,9 @@ pub async fn move_analyses_filtered(
         q.push(" AND game_no=").push_bind(game_no);
     }
     if errors_only {
-        q.push(" AND equity_loss>=0.04 AND COALESCE(data->>'evaluation_status','') NOT IN ('forced','unavailable')");
+        q.push(" AND equity_loss>=")
+            .push(crate::model::MoveSeverity::DOUBTFUL_MIN_LOSS)
+            .push(" AND COALESCE(data->>'evaluation_status','') NOT IN ('forced','unavailable')");
     }
     if let Some(player) = player {
         q.push(" AND player=").push_bind(player);

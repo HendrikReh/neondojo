@@ -35,5 +35,5 @@ test('browser imports reach the disposable PostgreSQL database', async ({
     ],
     { encoding: 'utf8' },
   );
-  expect(owner.trim()).toBe('Unsortiert');
+  expect(owner.trim()).toBe('Unsorted');
 });

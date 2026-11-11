@@ -1,5 +1,6 @@
 //! Read-only browsing of shared cards. Filtering happens before cursor pagination.
 use super::*;
+use crate::search::literal_pattern;
 use axum::extract::rejection::QueryRejection;
 use sqlx::{Postgres, QueryBuilder, Row};
 use std::collections::{BTreeMap, BTreeSet};
@@ -134,16 +135,6 @@ const NOTE_SCOPE: &str = r#"(
         )
     )
 )"#;
-fn pattern(value: &str) -> String {
-    format!(
-        "%{}%",
-        value
-            .to_lowercase()
-            .replace('\\', "\\\\")
-            .replace('%', "\\%")
-            .replace('_', "\\_")
-    )
-}
 fn filters(sql: &mut QueryBuilder<'_, Postgres>, q: &CardQuery, deck: Option<Uuid>) {
     sql.push(" WHERE true");
     if let Some(id) = deck {
@@ -170,7 +161,7 @@ fn filters(sql: &mut QueryBuilder<'_, Postgres>, q: &CardQuery, deck: Option<Uui
         sql.push(
             " AND lower(c.payload->'players'->>((c.payload#>>'{position,player}')::int)) LIKE ",
         )
-        .push_bind(pattern(player))
+        .push_bind(literal_pattern(player))
         .push(" ESCAPE '\\'");
     }
     for (value, column) in [(&q.comment, "lower(a.comment)"), (&q.tag, "")] {
@@ -183,14 +174,14 @@ fn filters(sql: &mut QueryBuilder<'_, Postgres>, q: &CardQuery, deck: Option<Uui
             } else {
                 sql.push(column)
                     .push(" LIKE ")
-                    .push_bind(pattern(value))
+                    .push_bind(literal_pattern(value))
                     .push(" ESCAPE '\\'");
             }
             sql.push(")");
         }
     }
     if let Some(text) = &q.q {
-        let value = pattern(text);
+        let value = literal_pattern(text);
         sql.push(" AND (lower(coalesce(c.payload->'players'->>0,'')||' '||coalesce(c.payload->'players'->>1,'')||' '||coalesce(c.payload->>'prompt','')||' '||coalesce(c.payload#>>'{position,position_id}','')||' '||coalesce(c.payload#>>'{position,gnubg_match_id}','')) LIKE ").push_bind(value.clone()).push(" ESCAPE '\\' OR EXISTS(SELECT 1 FROM annotations a WHERE ").push(NOTE_SCOPE).push(" AND a.search_text LIKE ").push_bind(value.clone()).push(" ESCAPE '\\') OR EXISTS(SELECT 1 FROM deck_cards dc JOIN decks d ON d.id=dc.deck_id WHERE dc.card_id=c.id AND lower(d.name) LIKE ").push_bind(value).push(" ESCAPE '\\'))");
     }
 }

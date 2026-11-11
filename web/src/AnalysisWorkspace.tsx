@@ -11,6 +11,7 @@ import {
 } from 'react';
 import Board, { type Theme } from './Board';
 import BoardReviewControls from './BoardReviewControls';
+import { useBoardReviewShortcuts } from './useBoardReviewShortcuts';
 import PositionBookmarkButton from './PositionBookmarkButton';
 import { projectMove, type BoardView } from './move-preview';
 import { useBoardReviewText } from './board-review-messages';
@@ -176,42 +177,12 @@ export default function AnalysisWorkspace({
     [position, selectedPreview?.notation],
   );
   const effectiveView = preview?.ok ? boardView : 'before';
-  useEffect(() => {
-    if (!active || !selectedPreview || notesSuspended) return;
-    function changePreview(event: globalThis.KeyboardEvent) {
-      if (
-        event.defaultPrevented ||
-        !['ArrowLeft', 'ArrowRight'].includes(event.key) ||
-        event.altKey ||
-        event.ctrlKey ||
-        event.metaKey ||
-        event.shiftKey
-      )
-        return;
-      const target = event.target instanceof Element ? event.target : null;
-      if (
-        document.querySelector('dialog[open]') ||
-        target?.closest(
-          'input,textarea,select,a,[contenteditable="true"],[contenteditable=""],[role="tablist"],[role="dialog"]',
-        )
-      )
-        return;
-      const button = target?.closest('button');
-      if (
-        button &&
-        !button.matches('.candidate-preview-button') &&
-        !button.closest('.board-view-buttons')
-      )
-        return;
-      event.preventDefault();
-      event.stopPropagation();
-      if (event.key === 'ArrowLeft') setBoardView('before');
-      else if (preview?.ok) setBoardView('after');
-    }
-    // Handle the active preview before the app's match-history arrow shortcuts.
-    window.addEventListener('keydown', changePreview, true);
-    return () => window.removeEventListener('keydown', changePreview, true);
-  }, [active, selectedPreview, preview?.ok, notesSuspended]);
+  useBoardReviewShortcuts(
+    active && !!selectedPreview && !notesSuspended,
+    '.candidate-preview-button',
+    setBoardView,
+    preview?.ok === true,
+  );
 
   const [nextErrorFailure, setNextErrorFailure] = useState<unknown>();
   const [noErrors, setNoErrors] = useState(false);

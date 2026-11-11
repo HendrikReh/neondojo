@@ -30,6 +30,26 @@ pub(crate) async fn benchmark_exclusive<F: std::future::Future>(work: F) -> F::O
     ENGINE_ACCESS.scope((), work).await
 }
 
+/// Resolve before changing the child process's working directory. The canonical
+/// path also identifies the executable in saved play sessions and benchmarks.
+pub(crate) fn resolve_binary(binary: &str) -> Result<String> {
+    let path = Path::new(binary);
+    let candidate = if path.is_absolute() || binary.contains(std::path::is_separator) {
+        path.to_path_buf()
+    } else {
+        std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+            .map(|directory| directory.join(path))
+            .find(|candidate| candidate.is_file())
+            .context("Configured GNUbg executable was not found on PATH")?
+    };
+    let resolved = std::fs::canonicalize(candidate)
+        .context("Cannot resolve the configured GNUbg executable")?;
+    Ok(resolved
+        .to_str()
+        .context("GNUbg executable path must be UTF-8")?
+        .to_owned())
+}
+
 #[derive(Clone)]
 pub struct Engine {
     binary: String,
@@ -119,13 +139,13 @@ impl Engine {
 
     pub async fn version(&self) -> Result<String> {
         let _permit = engine_permit().await;
-        self.version_unlocked().await
+        self.version_unlocked(&resolve_binary(&self.binary)?).await
     }
 
-    async fn version_unlocked(&self) -> Result<String> {
+    async fn version_unlocked(&self, binary: &str) -> Result<String> {
         let result = tokio::time::timeout(
             Duration::from_secs(5),
-            Command::new(&self.binary)
+            Command::new(binary)
                 .arg("--version")
                 .env("LC_ALL", "C")
                 .kill_on_drop(true)
@@ -170,15 +190,17 @@ impl Engine {
         timeout: Option<Duration>,
     ) -> Result<String> {
         let _permit = engine_permit().await;
+        let binary =
+            resolve_binary(&self.binary).context("Could not start GNUbg; check GNUBG_BIN")?;
         // A job may outlive an upgrade at the same path. Fence every native
         // invocation, including later games, dice rolls and forced-pass calls.
         if self.expected_version.is_some() {
-            self.version_unlocked()
+            self.version_unlocked(&binary)
                 .await
                 .context("Cannot execute the saved GNUbg job configuration")?;
         }
         tokio::fs::write(directory.join("commands.txt"), commands).await?;
-        let mut child = Command::new(&self.binary)
+        let mut child = Command::new(&binary)
             .args(["-t", "-q", "-r", "-c", "commands.txt"])
             .current_dir(directory)
             .env("LC_ALL", "C")
@@ -231,7 +253,7 @@ impl Engine {
         // Discard output if an installation replacement raced the invocation;
         // no checkpoint or completed result may incorporate another version.
         if self.expected_version.is_some() {
-            self.version_unlocked()
+            self.version_unlocked(&binary)
                 .await
                 .context("GNUbg changed during execution; discarding the result")?;
         }
@@ -729,19 +751,23 @@ mod benchmark_gate_tests {
         }));
         exclusive_rx.await.unwrap();
         let (started_tx, mut started_rx) = tokio::sync::oneshot::channel();
-        let pipeline = tokio::spawn(with_shared_access(async move {
-            started_tx.send(()).unwrap();
-            // The writer must queue behind our shared permit before nested access.
-            let writer = tokio::spawn(benchmark_exclusive(async {}));
-            tokio::task::yield_now().await;
-            assert!(
-                Engine::new("/missing-engine".into())
-                    .version()
-                    .await
-                    .is_err()
-            );
-            writer
-        }));
+        let pipeline = tokio::spawn(async move {
+            let mut writer = None;
+            with_shared_access(async {
+                started_tx.send(()).unwrap();
+                // The writer must queue behind our shared permit before nested access.
+                writer = Some(tokio::spawn(benchmark_exclusive(async {})));
+                tokio::task::yield_now().await;
+                assert!(
+                    Engine::new("/missing-engine".into())
+                        .version()
+                        .await
+                        .is_err()
+                );
+            })
+            .await;
+            writer.unwrap().await.unwrap();
+        });
         assert!(
             tokio::time::timeout(Duration::from_millis(40), &mut started_rx)
                 .await
@@ -749,11 +775,10 @@ mod benchmark_gate_tests {
         );
         release_tx.send(()).unwrap();
         exclusive.await.unwrap();
-        let writer = tokio::time::timeout(Duration::from_secs(2), pipeline)
+        tokio::time::timeout(Duration::from_secs(2), pipeline)
             .await
             .expect("nested engine access must not deadlock behind queued writer")
             .unwrap();
-        writer.await.unwrap();
     }
     #[cfg(unix)]
     #[tokio::test]

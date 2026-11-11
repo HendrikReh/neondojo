@@ -204,19 +204,74 @@ test('Flashcards has an external heading, server search beyond the first page an
   await expect(study.locator('.study-answer')).toHaveCount(0);
 });
 
+test('flashcard search uses the position search layout and page controls', async ({
+  page,
+}) => {
+  const { study, queries, writes } = await setup(page);
+  const form = study.locator('form.position-filter-form');
+  const chooser = form.getByLabel('Choose deck', { exact: true });
+  const preview = study.locator('.learning-card-preview');
+  const results = study.getByRole('table', {
+    name: 'Search results',
+    exact: true,
+  });
+  const pagination = study.getByRole('navigation', {
+    name: 'Search results',
+    exact: true,
+  });
+  await expect(form.getByLabel('Search text', { exact: true })).toBeVisible();
+  await expect(
+    form.getByLabel('Player on roll', { exact: true }),
+  ).toBeVisible();
+  await expect(chooser).toHaveValue('__all__');
+  await expect(
+    form
+      .locator('.position-filter-footer')
+      .getByRole('button', { name: 'Clear filters' }),
+  ).toBeVisible();
+  await expect(
+    pagination.getByRole('button', { name: 'Previous page' }),
+  ).toBeDisabled();
+  await expect(results.locator('tbody tr')).toHaveCount(50);
+  await pagination.getByRole('button', { name: 'More cards' }).click();
+  await expect(pagination).toContainText('Page 2');
+  await expect(results.locator('tbody tr')).toHaveCount(3);
+  await expect(preview).toHaveAttribute('data-card-id', 'card-0');
+  await pagination.getByRole('button', { name: 'Previous page' }).click();
+  await expect(results.locator('tbody tr')).toHaveCount(50);
+  await pagination.getByRole('button', { name: 'Next page' }).click();
+  await expect(results.locator('tbody tr')).toHaveCount(3);
+  expect(
+    queries.filter((query) => query.searchParams.has('after')),
+  ).toHaveLength(1);
+  await chooser.selectOption(deckB);
+  await expect(pagination).toContainText('Page 1');
+  await expect(results.locator('tbody tr')).toHaveCount(1);
+  await expect(preview).toHaveAttribute('data-card-id', 'card-52');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect((await preview.boundingBox())!.y).toBeLessThan(
+    (await results.boundingBox())!.y,
+  );
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  expect(writes).toEqual([]);
+});
+
 test('filters preserve scope and a delayed old search cannot replace newer results', async ({
   page,
 }) => {
   const { study, queries, writes, setSlow } = await setup(page);
   await study.getByLabel('Choose deck', { exact: true }).selectOption(deckA);
   await study.getByText('More filters', { exact: true }).click();
-  await study.getByLabel('Exact tag', { exact: true }).fill('prime');
+  const tag = study.getByLabel('Exact tag', { exact: true });
+  await tag.fill('prime');
   await study
     .getByLabel('Review status', { exact: true })
     .selectOption('reviewed');
-  await study
-    .getByRole('button', { name: 'Search cards', exact: true })
-    .click();
+  await tag.press('Enter');
   await expect(study.locator('.learning-card-list tbody tr')).toHaveCount(1);
   expect(queries.at(-1)!.pathname).toContain(deckA);
   expect(queries.at(-1)!.searchParams.get('tag')).toBe('prime');
