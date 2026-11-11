@@ -327,6 +327,11 @@ async fn legacy_catalog_backfills_once_under_concurrent_requests(pool: PgPool) {
 #[ignore = "requires PostgreSQL"]
 async fn all_note_scopes_respect_database_search_and_tag_filters(pool: PgPool) {
     let (app, id) = setup(&pool).await;
+    let default_db: Uuid = sqlx::query_scalar("SELECT database_id FROM matches WHERE id=$1")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     let (status, database) = call(
         app.clone(),
         "POST",
@@ -403,7 +408,7 @@ async fn all_note_scopes_respect_database_search_and_tag_filters(pool: PgPool) {
     let (_, hits) = call(
         app.clone(),
         "GET",
-        "/api/annotations/search?q=needle&database_id=00000000-0000-0000-0000-000000000001",
+        &format!("/api/annotations/search?q=needle&database_id={default_db}"),
         None,
     )
     .await;
@@ -423,7 +428,7 @@ async fn all_note_scopes_respect_database_search_and_tag_filters(pool: PgPool) {
         call(
             app,
             "GET",
-            "/api/tags?database_id=00000000-0000-0000-0000-000000000001",
+            &format!("/api/tags?database_id={default_db}"),
             None
         )
         .await

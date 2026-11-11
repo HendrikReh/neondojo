@@ -157,7 +157,7 @@ IF EXISTS (
 END IF;
 END $demo$;
 DELETE FROM matches WHERE database_id NOT IN ({allowed});
-DELETE FROM databases WHERE id NOT IN ({allowed},'{DEFAULT}');
+DELETE FROM databases WHERE id NOT IN ({allowed},'{DEFAULT}') AND NOT is_default;
 UPDATE matches SET database_id='{DEFAULT}' WHERE database_id='{ids['bgf']}';
 DELETE FROM databases WHERE id='{ids['bgf']}';
 UPDATE databases SET name='Demo BGF',description='Private test and demo data from games/bgf',version=version+1 WHERE id='{DEFAULT}';

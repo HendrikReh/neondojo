@@ -22,7 +22,11 @@ use std::{
 use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
 
-pub const DEFAULT_DATABASE_ID: Uuid = Uuid::from_u128(1);
+pub(crate) async fn default_database_id(pool: &PgPool) -> Result<Uuid, sqlx::Error> {
+    sqlx::query_scalar("SELECT id FROM databases WHERE is_default")
+        .fetch_one(pool)
+        .await
+}
 const MAX_ACTIONS: usize = 100;
 const MAX_EXPORTS: usize = 50;
 const MAX_EXPORT_BYTES: i64 = 64 * 1024 * 1024;

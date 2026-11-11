@@ -54,7 +54,10 @@ async fn database(pool: &PgPool, name: &str) -> Uuid {
 async fn default_database_and_optimistic_update(pool: PgPool) {
     let (status, list) = request(&pool, "GET", "/api/databases", None).await;
     assert_eq!(status, 200, "{list}");
-    assert_eq!(list[0]["id"], "00000000-0000-0000-0000-000000000001");
+    assert_eq!(list[0]["name"], "Unsortiert");
+    assert_eq!(list[0]["is_default"], true);
+    let default_id = list[0]["id"].as_str().unwrap();
+    let default_version = list[0]["version"].as_i64().unwrap();
     let id = database(&pool, "Tournament").await;
     assert_eq!(
         request(
@@ -82,7 +85,7 @@ async fn default_database_and_optimistic_update(pool: PgPool) {
         request(
             &pool,
             "DELETE",
-            "/api/databases/00000000-0000-0000-0000-000000000001?version=1&delete_matches=true",
+            &format!("/api/databases/{default_id}?version={default_version}&delete_matches=true"),
             None
         )
         .await
@@ -405,7 +408,7 @@ async fn exports_preserve_bytes_and_reject_missing_or_oversized_selection(pool: 
 }
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
-async fn imports_deduplicate_within_each_database_and_keep_legacy_default(pool: PgPool) {
+async fn imports_deduplicate_within_each_database(pool: PgPool) {
     let source = include_str!("fixtures/analysis-game1.sgf");
     let imported = bgtutor::import::parse_sgf(source).unwrap();
     let db = database(&pool, "Imports").await;
@@ -796,7 +799,7 @@ async fn round_filter_is_literal_case_insensitive_and_combines_with_scope(pool: 
         (wrong_tournament, db, "Spring Open", Some("Final 100%_A\\B")),
         (
             other_database,
-            bgtutor::databases::DEFAULT_DATABASE_ID,
+            Uuid::from_u128(1),
             "Autumn Open",
             Some("Final 100%_A\\B"),
         ),

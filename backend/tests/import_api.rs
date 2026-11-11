@@ -23,6 +23,38 @@ fn upload(filename: &str, bytes: &[u8]) -> Request<Body> {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn import_uses_unsorted_unless_a_database_is_selected(pool: PgPool) {
+    let app = api::router(AppState::new(pool.clone(), Engine::new("gnubg".into())));
+    let original = b"(;GM[6]PW[Alice]PB[Bob]MI[length:7];W[31hefe])";
+    let selected: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO databases(id,name) VALUES(gen_random_uuid(),'Demo BGF') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    for (uri, expected_name) in [
+        ("/api/imports".to_owned(), "Unsortiert"),
+        (format!("/api/imports?database_id={selected}"), "Demo BGF"),
+    ] {
+        let mut request = upload("match.sgf", original);
+        *request.uri_mut() = uri.parse().unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), 201);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let result: ImportResponse = serde_json::from_slice(&body).unwrap();
+        let name: String = sqlx::query_scalar(
+            "SELECT d.name FROM matches m JOIN databases d ON d.id=m.database_id WHERE m.id=$1",
+        )
+        .bind(result.r#match.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(name, expected_name);
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL and local GNUbg"]
 async fn all_four_formats_are_atomic_and_engine_failures_are_persisted(pool: PgPool) {
     let state = AppState::new(

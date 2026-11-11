@@ -162,7 +162,7 @@ class DemoPostgresGuardTests(unittest.TestCase):
         self.database = 'demo_guard_test_'+uuid.uuid4().hex
         subprocess.run(['docker', 'exec', demo.CONTAINER, 'createdb', '-U', 'bgtutor', self.database], check=True, capture_output=True)
         self.addCleanup(lambda: subprocess.run(['docker', 'exec', demo.CONTAINER, 'dropdb', '-U', 'bgtutor', '--force', self.database], check=True, capture_output=True))
-        self.run_sql('''CREATE TABLE databases(id uuid PRIMARY KEY,name text,description text,version bigint DEFAULT 0);
+        self.run_sql('''CREATE TABLE databases(id uuid PRIMARY KEY,name text,description text,version bigint DEFAULT 0,is_default boolean NOT NULL DEFAULT false);
 CREATE TABLE matches(id uuid PRIMARY KEY,database_id uuid REFERENCES databases(id),sha256 text);
 CREATE TABLE learning_history(id integer);
 INSERT INTO learning_history VALUES(1);''')

@@ -22,7 +22,7 @@ pub async fn import_match(
         bytes,
         sgf,
         imported,
-        crate::databases::DEFAULT_DATABASE_ID,
+        crate::databases::default_database_id(pool).await?,
     )
     .await
 }

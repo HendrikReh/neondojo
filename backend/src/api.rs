@@ -275,7 +275,12 @@ async fn upload(
     if imported.positions.is_empty() || imported.positions.len() > 100_000 {
         return Err(ApiError::invalid("Expected 1–100000 checker moves"));
     }
-    let database_id = query.database_id.unwrap_or(Uuid::from_u128(1));
+    let database_id = match query.database_id {
+        Some(id) => id,
+        None => crate::databases::default_database_id(&state.pool)
+            .await
+            .map_err(anyhow::Error::from)?,
+    };
     let exists: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM databases WHERE id=$1 AND NOT collection_only)",
     )
