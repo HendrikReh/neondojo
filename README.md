@@ -438,3 +438,31 @@ liefert die Prognose und ihre Messbasis. Ohne `game_no` gilt das gesamte Match;
 ohne `plies` gilt die gespeicherte Standardtiefe. Die Anfrage ist rein lesend,
 legt weder Jobs noch Metadaten an und beachtet die vorhandenen Quellen- und
 Wettbewerbssperren. Die Schnittstelle ist in OpenAPI dokumentiert.
+
+### Restzeit während der Analyse
+
+Im Fortschrittsbereich einer laufenden Spiel- oder Matchanalyse erscheint zusätzlich
+**„Geschätzte Restzeit: ca. …“**. Anfangs dient der gespeicherte passende Benchmark
+als Grundlage. Nach jedem vollständig analysierten Spiel wird das gemessene
+Analysetempo verwendet: bestätigte Analysezeit pro tatsächlich zeitgemessenem
+Checkerzug × verbleibende Checkerzüge. Dadurch zählen große Spiele entsprechend
+stärker als kurze. Innerhalb eines Spiels läuft ein Sekunden-Countdown; echte
+Fortschrittsdaten liefert die Engine derzeit nach vollständigen Spielen.
+
+Warteschlange und Warten auf die Engine zählen nicht als Analysezeit. Zeitwerte
+werden mit monotoner Uhr gemessen und dauerhaft am Auftrag gespeichert. Neuladen
+und Wiederaufnahme erhalten bestätigte Arbeit; ein unterbrochenes Teilspiel wird
+neu gemessen. Auch ältere Aufträge mit bereits erledigten, aber noch ungemessenen
+Zügen verfälschen den Durchschnitt nicht. Änderungen in den Einstellungen ändern die
+Messbasis eines gestarteten Auftrags nicht.
+
+Dauert ein Spiel länger als erwartet, steht dort **„Restzeit wird neu geschätzt …“**.
+Ohne passende Messwerte bleibt die Restzeit zunächst unbekannt; nach dem ersten
+verwertbaren Spiel ist eine Prognose trotzdem möglich. Nach Abschluss oder Fehler
+verschwindet die aktive Restzeitanzeige.
+
+`GET /api/jobs/{id}/remaining-time` liefert Zustand, Messbasis, bestätigte und
+zeitgemessene Zugzahlen sowie die aktuelle Restzeit. Die rein lesende Schnittstelle
+beachtet dieselben Quellen- und Wettbewerbssperren wie der Auftrag und startet
+keine Engine. Aktive Messwerte werden ungefähr einmal pro Sekunde gespeichert;
+die Oberfläche ergänzt dazwischen einen monotonen Countdown.

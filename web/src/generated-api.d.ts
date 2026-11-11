@@ -420,6 +420,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/jobs/{id}/remaining-time": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["remaining_time"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs/{id}/statistics": {
         parameters: {
             query?: never;
@@ -1215,6 +1231,29 @@ export interface components {
             engine: string;
             /** Format: int32 */
             plies: number;
+        };
+        AnalysisRemainingTime: {
+            /** Format: int32 */
+            attempt: number;
+            basis?: null | components["schemas"]["RemainingTimeBasis"];
+            /** Format: int64 */
+            completed_moves: number;
+            /** Format: double */
+            current_game_elapsed_ms: number;
+            /** Format: uuid */
+            job_id: string;
+            /** Format: double */
+            measured_elapsed_ms: number;
+            /** Format: double */
+            remaining_ms?: number | null;
+            /** Format: date-time */
+            sampled_at: string;
+            state: components["schemas"]["RemainingTimeState"];
+            status: components["schemas"]["JobStatus"];
+            /** Format: int64 */
+            timed_moves: number;
+            /** Format: int64 */
+            total_moves: number;
         };
         AnalysisTimeEstimate: {
             benchmark?: null | components["schemas"]["EstimateBenchmark"];
@@ -2637,6 +2676,10 @@ export interface components {
             /** Format: int64 */
             hard: number;
         };
+        /** @enum {string} */
+        RemainingTimeBasis: "benchmark" | "observed";
+        /** @enum {string} */
+        RemainingTimeState: "queued" | "waiting" | "estimated" | "reestimating" | "unavailable" | "finishing" | "completed" | "failed";
         RenameDeck: {
             /** Format: int64 */
             expected_version: number;
@@ -4017,6 +4060,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MoveAnalysisPage"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    remaining_time: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisRemainingTime"];
                 };
             };
             404: {

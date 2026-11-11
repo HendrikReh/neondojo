@@ -3,6 +3,7 @@ use crate::{api::AppState, match_analysis::AnalyzedGame, model::*};
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 use sqlx::{PgPool, Postgres, Transaction};
+use std::time::Instant;
 use uuid::Uuid;
 
 pub(crate) async fn execute(
@@ -24,7 +25,12 @@ pub(crate) async fn execute(
         serde_json::from_value(value.clone()).context("Invalid saved match checkpoint")?
     } else {
         MatchAnalysisSummary {
-            engine: engine.version().await?,
+            // A submitted job already owns its immutable identity. Initialize
+            // waiting timing before the gate; each native call still validates it.
+            engine: match engine.saved_version() {
+                Some(version) => version.to_owned(),
+                None => engine.version().await?,
+            },
             plies: job.plies,
             total_games: job.total_games,
             completed_games: 0,
@@ -56,17 +62,58 @@ pub(crate) async fn execute(
             && summary.completed_games == job.completed_games,
         "Inconsistent match analysis checkpoint"
     );
+    crate::analysis_timing::initialize(
+        &state.pool,
+        job,
+        token,
+        engine,
+        &summary.engine,
+        total_moves,
+        summary.analyzed_moves,
+    )
+    .await?;
     for &game_no in &game_numbers[job.completed_games as usize..] {
-        let analyzed = engine
-            .analyze_game(&source, game_no, job.plies)
-            .await
-            .with_context(|| {
-                format!(
-                    "GNUbg analysis failed in game {game_no}/{}",
-                    job.total_games
+        crate::engine::with_shared_access(async {
+            crate::analysis_timing::start_game(&state.pool, job, token).await?;
+            let started = Instant::now();
+            let work = async {
+                let analyzed = engine
+                    .analyze_game(&source, game_no, job.plies)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "GNUbg analysis failed in game {game_no}/{}",
+                            job.total_games
+                        )
+                    })?;
+                checkpoint(
+                    &state.pool,
+                    job,
+                    token,
+                    &analyzed,
+                    &mut summary,
+                    Some(started),
                 )
-            })?;
-        checkpoint(&state.pool, job, token, &analyzed, &mut summary).await?;
+                .await
+            };
+            let samples = async {
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    crate::analysis_timing::sample_game(
+                        &state.pool,
+                        job,
+                        token,
+                        started.elapsed().as_secs_f64() * 1000.0,
+                    )
+                    .await?;
+                }
+            };
+            tokio::select! {
+                result = work => result,
+                result = samples => result,
+            }
+        })
+        .await?;
     }
     ensure!(
         summary.analyzed_moves == total_moves,
@@ -76,7 +123,11 @@ pub(crate) async fn execute(
     Ok(serde_json::to_value(summary)?)
 }
 
-async fn assert_lease(tx: &mut Transaction<'_, Postgres>, id: Uuid, token: Uuid) -> Result<()> {
+pub(crate) async fn assert_lease(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    token: Uuid,
+) -> Result<()> {
     let owns: Option<Uuid> = sqlx::query_scalar("SELECT id FROM jobs WHERE id=$1 AND lease_token=$2 AND status='running' AND lease_until>now() FOR UPDATE")
         .bind(id).bind(token).fetch_optional(&mut **tx).await?;
     ensure!(owns.is_some(), "Job lease was lost");
@@ -89,6 +140,7 @@ async fn checkpoint(
     token: Uuid,
     game: &AnalyzedGame,
     summary: &mut MatchAnalysisSummary,
+    started: Option<Instant>,
 ) -> Result<()> {
     ensure!(
         game.game_no == job.game_no.unwrap_or(summary.completed_games + 1)
@@ -175,6 +227,16 @@ async fn checkpoint(
         .bind(serde_json::to_value(&game_summary)?)
         .execute(&mut *tx)
         .await?;
+    if let Some(started) = started {
+        crate::analysis_timing::confirm_game(
+            &mut tx,
+            job,
+            token,
+            positions.len() as i64,
+            started.elapsed().as_secs_f64() * 1000.0,
+        )
+        .await?;
+    }
     let progress = next.completed_games * 100 / job.total_games;
     sqlx::query("UPDATE jobs SET completed_games=$3,progress=$4,result=$5,updated_at=now(),lease_until=now()+interval '120 seconds' WHERE id=$1 AND lease_token=$2")
         .bind(job.id).bind(token).bind(next.completed_games).bind(progress).bind(serde_json::to_value(&next)?).execute(&mut *tx).await?;
@@ -264,6 +326,75 @@ fn accumulate_performance_rating(summary: &mut MatchAnalysisSummary, game: &Anal
 mod tests {
     use super::*;
     use crate::{engine::Engine, import, jobs, store};
+
+    #[sqlx::test(migrations = "./migrations")]
+    #[ignore = "requires PostgreSQL"]
+    async fn saved_snapshot_is_ready_while_waiting_for_the_engine_gate(pool: PgPool) {
+        let sgf = "(;GM[6]FF[4]MI[length:7][ws:0][bs:0];W[31hefe])";
+        let imported = store::import_match(
+            &pool,
+            "gate.sgf",
+            "sgf",
+            sgf.as_bytes(),
+            sgf,
+            &import::parse_sgf(sgf).unwrap(),
+        )
+        .await
+        .unwrap();
+        let snapshot = crate::settings::EngineSnapshot {
+            engine_id: "gnubg".into(),
+            gnubg_path: "/missing-native-engine".into(),
+            engine_version: Some("GNU Backgammon saved".into()),
+        };
+        let job = store::create_match_job_scoped_with_snapshot(
+            &pool,
+            imported.r#match.id,
+            0,
+            1,
+            None,
+            Some(&snapshot),
+        )
+        .await
+        .unwrap();
+        let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = tokio::sync::oneshot::channel();
+        let exclusive = tokio::spawn(crate::engine::benchmark_exclusive(async move {
+            entered_tx.send(()).unwrap();
+            release_rx.await.unwrap();
+        }));
+        entered_rx.await.unwrap();
+        let state = AppState::new(pool.clone(), Engine::new("/unused-fallback".into()));
+        let worker = tokio::spawn(async move { jobs::run_one(&state).await.unwrap() });
+        let ready=tokio::time::timeout(std::time::Duration::from_secs(1),async {
+            loop {
+                let sample: Option<(Option<chrono::DateTime<chrono::Utc>>,f64)>=sqlx::query_as("SELECT active_started_at,measured_elapsed_ms FROM match_analysis_timing WHERE job_id=$1").bind(job.id).fetch_optional(&pool).await.unwrap();
+                if let Some(sample)=sample { break sample; }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        }).await;
+        release_tx.send(()).unwrap();
+        exclusive.await.unwrap();
+        worker.await.unwrap();
+        assert_eq!(
+            ready.expect(
+                "saved engine identity should initialize timing without waiting on native work"
+            ),
+            (None, 0.0)
+        );
+        let done = store::get_job(&pool, job.id).await.unwrap().unwrap();
+        assert_eq!(done.status, "failed");
+        assert_eq!(
+            sqlx::query_scalar::<_, f64>(
+                "SELECT measured_elapsed_ms FROM match_analysis_timing WHERE job_id=$1"
+            )
+            .bind(job.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+            0.0,
+            "failed partial sections must not add measured time"
+        );
+    }
 
     fn rating_summary() -> MatchAnalysisSummary {
         MatchAnalysisSummary {
@@ -423,12 +554,12 @@ mod tests {
             ],
         };
         let game = engine.analyze_game(sgf, 2, 0).await.unwrap();
-        let error = checkpoint(&pool, &job, Uuid::new_v4(), &game, &mut summary)
+        let error = checkpoint(&pool, &job, Uuid::new_v4(), &game, &mut summary, None)
             .await
             .unwrap_err();
         assert!(error.to_string().contains("lease"), "{error}");
         assert_eq!(summary.completed_games, 0);
-        checkpoint(&pool, &job, token, &game, &mut summary)
+        checkpoint(&pool, &job, token, &game, &mut summary, None)
             .await
             .unwrap();
         assert_eq!(summary.completed_games, 1);
@@ -503,7 +634,7 @@ mod tests {
             ],
         };
         let first = engine.analyze_game(&sgf, 1, 0).await.unwrap();
-        checkpoint(&pool, &job, token, &first, &mut summary)
+        checkpoint(&pool, &job, token, &first, &mut summary, None)
             .await
             .unwrap();
         let ids: Vec<i64> =
@@ -515,7 +646,7 @@ mod tests {
         let second = engine.analyze_game(&sgf, 2, 0).await.unwrap();
         let mut stale = summary.clone();
         assert!(
-            checkpoint(&pool, &job, Uuid::new_v4(), &second, &mut stale)
+            checkpoint(&pool, &job, Uuid::new_v4(), &second, &mut stale, None)
                 .await
                 .is_err()
         );
@@ -526,7 +657,7 @@ mod tests {
             .await
             .unwrap();
         assert!(
-            checkpoint(&pool, &job, token, &second, &mut stale)
+            checkpoint(&pool, &job, token, &second, &mut stale, None)
                 .await
                 .is_err()
         );
@@ -536,6 +667,13 @@ mod tests {
         assert_eq!(done.status, "completed", "{:?}", done.error);
         assert_eq!(done.attempts, 2);
         assert_eq!(done.completed_games, 2);
+        let timing: (i64, i64, f64) = sqlx::query_as("SELECT completed_moves,timed_moves,measured_elapsed_ms FROM match_analysis_timing WHERE job_id=$1").bind(job.id).fetch_one(&pool).await.unwrap();
+        assert_eq!(
+            (timing.0, timing.1),
+            (4, 2),
+            "only the newly completed second game has measured timing"
+        );
+        assert!(timing.2 > 0.0);
         let result = done.result.as_ref().unwrap();
         assert_eq!(result["performance_rating"]["games"], 2);
         assert_eq!(result["performance_rating"]["method"], "gnubg_emg_500_v1");
@@ -655,7 +793,7 @@ mod tests {
             .analyze_game(sgf, 1, 0)
             .await
             .unwrap();
-        checkpoint(&pool, &job, token, &game, &mut summary)
+        checkpoint(&pool, &job, token, &game, &mut summary, None)
             .await
             .unwrap();
         let first_rows: Vec<i64> =

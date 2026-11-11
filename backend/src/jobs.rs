@@ -40,12 +40,20 @@ pub async fn run_one(state: &AppState) -> Result<bool> {
     let expired: Vec<Uuid> = sqlx::query_scalar("UPDATE jobs SET status=CASE WHEN attempts>=3 THEN 'failed' ELSE 'queued' END, error=CASE WHEN attempts>=3 THEN 'Worker lease expired after 3 attempts' ELSE NULL END, lease_token=NULL, lease_until=NULL, progress=CASE WHEN kind='match' THEN progress ELSE 0 END, updated_at=now() WHERE status='running' AND lease_until<now() RETURNING id")
         .fetch_all(&mut *tx).await?;
     for id in expired {
+        sqlx::query("UPDATE match_analysis_timing SET active_started_at=NULL,active_elapsed_ms=0 WHERE job_id=$1")
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
         sqlx::query("INSERT INTO job_events(job_id,event,data) SELECT id,status,jsonb_build_object('status',status,'progress',progress,'error',error,'completed_games',completed_games,'total_games',total_games) FROM jobs WHERE id=$1")
             .bind(id).execute(&mut *tx).await?;
     }
     let job = sqlx::query_as::<_, Job>("UPDATE jobs SET status='running',lease_token=$1,lease_until=now()+interval '120 seconds',attempts=attempts+1,updated_at=now() WHERE id=(SELECT id FROM jobs WHERE status='queued' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *")
         .bind(token).fetch_optional(&mut *tx).await?;
     if let Some(ref job) = job {
+        sqlx::query("UPDATE match_analysis_timing SET active_started_at=NULL,active_elapsed_ms=0 WHERE job_id=$1")
+            .bind(job.id)
+            .execute(&mut *tx)
+            .await?;
         sqlx::query("INSERT INTO job_events(job_id,event,data) VALUES($1,'running',$2)")
             .bind(job.id)
             .bind(json!({"status":"running","progress":job.progress,"attempt":job.attempts,"completed_games":job.completed_games,"total_games":job.total_games}))
@@ -63,6 +71,7 @@ pub async fn run_one(state: &AppState) -> Result<bool> {
     let changed = sqlx::query("UPDATE jobs SET status=$3,result=COALESCE($4,result),error=$5,progress=CASE WHEN $3='completed' THEN 100 ELSE progress END,lease_token=NULL,lease_until=NULL,updated_at=now() WHERE id=$1 AND lease_token=$2 AND status='running' AND lease_until>now()")
         .bind(job.id).bind(token).bind(status).bind(&data).bind(&error).execute(&mut *tx).await?;
     if changed.rows_affected() == 1 {
+        sqlx::query("UPDATE match_analysis_timing SET active_started_at=NULL,active_elapsed_ms=0 WHERE job_id=$1 AND lease_token=$2").bind(job.id).bind(token).execute(&mut *tx).await?;
         sqlx::query("INSERT INTO job_events(job_id,event,data) SELECT id,status,jsonb_build_object('status',status,'progress',progress,'error',error,'completed_games',completed_games,'total_games',total_games) FROM jobs WHERE id=$1")
             .bind(job.id).execute(&mut *tx).await?;
     }

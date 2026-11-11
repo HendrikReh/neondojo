@@ -106,6 +106,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/positions/{id}", get(get_position))
         .route("/api/jobs", post(create_job))
         .route("/api/jobs/{id}", get(job))
+        .merge(crate::analysis_timing::routes())
         .route("/api/jobs/{id}/events", get(events))
         .route("/api/jobs/{id}/moves", get(move_analyses))
         .route("/api/openapi.json", get(openapi))
@@ -828,6 +829,7 @@ impl OpenApi for ApiDoc {
         doc.merge(crate::settings::SettingsDoc::openapi());
         doc.merge(crate::benchmarks::BenchmarkDoc::openapi());
         doc.merge(crate::benchmarks::estimate::EstimateDoc::openapi());
+        doc.merge(crate::analysis_timing::TimingDoc::openapi());
         doc.merge(crate::play::PlayDoc::openapi());
         doc.merge(crate::study::StudyDoc::openapi());
         doc.merge(crate::opening_book::OpeningBookDoc::openapi());

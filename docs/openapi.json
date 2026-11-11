@@ -1879,6 +1879,57 @@
         }
       }
     },
+    "/api/jobs/{id}/remaining-time": {
+      "get": {
+        "tags": [
+          "Match analysis"
+        ],
+        "operationId": "remaining_time",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisRemainingTime"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/jobs/{id}/statistics": {
       "get": {
         "tags": [
@@ -5363,6 +5414,78 @@
           "plies": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "AnalysisRemainingTime": {
+        "type": "object",
+        "required": [
+          "job_id",
+          "status",
+          "state",
+          "total_moves",
+          "completed_moves",
+          "timed_moves",
+          "measured_elapsed_ms",
+          "current_game_elapsed_ms",
+          "sampled_at",
+          "attempt"
+        ],
+        "properties": {
+          "attempt": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "basis": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RemainingTimeBasis"
+              }
+            ]
+          },
+          "completed_moves": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "current_game_elapsed_ms": {
+            "type": "number",
+            "format": "double"
+          },
+          "job_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "measured_elapsed_ms": {
+            "type": "number",
+            "format": "double"
+          },
+          "remaining_ms": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "sampled_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "state": {
+            "$ref": "#/components/schemas/RemainingTimeState"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          },
+          "timed_moves": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total_moves": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -10113,6 +10236,26 @@
             "format": "int64"
           }
         }
+      },
+      "RemainingTimeBasis": {
+        "type": "string",
+        "enum": [
+          "benchmark",
+          "observed"
+        ]
+      },
+      "RemainingTimeState": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "waiting",
+          "estimated",
+          "reestimating",
+          "unavailable",
+          "finishing",
+          "completed",
+          "failed"
+        ]
       },
       "RenameDeck": {
         "type": "object",

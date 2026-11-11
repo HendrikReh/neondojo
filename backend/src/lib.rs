@@ -7,6 +7,7 @@ pub mod match_analysis;
 pub mod model;
 pub mod store;
 
+mod analysis_timing;
 mod match_jobs;
 
 pub mod annotations;

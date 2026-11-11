@@ -82,6 +82,10 @@ impl Engine {
         self
     }
 
+    pub(crate) fn saved_version(&self) -> Option<&str> {
+        self.expected_version.as_deref()
+    }
+
     pub fn binary(&self) -> &str {
         &self.binary
     }

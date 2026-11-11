@@ -1,3 +1,4 @@
+import AnalysisRemainingTime from './AnalysisRemainingTime';
 import AnalysisTimeEstimate from './AnalysisTimeEstimate';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -247,6 +248,7 @@ export default function MatchAnalysisPanel({
         max={100}
       />
       {active && <small>{t('matchAnalysis.progressHint')}</small>}
+      {active && <AnalysisRemainingTime key={job.id} job={job} />}
       {job.error && (
         <p role="alert">{t('error.engine', { details: job.error })}</p>
       )}
