@@ -45,8 +45,10 @@ test('ranked checker candidates expose explicit accessible board preview actions
   const html = render(() => {});
   expect(html).toContain('aria-label="Preview move 1: 8/5 6/5"');
   expect(html).toContain('aria-label="Preview move 2: 13/10 6/5"');
-  expect(html).toContain('Preview best move');
+  expect(html).not.toContain('Preview best move');
+  expect(html.match(/candidate-preview-row/g)).toHaveLength(2);
 });
 test('a source view without a preview handler remains read-only', () => {
   expect(render()).not.toContain('Preview move 1:');
+  expect(render()).not.toContain('candidate-preview-row');
 });

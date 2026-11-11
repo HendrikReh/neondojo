@@ -74,9 +74,7 @@ test('file, book and native candidates preview explicitly and source changes res
   );
   await page.getByRole('tab', { name: 'Opening book', exact: true }).click();
   await expect(page.locator('.board-review-selection')).toHaveCount(0);
-  await imported
-    .getByRole('button', { name: 'Preview best move', exact: true })
-    .click();
+  await imported.getByRole('button', { name: /^Preview move 1:/ }).click();
   await expect(page.locator('.board-review-selection')).toContainText(
     'BackgammonDB',
   );
@@ -88,9 +86,7 @@ test('file, book and native candidates preview explicitly and source changes res
     .getByRole('button', { name: 'Analyze position', exact: true })
     .click();
   const native = page.locator('.analysis-panel');
-  await native
-    .getByRole('button', { name: 'Preview best move', exact: true })
-    .click();
+  await native.getByRole('button', { name: /^Preview move 1:/ }).click();
   await expect(page.locator('.board-review-selection')).toContainText(
     'Candidate 1',
   );
