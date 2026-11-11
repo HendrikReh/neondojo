@@ -1,0 +1,22 @@
+.action-tooltip[popover] {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  max-width: min(320px, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
+  box-sizing: border-box;
+  overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid #ffffff22;
+  border-radius: 6px;
+  background: #172033;
+  color: #fff;
+  font: 400 12px/1.45 var(--font-ui, sans-serif);
+  text-align: left;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  box-shadow: 0 5px 20px #0003;
+  cursor: default;
+}
