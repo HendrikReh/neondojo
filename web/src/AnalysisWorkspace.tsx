@@ -365,7 +365,11 @@ export default function AnalysisWorkspace({
                     preview={preview}
                     selected={selectedPreview}
                     onView={setBoardView}
-                    onPlayed={() => onPreview(null)}
+                    onPlayed={() => {
+                      onPreview(null);
+                      currentMove.current?.focus({ preventScroll: true });
+                      currentMove.current?.scrollIntoView({ block: 'nearest' });
+                    }}
                   />
                 )}
                 <PositionBookmarkButton

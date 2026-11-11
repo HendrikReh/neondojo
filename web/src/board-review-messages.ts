@@ -22,7 +22,7 @@ const entries = {
   after: ['Final', 'Final', 'Final', 'Final', 'Final', 'Final'],
   reset: [
     'Reset preview',
-    'Vorschau zurücksetzen',
+    'Zum gespielten Zug',
     'Restablecer vista previa',
     'Réinitialiser l’aperçu',
     'Resetuj podgląd',

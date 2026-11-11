@@ -115,11 +115,15 @@ for (const theme of ['graphite', 'club', 'paper'])
       await expect(rows.nth(4).locator('.move-assessment-marker')).toHaveCount(
         0,
       );
-      await expect(
-        rows.nth(2).locator('.move-assessment-marker'),
-      ).toHaveAttribute('title', /Reference GNUbg.*2-ply/);
-      await rows.nth(2).click();
-      await expect(rows.nth(2)).toHaveAttribute('aria-current', 'step');
+      const assessedRow = rows.nth(2);
+      await assessedRow.focus();
+      const tooltip = page.getByRole('tooltip');
+      const assessment = /Reference GNUbg.*2-ply/;
+      await expect(tooltip).toBeVisible();
+      await expect(tooltip).toContainText(assessment);
+      await expect(assessedRow).toHaveAccessibleDescription(assessment);
+      await assessedRow.click();
+      await expect(assessedRow).toHaveAttribute('aria-current', 'step');
       await expect(page.locator('.board-heading')).toContainText('Move 3');
       await expect(rows.nth(2)).toHaveCSS(
         'background-color',

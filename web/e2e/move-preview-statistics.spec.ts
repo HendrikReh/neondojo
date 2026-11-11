@@ -101,6 +101,49 @@ test('file, book and native candidates preview explicitly and source changes res
   await expect(page.locator('.board-review-selection')).toHaveCount(0);
 });
 
+for (const [layout, viewport] of [
+  ['mobile', { width: 390, height: 900 }],
+  ['desktop', { width: 1440, height: 1100 }],
+] as const) {
+  test(`returning to the played move reveals its marked row in the scrolled history on ${layout}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await page.addInitScript(() =>
+      localStorage.setItem('bgtutor.locale', 'de'),
+    );
+    await page.goto('/');
+    await page
+      .getByLabel('Partiedatei', { exact: true })
+      .setInputFiles('../backend/tests/fixtures/WC2014.xg');
+    await page.getByLabel('Spiel auswählen', { exact: true }).selectOption('6');
+    await expect(page.locator('.board-heading')).toContainText('Spiel 6');
+    await page
+      .getByRole('tab', { name: 'Importierte Analyse', exact: true })
+      .click();
+    await page.getByRole('button', { name: /^Zug 2 ansehen:/ }).click();
+
+    const moveList = page.locator('.analysis-workspace .moves-list');
+    const playedMove = moveList.getByRole('button').first();
+    await moveList.scrollIntoViewIfNeeded();
+    await expect(playedMove).toHaveAttribute('aria-current', 'step');
+    await expect(playedMove).toBeInViewport({ ratio: 0.99 });
+    await moveList.evaluate((list) => {
+      list.scrollTop = list.scrollHeight;
+    });
+    await expect(playedMove).not.toBeInViewport();
+
+    await page
+      .getByRole('button', { name: 'Zum gespielten Zug', exact: true })
+      .click();
+    await expect(playedMove).toBeFocused();
+    await expect(playedMove).toHaveAttribute('aria-current', 'step');
+    await expect(playedMove).toHaveCSS('outline-style', 'solid');
+    await expect(playedMove).toBeInViewport({ ratio: 0.99 });
+    await expect(page.locator('.board-review-selection')).toHaveCount(0);
+  });
+}
+
 test('native match and game metrics open the exact visible decision filters', async ({
   page,
 }) => {
