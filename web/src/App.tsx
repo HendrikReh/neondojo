@@ -1,3 +1,5 @@
+import PlayWorkspace from './PlayWorkspace';
+import { usePlayText } from './play-messages';
 import {
   useCallback,
   useEffect,
@@ -38,14 +40,15 @@ import { DEFAULT_ANALYSIS_PLIES } from './analysis-depth';
 import MoveNotesDialog, { type MoveNotesTarget } from './MoveNotesDialog';
 import { useUiAppearance } from './useUiAppearance';
 
-type View = 'analysis' | 'database' | 'positions' | 'learning';
-const views: View[] = ['analysis', 'database', 'positions', 'learning'];
+type View = 'analysis' | 'database' | 'positions' | 'play' | 'learning';
+const views: View[] = ['analysis', 'database', 'positions', 'play', 'learning'];
 export default function App() {
   const { t, setLocale, formatError } = useI18n();
   const w = useWorkspaceText(),
     learnT = useLearningText();
   const l = useLibraryText();
   const positionText = usePositionText();
+  const playT = usePlayText();
   const { appearance, applyAppearance } = useUiAppearance();
   const [requestedDeck, setRequestedDeck] = useState<{
     id: string;
@@ -365,7 +368,9 @@ export default function App() {
                 ? learnT('study')
                 : tab === 'positions'
                   ? positionText('title')
-                  : w(tab)}
+                  : tab === 'play'
+                    ? playT('title')
+                    : w(tab)}
             </button>
           ))}
         </nav>
@@ -400,6 +405,18 @@ export default function App() {
         />
       </header>
       <main className={`app-body app-body-${view}`}>
+        <div
+          id="workspace-panel-play"
+          role="tabpanel"
+          aria-labelledby="workspace-tab-play"
+          hidden={view !== 'play'}
+        >
+          <PlayWorkspace
+            visible={view === 'play'}
+            theme={theme}
+            onSaved={() => setRevision((value) => value + 1)}
+          />
+        </div>
         {!!(error || navigation.error) && (
           <div className="error" role="alert">
             {formatError(error || navigation.error)}

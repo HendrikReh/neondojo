@@ -1,7 +1,7 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
 
 /// GNUbg encodes the opponent's checkers first, then the player on roll.
-pub(super) fn position_id(board: &[i32; 26], player: i32) -> String {
+pub(crate) fn position_id(board: &[i32; 26], player: i32) -> String {
     let mut bytes = [0u8; 10];
     let mut bit = 0usize;
     for side in [1 - player, player] {
@@ -24,7 +24,7 @@ pub(super) fn position_id(board: &[i32; 26], player: i32) -> String {
 
 // These are the eight independently encoded fields in GNUbg's binary Match ID.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn match_id(
+pub(crate) fn match_id(
     length: i32,
     scores: [i32; 2],
     cube: i32,

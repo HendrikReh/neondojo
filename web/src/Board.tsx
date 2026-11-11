@@ -5,6 +5,11 @@ import { useEffect, useState } from 'react';
 import { useI18n } from './i18n';
 import { useBoardReviewText } from './board-review-messages';
 import BgBlitzBoard from './BgBlitzBoard';
+import PlayBoardDice from './PlayBoardDice';
+import PlayCube from './PlayCube';
+import PlayCheckerMotion from './PlayCheckerMotion';
+import { underlayBoard, type PlaybackFrame } from './play-animation';
+import BoardPlayTargets, { type BoardInteraction } from './BoardPlayTargets';
 import { archiveThemes, type Theme } from './themes';
 import MoveArrows from './MoveArrows';
 import type { BoardView, MovePreview } from './move-preview';
@@ -65,6 +70,9 @@ export default function Board({
   preview,
   previewMode,
   previewLabel,
+  interaction,
+  animation,
+  showPipCounts = true,
 }: {
   position: Position;
   white: string;
@@ -73,6 +81,9 @@ export default function Board({
   preview?: MovePreview;
   previewMode?: BoardView;
   previewLabel?: string;
+  interaction?: BoardInteraction;
+  animation?: PlaybackFrame | null;
+  showPipCounts?: boolean;
 }) {
   const { t, formatNumber } = useI18n();
   const review = useBoardReviewText();
@@ -86,9 +97,10 @@ export default function Board({
     preview,
     effectiveMode,
   );
-  const board = displayedPosition.board;
-  const pips = pipCounts(board);
-  const counts = checkerCounts(board);
+  const moving = animation?.kind === 'checker' ? animation : undefined;
+  const board = moving ? underlayBoard(moving) : displayedPosition.board;
+  const pips = pipCounts(displayedPosition.board);
+  const counts = checkerCounts(displayedPosition.board);
   const context = matchContext(position.gnubg_match_id);
   const displayedCube = context.cube * (context.doubled ? 2 : 1);
   const cubeOwner = context.doubled ? null : context.owner;
@@ -106,17 +118,27 @@ export default function Board({
   const hasDice =
     displayedPosition.dice.length === 2 &&
     displayedPosition.dice.every((die) => die >= 1 && die <= 6);
-  const stateLabel = hasDice
-    ? t('board.label', {
-        player: active,
-        first: displayedPosition.dice[0],
-        second: displayedPosition.dice[1],
-        white: pips[0],
-        black: pips[1],
-      })
-    : effectiveMode === 'after'
-      ? `${review('pipsLabel', { white, black, whitePips: formatNumber(pips[0]), blackPips: formatNumber(pips[1]) })}. ${cubeLabel}`
-      : `${t('app.toMove', { player: active })}. ${cubeLabel}`;
+  const openingDice = interaction?.dice?.opening;
+  const stateLabel = !showPipCounts
+    ? `${t('app.toMove', { player: active })}. ${hasDice ? displayedPosition.dice.join(' · ') : ''}. ${cubeLabel}`
+    : openingDice
+      ? openingDice.values
+          .map(
+            (value, index) =>
+              `${openingDice.labels[index]} · ${value ?? openingDice.unrolled}`,
+          )
+          .join(' · ')
+      : hasDice
+        ? t('board.label', {
+            player: active,
+            first: displayedPosition.dice[0],
+            second: displayedPosition.dice[1],
+            white: pips[0],
+            black: pips[1],
+          })
+        : effectiveMode === 'after'
+          ? `${review('pipsLabel', { white, black, whitePips: formatNumber(pips[0]), blackPips: formatNumber(pips[1]) })}. ${cubeLabel}`
+          : `${t('app.toMove', { player: active })}. ${cubeLabel}`;
   const label = previewLabel ? `${previewLabel}. ${stateLabel}` : stateLabel;
   return (
     <div
@@ -138,12 +160,14 @@ export default function Board({
           {black}{' '}
           <small>· {t('board.points', { count: context.scores[1] })}</small>
         </span>
-        <span>
-          {t('board.pipsOff', {
-            pips: formatNumber(pips[1]),
-            off: formatNumber(15 - counts[1]),
-          })}
-        </span>
+        {showPipCounts && (
+          <span>
+            {t('board.pipsOff', {
+              pips: formatNumber(pips[1]),
+              off: formatNumber(15 - counts[1]),
+            })}
+          </span>
+        )}
       </div>
       {failedTheme === theme && (
         <p className="theme-load-error" role="alert">
@@ -157,6 +181,8 @@ export default function Board({
           label={label}
           cubeLabel={cubeLabel}
           onError={() => setFailedTheme(theme)}
+          interaction={interaction}
+          animation={animation}
           previewSteps={
             effectiveMode === 'arrows' && preview?.ok
               ? preview.steps
@@ -166,8 +192,8 @@ export default function Board({
       ) : (
         <svg
           className="board"
-          viewBox="0 0 680 470"
-          role="img"
+          viewBox={interaction ? '0 0 730 470' : '0 0 680 470'}
+          role={interaction ? 'group' : 'img'}
           aria-label={label}
         >
           <rect
@@ -219,12 +245,15 @@ export default function Board({
           })}
           <Checkers count={board[0]} x={340} y={64} point={0} />
           <Checkers count={board[25]} x={340} y={406} bottom point={25} />
-          <g
+          {interaction && <BoardPlayTargets interaction={interaction} />}
+          <PlayCube
             transform={`translate(328,${cubeOwner === null ? 223 : cubeOwner === 0 ? 365 : 81})`}
-            aria-label={cubeLabel}
-            data-cube={displayedCube}
-            data-cube-owner={cubeOwner ?? 'centered'}
-            data-cube-pending={context.doubled}
+            label={cubeLabel}
+            value={displayedCube}
+            owner={cubeOwner}
+            pending={context.doubled}
+            interaction={interaction?.cube}
+            hitArea={{ x: -10, y: -10, width: 44, height: 44 }}
           >
             <rect
               width="24"
@@ -243,28 +272,13 @@ export default function Board({
             >
               {displayedCube === 1 ? '64' : displayedCube}
             </text>
-          </g>
-          {displayedPosition.dice
-            .filter((die) => die >= 1 && die <= 6)
-            .map((die, i) => (
-              <g key={i} transform={`translate(${420 + i * 45},219)`}>
-                <rect
-                  width="33"
-                  height="33"
-                  rx="6"
-                  className={
-                    position.player === 0 ? 'white-checker' : 'black-checker'
-                  }
-                />
-                <text
-                  x="16.5"
-                  y="23"
-                  className={`die-value ${position.player === 0 ? 'on-white' : 'on-black'}`}
-                >
-                  {['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'][die]}
-                </text>
-              </g>
-            ))}
+          </PlayCube>
+          <PlayBoardDice
+            dice={displayedPosition.dice}
+            player={position.player}
+            interaction={interaction?.dice}
+          />
+          {moving && <PlayCheckerMotion key={animation?.id} frame={moving} />}
           {effectiveMode === 'arrows' && preview?.ok && (
             <MoveArrows
               board={position.board}
@@ -292,12 +306,14 @@ export default function Board({
             {context.crawford ? ' · Crawford' : ''}
           </small>
         </span>
-        <span>
-          {t('board.pipsOff', {
-            pips: formatNumber(pips[0]),
-            off: formatNumber(15 - counts[0]),
-          })}
-        </span>
+        {showPipCounts && (
+          <span>
+            {t('board.pipsOff', {
+              pips: formatNumber(pips[0]),
+              off: formatNumber(15 - counts[0]),
+            })}
+          </span>
+        )}
       </div>
       {custom && (
         <a

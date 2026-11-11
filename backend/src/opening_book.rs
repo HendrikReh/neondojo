@@ -263,11 +263,12 @@ async fn install_xg_book(
     ))
 }
 
-#[utoipa::path(get,path="/api/positions/{id}/opening-book",params(("id"=Uuid,Path)),responses((status=200,body=BookLookup),(status=404,body=ErrorBody)),tag="Opening book")]
+#[utoipa::path(get,path="/api/positions/{id}/opening-book",params(("id"=Uuid,Path)),responses((status=200,body=BookLookup),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Opening book")]
 async fn position_book(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<BookLookup>> {
+    crate::play::require_position_review_available(&state.pool, id).await?;
     let position = crate::store::get_position(&state.pool, id)
         .await?
         .ok_or_else(ApiError::missing)?;

@@ -417,14 +417,38 @@ fn play(board: &mut [i32; 26], player: i32, value: &str) -> Result<([i32; 2], St
             }
         }
     }
+    *board = apply_checker_turn(board, player, dice, &pairs)
+        .with_context(|| format!("SGF: illegal or incomplete checker move {value}"))?;
+    Ok((
+        dice,
+        if notation.is_empty() {
+            "Cannot move".to_owned()
+        } else {
+            notation.join(" ")
+        },
+    ))
+}
+
+/// Apply a complete turn in the given order. Pairs are mover-relative, with
+/// bar at 25 and off at 0. The input and output boards use absolute colors.
+pub(crate) fn apply_checker_turn(
+    board: &[i32; 26],
+    player: i32,
+    dice: [i32; 2],
+    pairs: &[(usize, usize)],
+) -> Result<[i32; 26]> {
+    ensure!(
+        matches!(player, 0 | 1) && dice.iter().all(|die| (1..=6).contains(die)),
+        "Invalid checker turn context"
+    );
     let available = if dice[0] == dice[1] {
         vec![dice[0]; 4]
     } else {
         dice.to_vec()
     };
     let before = local_board(board, player);
-    let after = apply_pairs(&before, &pairs, &available)
-        .with_context(|| format!("SGF: illegal or incomplete checker move {value}"))?;
+    let after =
+        apply_pairs(&before, pairs, &available).context("Illegal or incomplete checker move")?;
     ensure!(
         pairs.len() == max_plays(&before, &available) || !after.iter().any(|n| *n > 0),
         "SGF: checker play does not use the maximum possible dice"
@@ -437,15 +461,7 @@ fn play(board: &mut [i32; 26], player: i32, value: &str) -> Result<([i32; 2], St
             "SGF: single checker move must use the larger die"
         );
     }
-    *board = local_board(&after, player);
-    Ok((
-        dice,
-        if notation.is_empty() {
-            "Cannot move".to_owned()
-        } else {
-            notation.join(" ")
-        },
-    ))
+    Ok(local_board(&after, player))
 }
 
 pub(crate) fn parse_trees(input: &str) -> Result<Vec<Vec<Node>>> {
@@ -569,11 +585,21 @@ pub(crate) struct SourceMove {
     pub dice: [i32; 2],
     pub position_id: String,
     pub match_id: String,
+    pub after_board: Vec<i32>,
+    pub after_match_id: String,
 }
 
 pub(crate) fn parse_sgf_source_moves(input: &str) -> Result<(ImportedMatch, Vec<SourceMove>)> {
     let mut moves = Vec::new();
     let (imported, _) = parse_sgf_context(input, false, Some(&mut moves))?;
+    Ok((imported, moves))
+}
+
+pub(crate) fn parse_native_sgf_source_moves(
+    input: &str,
+) -> Result<(ImportedMatch, Vec<SourceMove>)> {
+    let mut moves = Vec::new();
+    let (imported, _) = parse_sgf_context(input, true, Some(&mut moves))?;
     Ok((imported, moves))
 }
 
@@ -608,6 +634,7 @@ fn parse_sgf_context(
 ) -> Result<(ImportedMatch, Vec<GameContext>)> {
     let trees = parse_trees(input)?;
     let mut contexts = Vec::new();
+    let mut result_cubes = Vec::with_capacity(trees.len());
     let mut result = ImportedMatch {
         players: ["White".into(), "Black".into()],
         match_length: 0,
@@ -699,6 +726,9 @@ fn parse_sgf_context(
         let mut pending = None;
         let mut expected_turn = None;
         let mut ended = false;
+        let mut dropped_by = None;
+        let mut terminal_checker = false;
+        let mut terminal_evidence = None;
         let mut ply = 0;
         let mut move_no = 0;
         for (node_index, node) in nodes.iter().enumerate() {
@@ -795,6 +825,8 @@ fn parse_sgf_context(
                         expected_turn = Some(doubler);
                     } else {
                         ended = true;
+                        dropped_by = Some(player);
+                        terminal_evidence = Some((board, cube, owner));
                     }
                 }
                 _ => {
@@ -811,6 +843,11 @@ fn parse_sgf_context(
                     let (dice, notation) = play(&mut board, player, value).with_context(|| {
                         format!("game {}, checker ply {}", game_index + 1, ply + 1)
                     })?;
+                    terminal_checker =
+                        !board.iter().any(|n| *n > 0) || !board.iter().any(|n| *n < 0);
+                    if terminal_checker {
+                        terminal_evidence = Some((board, cube, owner));
+                    }
                     ply += 1;
                     context.decision_ids.push((
                         ids::position_id(&before, player),
@@ -862,12 +899,34 @@ fn parse_sgf_context(
                 );
                 if let Some(doubler) = pending_before {
                     // GNUbg's player on roll remains the doubler while the
-                    // opponent decides; bit 13 marks the outstanding offer.
+                    // opponent decides; bit 12 marks the outstanding offer.
                     use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
                     let mut bytes = STANDARD_NO_PAD.decode(&match_id)?;
                     bytes[0] = (bytes[0] & !(1 << 6)) | ((doubler as u8) << 6);
                     bytes[1] |= 1 << 4;
                     match_id = STANDARD_NO_PAD.encode(bytes);
+                }
+                let after_turn = if checker {
+                    1 - player
+                } else {
+                    pending.or(pending_before).unwrap_or(player)
+                };
+                let mut after_match_id = ids::match_id(
+                    length,
+                    scores,
+                    cube,
+                    owner,
+                    crawford,
+                    jacoby,
+                    after_turn,
+                    [0, 0],
+                );
+                if let Some(doubler) = pending {
+                    use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
+                    let mut bytes = STANDARD_NO_PAD.decode(&after_match_id)?;
+                    bytes[1] = (bytes[1] & !(1 << 3)) | (((1 - doubler) as u8) << 3);
+                    bytes[1] |= 1 << 4;
+                    after_match_id = STANDARD_NO_PAD.encode(bytes);
                 }
                 moves.push(SourceMove {
                     game_no: game_index as i32 + 1,
@@ -880,6 +939,8 @@ fn parse_sgf_context(
                     dice,
                     position_id: ids::position_id(&before_event, pending_before.unwrap_or(player)),
                     match_id,
+                    after_board: board.to_vec(),
+                    after_match_id,
                 });
             }
         }
@@ -905,6 +966,17 @@ fn parse_sgf_context(
                 kind: "resign",
                 player,
                 notation: "Resign".to_owned(),
+                after_board: board.to_vec(),
+                after_match_id: ids::match_id(
+                    length,
+                    scores,
+                    cube,
+                    owner,
+                    crawford,
+                    jacoby,
+                    player,
+                    [0, 0],
+                ),
                 checker_ply: None,
                 board: board.to_vec(),
                 dice: [0, 0],
@@ -921,7 +993,20 @@ fn parse_sgf_context(
                 ),
             });
         }
+        let (result_board, result_cube, result_owner) =
+            terminal_evidence.unwrap_or((board, cube, owner));
+        let outcome = crate::game_result::derive(
+            &result_board,
+            result_cube,
+            jacoby && result_owner == -1,
+            scores,
+            terminal_checker,
+            dropped_by,
+            one(root, "RE")?,
+        );
+        result_cubes.push(result_cube);
         result.games.push(crate::model::MatchGame {
+            result: outcome.clone(),
             game_no: game_index as i32 + 1,
             position_count: ply,
             white_score: scores[0],
@@ -950,7 +1035,60 @@ fn parse_sgf_context(
             }
         }
     }
+    // Read only explicit next-root score fields. Inferred results must never
+    // feed previous_scores or alter position/match IDs during source replay.
+    for (index, (game, (next, cube))) in result
+        .games
+        .iter_mut()
+        .zip(trees.iter().skip(1).zip(result_cubes))
+        .enumerate()
+    {
+        if game.result.is_none()
+            && !trees[index][0].contains_key("RE")
+            && consecutive_declared_games(&trees[index][0], &next[0])
+            && let Some(scores_after) = explicit_scores(&next[0])
+        {
+            game.result = crate::game_result::from_following_scores(
+                [game.white_score, game.black_score],
+                scores_after,
+                cube,
+            );
+        }
+    }
     Ok((result, contexts))
+}
+
+fn consecutive_declared_games(current: &Node, next: &Node) -> bool {
+    let game_number = |root: &Node| -> Option<i32> {
+        root.get("MI")?.iter().rev().find_map(|field| {
+            let (key, value) = field.split_once(':')?;
+            key.eq_ignore_ascii_case("game")
+                .then(|| value.trim().parse().ok())
+                .flatten()
+        })
+    };
+    match (game_number(current), game_number(next)) {
+        (Some(current), Some(next)) => current.checked_add(1) == Some(next),
+        _ => true,
+    }
+}
+
+fn explicit_scores(root: &Node) -> Option<[i32; 2]> {
+    let mut scores = [None, None];
+    for field in root.get("MI")? {
+        let (key, value) = field.split_once(':')?;
+        let side = match key.to_ascii_lowercase().as_str() {
+            "ws" => 0,
+            "bs" => 1,
+            _ => continue,
+        };
+        let value = value.trim().parse::<i32>().ok()?;
+        if scores[side].is_some_and(|previous| previous != value) {
+            return None;
+        }
+        scores[side] = Some(value);
+    }
+    Some([scores[0]?, scores[1]?])
 }
 
 /// Compact, bounded transport for foreign native evaluations. The source

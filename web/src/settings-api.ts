@@ -1,13 +1,23 @@
 import type { components } from './generated-api';
 import { isAnalysisDepth } from './analysis-depth';
+import { isPlayMode, type PlayMode } from './play-mode-messages';
 
 type Schema = components['schemas'];
 export type AppSettings = Omit<
   Schema['AppSettings'],
-  'analysis_engine' | 'play_engine'
+  | 'analysis_engine'
+  | 'play_engine'
+  | 'bearoff_direction'
+  | 'default_play_mode'
+  | 'tutor_threshold'
+  | 'training_auto_analysis'
 > & {
   analysis_engine: 'gnubg';
   play_engine: 'gnubg';
+  bearoff_direction?: 'right' | 'left';
+  default_play_mode?: PlayMode;
+  tutor_threshold?: number;
+  training_auto_analysis?: boolean;
 };
 export type EngineInfo = Required<Schema['EngineInfo']>;
 
@@ -50,6 +60,17 @@ function parseSettings(value: unknown): AppSettings {
     typeof value.player_name !== 'string' ||
     value.analysis_engine !== 'gnubg' ||
     value.play_engine !== 'gnubg' ||
+    (value.bearoff_direction !== undefined &&
+      !['left', 'right'].includes(String(value.bearoff_direction))) ||
+    (value.default_play_mode !== undefined &&
+      !isPlayMode(value.default_play_mode)) ||
+    (value.tutor_threshold !== undefined &&
+      (typeof value.tutor_threshold !== 'number' ||
+        !Number.isFinite(value.tutor_threshold) ||
+        value.tutor_threshold <= 0 ||
+        value.tutor_threshold > 1)) ||
+    (value.training_auto_analysis !== undefined &&
+      typeof value.training_auto_analysis !== 'boolean') ||
     !isAnalysisDepth(value.analysis_plies) ||
     ![0, 1, 2].includes(Number(value.play_plies)) ||
     typeof value.analysis_plies !== 'number' ||

@@ -140,7 +140,7 @@ pub async fn match_games(pool: &PgPool, match_id: Uuid) -> Result<Option<Vec<Mat
         .fetch_all(pool)
         .await?;
     if !games.is_empty() {
-        return Ok(Some(games));
+        return Ok(Some(enrich_game_results(pool, match_id, games).await?));
     }
     let mut tx = pool.begin().await?;
     let source: Option<String> =
@@ -158,7 +158,7 @@ pub async fn match_games(pool: &PgPool, match_id: Uuid) -> Result<Option<Vec<Mat
         .await?;
     if !games.is_empty() {
         tx.commit().await?;
-        return Ok(Some(games));
+        return Ok(Some(enrich_game_results(pool, match_id, games).await?));
     }
     let games =
         tokio::task::spawn_blocking(move || crate::import::parse_sgf(&source).map(|m| m.games))
@@ -166,6 +166,38 @@ pub async fn match_games(pool: &PgPool, match_id: Uuid) -> Result<Option<Vec<Mat
     insert_games(&mut tx, match_id, &games).await?;
     tx.commit().await?;
     Ok(Some(games))
+}
+
+// Computed metadata deliberately stays out of match_games and retained source-less
+// collection context. A damaged/unavailable source must not hide the catalog.
+async fn enrich_game_results(
+    pool: &PgPool,
+    id: Uuid,
+    mut games: Vec<MatchGame>,
+) -> Result<Vec<MatchGame>> {
+    let source: Option<String> =
+        sqlx::query_scalar("SELECT sgf FROM matches WHERE id=$1 AND NOT collection_only")
+            .bind(id)
+            .fetch_optional(pool)
+            .await?;
+    if let Some(source) = source.filter(|source| !source.trim().is_empty()) {
+        let parsed = tokio::task::spawn_blocking(move || {
+            crate::import::sgf::parse_sgf_with_context(&source)
+        })
+        .await?;
+        if let Ok((imported, _)) = parsed {
+            for game in &mut games {
+                if let Some(source_game) = imported.games.iter().find(|g| g.game_no == game.game_no)
+                    && source_game.white_score == game.white_score
+                    && source_game.black_score == game.black_score
+                    && source_game.position_count == game.position_count
+                {
+                    game.result = source_game.result.clone();
+                }
+            }
+        }
+    }
+    Ok(games)
 }
 
 pub async fn get_match(pool: &PgPool, id: Uuid) -> Result<Option<MatchSummary>> {
@@ -388,7 +420,7 @@ pub async fn latest_match_job_scoped(
     match_id: Uuid,
     game_no: Option<i32>,
 ) -> Result<Option<Job>> {
-    Ok(sqlx::query_as("SELECT * FROM jobs WHERE match_uuid=$1 AND game_no IS NOT DISTINCT FROM $2 AND kind='match' ORDER BY created_at DESC,id DESC LIMIT 1")
+    Ok(sqlx::query_as("SELECT * FROM jobs WHERE source_revision=(SELECT source_revision FROM matches WHERE id=$1) AND match_uuid=$1 AND game_no IS NOT DISTINCT FROM $2 AND kind='match' ORDER BY created_at DESC,id DESC LIMIT 1")
         .bind(match_id).bind(game_no).fetch_optional(pool).await?)
 }
 

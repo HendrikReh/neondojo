@@ -1,5 +1,9 @@
 /* Reference move history: notation, player/dice context, numeric loss. */
-.analysis-workspace .moves-panel .moves-list .move-history-row {
+:is(.analysis-workspace, .play-workspace)
+  .moves-panel
+  .moves-list
+  .move-history-row {
+  position: relative;
   display: grid;
   grid-template-columns: 29px minmax(0, 1fr) auto;
   align-items: center;
@@ -16,17 +20,34 @@
   outline: none;
   text-align: left;
 }
-.analysis-workspace .moves-panel .moves-list .move-history-row:last-child {
+:is(.analysis-workspace, .play-workspace)
+  .moves-panel
+  .moves-list
+  > .move-history-row:last-child,
+:is(.analysis-workspace, .play-workspace)
+  .moves-panel
+  .moves-list
+  > :last-child
+  > .move-history-row {
   border-bottom: 0;
 }
-.analysis-workspace .moves-panel .moves-list .move-history-row:hover {
+:is(.analysis-workspace, .play-workspace)
+  .moves-panel
+  .moves-list
+  :where(button).move-history-row:hover {
   background: var(--ui-surface-alt);
 }
-.analysis-workspace .moves-panel .moves-list .move-history-row.current {
+:is(.analysis-workspace, .play-workspace)
+  .moves-panel
+  .moves-list
+  .move-history-row.current {
   background: var(--ui-selected);
   box-shadow: inset 3px 0 var(--ui-accent);
 }
-.analysis-workspace .moves-panel .moves-list .move-history-row:focus-visible,
+:is(.analysis-workspace, .play-workspace)
+  .moves-panel
+  .moves-list
+  .move-history-row:focus-visible,
 .analysis-workspace .moves-list .move-history-row.current:focus {
   outline: 2px solid var(--ui-accent);
   outline-offset: -2px;
@@ -37,7 +58,10 @@
   gap: 2px;
   min-width: 0;
 }
-.analysis-workspace .moves-list .move-history-details > strong {
+:is(.analysis-workspace, .play-workspace)
+  .moves-list
+  .move-history-details
+  > strong {
   flex: none;
   padding: 0;
   font-size: var(--font-size-table);
@@ -62,20 +86,27 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.analysis-workspace .move-history-context .move-dice {
+:is(.analysis-workspace, .play-workspace) .move-history-context .move-dice {
   padding: 0;
   border: 0;
   background: transparent;
   font: inherit;
   font-variant-numeric: tabular-nums;
 }
-.analysis-workspace .moves-list .move-history-row .move-no {
+:is(.analysis-workspace, .play-workspace)
+  .moves-list
+  .move-history-row
+  .move-no {
   width: auto;
   font-size: var(--font-size-micro);
   color: var(--ui-muted);
 }
-.analysis-workspace .move-history-row .move-assessment-marker,
-.analysis-workspace .move-history-row .move-assessment-unavailable {
+:is(.analysis-workspace, .play-workspace)
+  .move-history-row
+  .move-assessment-marker,
+:is(.analysis-workspace, .play-workspace)
+  .move-history-row
+  .move-assessment-unavailable {
   display: inline-flex;
   justify-content: center;
   min-width: 44px;
@@ -87,22 +118,32 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.analysis-workspace .move-history-row .move-assessment-unavailable {
+:is(.analysis-workspace, .play-workspace)
+  .move-history-row
+  .move-assessment-unavailable {
   color: var(--ui-muted);
 }
-.analysis-workspace .move-assessment-none .move-assessment-marker {
+:is(.analysis-workspace, .play-workspace)
+  .move-assessment-none
+  .move-assessment-marker {
   color: var(--ui-success-text);
   background: var(--ui-success-bg);
 }
-.analysis-workspace .move-assessment-doubtful .move-assessment-marker {
+:is(.analysis-workspace, .play-workspace)
+  .move-assessment-doubtful
+  .move-assessment-marker {
   color: var(--ui-warning-text);
   background: var(--ui-warning-bg);
 }
-.analysis-workspace .move-assessment-bad .move-assessment-marker {
+:is(.analysis-workspace, .play-workspace)
+  .move-assessment-bad
+  .move-assessment-marker {
   color: var(--ui-bad-text);
   background: var(--ui-bad-bg);
 }
-.analysis-workspace .move-assessment-very_bad .move-assessment-marker {
+:is(.analysis-workspace, .play-workspace)
+  .move-assessment-very_bad
+  .move-assessment-marker {
   color: var(--ui-danger-text);
   background: var(--ui-danger-bg);
 }

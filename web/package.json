@@ -19,6 +19,7 @@
     "test:themes": "python3 -m unittest discover -s ../tools -p 'test_*.py'"
   },
   "dependencies": {
+    "lucide-react": "^1.71.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

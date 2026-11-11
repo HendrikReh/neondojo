@@ -27,6 +27,7 @@ import { useWorkspaceText } from './workspace-messages';
 import type { AnnotationKind } from './annotation-api';
 import { useMoveAssessments } from './useMoveAssessments';
 import MoveHistoryRow from './MoveHistoryRow';
+import GameResultSummary from './GameResultSummary';
 import AnalysisMatchHeader from './AnalysisMatchHeader';
 import { hasMatchSource } from './match-source';
 import { useAnalysisMatchHeaderText } from './analysis-match-header-messages';
@@ -129,10 +130,13 @@ export default function AnalysisWorkspace({
     if (!list || !current || !list.clientHeight) return;
     const outer = list.getBoundingClientRect(),
       row = current.getBoundingClientRect();
+    const result = current.nextElementSibling;
+    const bottom = result?.matches('.game-result-summary')
+      ? result.getBoundingClientRect().bottom
+      : row.bottom;
     if (row.top < outer.top) list.scrollTop -= outer.top - row.top;
-    else if (row.bottom > outer.bottom)
-      list.scrollTop += row.bottom - outer.bottom;
-  }, [position?.id, positions.length, detail, focus]);
+    else if (bottom > outer.bottom) list.scrollTop += bottom - outer.bottom;
+  }, [position?.id, positions.length, detail, focus, game?.result]);
   const [moveFilter, setMoveFilter] = useState<{
     player: string;
     kind: string;
@@ -152,8 +156,6 @@ export default function AnalysisWorkspace({
           ? { ...selected, positionId: position.id }
           : undefined,
       );
-      if (selected)
-        setBoardView((view) => (view === 'before' ? 'arrows' : view));
     },
     [position],
   );
@@ -163,6 +165,43 @@ export default function AnalysisWorkspace({
     [position, selectedPreview?.notation],
   );
   const effectiveView = preview?.ok ? boardView : 'before';
+  useEffect(() => {
+    if (!active || !selectedPreview || notesSuspended) return;
+    function changePreview(event: globalThis.KeyboardEvent) {
+      if (
+        event.defaultPrevented ||
+        !['ArrowLeft', 'ArrowRight'].includes(event.key) ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey
+      )
+        return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (
+        document.querySelector('dialog[open]') ||
+        target?.closest(
+          'input,textarea,select,a,[contenteditable="true"],[contenteditable=""],[role="tablist"],[role="dialog"]',
+        )
+      )
+        return;
+      const button = target?.closest('button');
+      if (
+        button &&
+        !button.matches('.candidate-preview-button') &&
+        !button.closest('.board-view-buttons')
+      )
+        return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === 'ArrowLeft') setBoardView('before');
+      else if (preview?.ok) setBoardView('after');
+    }
+    // Handle the active preview before the app's match-history arrow shortcuts.
+    window.addEventListener('keydown', changePreview, true);
+    return () => window.removeEventListener('keydown', changePreview, true);
+  }, [active, selectedPreview, preview?.ok, notesSuspended]);
+
   const [nextErrorFailure, setNextErrorFailure] = useState<unknown>();
   const [noErrors, setNoErrors] = useState(false);
   const tabRefs = useRef<
@@ -317,6 +356,13 @@ export default function AnalysisWorkspace({
                 onSelect={() => navigation.selectIndex(i)}
               />
             ))}
+            {!loading && sourceAvailable && game?.result && (
+              <GameResultSummary
+                result={game.result}
+                white={match.white}
+                black={match.black}
+              />
+            )}
           </div>
           {!!moveAssessments.error && (
             <p className="move-assessment-error" role="alert">

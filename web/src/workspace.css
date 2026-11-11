@@ -294,9 +294,6 @@
   font-size: var(--font-size-control);
   padding: 9px 8px;
 }
-.position-inspector .analysis-controls button span {
-  display: none;
-}
 .position-inspector .tabs {
   gap: 10px;
   justify-content: space-between;

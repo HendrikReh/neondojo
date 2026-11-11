@@ -52,8 +52,36 @@ pub struct MatchSummary {
     pub created_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum GameResultReason {
+    Single,
+    Gammon,
+    Backgammon,
+    Drop,
+    Resignation,
+    Recorded,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct GameResult {
+    /// 0 is White; 1 is Black.
+    pub winner: i32,
+    pub points: i32,
+    /// Accepted cube value, before any declined offer.
+    pub cube: i32,
+    /// Only present when the source supports this cube calculation.
+    pub multiplier: Option<i32>,
+    pub reason: GameResultReason,
+    pub scores_after: [i32; 2],
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct MatchGame {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[sqlx(skip)]
+    /// Terminal source evidence, an explicit award, or an unambiguous delta established by both explicit next-game scores.
+    pub result: Option<GameResult>,
     pub game_no: i32,
     pub position_count: i32,
     pub white_score: i32,

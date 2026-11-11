@@ -2,7 +2,11 @@ import { useEffect, useState } from 'react';
 import { useI18n } from './i18n';
 import XgPositionView from './XgPositionView';
 import { useBoardReviewText } from './board-review-messages';
-import type { PreviewCandidate } from './candidate-preview';
+import {
+  focusCandidateRow,
+  navigateCandidatePreview,
+  type PreviewCandidate,
+} from './candidate-preview';
 import { useSourceText } from './analysis-source-messages';
 import type { SourceAnalysis, BookLookup } from './source-analysis-api';
 export default function SourceAnalysisView({
@@ -223,15 +227,6 @@ export default function SourceAnalysisView({
       )}
       {checker && candidates.length > 0 && (
         <div className="source-candidates">
-          {onPreview && (
-            <button
-              type="button"
-              className="preview-best"
-              onClick={() => preview(candidates[0])}
-            >
-              {review('best')}
-            </button>
-          )}
           <table className="candidates">
             <thead>
               <tr>
@@ -241,9 +236,40 @@ export default function SourceAnalysisView({
                 <th>{t('analysis.win')}</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody
+              onKeyDown={
+                onPreview
+                  ? (event) =>
+                      navigateCandidatePreview(event, (index) =>
+                        preview(candidates[index]),
+                      )
+                  : undefined
+              }
+            >
               {candidates.map((c) => (
-                <tr key={c.rank} className={c.rank === 1 ? 'best-move' : ''}>
+                <tr
+                  key={c.rank}
+                  className={[
+                    c.rank === 1 ? 'best-move' : '',
+                    onPreview ? 'candidate-preview-row' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                  data-preview-selected={
+                    onPreview
+                      ? selectedPreview?.notation === c.notation &&
+                        selectedPreview?.source === previewSource
+                      : undefined
+                  }
+                  onClick={
+                    onPreview
+                      ? (event) => {
+                          focusCandidateRow(event.currentTarget);
+                          preview(c);
+                        }
+                      : undefined
+                  }
+                >
                   <td>{c.rank}</td>
                   <td>
                     {onPreview ? (
@@ -258,7 +284,6 @@ export default function SourceAnalysisView({
                           selectedPreview?.notation === c.notation &&
                           selectedPreview?.source === previewSource
                         }
-                        onClick={() => preview(c)}
                       >
                         {formatDecision(c.notation)}
                       </button>

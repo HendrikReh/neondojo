@@ -58,11 +58,6 @@
   background: var(--ui-selected);
   border-color: var(--ui-accent);
 }
-.preview-best {
-  font-size: var(--font-size-control);
-  padding: 6px 9px;
-  margin: 8px 0;
-}
 .position-inspector .inspector-tabs {
   flex-wrap: wrap;
 }
@@ -81,4 +76,16 @@
   .board-view-buttons {
     gap: 4px;
   }
+}
+
+.candidates .candidate-preview-row {
+  cursor: pointer;
+}
+.candidates .candidate-preview-row:hover,
+.candidates .candidate-preview-row:focus-within,
+.candidates .candidate-preview-row[data-preview-selected='true'] {
+  background: var(--ui-selected);
+}
+.candidates .candidate-preview-row[data-preview-selected='true'] {
+  box-shadow: inset 3px 0 var(--ui-accent);
 }

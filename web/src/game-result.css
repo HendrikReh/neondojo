@@ -1,0 +1,20 @@
+.game-result-summary {
+  grid-column: 1 / -1;
+  margin: 10px 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--ui-surface, white);
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+  font-size: 0.8rem;
+}
+.game-result-summary strong {
+  color: var(--ui-accent, #3158c9);
+}
+.game-result-summary p {
+  margin: 5px 0 0;
+}
+.game-result-summary .game-result-score {
+  color: var(--text-muted);
+}

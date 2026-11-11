@@ -30,3 +30,9 @@ pub mod position_browser;
 pub mod position_bookmarks;
 
 mod position_retention;
+
+pub mod play;
+
+mod game_result;
+
+pub mod study;

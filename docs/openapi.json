@@ -1531,6 +1531,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -2218,6 +2228,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -2566,6 +2586,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -2649,6 +2679,16 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "",
             "content": {
               "application/json": {
@@ -2862,6 +2902,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -3049,6 +3099,16 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "",
             "content": {
               "application/json": {
@@ -3277,6 +3337,494 @@
             }
           },
           "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/play/sessions": {
+      "get": {
+        "tags": [
+          "Playing"
+        ],
+        "operationId": "list_sessions",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlaySession"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Playing"
+        ],
+        "operationId": "create_session",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePlaySession"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaySession"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/play/sessions/{id}": {
+      "get": {
+        "tags": [
+          "Playing"
+        ],
+        "operationId": "get_session",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaySession"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/play/sessions/{id}/actions": {
+      "post": {
+        "tags": [
+          "Playing"
+        ],
+        "operationId": "act",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaySession"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/play/sessions/{id}/feedback": {
+      "post": {
+        "tags": [
+          "Playing"
+        ],
+        "operationId": "feedback",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayFeedbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaySession"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/play/sessions/{id}/history": {
+      "get": {
+        "tags": [
+          "Playing"
+        ],
+        "operationId": "history_snapshots",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "description": "Saved session revision",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayHistorySnapshots"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/play/sessions/{id}/mode": {
+      "post": {
+        "tags": [
+          "Playing"
+        ],
+        "operationId": "change_mode",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayModeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaySession"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/play/sessions/{id}/review": {
+      "post": {
+        "tags": [
+          "Playing"
+        ],
+        "operationId": "review",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaySession"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/play/sessions/{id}/sgf": {
+      "get": {
+        "tags": [
+          "Playing"
+        ],
+        "operationId": "export_sgf",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/x-go-sgf": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -3692,6 +4240,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -3988,6 +4546,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -4021,6 +4589,16 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "",
             "content": {
               "application/json": {
@@ -4089,6 +4667,174 @@
             }
           },
           "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/study/reports": {
+      "get": {
+        "tags": [
+          "Study"
+        ],
+        "operationId": "list_reports",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "group_by",
+            "in": "query",
+            "description": "\"session\" paginates complete money sessions; point reports remain individual.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudyReportPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/study/reports/{id}": {
+      "get": {
+        "tags": [
+          "Study"
+        ],
+        "operationId": "get_report",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaySession"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/study/reports/{id}/history": {
+      "get": {
+        "tags": [
+          "Study"
+        ],
+        "operationId": "report_history",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayHistorySnapshots"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -4360,6 +5106,39 @@
           }
         }
       },
+      "AnalyzedGame": {
+        "type": "object",
+        "required": [
+          "engine",
+          "game_no",
+          "decisions"
+        ],
+        "properties": {
+          "decisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Decision"
+            }
+          },
+          "engine": {
+            "type": "string"
+          },
+          "game_no": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "statistics": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/NativePlayerStatistics"
+            },
+            "description": "Authoritative native statistics. Absent if the export cannot prove full coverage."
+          }
+        }
+      },
       "Annotation": {
         "type": "object",
         "required": [
@@ -4552,6 +5331,12 @@
             "maximum": 4,
             "minimum": 0
           },
+          "bearoff_direction": {
+            "type": "string"
+          },
+          "default_play_mode": {
+            "$ref": "#/components/schemas/PlayMode"
+          },
           "gnubg_path": {
             "type": "string"
           },
@@ -4566,6 +5351,13 @@
           },
           "player_name": {
             "type": "string"
+          },
+          "training_auto_analysis": {
+            "type": "boolean"
+          },
+          "tutor_threshold": {
+            "type": "number",
+            "format": "double"
           },
           "version": {
             "type": "integer",
@@ -5250,6 +6042,52 @@
         },
         "additionalProperties": false
       },
+      "CreatePlaySession": {
+        "type": "object",
+        "required": [
+          "human_player",
+          "match_length"
+        ],
+        "properties": {
+          "human_player": {
+            "type": "integer",
+            "format": "int32",
+            "maximum": 1,
+            "minimum": 0
+          },
+          "match_length": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Zero starts a continuous money-game session; 1..25 starts a point match.",
+            "maximum": 25,
+            "minimum": 0
+          },
+          "play_mode": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PlayMode"
+              }
+            ]
+          },
+          "training_auto_analysis": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "tutor_threshold": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
       "CreatePositionFilter": {
         "type": "object",
         "required": [
@@ -5821,6 +6659,14 @@
           }
         }
       },
+      "FeedbackOperation": {
+        "type": "string",
+        "enum": [
+          "hint",
+          "reveal",
+          "retry"
+        ]
+      },
       "GameAnalysisStatistics": {
         "type": "object",
         "required": [
@@ -5987,6 +6833,61 @@
             "$ref": "#/components/schemas/GamePlan"
           }
         }
+      },
+      "GameResult": {
+        "type": "object",
+        "required": [
+          "winner",
+          "points",
+          "cube",
+          "reason",
+          "scores_after"
+        ],
+        "properties": {
+          "cube": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Accepted cube value, before any declined offer."
+          },
+          "multiplier": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Only present when the source supports this cube calculation."
+          },
+          "points": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/GameResultReason"
+          },
+          "scores_after": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "winner": {
+            "type": "integer",
+            "format": "int32",
+            "description": "0 is White; 1 is Black."
+          }
+        }
+      },
+      "GameResultReason": {
+        "type": "string",
+        "enum": [
+          "single",
+          "gammon",
+          "backgammon",
+          "drop",
+          "resignation",
+          "recorded"
+        ]
       },
       "Health": {
         "type": "object",
@@ -6686,6 +7587,17 @@
             "type": "integer",
             "format": "int32"
           },
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GameResult",
+                "description": "Terminal source evidence, an explicit award, or an unambiguous delta established by both explicit next-game scores."
+              }
+            ]
+          },
           "white_score": {
             "type": "integer",
             "format": "int32"
@@ -6934,6 +7846,39 @@
           "very_bad"
         ]
       },
+      "NativePlayerStatistics": {
+        "type": "object",
+        "required": [
+          "total_checker_moves",
+          "total_cube_decisions",
+          "unforced_checker_moves",
+          "close_cube_decisions",
+          "normalized_equity_loss"
+        ],
+        "properties": {
+          "close_cube_decisions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "normalized_equity_loss": {
+            "type": "number",
+            "format": "double",
+            "description": "GNUbg's combined normalized Error total EMG, exported to six decimals."
+          },
+          "total_checker_moves": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total_cube_decisions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "unforced_checker_moves": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "NextCard": {
         "type": "object",
         "required": [
@@ -6952,6 +7897,39 @@
           },
           "counts": {
             "$ref": "#/components/schemas/ReviewCounts"
+          }
+        }
+      },
+      "OpeningRoll": {
+        "type": "object",
+        "required": [
+          "white_die",
+          "black_die",
+          "winner",
+          "rolls"
+        ],
+        "properties": {
+          "black_die": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "rolls": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int32"
+              }
+            }
+          },
+          "white_die": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "winner": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -6981,6 +7959,797 @@
           },
           "profile": {
             "type": "string"
+          }
+        }
+      },
+      "PlayAction": {
+        "type": "string",
+        "enum": [
+          "opening_roll",
+          "start_opening_move",
+          "roll",
+          "move",
+          "pass",
+          "double",
+          "take",
+          "drop",
+          "resign",
+          "next_game",
+          "end_session"
+        ]
+      },
+      "PlayActionRequest": {
+        "type": "object",
+        "required": [
+          "version",
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/PlayAction"
+          },
+          "decision_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "move": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "resign_level": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Resign the current game for a single (1), gammon (2), or backgammon (3).\nRequired for resign; invalid for every other action.",
+            "maximum": 3,
+            "minimum": 1
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlayAlternative": {
+        "type": "object",
+        "required": [
+          "action",
+          "notation",
+          "loss"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "equity": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "loss": {
+            "type": "number",
+            "format": "double"
+          },
+          "move_index": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "notation": {
+            "type": "string"
+          },
+          "probabilities": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "rating_decisions": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PlayAttempt": {
+        "type": "object",
+        "required": [
+          "action",
+          "assisted"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "assisted": {
+            "type": "boolean"
+          },
+          "loss": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "move_index": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "notation": {
+            "type": "string"
+          },
+          "rating_decisions": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "severity": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "PlayDecision": {
+        "type": "object",
+        "required": [
+          "id",
+          "warning",
+          "revealed",
+          "assisted",
+          "retry_count",
+          "alternatives",
+          "attempts",
+          "committed"
+        ],
+        "properties": {
+          "action": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "alternatives": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlayAlternative"
+            }
+          },
+          "assisted": {
+            "type": "boolean"
+          },
+          "attempts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlayAttempt"
+            }
+          },
+          "committed": {
+            "type": "boolean"
+          },
+          "first_loss": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "first_rating_decisions": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "first_severity": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "game_no": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "history_index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "loss": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "move_index": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "notation": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "original_action": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "original_move_index": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "original_notation": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rating_decisions": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "retry_count": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "revealed": {
+            "type": "boolean"
+          },
+          "severity": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "warning": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PlayEngine": {
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "plies"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "plies": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "PlayFeedbackRequest": {
+        "type": "object",
+        "required": [
+          "version",
+          "operation"
+        ],
+        "properties": {
+          "decision_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/FeedbackOperation"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlayGameResult": {
+        "type": "object",
+        "description": "Completed source games, attached after their final played history event.",
+        "required": [
+          "game_no",
+          "history_index",
+          "result"
+        ],
+        "properties": {
+          "game_no": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "history_index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "result": {
+            "$ref": "#/components/schemas/GameResult"
+          }
+        }
+      },
+      "PlayHistory": {
+        "type": "object",
+        "required": [
+          "player",
+          "dice",
+          "notation"
+        ],
+        "properties": {
+          "dice": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "notation": {
+            "type": "string"
+          },
+          "player": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PlayHistorySnapshot": {
+        "type": "object",
+        "required": [
+          "index",
+          "game_no",
+          "move_no",
+          "kind",
+          "before",
+          "after"
+        ],
+        "properties": {
+          "after": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "before": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "game_no": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "kind": {
+            "type": "string",
+            "examples": [
+              "checker",
+              "cube",
+              "resign"
+            ]
+          },
+          "move_no": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PlayHistorySnapshots": {
+        "type": "object",
+        "description": "Read-only snapshots aligned one-for-one with the saved session history.",
+        "required": [
+          "session_id",
+          "version",
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlayHistorySnapshot"
+            }
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "PlayMode": {
+        "type": "string",
+        "enum": [
+          "competition",
+          "training",
+          "coach",
+          "tutor"
+        ]
+      },
+      "PlayModeRequest": {
+        "type": "object",
+        "required": [
+          "version",
+          "play_mode"
+        ],
+        "properties": {
+          "play_mode": {
+            "$ref": "#/components/schemas/PlayMode"
+          },
+          "tutor_threshold": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlayMove": {
+        "type": "object",
+        "required": [
+          "notation",
+          "steps"
+        ],
+        "properties": {
+          "notation": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlayStep"
+            }
+          }
+        }
+      },
+      "PlayPhase": {
+        "type": "string",
+        "enum": [
+          "opening_roll",
+          "opening_result",
+          "roll",
+          "move",
+          "double_response",
+          "game_over",
+          "match_over"
+        ]
+      },
+      "PlayReview": {
+        "type": "object",
+        "required": [
+          "analysis_plies",
+          "games",
+          "assisted",
+          "first_attempt_loss",
+          "final_choice_loss",
+          "first_attempt_count",
+          "retry_count",
+          "first_attempt_rating_decisions",
+          "first_attempt_rating_method",
+          "first_attempt_rating_profile",
+          "independent_first_attempt_count",
+          "assisted_first_attempt_count"
+        ],
+        "properties": {
+          "analysis_plies": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "assisted": {
+            "type": "boolean"
+          },
+          "assisted_first_attempt_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "final_choice_loss": {
+            "type": "number",
+            "format": "double"
+          },
+          "first_attempt_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "first_attempt_loss": {
+            "type": "number",
+            "format": "double",
+            "description": "Sum of first attempted losses; not a performance rating."
+          },
+          "first_attempt_rating": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "EMG500 of original choices on reached positions, using native relevance."
+          },
+          "first_attempt_rating_decisions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "first_attempt_rating_method": {
+            "type": "string"
+          },
+          "first_attempt_rating_profile": {
+            "type": "string"
+          },
+          "games": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnalyzedGame"
+            },
+            "description": "Actual played match only; native statistics preserve GNUbg's denominator."
+          },
+          "independent_first_attempt_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "retry_count": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "PlayReviewRequest": {
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlaySession": {
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "human_player",
+          "human_name",
+          "match_length",
+          "bearoff_direction",
+          "engine",
+          "position",
+          "phase",
+          "can_double",
+          "legal_moves",
+          "history",
+          "scores",
+          "game_no"
+        ],
+        "properties": {
+          "analysis_plies": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "bearoff_direction": {
+            "type": "string"
+          },
+          "can_double": {
+            "type": "boolean"
+          },
+          "decisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlayDecision"
+            }
+          },
+          "engine": {
+            "$ref": "#/components/schemas/PlayEngine"
+          },
+          "game_learning_used": {
+            "type": "boolean"
+          },
+          "game_no": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "game_results": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PlayGameResult"
+            }
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlayHistory"
+            }
+          },
+          "human_name": {
+            "type": "string"
+          },
+          "human_player": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "learning_used": {
+            "type": "boolean"
+          },
+          "legal_moves": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlayMove"
+            }
+          },
+          "library_match_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Current linked library entry; projected from the relational session link."
+          },
+          "match_length": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "money_session_ended": {
+            "type": "boolean",
+            "description": "An explicitly closed money session cannot start another game."
+          },
+          "opening": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OpeningRoll"
+              }
+            ]
+          },
+          "pending_decision": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PlayDecision"
+              }
+            ]
+          },
+          "phase": {
+            "$ref": "#/components/schemas/PlayPhase"
+          },
+          "play_mode": {
+            "$ref": "#/components/schemas/PlayMode"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "review": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PlayReview"
+              }
+            ]
+          },
+          "review_game_no": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "scores": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "study_report_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "study_report_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "training_auto_analysis": {
+            "type": "boolean"
+          },
+          "tutor_threshold": {
+            "type": "number",
+            "format": "double"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "winner": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "PlayStep": {
+        "type": "object",
+        "required": [
+          "from",
+          "to"
+        ],
+        "properties": {
+          "from": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "to": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -7960,6 +9729,126 @@
             ],
             "format": "uuid",
             "description": "Checker notes use this canonical position occurrence; cube notes use id."
+          }
+        }
+      },
+      "StudyReportPage": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StudyReportSummary"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "StudyReportSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "session_id",
+          "session_scores",
+          "money_session_ended",
+          "name",
+          "created_at",
+          "updated_at",
+          "human_player",
+          "human_name",
+          "match_length",
+          "scores",
+          "play_mode",
+          "assisted",
+          "analysis_plies"
+        ],
+        "properties": {
+          "analysis_plies": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "assisted": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "first_attempt_rating": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "game_no": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "human_name": {
+            "type": "string"
+          },
+          "human_player": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "library_match_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "match_length": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "money_session_ended": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "play_mode": {
+            "type": "string"
+          },
+          "scores": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "session_scores": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "description": "Current cumulative session score; never the sum of per-report scores."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

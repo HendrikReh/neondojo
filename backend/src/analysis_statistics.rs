@@ -89,6 +89,11 @@ async fn statistics(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<JobAnalysisStatistics>> {
+    // Complete the source visibility check before holding a pool connection.
+    let visibility_job = crate::store::get_job(&state.pool, id)
+        .await?
+        .ok_or_else(ApiError::missing)?;
+    crate::play::require_job_review_available(&state.pool, &visibility_job).await?;
     // A worker may checkpoint while this request runs. All summary and coverage
     // reads must describe the same committed database snapshot.
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;

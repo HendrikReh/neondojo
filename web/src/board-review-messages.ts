@@ -52,14 +52,6 @@ const entries = {
     'Podgląd ruchu {rank}: {move}',
     'Anteprima mossa {rank}: {move}',
   ],
-  best: [
-    'Preview best move',
-    'Besten Zug ansehen',
-    'Ver la mejor jugada',
-    'Voir le meilleur coup',
-    'Podgląd najlepszego ruchu',
-    'Anteprima della mossa migliore',
-  ],
   unavailable: [
     'This move cannot be previewed safely. The stored position remains available.',
     'Dieser Zug kann nicht sicher dargestellt werden. Die gespeicherte Stellung bleibt verfügbar.',

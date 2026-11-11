@@ -619,35 +619,38 @@ pub async fn position_records(
     }
     Ok(Some(records_where(pool, match_id, Some(id), None).await?))
 }
+
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/matches/{id}/imported-analysis", get(get_match))
         .route("/api/positions/{id}/imported-analysis", get(get_position))
         .route("/api/moves/{id}/imported-analysis", get(get_move))
 }
-#[utoipa::path(get,path="/api/matches/{id}/imported-analysis",params(("id"=Uuid,Path)),responses((status=200,body=ImportedAnalysisSummary),(status=404,body=ErrorBody)),tag="Imported analysis")]
+#[utoipa::path(get,path="/api/matches/{id}/imported-analysis",params(("id"=Uuid,Path)),responses((status=200,body=ImportedAnalysisSummary),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Imported analysis")]
 async fn get_match(
     State(s): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<ImportedAnalysisSummary>> {
+    crate::play::require_review_available(&s.pool, id).await?;
     Ok(Json(
         match_summary(&s.pool, id)
             .await?
             .ok_or_else(ApiError::missing)?,
     ))
 }
-#[utoipa::path(get,path="/api/positions/{id}/imported-analysis",params(("id"=Uuid,Path)),responses((status=200,body=Vec<ImportedAnalysisRecord>),(status=404,body=ErrorBody)),tag="Imported analysis")]
+#[utoipa::path(get,path="/api/positions/{id}/imported-analysis",params(("id"=Uuid,Path)),responses((status=200,body=Vec<ImportedAnalysisRecord>),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Imported analysis")]
 async fn get_position(
     State(s): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<Vec<ImportedAnalysisRecord>>> {
+    crate::play::require_position_review_available(&s.pool, id).await?;
     Ok(Json(
         position_records(&s.pool, id)
             .await?
             .ok_or_else(ApiError::missing)?,
     ))
 }
-#[utoipa::path(get,path="/api/moves/{id}/imported-analysis",params(("id"=Uuid,Path)),responses((status=200,body=Vec<ImportedAnalysisRecord>),(status=404,body=ErrorBody)),tag="Imported analysis")]
+#[utoipa::path(get,path="/api/moves/{id}/imported-analysis",params(("id"=Uuid,Path)),responses((status=200,body=Vec<ImportedAnalysisRecord>),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Imported analysis")]
 async fn get_move(
     State(s): State<AppState>,
     Path(id): Path<Uuid>,
@@ -659,6 +662,7 @@ async fn get_move(
             .await
             .map_err(anyhow::Error::from)?;
     let (match_id, game, mov) = row.ok_or_else(ApiError::missing)?;
+    crate::play::require_review_available(&s.pool, match_id).await?;
     if !ensure_catalog(&s.pool, match_id).await? {
         return Err(ApiError::missing());
     }

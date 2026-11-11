@@ -23,8 +23,18 @@ async fn main() -> anyhow::Result<()> {
         .acquire_timeout(std::time::Duration::from_secs(5))
         .connect(&url)
         .await?;
+    if let Ok(expected) = std::env::var("BGTUTOR_E2E_DATABASE_NAME") {
+        let actual: String = sqlx::query_scalar("SELECT current_database()")
+            .fetch_one(&pool)
+            .await?;
+        anyhow::ensure!(
+            expected.starts_with("bgtutor_e2e_") && actual == expected,
+            "Browser test backend must use the provisioned test database"
+        );
+    }
     sqlx::migrate!().run(&pool).await?;
     while bgtutor::databases::backfill_source_metadata(&pool).await? > 0 {}
+    while bgtutor::play::backfill_library_matches(&pool).await? > 0 {}
     let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or_else(|_| "gnubg".into()));
     match engine.version().await {
         Ok(version) => tracing::info!(%version,"Local engine ready"),
@@ -43,6 +53,7 @@ async fn main() -> anyhow::Result<()> {
     }
     let address = std::env::var("BGTUTOR_BIND").unwrap_or_else(|_| "127.0.0.1:8787".into());
     let listener = tokio::net::TcpListener::bind(&address).await?;
+    let address = listener.local_addr()?;
     tracing::info!(%address,"BG Tutor listening");
     let shutdown = stop.clone();
     axum::serve(listener, app)

@@ -724,6 +724,134 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/play/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_sessions"];
+        put?: never;
+        post: operations["create_session"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/play/sessions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_session"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/play/sessions/{id}/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["act"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/play/sessions/{id}/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["feedback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/play/sessions/{id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["history_snapshots"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/play/sessions/{id}/mode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["change_mode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/play/sessions/{id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["review"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/play/sessions/{id}/sgf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["export_sgf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/position-browser": {
         parameters: {
             query?: never;
@@ -884,6 +1012,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/study/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_reports"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/study/reports/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_report"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/study/reports/{id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["report_history"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tags": {
         parameters: {
             query?: never;
@@ -960,6 +1136,14 @@ export interface components {
             /** Format: int32 */
             plies: number;
         };
+        AnalyzedGame: {
+            decisions: components["schemas"]["Decision"][];
+            engine: string;
+            /** Format: int32 */
+            game_no: number;
+            /** @description Authoritative native statistics. Absent if the export cannot prove full coverage. */
+            statistics?: components["schemas"]["NativePlayerStatistics"][] | null;
+        };
         Annotation: {
             /** @description Plaintext Markdown; never interpreted as trusted HTML. */
             comment: string;
@@ -1020,11 +1204,16 @@ export interface components {
              * @default 2
              */
             analysis_plies: number;
+            bearoff_direction?: string;
+            default_play_mode?: components["schemas"]["PlayMode"];
             gnubg_path: string;
             play_engine: string;
             /** Format: int32 */
             play_plies: number;
             player_name: string;
+            training_auto_analysis?: boolean;
+            /** Format: double */
+            tutor_threshold?: number;
             /**
              * Format: int64
              * @description Expected revision on PUT; a successful write increments it by one.
@@ -1209,6 +1398,19 @@ export interface components {
         };
         CreateDeck: {
             name: string;
+        };
+        CreatePlaySession: {
+            /** Format: int32 */
+            human_player: number;
+            /**
+             * Format: int32
+             * @description Zero starts a continuous money-game session; 1..25 starts a point match.
+             */
+            match_length: number;
+            play_mode?: null | components["schemas"]["PlayMode"];
+            training_auto_analysis?: boolean | null;
+            /** Format: double */
+            tutor_threshold?: number | null;
         };
         CreatePositionFilter: {
             definition: components["schemas"]["PositionFilterDefinition"];
@@ -1403,6 +1605,8 @@ export interface components {
             format: string;
             match_ids: string[];
         };
+        /** @enum {string} */
+        FeedbackOperation: "hint" | "reveal" | "retry";
         GameAnalysisStatistics: {
             /** @description True only when this source game has a durable, complete checkpoint for this job. */
             analyzed: boolean;
@@ -1459,6 +1663,29 @@ export interface components {
             source_revision: string;
             white: components["schemas"]["GamePlan"];
         };
+        GameResult: {
+            /**
+             * Format: int32
+             * @description Accepted cube value, before any declined offer.
+             */
+            cube: number;
+            /**
+             * Format: int32
+             * @description Only present when the source supports this cube calculation.
+             */
+            multiplier?: number | null;
+            /** Format: int32 */
+            points: number;
+            reason: components["schemas"]["GameResultReason"];
+            scores_after: number[];
+            /**
+             * Format: int32
+             * @description 0 is White; 1 is Black.
+             */
+            winner: number;
+        };
+        /** @enum {string} */
+        GameResultReason: "single" | "gammon" | "backgammon" | "drop" | "resignation" | "recorded";
         Health: {
             database: boolean;
             gnubg?: string | null;
@@ -1658,6 +1885,7 @@ export interface components {
             game_no: number;
             /** Format: int32 */
             position_count: number;
+            result?: null | components["schemas"]["GameResult"];
             /** Format: int32 */
             white_score: number;
         };
@@ -1741,9 +1969,33 @@ export interface components {
          * @enum {string}
          */
         MoveSeverity: "none" | "doubtful" | "bad" | "very_bad";
+        NativePlayerStatistics: {
+            /** Format: int32 */
+            close_cube_decisions: number;
+            /**
+             * Format: double
+             * @description GNUbg's combined normalized Error total EMG, exported to six decimals.
+             */
+            normalized_equity_loss: number;
+            /** Format: int32 */
+            total_checker_moves: number;
+            /** Format: int32 */
+            total_cube_decisions: number;
+            /** Format: int32 */
+            unforced_checker_moves: number;
+        };
         NextCard: {
             card?: null | components["schemas"]["CardQuestion"];
             counts: components["schemas"]["ReviewCounts"];
+        };
+        OpeningRoll: {
+            /** Format: int32 */
+            black_die: number;
+            rolls: number[][];
+            /** Format: int32 */
+            white_die: number;
+            /** Format: int32 */
+            winner: number;
         };
         PerformanceRatingSummary: {
             /**
@@ -1758,6 +2010,227 @@ export interface components {
             method: string;
             players: components["schemas"]["PlayerPerformanceRating"][];
             profile: string;
+        };
+        /** @enum {string} */
+        PlayAction: "opening_roll" | "start_opening_move" | "roll" | "move" | "pass" | "double" | "take" | "drop" | "resign" | "next_game" | "end_session";
+        PlayActionRequest: {
+            action: components["schemas"]["PlayAction"];
+            /** Format: uuid */
+            decision_id?: string | null;
+            move?: number | null;
+            /**
+             * Format: int32
+             * @description Resign the current game for a single (1), gammon (2), or backgammon (3).
+             *     Required for resign; invalid for every other action.
+             */
+            resign_level?: number | null;
+            /** Format: int64 */
+            version: number;
+        };
+        PlayAlternative: {
+            action: string;
+            /** Format: double */
+            equity?: number | null;
+            /** Format: double */
+            loss: number;
+            move_index?: number | null;
+            notation: string;
+            probabilities?: number[] | null;
+            /** Format: int32 */
+            rating_decisions?: number;
+        };
+        PlayAttempt: {
+            action: string;
+            assisted: boolean;
+            /** Format: double */
+            loss?: number | null;
+            move_index?: number | null;
+            notation?: string;
+            /** Format: int32 */
+            rating_decisions?: number | null;
+            severity?: string | null;
+        };
+        PlayDecision: {
+            action?: string | null;
+            alternatives: components["schemas"]["PlayAlternative"][];
+            assisted: boolean;
+            attempts: components["schemas"]["PlayAttempt"][];
+            committed: boolean;
+            /** Format: double */
+            first_loss?: number | null;
+            /** Format: int32 */
+            first_rating_decisions?: number | null;
+            first_severity?: string | null;
+            /** Format: int32 */
+            game_no?: number;
+            history_index?: number;
+            /** Format: uuid */
+            id: string;
+            /** Format: double */
+            loss?: number | null;
+            move_index?: number | null;
+            notation?: string | null;
+            original_action?: string | null;
+            original_move_index?: number | null;
+            original_notation?: string | null;
+            /** Format: int32 */
+            rating_decisions?: number | null;
+            /** Format: int32 */
+            retry_count: number;
+            revealed: boolean;
+            severity?: string | null;
+            warning: boolean;
+        };
+        PlayEngine: {
+            id: string;
+            /** Format: int32 */
+            plies: number;
+            version: string;
+        };
+        PlayFeedbackRequest: {
+            /** Format: uuid */
+            decision_id?: string | null;
+            operation: components["schemas"]["FeedbackOperation"];
+            /** Format: int64 */
+            version: number;
+        };
+        /** @description Completed source games, attached after their final played history event. */
+        PlayGameResult: {
+            /** Format: int32 */
+            game_no: number;
+            history_index: number;
+            result: components["schemas"]["GameResult"];
+        };
+        PlayHistory: {
+            dice: number[];
+            notation: string;
+            /** Format: int32 */
+            player: number;
+        };
+        PlayHistorySnapshot: {
+            after: components["schemas"]["Position"];
+            before: components["schemas"]["Position"];
+            /** Format: int32 */
+            game_no: number;
+            index: number;
+            /**
+             * @example checker
+             * @example cube
+             * @example resign
+             */
+            kind: string;
+            /** Format: int32 */
+            move_no: number;
+        };
+        /** @description Read-only snapshots aligned one-for-one with the saved session history. */
+        PlayHistorySnapshots: {
+            items: components["schemas"]["PlayHistorySnapshot"][];
+            /** Format: uuid */
+            session_id: string;
+            /** Format: int64 */
+            version: number;
+        };
+        /** @enum {string} */
+        PlayMode: "competition" | "training" | "coach" | "tutor";
+        PlayModeRequest: {
+            play_mode: components["schemas"]["PlayMode"];
+            /** Format: double */
+            tutor_threshold?: number | null;
+            /** Format: int64 */
+            version: number;
+        };
+        PlayMove: {
+            notation: string;
+            steps: components["schemas"]["PlayStep"][];
+        };
+        /** @enum {string} */
+        PlayPhase: "opening_roll" | "opening_result" | "roll" | "move" | "double_response" | "game_over" | "match_over";
+        PlayReview: {
+            /** Format: int32 */
+            analysis_plies: number;
+            assisted: boolean;
+            assisted_first_attempt_count: number;
+            /** Format: double */
+            final_choice_loss: number;
+            first_attempt_count: number;
+            /**
+             * Format: double
+             * @description Sum of first attempted losses; not a performance rating.
+             */
+            first_attempt_loss: number;
+            /**
+             * Format: double
+             * @description EMG500 of original choices on reached positions, using native relevance.
+             */
+            first_attempt_rating?: number | null;
+            /** Format: int32 */
+            first_attempt_rating_decisions: number;
+            first_attempt_rating_method: string;
+            first_attempt_rating_profile: string;
+            /** @description Actual played match only; native statistics preserve GNUbg's denominator. */
+            games: components["schemas"]["AnalyzedGame"][];
+            independent_first_attempt_count: number;
+            /** Format: int32 */
+            retry_count: number;
+        };
+        PlayReviewRequest: {
+            /** Format: int64 */
+            version: number;
+        };
+        PlaySession: {
+            /** Format: int32 */
+            analysis_plies?: number;
+            bearoff_direction: string;
+            can_double: boolean;
+            decisions?: components["schemas"]["PlayDecision"][];
+            engine: components["schemas"]["PlayEngine"];
+            game_learning_used?: boolean;
+            /** Format: int32 */
+            game_no: number;
+            game_results?: components["schemas"]["PlayGameResult"][] | null;
+            history: components["schemas"]["PlayHistory"][];
+            human_name: string;
+            /** Format: int32 */
+            human_player: number;
+            /** Format: uuid */
+            id: string;
+            learning_used?: boolean;
+            legal_moves: components["schemas"]["PlayMove"][];
+            /**
+             * Format: uuid
+             * @description Current linked library entry; projected from the relational session link.
+             */
+            library_match_id?: string | null;
+            /** Format: int32 */
+            match_length: number;
+            /** @description An explicitly closed money session cannot start another game. */
+            money_session_ended?: boolean;
+            opening?: null | components["schemas"]["OpeningRoll"];
+            pending_decision?: null | components["schemas"]["PlayDecision"];
+            phase: components["schemas"]["PlayPhase"];
+            play_mode?: components["schemas"]["PlayMode"];
+            position: components["schemas"]["Position"];
+            review?: null | components["schemas"]["PlayReview"];
+            /** Format: int32 */
+            review_game_no?: number | null;
+            scores: number[];
+            /** Format: uuid */
+            study_report_id?: string | null;
+            /** Format: int64 */
+            study_report_version?: number | null;
+            training_auto_analysis?: boolean;
+            /** Format: double */
+            tutor_threshold?: number;
+            /** Format: int64 */
+            version: number;
+            /** Format: int32 */
+            winner?: number | null;
+        };
+        PlayStep: {
+            /** Format: int32 */
+            from: number;
+            /** Format: int32 */
+            to: number;
         };
         PlayerAnalysisSummary: {
             /** Format: int32 */
@@ -2070,6 +2543,40 @@ export interface components {
              * @description Checker notes use this canonical position occurrence; cube notes use id.
              */
             position_uuid?: string | null;
+        };
+        StudyReportPage: {
+            items: components["schemas"]["StudyReportSummary"][];
+            next_cursor?: string | null;
+        };
+        StudyReportSummary: {
+            /** Format: int32 */
+            analysis_plies: number;
+            assisted: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: double */
+            first_attempt_rating?: number | null;
+            /** Format: int32 */
+            game_no?: number | null;
+            human_name: string;
+            /** Format: int32 */
+            human_player: number;
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            library_match_id?: string | null;
+            /** Format: int32 */
+            match_length: number;
+            money_session_ended: boolean;
+            name: string;
+            play_mode: string;
+            scores: number[];
+            /** Format: uuid */
+            session_id: string;
+            /** @description Current cumulative session score; never the sum of per-report scores. */
+            session_scores: number[];
+            /** Format: date-time */
+            updated_at: string;
         };
         UpdatePositionFilter: {
             definition: components["schemas"]["PositionFilterDefinition"];
@@ -3115,6 +3622,14 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     events: {
@@ -3434,6 +3949,14 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     latest_match_analysis: {
@@ -3663,6 +4186,14 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     game_decisions: {
@@ -3715,6 +4246,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3855,6 +4394,14 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     get_move: {
@@ -3984,6 +4531,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4166,6 +4721,350 @@ export interface operations {
                 };
             };
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_sessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaySession"][];
+                };
+            };
+        };
+    };
+    create_session: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePlaySession"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaySession"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_session: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaySession"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    act: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlayActionRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaySession"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    feedback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlayFeedbackRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaySession"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    history_snapshots: {
+        parameters: {
+            query: {
+                /** @description Saved session revision */
+                version: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayHistorySnapshots"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    change_mode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlayModeRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaySession"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    review: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlayReviewRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaySession"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    export_sgf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-go-sgf": string;
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4425,6 +5324,14 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     get_position_annotation: {
@@ -4643,6 +5550,14 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     position_book: {
@@ -4665,6 +5580,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4723,6 +5646,106 @@ export interface operations {
                 };
             };
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_reports: {
+        parameters: {
+            query?: {
+                limit?: number | null;
+                after?: string | null;
+                /** @description "session" paginates complete money sessions; point reports remain individual. */
+                group_by?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyReportPage"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_report: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaySession"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    report_history: {
+        parameters: {
+            query: {
+                version: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayHistorySnapshots"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

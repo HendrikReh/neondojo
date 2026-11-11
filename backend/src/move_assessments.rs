@@ -88,6 +88,7 @@ async fn assessments(
     Path(id): Path<Uuid>,
     Query(query): Query<MoveAssessmentQuery>,
 ) -> ApiResult<Json<GameMoveAssessments>> {
+    crate::play::require_review_available(&state.pool, id).await?;
     if query.game_no <= 0 {
         return Err(ApiError::invalid("game_no must be positive"));
     }

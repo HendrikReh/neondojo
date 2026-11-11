@@ -1,3 +1,4 @@
+import ActionButton from './ActionButton';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { type Analysis, type Distribution, type DiceStats } from './api';
 import type { Jobs } from './useJobs';
@@ -5,7 +6,11 @@ import { useI18n } from './i18n';
 import { useAnalysisSources } from './useAnalysisSources';
 import { useSourceText } from './analysis-source-messages';
 import SourceAnalysisView from './SourceAnalysisView';
-import type { PreviewCandidate } from './candidate-preview';
+import {
+  focusCandidateRow,
+  navigateCandidatePreview,
+  type PreviewCandidate,
+} from './candidate-preview';
 import { useBoardReviewText } from './board-review-messages';
 import './analysis-sources.css';
 import { DEFAULT_ANALYSIS_PLIES } from './analysis-depth';
@@ -145,16 +150,19 @@ export default function AnalysisPanel({
             <option value={4}>4-ply</option>
           </select>
         </label>
-        <button
+        <ActionButton
+          icon="analysis"
+          label={t('analysis.analyze')}
           className="primary"
           disabled={disabled || pending}
           onClick={() => choose('analysis')}
-        >
-          {t('analysis.analyze')} <span aria-hidden="true">↗</span>
-        </button>
-        <button disabled={disabled || pending} onClick={() => choose('dice')}>
-          {t('analysis.distribution')}
-        </button>
+        />
+        <ActionButton
+          icon="dice"
+          label={t('analysis.distribution')}
+          disabled={disabled || pending}
+          onClick={() => choose('dice')}
+        />
       </div>
       {pending && (
         <div className="job-progress" role="status">
@@ -262,20 +270,6 @@ export default function AnalysisPanel({
         selectedSource === 'engine' &&
         (analysis ? (
           <>
-            {onPreview && analysis.candidates[0] && (
-              <button
-                type="button"
-                className="preview-best"
-                onClick={() =>
-                  onPreview({
-                    ...analysis.candidates[0],
-                    source: `${analysis.engine} · ${analysis.plies}-ply`,
-                  })
-                }
-              >
-                {review('best')}
-              </button>
-            )}
             <table className="candidates">
               <thead>
                 <tr>
@@ -285,9 +279,47 @@ export default function AnalysisPanel({
                   <th>{t('analysis.win')}</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody
+                onKeyDown={
+                  onPreview
+                    ? (event) =>
+                        navigateCandidatePreview(event, (index) =>
+                          onPreview({
+                            ...analysis.candidates[index],
+                            source: `${analysis.engine} · ${analysis.plies}-ply`,
+                          }),
+                        )
+                    : undefined
+                }
+              >
                 {analysis.candidates.map((c) => (
-                  <tr key={c.rank} className={c.rank === 1 ? 'best-move' : ''}>
+                  <tr
+                    key={c.rank}
+                    className={[
+                      c.rank === 1 ? 'best-move' : '',
+                      onPreview ? 'candidate-preview-row' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                    data-preview-selected={
+                      onPreview
+                        ? selectedPreview?.notation === c.notation &&
+                          selectedPreview?.source ===
+                            `${analysis.engine} · ${analysis.plies}-ply`
+                        : undefined
+                    }
+                    onClick={
+                      onPreview
+                        ? (event) => {
+                            focusCandidateRow(event.currentTarget);
+                            onPreview({
+                              ...c,
+                              source: `${analysis.engine} · ${analysis.plies}-ply`,
+                            });
+                          }
+                        : undefined
+                    }
+                  >
                     <td>{formatNumber(c.rank, { minimumIntegerDigits: 2 })}</td>
                     <td>
                       {onPreview ? (
@@ -302,12 +334,6 @@ export default function AnalysisPanel({
                             selectedPreview?.notation === c.notation &&
                             selectedPreview?.source ===
                               `${analysis.engine} · ${analysis.plies}-ply`
-                          }
-                          onClick={() =>
-                            onPreview({
-                              ...c,
-                              source: `${analysis.engine} · ${analysis.plies}-ply`,
-                            })
                           }
                         >
                           {formatDecision(c.notation)}

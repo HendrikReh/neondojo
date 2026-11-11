@@ -1,3 +1,4 @@
+import ActionButton from './ActionButton';
 import type { BoardView, MovePreview } from './move-preview';
 import type { PreviewCandidate } from './candidate-preview';
 import { useBoardReviewText } from './board-review-messages';
@@ -31,6 +32,15 @@ export default function BoardReviewControls({
             type="button"
             key={mode}
             aria-pressed={view === mode}
+            aria-keyshortcuts={
+              selected
+                ? mode === 'before'
+                  ? 'ArrowLeft'
+                  : mode === 'after'
+                    ? 'ArrowRight'
+                    : undefined
+                : undefined
+            }
             disabled={mode !== 'before' && !preview.ok}
             onClick={() => onView(mode)}
           >
@@ -40,13 +50,14 @@ export default function BoardReviewControls({
       </div>
       {selected && (
         <div className="board-review-selection">
-          <button
+          <ActionButton
+            icon="reset"
+            label={l('reset')}
+            compact
             type="button"
             className="played-preview-button"
             onClick={onPlayed}
-          >
-            {l('reset')}
-          </button>
+          />
           <strong>
             {l('candidate', {
               rank: selected.rank,

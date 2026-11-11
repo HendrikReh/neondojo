@@ -16,6 +16,12 @@ use utoipa::{OpenApi, ToSchema};
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct AppSettings {
+    #[serde(default = "crate::play::default_play_mode")]
+    pub default_play_mode: crate::play::PlayMode,
+    #[serde(default = "crate::play::default_threshold")]
+    pub tutor_threshold: f64,
+    #[serde(default = "crate::play::default_auto_analysis")]
+    pub training_auto_analysis: bool,
     /// Expected revision on PUT; a successful write increments it by one.
     pub version: i64,
     pub player_name: String,
@@ -26,6 +32,12 @@ pub struct AppSettings {
     #[schema(minimum = 0, maximum = 2)]
     pub play_plies: i32,
     pub gnubg_path: String,
+    #[serde(default = "default_bearoff_direction")]
+    pub bearoff_direction: String,
+}
+
+fn default_bearoff_direction() -> String {
+    "right".into()
 }
 
 #[derive(FromRow)]
@@ -118,6 +130,14 @@ fn validate_path(path: &str) -> ApiResult<()> {
     Ok(())
 }
 fn validate(settings: &AppSettings) -> ApiResult<()> {
+    if !(settings.tutor_threshold.is_finite()
+        && 0.0 < settings.tutor_threshold
+        && settings.tutor_threshold <= 1.0)
+    {
+        return Err(ApiError::invalid(
+            "tutor_threshold must be greater than 0 and at most 1",
+        ));
+    }
     if settings.version < 0 || settings.version == i64::MAX {
         return Err(ApiError::invalid("Invalid settings version"));
     }
@@ -138,6 +158,9 @@ fn validate(settings: &AppSettings) -> ApiResult<()> {
     }
     if !(0..=2).contains(&settings.play_plies) {
         return Err(ApiError::invalid("play plies must be 0..2"));
+    }
+    if !matches!(settings.bearoff_direction.as_str(), "right" | "left") {
+        return Err(ApiError::invalid("bearoff direction must be right or left"));
     }
     validate_path(&settings.gnubg_path)
 }
@@ -164,9 +187,9 @@ async fn put_settings(
         .check_installation()
         .await
         .map_err(|e| ApiError::invalid(format!("GNUbg installation check failed: {e:#}")))?;
-    let saved: Option<AppSettings> = sqlx::query_as("UPDATE app_settings SET version=version+1,player_name=$2,analysis_engine=$3,analysis_plies=$4,play_engine=$5,play_plies=$6,gnubg_path=$7,gnubg_version=$8 WHERE singleton=true AND version=$1 RETURNING *")
+    let saved: Option<AppSettings> = sqlx::query_as("UPDATE app_settings SET version=version+1,player_name=$2,analysis_engine=$3,analysis_plies=$4,play_engine=$5,play_plies=$6,gnubg_path=$7,gnubg_version=$8,bearoff_direction=$9,default_play_mode=$10,tutor_threshold=$11,training_auto_analysis=$12 WHERE singleton=true AND version=$1 RETURNING *")
         .bind(settings.version).bind(settings.player_name).bind(settings.analysis_engine).bind(settings.analysis_plies)
-        .bind(settings.play_engine).bind(settings.play_plies).bind(settings.gnubg_path).bind(version)
+        .bind(settings.play_engine).bind(settings.play_plies).bind(settings.gnubg_path).bind(version).bind(settings.bearoff_direction).bind(settings.default_play_mode).bind(settings.tutor_threshold).bind(settings.training_auto_analysis)
         .fetch_optional(&state.pool).await.map_err(anyhow::Error::from)?;
     Ok(Json(saved.ok_or_else(conflict)?))
 }

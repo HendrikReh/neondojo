@@ -1,0 +1,169 @@
+.play-interruption-dialog.learning-review-dialog {
+  width: min(1100px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: hidden;
+  text-align: left;
+}
+.learning-review-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.learning-review-dialog > .play-dialog-heading,
+.learning-review-context,
+.learning-review-summary {
+  flex: 0 0 auto;
+}
+.learning-review-dialog .play-dialog-drag-handle {
+  justify-content: flex-start;
+}
+.learning-review-dialog .learning-review-context {
+  margin: 0 0 12px;
+  color: var(--ui-muted);
+  overflow-wrap: anywhere;
+  max-height: 4.2em;
+  overflow: auto;
+}
+.learning-review-dialog .play-learning-review {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+}
+.learning-review-dialog .learning-review-summary h3 {
+  display: none;
+}
+.learning-review-summary p {
+  margin: 0 0 8px;
+  line-height: 1.4;
+}
+.learning-review-summary .play-mode-help {
+  max-width: none;
+  font-size: var(--font-size-meta);
+}
+.learning-review-decisions {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: min(55dvh, 520px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-right: 8px;
+}
+.learning-review-dialog .play-feedback-results {
+  max-height: none;
+  overflow: visible;
+  margin: 8px 0 16px;
+}
+.learning-review-decisions th {
+  position: sticky;
+  top: 0;
+  background: var(--ui-surface);
+}
+.learning-review-decisions details {
+  margin-bottom: 8px;
+  overflow-wrap: anywhere;
+}
+.learning-review-decisions summary {
+  cursor: pointer;
+}
+@media (max-width: 600px) {
+  .play-interruption-dialog.learning-review-dialog {
+    padding: 16px;
+  }
+  .learning-review-dialog .play-dialog-heading > h2 {
+    font-size: 1.1rem;
+  }
+}
+
+/* On short landscape screens, scroll the report as a whole below its title. */
+@media (max-height: 560px) {
+  .learning-review-dialog .play-learning-review {
+    display: block;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  .learning-review-dialog .learning-review-decisions {
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+.learning-review-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.learning-review-content--preview {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 20px;
+}
+.learning-decision-preview {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+.learning-review-preview-label {
+  margin: 0 0 10px;
+  overflow-wrap: anywhere;
+}
+.learning-review-preview-board .board-shell {
+  width: 100%;
+}
+.learning-review-content--preview .learning-review-decisions {
+  min-width: 0;
+}
+.learning-review-decision {
+  cursor: pointer;
+}
+.learning-review-decision:hover,
+.learning-review-decision[aria-selected='true'] {
+  background: var(--ui-selected);
+}
+.learning-review-decision:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: -2px;
+}
+.learning-review-dialog .learning-review-decision-number {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ui-accent);
+  font: inherit;
+}
+@media (max-width: 850px), (max-height: 560px) {
+  .learning-review-content--preview {
+    display: block;
+    overflow: auto;
+  }
+  .learning-review-content--preview .learning-review-decisions {
+    overflow: visible;
+    max-height: none;
+  }
+  .learning-decision-preview {
+    overflow: visible;
+    margin-bottom: 16px;
+  }
+}
+@media (max-height: 560px) {
+  .learning-review-content {
+    display: block;
+    overflow: visible;
+  }
+}
+
+.learning-preview-return {
+  display: none;
+}
+@media (max-width: 850px), (max-height: 560px) {
+  .learning-preview-return {
+    display: inline-flex;
+    margin-top: 12px;
+  }
+}

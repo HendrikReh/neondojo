@@ -77,6 +77,8 @@ pub(crate) type ApiResult<T> = Result<T, ApiError>;
 pub fn router(state: AppState) -> Router {
     Router::new()
         .merge(crate::settings::routes())
+        .merge(crate::play::routes())
+        .merge(crate::study::routes())
         .merge(crate::opening_book::routes())
         .merge(crate::imported_analysis::routes())
         .merge(crate::databases::routes())
@@ -320,11 +322,12 @@ async fn matches(
     ))
 }
 
-#[utoipa::path(get, path="/api/matches/{id}", params(("id"=Uuid, Path)), responses((status=200, body=MatchSummary), (status=404, body=ErrorBody)), tag="Library")]
+#[utoipa::path(get, path="/api/matches/{id}", params(("id"=Uuid, Path)), responses((status=200, body=MatchSummary), (status=404, body=ErrorBody), (status=422, body=ErrorBody)), tag="Library")]
 async fn get_match(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<MatchSummary>> {
+    crate::play::require_review_available(&state.pool, id).await?;
     Ok(Json(
         store::get_match(&state.pool, id)
             .await?
@@ -332,11 +335,12 @@ async fn get_match(
     ))
 }
 
-#[utoipa::path(get, path="/api/matches/{id}/games", params(("id"=Uuid, Path)), responses((status=200, body=Vec<MatchGame>), (status=404, body=ErrorBody)), tag="Library")]
+#[utoipa::path(get, path="/api/matches/{id}/games", params(("id"=Uuid, Path)), responses((status=200, body=Vec<MatchGame>), (status=404, body=ErrorBody), (status=422, body=ErrorBody)), tag="Library")]
 async fn match_games(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<Vec<MatchGame>>> {
+    crate::play::require_review_available(&state.pool, id).await?;
     Ok(Json(
         store::match_games(&state.pool, id)
             .await?
@@ -344,11 +348,12 @@ async fn match_games(
     ))
 }
 
-#[utoipa::path(get, path="/api/positions/{id}", params(("id"=Uuid, Path)), responses((status=200, body=Position), (status=404, body=ErrorBody)), tag="Library")]
+#[utoipa::path(get, path="/api/positions/{id}", params(("id"=Uuid, Path)), responses((status=200, body=Position), (status=404, body=ErrorBody), (status=422, body=ErrorBody)), tag="Library")]
 async fn get_position(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<Position>> {
+    crate::play::require_position_review_available(&state.pool, id).await?;
     Ok(Json(
         store::get_position(&state.pool, id)
             .await?
@@ -376,8 +381,9 @@ async fn validate_game(
     Ok(games)
 }
 
-#[utoipa::path(get, path="/api/matches/{id}/source", params(("id"=Uuid, Path)), responses((status=200, body=String, content_type="application/x-go-sgf"), (status=404, body=ErrorBody)), tag="Library")]
+#[utoipa::path(get, path="/api/matches/{id}/source", params(("id"=Uuid, Path)), responses((status=200, body=String, content_type="application/x-go-sgf"), (status=404, body=ErrorBody), (status=422, body=ErrorBody)), tag="Library")]
 async fn source(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResult<Response> {
+    crate::play::require_review_available(&state.pool, id).await?;
     let sgf: Option<String> =
         sqlx::query_scalar("SELECT sgf FROM matches WHERE id=$1 AND NOT collection_only")
             .bind(id)
@@ -412,6 +418,9 @@ async fn positions(
     State(state): State<AppState>,
     Query(query): Query<PositionQuery>,
 ) -> ApiResult<Json<PositionPage>> {
+    if let Some(id) = query.match_id {
+        crate::play::require_review_available(&state.pool, id).await?;
+    }
     if query.game_no.is_some() {
         let match_id = query
             .match_id
@@ -477,6 +486,7 @@ async fn dice(
     Path(id): Path<Uuid>,
     Query(query): Query<GameScope>,
 ) -> ApiResult<Json<DiceStats>> {
+    crate::play::require_review_available(&state.pool, id).await?;
     validate_game(&state, id, query.game_no).await?;
     Ok(Json(
         store::dice_stats_scoped(&state.pool, id, query.game_no).await?,
@@ -508,6 +518,7 @@ async fn create_job(
     payload: Result<Json<JobRequest>, axum::extract::rejection::JsonRejection>,
 ) -> ApiResult<(StatusCode, Json<Job>)> {
     let Json(request) = payload.map_err(|e| ApiError::invalid(e.body_text()))?;
+    crate::play::require_position_review_available(&state.pool, request.position_id).await?;
     let (settings, snapshot) = crate::settings::snapshot(&state).await?;
     let plies = request.plies.unwrap_or(settings.analysis_plies);
     if !(0..=4).contains(&plies) {
@@ -547,6 +558,7 @@ async fn create_match_analysis(
     Path(id): Path<Uuid>,
     payload: Result<Json<MatchAnalysisRequest>, axum::extract::rejection::JsonRejection>,
 ) -> ApiResult<(StatusCode, Json<Job>)> {
+    crate::play::require_review_available(&state.pool, id).await?;
     let Json(request) = payload.map_err(|e| ApiError::invalid(e.body_text()))?;
     let source = store::get_match(&state.pool, id)
         .await?
@@ -586,6 +598,7 @@ async fn latest_match_analysis(
     Path(id): Path<Uuid>,
     Query(query): Query<GameScope>,
 ) -> ApiResult<Json<Option<Job>>> {
+    crate::play::require_review_available(&state.pool, id).await?;
     validate_game(&state, id, query.game_no).await?;
     Ok(Json(
         store::latest_match_job_scoped(&state.pool, id, query.game_no).await?,
@@ -622,6 +635,7 @@ async fn move_analyses(
     let job = store::get_job(&state.pool, id)
         .await?
         .ok_or_else(ApiError::missing)?;
+    crate::play::require_job_review_available(&state.pool, &job).await?;
     if job.kind != "match" {
         return Err(ApiError::invalid("This job is not a match analysis"));
     }
@@ -683,13 +697,13 @@ async fn move_analyses(
     ))
 }
 
-#[utoipa::path(get, path="/api/jobs/{id}", params(("id"=Uuid, Path)), responses((status=200, body=Job), (status=404, body=ErrorBody)), tag="Analysis")]
+#[utoipa::path(get, path="/api/jobs/{id}", params(("id"=Uuid, Path)), responses((status=200, body=Job), (status=404, body=ErrorBody), (status=422, body=ErrorBody)), tag="Analysis")]
 async fn job(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResult<Json<Job>> {
-    Ok(Json(
-        store::get_job(&state.pool, id)
-            .await?
-            .ok_or_else(ApiError::missing)?,
-    ))
+    let job = store::get_job(&state.pool, id)
+        .await?
+        .ok_or_else(ApiError::missing)?;
+    crate::play::require_job_review_available(&state.pool, &job).await?;
+    Ok(Json(job))
 }
 
 #[utoipa::path(get, path="/api/jobs/{id}/events", params(("id"=Uuid, Path),("Last-Event-ID"=Option<i64>, Header, description="Resume after this persisted event ID")), responses((status=200, body=String, content_type="text/event-stream", description="SSE wire format: id: <persisted integer>\\nevent: <queued|running|progress|completed|failed>\\ndata: <JobProgress JSON>\\n\\n. Each data field conforms to components.schemas.JobProgress. Stream ends after terminal event or service shutdown; reconnect resumes via Last-Event-ID."),(status=404, body=ErrorBody),(status=422,body=ErrorBody)), tag="Analysis")]
@@ -698,9 +712,10 @@ async fn events(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Sse<impl Stream<Item = Result<Event, Infallible>>>> {
-    store::get_job(&state.pool, id)
+    let job = store::get_job(&state.pool, id)
         .await?
         .ok_or_else(ApiError::missing)?;
+    crate::play::require_job_review_available(&state.pool, &job).await?;
     let mut after = headers
         .get("last-event-id")
         .map(|h| h.to_str().ok().and_then(|s| s.parse::<i64>().ok()))
@@ -803,6 +818,8 @@ impl OpenApi for ApiDoc {
     fn openapi() -> utoipa::openapi::OpenApi {
         let mut doc = BaseApiDoc::openapi();
         doc.merge(crate::settings::SettingsDoc::openapi());
+        doc.merge(crate::play::PlayDoc::openapi());
+        doc.merge(crate::study::StudyDoc::openapi());
         doc.merge(crate::opening_book::OpeningBookDoc::openapi());
         doc.merge(crate::imported_analysis::ImportedAnalysisDoc::openapi());
         doc.merge(crate::databases::DatabaseDoc::openapi());

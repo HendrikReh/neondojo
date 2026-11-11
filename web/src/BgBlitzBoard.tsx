@@ -8,6 +8,11 @@ import {
 } from './themes';
 import { useI18n } from './i18n';
 import MoveArrows from './MoveArrows';
+import PlayBoardDice from './PlayBoardDice';
+import PlayCube from './PlayCube';
+import PlayCheckerMotion from './PlayCheckerMotion';
+import { underlayBoard, type PlaybackFrame } from './play-animation';
+import BoardPlayTargets, { type BoardInteraction } from './BoardPlayTargets';
 import type { MovePreviewStep } from './move-preview';
 
 export default function BgBlitzBoard({
@@ -17,6 +22,8 @@ export default function BgBlitzBoard({
   cubeLabel,
   onError,
   previewSteps,
+  interaction,
+  animation,
 }: {
   position: Position;
   theme: BgBlitzTheme;
@@ -24,11 +31,19 @@ export default function BgBlitzBoard({
   cubeLabel: string;
   onError: () => void;
   previewSteps?: MovePreviewStep[];
+  interaction?: BoardInteraction;
+  animation?: PlaybackFrame | null;
 }) {
   const { formatNumber } = useI18n();
   const { width, height } = theme.background;
   const context = matchContext(position.gnubg_match_id);
   const counts = checkerCounts(position.board);
+  const moving = animation?.kind === 'checker' ? animation : undefined;
+  const board = moving ? underlayBoard(moving) : position.board;
+  const offWhite =
+    15 - counts[0] - (moving?.motions.filter((m) => m.from === -1).length ?? 0);
+  const offBlack =
+    15 - counts[1] - (moving?.motions.filter((m) => m.from === 26).length ?? 0);
   function artwork(
     image: ThemeImage,
     x: number,
@@ -118,13 +133,11 @@ export default function BgBlitzBoard({
     (cubeOwner === null
       ? theme.cubeCenteredY
       : (cubeOwner === 0 ? -1 : 1) * theme.cubeOffsetY);
-  const dice = position.player === 0 ? theme.dice.white : theme.dice.black;
-  const diceX = position.player === 0 ? theme.diceRightX : theme.diceLeftX;
   return (
     <svg
       className="board bgblitz-board"
       viewBox={`0 0 ${width} ${height}`}
-      role="img"
+      role={interaction ? 'group' : 'img'}
       aria-label={label}
       data-theme={theme.id}
     >
@@ -135,17 +148,27 @@ export default function BgBlitzBoard({
         )}
       </g>
       {pointColumns.map(({ point, column, bottom }) =>
-        stack(position.board[point], column, bottom, point),
+        stack(board[point], column, bottom, point),
       )}
-      {stack(position.board[0], 7, false, 'bar-black')}
-      {stack(position.board[25], 7, true, 'bar-white')}
-      {stack(-(15 - counts[1]), 14, false, 'off-black')}
-      {stack(15 - counts[0], 14, true, 'off-white')}
-      <g
-        aria-label={cubeLabel}
-        data-cube={displayedCube}
-        data-cube-pending={context.doubled}
-        data-cube-owner={cubeOwner ?? 'centered'}
+      {stack(board[0], 7, false, 'bar-black')}
+      {stack(board[25], 7, true, 'bar-white')}
+      {stack(-offBlack, 14, false, 'off-black')}
+      {stack(offWhite, 14, true, 'off-white')}
+      {interaction && (
+        <BoardPlayTargets interaction={interaction} theme={theme} />
+      )}
+      <PlayCube
+        label={cubeLabel}
+        value={displayedCube}
+        pending={context.doubled}
+        owner={cubeOwner}
+        interaction={interaction?.cube}
+        hitArea={{
+          x: cubeX - Math.max(0, (44 - (cubeImage?.width ?? 64)) / 2),
+          y: cubeY - Math.max(44, cubeImage?.height ?? 64) / 2,
+          width: Math.max(44, cubeImage?.width ?? 64),
+          height: Math.max(44, cubeImage?.height ?? 64),
+        }}
       >
         {cubeImage ? (
           artwork(cubeImage, cubeX, cubeY - cubeImage.height / 2)
@@ -170,19 +193,17 @@ export default function BgBlitzBoard({
             </text>
           </g>
         )}
-      </g>
-      <g data-dice={position.dice.join('-')}>
-        {position.dice
-          .filter((value) => value >= 1 && value <= 6)
-          .map((value, i) =>
-            artwork(
-              dice[value - 1],
-              diceX + i * dice[value - 1].width * 1.25,
-              (height - dice[value - 1].height) / 2,
-              i,
-            ),
-          )}
-      </g>
+      </PlayCube>
+      <PlayBoardDice
+        dice={position.dice}
+        player={position.player}
+        interaction={interaction?.dice}
+        theme={theme}
+        onError={onError}
+      />
+      {moving && (
+        <PlayCheckerMotion key={animation?.id} frame={moving} theme={theme} />
+      )}
       {previewSteps && (
         <MoveArrows
           board={position.board}

@@ -257,6 +257,32 @@ impl Engine {
     }
 }
 
+pub(crate) fn decision_hint_commands(
+    position_id: &str,
+    match_id: &str,
+    plies: i32,
+) -> Result<String> {
+    ensure!((0..=4).contains(&plies), "plies must be 0..4");
+    ensure!(
+        valid_id(position_id, 14) && valid_id(match_id, 12),
+        "Invalid GNUbg ID"
+    );
+    let mut commands = format!(
+        "set display off\nset gnubgid {position_id}:{match_id}\nset output mwc off\nset output digits 6\n"
+    );
+    for kind in ["chequerplay", "cubedecision"] {
+        commands.push_str(&format!("set evaluation {kind} evaluation plies {plies}\nset evaluation {kind} evaluation cubeful on\nset evaluation {kind} evaluation deterministic on\nset evaluation {kind} evaluation noise 0\n"));
+    }
+    for depth in 1..=plies {
+        for previous in 0..depth {
+            commands.push_str(&format!(
+                "set evaluation movefilter {depth} {previous} 10000 0 0\n"
+            ));
+        }
+    }
+    Ok(commands)
+}
+
 fn normalize_mat_resignations(bytes: &[u8]) -> Result<Vec<u8>> {
     const MARKER: &[u8] = b"wants to resign";
     static RESULT: OnceLock<Regex> = OnceLock::new();
@@ -326,7 +352,7 @@ pub fn valid_id(value: &str, length: usize) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == b'+' || c == b'/')
 }
 
-fn parse_hints(output: &str) -> Result<Vec<Candidate>> {
+pub(crate) fn parse_hints(output: &str) -> Result<Vec<Candidate>> {
     static PATTERN: OnceLock<Regex> = OnceLock::new();
     let pattern = PATTERN.get_or_init(|| {
         Regex::new(r"^\s*(\d+)\.\s+Cubeful\s+\d+-ply\s+(.+?)\s+Eq\.:\s*([+-]?[\d.]+)").unwrap()
@@ -363,6 +389,25 @@ fn parse_hints(output: &str) -> Result<Vec<Candidate>> {
         "Incomplete GNUbg evaluation"
     );
     Ok(candidates)
+}
+
+pub(crate) fn parse_full_checker_hints(output: &str, plies: i32) -> Result<(Vec<Candidate>, i32)> {
+    static DEPTH: OnceLock<Regex> = OnceLock::new();
+    let depth = DEPTH.get_or_init(|| Regex::new(r"(?m)^\s*\d+\.\s+Cubeful\s+(\d+)-ply").unwrap());
+    let candidates = parse_hints(output)?;
+    let depths = depth
+        .captures_iter(output)
+        .map(|row| row[1].parse::<i32>())
+        .collect::<Result<Vec<_>, _>>()?;
+    ensure!(
+        depths.len() == candidates.len(),
+        "Missing native checker evaluation depth"
+    );
+    ensure!(
+        candidates.len() == 1 || depths.iter().all(|depth| *depth == plies),
+        "Native feedback contains lower-depth pruned candidates"
+    );
+    Ok((candidates, depths[0]))
 }
 
 fn parse_pass(output: &str, plies: i32) -> Result<Candidate> {

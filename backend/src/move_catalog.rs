@@ -133,11 +133,12 @@ pub async fn ensure_catalog(pool: &PgPool, match_id: Uuid) -> Result<bool> {
     Ok(true)
 }
 
-#[utoipa::path(get,path="/api/matches/{id}/games/{game_no}/decisions",params(("id"=Uuid,Path),("game_no"=i32,Path)),responses((status=200,body=GameDecisions),(status=404,body=ErrorBody)),tag="Library")]
+#[utoipa::path(get,path="/api/matches/{id}/games/{game_no}/decisions",params(("id"=Uuid,Path),("game_no"=i32,Path)),responses((status=200,body=GameDecisions),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Library")]
 async fn game_decisions(
     State(state): State<AppState>,
     Path((id, game_no)): Path<(Uuid, i32)>,
 ) -> ApiResult<Json<GameDecisions>> {
+    crate::play::require_review_available(&state.pool, id).await?;
     if !ensure_catalog(&state.pool, id).await? {
         return Err(ApiError::missing());
     }
@@ -164,17 +165,19 @@ async fn game_decisions(
     }))
 }
 
-#[utoipa::path(get,path="/api/moves/{id}",params(("id"=Uuid,Path)),responses((status=200,body=StoredMove),(status=404,body=ErrorBody)),tag="Library")]
+#[utoipa::path(get,path="/api/moves/{id}",params(("id"=Uuid,Path)),responses((status=200,body=StoredMove),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Library")]
 async fn get_move(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<StoredMove>> {
-    let event = sqlx::query_as("SELECT * FROM match_moves WHERE id=$1")
+    let event: Option<StoredMove> = sqlx::query_as("SELECT * FROM match_moves WHERE id=$1")
         .bind(id)
         .fetch_optional(&state.pool)
         .await
         .map_err(anyhow::Error::from)?;
-    Ok(Json(event.ok_or_else(ApiError::missing)?))
+    let event = event.ok_or_else(ApiError::missing)?;
+    crate::play::require_review_available(&state.pool, event.match_uuid).await?;
+    Ok(Json(event))
 }
 
 #[derive(OpenApi)]
