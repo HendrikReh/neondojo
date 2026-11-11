@@ -472,15 +472,19 @@ fn cube_decision(block: &str, player: i32, played: &str) -> Result<Decision> {
     let no_double = equities["No double"];
     let take = equities["Double, take"];
     let pass = equities["Double, pass"];
-    // Exported cube equities are all from the doubler's perspective, in units
-    // of the cube before the offer. The responder chooses its own best equity.
     let (actual, best, label) = match played {
         "take" | "drop" => {
-            let best = (-take).max(-pass);
+            // A pass loses one pre-offer cube unit for the responder. Older
+            // GNUbg exports use the doubler's perspective, where it is positive.
+            let (take, pass) = if pass > 0.0 {
+                (-take, -pass)
+            } else {
+                (take, pass)
+            };
             (
-                if played == "take" { -take } else { -pass },
-                best,
-                if take <= pass { "take" } else { "drop" },
+                if played == "take" { take } else { pass },
+                take.max(pass),
+                if take >= pass { "take" } else { "drop" },
             )
         }
         "double" | "no double" => {
@@ -680,6 +684,66 @@ mod tests {
     use super::*;
     const MATCH: &str = include_str!("../tests/fixtures/WC2014.gnubg.sgf");
 
+    async fn run_native_game_analysis(
+        engine: &Engine,
+        directory: &std::path::Path,
+        source: &str,
+        game_no: i32,
+        report_command: &str,
+    ) -> String {
+        tokio::fs::write(directory.join("input.sgf"), source)
+            .await
+            .unwrap();
+        let mut commands = String::from(concat!(
+            "set confirm default yes\nset display off\n",
+            "set output mwc off\nset output digits 6\nset analysis luck off\n",
+        ));
+        for kind in ["chequerplay", "cubedecision"] {
+            commands.push_str(&format!(
+                "set analysis {kind} type evaluation\nset analysis {kind} evaluation plies 0\nset analysis {kind} evaluation cubeful on\nset analysis {kind} evaluation deterministic on\nset analysis {kind} evaluation noise 0\n"
+            ));
+        }
+        commands.push_str("load match input.sgf\nfirst game\n");
+        if game_no > 1 {
+            commands.push_str(&format!("next game {}\n", game_no - 1));
+        }
+        commands.push_str("analyse clear game\nanalyse game\n");
+        commands.push_str(report_command);
+        engine
+            .run_with_timeout(directory, &commands, std::time::Duration::from_secs(30))
+            .await
+            .unwrap()
+    }
+
+    #[test]
+    fn cube_responses_use_responder_equities_in_both_export_formats() {
+        for (take_equity, best, take_loss, drop_loss) in [
+            (-0.840856, "take", 0.0, 0.159144),
+            (-1.25, "drop", 0.25, 0.0),
+            (-1.0, "take", 0.0, 0.0),
+        ] {
+            for perspective in [-1.0, 1.0] {
+                let block = format!(
+                    "1. No double {:+.6}\n2. Double, take {:+.6}\n3. Double, pass {:+.6}\n",
+                    -0.75 * perspective,
+                    take_equity * perspective,
+                    -perspective,
+                );
+                let take = cube_decision(&block, 0, "take").unwrap();
+                let drop = cube_decision(&block, 0, "drop").unwrap();
+
+                assert_eq!(take.best, best, "{block}");
+                assert_eq!(drop.best, best, "{block}");
+                assert_eq!(take.played_equity, Some(take_equity), "{block}");
+                assert_eq!(drop.played_equity, Some(-1.0), "{block}");
+                assert_eq!(take.best_equity, Some(take_equity.max(-1.0)), "{block}");
+                assert_eq!(drop.best_equity, take.best_equity, "{block}");
+                assert_eq!(take.equity_loss, take_loss, "{block}");
+                assert_eq!(drop.equity_loss, drop_loss, "{block}");
+            }
+        }
+    }
+
     #[tokio::test]
     #[ignore = "requires local GNUbg with weights"]
     async fn native_performance_statistics_exclude_forced_moves_and_trivial_cube_choices() {
@@ -692,23 +756,12 @@ mod tests {
         assert_eq!(value["statistics"][1]["unforced_checker_moves"], 1);
         assert_eq!(value["statistics"][1]["total_cube_decisions"], 1);
         assert_eq!(value["statistics"][1]["close_cube_decisions"], 0);
-        assert!(
-            (value["statistics"][0]["normalized_equity_loss"]
-                .as_f64()
-                .unwrap()
-                - 0.267064)
-                .abs()
-                < 0.000002
-        );
         // Independent CLI oracle: query native statistics directly, without
         // running our text-export parser or reconstructing losses from decisions.
         let temp = tempfile::tempdir().unwrap();
-        tokio::fs::write(temp.path().join("input.sgf"), source)
-            .await
-            .unwrap();
-        let native = engine.run_with_timeout(temp.path(),
-            "set confirm default yes\nset display off\nset output mwc off\nset output digits 6\nset analysis luck off\nset analysis chequerplay evaluation plies 0\nset analysis cubedecision evaluation plies 0\nload match input.sgf\nanalyse clear game\nanalyse game\nshow statistics game\n",
-            std::time::Duration::from_secs(30)).await.unwrap();
+        let native =
+            run_native_game_analysis(&engine, temp.path(), source, 1, "show statistics game\n")
+                .await;
         assert!(
             Regex::new(r"(?m)^Unforced moves\s+1\s+1\s*$")
                 .unwrap()
@@ -725,6 +778,7 @@ mod tests {
             .find(|line| line.starts_with("Error total EMG"))
             .unwrap();
         let oracle_white: f64 = row.split_whitespace().nth(4).unwrap().parse().unwrap();
+        assert!(oracle_white < 0.0);
         assert_eq!(
             value["statistics"][0]["normalized_equity_loss"]
                 .as_f64()
@@ -839,7 +893,7 @@ mod tests {
     async fn real_gnubg_analyzes_complete_match_with_score_context() {
         let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()));
         let mut total = 0;
-        let mut drops = Vec::new();
+        let mut game_two_drop = None;
         for game_no in 1..=10 {
             let result = engine.analyze_game(MATCH, game_no, 0).await.unwrap();
             let checker: Vec<_> = result
@@ -853,14 +907,39 @@ mod tests {
                     .iter()
                     .all(|d| d.evaluation_status == "evaluated" || d.evaluation_status == "forced")
             );
-            drops.extend(result.decisions.into_iter().filter(|d| d.played == "drop"));
+            if game_no == 2 {
+                game_two_drop = result.decisions.into_iter().find(|d| d.played == "drop");
+            }
         }
         assert_eq!(total, 460);
-        assert!(
-            drops
-                .iter()
-                .any(|d| (d.equity_loss - 0.138356).abs() < 0.000003)
-        );
+
+        let drop = game_two_drop.expect("game 2 ends with a pass");
+        let temp = tempfile::tempdir().unwrap();
+        run_native_game_analysis(
+            &engine,
+            temp.path(),
+            MATCH,
+            2,
+            "set export cube display actual on\nexport game text native.txt\n",
+        )
+        .await;
+        let report = tokio::fs::read_to_string(temp.path().join("native.txt"))
+            .await
+            .unwrap();
+        let wrong_pass: f64 = report
+            .lines()
+            .find_map(|line| {
+                line.trim()
+                    .strip_prefix("Alert: wrong pass (")?
+                    .strip_suffix(")!")
+            })
+            .expect("GNUbg reports the loss for the game 2 pass")
+            .parse()
+            .unwrap();
+        assert!(wrong_pass < 0.0);
+        assert_eq!(drop.player, 0);
+        assert_eq!(drop.best, "take");
+        assert_eq!(drop.equity_loss, -wrong_pass);
     }
 
     #[tokio::test]

@@ -28,7 +28,8 @@ async fn call(app: &axum::Router, method: &str, uri: &str, body: Value) -> (u16,
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL and GNUbg"]
 async fn real_native_analysis_flows_into_answer_hidden_checker_and_cube_practice(pool: PgPool) {
-    let source = "(;GM[6]PW[Alice]PB[Bob]MI[length:7];W[31xufe];B[42qusu])\n(;GM[6]PW[Alice]PB[Bob]MI[length:7]AE[a:y]AW[f]AB[s]PL[W]RE[W+1];W[double];B[drop])";
+    // In the cube-only game, GNUbg recommends Take from the responder's position.
+    let source = "(;GM[6]PW[Alice]PB[Bob]MI[length:7];W[31xufe];B[42qusu])\n(;GM[6]PW[Alice]PB[Bob]MI[length:7]AE[a:y]AW[i]AB[s]PL[W]RE[W+1];W[double];B[drop])";
     let imported = store::import_match(
         &pool,
         "recurring-native.sgf",
@@ -111,7 +112,7 @@ async fn real_native_analysis_flows_into_answer_hidden_checker_and_cube_practice
                 if question["kind"] == "cube_response" {
                     response_seen = true;
                     assert_eq!(name, "Bob");
-                    assert_eq!(question["position"]["board"][6], 1);
+                    assert_eq!(question["position"]["board"][9], 1);
                     assert_eq!(question["position"]["board"][19], -1);
                     assert_eq!(question["position"]["dice"], json!([0, 0]));
                     let encoded = question["position"]["gnubg_match_id"].as_str().unwrap();
