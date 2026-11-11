@@ -111,9 +111,11 @@ test('move assessments stay scoped while switching games during a delayed respon
   await expect(
     page.locator('.moves-list .move-assessment-very_bad'),
   ).toHaveCount(0);
-  await expect(
-    page.locator('.moves-list .move-assessment-marker').first(),
-  ).toHaveAttribute('title', /Fixture engine/);
+  await page
+    .locator('.moves-list button:has(.move-assessment-marker)')
+    .first()
+    .focus();
+  await expect(page.getByRole('tooltip')).toContainText('Fixture engine');
 });
 
 for (const viewport of [
