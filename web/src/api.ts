@@ -59,13 +59,14 @@ export async function request<T>(
 
 export const terminal = (job: Job) =>
   job.status === 'completed' || job.status === 'failed';
-// SSE and polling can finish out of order. Terminal jobs are immutable;
-// retries are accepted only when the persisted update is newer.
+// SSE and polling can finish out of order. A terminal state for the same job
+// is authoritative even if its persisted timestamp moved backwards.
 export function mergeJob(previous: Job | undefined, incoming: Job): Job {
   if (
     previous?.id === incoming.id &&
     (terminal(previous) ||
-      Date.parse(previous.updated_at) > Date.parse(incoming.updated_at))
+      (!terminal(incoming) &&
+        Date.parse(previous.updated_at) > Date.parse(incoming.updated_at)))
   ) {
     return previous;
   }

@@ -32,6 +32,18 @@ it('late HTTP responses cannot replace a terminal result after SSE closes', () =
   ).toBe(running);
 });
 
+it.each(['completed', 'failed'] as const)(
+  'accepts an immutable %s result even when its timestamp predates the last update',
+  (status) => {
+    const finished: Job = {
+      ...running,
+      status,
+      updated_at: '2026-11-08T11:00:01Z',
+    };
+    expect(mergeJob(running, finished)).toBe(finished);
+  },
+);
+
 it('accepts a later retry state and a newly submitted job', () => {
   const retry: Job = {
     ...running,
