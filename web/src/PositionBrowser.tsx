@@ -1,5 +1,6 @@
 import { useProfileValue } from './useProfileValue';
 import { useOptionalConfiguration } from './ConfigurationProvider';
+import ActionButton from './ActionButton';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { request } from './api';
 import { removePositionBookmark } from './position-bookmark-api';
@@ -340,18 +341,20 @@ export default function PositionBrowser({
           </div>
           <div className="position-selection-summary">
             <strong>{p('selected', { count: selected.size })}</strong>
-            <button
+            <ActionButton
+              icon="clear"
+              label={p('clearSelection')}
+              compact
               disabled={!selected.size || busy}
               onClick={() => setSelected(new Set())}
-            >
-              {p('clearSelection')}
-            </button>
-            <button
+            />
+            <ActionButton
+              icon="delete"
+              label={p(removing ? 'removing' : 'removeSelected')}
+              compact
               disabled={!selected.size || busy}
               onClick={() => void removeSaved([...selected])}
-            >
-              {p(removing ? 'removing' : 'removeSelected')}
-            </button>
+            />
             <small>{p('selectionLimit')}</small>
           </div>
           {loading && <p role="status">{p('loading')}</p>}
@@ -387,24 +390,29 @@ export default function PositionBrowser({
             />
           )}
           <nav className="position-pagination" aria-label={p('results')}>
-            <button
+            <ActionButton
+              icon="back"
+              label={p('previousPage')}
+              compact
               disabled={pageIndex === 0 || busy}
               onClick={() => setPageIndex((value) => value - 1)}
-            >
-              {p('previousPage')}
-            </button>
+            />
             <span>{p('page', { number: pageIndex + 1 })}</span>
             {pageIndex + 1 < pageCount ? (
-              <button
+              <ActionButton
+                icon="next"
+                label={p('nextPage')}
+                compact
                 disabled={busy}
                 onClick={() => setPageIndex((value) => value + 1)}
-              >
-                {p('nextPage')}
-              </button>
+              />
             ) : (
-              <button disabled={!cursor || busy} onClick={() => void more()}>
-                {p(moreLoading ? 'loading' : 'more')}
-              </button>
+              <ActionButton
+                icon="more"
+                label={p(moreLoading ? 'loading' : 'more')}
+                disabled={!cursor || busy}
+                onClick={() => void more()}
+              />
             )}
           </nav>
           <PositionBrowserDecks

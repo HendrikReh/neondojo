@@ -1,3 +1,6 @@
+import ActionButton from './ActionButton';
+import { useGamePlanText } from './game-plan-messages';
+import { mistakeGamePlans } from './recurring-mistakes-api';
 import { useEffect, useRef, useState } from 'react';
 import { useI18n } from './i18n';
 import type { Database } from './library-api';
@@ -35,6 +38,7 @@ export default function PositionBrowserControls({
   revision: number;
 }) {
   const p = usePositionText();
+  const planText = useGamePlanText();
   const field = (
     key: keyof PositionFilterDraft,
     label: PositionMessageKey,
@@ -124,13 +128,33 @@ export default function PositionBrowserControls({
               ))}
             </select>
           </label>
-          <button className="primary" disabled={busy}>
-            {p('search')}
-          </button>
+          <ActionButton
+            icon="search"
+            label={p('search')}
+            compact
+            className="primary"
+            disabled={busy}
+          />
         </div>
         <details className="position-filter-details">
           <summary>{p('filters')}</summary>
           <div className="position-filter-grid">
+            <label>
+              <span>{planText('title')}</span>
+              <select
+                value={filters.game_plan ?? ''}
+                onChange={(event) =>
+                  onChange({ ...filters, game_plan: event.target.value })
+                }
+              >
+                <option value="">{p('any')}</option>
+                {mistakeGamePlans.map((plan) => (
+                  <option key={plan} value={plan}>
+                    {planText(plan)}
+                  </option>
+                ))}
+              </select>
+            </label>
             {field('match_name', 'matchName')}
             {field('tournament', 'tournament')}
             {field('round', 'round')}
@@ -181,9 +205,13 @@ export default function PositionBrowserControls({
             ['asc', 'ascending'],
             ['desc', 'descending'],
           ])}
-          <button type="button" onClick={onClear}>
-            {p('clear')}
-          </button>
+          <ActionButton
+            icon="clear"
+            label={p('clear')}
+            compact
+            type="button"
+            onClick={onClear}
+          />
         </div>
       </form>
     </div>
@@ -333,9 +361,13 @@ function SavedPositionSearches({
             ))}
           </select>
         </label>
-        <button disabled={!chosen || busy} onClick={load}>
-          {p('loadSearch')}
-        </button>
+        <ActionButton
+          icon="open"
+          label={p('loadSearch')}
+          compact
+          disabled={!chosen || busy}
+          onClick={load}
+        />
         <label>
           <span>{p('searchName')}</span>
           <input
@@ -345,24 +377,33 @@ function SavedPositionSearches({
             onChange={(event) => setName(event.target.value)}
           />
         </label>
-        <button
+        <ActionButton
+          icon="save"
+          label={p('saveNew')}
           disabled={!name.trim() || busy}
           onClick={() => void save(false)}
-        >
-          {p('saveNew')}
-        </button>
-        <button
+        />
+        <ActionButton
+          icon="save"
+          label={p('updateSearch')}
+          compact
           disabled={!active || !name.trim() || busy}
           onClick={() => void save(true)}
-        >
-          {p('updateSearch')}
-        </button>
-        <button disabled={!active || busy} onClick={() => void remove()}>
-          {p('deleteSearch')}
-        </button>
-        <button disabled={busy} onClick={() => setReload((value) => value + 1)}>
-          {p('reload')}
-        </button>
+        />
+        <ActionButton
+          icon="delete"
+          label={p('deleteSearch')}
+          compact
+          disabled={!active || busy}
+          onClick={() => void remove()}
+        />
+        <ActionButton
+          icon="refresh"
+          label={p('reload')}
+          compact
+          disabled={busy}
+          onClick={() => setReload((value) => value + 1)}
+        />
       </div>
       {active?.database_missing && <p role="alert">{p('databaseMissing')}</p>}
       {changed && <p className="position-unsaved">{p('dirty')}</p>}

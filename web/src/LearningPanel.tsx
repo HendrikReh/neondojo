@@ -1,5 +1,6 @@
 import { useProfileValue } from './useProfileValue';
 import { useOptionalConfiguration } from './ConfigurationProvider';
+import ActionButton from './ActionButton';
 import { useEffect, useRef, useState } from 'react';
 import { request, type Job } from './api';
 import { AppError } from './i18n-core';
@@ -149,7 +150,14 @@ function CreateDeckForm({ onCreated }: { onCreated: (deck: Deck) => void }) {
         value={name}
         onChange={(e) => setName(e.target.value)}
       />
-      <button disabled={busy || !name.trim()}>{t('create')}</button>
+      <ActionButton
+        icon="add"
+        label={t('create')}
+        compact
+        disabled={busy || !name.trim()}
+      >
+        {t('create')}
+      </ActionButton>
       {!!error && <p role="alert">{formatError(error)}</p>}
     </form>
   );
@@ -291,27 +299,30 @@ export function AddCardsPanel({
             onChange={(e) => setDeckId(e.target.value)}
             disabled={busy}
           >
+            {deckId === ALL_CARDS && (
+              <option value={ALL_CARDS} disabled>
+                {t('chooseDeck')}
+              </option>
+            )}
             {!decks.length && <option value="">—</option>}
             {decks.map((deck) => (
               <option value={deck.id} key={deck.id}>
                 {deck.name}
               </option>
             ))}
-            {deckId === ALL_CARDS && (
-              <option value={ALL_CARDS} disabled>
-                {t('chooseDeck')}
-              </option>
-            )}
           </select>
         </label>
-        <button
+        <ActionButton
+          icon="add"
+          label={t('addPosition')}
+          compact
           disabled={
             !positionId || !decks.some((deck) => deck.id === deckId) || busy
           }
           onClick={() => void add('position')}
         >
           {t('addPosition')}
-        </button>
+        </ActionButton>
       </div>
       <CreateDeckForm
         onCreated={(deck) => {
@@ -346,7 +357,14 @@ export function AddCardsPanel({
               <option value="1">{baseT('common.black')}</option>
             </select>
           </label>
-          <button
+          <ActionButton
+            icon="add"
+            label={
+              gameNo
+                ? baseT('games.addErrors', { game: gameNo })
+                : t('addErrors')
+            }
+            compact
             disabled={
               !decks.some((deck) => deck.id === deckId) ||
               gameNo === undefined ||
@@ -360,7 +378,7 @@ export function AddCardsPanel({
             {gameNo
               ? baseT('games.addErrors', { game: gameNo })
               : t('addErrors')}
-          </button>
+          </ActionButton>
         </div>
       )}
       {allowBatch && needsAnalysis && <p role="alert">{t('addHint')}</p>}
@@ -388,9 +406,9 @@ export default function LearningWorkspace({
   onChanged: () => void;
   requestedDeck?: { id: string; token: number };
 }) {
+  const profile = useOptionalConfiguration();
   const t = useLearningText();
   const searchT = useCardSearchText();
-  const profile = useOptionalConfiguration();
   const [draftFilters, setDraftFilters] = useState(emptyCardFilters);
   const [filters, setFilters] = useProfileValue(
     (c) => c.learning.filters,
@@ -720,7 +738,14 @@ export default function LearningWorkspace({
         {!!deckError && (
           <>
             <p role="alert">{formatError(deckError)}</p>
-            <button onClick={onChanged}>{uiT('games.retry')}</button>
+            <ActionButton
+              icon="refresh"
+              label={uiT('games.retry')}
+              compact
+              onClick={onChanged}
+            >
+              {uiT('games.retry')}
+            </ActionButton>
           </>
         )}
       </section>
@@ -760,7 +785,10 @@ export default function LearningWorkspace({
               ))}
             </select>
           </label>
-          <button
+          <ActionButton
+            icon="edit"
+            label={managementT('rename')}
+            compact
             disabled={!decks.some((deck) => deck.id === deckId)}
             onClick={() => {
               const deck = decks.find((deck) => deck.id === deckId);
@@ -768,8 +796,11 @@ export default function LearningWorkspace({
             }}
           >
             {managementT('rename')}
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
+            icon="delete"
+            label={managementT('delete')}
+            compact
             disabled={!decks.some((deck) => deck.id === deckId)}
             onClick={() => {
               const deck = decks.find((deck) => deck.id === deckId);
@@ -777,8 +808,10 @@ export default function LearningWorkspace({
             }}
           >
             {managementT('delete')}
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
+            icon="play"
+            label={t('studyNow')}
             className="primary"
             disabled={
               !decks.some((deck) => deck.id === deckId) || loading || busy
@@ -791,15 +824,18 @@ export default function LearningWorkspace({
             }}
           >
             {t('studyNow')}
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
+            icon="export"
+            label={exporting ? t('exporting') : t('export')}
+            compact
             disabled={
               !decks.find((d) => d.id === deckId)?.card_count || exporting
             }
             onClick={() => void download()}
           >
             {exporting ? t('exporting') : t('export')}
-          </button>
+          </ActionButton>
         </div>
         <p className="learning-explainer">
           {t('separateProgress')} {t('retention')}
@@ -824,7 +860,10 @@ export default function LearningWorkspace({
       )}
       {studying ? (
         <>
-          <button
+          <ActionButton
+            icon="back"
+            label={t('back')}
+            compact
             className="subtle"
             onClick={() => {
               setStudying(false);
@@ -836,7 +875,7 @@ export default function LearningWorkspace({
             }}
           >
             {t('back')}
-          </button>
+          </ActionButton>
           {loading && <p role="status">{t('loading')}</p>}
           {activeNext && (
             <p className="learning-counts">
@@ -886,13 +925,15 @@ export default function LearningWorkspace({
               {!revealed ? (
                 <>
                   <p>{t('answerFirst')}</p>
-                  <button
+                  <ActionButton
+                    icon="solution"
+                    label={t('reveal')}
                     className="primary"
                     disabled={busy}
                     onClick={() => void reveal()}
                   >
                     {t('reveal')}
-                  </button>
+                  </ActionButton>
                 </>
               ) : (
                 <section className="study-answer" aria-label={t('solution')}>
@@ -952,14 +993,16 @@ export default function LearningWorkspace({
                   <div className="study-ratings">
                     {(['again', 'hard', 'good', 'easy'] as const).map(
                       (rating) => (
-                        <button
+                        <ActionButton
+                          icon={rating === 'again' ? 'reset' : 'confirm'}
+                          label={t(rating)}
                           key={rating}
                           disabled={busy}
                           onClick={() => void grade(rating)}
                         >
                           {t(rating)}
                           <small>{interval(revealed.intervals[rating])}</small>
-                        </button>
+                        </ActionButton>
                       ),
                     )}
                   </div>

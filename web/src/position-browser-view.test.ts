@@ -73,7 +73,7 @@ test('results expose contextual selection, real origin and actionable missing an
   expect(html).toContain('Select this page');
   expect(html).toContain('Independent database');
   expect(html).toContain('Relevant comment');
-  expect(html).not.toMatch(/<button\b[^>]*>\s*Open analysis\s*<\/button>/);
+  expect(html).not.toMatch(/<button\b[^>]*aria-label="Open analysis"[^>]*>/);
   expect(html).not.toContain('SECRET SOLUTION');
   expect(html).toContain('data-column="player"');
   expect(html).toContain('data-column="opponent"');
@@ -97,7 +97,7 @@ test('saved rows offer removal without deleting the original position', () => {
     }),
   );
   expect(html).toContain('Remove from collection');
-  expect(html).not.toMatch(/<button\b[^>]*>\s*Open analysis\s*<\/button>/);
+  expect(html).not.toMatch(/<button\b[^>]*aria-label="Open analysis"[^>]*>/);
   expect(html).not.toContain('Delete position');
 });
 
@@ -188,7 +188,7 @@ test('one preview shows only the stored board before the move and no invented an
   expect(html).toContain('data-preview-mode="before"');
   expect(html).toContain('Stored position before the move');
   expect(html).toContain('Local analysis is required');
-  expect(html).toMatch(/<button\b[^>]*>\s*Open analysis\s*<\/button>/);
+  expect(html).toMatch(/<button\b[^>]*aria-label="Open analysis"[^>]*>/);
   expect(html).not.toContain('SECRET SOLUTION');
 });
 test('native error is paired with its actual engine depth and job', () => {
@@ -242,6 +242,6 @@ test('retained preview explains that the source is gone while individual analysi
     }),
   );
   expect(html).toContain('Original match removed; saved position retained');
-  expect(html).toMatch(/<button\b[^>]*>\s*Open analysis\s*<\/button>/);
+  expect(html).toMatch(/<button\b[^>]*aria-label="Open analysis"[^>]*>/);
   expect(html).toContain('class="board-shell ');
 });

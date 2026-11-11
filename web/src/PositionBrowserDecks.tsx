@@ -1,3 +1,4 @@
+import ActionButton from './ActionButton';
 import { useEffect, useRef, useState, useId } from 'react';
 import { request } from './api';
 import { useI18n } from './i18n';
@@ -32,9 +33,11 @@ export function PositionTransferOutcomes({
             <span>{names[item.position_id] ?? item.position_id}</span>
             <strong>{p(item.status)}</strong>
             {item.status === 'analysis_required' && (
-              <button onClick={() => onOpen(item.position_id)}>
-                {p('openAnalysis')}
-              </button>
+              <ActionButton
+                icon="analysis"
+                label={p('openAnalysis')}
+                onClick={() => onOpen(item.position_id)}
+              />
             )}
           </li>
         ))}
@@ -229,19 +232,20 @@ export default function PositionBrowserDecks({
             {p('deckCount', { count: chosenDeck?.card_count ?? 0 })}
           </small>
         </label>
-        <button
+        <ActionButton
+          icon="add"
+          label={p(busy ? 'transfer' : 'addSelected')}
+          compact
           className="primary"
           disabled={!deckId || !selected.size || busy || exporting}
           onClick={() => void add()}
-        >
-          {p(busy ? 'transfer' : 'addSelected')}
-        </button>
-        <button
+        />
+        <ActionButton
+          icon="cards"
+          label={p('study')}
           disabled={!hasCards || busy || exporting}
           onClick={() => onStudy(deckId)}
-        >
-          {p('study')}
-        </button>
+        />
       </div>
       <form
         className="position-create-deck"
@@ -259,15 +263,20 @@ export default function PositionBrowserDecks({
             onChange={(event) => setName(event.target.value)}
           />
         </label>
-        <button disabled={!name.trim() || busy}>{p('createDeck')}</button>
+        <ActionButton
+          icon="add"
+          label={p('createDeck')}
+          disabled={!name.trim() || busy}
+        />
       </form>
       <div className="position-deck-export">
-        <button
+        <ActionButton
+          icon="export"
+          label={p(exporting ? 'exporting' : 'exportDeck')}
+          compact
           disabled={!hasCards || busy || exporting}
           onClick={() => void download()}
-        >
-          {p(exporting ? 'exporting' : 'exportDeck')}
-        </button>
+        />
         <small>{p('exportHint')}</small>
       </div>
       {!!error && (

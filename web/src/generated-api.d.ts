@@ -1300,6 +1300,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/study/mistakes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/study/mistakes/practice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["practice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/study/mistakes/reveal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reveal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/study/reports": {
         parameters: {
             query?: never;
@@ -2603,6 +2651,71 @@ export interface components {
             /** Format: int32 */
             white_score?: number | null;
         };
+        MistakeAnswer: {
+            best: string;
+            depth?: string | null;
+            engine: string;
+            /** Format: double */
+            equity_loss: number;
+            method?: string | null;
+            played: string;
+            /** Format: int32 */
+            plies?: number | null;
+            source?: null | components["schemas"]["MistakeSource"];
+        };
+        MistakeGroup: {
+            count: number;
+            game_plan: components["schemas"]["GamePlan"];
+            match_count: number;
+            mistake_kind: components["schemas"]["MistakeKind"];
+            /** Format: double */
+            total_loss: number;
+        };
+        /** @enum {string} */
+        MistakeKind: "checker" | "missed_double" | "premature_double" | "wrong_take" | "wrong_pass" | "unclassified_cube";
+        MistakePractice: {
+            items: components["schemas"]["MistakePracticeQuestion"][];
+        };
+        MistakePracticeQuestion: {
+            depth?: string | null;
+            engine: string;
+            /** @description checker, cube_offer or cube_response. */
+            kind: string;
+            method?: string | null;
+            players: string[];
+            /** Format: int32 */
+            plies?: number | null;
+            position: components["schemas"]["Position"];
+            reference: components["schemas"]["MistakeReference"];
+            source?: null | components["schemas"]["MistakeSource"];
+        };
+        MistakePracticeRequest: {
+            /** Format: uuid */
+            database_id?: string | null;
+            game_plan: components["schemas"]["GamePlan"];
+            /** Format: double */
+            min_loss?: number | null;
+            mistake_kind: components["schemas"]["MistakeKind"];
+            player: string;
+        };
+        MistakeReference: {
+            /** Format: int32 */
+            decision_no: number;
+            /** Format: int32 */
+            game_no: number;
+            /** Format: uuid */
+            imported_analysis_id?: string | null;
+            /** Format: uuid */
+            job_id?: string | null;
+        };
+        /** @enum {string} */
+        MistakeSource: "native" | "xg" | "bgblitz";
+        Mistakes: {
+            analyzed_decisions: number;
+            analyzed_matches: number;
+            groups: components["schemas"]["MistakeGroup"][];
+            players: string[];
+        };
         MoveAnalysis: components["schemas"]["Decision"] & {
             /** Format: int32 */
             game_no: number;
@@ -3065,6 +3178,7 @@ export interface components {
             /** Format: int32 */
             die2?: number | null;
             direction?: null | components["schemas"]["PositionBrowserDirection"];
+            game_plan?: null | components["schemas"]["GamePlan"];
             match_name?: string | null;
             /** Format: int32 */
             match_points_max?: number | null;
@@ -7233,6 +7347,108 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list: {
+        parameters: {
+            query?: {
+                player?: string;
+                database_id?: string;
+                game_plan?: components["schemas"]["GamePlan"];
+                min_loss?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Mistakes"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    practice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MistakePracticeRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MistakePractice"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    reveal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MistakeReference"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MistakeAnswer"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

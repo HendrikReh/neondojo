@@ -1,5 +1,7 @@
 import { request } from './api';
 import { AppError } from './i18n-core';
+import type { GamePlan } from './game-plan-api';
+import { mistakeGamePlans } from './recurring-mistakes-api';
 
 import type { components } from './generated-api';
 type Schema = components['schemas'];
@@ -64,6 +66,7 @@ export function emptyPositionFilters(): PositionFilterDraft {
       'analysis_state',
       'sort',
       'direction',
+      'game_plan',
     ].map((key) => [key, key === 'sort' ? 'match' : '']),
   ) as PositionFilterDraft;
 }
@@ -77,6 +80,11 @@ export function positionDefinition(
     schema_version: 1,
     sort: sort as PositionSort,
   };
+  if (draft.game_plan) {
+    if (!mistakeGamePlans.includes(draft.game_plan as GamePlan))
+      throw new Error('invalidFilter');
+    definition.game_plan = draft.game_plan as GamePlan;
+  }
   if (draft.direction) {
     if (draft.direction !== 'asc' && draft.direction !== 'desc')
       throw new Error('invalidFilter');

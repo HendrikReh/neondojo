@@ -29,6 +29,7 @@ import {
   type CheckerStep,
 } from './play-state';
 import { usePositionText } from './position-browser-messages';
+import { useMistakeText } from './recurring-mistakes-messages';
 import {
   savePracticeSummary,
   type PracticeSummaryInput,
@@ -66,6 +67,7 @@ export default function SimilarPositionPractice({
   onClose: () => void;
 }) {
   const p = usePositionText();
+  const t = useMistakeText();
   const { formatNumber, formatError } = useI18n();
   const [round, setRound] = useState(() => startRound(items));
   const [pendingSaves, setPendingSaves] = useState<PendingSave[]>([]);
@@ -87,7 +89,7 @@ export default function SimilarPositionPractice({
     <ActionButton
       type="button"
       icon="close"
-      label={p('practiceClose')}
+      label={t('close')}
       onClick={onClose}
     />
   );
@@ -182,7 +184,7 @@ export default function SimilarPositionPractice({
       ) : (
         <>
           <h3 ref={completion} tabIndex={-1}>
-            {p('practiceComplete')}
+            {t('complete')}
           </h3>
           {scored.length ? (
             <>
@@ -250,6 +252,7 @@ function PracticeQuestion({
   closeButton: ReactNode;
 }) {
   const p = usePositionText();
+  const t = useMistakeText();
   const play = usePlayText();
   const review = useBoardReviewText();
   const {
@@ -446,7 +449,7 @@ function PracticeQuestion({
                 ))}
               </div>
               <p>
-                {p('practiceLoss')} ·{' '}
+                {t('loss')} ·{' '}
                 <strong>
                   {formatNumber(score.equity_loss, {
                     minimumFractionDigits: 3,
@@ -462,7 +465,7 @@ function PracticeQuestion({
             </>
           )}
           <p>
-            {p('practiceBest')} · <strong>{formatDecision(answer.best)}</strong>
+            {t('best')} · <strong>{formatDecision(answer.best)}</strong>
             {score && ` · ${formatEquity(score.best_equity)}`}
           </p>
           <p>{[answer.engine, answer.depth].filter(Boolean).join(' · ')}</p>
@@ -490,7 +493,7 @@ function PracticeQuestion({
           <ActionButton
             type="button"
             icon="view"
-            label={p('practiceReveal')}
+            label={t('reveal')}
             disabled={loading}
             onClick={() => void reveal(false)}
           />
@@ -503,7 +506,7 @@ function PracticeQuestion({
           label={
             pendingAction === 'score'
               ? p('practiceSkipScoring')
-              : p(last ? 'practiceFinish' : 'practiceNext')
+              : t(last ? 'finish' : 'next')
           }
           onClick={() => onAdvance(score?.equity_loss)}
         />

@@ -139,3 +139,20 @@ test('every table sort and direction survives saved-filter and request roundtrip
     positionDefinition({ ...emptyPositionFilters(), direction: 'sideways' }),
   ).toThrow();
 });
+
+test('game plans roundtrip while absent optional filters preserve old serialization', () => {
+  const original = { schema_version: 1, sort: 'match' as const };
+  expect(JSON.stringify(positionDefinition(positionDraft(original)))).toBe(
+    JSON.stringify(original),
+  );
+  const planned = positionDefinition({
+    ...emptyPositionFilters(),
+    game_plan: 'priming',
+  });
+  expect(planned).toEqual({ ...original, game_plan: 'priming' });
+  expect(positionDefinition(positionDraft(planned))).toEqual(planned);
+  expect(JSON.parse(positionParams(planned).get('filters')!)).toEqual(planned);
+  expect(() =>
+    positionDefinition({ ...emptyPositionFilters(), game_plan: 'unknown' }),
+  ).toThrow();
+});

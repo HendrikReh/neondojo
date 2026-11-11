@@ -5814,6 +5814,162 @@
         }
       }
     },
+    "/api/study/mistakes": {
+      "get": {
+        "tags": [
+          "Study"
+        ],
+        "operationId": "list",
+        "parameters": [
+          {
+            "name": "player",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "database_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "game_plan",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/GamePlan"
+            }
+          },
+          {
+            "name": "min_loss",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mistakes"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/study/mistakes/practice": {
+      "post": {
+        "tags": [
+          "Study"
+        ],
+        "operationId": "practice",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MistakePracticeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MistakePractice"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/study/mistakes/reveal": {
+      "post": {
+        "tags": [
+          "Study"
+        ],
+        "operationId": "reveal",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MistakeReference"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MistakeAnswer"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/study/reports": {
       "get": {
         "tags": [
@@ -10325,6 +10481,279 @@
           }
         }
       },
+      "MistakeAnswer": {
+        "type": "object",
+        "required": [
+          "best",
+          "played",
+          "equity_loss",
+          "engine"
+        ],
+        "properties": {
+          "best": {
+            "type": "string"
+          },
+          "depth": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "engine": {
+            "type": "string"
+          },
+          "equity_loss": {
+            "type": "number",
+            "format": "double"
+          },
+          "method": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "played": {
+            "type": "string"
+          },
+          "plies": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "source": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MistakeSource"
+              }
+            ]
+          }
+        }
+      },
+      "MistakeGroup": {
+        "type": "object",
+        "required": [
+          "game_plan",
+          "mistake_kind",
+          "count",
+          "match_count",
+          "total_loss"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "game_plan": {
+            "$ref": "#/components/schemas/GamePlan"
+          },
+          "match_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "mistake_kind": {
+            "$ref": "#/components/schemas/MistakeKind"
+          },
+          "total_loss": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "MistakeKind": {
+        "type": "string",
+        "enum": [
+          "checker",
+          "missed_double",
+          "premature_double",
+          "wrong_take",
+          "wrong_pass",
+          "unclassified_cube"
+        ]
+      },
+      "MistakePractice": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MistakePracticeQuestion"
+            }
+          }
+        }
+      },
+      "MistakePracticeQuestion": {
+        "type": "object",
+        "required": [
+          "reference",
+          "kind",
+          "position",
+          "players",
+          "engine"
+        ],
+        "properties": {
+          "depth": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "engine": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "description": "checker, cube_offer or cube_response."
+          },
+          "method": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "players": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "plies": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "reference": {
+            "$ref": "#/components/schemas/MistakeReference"
+          },
+          "source": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MistakeSource"
+              }
+            ]
+          }
+        }
+      },
+      "MistakePracticeRequest": {
+        "type": "object",
+        "required": [
+          "player",
+          "game_plan",
+          "mistake_kind"
+        ],
+        "properties": {
+          "database_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "game_plan": {
+            "$ref": "#/components/schemas/GamePlan"
+          },
+          "min_loss": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "mistake_kind": {
+            "$ref": "#/components/schemas/MistakeKind"
+          },
+          "player": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MistakeReference": {
+        "type": "object",
+        "required": [
+          "game_no",
+          "decision_no"
+        ],
+        "properties": {
+          "decision_no": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "game_no": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "imported_analysis_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "job_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MistakeSource": {
+        "type": "string",
+        "enum": [
+          "native",
+          "xg",
+          "bgblitz"
+        ]
+      },
+      "Mistakes": {
+        "type": "object",
+        "required": [
+          "players",
+          "groups",
+          "analyzed_decisions",
+          "analyzed_matches"
+        ],
+        "properties": {
+          "analyzed_decisions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "analyzed_matches": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MistakeGroup"
+            }
+          },
+          "players": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "MoveAnalysis": {
         "allOf": [
           {
@@ -11873,6 +12302,17 @@
               {
                 "$ref": "#/components/schemas/PositionBrowserDirection",
                 "description": "Omitted: loss descending; all other columns ascending. Legacy definitions\nomit this field when serialized to preserve their stored definition format."
+              }
+            ]
+          },
+          "game_plan": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GamePlan",
+                "description": "Open Sage plan for the player on roll."
               }
             ]
           },

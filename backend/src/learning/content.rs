@@ -303,7 +303,7 @@ fn prompt(kind: &str) -> &'static str {
 }
 
 /// Inverse of GNUbg's unary opponent-then-player encoding, returned in absolute colors.
-fn decode_board(position_id: &str, match_id: &str) -> anyhow::Result<Vec<i32>> {
+pub(crate) fn decode_board(position_id: &str, match_id: &str) -> anyhow::Result<Vec<i32>> {
     let key = STANDARD_NO_PAD.decode(position_id)?;
     let state = STANDARD_NO_PAD.decode(match_id)?;
     ensure!(key.len() == 10 && state.len() == 9, "Invalid GNU ID length");

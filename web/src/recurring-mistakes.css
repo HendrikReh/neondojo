@@ -1,0 +1,65 @@
+.recurring-mistakes {
+  min-width: 0;
+}
+.recurring-help,
+.recurring-source {
+  color: var(--ui-muted);
+  line-height: 1.5;
+  max-width: 85ch;
+}
+.recurring-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 24px 0;
+}
+.recurring-filters label {
+  display: grid;
+  gap: 6px;
+  min-width: 160px;
+  flex: 1;
+}
+.recurring-filters input,
+.recurring-filters select {
+  width: 100%;
+  min-width: 0;
+}
+.play-interruption-dialog.recurring-practice-dialog {
+  width: min(860px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+}
+.recurring-practice-board {
+  width: min(100%, 680px);
+  margin: 12px auto;
+}
+.recurring-answer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 8px 16px;
+  padding: 16px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+}
+.recurring-answer dt {
+  color: var(--ui-muted);
+}
+.recurring-answer dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.recurring-question > button,
+.recurring-practice-dialog > button {
+  margin: 8px 8px 8px 0;
+}
+@media (max-width: 700px) {
+  .study-tabs {
+    flex-wrap: wrap;
+  }
+  .recurring-filters label {
+    flex-basis: 100%;
+  }
+  .recurring-answer {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,4 +1,6 @@
+import Tooltip from './Tooltip';
 import { useOptionalConfiguration } from './ConfigurationProvider';
+import ActionButton from './ActionButton';
 import { useMemo, type KeyboardEvent } from 'react';
 import Board from './Board';
 import LibrarySortHeading from './LibrarySortHeading';
@@ -214,14 +216,15 @@ export function PositionBrowserResults({
           />
           {p('showPlayed')}
         </label>
-        <button
+        <ActionButton
+          icon="reset"
+          label={l('resetColumnWidths')}
+          compact
           type="button"
           className="position-width-reset"
           onClick={columns.reset}
           disabled={!columns.custom}
-        >
-          {l('resetColumnWidths')}
-        </button>
+        />
       </div>
       <div className="position-table-scroll">
         <table
@@ -287,11 +290,12 @@ export function PositionBrowserResults({
           </thead>
           <tbody>
             {items.map((hit, index) => (
-              <tr
+              <Tooltip
+                as="tr"
                 key={hit.position.id}
                 id={`position-row-${hit.position.id}`}
                 tabIndex={0}
-                title={summaries.get(hit.position.id)}
+                text={summaries.get(hit.position.id)}
                 className={
                   previewId === hit.position.id
                     ? 'position-preview-selected'
@@ -410,7 +414,10 @@ export function PositionBrowserResults({
                 <td>
                   <div className="position-row-actions">
                     {onRemove && (
-                      <button
+                      <ActionButton
+                        icon="delete"
+                        label={p('removeSaved')}
+                        compact
                         className="position-remove-saved"
                         aria-label={p('removeSaved')}
                         disabled={busy}
@@ -418,13 +425,11 @@ export function PositionBrowserResults({
                           event.stopPropagation();
                           onRemove([hit.position.id]);
                         }}
-                      >
-                        <span aria-hidden="true">×</span>
-                      </button>
+                      />
                     )}
                   </div>
                 </td>
-              </tr>
+              </Tooltip>
             ))}
           </tbody>
         </table>
@@ -526,9 +531,12 @@ export function PositionBrowserPreview({
           {!hit.card_ready && (
             <p className="position-analysis-needed">{p('needed')}</p>
           )}
-          <button className="primary" onClick={() => onOpen(hit.position.id)}>
-            {p('openAnalysis')}
-          </button>
+          <ActionButton
+            icon="analysis"
+            label={p('openAnalysis')}
+            className="primary"
+            onClick={() => onOpen(hit.position.id)}
+          />
         </>
       )}
     </aside>

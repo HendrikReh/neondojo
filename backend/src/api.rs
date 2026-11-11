@@ -82,6 +82,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::benchmarks::routes())
         .merge(crate::play::routes())
         .merge(crate::study::routes())
+        .merge(crate::recurring_mistakes::routes())
         .merge(crate::opening_book::routes())
         .merge(crate::imported_analysis::routes())
         .merge(crate::databases::routes())
@@ -842,6 +843,7 @@ impl OpenApi for ApiDoc {
         doc.merge(crate::analysis_timing::TimingDoc::openapi());
         doc.merge(crate::play::PlayDoc::openapi());
         doc.merge(crate::study::StudyDoc::openapi());
+        doc.merge(crate::recurring_mistakes::RecurringMistakesDoc::openapi());
         doc.merge(crate::opening_book::OpeningBookDoc::openapi());
         doc.merge(crate::imported_analysis::ImportedAnalysisDoc::openapi());
         doc.merge(crate::databases::DatabaseDoc::openapi());

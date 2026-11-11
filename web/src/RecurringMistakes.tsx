@@ -1,0 +1,272 @@
+import { useEffect, useRef, useState } from 'react';
+import ActionButton from './ActionButton';
+import RecurringMistakePractice from './RecurringMistakePractice';
+import { request } from './api';
+import type { Database } from './library-api';
+import type { Theme } from './themes';
+import { useI18n } from './i18n';
+import { useGamePlanText } from './game-plan-messages';
+import type { GamePlan } from './game-plan-api';
+import { useMistakeText } from './recurring-mistakes-messages';
+import {
+  loadMistakes,
+  mistakeGamePlans,
+  type MistakeFilters,
+  type MistakeGroup,
+  type MistakePage,
+  type MistakePracticeRequest,
+} from './recurring-mistakes-api';
+import './recurring-mistakes.css';
+
+export default function RecurringMistakes({
+  visible,
+  theme,
+}: {
+  visible: boolean;
+  theme: Theme;
+}) {
+  const t = useMistakeText(),
+    planText = useGamePlanText(),
+    { formatError } = useI18n();
+  const [player, setPlayer] = useState(''),
+    [database, setDatabase] = useState(''),
+    [plan, setPlan] = useState<GamePlan | ''>(''),
+    [loss, setLoss] = useState('0.08');
+  const [page, setPage] = useState<MistakePage>(),
+    [players, setPlayers] = useState<string[]>([]),
+    [databases, setDatabases] = useState<Database[]>([]);
+  const [loading, setLoading] = useState(false),
+    [error, setError] = useState<unknown>(),
+    [databaseError, setDatabaseError] = useState<unknown>(),
+    [revision, setRevision] = useState(0);
+  const [practice, setPractice] = useState<MistakePracticeRequest>();
+  const trigger = useRef<HTMLButtonElement | null>(null),
+    generation = useRef(0);
+  const minLoss = Number(loss),
+    valid =
+      loss.trim() !== '' &&
+      Number.isFinite(minLoss) &&
+      minLoss >= 0 &&
+      minLoss <= 1000;
+  useEffect(() => {
+    setPractice(undefined);
+    if (!visible || !valid) return;
+    const abort = new AbortController(),
+      version = ++generation.current;
+    setLoading(true);
+    setError(undefined);
+    setPage(undefined);
+    const filters: MistakeFilters = {
+      ...(player ? { player } : {}),
+      ...(database ? { database_id: database } : {}),
+      ...(plan ? { game_plan: plan } : {}),
+      min_loss: minLoss,
+    };
+    void loadMistakes(filters, abort.signal)
+      .then((result) => {
+        if (!abort.signal.aborted && version === generation.current) {
+          setPlayers(result.players);
+          if (player && !result.players.includes(player)) {
+            setPlayer('');
+            setPage(undefined);
+          } else setPage(result);
+        }
+      })
+      .catch((failure) => {
+        if (!abort.signal.aborted && version === generation.current)
+          setError(failure);
+      })
+      .finally(() => {
+        if (!abort.signal.aborted && version === generation.current)
+          setLoading(false);
+      });
+    return () => {
+      abort.abort();
+      generation.current++;
+    };
+  }, [visible, player, database, plan, minLoss, valid, revision]);
+  useEffect(() => {
+    if (!visible) return;
+    const abort = new AbortController();
+    setDatabaseError(undefined);
+    void request<Database[]>('/databases', { signal: abort.signal })
+      .then((result) => {
+        if (!abort.signal.aborted) setDatabases(result);
+      })
+      .catch((failure) => {
+        if (!abort.signal.aborted) setDatabaseError(failure);
+      });
+    return () => abort.abort();
+  }, [visible, revision]);
+  function start(group: MistakeGroup, button: HTMLButtonElement) {
+    if (!player || !players.includes(player) || !valid) return;
+    trigger.current = button;
+    setPractice({
+      player,
+      ...(database ? { database_id: database } : {}),
+      game_plan: group.game_plan,
+      min_loss: minLoss,
+      mistake_kind: group.mistake_kind,
+    });
+  }
+  return (
+    <section className="recurring-mistakes" aria-label={t('title')}>
+      <div className="study-reports-heading">
+        <h1>{t('title')}</h1>
+        <ActionButton
+          icon="refresh"
+          label={t('refresh')}
+          disabled={loading}
+          onClick={() => setRevision((value) => value + 1)}
+        >
+          {t('refresh')}
+        </ActionButton>
+      </div>
+      <p className="recurring-help">{t('coverage')}</p>
+      <div className="recurring-filters">
+        <label>
+          <span>{t('player')}</span>
+          <select
+            value={player}
+            onChange={(event) => {
+              setPractice(undefined);
+              setPlayer(event.target.value);
+            }}
+          >
+            <option value="">{t('choose')}</option>
+            {players.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>{t('database')}</span>
+          <select
+            value={database}
+            onChange={(event) => {
+              setPractice(undefined);
+              setDatabase(event.target.value);
+            }}
+          >
+            <option value="">{t('allDatabases')}</option>
+            {databases.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>{planText('title')}</span>
+          <select
+            value={plan}
+            onChange={(event) => {
+              setPractice(undefined);
+              setPlan(event.target.value as GamePlan | '');
+            }}
+          >
+            <option value="">{t('any')}</option>
+            {mistakeGamePlans.map((item) => (
+              <option key={item} value={item}>
+                {planText(item)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>{t('minLoss')}</span>
+          <input
+            type="number"
+            step="any"
+            min="0"
+            max="1000"
+            value={loss}
+            aria-invalid={!valid}
+            onChange={(event) => {
+              setPractice(undefined);
+              setLoss(event.target.value);
+            }}
+          />
+        </label>
+      </div>
+      {!valid && <p role="alert">{t('invalidLoss')}</p>}
+      {loading && valid && <p role="status">{t('loading')}</p>}
+      {!!(error || databaseError) && (
+        <div role="alert">
+          <p>{formatError(error || databaseError)}</p>
+          <ActionButton
+            icon="refresh"
+            label={t('retry')}
+            onClick={() => setRevision((value) => value + 1)}
+          >
+            {t('retry')}
+          </ActionButton>
+        </div>
+      )}
+      {!player && <p>{t('chooseHelp')}</p>}
+      {!loading && !error && page && valid && (
+        <>
+          {!page.players.length && <p>{t('noPlayers')}</p>}
+          {player && (
+            <>
+              <p>
+                {t('analyzed')}: {page.analyzed_decisions} /{' '}
+                {page.analyzed_matches}
+              </p>
+              {!page.groups.length ? (
+                <p role="status">{t('empty')}</p>
+              ) : (
+                <div className="study-report-table-scroll">
+                  <table className="study-report-table">
+                    <thead>
+                      <tr>
+                        <th>{planText('title')}</th>
+                        <th>{t('kind')}</th>
+                        <th>{t('occurrences')}</th>
+                        <th>{t('matches')}</th>
+                        <th>{t('totalLoss')}</th>
+                        <th>{t('practice')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {page.groups.map((group) => (
+                        <tr key={`${group.game_plan}:${group.mistake_kind}`}>
+                          <td>{planText(group.game_plan)}</td>
+                          <td>{t(group.mistake_kind)}</td>
+                          <td>{group.count}</td>
+                          <td>{group.match_count}</td>
+                          <td>{group.total_loss.toFixed(3)}</td>
+                          <td>
+                            <ActionButton
+                              icon="next"
+                              label={t('practice')}
+                              onClick={(event) =>
+                                start(group, event.currentTarget)
+                              }
+                            >
+                              {t('practice')}
+                            </ActionButton>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+      {visible && practice && (
+        <RecurringMistakePractice
+          request={practice}
+          theme={theme}
+          returnFocus={trigger}
+          onClose={() => setPractice(undefined)}
+        />
+      )}
+    </section>
+  );
+}

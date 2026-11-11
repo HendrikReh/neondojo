@@ -7,12 +7,13 @@ import {
 } from 'react';
 import LearningWorkspace from './LearningPanel';
 import StudyReports from './StudyReports';
+import RecurringMistakes from './RecurringMistakes';
 import SimilarPracticeHistory from './SimilarPracticeHistory';
 import { usePositionText } from './position-browser-messages';
 import { useStudyText } from './study-messages';
 import './study.css';
-type Area = 'cards' | 'reports' | 'practice';
-const areas: Area[] = ['cards', 'reports', 'practice'];
+type Area = 'cards' | 'reports' | 'mistakes' | 'practice';
+const areas: Area[] = ['cards', 'reports', 'mistakes', 'practice'];
 export default function StudyWorkspace(
   props: ComponentProps<typeof LearningWorkspace>,
 ) {
@@ -84,6 +85,17 @@ export default function StudyWorkspace(
       >
         <StudyReports
           visible={visible && area === 'reports'}
+          theme={props.theme}
+        />
+      </div>
+      <div
+        role="tabpanel"
+        id="study-panel-mistakes"
+        aria-labelledby="study-tab-mistakes"
+        hidden={area !== 'mistakes'}
+      >
+        <RecurringMistakes
+          visible={visible && area === 'mistakes'}
           theme={props.theme}
         />
       </div>

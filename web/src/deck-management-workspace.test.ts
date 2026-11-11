@@ -39,6 +39,7 @@ vi.mock('react', async (original) => ({
   },
 }));
 import LearningWorkspace, { useDecks } from './LearningPanel';
+import ActionButton from './ActionButton';
 const decks = [
   { id: 'a', name: 'A', card_count: 1, version: 0 },
   { id: 'b', name: 'B', card_count: 0, version: 0 },
@@ -126,7 +127,7 @@ it('hides the old study card synchronously on an A–B–A deck round trip befor
   elements(view)
     .find(
       (element) =>
-        element.type === 'button' && element.props.children === 'Study now',
+        element.type === ActionButton && element.props.label === 'Study now',
     )!
     .props.onClick();
   render();
@@ -147,7 +148,7 @@ it('hides the old study card synchronously on an A–B–A deck round trip befor
   elements(view)
     .find(
       (element) =>
-        element.type === 'button' && element.props.children === 'Study now',
+        element.type === ActionButton && element.props.label === 'Study now',
     )!
     .props.onClick();
   view = render();
@@ -190,8 +191,8 @@ it('clears an in-flight export indicator when switching decks', async () => {
   elements(view)
     .find(
       (element) =>
-        element.type === 'button' &&
-        element.props.children === 'Download Anki deck',
+        element.type === ActionButton &&
+        element.props.label === 'Download Anki deck',
     )!
     .props.onClick();
   view = render();
@@ -204,8 +205,8 @@ it('clears an in-flight export indicator when switching decks', async () => {
   expect(
     elements(view).some(
       (element) =>
-        element.type === 'button' &&
-        element.props.children === 'Download Anki deck',
+        element.type === ActionButton &&
+        element.props.label === 'Download Anki deck',
     ),
   ).toBe(true);
 });
@@ -324,7 +325,8 @@ it.each([1, 2])(
     elements(view)
       .find(
         (element) =>
-          element.type === 'button' && element.props.children === 'Rename deck',
+          element.type === ActionButton &&
+          element.props.label === 'Rename deck',
       )!
       .props.onClick();
     view = render();

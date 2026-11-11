@@ -858,3 +858,6 @@ async fn export_deck(
         bytes,
     ))
 }
+
+// Share the canonical absolute-color GNU ID decoder with read-only practice.
+pub(crate) use content::decode_board as decode_decision_board;

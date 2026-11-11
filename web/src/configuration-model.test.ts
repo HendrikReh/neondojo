@@ -120,6 +120,30 @@ it('persists money-game selection without permitting negative or excessive targe
   }
 });
 
+it('preserves optional game plans through profile normalization without changing old definitions', () => {
+  const current = structuredClone(defaultConfiguration);
+  expect(normalizeConfiguration(current).positions.definition).toEqual({
+    schema_version: 1,
+    sort: 'match',
+  });
+  current.positions.definition.game_plan = 'priming';
+  expect(normalizeConfiguration(current).positions.definition.game_plan).toBe(
+    'priming',
+  );
+  expect(configurationDifferences(defaultConfiguration, current)).toEqual([
+    { path: 'positions.definition.game_plan', saved: null, current: 'priming' },
+  ]);
+  expect(() =>
+    normalizeConfiguration({
+      ...current,
+      positions: {
+        ...current.positions,
+        definition: { ...current.positions.definition, game_plan: 'invalid' },
+      },
+    }),
+  ).toThrow();
+});
+
 it('upgrades the column order and action widths from an existing version 1 profile', () => {
   const legacy = structuredClone(defaultConfiguration);
   legacy.library.column_order = legacy.library.column_order.filter(

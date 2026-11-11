@@ -59,6 +59,9 @@ pub enum PositionAnalysisState {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PositionFilterDefinition {
+    /// Open Sage plan for the player on roll.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub game_plan: Option<crate::game_plan::GamePlan>,
     /// Supported definition version: exactly 1.
     #[schema(minimum = 1, maximum = 1)]
     pub schema_version: i32,
@@ -454,6 +457,9 @@ async fn search(
         return Err(ApiError::invalid("limit must be 1–100"));
     }
     database_exists(&s.pool, filters.database_id).await?;
+    if filters.game_plan.is_some() {
+        crate::position_game_plans::ensure_saved(&s.pool, filters.database_id).await?;
+    }
     let scope = format!(
         "{CURSOR_SCOPE}{:x}",
         Sha256::digest(serde_json::to_vec(&filters).map_err(anyhow::Error::from)?)
@@ -512,6 +518,13 @@ async fn search(
     sql.push(table_sort_expression(filters.sort))
         .push(" AS sort_value,m.id AS sort_match_id,p.ordinal AS sort_ordinal,p.id AS sort_id,");
     sql.push(READY).push(" AS card_ready,").push(NAME).push(" AS sort_name FROM positions p JOIN saved_positions saved ON saved.position_uuid=p.id JOIN matches m ON m.id=p.match_uuid JOIN databases d ON d.id=m.database_id LEFT JOIN match_games g ON g.match_uuid=p.match_uuid AND g.game_no=p.game_no LEFT JOIN LATERAL (SELECT chosen.job_id,chosen.engine,chosen.plies,chosen.equity_loss FROM (SELECT j.id AS job_id,coalesce(j.result->>'engine','GNU Backgammon') AS engine,j.plies,ma.equity_loss,ma.data FROM move_analyses ma JOIN jobs j ON j.id=ma.job_id WHERE ma.position_uuid=p.id AND ma.kind='checker' AND ma.game_no=p.game_no AND j.kind='match' AND j.match_uuid=p.match_uuid AND (j.game_no IS NULL OR j.game_no=p.game_no) AND j.status='completed' ORDER BY j.plies DESC,j.created_at DESC,j.id DESC,ma.id DESC LIMIT 1) chosen WHERE ").push(NATIVE_SOLUTION).push(") native ON true WHERE NOT EXISTS(SELECT 1 FROM play_sessions live WHERE live.library_match_id=m.id AND coalesce(live.state->>'play_mode','competition')='competition' AND live.state->>'phase'<>'match_over' AND NOT (live.state->>'match_length'='0' AND live.state->>'phase'='game_over'))");
+    if let Some(plan) = filters.game_plan {
+        sql.push(" AND EXISTS(SELECT 1 FROM position_game_plans plans WHERE plans.position_uuid=p.id AND plans.classifier=")
+            .push_bind(crate::game_plan::CLASSIFIER)
+            .push(" AND plans.game_plan=")
+            .push_bind(crate::position_game_plans::label(plan))
+            .push(")");
+    }
     if let Some(id) = filters.database_id {
         sql.push(" AND coalesce(m.source_database_id,m.database_id)=")
             .push_bind(id);

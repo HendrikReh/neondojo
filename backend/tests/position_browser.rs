@@ -104,6 +104,402 @@ async fn save_match(pool: &PgPool, id: Uuid) {
     .unwrap();
 }
 
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn similar_search_ranks_unsaved_occurrences_and_excludes_the_whole_match_by_default(
+    pool: PgPool,
+) {
+    let (app, current_match, positions) = setup(&pool).await;
+    let other = SOURCE.replace("Alice", "Carol");
+    let other_match = store::import_match(
+        &pool,
+        "neighbors.sgf",
+        "sgf",
+        other.as_bytes(),
+        &other,
+        &import::parse_sgf(&other).unwrap(),
+    )
+    .await
+    .unwrap()
+    .r#match
+    .id;
+    let target = positions.first().unwrap();
+    let url = format!("/api/positions/{}/similar", target.id);
+    let (status, response) = call(app.clone(), "GET", &url, None).await;
+    assert_eq!(status, 200, "{response}");
+    let hits = response["items"].as_array().unwrap();
+    assert_eq!(hits.len(), positions.len());
+    assert!(
+        hits.iter()
+            .all(|hit| hit["position"]["match_uuid"] == other_match.to_string())
+    );
+    assert_eq!(hits[0]["distance"], 0);
+    assert!(
+        hits.windows(2)
+            .all(|pair| pair[0]["distance"].as_i64() <= pair[1]["distance"].as_i64())
+    );
+    let (status, response) = call(
+        app,
+        "GET",
+        &format!("{url}?include_current_match=true"),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{response}");
+    let hits = response["items"].as_array().unwrap();
+    assert!(hits.iter().any(
+        |hit| hit["position"]["match_uuid"] == current_match.to_string()
+            && hit["position"]["game_no"] == 2
+    ));
+    assert!(
+        hits.iter()
+            .all(|hit| hit["position"]["id"] != target.id.to_string())
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn similar_context_filters_combine_and_follow_the_player_on_roll(pool: PgPool) {
+    let target_source = "(;GM[6]PW[Alice]PB[Bob]MI[length:9][ws:4][bs:2]CV[2]CO[w];W[31hefe])";
+    let other_source = "(;GM[6]PW[Carol]PB[Dan]MI[length:9][ws:2][bs:4]CV[2]CO[b];B[13qtst])";
+    let sources = [
+        target_source.to_owned(),
+        other_source.to_owned(),
+        other_source.replace("13qtst", "52lqqs"),
+        other_source.replace("[ws:2][bs:4]", "[ws:4][bs:2]"),
+        other_source.replace("length:9", "length:11"),
+        other_source.replace("CV[2]", "CV[4]"),
+        other_source.replace("CO[b]", "CO[w]"),
+    ];
+    let mut ids = Vec::new();
+    for source in sources {
+        let imported = store::import_match(
+            &pool,
+            "context.sgf",
+            "sgf",
+            source.as_bytes(),
+            &source,
+            &import::parse_sgf(&source).unwrap(),
+        )
+        .await
+        .unwrap();
+        ids.push(imported.r#match.id);
+    }
+    let position: Uuid = sqlx::query_scalar("SELECT id FROM positions WHERE match_uuid=$1")
+        .bind(ids[0])
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let app = api::router(AppState::new(pool, Engine::new("unused".into())));
+    let url = format!("/api/positions/{position}/similar");
+    for (query, expected) in [
+        ("same_dice=true", vec![1, 3, 4, 5, 6]),
+        ("same_score=true", vec![1, 2, 5, 6]),
+        ("same_cube=true", vec![1, 2, 3, 4]),
+        ("same_dice=true&same_score=true&same_cube=true", vec![1]),
+    ] {
+        let (status, response) = call(app.clone(), "GET", &format!("{url}?{query}"), None).await;
+        assert_eq!(status, 200, "{response}");
+        let mut actual: Vec<_> = response["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|hit| {
+                let id: Uuid =
+                    serde_json::from_value(hit["position"]["match_uuid"].clone()).unwrap();
+                ids.iter().position(|candidate| *candidate == id).unwrap()
+            })
+            .collect();
+        actual.sort_unstable();
+        assert_eq!(actual, expected, "{query}");
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn similar_practice_reveals_the_saved_checker_answer(pool: PgPool) {
+    let (app, match_id, positions) = setup(&pool).await;
+    let position = &positions[0];
+    let uri = format!("/api/positions/{}/practice-answer", position.id);
+    let result = json!({"engine":"Saved GNU Backgammon hint","plies":2,"candidates":[{
+        "rank":1,"notation":"8/5 6/5","equity":0.2,"probabilities":[]
+    }]});
+    sqlx::query("INSERT INTO jobs(id,position_uuid,kind,plies,status,result) VALUES($1,$2,'analysis',2,'completed',$3)")
+        .bind(Uuid::new_v4())
+        .bind(position.id)
+        .bind(result)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (status, answer) = call(app.clone(), "POST", &uri, None).await;
+    assert_eq!(status, 200, "{answer}");
+    assert_eq!(answer["best"], "8/5 6/5");
+    assert_eq!(answer["engine"], "Saved GNU Backgammon hint");
+    let match_job = native(&pool, match_id, position, 1, 0.0, "completed").await;
+    sqlx::query("UPDATE move_analyses SET data=data || $1 WHERE job_id=$2")
+        .bind(json!({"decision_no":1,"checker_no":1,"player":0,"kind":"checker","played":"8/5 6/5","dice":[3,1]}))
+        .bind(match_job)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE jobs SET result='{}' WHERE position_uuid=$1")
+        .bind(position.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (status, answer) = call(app.clone(), "POST", &uri, None).await;
+    assert_eq!(status, 200, "{answer}");
+    assert_eq!(answer["engine"], "GNU Backgammon 1");
+    assert_eq!(answer["best"], "8/5 6/5");
+    let (status, _) = call(
+        app,
+        "POST",
+        &format!("/api/positions/{}/practice-answer", Uuid::new_v4()),
+        None,
+    )
+    .await;
+    assert_eq!(status, 404);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn similar_practice_uses_imported_answers_and_respects_competition(pool: PgPool) {
+    let (app, match_id, positions) = setup(&pool).await;
+    let position = &positions[0];
+    let uri = format!("/api/positions/{}/practice-answer", position.id);
+    sqlx::query("UPDATE matches SET format='xg',imported_analysis_loaded=true WHERE id=$1")
+        .bind(match_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let record = json!({
+        "game_no":position.game_no,"source_move_no":1,"checker_ply":1,
+        "position_id":position.position_id,"gnubg_match_id":position.gnubg_match_id,
+        "dice":[1,3],"kind":"checker","player":position.player,"played":position.notation,
+        "engine":"eXtreme Gammon","method":"evaluation","depth":"XGRoller++",
+        "candidates":[{"rank":1,"notation":"8/5 6/5","equity":0.2,"equity_kind":"cubeful","probabilities":{},"raw":{}}],
+        "raw":{}
+    });
+    for (index, data) in [(0, json!({})), (1, record)] {
+        sqlx::query("INSERT INTO imported_analyses(match_uuid,position_uuid,source_ordinal,game_no,source_move_no,kind,data) VALUES($1,$2,$3,$4,1,'checker',$5)")
+            .bind(match_id).bind(position.id).bind(index).bind(position.game_no).bind(data)
+            .execute(&pool).await.unwrap();
+    }
+    let (status, answer) = call(app.clone(), "POST", &uri, None).await;
+    assert_eq!(status, 200, "{answer}");
+    assert_eq!(answer["engine"], "eXtreme Gammon");
+    assert_eq!(answer["depth"], "XGRoller++");
+
+    sqlx::query("INSERT INTO play_sessions(id,state,gnubg_path,sgf,native_id,library_match_id) VALUES($1,$2,'/unavailable','','saved',$3)")
+        .bind(Uuid::new_v4()).bind(json!({"phase":"move","play_mode":"competition","match_length":7})).bind(match_id)
+        .execute(&pool).await.unwrap();
+    let (status, response) = call(app, "POST", &uri, None).await;
+    assert_eq!(status, 422, "{response}");
+    assert!(response.get("best").is_none());
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL and native GNUbg"]
+async fn similar_practice_scores_complete_moves_outside_the_hint_list(pool: PgPool) {
+    let (_, _, positions) = setup(&pool).await;
+    let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or_else(|_| "gnubg".into()));
+    let position = &positions[0];
+    let usual_hint = engine
+        .analyze(&position.position_id, &position.gnubg_match_id, 2, None)
+        .await
+        .unwrap();
+    assert!(
+        usual_hint
+            .candidates
+            .iter()
+            .all(|candidate| candidate.notation != "8/7 8/5")
+    );
+    let uri = format!("/api/positions/{}/practice-score", position.id);
+    let app = api::router(AppState::new(pool, engine));
+    let (status, invalid) = call(
+        app.clone(),
+        "POST",
+        &uri,
+        Some(json!({"steps":[{"from":8,"to":5}]})),
+    )
+    .await;
+    assert_eq!(status, 422, "{invalid}");
+    let (status, score) = call(
+        app.clone(),
+        "POST",
+        &uri,
+        Some(json!({"steps":[{"from":8,"to":5},{"from":8,"to":7}]})),
+    )
+    .await;
+    assert_eq!(status, 200, "{score}");
+    assert_eq!(score["best"], "8/5 6/5");
+    assert_eq!(score["played"], "8/7 8/5");
+    assert_eq!(score["depth"], "2-ply");
+    let loss = score["equity_loss"].as_f64().unwrap();
+    assert!(loss > 0.1);
+    assert!(
+        (score["best_equity"].as_f64().unwrap() - score["played_equity"].as_f64().unwrap() - loss)
+            .abs()
+            < 1e-6
+    );
+    let (status, score) = call(
+        app,
+        "POST",
+        &uri,
+        Some(json!({"steps":[{"from":6,"to":5},{"from":8,"to":5}]})),
+    )
+    .await;
+    assert_eq!(status, 200, "{score}");
+    assert_eq!(score["equity_loss"], 0.0);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL and native GNUbg"]
+async fn similar_practice_scores_a_forced_pass(pool: PgPool) {
+    let source = "(;GM[6]PW[Alice]PB[Bob]MI[length:7]AE[a:x]AW[y]AB[x][x][w][w];W[12])";
+    let imported = store::import_match(
+        &pool,
+        "dance.sgf",
+        "sgf",
+        source.as_bytes(),
+        source,
+        &import::parse_sgf(source).unwrap(),
+    )
+    .await
+    .unwrap();
+    let id: Uuid = sqlx::query_scalar("SELECT id FROM positions WHERE match_uuid=$1")
+        .bind(imported.r#match.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or_else(|_| "gnubg".into()));
+    let app = api::router(AppState::new(pool, engine));
+    let (status, score) = call(
+        app,
+        "POST",
+        &format!("/api/positions/{id}/practice-score"),
+        Some(json!({"steps":[]})),
+    )
+    .await;
+    assert_eq!(status, 200, "{score}");
+    assert_eq!(score["equity_loss"], 0.0);
+    assert_eq!(score["played"], score["best"]);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn similar_practice_history_persists_rounds_and_deduplicates_save_retries(pool: PgPool) {
+    let uri = "/api/study/similar-practice";
+    let app = api::router(AppState::new(pool.clone(), Engine::new("unused".into())));
+    let id = Uuid::new_v4();
+    let completed_at = "2026-11-11T09:00:00Z";
+    let retry_id = Uuid::new_v4();
+    let (status, retry) = call(app.clone(), "POST", uri, Some(json!({"id":retry_id,"completed_at":"2026-11-11T09:01:00Z","total_positions":2,"losses":[0.0,0.0],"is_retry":true}))).await;
+    assert_eq!(status, 200, "{retry}");
+    assert_eq!(retry["average_equity_loss"], 0.0);
+    let round = json!({"id":id,"completed_at":completed_at,"total_positions":4,"losses":[0.3,0.0,0.15],"is_retry":false});
+    let (status, saved) = call(app.clone(), "POST", uri, Some(round.clone())).await;
+    assert_eq!(status, 200, "{saved}");
+    assert_eq!(saved["scored_moves"], 3);
+    assert_eq!(saved["missed_moves"], 2);
+    assert_eq!(saved["completed_at"], completed_at);
+    assert!((saved["average_equity_loss"].as_f64().unwrap() - 0.15).abs() < 1e-12);
+    assert_eq!(
+        call(app.clone(), "POST", uri, Some(round)).await,
+        (200, saved.clone())
+    );
+    let (status, _) = call(
+        app.clone(),
+        "POST",
+        uri,
+        Some(json!({"id":id,"completed_at":completed_at,"total_positions":4,"losses":[0.5],"is_retry":false})),
+    )
+    .await;
+    assert_eq!(status, 409);
+    for losses in [json!([]), json!([-0.01]), json!([0, 0, 0, 0, 0])] {
+        let (status, _) = call(
+            app.clone(),
+            "POST",
+            uri,
+            Some(json!({"id":Uuid::new_v4(),"completed_at":completed_at,"total_positions":4,"losses":losses,"is_retry":false})),
+        )
+        .await;
+        assert_eq!(status, 422);
+    }
+    let app = api::router(AppState::new(pool.clone(), Engine::new("unused".into())));
+    let (status, page) = call(app.clone(), "GET", uri, None).await;
+    assert_eq!(status, 200, "{page}");
+    assert_eq!(page["items"], json!([retry, saved]));
+    assert_eq!(page["next_cursor"], Value::Null);
+    sqlx::query("INSERT INTO similar_practice_summaries(id,completed_at,total_positions,scored_moves,missed_moves,total_equity_loss,is_retry)
+                 SELECT gen_random_uuid(),'2000-01-01',1,1,0,0,false FROM generate_series(1,25)")
+        .execute(&pool).await.unwrap();
+    let (status, first) = call(app.clone(), "GET", uri, None).await;
+    assert_eq!(status, 200, "{first}");
+    let first_items = first["items"].as_array().unwrap();
+    assert_eq!(first_items.len(), 25);
+    assert_eq!(first_items[0]["id"], retry_id.to_string());
+    assert_eq!(first["next_cursor"], first_items[24]["id"]);
+    let cursor = first["next_cursor"].as_str().unwrap();
+    let (status, older) = call(app.clone(), "GET", &format!("{uri}?before={cursor}"), None).await;
+    assert_eq!(status, 200, "{older}");
+    let older_items = older["items"].as_array().unwrap();
+    assert_eq!(older_items.len(), 2);
+    assert!(older_items.iter().all(|item| {
+        !first_items
+            .iter()
+            .any(|previous| previous["id"] == item["id"])
+    }));
+    assert_eq!(older["next_cursor"], Value::Null);
+    let (status, tiny) = call(
+        app,
+        "POST",
+        uri,
+        Some(json!({
+            "id":Uuid::new_v4(),"completed_at":completed_at,"total_positions":2,
+            "losses":[f64::from_bits(1),0.0],"is_retry":false
+        })),
+    )
+    .await;
+    assert_eq!(status, 200, "{tiny}");
+    assert_eq!(tiny["average_equity_loss"], 0.0);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL and native GNUbg"]
+async fn similar_practice_distinguishes_two_routes_to_the_same_point(pool: PgPool) {
+    let source = "(;GM[6]PW[Alice]PB[Bob]MI[length:7]AE[a:x]AW[x]AB[u][q];W[31xwwt])";
+    let imported = store::import_match(
+        &pool,
+        "routes.sgf",
+        "sgf",
+        source.as_bytes(),
+        source,
+        &import::parse_sgf(source).unwrap(),
+    )
+    .await
+    .unwrap();
+    let id: Uuid = sqlx::query_scalar("SELECT id FROM positions WHERE match_uuid=$1")
+        .bind(imported.r#match.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or_else(|_| "gnubg".into()));
+    let app = api::router(AppState::new(pool, engine));
+    let uri = format!("/api/positions/{id}/practice-score");
+    for (intermediate, notation) in [(21, "24/21*/20"), (23, "24/20")] {
+        let (status, score) = call(
+            app.clone(),
+            "POST",
+            &uri,
+            Some(json!({"steps":[{"from":24,"to":intermediate},{"from":intermediate,"to":20}]})),
+        )
+        .await;
+        assert_eq!(status, 200, "{score}");
+        assert_eq!(score["played"], notation);
+    }
+}
+
 async fn note(pool: &PgPool, column: &str, target: Uuid, text: &str) {
     sqlx::query(&format!(
         "INSERT INTO annotations(id,{column},tags,comment,version) VALUES($1,$2,ARRAY['test'],$3,1)"
@@ -1317,4 +1713,162 @@ async fn global_cursors_are_invalidated_while_v1_saved_definitions_still_round_t
         .await;
         assert_eq!(restored["items"], second["items"]);
     }
+}
+
+#[test]
+fn game_plan_filters_round_trip_without_changing_legacy_serialization() {
+    use bgtutor::position_browser::PositionFilterDefinition;
+    let legacy: PositionFilterDefinition =
+        serde_json::from_value(json!({"schema_version":1})).unwrap();
+    assert!(
+        serde_json::to_value(legacy)
+            .unwrap()
+            .get("game_plan")
+            .is_none()
+    );
+    let filter: PositionFilterDefinition =
+        serde_json::from_value(json!({"schema_version":1,"game_plan":"priming"})).unwrap();
+    assert_eq!(
+        serde_json::to_value(filter).unwrap()["game_plan"],
+        "priming"
+    );
+    assert!(
+        serde_json::from_value::<PositionFilterDefinition>(
+            json!({"schema_version":1,"game_plan":"unknown"})
+        )
+        .is_err()
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn game_plan_filter_uses_the_player_on_roll_and_precedes_pagination(pool: PgPool) {
+    let (app, _, positions) = setup(&pool).await;
+    for plan in ["pure_race", "racing", "attacking", "priming", "anchoring"] {
+        let expected: Vec<_> = positions
+            .iter()
+            .filter(|p| {
+                let plans =
+                    bgtutor::game_plan::classify(p.board.as_slice().try_into().unwrap()).unwrap();
+                serde_json::to_value(if p.player == 0 {
+                    plans.white
+                } else {
+                    plans.black
+                })
+                .unwrap()
+                    == plan
+            })
+            .map(|p| p.id)
+            .collect();
+        let found = search(app.clone(), json!({"game_plan":plan})).await;
+        let actual: Vec<Uuid> = found["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|i| i["position"]["id"].as_str().unwrap().parse().unwrap())
+            .collect();
+        assert_eq!(actual, expected, "{plan}");
+    }
+    let (status, page) = call(app.clone(), "GET", "/api/position-browser?limit=1", None).await;
+    assert_eq!(status, 200);
+    let cursor = page["next_cursor"].as_str().unwrap();
+    let (status, _) = call(
+        app,
+        "GET",
+        &format!(
+            "/api/position-browser?limit=1&after={cursor}&filters={}",
+            encoded(&json!({"schema_version":1,"game_plan":"priming"}))
+        ),
+        None,
+    )
+    .await;
+    assert_eq!(status, 422);
+    let cached: i64 = sqlx::query_scalar("SELECT count(*) FROM position_game_plans")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(cached, positions.len() as i64);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn game_plan_cache_is_versioned_and_retained_positions_remain_searchable(pool: PgPool) {
+    let (app, id, positions) = setup(&pool).await;
+    let board = vec![
+        0, -1, 1, 0, 1, 0, 5, -1, 1, 0, 0, 0, -5, 5, 0, 0, 0, -3, 0, -4, 0, 0, 0, -1, 2, 0,
+    ];
+    for position in &positions[..2] {
+        sqlx::query("UPDATE positions SET board=$2 WHERE id=$1")
+            .bind(position.id)
+            .bind(&board)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO position_game_plans(position_uuid,classifier,game_plan) VALUES($1,'old_rules','pure_race')").bind(position.id).execute(&pool).await.unwrap();
+    }
+    let white = search(app.clone(), json!({"game_plan":"attacking"})).await;
+    assert!(
+        white["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|i| i["position"]["id"] == positions[0].id.to_string())
+    );
+    assert!(
+        !white["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|i| i["position"]["id"] == positions[1].id.to_string())
+    );
+    let black = search(app.clone(), json!({"game_plan":"priming"})).await;
+    assert!(
+        black["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|i| i["position"]["id"] == positions[1].id.to_string())
+    );
+    let (status, result) = call(
+        app.clone(),
+        "POST",
+        "/api/library/actions",
+        Some(json!({"action":"delete","match_ids":[id]})),
+    )
+    .await;
+    assert_eq!(status, 200, "{result}");
+    let after = search(app, json!({"game_plan":"attacking"})).await;
+    assert_eq!(
+        after["items"][0]["position"]["id"],
+        positions[0].id.to_string()
+    );
+    assert_eq!(after["items"][0]["source_available"], false);
+    let cached: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM position_game_plans WHERE classifier=$1")
+            .bind(bgtutor::game_plan::CLASSIFIER)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(cached, positions.len() as i64);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn large_game_plan_backfill_is_bounded_and_requires_retry_before_searching(pool: PgPool) {
+    let (app, _, positions) = setup(&pool).await;
+    sqlx::query("INSERT INTO positions(id,match_uuid,ordinal,game_no,ply,player,dice,board,position_id,gnubg_match_id,notation) SELECT gen_random_uuid(),p.match_uuid,100+n,p.game_no,p.ply,p.player,p.dice,p.board,p.position_id,p.gnubg_match_id,p.notation FROM positions p CROSS JOIN generate_series(1,4100) n WHERE p.id=$1").bind(positions[0].id).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO saved_positions(position_uuid) SELECT id FROM positions ON CONFLICT DO NOTHING").execute(&pool).await.unwrap();
+    let path = format!(
+        "/api/position-browser?filters={}",
+        encoded(&json!({"schema_version":1,"game_plan":"priming"}))
+    );
+    let (status, error) = call(app.clone(), "GET", &path, None).await;
+    assert_eq!(status, 422, "{error}");
+    assert!(error["error"].as_str().unwrap().contains("retry"));
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM position_game_plans")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 4096);
+    assert_eq!(call(app, "GET", &path, None).await.0, 200);
 }

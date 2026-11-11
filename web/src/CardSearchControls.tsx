@@ -1,3 +1,4 @@
+import ActionButton from './ActionButton';
 import { type CardFilters } from './card-search-api';
 import { useCardSearchText } from './card-search-messages';
 import { usePositionText } from './position-browser-messages';
@@ -41,10 +42,23 @@ export default function CardSearchControls({
       <div className="card-search-row">
         {field('q', p('q'), 200)}
         {field('player', p('player'), 240)}
-        <button className="primary">{t('search')}</button>
-        <button type="button" onClick={onClear}>
+        <ActionButton
+          icon="search"
+          label={t('search')}
+          compact
+          className="primary"
+        >
+          {t('search')}
+        </ActionButton>
+        <ActionButton
+          icon="clear"
+          label={p('clear')}
+          compact
+          type="button"
+          onClick={onClear}
+        >
           {p('clear')}
-        </button>
+        </ActionButton>
       </div>
       <details>
         <summary>{p('filters')}</summary>

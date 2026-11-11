@@ -363,6 +363,7 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
     'crawford',
     'analysis_state',
     'direction',
+    'game_plan',
   ];
   exactKeys(
     c.positions.definition,

@@ -1,0 +1,54 @@
+import { request } from './api';
+import type { components } from './generated-api';
+type Schema = components['schemas'];
+import type { GamePlan } from './game-plan-api';
+export const mistakeGamePlans: GamePlan[] = [
+  'pure_race',
+  'racing',
+  'attacking',
+  'priming',
+  'anchoring',
+];
+export type MistakeKind = Schema['MistakeKind'];
+export type MistakeFilters = {
+  player?: string;
+  database_id?: string;
+  game_plan?: GamePlan;
+  min_loss?: number;
+};
+export type MistakeGroup = Schema['MistakeGroup'];
+export type MistakePage = Schema['Mistakes'];
+export type MistakeReference = Schema['MistakeReference'];
+// The generated schema describes kind and players broadly; the endpoint contract
+// guarantees one of these question types and fixed White/Black player order.
+export type MistakeQuestion = Omit<
+  Schema['MistakePracticeQuestion'],
+  'kind' | 'players'
+> & {
+  kind: 'checker' | 'cube_offer' | 'cube_response';
+  players: [string, string];
+};
+export type MistakeAnswer = Schema['MistakeAnswer'];
+export type MistakePracticeRequest = Schema['MistakePracticeRequest'];
+export function loadMistakes(filters: MistakeFilters, signal: AbortSignal) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters))
+    if (value !== undefined && value !== '') params.set(key, String(value));
+  return request<MistakePage>(`/study/mistakes?${params}`, { signal });
+}
+function post<T>(path: string, body: unknown, signal: AbortSignal) {
+  return request<T>(`/study/mistakes/${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  });
+}
+export const loadMistakePractice = (
+  filters: MistakePracticeRequest,
+  signal: AbortSignal,
+) => post<{ items: MistakeQuestion[] }>('practice', filters, signal);
+export const revealMistake = (
+  reference: MistakeReference,
+  signal: AbortSignal,
+) => post<MistakeAnswer>('reveal', reference, signal);

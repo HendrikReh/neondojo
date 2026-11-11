@@ -1,3 +1,5 @@
+import Tooltip from './Tooltip';
+import ActionButton from './ActionButton';
 import { useState, type KeyboardEvent } from 'react';
 import Board, { type Theme } from './Board';
 import { matchContext } from './boardMath';
@@ -84,11 +86,12 @@ export default function LearningCardBrowser({
             </thead>
             <tbody>
               {cards.map((card, index) => (
-                <tr
+                <Tooltip
+                  as="tr"
                   key={card.id}
                   id={`learning-card-${card.id}`}
                   data-card-id={card.id}
-                  title={[
+                  text={[
                     question(card),
                     card.players.join(' · '),
                     card.position.position_id,
@@ -130,7 +133,7 @@ export default function LearningCardBrowser({
                       : p('noDecks')}
                   </td>
                   <td>{formatNumber(card.review_count)}</td>
-                </tr>
+                </Tooltip>
               ))}
             </tbody>
           </table>
@@ -141,9 +144,15 @@ export default function LearningCardBrowser({
           </p>
         )}
         {hasMore && (
-          <button disabled={moreLoading} onClick={onMore}>
+          <ActionButton
+            icon="more"
+            label={t(moreLoading ? 'loading' : 'more')}
+            compact
+            disabled={moreLoading}
+            onClick={onMore}
+          >
             {t(moreLoading ? 'loading' : 'more')}
-          </button>
+          </ActionButton>
         )}
       </div>
       <aside

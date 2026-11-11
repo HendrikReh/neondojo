@@ -7,15 +7,13 @@ pub mod match_analysis;
 pub mod model;
 pub mod store;
 
-mod analysis_timing;
 mod match_jobs;
-mod similar_positions;
 
 pub mod annotations;
-pub mod configuration;
 pub mod learning;
-pub mod profiles;
 
+pub mod configuration;
+pub mod profiles;
 pub mod settings;
 
 pub mod databases;
@@ -39,6 +37,13 @@ pub mod play;
 
 mod game_result;
 
+pub mod benchmarks;
+
 pub mod study;
 
-pub mod benchmarks;
+pub mod recurring_mistakes;
+
+mod position_game_plans;
+
+mod analysis_timing;
+mod similar_positions;

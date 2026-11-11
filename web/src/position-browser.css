@@ -292,7 +292,7 @@
   overflow-wrap: anywhere;
 }
 .position-col-actions {
-  width: 40px;
+  width: 60px;
 }
 .position-browser .position-table th {
   position: sticky;
@@ -667,13 +667,10 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  overflow: hidden;
+  overflow: visible;
 }
 .position-browser .position-remove-saved {
-  flex: 0 0 24px;
-  padding: 1px 4px;
-  line-height: 20px;
-  font-size: 18px;
+  padding: 0;
 }
 
 .position-source-removed {

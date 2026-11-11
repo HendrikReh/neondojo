@@ -1,3 +1,4 @@
+import ActionButton from './ActionButton';
 import { useEffect, useId, useRef, useState } from 'react';
 import { useI18n } from './i18n';
 import { useDeckManagementText } from './deck-management-messages';
@@ -192,15 +193,31 @@ export default function DeckManagementDialog({
         {missing && <p role="alert">{t('missing')}</p>}
         {refreshed && !error && <p role="status">{t('refreshed')}</p>}
         {conflict && (
-          <button type="button" disabled={busy} onClick={() => void refresh()}>
+          <ActionButton
+            icon="refresh"
+            label={t('refresh')}
+            compact
+            type="button"
+            disabled={busy}
+            onClick={() => void refresh()}
+          >
             {t('refresh')}
-          </button>
+          </ActionButton>
         )}
         <footer>
-          <button type="button" disabled={busy} onClick={onClose}>
+          <ActionButton
+            icon="cancel"
+            label={t('cancel')}
+            compact
+            type="button"
+            disabled={busy}
+            onClick={onClose}
+          >
             {t('cancel')}
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
+            icon={mode === 'delete' ? 'delete' : 'save'}
+            label={t(busy ? 'working' : mode === 'delete' ? 'delete' : 'save')}
             type="submit"
             className={mode === 'delete' ? 'deck-management-delete' : 'primary'}
             disabled={
@@ -213,7 +230,7 @@ export default function DeckManagementDialog({
             }
           >
             {t(busy ? 'working' : mode === 'delete' ? 'delete' : 'save')}
-          </button>
+          </ActionButton>
         </footer>
       </form>
     </dialog>
