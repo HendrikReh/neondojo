@@ -1,3 +1,4 @@
+import ActionButton from './ActionButton';
 import type { ReactNode } from 'react';
 import type { Job, MatchAnalysisSummary } from './api';
 import { useI18n } from './i18n';
@@ -320,7 +321,9 @@ export default function MatchStatisticsView({
                     <tr key={game.game_no}>
                       <th scope="row">
                         {onGame ? (
-                          <button
+                          <ActionButton
+                            icon="open"
+                            label={text('openGame', { game: game.game_no })}
                             type="button"
                             className="position-link"
                             aria-label={text('openGame', {
@@ -328,8 +331,8 @@ export default function MatchStatisticsView({
                             })}
                             onClick={() => onGame(game.game_no)}
                           >
-                            {text('game', { game: game.game_no })} ↗
-                          </button>
+                            {text('game', { game: game.game_no })}
+                          </ActionButton>
                         ) : (
                           text('game', { game: game.game_no })
                         )}

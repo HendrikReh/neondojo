@@ -1,5 +1,7 @@
+import Tooltip from './Tooltip';
 import { useProfileValue } from './useProfileValue';
 import { useOptionalConfiguration } from './ConfigurationProvider';
+import ActionButton from './ActionButton';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import {
   normalizeAnnotationTag,
@@ -193,9 +195,16 @@ export default function AnnotationSearch({
             <option value="move">{l('sourceMove')}</option>
           </select>
         </label>
-        <button type="submit" className="primary" disabled={loading}>
+        <ActionButton
+          icon="search"
+          label={t(loading ? 'searching' : 'search')}
+          compact
+          type="submit"
+          className="primary"
+          disabled={loading}
+        >
           {t(loading ? 'searching' : 'search')}
-        </button>
+        </ActionButton>
       </form>
       <p className="fineprint">{t('searchHelp')}</p>
       {validation && (
@@ -235,9 +244,17 @@ export default function AnnotationSearch({
                   {hit.white} — {hit.black}
                 </h4>
               </div>
-              <button type="button" onClick={() => onOpen(hit)}>
+              <ActionButton
+                icon="open"
+                label={t(
+                  hit.target_kind === 'match' ? 'openMatch' : 'openPosition',
+                )}
+                compact
+                type="button"
+                onClick={() => onOpen(hit)}
+              >
                 {t(hit.target_kind === 'match' ? 'openMatch' : 'openPosition')}
-              </button>
+              </ActionButton>
             </div>
             <p className="annotation-hit-context fineprint">
               <span>{hit.filename}</span>
@@ -249,14 +266,15 @@ export default function AnnotationSearch({
             {!!hit.tags.length && (
               <div className="annotation-hit-tags">
                 {hit.tags.map((value) => (
-                  <button
+                  <Tooltip
+                    as="button"
                     type="button"
                     key={value}
-                    title={t('filterByTag', { tag: value })}
+                    text={t('filterByTag', { tag: value })}
                     onClick={() => findTag(value)}
                   >
                     {value}
-                  </button>
+                  </Tooltip>
                 ))}
               </div>
             )}
@@ -268,13 +286,16 @@ export default function AnnotationSearch({
       </div>
       {cursor && (
         <div className="annotation-search-actions">
-          <button
+          <ActionButton
+            icon="more"
+            label={t(loadingMore ? 'searching' : 'more')}
+            compact
             type="button"
             disabled={loading || loadingMore}
             onClick={() => void more()}
           >
             {t(loadingMore ? 'searching' : 'more')}
-          </button>
+          </ActionButton>
         </div>
       )}
     </details>

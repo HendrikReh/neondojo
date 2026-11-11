@@ -1,3 +1,4 @@
+import ActionButton from './ActionButton';
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import AnnotationPanel from './AnnotationPanel';
 import type { AnnotationKind } from './annotation-api';
@@ -135,7 +136,11 @@ export default function NotesPanel({
       ))}
       {catalog && (
         <div className="notes-game-actions">
-          <button onClick={onMoveNotes}>{l('cubeNotes')}</button>
+          <ActionButton
+            icon="notes"
+            label={l('cubeNotes')}
+            onClick={onMoveNotes}
+          />
         </div>
       )}
     </div>

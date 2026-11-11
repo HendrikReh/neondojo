@@ -2,6 +2,7 @@ import { ConfigurationApiError } from './configuration-api';
 import ProfileActionDialog from './ProfileActionDialog';
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import { useProfileText } from './profile-messages';
+import ActionButton from './ActionButton';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import LibraryDialog from './LibraryDialog';
 import { request } from './api';
@@ -211,13 +212,14 @@ export default function OpeningBookDialog({
               }}
             />
           </label>
-          <button
+          <ActionButton
+            icon="confirm"
+            label={l('check')}
+            compact
             type="button"
             onClick={() => void check()}
             disabled={busy || !draft.path.trim()}
-          >
-            {l('check')}
-          </button>
+          />
           {status && (
             <div className="source-book-status" role="status">
               <strong>
@@ -254,13 +256,14 @@ export default function OpeningBookDialog({
               }}
             />
           </label>
-          <button
+          <ActionButton
+            icon="confirm"
+            label={l('checkXg')}
+            compact
             type="button"
             onClick={() => void checkXg()}
             disabled={busy || !draft.xg_path?.trim()}
-          >
-            {l('checkXg')}
-          </button>
+          />
           {xgStatus && (
             <div className="source-book-status">
               <strong>
@@ -283,32 +286,48 @@ export default function OpeningBookDialog({
             </p>
           )}
           {conflict && (
-            <button
+            <ActionButton
+              icon="refresh"
+              label={l('retry')}
+              compact
               type="button"
               onClick={() =>
                 configuration ? setConfirmReload(true) : setReload((n) => n + 1)
               }
-            >
-              {l('retry')}
-            </button>
+            />
           )}
           <div className="library-dialog-actions">
-            <button type="button" disabled={busy} onClick={onClose}>
-              {l('cancel')}
-            </button>
-            <button className="primary" disabled={busy || conflict}>
-              {busy
-                ? l('loading')
-                : configuration
-                  ? profileT('apply')
-                  : l('save')}
-            </button>
+            <ActionButton
+              icon="cancel"
+              label={l('cancel')}
+              compact
+              type="button"
+              disabled={busy}
+              onClick={onClose}
+            />
+            <ActionButton
+              icon="save"
+              label={
+                busy
+                  ? l('loading')
+                  : configuration
+                    ? profileT('apply')
+                    : l('save')
+              }
+              className="primary"
+              disabled={busy || conflict}
+            />
           </div>
         </form>
       ) : (
         <>
           <p role="alert">{formatError(error)}</p>
-          <button onClick={() => setReload((n) => n + 1)}>{l('retry')}</button>
+          <ActionButton
+            icon="refresh"
+            label={l('retry')}
+            compact
+            onClick={() => setReload((n) => n + 1)}
+          />
         </>
       )}
     </LibraryDialog>

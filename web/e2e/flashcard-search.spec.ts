@@ -122,9 +122,9 @@ async function setup(page: Page) {
       writes.push(req.url());
   });
   await page.goto('/');
-  await page.getByRole('tab', { name: 'Study & Anki', exact: true }).click();
+  await page.getByRole('tab', { name: 'Study', exact: true }).click();
   return {
-    study: page.getByRole('region', { name: 'Study & Anki', exact: true }),
+    study: page.getByRole('region', { name: 'Study', exact: true }),
     queries,
     writes,
     setSlow: (fn: () => Promise<void>) => {

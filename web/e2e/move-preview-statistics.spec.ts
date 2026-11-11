@@ -2,6 +2,19 @@ import { expect, test } from './test';
 import { readFileSync } from 'node:fs';
 test.use({ actionTimeout: 10000 });
 
+function analyzedGameFile() {
+  return {
+    name: 'preview-sources.sgf',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.from(
+      readFileSync(
+        '../backend/tests/fixtures/analysis-game1.sgf',
+        'utf8',
+      ).replace(/PW\[[^\]]*\]/, `PW[Preview sources ${crypto.randomUUID()}]`),
+    ),
+  };
+}
+
 test('played move arrows and before/after remain tied to the original decision', async ({
   page,
 }) => {
@@ -45,16 +58,9 @@ test('file, book and native candidates preview explicitly and source changes res
 }) => {
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
   await page.goto('/');
-  await page.getByLabel('Match file', { exact: true }).setInputFiles({
-    name: 'preview-sources.sgf',
-    mimeType: 'application/octet-stream',
-    buffer: Buffer.from(
-      readFileSync(
-        '../backend/tests/fixtures/analysis-game1.sgf',
-        'utf8',
-      ).replace(/PW\[[^\]]*\]/, `PW[Preview sources ${crypto.randomUUID()}]`),
-    ),
-  });
+  await page
+    .getByLabel('Match file', { exact: true })
+    .setInputFiles(analyzedGameFile());
   await page
     .getByRole('tab', { name: 'Imported analysis', exact: true })
     .click();

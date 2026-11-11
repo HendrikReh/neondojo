@@ -8,23 +8,31 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function completedFullJob(page: Page, matchId: string) {
-  let job = await (
-    await page.request.get(`/api/matches/${matchId}/analysis`)
-  ).json();
-  if (job?.status !== 'completed') {
-    job = await (
-      await page.request.post(`/api/matches/${matchId}/analysis`, {
-        data: { plies: 0 },
-      })
-    ).json();
-    await expect
-      .poll(
-        async () =>
-          (await (await page.request.get(`/api/jobs/${job.id}`)).json()).status,
-        { timeout: 30_000 },
-      )
-      .toBe('completed');
+  const analysisUrl = `/api/matches/${matchId}/analysis`;
+  const existing = await page.request.get(analysisUrl);
+  await expect(existing).toBeOK();
+  let job = await existing.json();
+  if (job?.status === 'completed') return job;
+
+  if (!job || job.status === 'failed') {
+    const submitted = await page.request.post(analysisUrl, {
+      data: { plies: 0 },
+    });
+    await expect(submitted).toBeOK();
+    job = await submitted.json();
   }
+  const jobUrl = `/api/jobs/${job.id}`;
+  await expect
+    .poll(
+      async () => {
+        const latest = await page.request.get(jobUrl);
+        await expect(latest).toBeOK();
+        job = await latest.json();
+        return job.status;
+      },
+      { timeout: 30_000 },
+    )
+    .toBe('completed');
   return job;
 }
 
@@ -86,6 +94,8 @@ test('one game owns its move list, board boundaries and native analysis; full ma
   await expect(page.getByLabel('Analyseumfang', { exact: true })).toHaveValue(
     'game',
   );
+  const depth = page.getByLabel('Partie-Analysetiefe', { exact: true });
+  await depth.selectOption('0');
   const scoped = page.waitForResponse(
     (r) =>
       r.request().method() === 'POST' &&
@@ -97,7 +107,7 @@ test('one game owns its move list, board boundaries and native analysis; full ma
     })
     .click();
   const response = await scoped;
-  expect(response.request().postDataJSON().game_no).toBe(2);
+  expect(response.request().postDataJSON()).toEqual({ plies: 0, game_no: 2 });
   const job = await response.json();
   expect(job.game_no).toBe(2);
   expect(job.total_games).toBe(1);
@@ -127,6 +137,7 @@ test('one game owns its move list, board boundaries and native analysis; full ma
   });
   await page.setViewportSize({ width: 1440, height: 1100 });
   await page.getByLabel('Analyseumfang', { exact: true }).selectOption('match');
+  await depth.selectOption('0');
   const full = page.waitForResponse(
     (r) =>
       r.request().method() === 'POST' &&
@@ -138,7 +149,7 @@ test('one game owns its move list, board boundaries and native analysis; full ma
     })
     .click();
   const fullResponse = await full;
-  expect(fullResponse.request().postDataJSON().game_no).toBeUndefined();
+  expect(fullResponse.request().postDataJSON()).toEqual({ plies: 0 });
   const fullJob = await fullResponse.json();
   expect(fullJob.game_no).toBeNull();
   expect(fullJob.total_games).toBe(10);

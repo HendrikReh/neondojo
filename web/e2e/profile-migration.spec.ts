@@ -17,7 +17,7 @@ test('imports legacy preferences once and preserves unrelated workspace state', 
     localStorage.setItem('bgtutor.play-sounds', 'off');
     localStorage.setItem(
       'bgtutor.library.visibleColumns',
-      JSON.stringify({ version: 1, columns: ['id'] }),
+      JSON.stringify({ version: 2, columns: ['id'] }),
     );
     localStorage.setItem('bgtutor.jobs.unrelated', 'kept');
   });

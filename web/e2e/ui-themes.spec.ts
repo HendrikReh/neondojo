@@ -177,7 +177,7 @@ for (const theme of ['graphite', 'club', 'paper'] as const) {
       await savedDialog
         .getByRole('button', { name: 'Cancel', exact: true })
         .click();
-      for (const tab of ['Match database', 'Positions', 'Study & Anki']) {
+      for (const tab of ['Match database', 'Positions', 'Study']) {
         await page.getByRole('tab', { name: tab, exact: true }).click();
         await expect(page.locator('.app-shell')).toHaveCSS(
           'background-color',

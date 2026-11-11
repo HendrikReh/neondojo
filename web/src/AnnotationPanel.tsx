@@ -1,3 +1,4 @@
+import ActionButton from './ActionButton';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { request } from './api';
 import { useLibraryText } from './library-messages';
@@ -207,26 +208,27 @@ function AnnotationEditor({ kind, id, onSaved }: AnnotationPanelProps) {
         <div className="error" role="alert">
           <p>{formatError(error)}</p>
           {!ready && (
-            <button
+            <ActionButton
+              icon="refresh"
+              label={t('retry')}
+              compact
               type="button"
               onClick={() => void load(false)}
               disabled={loading}
-            >
-              {t('retry')}
-            </button>
+            />
           )}
         </div>
       )}
       {conflict && (
         <div className="annotation-conflict" role="alert">
           <p>{t('conflict')}</p>
-          <button
+          <ActionButton
+            icon="refresh"
+            label={t('loadLatest')}
             type="button"
             onClick={() => void load(true)}
             disabled={loading || saving}
-          >
-            {t('loadLatest')}
-          </button>
+          />
         </div>
       )}
       <div className="annotation-fields">
@@ -249,13 +251,14 @@ function AnnotationEditor({ kind, id, onSaved }: AnnotationPanelProps) {
                 }
               }}
             />
-            <button
+            <ActionButton
+              icon="add"
+              label={t('addTag')}
+              compact
               type="button"
               onClick={addTag}
               disabled={disabled || !draft.tagInput.trim()}
-            >
-              {t('addTag')}
-            </button>
+            />
           </div>
           <p className="fineprint annotation-help" id={`${htmlId}-tag-help`}>
             {t('tagHelp')}
@@ -265,7 +268,10 @@ function AnnotationEditor({ kind, id, onSaved }: AnnotationPanelProps) {
               {draft.tags.map((tag) => (
                 <li className="annotation-tag" key={tag}>
                   <span>{tag}</span>
-                  <button
+                  <ActionButton
+                    icon="close"
+                    label={t('removeTag', { tag })}
+                    compact
                     type="button"
                     aria-label={t('removeTag', { tag })}
                     disabled={disabled}
@@ -277,9 +283,7 @@ function AnnotationEditor({ kind, id, onSaved }: AnnotationPanelProps) {
                         ),
                       })
                     }
-                  >
-                    <span aria-hidden="true">×</span>
-                  </button>
+                  />
                 </li>
               ))}
             </ul>
@@ -309,14 +313,15 @@ function AnnotationEditor({ kind, id, onSaved }: AnnotationPanelProps) {
         </p>
       )}
       <div className="annotation-actions">
-        <button
+        <ActionButton
+          icon="save"
+          label={t(saving ? 'saving' : 'save')}
+          compact
           type="button"
           className="primary"
           disabled={disabled || !unsaved || conflict}
           onClick={() => void save()}
-        >
-          {t(saving ? 'saving' : 'save')}
-        </button>
+        />
         {saved && (
           <span className="annotation-status" role="status">
             {t('saved')}

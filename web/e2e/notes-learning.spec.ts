@@ -217,9 +217,9 @@ test('an analyzed annotated position becomes a shared study card and a downloada
     .getByRole('button', { name: 'Aktuelle Position hinzufügen', exact: true })
     .click();
   await expect(add).toContainText('1 Karten verarbeitet.');
-  await page.getByRole('tab', { name: 'Lernen & Anki', exact: true }).click();
+  await page.getByRole('tab', { name: 'Study', exact: true }).click();
   const study = page.getByRole('region', {
-    name: 'Lernen & Anki',
+    name: 'Study',
     exact: true,
   });
   await study
@@ -317,7 +317,7 @@ test('an analyzed annotated position becomes a shared study card and a downloada
     study.getByRole('button', { name: 'Anki-Deck herunterladen', exact: true }),
   ).toBeEnabled();
   await page.reload();
-  await page.getByRole('tab', { name: 'Lernen & Anki', exact: true }).click();
+  await page.getByRole('tab', { name: 'Study', exact: true }).click();
   await study
     .getByLabel('Deck auswählen', { exact: true })
     .selectOption(deck.id);
@@ -435,9 +435,9 @@ test('an annotation jump supersedes a delayed game load and switching views pres
   });
   await page.getByLabel('Spiel auswählen', { exact: true }).selectOption('2');
   await viewStarted;
-  await page.getByRole('tab', { name: 'Lernen & Anki', exact: true }).click();
+  await page.getByRole('tab', { name: 'Study', exact: true }).click();
   await expect(
-    page.getByRole('region', { name: 'Lernen & Anki', exact: true }),
+    page.getByRole('region', { name: 'Study', exact: true }),
   ).toBeVisible();
   releaseView();
   expect(await (await backgroundResponse).finished()).toBeNull();
@@ -534,13 +534,11 @@ test('a whole-match deck trains checker, double and response cards with the sele
   });
   await settings.getByRole('button', { name: 'Brett', exact: true }).click();
   await settings.getByRole('button', { name: 'Walnut', exact: true }).click();
-  await settings
-    .getByRole('button', { name: 'Anwenden', exact: true })
-    .click();
+  await settings.getByRole('button', { name: 'Anwenden', exact: true }).click();
   await expect(settings).not.toBeVisible();
-  await page.getByRole('tab', { name: 'Lernen & Anki', exact: true }).click();
+  await page.getByRole('tab', { name: 'Study', exact: true }).click();
   const study = page.getByRole('region', {
-    name: 'Lernen & Anki',
+    name: 'Study',
     exact: true,
   });
   await study

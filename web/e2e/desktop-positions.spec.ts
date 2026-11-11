@@ -1,4 +1,5 @@
 import { expect, test, type Page } from './test';
+import { expectCompactPositionRow } from './position-row-layout';
 
 test.use({ actionTimeout: 10000 });
 
@@ -80,10 +81,13 @@ test('compact position rows retain a right-hand board preview at desktop sizes',
       .locator('.position-preview')
       .getByRole('button', { name: 'Open analysis', exact: true }),
   ).toBeVisible();
-  await expect(rows.first()).toHaveAttribute('title', /Player on roll:/);
-  expect((await rows.first().boundingBox())!.height).toBeLessThanOrEqual(40);
+  await rows.first().focus();
+  await expect(page.getByRole('tooltip')).toContainText('Player on roll:');
+  await expect(page.getByRole('tooltip')).not.toContainText('Played move:');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('tooltip')).toHaveCount(0);
+  await expectCompactPositionRow(rows.first());
   await expect(pane.locator('.position-played-move')).toHaveCount(0);
-  await expect(rows.first()).not.toHaveAttribute('title', /Played move:/);
   // Select by the exact stored occurrence, rather than by a duplicate board ID.
   const second = pane.locator(`tr[data-position-id="${records[1].id}"]`);
   await second.locator('.position-player').click();
@@ -107,6 +111,8 @@ test('compact position rows retain a right-hand board preview at desktop sizes',
     [3840, 2160],
   ]) {
     await page.setViewportSize({ width, height });
+    await expectCompactPositionRow(rows.first());
+    await expectCompactPositionRow(rows.last());
     expect(
       (await pane.locator('th[data-column="notes"]').boundingBox())!.width,
     ).toBeGreaterThanOrEqual(120);

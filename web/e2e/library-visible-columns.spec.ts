@@ -66,7 +66,8 @@ test('optional columns persist without changing filters, sorting or batch select
   await expect(head(page, 'tags')).toBeVisible();
   const row = page.locator('.database-table tbody tr').first();
   await expect(row.locator('.library-tags-cell')).toContainText('column-tag');
-  await expect(row).toHaveAttribute('title', /Rare comment/);
+  await row.focus();
+  await expect(page.getByRole('tooltip')).toContainText('Rare comment');
   await row.getByRole('checkbox').check();
   const requests: string[] = [];
   page.on('request', (request) => {

@@ -1,4 +1,5 @@
 import { expect, test } from './test';
+import { expectCompactPositionRow } from './position-row-layout';
 import { POSITION_COLUMNS } from '../src/position-table-columns';
 test.use({ actionTimeout: 10000 });
 test('header omits import while the match database retains working file import', async ({
@@ -165,7 +166,8 @@ test('deck memberships refresh on later result pages and retain existing column 
     .sort()
     .join(', ');
   await expect(row.locator('.position-row-decks')).toHaveText(expected);
-  await expect(row).toHaveAttribute('title', new RegExp('Decks: Alpha'));
+  await row.focus();
+  await expect(page.getByRole('tooltip')).toContainText('Decks: Alpha');
   await pane
     .getByRole('button', { name: 'Add selected positions', exact: true })
     .click();
@@ -173,7 +175,7 @@ test('deck memberships refresh on later result pages and retain existing column 
     1,
   );
   await expect(row.locator('.position-row-decks')).toHaveText(expected);
-  expect((await row.boundingBox())!.height).toBeLessThanOrEqual(40);
+  await expectCompactPositionRow(row);
   const player = pane.locator('th[data-column="player"]'),
     decks = pane.locator('th[data-column="decks"]');
   expect((await player.boundingBox())!.width).toBeCloseTo(221, 0);
@@ -316,7 +318,8 @@ test('found positions flow through real analysis, partial card transfer, Anki ex
   page,
 }) => {
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
-  const f = await fixture(page),
+  // Keep FSRS progress separate from the commonly reviewed seven-point fixtures.
+  const f = await fixture(page, 1, 61),
     pane = await openBrowser(page, f.database.id),
     rows = pane.locator('.position-table tbody tr');
   await expect(rows).toHaveCount(2);
@@ -375,11 +378,15 @@ test('found positions flow through real analysis, partial card transfer, Anki ex
   expect(path).toBeTruthy();
   const { readFileSync } = await import('node:fs');
   expect(readFileSync(path!).subarray(0, 2).toString()).toBe('PK');
+  // Opening a requested deck must switch away from a previously selected report area.
+  await page.getByRole('tab', { name: 'Study', exact: true }).click();
+  await page.getByRole('tab', { name: 'Reports', exact: true }).click();
+  await page.getByRole('tab', { name: 'Positions', exact: true }).click();
   await pane
     .getByRole('button', { name: 'Study this deck', exact: true })
     .click();
   const learning = page.getByRole('region', {
-    name: 'Study & Anki',
+    name: 'Study',
     exact: true,
   });
   await expect(learning.locator('.study-card')).toContainText(deckName);

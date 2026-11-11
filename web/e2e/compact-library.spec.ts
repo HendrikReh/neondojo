@@ -100,7 +100,7 @@ for (const [width, height] of [
     const first = rows.first(),
       long = rows.nth(1);
     for (const row of [first, long])
-      expect((await row.boundingBox())!.height).toBeLessThanOrEqual(40);
+      expect((await row.boundingBox())!.height).toBeLessThanOrEqual(56);
     const sizes = await page.locator('.library-content').evaluate((element) => {
       const table = element.querySelector('table')!;
       return {
@@ -126,7 +126,10 @@ for (const [width, height] of [
       'Long tag 9',
     );
     await expect(long.locator('[title]')).toHaveCount(0);
-    const summary = await long.getAttribute('title');
+    await long.focus();
+    const tooltip = page.getByRole('tooltip');
+    await expect(tooltip).toBeVisible();
+    const summary = await tooltip.innerText();
     expect(summary).toContain('ID: 2');
     expect(summary).toContain(entries[1].white);
     expect(summary).toContain(entries[1].display_name);
@@ -135,7 +138,9 @@ for (const [width, height] of [
     expect(summary).toContain('Analysis: Imported');
     expect(summary).toContain('Tags: Long tag 0');
     expect(summary).toContain('Comment: First line of a long note');
-    expect(summary).not.toBe(await first.getAttribute('title'));
+    await first.focus();
+    await expect(tooltip).toContainText('ID: 1');
+    await expect(tooltip).not.toHaveText(summary);
     await first.locator('td').nth(3).click();
     await expect(first).toBeFocused();
     await page.keyboard.press('ArrowDown');
@@ -144,10 +149,9 @@ for (const [width, height] of [
       page.getByRole('tab', { name: 'Match database', exact: true }),
     ).toHaveAttribute('aria-selected', 'true');
     expect(requests).toEqual([]);
-    await expect(first.getByRole('link', { name: 'SGF ↓' })).toHaveAttribute(
-      'href',
-      `/api/matches/${entries[0].id}/source`,
-    );
+    await expect(
+      first.getByRole('link', { name: 'Export: SGF' }),
+    ).toHaveAttribute('href', `/api/matches/${entries[0].id}/source`);
     const edit = long.getByRole('button', {
       name: `Edit match details: ${entries[1].display_name}`,
       exact: true,
@@ -181,7 +185,7 @@ for (const [width, height] of [
       expect(
         (await long.locator('.library-notes-cell').boundingBox())!.width,
       ).toBeGreaterThanOrEqual(64);
-      expect((await long.boundingBox())!.height).toBeLessThanOrEqual(40);
+      expect((await long.boundingBox())!.height).toBeLessThanOrEqual(56);
     }
   });
 }

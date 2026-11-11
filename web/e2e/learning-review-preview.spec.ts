@@ -150,7 +150,7 @@ async function setup(
   });
   await page.goto('/');
   if (entry === 'study') {
-    await page.getByRole('tab', { name: 'Study & Anki', exact: true }).click();
+    await page.getByRole('tab', { name: 'Study', exact: true }).click();
     await page.getByRole('tab', { name: 'Reports', exact: true }).click();
     await page
       .getByRole('button', { name: 'Open report', exact: true })

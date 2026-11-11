@@ -111,7 +111,7 @@ const views = [
   ],
   [
     'learning',
-    'Study & Anki',
+    'Study',
     '.learning-heading h1',
     '.learning-card-list',
     '.create-deck input',
@@ -170,10 +170,7 @@ for (const theme of ['graphite', 'club', 'paper'])
           await expect(
             panel.locator('.board-view-buttons button').first(),
           ).toHaveCSS('font-size', '13px');
-          await expect(panel.locator('.board-focus-toggle')).toHaveCSS(
-            'font-size',
-            '13px',
-          );
+          await expect(panel.locator('.board-focus-toggle')).toHaveCount(0);
         }
         if (id === 'database')
           await expect(panel.locator('.position-search input')).toHaveCSS(
@@ -251,8 +248,8 @@ test('comment editors, modal titles and study questions follow their roles while
     '14px',
   );
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await page.getByRole('tab', { name: 'Study & Anki', exact: true }).click();
-  const study = page.getByRole('region', { name: 'Study & Anki', exact: true });
+  await page.getByRole('tab', { name: 'Study', exact: true }).click();
+  const study = page.getByRole('region', { name: 'Study', exact: true });
   await expect(study.locator('.learning-card-list small').first()).toHaveCSS(
     'font-family',
     /monospace/,
@@ -396,7 +393,7 @@ test('analysis statistics and move errors use the shared table roles', async ({
 test('the shared role scale stays stable across desktop widths and every locale', async ({
   page,
 }, info) => {
-  await fixture(page);
+  const positionId = await fixture(page);
   async function reloadWithLocale(locale: string) {
     await page.evaluate(async (locale) => {
       const state = await (await fetch('/api/configuration')).json();
@@ -413,13 +410,18 @@ test('the shared role scale stays stable across desktop widths and every locale'
       });
       if (!response.ok) throw new Error(await response.text());
     }, locale);
+    const restored = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === `/api/positions/${positionId}` &&
+        response.ok(),
+    );
     await page.reload();
+    await restored;
     await expect(page.locator('html')).toHaveAttribute('lang', locale);
     await expect(page.locator('.analysis-workspace .board')).toBeVisible();
   }
   for (const locale of ['en', 'de', 'es', 'fr', 'pl', 'it']) {
     await reloadWithLocale(locale);
-    await expect(page.locator('html')).toHaveAttribute('lang', locale);
     for (const [id, , title, table] of views) {
       await page.locator(`#workspace-tab-${id}`).click();
       const panel = page.locator(`#workspace-panel-${id}`);

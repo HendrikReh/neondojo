@@ -159,6 +159,10 @@ test('header keyboard navigation and history navigation retain selection, focus 
     page.getByRole('tab', { name: 'Extras', exact: true }),
   ).toBeFocused();
   await page.keyboard.press('Home');
+  await expect(
+    page.getByRole('tab', { name: 'Playing', exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press('ArrowRight');
   await expect(tab).toBeFocused();
   await page.locator('.moves-list button').nth(1).focus();
   await page.keyboard.press('Enter');

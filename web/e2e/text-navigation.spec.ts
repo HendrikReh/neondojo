@@ -186,7 +186,7 @@ for (const theme of ['graphite', 'club', 'paper'])
         page.locator('.database-collections [aria-pressed="true"]'),
         color,
       );
-      for (const name of ['Positions', 'Study & Anki']) {
+      for (const name of ['Positions', 'Study']) {
         await page.getByRole('tab', { name, exact: true }).click();
         await activeText(
           page.locator('.app-tabs [aria-selected="true"]'),

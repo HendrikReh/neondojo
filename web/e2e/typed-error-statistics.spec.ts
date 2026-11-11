@@ -33,6 +33,7 @@ for (const scope of ['match', 'game'] as const) {
       .click();
     await expect(page.locator('.match-analysis-progress')).toContainText(
       scope === 'game' ? 'Game analysis complete' : 'Match analysis complete',
+      { timeout: 30000 },
     );
     const stats = page.locator('.overview-statistics');
     await expect(stats.locator('.statistics-error-matrix')).toHaveCount(

@@ -2,6 +2,7 @@ import AnalysisRemainingTime from './AnalysisRemainingTime';
 import AnalysisTimeEstimate from './AnalysisTimeEstimate';
 import { useProfileValue } from './useProfileValue';
 import { useOptionalConfiguration } from './ConfigurationProvider';
+import ActionButton from './ActionButton';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -329,7 +330,17 @@ export default function MatchAnalysisPanel({
             <option value={4}>4-ply</option>
           </select>
         </label>
-        <button
+        <ActionButton
+          icon="analysis"
+          label={
+            submitting
+              ? t('matchAnalysis.submitting')
+              : active
+                ? t('matchAnalysis.running')
+                : job
+                  ? t(scoped ? 'gameAnalysis.again' : 'matchAnalysis.again')
+                  : t(scoped ? 'gameAnalysis.start' : 'matchAnalysis.start')
+          }
           className="primary"
           onClick={() => void run(plies)}
           disabled={
@@ -338,15 +349,7 @@ export default function MatchAnalysisPanel({
             submitting ||
             (scoped && gameNo === undefined)
           }
-        >
-          {submitting
-            ? t('matchAnalysis.submitting')
-            : active
-              ? t('matchAnalysis.running')
-              : job
-                ? t(scoped ? 'gameAnalysis.again' : 'matchAnalysis.again')
-                : t(scoped ? 'gameAnalysis.start' : 'matchAnalysis.start')}
-        </button>
+        />
         {!active && !submitting && (
           <AnalysisTimeEstimate
             key={match.position_count}
@@ -501,7 +504,10 @@ export default function MatchAnalysisPanel({
                       </option>
                     ))}
                   </select>
-                  <button
+                  <ActionButton
+                    icon="clear"
+                    label={text('resetFilters')}
+                    compact
                     type="button"
                     className="statistics-reset"
                     onClick={() =>
@@ -510,9 +516,7 @@ export default function MatchAnalysisPanel({
                         filter: defaultFilter,
                       })
                     }
-                  >
-                    {text('resetFilters')}
-                  </button>
+                  />
                 </div>
                 {pageError?.key === resultKey && (
                   <p role="alert">{formatError(pageError.error)}</p>
@@ -542,7 +546,12 @@ export default function MatchAnalysisPanel({
                         >
                           <td>
                             {row.position_uuid ? (
-                              <button
+                              <ActionButton
+                                icon="open"
+                                label={t('matchAnalysis.openPosition', {
+                                  game: row.game_no,
+                                  move: row.checker_no ?? '—',
+                                })}
                                 className="position-link"
                                 aria-label={t('matchAnalysis.openPosition', {
                                   game: row.game_no,
@@ -553,9 +562,8 @@ export default function MatchAnalysisPanel({
                                 {formatNumber(row.game_no)} ·{' '}
                                 {row.checker_no == null
                                   ? '—'
-                                  : formatNumber(row.checker_no)}{' '}
-                                ↗
-                              </button>
+                                  : formatNumber(row.checker_no)}
+                              </ActionButton>
                             ) : (
                               t('matchAnalysis.cubeMove', {
                                 game: row.game_no,
@@ -619,12 +627,12 @@ export default function MatchAnalysisPanel({
                 )}
                 {loading && <p role="status">{t('matchAnalysis.loading')}</p>}
                 {cursor && (
-                  <button
+                  <ActionButton
+                    icon="more"
+                    label={t('matchAnalysis.more')}
                     onClick={() => setPage({ key: resultKey, cursor })}
                     disabled={loading}
-                  >
-                    {t('matchAnalysis.more')}
-                  </button>
+                  />
                 )}
               </details>
             </>

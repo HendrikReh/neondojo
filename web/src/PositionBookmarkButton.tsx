@@ -135,13 +135,14 @@ export default function PositionBookmarkButton({
             )}{' '}
             {formatError(status.error.cause)}
           </p>
-          <button
+          <ActionButton
+            icon="refresh"
+            label={l('retry')}
+            compact
             type="button"
             className="played-preview-button"
             onClick={retryFailure}
-          >
-            {l('retry')}
-          </button>
+          />
         </>
       )}
     </div>

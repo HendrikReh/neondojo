@@ -1,3 +1,5 @@
+import Tooltip from './Tooltip';
+import ActionButton from './ActionButton';
 import type { GamePlans } from './game-plan-api';
 import { useGamePlans } from './useGamePlans';
 import { useGamePlanText } from './game-plan-messages';
@@ -51,15 +53,16 @@ export function GamePlanPanelView({
     >
       <div className="game-plan-heading">
         <span>{l('title')}</span>
-        <span
+        <Tooltip
+          as="span"
           className="game-plan-help"
           tabIndex={0}
           role="note"
-          aria-label={l('explanation')}
-          title={l('explanation')}
+          aria-label={l('title')}
+          text={l('explanation')}
         >
           ⓘ
-        </span>
+        </Tooltip>
       </div>
       {plans ? (
         <dl className="game-plan-players">
@@ -82,9 +85,13 @@ export function GamePlanPanelView({
       ) : error ? (
         <div className="game-plan-unavailable">
           <span role="status">{l('unavailable')}</span>
-          <button type="button" onClick={onRetry}>
-            {l('retry')}
-          </button>
+          <ActionButton
+            icon="refresh"
+            label={l('retry')}
+            compact
+            type="button"
+            onClick={onRetry}
+          />
         </div>
       ) : (
         <span className="game-plan-loading" role="status">

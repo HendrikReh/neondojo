@@ -69,8 +69,8 @@ test('real import shows both named plans without analysis and follows the displa
   await expect(panel.locator('[data-game-plan="black"]')).toContainText(
     names.black,
   );
-  await expect(panel.locator('.game-plan-help')).toHaveAttribute(
-    'title',
+  await panel.locator('.game-plan-help').focus();
+  await expect(page.getByRole('tooltip')).toContainText(
     /Open Sage.*board structure.*GNUbg/,
   );
   const initial = await displayedBoard(page);

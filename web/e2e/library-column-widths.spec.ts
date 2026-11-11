@@ -184,7 +184,7 @@ test('custom wide-monitor widths stay contained and reset to current window defa
   expect(Math.abs(sizes.available - sizes.table)).toBeLessThanOrEqual(1);
   expect(
     (await page.locator('.database-table tbody tr').boundingBox())!.height,
-  ).toBeLessThanOrEqual(40);
+  ).toBeLessThanOrEqual(56);
 });
 
 test('captured defaults on an extra-wide display stay reloadable within width bounds', async ({

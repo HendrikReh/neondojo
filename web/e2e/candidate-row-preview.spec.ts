@@ -160,6 +160,9 @@ for (const source of ['engine', 'file', 'book'] as const)
       ),
     ).toBeVisible();
     await expect(
+      page.locator('.analysis-workspace .board-focus-toggle'),
+    ).toHaveCount(0);
+    await expect(
       page.locator('.analysis-workspace .moves-panel'),
     ).toBeVisible();
     await expect(page.locator('.analysis-workspace')).not.toHaveClass(

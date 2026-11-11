@@ -515,7 +515,7 @@ test('practice summarizes scored moves and retries only missed positions', async
     [0, 1, 3, 0, 3].map((index) => hits[index].position.id),
   );
   await page.reload();
-  await page.getByRole('tab', { name: 'Study & Anki', exact: true }).click();
+  await page.getByRole('tab', { name: 'Study', exact: true }).click();
   await page
     .getByRole('tab', { name: 'Practice history', exact: true })
     .click();
@@ -559,7 +559,7 @@ test('practice history charts initial rounds and lets the keyboard reach retries
     });
   });
   await page.goto('/');
-  await page.getByRole('tab', { name: 'Study & Anki', exact: true }).click();
+  await page.getByRole('tab', { name: 'Study', exact: true }).click();
   await page
     .getByRole('tab', { name: 'Practice history', exact: true })
     .click();

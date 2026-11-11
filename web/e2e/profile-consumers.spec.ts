@@ -293,8 +293,8 @@ test('a profile switch retains the active learning card and applies the new deck
     });
   });
   await page.goto('/');
-  await page.getByRole('tab', { name: 'Study & Anki', exact: true }).click();
-  const study = page.getByRole('region', { name: 'Study & Anki', exact: true });
+  await page.getByRole('tab', { name: 'Study', exact: true }).click();
+  const study = page.getByRole('region', { name: 'Study', exact: true });
   await expect(study.getByLabel('Choose deck', { exact: true })).toHaveValue(
     deckA,
   );

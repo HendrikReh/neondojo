@@ -34,9 +34,9 @@ test('analysis-first tabs preserve the selected game, notes and database navigat
     '2',
   );
   await expect(comment).toHaveValue('Retained workspace draft');
-  await page.getByRole('tab', { name: 'Lernen & Anki', exact: true }).click();
+  await page.getByRole('tab', { name: 'Study', exact: true }).click();
   await expect(
-    page.getByRole('region', { name: 'Lernen & Anki', exact: true }),
+    page.getByRole('region', { name: 'Study', exact: true }),
   ).toBeVisible();
   await analysisTab.click();
   await expect(page.locator('.board-heading')).toContainText('Spiel 2');

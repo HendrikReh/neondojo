@@ -23,7 +23,7 @@ test('browser imports reach the disposable PostgreSQL database', async ({
   });
   expect(imported.status()).toBe(201);
 
-  const isDefault = execFileSync(
+  const owner = execFileSync(
     'psql',
     [
       database!,
@@ -31,9 +31,9 @@ test('browser imports reach the disposable PostgreSQL database', async ({
       '-v',
       'ON_ERROR_STOP=1',
       '-c',
-      `SELECT d.is_default FROM matches m JOIN databases d ON d.id=m.database_id WHERE m.white='${player}'`,
+      `SELECT d.name FROM matches m JOIN databases d ON d.id=m.database_id WHERE m.white='${player}'`,
     ],
     { encoding: 'utf8' },
   );
-  expect(isDefault.trim()).toBe('t');
+  expect(owner.trim()).toBe('Unsortiert');
 });

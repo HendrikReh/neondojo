@@ -21,6 +21,48 @@ const settings: AppSettings = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('settings API', () => {
+  it('validates saved feedback modes and the independent tutor threshold', async () => {
+    for (const invalid of [
+      { default_play_mode: 'expert' },
+      { tutor_threshold: 0 },
+      { tutor_threshold: -0.01 },
+      { tutor_threshold: 2 },
+      { tutor_threshold: '0.04' },
+      { training_auto_analysis: 'yes' },
+    ]) {
+      vi.stubGlobal('fetch', async () =>
+        Response.json({ ...settings, ...invalid }),
+      );
+      await expect(loadSettings()).rejects.toBeInstanceOf(SettingsApiError);
+    }
+    for (const mode of ['competition', 'training', 'coach', 'tutor']) {
+      vi.stubGlobal('fetch', async () =>
+        Response.json({
+          ...settings,
+          default_play_mode: mode,
+          tutor_threshold: 0.02,
+          training_auto_analysis: false,
+        }),
+      );
+      expect(await loadSettings()).toMatchObject({
+        default_play_mode: mode,
+        tutor_threshold: 0.02,
+        training_auto_analysis: false,
+      });
+    }
+  });
+  it('accepts both bear-off directions and rejects unsupported values', async () => {
+    for (const direction of ['left', 'right']) {
+      vi.stubGlobal('fetch', async () =>
+        Response.json({ ...settings, bearoff_direction: direction }),
+      );
+      expect((await loadSettings()).bearoff_direction).toBe(direction);
+    }
+    vi.stubGlobal('fetch', async () =>
+      Response.json({ ...settings, bearoff_direction: 'sideways' }),
+    );
+    await expect(loadSettings()).rejects.toBeInstanceOf(SettingsApiError);
+  });
   it.each([3, 4])(
     'accepts a %i-ply analysis profile while retaining the separate play profile',
     async (plies) => {

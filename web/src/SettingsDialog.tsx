@@ -8,6 +8,7 @@ import {
   saveInstallationPath,
 } from './configuration-settings';
 import { useBenchmarkText } from './benchmark-messages';
+import ActionButton from './ActionButton';
 import { ANALYSIS_PLIES, isAnalysisDepth } from './analysis-depth';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import Board from './Board';
@@ -466,16 +467,17 @@ export default function SettingsDialog({
             <h2 id={`${id}-title`}>{t('title')}</h2>
             <p id={`${id}-description`}>{t('description')}</p>
           </div>
-          <button
+          <ActionButton
+            icon="close"
+            label={t('close')}
+            compact
             type="button"
             className="settings-close"
             aria-label={t('close')}
             onClick={close}
             disabled={saving}
             autoFocus
-          >
-            ×
-          </button>
+          />
         </header>
         <div className="settings-layout">
           <nav
@@ -509,7 +511,6 @@ export default function SettingsDialog({
             ))}
           </nav>
           <div className="settings-content" aria-busy={loading}>
-            {loading && <p role="status">{t('loading')}</p>}
             {pendingSection && (
               <div
                 role="alertdialog"
@@ -553,17 +554,19 @@ export default function SettingsDialog({
             {category === 'profiles' && !pendingSection && (
               <ProfileSettingsPanel />
             )}
+            {loading && <p role="status">{t('loading')}</p>}
             {Boolean(loadError) && (
               <div className="settings-error" role="alert">
                 <p>
                   {t('loadError')} {diagnostic(loadError)}
                 </p>
-                <button
+                <ActionButton
+                  icon="refresh"
+                  label={t('retry')}
+                  compact
                   type="button"
                   onClick={() => setReload((value) => value + 1)}
-                >
-                  {t('retry')}
-                </button>
+                />
               </div>
             )}
             {draft && !pendingSection && (
@@ -709,13 +712,13 @@ export default function SettingsDialog({
                     </select>
                   </label>
                   <p className="settings-help">{t('analysisHelp')}</p>
-                  <button
+                  <ActionButton
+                    icon="open"
+                    label={sourceT('books')}
                     type="button"
                     className="settings-book-button"
                     onClick={() => enterSection('book')}
-                  >
-                    {sourceT('books')}
-                  </button>
+                  />
                   {onBenchmark && (
                     <div>
                       <button
@@ -781,14 +784,15 @@ export default function SettingsDialog({
                     )}
                     {checking && <p role="status">{t('checking')}</p>}
                   </div>
-                  <button
+                  <ActionButton
+                    icon="confirm"
+                    label={t('check')}
+                    compact
                     type="button"
                     className="settings-check"
                     disabled={checking || !draft.gnubg_path.trim()}
                     onClick={checkInstallation}
-                  >
-                    {t('check')}
-                  </button>
+                  />
                   <p className="settings-help">{t('checkHelp')}</p>
                 </fieldset>
                 <fieldset
@@ -855,6 +859,7 @@ export default function SettingsDialog({
                     <span>{modeT('automatic')}</span>
                   </label>
                   <p className="settings-help">{modeT('automaticHelp')}</p>
+                  {engineSelect('playEngine', 'play-engine')}
                   <label className="settings-field" htmlFor={`${id}-bearoff`}>
                     <span>{playT('direction')}</span>
                     <select
@@ -873,7 +878,6 @@ export default function SettingsDialog({
                     </select>
                   </label>
                   <p className="settings-help">{playT('directionHelp')}</p>
-                  {engineSelect('playEngine', 'play-engine')}
                   <label
                     className="settings-field"
                     htmlFor={`${id}-play-strength`}
@@ -1002,7 +1006,10 @@ export default function SettingsDialog({
                   {!conflict && diagnostic(saveError)}
                 </p>
                 {conflict && (
-                  <button
+                  <ActionButton
+                    icon="refresh"
+                    label={t('loadLatest')}
+                    compact
                     type="button"
                     onClick={async () => {
                       if (configuration) {
@@ -1016,9 +1023,7 @@ export default function SettingsDialog({
                       }
                       setReload((value) => value + 1);
                     }}
-                  >
-                    {t('loadLatest')}
-                  </button>
+                  />
                 )}
               </div>
             )}
@@ -1030,20 +1035,27 @@ export default function SettingsDialog({
             className="settings-actions"
             hidden={category === 'profiles' || !!pendingSection}
           >
-            <button type="button" onClick={close} disabled={saving}>
-              {t('cancel')}
-            </button>
-            <button
+            <ActionButton
+              icon="cancel"
+              label={t('cancel')}
+              compact
+              type="button"
+              onClick={close}
+              disabled={saving}
+            />
+            <ActionButton
+              icon="save"
+              label={
+                saving
+                  ? t('saving')
+                  : configuration
+                    ? profileT('apply')
+                    : t('save')
+              }
               type="submit"
               className="settings-save"
               disabled={!draft || loading || saving || checking || conflict}
-            >
-              {saving
-                ? t('saving')
-                : configuration
-                  ? profileT('apply')
-                  : t('save')}
-            </button>
+            />
           </div>
         </footer>
       </form>

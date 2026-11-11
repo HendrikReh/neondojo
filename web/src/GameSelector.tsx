@@ -1,3 +1,4 @@
+import ActionButton from './ActionButton';
 import type { MatchGame } from './api';
 import { useI18n } from './i18n';
 
@@ -16,13 +17,14 @@ export default function GameSelector({
     <section className="game-selector" aria-label={t('games.heading')}>
       <span className="eyebrow">{t('games.heading')}</span>
       <div className="game-selector-controls">
-        <button
+        <ActionButton
+          icon="back"
+          label={t('games.previous')}
+          compact
           aria-label={t('games.previous')}
           disabled={index <= 0}
           onClick={() => onSelect(games[index - 1].game_no)}
-        >
-          ←
-        </button>
+        />
         <label>
           {t('games.choose')}
           <select
@@ -45,13 +47,14 @@ export default function GameSelector({
             ))}
           </select>
         </label>
-        <button
+        <ActionButton
+          icon="next"
+          label={t('games.next')}
+          compact
           aria-label={t('games.next')}
           disabled={index < 0 || index >= games.length - 1}
           onClick={() => onSelect(games[index + 1].game_no)}
-        >
-          →
-        </button>
+        />
       </div>
     </section>
   );

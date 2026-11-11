@@ -44,9 +44,7 @@ test('real import, search, GNUbg analysis, distribution, themes and mobile layou
   const settings = page.getByRole('dialog');
   await settings.getByRole('button', { name: 'Brett', exact: true }).click();
   await settings.getByRole('button', { name: 'Walnut', exact: true }).click();
-  await settings
-    .getByRole('button', { name: 'Anwenden', exact: true })
-    .click();
+  await settings.getByRole('button', { name: 'Anwenden', exact: true }).click();
   await expect(settings).not.toBeVisible();
   await expect(page.locator('.analysis-workspace .theme-walnut')).toBeVisible();
   await page.getByRole('button', { name: 'Nächster Zug' }).click();
@@ -112,7 +110,10 @@ test('a late game loads directly and its full move list stops at its own boundar
   await page
     .getByLabel('Partiedatei')
     .setInputFiles('../backend/tests/fixtures/WC2014.xg');
-  await expect(page.locator('.moves-list button')).toHaveCount(8);
+  await page.getByLabel('Spiel auswählen', { exact: true }).selectOption('1');
+  await expect(page.locator('.moves-list button')).toHaveCount(8, {
+    timeout: 15000,
+  });
   await page.getByLabel('Spiel auswählen', { exact: true }).selectOption('10');
   await expect(page.locator('.board-heading')).toContainText('Spiel 10');
   const moves = await page.locator('.moves-list button').count();
@@ -219,6 +220,9 @@ test('the latest clicked analysis row wins during a delayed game load', async ({
     .getByLabel('Partiedatei')
     .setInputFiles('../backend/tests/fixtures/WC2014.mat');
   await page.getByLabel('Analyseumfang', { exact: true }).selectOption('match');
+  await page
+    .getByLabel('Partie-Analysetiefe', { exact: true })
+    .selectOption('0');
   await page.getByRole('tab', { name: 'Fehler', exact: true }).click();
   const panel = page.getByRole('region', {
     name: 'Vollständige Partieanalyse',

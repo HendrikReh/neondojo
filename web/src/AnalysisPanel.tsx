@@ -1,3 +1,4 @@
+import Tooltip from './Tooltip';
 import ActionButton from './ActionButton';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { type Analysis, type Distribution, type DiceStats } from './api';
@@ -384,13 +385,18 @@ export default function AnalysisPanel({
                     r.dice[1] === Math.max(a, b),
                 );
                 return (
-                  <button
+                  <Tooltip
+                    as="button"
                     key={i}
-                    title={t('analysis.rollTitle', {
-                      first: a,
-                      second: b,
-                      move: roll ? formatDecision(roll.best.notation) : '—',
-                    })}
+                    text={
+                      roll
+                        ? t('analysis.rollTitle', {
+                            first: a,
+                            second: b,
+                            move: formatDecision(roll.best.notation),
+                          })
+                        : undefined
+                    }
                     className={`${roll && roll.best.equity >= distribution.mean_equity ? 'above' : 'below'} ${selectedRoll === [Math.min(a, b), Math.max(a, b)].join('-') ? 'selected' : ''}`}
                     onClick={() =>
                       setSelectedRoll(
@@ -402,7 +408,7 @@ export default function AnalysisPanel({
                       {a} · {b}
                     </span>
                     <b>{roll ? formatEquity(roll.best.equity) : '—'}</b>
-                  </button>
+                  </Tooltip>
                 );
               })}
             </div>
