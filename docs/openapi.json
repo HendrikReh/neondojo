@@ -2524,6 +2524,94 @@
         }
       }
     },
+    "/api/matches/{id}/analysis/estimate": {
+      "get": {
+        "tags": [
+          "Match analysis"
+        ],
+        "operationId": "estimate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "plies",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "maximum": 4,
+              "minimum": 0
+            }
+          },
+          {
+            "name": "game_no",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "engine_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisTimeEstimate"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/matches/{id}/annotation": {
       "get": {
         "tags": [
@@ -5278,6 +5366,72 @@
           }
         }
       },
+      "AnalysisTimeEstimate": {
+        "type": "object",
+        "required": [
+          "match_id",
+          "engine_id",
+          "plies",
+          "position_count"
+        ],
+        "properties": {
+          "benchmark": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EstimateBenchmark"
+              }
+            ]
+          },
+          "engine_id": {
+            "type": "string"
+          },
+          "engine_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "estimated_ms": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "game_no": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "match_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "plies": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "position_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "unavailable_reason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EstimateUnavailableReason"
+              }
+            ]
+          }
+        }
+      },
       "AnalyzedGame": {
         "type": "object",
         "required": [
@@ -7047,6 +7201,44 @@
             "format": "int32"
           }
         }
+      },
+      "EstimateBenchmark": {
+        "type": "object",
+        "required": [
+          "id",
+          "finished_at",
+          "reference_name",
+          "average_move_ms",
+          "protocol_id"
+        ],
+        "properties": {
+          "average_move_ms": {
+            "type": "number",
+            "format": "double"
+          },
+          "finished_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "protocol_id": {
+            "type": "string"
+          },
+          "reference_name": {
+            "type": "string"
+          }
+        }
+      },
+      "EstimateUnavailableReason": {
+        "type": "string",
+        "enum": [
+          "no_matching_benchmark",
+          "engine_unavailable",
+          "no_checker_moves"
+        ]
       },
       "ExportRequest": {
         "type": "object",

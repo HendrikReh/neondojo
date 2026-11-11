@@ -1,3 +1,4 @@
+import AnalysisTimeEstimate from './AnalysisTimeEstimate';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -50,6 +51,7 @@ export default function MatchAnalysisPanel({
   onGame,
   defaultPlies = DEFAULT_ANALYSIS_PLIES,
   configured = true,
+  analysisInstallationKey,
   onJob,
   onAccepted,
   onFilterChange,
@@ -68,6 +70,7 @@ export default function MatchAnalysisPanel({
   onGame?: (gameNo: number) => void;
   defaultPlies?: number;
   configured?: boolean;
+  analysisInstallationKey?: string;
   onJob?: (job: Job | undefined) => void;
   onAccepted?: (job: Job) => void;
   onFilterChange?: (filter: {
@@ -315,6 +318,17 @@ export default function MatchAnalysisPanel({
                 ? t(scoped ? 'gameAnalysis.again' : 'matchAnalysis.again')
                 : t(scoped ? 'gameAnalysis.start' : 'matchAnalysis.start')}
         </button>
+        {!active && !submitting && (
+          <AnalysisTimeEstimate
+            key={match.position_count}
+            matchId={match.id}
+            gameNo={gameNo}
+            scoped={scoped}
+            plies={plies}
+            configured={configured}
+            installationKey={analysisInstallationKey}
+          />
+        )}
       </div>
     </div>
   );

@@ -70,3 +70,17 @@ pub(super) async fn snapshot(pool: &PgPool) -> anyhow::Result<Machine> {
         .await?;
     Ok(tokio::task::spawn_blocking(move || collect(id)).await?)
 }
+
+/// Read an existing installation identity without creating metadata on a GET.
+pub(super) async fn current(pool: &PgPool) -> anyhow::Result<Option<Machine>> {
+    let id: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM benchmark_machine WHERE singleton=true")
+            .fetch_optional(pool)
+            .await?;
+    match id {
+        Some(id) => Ok(Some(
+            tokio::task::spawn_blocking(move || collect(id)).await?,
+        )),
+        None => Ok(None),
+    }
+}

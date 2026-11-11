@@ -827,6 +827,7 @@ impl OpenApi for ApiDoc {
         let mut doc = BaseApiDoc::openapi();
         doc.merge(crate::settings::SettingsDoc::openapi());
         doc.merge(crate::benchmarks::BenchmarkDoc::openapi());
+        doc.merge(crate::benchmarks::estimate::EstimateDoc::openapi());
         doc.merge(crate::play::PlayDoc::openapi());
         doc.merge(crate::study::StudyDoc::openapi());
         doc.merge(crate::opening_book::OpeningBookDoc::openapi());

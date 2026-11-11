@@ -50,6 +50,7 @@ export default function AnalysisWorkspace({
   jobs,
   theme,
   defaultPlies,
+  analysisInstallationKey,
   sourceRevision,
   analysisRevision,
   metadataRevision,
@@ -74,6 +75,7 @@ export default function AnalysisWorkspace({
   jobs: ReturnType<typeof useJobs>;
   theme: Theme;
   defaultPlies: number;
+  analysisInstallationKey?: string;
   sourceRevision: number;
   analysisRevision?: string;
   metadataRevision?: number;
@@ -529,6 +531,7 @@ export default function AnalysisWorkspace({
               navigation={navigation}
               defaultPlies={defaultPlies}
               configured={configured}
+              analysisInstallationKey={analysisInstallationKey}
               detail={detail}
               target={commandTarget}
               onPosition={onPosition}
@@ -584,6 +587,7 @@ function MatchResults({
   navigation,
   defaultPlies,
   configured,
+  analysisInstallationKey,
   detail,
   target,
   onPosition,
@@ -598,6 +602,7 @@ function MatchResults({
   navigation: ReturnType<typeof useGameNavigation>;
   defaultPlies: number;
   configured: boolean;
+  analysisInstallationKey?: string;
   detail: AnalysisDetail;
   target: HTMLElement | null;
   onPosition: (id: string) => void;
@@ -632,6 +637,7 @@ function MatchResults({
         gameNo={navigation.game?.game_no}
         defaultPlies={defaultPlies}
         configured={configured}
+        analysisInstallationKey={analysisInstallationKey}
         controlsTarget={target}
         overview={detail === 'overview'}
         selectedPositionId={selectedPositionId}

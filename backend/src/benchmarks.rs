@@ -13,6 +13,7 @@ use sqlx::{FromRow, types::Json as SqlJson};
 use utoipa::{OpenApi, ToSchema};
 use uuid::Uuid;
 
+pub(crate) mod estimate;
 mod machine;
 mod runner;
 pub use runner::{recover_interrupted, run_one};
@@ -117,6 +118,7 @@ pub struct BenchmarkHistory {
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
+        .merge(estimate::routes())
         .route("/api/benchmarks", get(history).post(create))
         .route("/api/benchmarks/reference", get(get_reference))
         .route("/api/benchmarks/status", get(status))

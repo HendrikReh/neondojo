@@ -1,0 +1,25 @@
+.analysis-time-estimate {
+  flex: 1 0 100%;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.65rem;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--ui-muted);
+  overflow-wrap: anywhere;
+}
+.analysis-time-estimate strong {
+  font-weight: 600;
+  color: var(--ui-text);
+}
+.analysis-time-estimate small {
+  flex-basis: 100%;
+  font-size: 0.75rem;
+}
+
+.analysis-workspace
+  .workspace-analysis-command
+  .match-analysis-controls:has(> .analysis-time-estimate) {
+  flex-wrap: wrap;
+}

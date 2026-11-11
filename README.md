@@ -409,3 +409,32 @@ Neue Versuche während einer laufenden Messung werden mit HTTP 409 abgewiesen;
 mehrere Stufen werden gemeinsam vor Beginn angelegt. Nicht verfügbare Engines
 und ungültige Ply-Auswahlen ergeben HTTP 422. Benchmark-Endpunkte und Datentypen
 sind Bestandteil der generierten OpenAPI-Spezifikation.
+
+### Voraussichtliche Analysezeit
+
+Vor dem Start einer Spiel- oder Matchanalyse steht unter Umfang und Ply-Auswahl
+**„Geschätzte Analysezeit: ca. …“**. Grundlage ist die Zahl der Checkerzüge im
+gewählten Umfang multipliziert mit der durchschnittlichen Zeit pro Zug aus dem
+neuesten vollständig abgeschlossenen passenden Benchmark. Die Anzeige nennt
+Benchmarkdatum, Engine-Version, Ply und Zuganzahl. Ein Wechsel von Match, Spiel,
+Umfang, Ply oder Engine-Installation verwirft alte Antworten.
+Während der Übermittlung und Ausführung wird keine Prognose vor dem Start gezeigt.
+
+Passend bedeutet gleiche lokale Maschine und Hardware, gleiche Engine-Installation
+und Version, gleicher Ply-Wert sowie kompatible Referenz- und Analyseparameter.
+Die erfolgreich abgeschlossenen Protokolle mit früherem 600-Sekunden-Limit und
+neuem unbegrenzten Zeitlimit sind für diese Hochrechnung kompatibel. Fehlerhafte,
+unvollständige oder fremde Messungen dienen nicht als Kalibrierung.
+
+Die Schätzung enthält wie der Benchmark Cube-Analyse und Prozessstarts; fremde
+Aufträge in der Warteschlange zählen nicht dazu. Unterschiedliche Stellungstypen
+können die tatsächliche Dauer deutlich verändern. Fehlen passende Messdaten oder
+Checkerzüge, ist die Installation nicht ermittelbar oder schlägt die Anfrage fehl,
+zeigt die Oberfläche einen verständlichen Hinweis. Die Analyse kann trotzdem
+normal gestartet werden. Es wird kein neuer Benchmark für die Prognose ausgeführt.
+
+`GET /api/matches/{id}/analysis/estimate?plies=2&game_no=1&engine_id=gnubg`
+liefert die Prognose und ihre Messbasis. Ohne `game_no` gilt das gesamte Match;
+ohne `plies` gilt die gespeicherte Standardtiefe. Die Anfrage ist rein lesend,
+legt weder Jobs noch Metadaten an und beachtet die vorhandenen Quellen- und
+Wettbewerbssperren. Die Schnittstelle ist in OpenAPI dokumentiert.

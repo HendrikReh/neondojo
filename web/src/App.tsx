@@ -531,6 +531,12 @@ export default function App() {
             theme={theme}
             defaultPlies={settings?.analysis_plies ?? DEFAULT_ANALYSIS_PLIES}
             sourceRevision={bookRevision}
+            analysisInstallationKey={JSON.stringify([
+              settings?.version,
+              settings?.gnubg_path,
+              settings?.analysis_engine,
+              settingsRevision,
+            ])}
             configured={!!settings}
             detail={detail}
             onDetail={setDetail}

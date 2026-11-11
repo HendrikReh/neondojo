@@ -532,6 +532,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matches/{id}/analysis/estimate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["estimate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matches/{id}/annotation": {
         parameters: {
             query?: never;
@@ -1200,6 +1216,22 @@ export interface components {
             /** Format: int32 */
             plies: number;
         };
+        AnalysisTimeEstimate: {
+            benchmark?: null | components["schemas"]["EstimateBenchmark"];
+            engine_id: string;
+            engine_version?: string | null;
+            /** Format: double */
+            estimated_ms?: number | null;
+            /** Format: int32 */
+            game_no?: number | null;
+            /** Format: uuid */
+            match_id: string;
+            /** Format: int32 */
+            plies: number;
+            /** Format: int64 */
+            position_count: number;
+            unavailable_reason?: null | components["schemas"]["EstimateUnavailableReason"];
+        };
         AnalyzedGame: {
             decisions: components["schemas"]["Decision"][];
             engine: string;
@@ -1732,6 +1764,18 @@ export interface components {
             /** Format: int32 */
             very_bad: number;
         };
+        EstimateBenchmark: {
+            /** Format: double */
+            average_move_ms: number;
+            /** Format: date-time */
+            finished_at: string;
+            /** Format: uuid */
+            id: string;
+            protocol_id: string;
+            reference_name: string;
+        };
+        /** @enum {string} */
+        EstimateUnavailableReason: "no_matching_benchmark" | "engine_unavailable" | "no_checker_moves";
         ExportRequest: {
             format: string;
             match_ids: string[];
@@ -4289,6 +4333,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Job"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    estimate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                plies: number | null;
+                game_no: number | null;
+                engine_id: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisTimeEstimate"];
                 };
             };
             404: {
