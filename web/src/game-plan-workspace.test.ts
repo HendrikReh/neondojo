@@ -106,6 +106,7 @@ function props(player: 0 | 1 = 0) {
       cancel: noop,
       clearError: noop,
       clear: noop,
+      invalidateMatchAnalysis: noop,
       intent: () => 0,
       selectMatch: async () => false,
       selectGame: async () => false,

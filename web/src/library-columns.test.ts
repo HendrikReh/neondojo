@@ -91,6 +91,30 @@ it('migrates the old notes width to tags without resetting other custom widths',
   expect(restored.comment).toBe(220);
 });
 
+it('adds the mode width to old profiles without resetting customized player widths', () => {
+  const legacy = Object.fromEntries(
+    Object.entries(widths).filter(([key]) => key !== 'play_mode'),
+  );
+  legacy.white = 211;
+  const restored = readColumnWidths({
+    getItem: () => JSON.stringify({ version: 1, widths: legacy }),
+  }) as Record<string, number>;
+  expect(restored.white).toBe(211);
+  expect(restored.play_mode).toBe(210);
+});
+
+it('widens saved action controls without resetting other customized columns', () => {
+  const restored = readColumnWidths({
+    getItem: () =>
+      JSON.stringify({
+        version: 1,
+        widths: { ...widths, actions: 88, white: 211 },
+      }),
+  });
+  expect(restored).toEqual({ ...widths, actions: 160, white: 211 });
+  expect(resizeColumn(widths, 'actions', 88).actions).toBe(160);
+});
+
 it('restores search widths alongside legacy match widths without requiring new keys in old profiles', async () => {
   const { LIBRARY_RESIZABLE_LAYOUT } = await import('./library-columns');
   const legacy = JSON.stringify({

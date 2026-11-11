@@ -239,21 +239,6 @@
 .analysis-workspace .position-code {
   margin: 0 -14px;
 }
-.board-focus-toggle {
-  width: 100%;
-  border: 0;
-  border-top: 1px solid var(--ui-border);
-  padding: 9px;
-  font-size: 11px;
-  background: transparent;
-  margin-top: 0;
-}
-.board-focus .analysis-grid {
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 370px);
-}
-.board-focus .moves-panel {
-  display: none;
-}
 .position-inspector {
   border: 1px solid var(--ui-border);
   background: var(--ui-surface);
@@ -426,11 +411,16 @@
   margin: 0 auto 22px;
 }
 .welcome-actions {
-  display: flex;
-  justify-content: center;
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
+  max-width: 100%;
+  margin: 26px 0 14px;
+}
+.analysis-welcome .welcome-actions > button {
+  margin: 0;
+  padding: 12px 20px;
+  font-size: var(--font-size-table);
 }
 .database-heading {
   display: flex;
@@ -594,9 +584,6 @@
   }
   .position-inspector {
     grid-column: 1/-1;
-  }
-  .board-focus .analysis-grid {
-    grid-template-columns: minmax(0, 1fr);
   }
   .position-inspector .analysis-panel,
   .position-inspector .learning-add {
@@ -795,5 +782,46 @@
     padding-top: 6px;
     background: var(--ui-surface);
     z-index: 2;
+  }
+}
+
+.match-drop-zone {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 110px;
+  padding: 14px 12px;
+  gap: 6px;
+  border: 1px dashed var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  color: var(--ui-muted);
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+.match-drop-zone[data-drag-active='true'] {
+  border-color: var(--ui-accent);
+  border-style: solid;
+  background: var(--ui-selected);
+  color: var(--ui-accent);
+}
+.match-drop-zone[aria-busy='true'] {
+  opacity: 0.65;
+  cursor: progress;
+}
+.match-drop-zone-title {
+  font-size: var(--font-size-table);
+  font-weight: var(--font-weight-medium);
+}
+.match-drop-zone-formats {
+  font-size: var(--font-size-meta);
+}
+@media (prefers-reduced-motion: reduce) {
+  .match-drop-zone {
+    transition: none;
   }
 }

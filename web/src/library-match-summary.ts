@@ -1,4 +1,5 @@
 import type { LibraryMatch } from './library-api';
+import { playModeText } from './play-mode-messages';
 import type { Locale } from './i18n-core';
 import { libraryText, type LibraryMessageKey } from './library-messages';
 import { workspaceText } from './workspace-messages';
@@ -16,6 +17,30 @@ export function libraryAnalysisStatus(status: string | null, locale: Locale) {
   return libraryText(locale, key);
 }
 
+export function isUnfinishedCompetition(
+  match: Pick<LibraryMatch, 'play_mode' | 'play_session_id' | 'play_phase'> &
+    Partial<Pick<LibraryMatch, 'match_length'>>,
+) {
+  return (
+    match.play_mode === 'competition' &&
+    Boolean(match.play_session_id) &&
+    match.play_phase !== 'match_over' &&
+    !(match.match_length === 0 && match.play_phase === 'game_over')
+  );
+}
+export function canShowMatchPr(
+  match: Pick<
+    LibraryMatch,
+    'play_mode' | 'play_session_id' | 'play_phase' | 'play_assisted'
+  > &
+    Partial<Pick<LibraryMatch, 'match_length'>>,
+) {
+  return (
+    !match.play_assisted &&
+    (!match.play_mode || match.play_mode === 'competition') &&
+    !isUnfinishedCompetition(match)
+  );
+}
 function excerpt(value: string, limit = 160) {
   const characters = Array.from(value.replace(/\s+/gu, ' ').trim());
   return characters.length > limit
@@ -52,8 +77,12 @@ export function createMatchSummaryFormatter(locale: Locale) {
       `ID: ${number(match.match_no)}${name ? ` · ${name}` : ''}`,
       `${excerpt(match.white, 240)} — ${excerpt(match.black, 240)}`,
       `${l('length')}: ${match.match_length ? number(match.match_length) : l('money')} · ${l('result')}: ${result}`,
-      match.white_pr != null || match.black_pr != null
+      canShowMatchPr(match) &&
+      (match.white_pr != null || match.black_pr != null)
         ? `PR: ${l('white')} ${pr(match.white_pr)} · ${l('black')} ${pr(match.black_pr)}`
+        : '',
+      match.play_mode
+        ? `${playModeText(locale, match.play_mode)} · ${playModeText(locale, match.play_assisted ? 'assisted' : 'independent')}`
         : '',
       `${l('games')}: ${number(match.game_count)} · ${workspaceText(locale, 'positions')}: ${number(match.position_count)}`,
       `${l('analysis')}: ${libraryAnalysisStatus(match.analysis_status, locale)}${match.pr_profile ? ` · ${excerpt(match.pr_profile)}` : ''}`,

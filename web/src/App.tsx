@@ -4,7 +4,9 @@ import { settingsFromConfiguration } from './configuration-settings';
 import { loadBenchmarkStatus } from './benchmark-api';
 import BenchmarkWorkspace from './BenchmarkWorkspace';
 import { useBenchmarkText } from './benchmark-messages';
+import ActionButton from './ActionButton';
 import PlayWorkspace from './PlayWorkspace';
+import MatchDropZone from './MatchDropZone';
 import { usePlayText } from './play-messages';
 import {
   useCallback,
@@ -12,6 +14,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type MouseEvent,
 } from 'react';
 import { request, type Match, type Position } from './api';
 import AnalysisWorkspace, { type AnalysisDetail } from './AnalysisWorkspace';
@@ -39,21 +42,23 @@ import OpeningBookDialog from './OpeningBookDialog';
 import {
   readDatabase,
   saveDatabase,
-  defaultDatabaseId,
   type StoredMove,
+  type LibraryMatch,
 } from './library-api';
 import { useLibraryText } from './library-messages';
+import { isUnfinishedCompetition } from './library-match-summary';
+import type { PlaySession } from './play-api';
 import { DEFAULT_ANALYSIS_PLIES } from './analysis-depth';
 import MoveNotesDialog, { type MoveNotesTarget } from './MoveNotesDialog';
 import { useUiAppearance } from './useUiAppearance';
 
 type View =
-  'analysis' | 'database' | 'positions' | 'play' | 'learning' | 'extras';
+  'analysis' | 'database' | 'positions' | 'learning' | 'play' | 'extras';
 const views: View[] = [
+  'play',
   'analysis',
   'database',
   'positions',
-  'play',
   'learning',
   'extras',
 ];
@@ -62,12 +67,7 @@ export default function App() {
   const [settingsCategory, setSettingsCategory] = useState<
     'general' | 'profiles'
   >('general');
-  const { t, setLocale, formatError } = useI18n();
-  const w = useWorkspaceText(),
-    learnT = useLearningText();
-  const l = useLibraryText();
-  const positionText = usePositionText();
-  const playT = usePlayText();
+  const playText = usePlayText();
   const benchmarkT = useBenchmarkText();
   const [benchmarkActive, setBenchmarkActive] = useState(false);
   useEffect(() => {
@@ -90,12 +90,20 @@ export default function App() {
       clearTimeout(timer);
     };
   }, []);
+  const [requestedPlaySession, setRequestedPlaySession] = useState<{
+    id: string;
+    token: number;
+  }>();
+  const { t, setLocale, formatError } = useI18n();
+  const w = useWorkspaceText(),
+    learnT = useLearningText();
+  const l = useLibraryText();
+  const positionText = usePositionText();
   const { appearance, applyAppearance } = useUiAppearance();
   const [requestedDeck, setRequestedDeck] = useState<{
     id: string;
     token: number;
   }>();
-  const [databaseId, setDatabaseId] = useState(readDatabase);
   const [requestedPositionSearch, setRequestedPositionSearch] =
     useState<PositionSearchRequest>();
   const [similarTarget, setSimilarTarget] = useState<{
@@ -103,6 +111,18 @@ export default function App() {
     matchName: string;
     token: number;
   }>();
+  const [databaseId, setDatabaseId] = useState(readDatabase);
+  useEffect(() => {
+    if (configuration?.current)
+      setDatabaseId(configuration.current.library.database_id);
+  }, [configuration?.current?.library.database_id]);
+  const changeDatabase = (id: string) => {
+    setDatabaseId(id);
+    configuration?.updateCurrent((c) => ({
+      ...c,
+      library: { ...c.library, database_id: id },
+    }));
+  };
   const [moveNotes, setMoveNotes] = useState<MoveNotesTarget>();
   const [importResults, setImportResults] = useState<
     {
@@ -129,17 +149,6 @@ export default function App() {
   const [settingsRevision, setSettingsRevision] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [bookOpen, setBookOpen] = useState(false);
-  useEffect(() => {
-    if (configuration?.current)
-      setDatabaseId(configuration.current.library.database_id);
-  }, [configuration?.current?.library.database_id]);
-  const changeDatabase = (id: string) => {
-    setDatabaseId(id);
-    configuration?.updateCurrent((c) => ({
-      ...c,
-      library: { ...c.library, database_id: id },
-    }));
-  };
   const [bookRevision, setBookRevision] = useState(0);
   const [health, setHealth] = useState<'checking' | 'ok' | 'degraded'>(
     'checking',
@@ -156,6 +165,7 @@ export default function App() {
     token: number;
   }>();
   const [restoring, setRestoring] = useState(false);
+  const restorationRequest = useRef<AbortController | null>(null);
   const navigation = useGameNavigation();
   const { track, assessmentRevision } = useBackgroundJobs();
   const jobs = useJobs(navigation.position?.id, track);
@@ -208,20 +218,66 @@ export default function App() {
   useEffect(() => {
     const previous = readSelection();
     if (!previous) return;
-    let alive = true;
+    const abort = new AbortController();
+    restorationRequest.current = abort;
+    const intent = navigation.intent();
+    const current = () =>
+      !abort.signal.aborted && navigation.intent() === intent;
     setRestoring(true);
-    const restored = previous.positionId
-      ? navigation.openPosition(previous.positionId)
-      : navigation.openMatch(previous.matchId, previous.gameNo);
-    void restored.finally(() => {
-      if (alive) setRestoring(false);
+    void (async () => {
+      // Metadata is available even while a Competition source is restricted.
+      // Do not restore that source through the analysis endpoints.
+      let metadata: LibraryMatch | undefined;
+      try {
+        metadata = await request<LibraryMatch>(
+          `/matches/${previous.matchId}/metadata`,
+          { signal: abort.signal },
+        );
+      } catch {
+        // Old/missing metadata still uses normal navigation and its real error.
+      }
+      if (!current()) return;
+      if (
+        metadata &&
+        isUnfinishedCompetition(metadata) &&
+        metadata.play_session_id
+      ) {
+        navigation.clear();
+        setRequestedPlaySession({
+          id: metadata.play_session_id,
+          token: Date.now(),
+        });
+        setView('play');
+      } else {
+        await (previous.positionId
+          ? navigation.openPosition(previous.positionId)
+          : navigation.openMatch(previous.matchId, previous.gameNo));
+      }
+    })().finally(() => {
+      if (!abort.signal.aborted) setRestoring(false);
+      if (restorationRequest.current === abort)
+        restorationRequest.current = null;
     });
     return () => {
-      alive = false;
+      abort.abort();
+      if (restorationRequest.current === abort)
+        restorationRequest.current = null;
     };
-    // The navigation hook fences restoration against subsequent user actions.
+    // Navigation intent and aborts fence this single startup restore.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  function cancelRestoration() {
+    if (!restorationRequest.current) return;
+    restorationRequest.current.abort();
+    restorationRequest.current = null;
+    navigation.cancel();
+    setRestoring(false);
+  }
+  function playModeChanged(session: PlaySession) {
+    if (session.play_mode === 'competition' && session.library_match_id) {
+      navigation.invalidateMatchAnalysis(session.library_match_id);
+    }
+  }
   useEffect(() => {
     if (
       navigation.match &&
@@ -284,17 +340,22 @@ export default function App() {
     else if (event.key === 'End') next = views.length - 1;
     else return;
     event.preventDefault();
+    cancelRestoration();
     setView(views[next]);
     tabs.current[views[next]]?.focus();
   }
   async function upload(files: File[] | FileList | undefined) {
     const selected = Array.from(files ?? []);
     if (!selected.length || uploading) return;
+    cancelRestoration();
     setUploading(true);
     setError(undefined);
     setNotice(undefined);
     setImportResults([]);
-    const target = databaseId || defaultDatabaseId;
+    const target = databaseId
+      ? `?database_id=${encodeURIComponent(databaseId)}`
+      : '';
+    const navigationIntent = navigation.intent();
     const results: {
       name: string;
       status: 'importedFile' | 'duplicate' | 'error';
@@ -306,7 +367,7 @@ export default function App() {
         const body = new FormData();
         body.append('file', file);
         const imported = await request<{ match: Match; duplicate: boolean }>(
-          `/imports?database_id=${target}`,
+          `/imports${target}`,
           { method: 'POST', body },
         );
         setRevision((n) => n + 1);
@@ -314,7 +375,7 @@ export default function App() {
           name: file.name,
           status: imported.duplicate ? 'duplicate' : 'importedFile',
         });
-        if (selected.length === 1) {
+        if (selected.length === 1 && navigation.intent() === navigationIntent) {
           setView('analysis');
           setDetail('overview');
           void navigation.selectMatch(imported.match);
@@ -329,11 +390,39 @@ export default function App() {
       }
       setImportResults([...results]);
     }
-    if (selected.length > 1) setView('database');
+    if (selected.length > 1 && navigation.intent() === navigationIntent)
+      setView('database');
     setUploading(false);
     if (input.current) input.current.value = '';
   }
+  function goHome(event: MouseEvent<HTMLAnchorElement>) {
+    if (
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
+    event.preventDefault();
+    cancelRestoration();
+    annotationNavigation.current?.abort();
+    navigation.clear();
+    setView('analysis');
+    setDetail('overview');
+    setRestoring(false);
+    setError(undefined);
+    setNotice(undefined);
+    setMoveNotes(undefined);
+    try {
+      localStorage.removeItem('bgtutor.workspace');
+    } catch {
+      /* Home navigation also works without persistent storage. */
+    }
+    window.scrollTo(0, 0);
+  }
   function openMatch(match: Match, gameNo?: number) {
+    cancelRestoration();
     setError(undefined);
     setView('analysis');
     setDetail('overview');
@@ -344,6 +433,7 @@ export default function App() {
   function searchCurrentPosition() {
     const positionId = navigation.position?.position_id;
     if (!positionId) return;
+    cancelRestoration();
     changeDatabase('');
     setRequestedPositionSearch((previous) => ({
       positionId,
@@ -354,6 +444,7 @@ export default function App() {
   function searchSimilarPositions() {
     const { position, match } = navigation;
     if (!position || !match) return;
+    cancelRestoration();
     setSimilarTarget((previous) => ({
       source: position,
       matchName: match.filename,
@@ -362,6 +453,7 @@ export default function App() {
     setView('positions');
   }
   function openPosition(position: Position | string) {
+    cancelRestoration();
     setView('analysis');
     void navigation.openPosition(position);
   }
@@ -370,6 +462,7 @@ export default function App() {
       annotationNavigation.current?.abort();
   }, [view, settingsOpen]);
   function openAnnotation(hit: AnnotationHit) {
+    cancelRestoration();
     annotationNavigation.current?.abort();
     const abort = new AbortController();
     annotationNavigation.current = abort;
@@ -422,21 +515,42 @@ export default function App() {
       <h1>{w('welcomeTitle')}</h1>
       <p>{w('welcomeDescription')}</p>
       <div className="welcome-actions">
-        <button className="primary" onClick={() => setView('database')}>
+        <ActionButton
+          className="primary"
+          onClick={() => {
+            cancelRestoration();
+            setView('database');
+          }}
+          icon="open"
+          label={w('openMatch')}
+        >
           {w('openMatch')}
-        </button>
-        <button onClick={() => input.current?.click()} disabled={uploading}>
-          {uploading ? t('app.importRunning') : t('app.import')}
-        </button>
+        </ActionButton>
+        <ActionButton
+          onClick={() => input.current?.click()}
+          disabled={uploading}
+          icon="import"
+          label={uploading ? t('app.importRunning') : t('app.importPlain')}
+        >
+          {uploading ? t('app.importRunning') : t('app.importPlain')}
+        </ActionButton>
+        <MatchDropZone
+          disabled={uploading}
+          onFiles={(files) => void upload(files)}
+        />
       </div>
       {restoring && <p role="status">{w('lastMatch')}</p>}
-      <small>{t('app.dropFile')}</small>
     </section>
   );
   return (
     <div className="app-shell">
       <header className="app-header">
-        <a className="brand" href="/" aria-label={t('app.home')}>
+        <a
+          className="brand"
+          href="/"
+          aria-label={t('app.home')}
+          onClick={goHome}
+        >
           <span className="brand-mark">
             b<span>g</span>
           </span>
@@ -460,16 +574,19 @@ export default function App() {
                 tabs.current[tab] = el;
               }}
               onKeyDown={(event) => tabKey(event, tab)}
-              onClick={() => setView(tab)}
+              onClick={() => {
+                cancelRestoration();
+                setView(tab);
+              }}
             >
-              {tab === 'learning'
-                ? learnT('study')
-                : tab === 'positions'
-                  ? positionText('title')
-                  : tab === 'play'
-                    ? playT('title')
-                    : tab === 'extras'
-                      ? benchmarkT('extras')
+              {tab === 'extras'
+                ? benchmarkT('extras')
+                : tab === 'play'
+                  ? playText('title')
+                  : tab === 'learning'
+                    ? learnT('study')
+                    : tab === 'positions'
+                      ? positionText('title')
                       : w(tab)}
             </button>
           ))}
@@ -481,27 +598,16 @@ export default function App() {
               setSettingsOpen(true);
             }}
           />
-          <button
+          <ActionButton
             className="settings-trigger"
             onClick={() => {
               setSettingsCategory('general');
               setSettingsOpen(true);
             }}
-          >
-            <svg
-              aria-hidden="true"
-              focusable="false"
-              viewBox="0 0 20 20"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-            >
-              <path d="M2 5h4m4 0h8M2 15h8m4 0h4" />
-              <circle cx="8" cy="5" r="2" />
-              <circle cx="12" cy="15" r="2" />
-            </svg>
-            {w('settings')}
-          </button>
+            icon="settings"
+            label={w('settings')}
+            compact
+          ></ActionButton>
         </div>
         <input
           ref={input}
@@ -519,7 +625,8 @@ export default function App() {
         </p>
       )}
       <main className={`app-body app-body-${view}`}>
-        <div
+        <section
+          className="workspace-panel"
           id="workspace-panel-play"
           role="tabpanel"
           aria-labelledby="workspace-tab-play"
@@ -528,29 +635,35 @@ export default function App() {
           <PlayWorkspace
             visible={view === 'play'}
             theme={theme}
-            onSaved={() => setRevision((value) => value + 1)}
+            requestedSession={requestedPlaySession}
+            onSaved={() => setRevision((n) => n + 1)}
+            onModeChanged={playModeChanged}
           />
-        </div>
+        </section>
         {!!(error || navigation.error) && (
           <div className="error" role="alert">
             {formatError(error || navigation.error)}
-            <button
+            <ActionButton
               aria-label={t('app.closeError')}
               onClick={() => {
                 setError(undefined);
                 navigation.clearError();
               }}
-            >
-              ×
-            </button>
+              icon="close"
+              label={t('app.closeError')}
+              compact
+            ></ActionButton>
           </div>
         )}
         {!!settingsError && (
           <div className="error" role="alert">
             {w('configurationError')} {formatError(settingsError)}
-            <button onClick={() => setSettingsRevision((value) => value + 1)}>
-              {w('retry')}
-            </button>
+            <ActionButton
+              onClick={() => setSettingsRevision((value) => value + 1)}
+              icon="refresh"
+              label={w('retry')}
+              compact
+            ></ActionButton>
           </div>
         )}
         {notice && (
@@ -559,24 +672,26 @@ export default function App() {
             {notice.duplicate
               ? t('app.importDuplicate')
               : t('app.importCount', { count: notice.count })}
-            <button
+            <ActionButton
               aria-label={t('app.closeNotice')}
               onClick={() => setNotice(undefined)}
-            >
-              ×
-            </button>
+              icon="close"
+              label={t('app.closeNotice')}
+              compact
+            ></ActionButton>
           </div>
         )}
         {importResults.length > 1 && (
           <div className="import-results" role="status">
             <div className="section-heading">
               <h2>{l('importResults')}</h2>
-              <button
+              <ActionButton
                 onClick={() => setImportResults([])}
                 aria-label={l('close')}
-              >
-                ×
-              </button>
+                icon="close"
+                label={l('close')}
+                compact
+              ></ActionButton>
             </div>
             <ul>
               {importResults.map((result, i) => (
@@ -640,6 +755,13 @@ export default function App() {
           hidden={view !== 'database'}
         >
           <MatchDatabase
+            onResumePlay={(id) => {
+              setRequestedPlaySession((previous) => ({
+                id,
+                token: (previous?.token ?? 0) + 1,
+              }));
+              setView('play');
+            }}
             revision={revision}
             databaseId={databaseId}
             onDatabase={changeDatabase}
@@ -790,6 +912,7 @@ export default function App() {
         onClose={() => setSettingsOpen(false)}
         onBookSettings={() => setBookOpen(true)}
         onBenchmark={() => {
+          cancelRestoration();
           setSettingsOpen(false);
           setView('extras');
         }}

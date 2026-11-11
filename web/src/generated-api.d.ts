@@ -2079,6 +2079,11 @@ export interface components {
             match_no: number;
             occurrence?: null | components["schemas"]["LibraryOccurrence"];
             place?: string | null;
+            play_assisted: boolean;
+            play_mode?: null | components["schemas"]["PlayMode"];
+            play_phase?: string | null;
+            /** Format: uuid */
+            play_session_id?: string | null;
             /** Format: date */
             played_on?: string | null;
             /** Format: int32 */
@@ -2089,6 +2094,11 @@ export interface components {
             round?: string | null;
             /** @description False for independent saved-position context whose source match was deleted. */
             source_available: boolean;
+            /**
+             * Format: uuid
+             * @description Saved learning report available for this match; never implies generation.
+             */
+            study_report_id?: string | null;
             tags: string[];
             tournament?: string | null;
             /** Format: int64 */

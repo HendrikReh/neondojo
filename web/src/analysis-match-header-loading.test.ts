@@ -79,7 +79,7 @@ const metadata: LibraryMatch = {
 const fetch = vi.fn<typeof globalThis.fetch>();
 function render(props: Partial<Props> = {}) {
   hooks.index = 0;
-  return AnalysisMatchHeader({ match, ...props }).props;
+  return AnalysisMatchHeader({ match, theme: 'forest', ...props }).props;
 }
 function commit() {
   for (const [index, effect] of hooks.pending) {

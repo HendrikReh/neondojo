@@ -85,7 +85,14 @@ export function useLibraryColumns(visible: boolean, positionSearch = false) {
     minimumWidth: LIBRARY_COLUMNS.filter((column) =>
       activeColumns.includes(column.id),
     ).reduce(
-      (sum, column) => sum + column.defaultWidth,
+      // Player columns use percentages in the automatic layout, so allow
+      // them and the mode column to contract to their readable minimums.
+      // Explicit saved widths continue to take precedence.
+      (sum, column) =>
+        sum +
+        (['white', 'black', 'play_mode'].includes(column.id)
+          ? column.min
+          : column.defaultWidth),
       positionSearch
         ? OCCURRENCE_COLUMNS.reduce(
             (sum, column) => sum + column.defaultWidth,

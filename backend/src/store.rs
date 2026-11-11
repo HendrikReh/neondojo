@@ -279,7 +279,9 @@ pub async fn positions_scoped_in_database(
         game_no.is_none() || match_id.is_some(),
         "game_no requires match_id"
     );
-    let mut query = QueryBuilder::<Postgres>::new("SELECT * FROM positions WHERE true");
+    let mut query = QueryBuilder::<Postgres>::new(
+        "SELECT * FROM positions WHERE NOT EXISTS(SELECT 1 FROM play_sessions live WHERE live.library_match_id=positions.match_uuid AND coalesce(live.state->>'play_mode','competition')='competition' AND live.state->>'phase'<>'match_over' AND NOT (live.state->>'match_length'='0' AND live.state->>'phase'='game_over'))",
+    );
     if let Some(database_id) = database_id {
         query
             .push(" AND match_uuid IN (SELECT id FROM matches WHERE database_id=")
@@ -459,7 +461,7 @@ pub async fn create_match_job_scoped_with_snapshot(
     let snapshot = snapshot.map(serde_json::to_value).transpose()?;
     let mut tx = pool.begin().await?;
     let source: Option<bool> =
-        sqlx::query_scalar("SELECT NOT collection_only FROM matches WHERE id=$1 FOR KEY SHARE")
+        sqlx::query_scalar("SELECT NOT collection_only FROM matches WHERE id=$1 FOR SHARE")
             .bind(match_id)
             .fetch_optional(&mut *tx)
             .await?;
@@ -467,6 +469,32 @@ pub async fn create_match_job_scoped_with_snapshot(
         source == Some(true),
         "Source match is unavailable; analyze the saved position instead"
     );
+    // API preflight may precede a live match appending another game. Derive the
+    // scope under the same parent lock that protects the job's source snapshot.
+    let mut games: Vec<i32> =
+        sqlx::query_scalar("SELECT game_no FROM match_games WHERE match_uuid=$1 ORDER BY game_no")
+            .bind(match_id)
+            .fetch_all(&mut *tx)
+            .await?;
+    if games.is_empty() {
+        let source: String = sqlx::query_scalar("SELECT sgf FROM matches WHERE id=$1")
+            .bind(match_id)
+            .fetch_one(&mut *tx)
+            .await?;
+        games = crate::import::sgf::parse_sgf_with_context(&source)?
+            .0
+            .games
+            .into_iter()
+            .map(|game| game.game_no)
+            .collect();
+    }
+    let total_games = if let Some(game_no) = game_no {
+        ensure!(games.contains(&game_no), "Game not found");
+        1
+    } else {
+        i32::try_from(games.len())?
+    };
+    ensure!(total_games > 0, "Match contains no games");
     let job = loop {
         let inserted = sqlx::query_as::<_, Job>("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,game_no,engine_config,engine_snapshot) VALUES($1,$2,'match',$3,'queued',$4,$5,$6,$7) ON CONFLICT(match_uuid,(coalesce(game_no,0)),plies,engine_config) WHERE kind='match' AND status IN ('queued','running') DO NOTHING RETURNING *")
             .bind(Uuid::new_v4()).bind(match_id).bind(plies).bind(total_games).bind(game_no).bind(&engine_config).bind(&snapshot).fetch_optional(&mut *tx).await?;

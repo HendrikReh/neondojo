@@ -245,7 +245,7 @@ async fn match_deletion_retains_exact_saved_occurrences_with_source_context_and_
     assert_eq!(get(&pool, "/api/library/matches").await["items"], json!([]));
     assert_eq!(get(&pool, "/api/matches").await["items"], json!([]));
     let databases = get(&pool, "/api/databases").await;
-    assert_eq!(databases.as_array().unwrap().len(), 1);
+    assert_eq!(databases.as_array().unwrap().len(), 2);
     assert_eq!(databases[0]["match_count"], 0);
     let browser = get(&pool, "/api/position-browser").await;
     assert_eq!(browser["items"].as_array().unwrap().len(), 1);
@@ -254,7 +254,7 @@ async fn match_deletion_retains_exact_saved_occurrences_with_source_context_and_
     assert_eq!(hit["source_available"], false);
     assert_eq!(hit["match_info"]["source_available"], false);
     assert_eq!(hit["match_no"], before["match_no"]);
-    assert_eq!(hit["database_name"], "My matches");
+    assert_eq!(hit["database_name"], "Unsortiert");
     assert_eq!(hit["database_id"], before["database_id"]);
     assert_eq!(
         save(&pool, position.id).await,
@@ -313,7 +313,7 @@ async fn database_deletion_uses_the_same_retention_and_internal_hosts_are_protec
     assert_eq!(browser["items"][0]["database_id"], db);
     assert_eq!(
         get(&pool, "/api/databases").await.as_array().unwrap().len(),
-        1
+        2
     );
     assert_eq!(
         get(&pool, "/api/position-filters").await[0]["database_missing"],
@@ -799,6 +799,12 @@ async fn retention_migration_only_adds_infrastructure_and_preserves_existing_use
         ..sqlx::migrate::Migrator::DEFAULT
     };
     previous.run(&pool).await.unwrap();
+    let unsorted = Uuid::new_v4();
+    sqlx::query("INSERT INTO databases(id,name) VALUES($1,'Unsortiert')")
+        .bind(unsorted)
+        .execute(&pool)
+        .await
+        .unwrap();
     let source = Uuid::new_v4();
     let position = Uuid::new_v4();
     sqlx::query("INSERT INTO matches(id,filename,format,sha256,white,black,match_length,position_count,original,sgf,display_name,played_on,tournament,result_state,white_score,black_score,metadata_version) VALUES($1,'legacy.sgf','sgf','legacy-hash','Alice','Bob',7,1,'private bytes'::bytea,$2,'Manual name','2025-04-03','Manual event','completed',7,3,9)")
@@ -819,7 +825,7 @@ async fn retention_migration_only_adds_infrastructure_and_preserves_existing_use
         .await
         .unwrap();
     let old_databases: Vec<Value> =
-        sqlx::query_scalar("SELECT to_jsonb(d) FROM databases d ORDER BY id")
+        sqlx::query_scalar("SELECT to_jsonb(d)-ARRAY['is_default','version','updated_at'] FROM databases d ORDER BY id")
             .fetch_all(&pool)
             .await
             .unwrap();
@@ -837,10 +843,15 @@ async fn retention_migration_only_adds_infrastructure_and_preserves_existing_use
         old_children.push(rows);
     }
     all.run(&pool).await.unwrap();
-    let unchanged:Value=sqlx::query_scalar("SELECT to_jsonb(m)-ARRAY['collection_only','source_match_id','source_match_no','source_database_id','source_database_name'] FROM matches m").fetch_one(&pool).await.unwrap();
+    let unchanged:Value=sqlx::query_scalar("SELECT to_jsonb(m)-ARRAY['collection_only','source_match_id','source_match_no','source_database_id','source_database_name','source_revision','play_mode','play_assisted'] FROM matches m").fetch_one(&pool).await.unwrap();
     assert_eq!(unchanged, old_match);
-    let databases:Vec<Value>=sqlx::query_scalar("SELECT to_jsonb(d)-'collection_only' FROM databases d WHERE NOT collection_only ORDER BY id").fetch_all(&pool).await.unwrap();
+    let databases:Vec<Value>=sqlx::query_scalar("SELECT to_jsonb(d)-ARRAY['collection_only','is_default','version','updated_at'] FROM databases d WHERE NOT collection_only ORDER BY id").fetch_all(&pool).await.unwrap();
     assert_eq!(databases, old_databases);
+    let default_id: Uuid = sqlx::query_scalar("SELECT id FROM databases WHERE is_default")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(default_id, unsorted);
     for (table, expected) in [
         "positions",
         "saved_positions",
@@ -870,6 +881,23 @@ async fn retention_migration_only_adds_infrastructure_and_preserves_existing_use
     assert_eq!(flags, (false, None, None));
     assert_eq!(
         get(&pool, "/api/databases").await.as_array().unwrap().len(),
-        1
+        2
     );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn retained_learning_positions_keep_mode_and_assistance_metadata(pool: PgPool) {
+    let (source, positions) = imported(&pool).await;
+    sqlx::query("UPDATE matches SET play_mode='tutor',play_assisted=true WHERE id=$1")
+        .bind(source)
+        .execute(&pool)
+        .await
+        .unwrap();
+    save(&pool, positions[0].id).await;
+    delete(&pool, source).await;
+    let host = owner(&pool, positions[0].id).await;
+    let metadata = get(&pool, &format!("/api/matches/{host}/metadata")).await;
+    assert_eq!(metadata["play_mode"], "tutor");
+    assert_eq!(metadata["play_assisted"], true);
 }

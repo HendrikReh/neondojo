@@ -1,3 +1,4 @@
+import ActionButton from './ActionButton';
 import type { LibraryFilters as Filters } from './library-api';
 import { useLibraryText } from './library-messages';
 import type { Position } from './api';
@@ -80,15 +81,21 @@ export default function LibraryFilters({
       {field('position_id', l('position'))}
       <div className="library-filter-actions">
         {currentPosition && (
-          <button
+          <ActionButton
+            icon="view"
+            label={t('app.usePosition')}
+            compact
             onClick={() =>
               onChange({ ...filters, position_id: currentPosition.position_id })
             }
-          >
-            {t('app.usePosition')}
-          </button>
+          />
         )}
-        <button onClick={onClear}>{l('clearFilters')}</button>
+        <ActionButton
+          icon="clear"
+          label={l('clearFilters')}
+          compact
+          onClick={onClear}
+        />
       </div>
     </div>
   );

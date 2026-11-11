@@ -391,3 +391,55 @@ async fn money_game_target_is_a_valid_persisted_play_preference(pool: PgPool) {
         );
     }
 }
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn loads_pre_play_mode_profiles_without_changing_saved_preferences(pool: PgPool) {
+    let (app, state) = profile_support::initialized(&pool, false).await;
+    let mut legacy = state["current_configuration"].clone();
+    for field in ["column_order", "visible_columns"] {
+        legacy["library"][field]
+            .as_array_mut()
+            .unwrap()
+            .retain(|id| id != "play_mode");
+    }
+    legacy["library"]["column_widths"] = json!({"actions": 110, "white": 211});
+    legacy["positions"]["column_widths"] = json!({"actions": 40});
+    sqlx::query("UPDATE configuration_profiles SET configuration=$1")
+        .bind(&legacy)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE configuration_state SET current_configuration=$1")
+        .bind(&legacy)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let (status, loaded) = call(app.clone(), "GET", "/api/configuration", Value::Null).await;
+    assert_eq!(status, 200, "{loaded}");
+    assert_eq!(loaded["dirty"], false);
+    let config = &loaded["current_configuration"];
+    assert_eq!(
+        config["library"]["column_order"],
+        state["current_configuration"]["library"]["column_order"]
+    );
+    assert_eq!(
+        config["library"]["visible_columns"],
+        legacy["library"]["visible_columns"]
+    );
+    assert_eq!(
+        config["library"]["column_widths"],
+        json!({"actions": 160, "white": 211})
+    );
+    assert_eq!(config["positions"]["column_widths"], json!({"actions": 60}));
+    let (status, result) = call(
+        app,
+        "PUT",
+        "/api/configuration",
+        json!({"expected_revision":loaded["revision"],"configuration":legacy}),
+    )
+    .await;
+    assert_eq!(status, 200, "{result}");
+    assert_eq!(result, loaded);
+}

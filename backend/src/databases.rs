@@ -81,6 +81,12 @@ pub struct DatabaseMatch {
     pub id: Uuid,
     /// False for independent saved-position context whose source match was deleted.
     pub source_available: bool,
+    pub play_session_id: Option<Uuid>,
+    /// Saved learning report available for this match; never implies generation.
+    pub study_report_id: Option<Uuid>,
+    pub play_phase: Option<String>,
+    pub play_mode: Option<crate::play::PlayMode>,
+    pub play_assisted: bool,
     /// Persistent numeric library entry ID; UUID remains the action identity.
     pub match_no: i64,
     pub filename: String,
@@ -366,14 +372,15 @@ async fn delete_database(
 
 // Choose the latest completed scope before validating native coverage. A newer
 // legacy or incomplete result must never revive an older rating.
-const MATCH_FROM: &str = "FROM matches m LEFT JOIN annotations a ON a.match_uuid=m.id
+const MATCH_FROM: &str = "FROM matches m LEFT JOIN play_sessions ps ON ps.library_match_id=m.id LEFT JOIN annotations a ON a.match_uuid=m.id
 LEFT JOIN LATERAL (
     SELECT j.result,j.total_games,j.completed_games FROM jobs j
-    WHERE j.match_uuid=m.id AND j.kind='match' AND j.game_no IS NULL AND j.status='completed' AND NOT m.collection_only
+    WHERE j.match_uuid=m.id AND j.source_revision=m.source_revision AND j.kind='match' AND j.game_no IS NULL AND j.status='completed' AND NOT m.collection_only
     ORDER BY j.created_at DESC,j.id DESC LIMIT 1
 ) rawpr ON true
 LEFT JOIN LATERAL (
     SELECT rawpr.result WHERE rawpr.total_games>0 AND rawpr.completed_games=rawpr.total_games
+    AND NOT m.play_assisted AND (m.play_mode IS NULL OR (m.play_mode='competition' AND (ps.id IS NULL OR (ps.state->>'phase'='match_over' OR (m.match_length=0 AND ps.state->>'phase'='game_over')))))
     AND rawpr.result->>'total_games'=rawpr.total_games::text
     AND rawpr.result->>'completed_games'=rawpr.total_games::text
     AND rawpr.result->>'analyzed_moves'=rawpr.result->>'total_moves'
@@ -386,9 +393,9 @@ LEFT JOIN LATERAL (
     AND rawpr.result #>> '{performance_rating,players,1,player}'='1'
 ) prj ON true
 LEFT JOIN LATERAL (
-    SELECT coalesce((SELECT CASE WHEN j.game_no IS NOT NULL AND j.status='completed' THEN 'partial' ELSE j.status END FROM jobs j WHERE j.match_uuid=m.id AND j.kind='match' ORDER BY (j.game_no IS NULL) DESC,j.created_at DESC,j.id DESC LIMIT 1),CASE WHEN EXISTS(SELECT 1 FROM imported_analyses ia WHERE ia.match_uuid=m.id AND ia.kind IN ('checker','cube')) THEN 'imported' END) AS status
+    SELECT coalesce((SELECT CASE WHEN j.game_no IS NOT NULL AND j.status='completed' THEN 'partial' ELSE j.status END FROM jobs j WHERE j.match_uuid=m.id AND j.source_revision=m.source_revision AND j.kind='match' ORDER BY (j.game_no IS NULL) DESC,j.created_at DESC,j.id DESC LIMIT 1),CASE WHEN EXISTS(SELECT 1 FROM imported_analyses ia WHERE ia.match_uuid=m.id AND ia.kind IN ('checker','cube')) THEN 'imported' END) AS status
 ) analysis ON true";
-const MATCH_COLUMNS: &str = "m.id,NOT m.collection_only AS source_available,coalesce(m.source_match_no,m.match_no) AS match_no,m.filename,m.format,m.white,m.black,m.match_length,m.position_count,m.created_at,coalesce(m.source_database_id,m.database_id) AS database_id,coalesce(nullif(m.display_name,''),m.filename) AS display_name,m.played_on,m.tournament,m.round,m.place,m.result_state,m.white_score,m.black_score,(prj.result #>> '{performance_rating,players,0,value}')::float8 AS white_pr,(prj.result #>> '{performance_rating,players,1,value}')::float8 AS black_pr,prj.result #>> '{performance_rating,method}' AS pr_method,prj.result #>> '{performance_rating,profile}' AS pr_profile,analysis.status AS analysis_status,(SELECT count(*) FROM match_games g WHERE g.match_uuid=m.id) AS game_count,coalesce(a.tags,'{}'::text[]) AS tags,coalesce(a.comment,'') AS comment,m.metadata_version AS version";
+const MATCH_COLUMNS: &str = "coalesce((SELECT r.id FROM study_report_snapshots r WHERE r.session_id=ps.id ORDER BY r.game_no DESC,r.created_at DESC LIMIT 1),CASE WHEN ps.state->>'phase'='match_over' AND jsonb_typeof(ps.state->'review')='object' THEN ps.id END) AS study_report_id,ps.id AS play_session_id,ps.state->>'phase' AS play_phase,m.play_mode,m.play_assisted,m.id,NOT m.collection_only AS source_available,coalesce(m.source_match_no,m.match_no) AS match_no,m.filename,m.format,m.white,m.black,m.match_length,m.position_count,m.created_at,coalesce(m.source_database_id,m.database_id) AS database_id,coalesce(nullif(m.display_name,''),m.filename) AS display_name,m.played_on,m.tournament,m.round,m.place,m.result_state,m.white_score,m.black_score,(prj.result #>> '{performance_rating,players,0,value}')::float8 AS white_pr,(prj.result #>> '{performance_rating,players,1,value}')::float8 AS black_pr,prj.result #>> '{performance_rating,method}' AS pr_method,prj.result #>> '{performance_rating,profile}' AS pr_profile,analysis.status AS analysis_status,(SELECT count(*) FROM match_games g WHERE g.match_uuid=m.id) AS game_count,coalesce(a.tags,'{}'::text[]) AS tags,coalesce(a.comment,'') AS comment,m.metadata_version AS version";
 fn sort_spec(sort: &str) -> Option<(&'static str, &'static str)> {
     Some(match sort {
         "occurrence_database" => ("lower(occurrence_db.name)", "text"),
@@ -507,7 +514,8 @@ fn library_filters(
         q.push(" AND EXISTS(SELECT 1 FROM annotations n LEFT JOIN positions np ON np.id=n.position_uuid LEFT JOIN match_games ng ON ng.id=n.game_uuid LEFT JOIN match_moves nm ON nm.id=n.move_uuid WHERE coalesce(n.match_uuid,np.match_uuid,ng.match_uuid,nm.match_uuid)=m.id AND lower(n.comment) LIKE ").push_bind(crate::annotations::literal_pattern(v)).push(")");
     }
     if let Some(v) = &p.position_id {
-        q.push(" AND hit.position_id=").push_bind(v.clone());
+        q.push(" AND (ps.id IS NULL OR coalesce(ps.state->>'play_mode','competition')<>'competition' OR ps.state->>'phase'='match_over' OR (m.match_length=0 AND ps.state->>'phase'='game_over')) AND hit.position_id=")
+            .push_bind(v.clone());
     }
     if let Some(v) = &p.match_type {
         q.push(if v == "money" {
@@ -1023,7 +1031,7 @@ async fn action_one(pool: &PgPool, a: &LibraryAction, id: Uuid) -> ApiResult<Act
                 }
             } else {
                 let new_id = Uuid::new_v4();
-                let inserted=sqlx::query_scalar::<_,Uuid>("INSERT INTO matches(id,filename,format,sha256,white,black,match_length,position_count,original,sgf,created_at,database_id,display_name,played_on,tournament,round,place,result_state,white_score,black_score,metadata_version,moves_cataloged,source_metadata_loaded) SELECT $2,filename,format,sha256,white,black,match_length,position_count,original,sgf,created_at,$3,display_name,played_on,tournament,round,place,result_state,white_score,black_score,metadata_version,moves_cataloged,source_metadata_loaded FROM matches WHERE id=$1 ON CONFLICT(database_id,sha256) DO NOTHING RETURNING id").bind(id).bind(new_id).bind(target).fetch_optional(&mut *tx).await.map_err(anyhow::Error::from)?;
+                let inserted=sqlx::query_scalar::<_,Uuid>("INSERT INTO matches(id,filename,format,sha256,white,black,match_length,position_count,original,sgf,created_at,database_id,display_name,played_on,tournament,round,place,result_state,white_score,black_score,metadata_version,moves_cataloged,source_metadata_loaded,source_revision,play_mode,play_assisted) SELECT $2,filename,format,sha256,white,black,match_length,position_count,original,sgf,created_at,$3,display_name,played_on,tournament,round,place,result_state,white_score,black_score,metadata_version,moves_cataloged,source_metadata_loaded,source_revision,play_mode,play_assisted FROM matches WHERE id=$1 ON CONFLICT(database_id,sha256) DO NOTHING RETURNING id").bind(id).bind(new_id).bind(target).fetch_optional(&mut *tx).await.map_err(anyhow::Error::from)?;
                 if inserted.is_none() {
                     let existing = sqlx::query_scalar(
                         "SELECT id FROM matches WHERE database_id=$1 AND sha256=$2",

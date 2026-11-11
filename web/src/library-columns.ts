@@ -13,6 +13,12 @@ export const LIBRARY_COLUMNS = [
   { id: 'black', className: 'library-col-black', min: 60, defaultWidth: 180 },
   { id: 'black_pr', className: 'library-col-pr', min: 44, defaultWidth: 56 },
   {
+    id: 'play_mode',
+    className: 'library-col-play-mode',
+    min: 90,
+    defaultWidth: 210,
+  },
+  {
     id: 'match_length',
     className: 'library-col-length',
     min: 44,
@@ -59,8 +65,8 @@ export const LIBRARY_COLUMNS = [
   {
     id: 'actions',
     className: 'library-col-actions',
-    min: 88,
-    defaultWidth: 88,
+    min: 160,
+    defaultWidth: 160,
   },
 ] as const;
 export type LibraryColumn = (typeof LIBRARY_COLUMNS)[number]['id'];
@@ -68,15 +74,24 @@ export type ColumnWidths = SharedColumnWidths<LibraryColumn>;
 export const COLUMN_WIDTHS_KEY = 'bgtutor.library.columns';
 const baseLayout = createColumnLayout(LIBRARY_COLUMNS, COLUMN_WIDTHS_KEY, {
   comment: 220,
+  play_mode: 210,
 });
 export const LIBRARY_COLUMN_LAYOUT: typeof baseLayout = {
   ...baseLayout,
   read(storage) {
     try {
-      const raw = (storage ?? localStorage).getItem(COLUMN_WIDTHS_KEY);
+      let raw = (storage ?? localStorage).getItem(COLUMN_WIDTHS_KEY);
       if (!raw || raw.length > 4096) return;
       const profile = JSON.parse(raw);
       const widths = profile?.widths;
+      if (
+        Number.isInteger(widths?.actions) &&
+        widths.actions >= 88 &&
+        widths.actions < 160
+      ) {
+        widths.actions = 160;
+        raw = JSON.stringify(profile);
+      }
       if (
         profile?.version === 1 &&
         widths &&

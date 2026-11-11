@@ -1,3 +1,4 @@
+import ActionButton from './ActionButton';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { request, type Match } from './api';
 import type { LibraryMatch } from './library-api';
@@ -6,6 +7,8 @@ import { AppError, type Locale } from './i18n-core';
 import { useAnalysisMatchHeaderText } from './analysis-match-header-messages';
 import { hasMatchSource } from './match-source';
 import './analysis-match-header.css';
+import type { Theme } from './themes';
+import AnalysisStudyReportAction from './AnalysisStudyReportAction';
 
 interface HeaderState {
   identity: string;
@@ -18,12 +21,20 @@ export default function AnalysisMatchHeader({
   match,
   metadataRevision = 0,
   analysisRevision,
+  theme,
+  active = true,
 }: {
   match: Match;
   metadataRevision?: number;
   analysisRevision?: string;
+  theme: Theme;
+  active?: boolean;
 }) {
   const [retry, setRetry] = useState(0);
+  const [reportLink, setReportLink] = useState<{
+    matchId: string;
+    reportId: string | null;
+  }>();
   const identity = JSON.stringify([
     match.id,
     metadataRevision,
@@ -44,8 +55,13 @@ export default function AnalysisMatchHeader({
       .then((metadata) => {
         if (metadata.id !== match.id)
           throw new AppError('error.invalidResponse');
-        if (!abort.signal.aborted && current.current === identity)
+        if (!abort.signal.aborted && current.current === identity) {
           setState({ identity, loading: false, metadata });
+          setReportLink({
+            matchId: match.id,
+            reportId: metadata.study_report_id ?? null,
+          });
+        }
       })
       .catch((error: unknown) => {
         if (!abort.signal.aborted && current.current === identity)
@@ -63,6 +79,16 @@ export default function AnalysisMatchHeader({
       loading={status.loading}
       error={'error' in status ? status.error : undefined}
       onRetry={() => setRetry((value) => value + 1)}
+      reportAction={
+        active && reportLink?.matchId === match.id && reportLink.reportId ? (
+          <AnalysisStudyReportAction
+            key={`${match.id}:${reportLink.reportId}`}
+            matchId={match.id}
+            reportId={reportLink.reportId}
+            theme={theme}
+          />
+        ) : undefined
+      }
     />
   );
 }
@@ -87,12 +113,14 @@ export function AnalysisMatchHeaderView({
   loading,
   error,
   onRetry,
+  reportAction,
 }: {
   match: Match;
   metadata?: LibraryMatch;
   loading: boolean;
   error?: unknown;
   onRetry: () => void;
+  reportAction?: ReactNode;
 }) {
   const { t, locale, formatNumber, formatError } = useI18n();
   const h = useAnalysisMatchHeaderText();
@@ -142,6 +170,7 @@ export function AnalysisMatchHeaderView({
       <h1 title={names}>
         {players.white} <span>{t('common.versus')}</span> {players.black}
       </h1>
+      {reportAction}
       <dl className="analysis-match-metadata">
         {field(
           'id',
@@ -193,9 +222,13 @@ export function AnalysisMatchHeaderView({
       {error !== undefined && (
         <div className="analysis-match-error" role="alert">
           <span title={formatError(error)}>{h('loadError')}</span>
-          <button type="button" onClick={onRetry}>
-            {h('retry')}
-          </button>
+          <ActionButton
+            icon="refresh"
+            label={h('retry')}
+            compact
+            type="button"
+            onClick={onRetry}
+          />
         </div>
       )}
     </div>

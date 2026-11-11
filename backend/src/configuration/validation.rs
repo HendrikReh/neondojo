@@ -8,6 +8,7 @@ pub(crate) const LIBRARY_COLUMNS: &[(&str, i32)] = &[
     ("white_pr", 44),
     ("black", 60),
     ("black_pr", 44),
+    ("play_mode", 90),
     ("match_length", 44),
     ("score", 54),
     ("played_at", 70),
@@ -33,7 +34,7 @@ const POSITION_COLUMNS: &[(&str, i32)] = &[
     ("loss", 60),
     ("decks", 80),
     ("notes", 120),
-    ("actions", 40),
+    ("actions", 60),
 ];
 
 fn text(path: &str, value: &mut String, max: usize, trim: bool) -> Result<()> {
@@ -77,7 +78,30 @@ fn widths(
     }
     Ok(())
 }
+// Profiles remain schema version 1. Fill the new column and widen existing
+// action columns without changing the saved visibility or order of old columns.
+pub(super) fn upgrade_columns(config: &mut ProfileConfiguration) {
+    let order = &mut config.library.column_order;
+    if order.len() + 1 == LIBRARY_COLUMNS.len()
+        && !order.iter().any(|id| id == "play_mode")
+        && let Some(index) = order.iter().position(|id| id == "match_length")
+    {
+        order.insert(index, "play_mode".into());
+    }
+    for (widths, old, new) in [
+        (&mut config.library.column_widths, 88, 160),
+        (&mut config.positions.column_widths, 40, 60),
+    ] {
+        if let Some(width) = widths.as_mut().and_then(|w| w.get_mut("actions"))
+            && (old..new).contains(width)
+        {
+            *width = new;
+        }
+    }
+}
+
 pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfiguration> {
+    upgrade_columns(&mut config);
     if config.schema_version != 1 {
         return Err(ConfigurationError::invalid(
             "schema_version",
@@ -213,7 +237,7 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
     let mut library_widths = LIBRARY_COLUMNS.to_vec();
     library_widths.extend([
         ("select", 32),
-        ("actions", 88),
+        ("actions", 160),
         ("occurrence_database", 70),
         ("occurrence_game", 44),
         ("occurrence_move", 44),

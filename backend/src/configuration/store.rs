@@ -1,4 +1,4 @@
-use super::validation::{enum_string, normalize, resources};
+use super::validation::{enum_string, normalize, resources, upgrade_columns};
 use super::*;
 use sqlx::{PgPool, Postgres, Row, Transaction};
 
@@ -20,8 +20,10 @@ pub(crate) async fn begin(state: &AppState) -> Result<Transaction<'_, Postgres>>
     Ok(tx)
 }
 fn configuration(value: Value) -> Result<ProfileConfiguration> {
-    serde_json::from_value(value)
-        .map_err(|e| ConfigurationError::invalid("configuration", e.to_string()))
+    let mut config = serde_json::from_value(value)
+        .map_err(|e| ConfigurationError::invalid("configuration", e.to_string()))?;
+    upgrade_columns(&mut config);
+    Ok(config)
 }
 pub(crate) fn value(config: &ProfileConfiguration) -> Value {
     serde_json::to_value(config).expect("serializable configuration")

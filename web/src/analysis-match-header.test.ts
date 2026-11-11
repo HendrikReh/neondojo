@@ -90,6 +90,7 @@ it('integrates the match header with identity and loading fields while omitting 
       cancel: noop,
       clearError: noop,
       clear: noop,
+      invalidateMatchAnalysis: noop,
       intent: () => 0,
       selectMatch: async () => false,
       selectGame: async () => false,
@@ -259,7 +260,7 @@ it('distinguishes a metadata request error from unavailable stored values and of
   const html = renderHeader(null, 'en', new Error('Offline'));
   expect(html).toContain('role="alert"');
   expect(html).toContain('Could not load match details.');
-  expect(html).toContain('>Retry</button>');
+  expect(html).toMatch(/<button[^>]*aria-label="Retry"/);
   expect(field(html, 'result')).toContain('—');
   expect(field(html, 'pr-white')).not.toContain('n/a');
   expect(html).not.toContain('aria-busy="true"');

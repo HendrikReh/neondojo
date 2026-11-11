@@ -59,6 +59,7 @@
   margin: 4px 0;
 }
 .database-collection-actions button {
+  justify-self: start;
   text-align: left;
   font-size: var(--font-size-control);
 }
@@ -174,16 +175,6 @@
   gap: 8px 12px;
   margin: 12px 0;
 }
-.library-column-option {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-}
-.library-column-order-controls {
-  display: inline-flex;
-  gap: 2px;
-}
 .library-column-options label {
   display: flex;
   align-items: center;
@@ -296,7 +287,7 @@
   width: 126px;
 }
 .library-col-actions {
-  width: 88px;
+  width: 160px;
 }
 .match-database .database-table th {
   position: sticky;
@@ -333,15 +324,18 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.library-sort-indicator {
-  flex: 0 0 auto;
+.library-sort-heading .action-icon {
   color: var(--ui-muted);
+}
+.library-sort-heading .action-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .database-table th button[aria-pressed='true'] {
   color: var(--ui-accent);
   font-weight: var(--font-weight-semibold);
 }
-.database-table th button[aria-pressed='true'] .library-sort-indicator {
+.database-table th button[aria-pressed='true'] .action-icon {
   color: inherit;
 }
 .match-database .database-table th button:focus-visible {
@@ -385,7 +379,8 @@
   min-width: 0;
 }
 .library-match-player {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
+  max-width: 100%;
 }
 .library-match-title {
   flex: 0 2 auto;
@@ -454,13 +449,6 @@
   color: var(--ui-muted);
 }
 .match-database .library-row-edit {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
-  padding: 0;
   border-radius: 4px;
 }
 .match-database .library-row-open {
@@ -473,7 +461,7 @@
   background: transparent;
 }
 .match-database .library-row-actions a {
-  display: block;
+  display: inline-flex;
   margin: 0;
   font-size: var(--font-size-meta);
   white-space: nowrap;
@@ -659,4 +647,28 @@
 .library-position-filter button {
   padding: 4px 7px;
   font-size: var(--font-size-control);
+}
+
+.library-row-actions {
+  flex-wrap: wrap;
+}
+.match-database .library-row-resume {
+  flex: 0 0 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 2px 4px;
+  font-size: var(--font-size-meta);
+  line-height: 18px;
+  white-space: normal;
+}
+
+.library-play-mode {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: inherit;
+  color: var(--text-muted);
+  font-weight: 400;
 }

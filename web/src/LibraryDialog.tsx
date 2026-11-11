@@ -1,3 +1,4 @@
+import ActionButton from './ActionButton';
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { useLibraryText } from './library-messages';
 
@@ -94,14 +95,15 @@ export default function LibraryDialog({
       >
         <div className="section-heading">
           <h2 id={id}>{title}</h2>
-          <button
+          <ActionButton
+            icon="close"
+            label={l('close')}
+            compact
             type="button"
             onClick={onClose}
             disabled={busy}
             aria-label={l('close')}
-          >
-            ×
-          </button>
+          />
         </div>
         {children}
       </div>

@@ -274,3 +274,33 @@ fn openapi_documents_metadata_get_and_existing_update() {
     assert!(path["get"]["responses"].get("404").is_some());
     assert!(path.get("put").is_some());
 }
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn learning_history_never_exposes_corrected_native_pr_as_independent_competition(
+    pool: PgPool,
+) {
+    let id = import(&pool, SOURCE).await;
+    analysis(&pool, id, None, native_result(), 1).await;
+    for mode in [Some("coach"), Some("competition"), None] {
+        sqlx::query("UPDATE matches SET play_mode=$2,play_assisted=true WHERE id=$1")
+            .bind(id)
+            .bind(mode)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let value = metadata(&pool, id).await;
+        assert!(
+            value["white_pr"].is_null() && value["black_pr"].is_null(),
+            "{value}"
+        );
+    }
+    sqlx::query("UPDATE matches SET play_mode='competition',play_assisted=false WHERE id=$1")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let value = metadata(&pool, id).await;
+    assert_eq!(value["white_pr"], 2.5);
+    assert_eq!(value["black_pr"], 4.0);
+}

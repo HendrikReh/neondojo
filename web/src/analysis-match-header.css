@@ -87,3 +87,8 @@
     flex-wrap: wrap;
   }
 }
+
+.analysis-match-report-action {
+  flex: 0 0 auto;
+  min-height: 44px;
+}

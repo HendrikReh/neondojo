@@ -353,6 +353,7 @@ it('uses the real source occurrence beside review controls during candidate and 
       cancel: noop,
       clearError: noop,
       clear: noop,
+      invalidateMatchAnalysis: noop,
       intent: () => 0,
       selectMatch: async () => false,
       selectGame: async () => false,

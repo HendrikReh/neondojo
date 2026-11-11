@@ -32,6 +32,7 @@ pub fn config() -> Value {
         "white_pr",
         "black",
         "black_pr",
+        "play_mode",
         "match_length",
         "score",
         "played_at",

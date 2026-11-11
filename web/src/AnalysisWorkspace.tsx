@@ -1,6 +1,5 @@
-import ActionButton from './ActionButton';
-import { usePositionText } from './position-browser-messages';
 import { useProfileValue } from './useProfileValue';
+import ActionButton from './ActionButton';
 import {
   useCallback,
   useMemo,
@@ -37,6 +36,7 @@ import { useAnalysisMatchHeaderText } from './analysis-match-header-messages';
 import './retained-position.css';
 import GamePlanPanel from './GamePlanPanel';
 import { displayedBoardPosition } from './displayed-board';
+import { usePositionText } from './position-browser-messages';
 
 export type AnalysisDetail =
   'overview' | 'evaluation' | 'statistics' | 'errors' | 'notes' | 'cards';
@@ -121,7 +121,6 @@ export default function AnalysisWorkspace({
   const [commandTarget, setCommandTarget] = useState<HTMLDivElement | null>(
     null,
   );
-  const [focus, setFocus] = useState(false);
   const overview = detail === 'overview';
   const [matchJob, setMatchJob] = useState<Job>();
   const moveAssessments = useMoveAssessments({
@@ -136,15 +135,15 @@ export default function AnalysisWorkspace({
     const list = moveList.current,
       current = currentMove.current;
     if (!list || !current || !list.clientHeight) return;
-    const outer = list.getBoundingClientRect(),
-      row = current.getBoundingClientRect();
+    const outer = list.getBoundingClientRect();
     const result = current.nextElementSibling;
+    const row = current.getBoundingClientRect();
     const bottom = result?.matches('.game-result-summary')
       ? result.getBoundingClientRect().bottom
       : row.bottom;
     if (row.top < outer.top) list.scrollTop -= outer.top - row.top;
     else if (bottom > outer.bottom) list.scrollTop += bottom - outer.bottom;
-  }, [position?.id, positions.length, detail, focus, game?.result]);
+  }, [position?.id, positions.length, detail, game?.result]);
   const [moveFilter, setMoveFilter] = useState<{
     player: string;
     kind: string;
@@ -299,13 +298,15 @@ export default function AnalysisWorkspace({
     return <section className="analysis-workspace">{welcome}</section>;
   return (
     <section
-      className={`analysis-workspace ${overview ? 'analysis-overview' : ''} ${focus ? 'board-focus' : ''} ${sourceAvailable ? '' : 'analysis-retained'}`}
+      className={`analysis-workspace ${overview ? 'analysis-overview' : ''} ${sourceAvailable ? '' : 'analysis-retained'}`}
       aria-label={w('analysis')}
     >
       <AnalysisMatchHeader
         match={match}
         metadataRevision={metadataRevision}
         analysisRevision={analysisRevision}
+        theme={theme}
+        active={active && !notesSuspended}
       />
       {!sourceAvailable && (
         <p className="analysis-retained-context" role="status">
@@ -383,13 +384,13 @@ export default function AnalysisWorkspace({
           )}
           {sourceAvailable && (
             <>
-              <button
+              <ActionButton
+                icon="next"
+                label={w('nextError')}
                 className="next-error"
                 onClick={() => void nextError()}
                 disabled={!matchJob || !game}
-              >
-                {w('nextError')} →
-              </button>
+              />
               {noErrors && <p role="status">{w('noErrors')}</p>}
               {!!nextErrorFailure && (
                 <p role="alert">{formatError(nextErrorFailure)}</p>
@@ -437,10 +438,10 @@ export default function AnalysisWorkspace({
                     onChanged={onBookmarkChanged}
                   />
                   <ActionButton
-                    type="button"
                     icon="search"
                     label={t('app.prepareSearch')}
                     compact
+                    title={t('app.prepareSearch')}
                     onClick={onOpenDatabase}
                   />
                   <ActionButton
@@ -476,13 +477,14 @@ export default function AnalysisWorkspace({
                 active={active}
               />
               <div className="board-navigation">
-                <button
+                <ActionButton
+                  icon="back"
+                  label={t('app.previousMove')}
+                  compact
                   aria-label={t('app.previousMove')}
                   disabled={index === 0 || loading}
                   onClick={navigation.previous}
-                >
-                  ←
-                </button>
+                />
                 <span>
                   {t('common.played')}{' '}
                   <strong>{formatDecision(position.notation)}</strong>
@@ -491,13 +493,14 @@ export default function AnalysisWorkspace({
                     {formatNumber(game?.position_count ?? positions.length)}
                   </small>
                 </span>
-                <button
+                <ActionButton
+                  icon="next"
+                  label={t('app.nextMove')}
+                  compact
                   aria-label={t('app.nextMove')}
                   disabled={loading || index >= positions.length - 1}
                   onClick={navigation.next}
-                >
-                  →
-                </button>
+                />
               </div>
               <div className="position-code">
                 <span>{t('app.positionCode')}</span>
@@ -508,18 +511,15 @@ export default function AnalysisWorkspace({
             <div className="board-loading" role="status">
               {loading ? t('app.positionsLoading') : t('app.noPositions')}
               {!!navigation.error && (
-                <button onClick={() => void navigation.resume()}>
-                  {t('games.retry')}
-                </button>
+                <ActionButton
+                  icon="refresh"
+                  label={t('games.retry')}
+                  compact
+                  onClick={() => void navigation.resume()}
+                />
               )}
             </div>
           )}
-          <button
-            className="board-focus-toggle"
-            onClick={() => setFocus((value) => !value)}
-          >
-            {w(focus ? 'unfocus' : 'focus')}
-          </button>
         </section>
         <aside className="position-inspector">
           <div
@@ -609,8 +609,8 @@ export default function AnalysisWorkspace({
 function MatchResults({
   navigation,
   defaultPlies,
-  configured,
   analysisInstallationKey,
+  configured,
   detail,
   target,
   onPosition,
@@ -624,8 +624,8 @@ function MatchResults({
   gameNo?: number;
   navigation: ReturnType<typeof useGameNavigation>;
   defaultPlies: number;
-  configured: boolean;
   analysisInstallationKey?: string;
+  configured: boolean;
   detail: AnalysisDetail;
   target: HTMLElement | null;
   onPosition: (id: string) => void;

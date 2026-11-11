@@ -24,11 +24,15 @@ test('visibility restores canonical data-column order and ignores future and str
         columns: ['comment', 'white', 'select', 'future', 'white'],
       }),
   };
-  expect(readVisibleColumns(storage)).toEqual(['white', 'comment']);
+  expect(readVisibleColumns(storage)).toEqual([
+    'white',
+    'play_mode',
+    'comment',
+  ]);
   for (const raw of [
     'bad',
     'null',
-    JSON.stringify({ version: 2, columns: ['id'] }),
+    JSON.stringify({ version: 3, columns: ['id'] }),
     JSON.stringify({ version: 1, columns: [] }),
     JSON.stringify({ version: 1, columns: [42] }),
   ])
@@ -86,4 +90,25 @@ test('visibility can be saved and reset independently of width profiles', () => 
       },
     }),
   ).not.toThrow();
+});
+
+test('shows a separate play-mode column by default and upgrades older saved visibility', () => {
+  expect(DEFAULT_LIBRARY_COLUMNS).toContain('play_mode');
+  expect(
+    readVisibleColumns({
+      getItem: () =>
+        JSON.stringify({ version: 1, columns: ['id', 'white', 'comment'] }),
+    }),
+  ).toEqual(['id', 'white', 'play_mode', 'comment']);
+});
+test('new visibility profiles preserve an explicitly hidden play-mode column', () => {
+  let raw = '';
+  saveVisibleColumns(['id', 'white'], {
+    setItem: (_key, value) => {
+      raw = value;
+    },
+    removeItem: () => {},
+  });
+  expect(JSON.parse(raw).version).toBe(2);
+  expect(readVisibleColumns({ getItem: () => raw })).toEqual(['id', 'white']);
 });

@@ -290,6 +290,15 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
   c.library.filters.tag = c.library.filters.tag
     .replace(/\s+/gu, ' ')
     .toLowerCase();
+  const order = c.library.column_order;
+  if (
+    Array.isArray(order) &&
+    order.length === LIBRARY_DATA_COLUMNS.length - 1 &&
+    !order.includes('play_mode')
+  ) {
+    const index = order.indexOf('match_length');
+    if (index >= 0) order.splice(index, 0, 'play_mode');
+  }
   if (
     !Array.isArray(c.library.column_order) ||
     c.library.column_order.length !== LIBRARY_DATA_COLUMNS.length ||
@@ -306,6 +315,20 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
   c.library.visible_columns = c.library.column_order.filter((id) =>
     c.library.visible_columns.includes(id),
   );
+  for (const [saved, old, current] of [
+    [c.library.column_widths, 88, 160],
+    [c.positions.column_widths, 40, 60],
+  ] as const) {
+    const actionWidth = saved?.actions;
+    if (
+      saved &&
+      typeof actionWidth === 'number' &&
+      Number.isInteger(actionWidth) &&
+      actionWidth >= old &&
+      actionWidth < current
+    )
+      saved.actions = current;
+  }
   widths(
     c.library.column_widths,
     LIBRARY_WIDTH_COLUMNS,

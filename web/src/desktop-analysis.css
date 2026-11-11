@@ -405,11 +405,6 @@
     font-size: var(--font-size-micro);
   }
 
-  .analysis-workspace.analysis-overview .board-focus-toggle {
-    padding: 5px;
-    font-size: var(--font-size-control);
-  }
-
   .analysis-workspace.analysis-overview .position-inspector .analysis-controls {
     gap: 6px;
     margin: 0 0 9px;
@@ -508,11 +503,6 @@
     padding: 2px 3px;
     line-height: 1.4;
     overflow-wrap: anywhere;
-  }
-
-  .analysis-workspace.analysis-overview .preview-best {
-    margin: 6px 0;
-    padding: 5px 8px;
   }
 
   .analysis-workspace.analysis-overview .position-inspector .best-label {
@@ -792,17 +782,6 @@
     ) {
     display: none;
   }
-
-  .analysis-workspace.analysis-overview.board-focus .analysis-grid {
-    grid-template-columns: minmax(0, 1.3fr) minmax(325px, 1fr);
-    grid-template-areas:
-      'board evaluation'
-      'errors statistics';
-  }
-
-  .analysis-workspace.analysis-overview.board-focus .moves-panel {
-    display: none;
-  }
 }
 
 @media (min-width: 1600px) {
@@ -815,16 +794,6 @@
     grid-template-areas:
       'moves board evaluation statistics'
       'moves errors errors statistics';
-  }
-
-  .analysis-workspace.analysis-overview.board-focus .analysis-grid {
-    grid-template-columns: minmax(440px, 1.35fr) minmax(340px, 0.95fr) minmax(
-        350px,
-        1fr
-      );
-    grid-template-areas:
-      'board evaluation statistics'
-      'errors errors statistics';
   }
 }
 

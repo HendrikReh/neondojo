@@ -10,10 +10,4 @@
     grid-template-rows: minmax(0, 1fr);
     grid-template-areas: 'moves board evaluation';
   }
-
-  .analysis-workspace.analysis-overview.analysis-retained.board-focus
-    .analysis-grid {
-    grid-template-columns: minmax(0, 1.35fr) minmax(325px, 1fr);
-    grid-template-areas: 'board evaluation';
-  }
 }

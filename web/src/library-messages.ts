@@ -29,7 +29,14 @@ const rows = {
   ],
   occurrenceGame: ['Game', 'Partie', 'Partida', 'Partie', 'Partia', 'Partita'],
   occurrenceMove: ['Move', 'Zug', 'Jugada', 'Coup', 'Ruch', 'Mossa'],
-
+  resumePlay: [
+    'Resume match',
+    'Match fortsetzen',
+    'Continuar partida',
+    'Reprendre le match',
+    'Wznów mecz',
+    'Riprendi partita',
+  ],
   columns: ['Columns', 'Spalten', 'Columnas', 'Colonnes', 'Kolumny', 'Colonne'],
   chooseColumns: [
     'Visible columns',

@@ -8552,6 +8552,7 @@
         "required": [
           "id",
           "source_available",
+          "play_assisted",
           "match_no",
           "filename",
           "format",
@@ -8646,6 +8647,32 @@
               "null"
             ]
           },
+          "play_assisted": {
+            "type": "boolean"
+          },
+          "play_mode": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PlayMode"
+              }
+            ]
+          },
+          "play_phase": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "play_session_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
           "played_on": {
             "type": [
               "string",
@@ -8681,6 +8708,14 @@
           "source_available": {
             "type": "boolean",
             "description": "False for independent saved-position context whose source match was deleted."
+          },
+          "study_report_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Saved learning report available for this match; never implies generation."
           },
           "tags": {
             "type": "array",

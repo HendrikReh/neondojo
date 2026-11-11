@@ -577,3 +577,25 @@ async fn legacy_cube_only_checkpoint_needs_declared_durable_coverage(pool: PgPoo
     );
     assert_eq!(after["summary"], saved);
 }
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn statistics_review_guard_works_with_a_single_connection_pool(pool: PgPool) {
+    let (_, _, match_id) = setup(&pool).await;
+    let job = store::create_match_job(&pool, match_id, 0, 3)
+        .await
+        .unwrap();
+    let single = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with((*pool.connect_options()).clone())
+        .await
+        .unwrap();
+    let app = api::router(api::AppState::new(single, Engine::new("unused".into())));
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        get(app, &format!("/api/jobs/{}/statistics", job.id)),
+    )
+    .await
+    .expect("statistics must not acquire a second connection while holding its snapshot");
+    assert_eq!(result.0, 200, "{}", result.1);
+}

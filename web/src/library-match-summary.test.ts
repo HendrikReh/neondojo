@@ -103,3 +103,35 @@ it('keeps long comments and tag collections bounded and plain text', () => {
   expect(summary).toContain('…');
   expect(summary).not.toContain('\uFFFD');
 });
+
+it('identifies learning mode and assistance without presenting corrected play as independent PR', () => {
+  const learning = {
+    ...match,
+    play_mode: 'coach' as const,
+    play_assisted: true,
+  };
+  const summary = createMatchSummaryFormatter('en')(learning);
+  expect(summary).toContain('Coach');
+  expect(summary).toContain('With help');
+  expect(summary).not.toContain('PR: White');
+});
+
+it('does not reveal unfinished Competition PR through the match library', () => {
+  const summary = createMatchSummaryFormatter('en')({
+    ...match,
+    play_mode: 'competition',
+    play_session_id: match.id,
+    play_phase: 'move',
+  });
+  expect(summary).not.toContain('PR: White');
+});
+
+it('keeps helped matches out of independent PR after switching back to Competition', () => {
+  const summary = createMatchSummaryFormatter('en')({
+    ...match,
+    play_mode: 'competition',
+    play_assisted: true,
+    play_phase: 'match_over',
+  });
+  expect(summary).not.toContain('PR: White');
+});

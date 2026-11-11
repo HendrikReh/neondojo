@@ -19,12 +19,15 @@ export function readVisibleColumns(
     if (raw && raw.length <= 4096) {
       const profile = JSON.parse(raw);
       if (
-        profile?.version === 1 &&
+        (profile?.version === 1 || profile?.version === 2) &&
         Array.isArray(profile.columns) &&
         profile.columns.every((value: unknown) => typeof value === 'string')
       ) {
         const columns = canonical(profile.columns);
-        if (columns.length) return columns;
+        if (columns.length)
+          return profile.version === 1
+            ? canonical([...columns, 'play_mode'])
+            : columns;
       }
     }
   } catch {
@@ -44,7 +47,7 @@ export function saveVisibleColumns(
       if (normalized.length)
         target.setItem(
           VISIBLE_COLUMNS_KEY,
-          JSON.stringify({ version: 1, columns: normalized }),
+          JSON.stringify({ version: 2, columns: normalized }),
         );
     }
   } catch {

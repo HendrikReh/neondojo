@@ -100,12 +100,18 @@ export default function LibraryColumnPicker({
         </div>
         <small>{l('columnSelectionHint')}</small>
         <div className="library-column-menu-actions">
-          <button type="button" onClick={onAll}>
-            {l('showAllColumns')}
-          </button>
-          <button type="button" onClick={onReset}>
-            {l('defaultColumns')}
-          </button>
+          <ActionButton
+            icon="select-all"
+            label={l('showAllColumns')}
+            type="button"
+            onClick={onAll}
+          />
+          <ActionButton
+            icon="reset"
+            label={l('defaultColumns')}
+            type="button"
+            onClick={onReset}
+          />
         </div>
       </div>
     </details>

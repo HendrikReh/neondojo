@@ -119,3 +119,21 @@ it('persists money-game selection without permitting negative or excessive targe
     expect(() => normalizeConfiguration(c)).toThrow();
   }
 });
+
+it('upgrades the column order and action widths from an existing version 1 profile', () => {
+  const legacy = structuredClone(defaultConfiguration);
+  legacy.library.column_order = legacy.library.column_order.filter(
+    (id) => id !== 'play_mode',
+  );
+  legacy.library.visible_columns = ['white', 'score'];
+  legacy.library.column_widths = { actions: 110, white: 211 };
+  legacy.positions.column_widths = { actions: 40 };
+  const upgraded = normalizeConfiguration(legacy);
+  expect(upgraded.library.column_order).toEqual(
+    defaultConfiguration.library.column_order,
+  );
+  expect(upgraded.library.visible_columns).toEqual(['white', 'score']);
+  expect(upgraded.library.column_widths).toEqual({ actions: 160, white: 211 });
+  expect(upgraded.positions.column_widths).toEqual({ actions: 60 });
+  expect(normalizeConfiguration(upgraded)).toEqual(upgraded);
+});

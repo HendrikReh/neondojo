@@ -110,6 +110,13 @@ async fn statistics(
     if job.kind != "match" {
         return Err(ApiError::invalid("This job is not a match analysis"));
     }
+    let current_source: bool = sqlx::query_scalar("SELECT j.source_revision=m.source_revision FROM jobs j JOIN matches m ON m.id=j.match_uuid WHERE j.id=$1")
+        .bind(id).fetch_one(&mut *tx).await.map_err(anyhow::Error::from)?;
+    if !current_source {
+        return Err(ApiError::invalid(
+            "The match advanced after this analysis; analyze the current match again",
+        ));
+    }
     let source_available: bool =
         sqlx::query_scalar("SELECT NOT collection_only FROM matches WHERE id=$1")
             .bind(job.match_uuid)

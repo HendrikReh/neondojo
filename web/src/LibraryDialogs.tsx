@@ -1,3 +1,4 @@
+import ActionButton from './ActionButton';
 import { useState, type FormEvent } from 'react';
 import { request } from './api';
 import LibraryDialog from './LibraryDialog';
@@ -351,10 +352,32 @@ export default function LibraryDialogs({
           </p>
         )}
         <div className="library-dialog-actions">
-          <button type="button" disabled={busy} onClick={onClose}>
-            {l('cancel')}
-          </button>
-          <button
+          <ActionButton
+            icon="cancel"
+            label={l('cancel')}
+            type="button"
+            disabled={busy}
+            onClick={onClose}
+          />
+          <ActionButton
+            icon={
+              busy
+                ? 'loading'
+                : state.kind === 'deleteDatabase'
+                  ? 'delete'
+                  : action === 'tags'
+                    ? 'edit'
+                    : (action ?? 'save')
+            }
+            label={
+              busy
+                ? l('loading')
+                : state.kind === 'deleteDatabase'
+                  ? l('delete')
+                  : action
+                    ? l(action)
+                    : l('save')
+            }
             className={
               state.kind === 'deleteDatabase' || action === 'delete'
                 ? 'danger'
@@ -366,15 +389,7 @@ export default function LibraryDialogs({
               (action === 'tags' && !add.trim() && !remove.trim()) ||
               (!!action && ['copy', 'move'].includes(action) && !target)
             }
-          >
-            {busy
-              ? l('loading')
-              : state.kind === 'deleteDatabase'
-                ? l('delete')
-                : action
-                  ? l(action)
-                  : l('save')}
-          </button>
+          />
         </div>
       </form>
     </LibraryDialog>

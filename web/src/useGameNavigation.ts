@@ -37,6 +37,7 @@ export function useGameNavigation() {
   const current = useRef(view);
   const version = useRef(0);
   const active = useRef<AbortController | undefined>(undefined);
+  const activeMatch = useRef<string | undefined>(undefined);
   useEffect(
     () => () => {
       version.current++;
@@ -49,7 +50,8 @@ export function useGameNavigation() {
     current.current = { ...current.current, ...patch };
     setView(current.current);
   }
-  function begin(): Task {
+  function begin(matchId?: string): Task {
+    activeMatch.current = matchId;
     active.current?.abort();
     const controller = new AbortController();
     active.current = controller;
@@ -138,7 +140,7 @@ export function useGameNavigation() {
     return true;
   }
   async function selectMatch(match: Match) {
-    const task = begin();
+    const task = begin(match.id);
     try {
       return await load(match, undefined, undefined, task);
     } catch (error) {
@@ -148,7 +150,7 @@ export function useGameNavigation() {
   async function selectGame(gameNo: number) {
     const match = current.current.match;
     if (!match) return false;
-    const task = begin();
+    const task = begin(match.id);
     try {
       return await load(match, gameNo, undefined, task);
     } catch (error) {
@@ -156,7 +158,9 @@ export function useGameNavigation() {
     }
   }
   async function openPosition(position: Position | string) {
-    const task = begin();
+    const task = begin(
+      typeof position === 'string' ? undefined : position.match_uuid,
+    );
     try {
       const target =
         typeof position === 'string'
@@ -165,6 +169,7 @@ export function useGameNavigation() {
             })
           : position;
       ensureCurrent(task);
+      activeMatch.current = target.match_uuid;
       const previous = current.current;
       if (
         previous.match?.id === target.match_uuid &&
@@ -189,7 +194,7 @@ export function useGameNavigation() {
     }
   }
   async function openMatch(id: string, gameNo?: number) {
-    const task = begin();
+    const task = begin(id);
     try {
       const match =
         current.current.match?.id === id
@@ -204,6 +209,7 @@ export function useGameNavigation() {
     }
   }
   function cancel() {
+    activeMatch.current = undefined;
     active.current?.abort();
     version.current++;
     update({ loading: false });
@@ -218,15 +224,36 @@ export function useGameNavigation() {
     if (!previous.match || previous.loading) return;
     const game = previous.games.find((g) => g.game_no === previous.gameNo);
     if (!previous.error && game && previous.stats !== null) return;
-    const task = begin();
+    const task = begin(previous.match.id);
     try {
       await load(previous.match, previous.gameNo, previous.targetId, task);
     } catch (error) {
       fail(task, error);
     }
   }
+  function invalidateMatchAnalysis(matchId: string) {
+    if (current.current.match?.id !== matchId) return;
+    if (current.current.loading && activeMatch.current !== matchId) {
+      // Remove restricted cached data while allowing a newer, unrelated
+      // selection (including a position whose source is still loading) to finish.
+      update({
+        match: null,
+        games: [],
+        gameNo: undefined,
+        positions: [],
+        index: 0,
+        stats: null,
+        error: null,
+        targetId: undefined,
+      });
+    } else {
+      cancel();
+      update(initial());
+    }
+  }
   return {
     ...view,
+    invalidateMatchAnalysis,
     game: view.games.find((g) => g.game_no === view.gameNo),
     position: view.positions[view.index],
     selectMatch,

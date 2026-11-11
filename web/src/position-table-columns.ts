@@ -20,13 +20,36 @@ export const POSITION_COLUMNS = [
   { id: 'loss', className: 'position-col-loss', min: 60 },
   { id: 'decks', className: 'position-col-decks', min: 80, defaultWidth: 144 },
   { id: 'notes', className: 'position-col-notes', min: 120 },
-  { id: 'actions', className: 'position-col-actions', min: 40 },
+  {
+    id: 'actions',
+    className: 'position-col-actions',
+    min: 60,
+    defaultWidth: 60,
+  },
 ] as const;
-export const POSITION_COLUMN_LAYOUT = createColumnLayout(
+const baseLayout = createColumnLayout(
   POSITION_COLUMNS,
   'bgtutor.positions.columns',
   { decks: 144 },
 );
+export const POSITION_COLUMN_LAYOUT: typeof baseLayout = {
+  ...baseLayout,
+  read(storage) {
+    try {
+      let raw = (storage ?? localStorage).getItem(baseLayout.storageKey);
+      if (!raw || raw.length > 4096) return;
+      const profile = JSON.parse(raw);
+      const actions = profile?.widths?.actions;
+      if (Number.isInteger(actions) && actions >= 40 && actions < 60) {
+        profile.widths.actions = 60;
+        raw = JSON.stringify(profile);
+      }
+      return baseLayout.read({ getItem: () => raw });
+    } catch {
+      return;
+    }
+  },
+};
 export type PositionColumn = (typeof POSITION_COLUMNS)[number]['id'];
 export const POSITION_PLAYED_KEY = 'bgtutor.positions.showPlayed';
 export function readPositionPlayed() {

@@ -1,3 +1,4 @@
+import Tooltip from './Tooltip';
 import {
   useCallback,
   useEffect,
@@ -205,12 +206,13 @@ export function useResizableColumns<Id extends string>(
   function handle(column: Id, label: string) {
     const resizeLabel = options.resizeLabel(label);
     return (
-      <span
+      <Tooltip
+        as="span"
         role="separator"
         tabIndex={0}
         aria-orientation="vertical"
         aria-label={resizeLabel}
-        title={resizeLabel}
+        text={resizeLabel}
         aria-valuemin={layout.minimum(column)}
         aria-valuemax={MAX_COLUMN_WIDTH}
         aria-valuenow={(widths ?? measured)?.[column] ?? layout.minimum(column)}

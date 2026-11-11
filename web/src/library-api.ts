@@ -1,14 +1,27 @@
 import { request, type Page, type Position } from './api';
 import { AppError } from './i18n-core';
 import type { components } from './generated-api';
+import type { PlayMode } from './play-mode-messages';
 type Schema = components['schemas'];
 
-export const defaultDatabaseId = '00000000-0000-0000-0000-000000000001';
 export type Database = Schema['Database'];
 export type LibraryMatch = Required<
-  Omit<Schema['DatabaseMatch'], 'occurrence'>
+  Omit<
+    Schema['DatabaseMatch'],
+    | 'play_session_id'
+    | 'play_phase'
+    | 'play_mode'
+    | 'play_assisted'
+    | 'occurrence'
+    | 'study_report_id'
+  >
 > &
-  Pick<Schema['DatabaseMatch'], 'occurrence'>;
+  Pick<Schema['DatabaseMatch'], 'play_session_id' | 'play_phase'> & {
+    play_mode?: PlayMode | null;
+    play_assisted?: boolean;
+    occurrence?: Schema['LibraryOccurrence'] | null;
+    study_report_id?: string | null;
+  };
 export const libraryRowKey = (match: LibraryMatch): string =>
   match.occurrence?.id ?? match.id;
 export type OccurrenceSort =
@@ -161,9 +174,9 @@ export async function exportMatches(ids: string[], format: 'original' | 'sgf') {
 export function readDatabase() {
   try {
     const value = localStorage.getItem('bgtutor.database');
-    return value && /^[a-f0-9-]{36}$/i.test(value) ? value : defaultDatabaseId;
+    return value && /^[a-f0-9-]{36}$/i.test(value) ? value : '';
   } catch {
-    return defaultDatabaseId;
+    return '';
   }
 }
 export function saveDatabase(id: string) {

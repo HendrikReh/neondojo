@@ -1,3 +1,4 @@
+import ActionButton from './ActionButton';
 import { useLibraryText } from './library-messages';
 import type { LibrarySort } from './library-api';
 import type { ReactNode } from 'react';
@@ -35,7 +36,9 @@ export default function LibrarySortHeading<Sort extends string = LibrarySort>({
           const nextDescending = selected && direction === 'asc';
           const name = field.name ?? field.label;
           return (
-            <button
+            <ActionButton
+              icon={selected && direction === 'desc' ? 'sort-down' : 'sort-up'}
+              label={l('sortColumn', { column: name })}
               key={field.key}
               type="button"
               disabled={disabled}
@@ -46,10 +49,7 @@ export default function LibrarySortHeading<Sort extends string = LibrarySort>({
               onClick={() => onSort(field.key)}
             >
               <span className="library-sort-label">{field.label}</span>
-              <span className="library-sort-indicator" aria-hidden="true">
-                {selected ? (direction === 'asc' ? '↑' : '↓') : '↕'}
-              </span>
-            </button>
+            </ActionButton>
           );
         })}
       </div>
