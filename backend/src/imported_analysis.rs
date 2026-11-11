@@ -620,6 +620,21 @@ pub async fn position_records(
     Ok(Some(records_where(pool, match_id, Some(id), None).await?))
 }
 
+pub(crate) async fn position_checker_records(
+    pool: &PgPool,
+    position: &crate::model::Position,
+) -> Result<Vec<ImportedAnalysisData>> {
+    if !ensure_catalog(pool, position.match_uuid).await? {
+        return Ok(vec![]);
+    }
+    let rows: Vec<Value> = sqlx::query_scalar("SELECT data FROM imported_analyses WHERE match_uuid=$1 AND position_uuid=$2 AND kind='checker' ORDER BY source_ordinal")
+        .bind(position.match_uuid).bind(position.id).fetch_all(pool).await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|data| serde_json::from_value(data).ok())
+        .collect())
+}
+
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/matches/{id}/imported-analysis", get(get_match))

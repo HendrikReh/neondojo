@@ -147,6 +147,18 @@
 .similar-position-controls {
   margin-bottom: 16px;
 }
+.play-interruption-dialog.similar-practice-dialog {
+  width: min(860px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+}
+.similar-practice-board {
+  width: min(100%, 680px);
+  margin: 12px auto;
+}
+.similar-practice-dialog .board-view-buttons {
+  justify-content: center;
+}
 .similar-position-table {
   width: 100%;
   border-collapse: collapse;

@@ -6,6 +6,7 @@ import { matchContext } from './boardMath';
 import type { components } from './generated-api';
 import { useI18n } from './i18n';
 import { usePositionText } from './position-browser-messages';
+import SimilarPositionPractice from './SimilarPositionPractice';
 import type { Theme } from './themes';
 
 type SimilarResponse = components['schemas']['SimilarPositions'];
@@ -30,6 +31,7 @@ export default function SimilarPositions({
   const p = usePositionText();
   const { t, formatError } = useI18n();
   const heading = useRef<HTMLHeadingElement>(null);
+  const practiceButton = useRef<HTMLButtonElement>(null);
   const [filters, setFilters] = useState({
     same_dice: false,
     same_score: false,
@@ -42,6 +44,8 @@ export default function SimilarPositions({
     result?: SimilarResponse;
     error?: unknown;
   }>();
+  const [practiceItems, setPracticeItems] =
+    useState<SimilarResponse['items']>();
   const [selected, setSelected] = useState<string>();
   const params = new URLSearchParams(
     Object.entries(filters)
@@ -115,6 +119,14 @@ export default function SimilarPositions({
             {filterLabels[name]}
           </label>
         ))}
+        <ActionButton
+          ref={practiceButton}
+          type="button"
+          icon="cards"
+          label={p('practiceResults')}
+          disabled={!hits.length}
+          onClick={() => setPracticeItems(hits)}
+        />
       </div>
       {!result && !error && <p role="status">{p('loading')}</p>}
       {!!error && (
@@ -191,6 +203,14 @@ export default function SimilarPositions({
             />
           </aside>
         </div>
+      )}
+      {visible && practiceItems && (
+        <SimilarPositionPractice
+          items={practiceItems}
+          theme={theme}
+          returnFocus={practiceButton}
+          onClose={() => setPracticeItems(undefined)}
+        />
       )}
     </section>
   );

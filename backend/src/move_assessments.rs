@@ -350,7 +350,7 @@ fn imported_assessment(
 
 /// Resolve reordered, grouped and combined checker notation to the same legal
 /// final board. Mere absence of the played move in a top-N hint stays unknown.
-fn after_play(position: &Position, notation: &str) -> Option<[i32; 26]> {
+pub(crate) fn after_play(position: &Position, notation: &str) -> Option<[i32; 26]> {
     if notation.trim().is_empty() || notation.len() > 160 {
         return None;
     }

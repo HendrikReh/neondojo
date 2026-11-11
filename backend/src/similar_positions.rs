@@ -1,12 +1,20 @@
 //! Rank library checker positions by the number of checker-pips separating their boards.
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
+    engine::Engine,
+    import::sgf::apply_checker_turn,
     model::Position,
+    move_assessments::after_play,
+    play::PlayStep,
+    store,
 };
 use axum::{
     Json, Router,
-    extract::{Path, Query, State, rejection::QueryRejection},
-    routing::get,
+    extract::{
+        Path, Query, State,
+        rejection::{JsonRejection, QueryRejection},
+    },
+    routing::{get, post},
 };
 use futures_util::TryStreamExt;
 use serde::{Deserialize, Serialize};
@@ -16,6 +24,8 @@ use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
 
 const RESULT_LIMIT: usize = 50;
+// Serialize on-demand practice evaluations without holding a database lock.
+static EVALUATION: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 const REVIEW_BLOCKED: &str = "EXISTS(SELECT 1 FROM play_sessions live
     WHERE live.library_match_id=m.id AND coalesce(live.state->>'play_mode','competition')='competition'
       AND live.state->>'phase'<>'match_over'
@@ -57,6 +67,32 @@ struct SimilarPositions {
     items: Vec<SimilarHit>,
 }
 
+#[derive(Serialize, ToSchema)]
+struct CheckerPracticeAnswer {
+    best: String,
+    engine: String,
+    depth: Option<String>,
+}
+
+#[derive(Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+struct CheckerPracticeMove {
+    /// Complete ordered checker steps in board coordinates. An empty list is a forced pass.
+    #[schema(max_items = 4)]
+    steps: Vec<PlayStep>,
+}
+
+#[derive(Serialize, ToSchema)]
+struct CheckerPracticeScore {
+    #[serde(flatten)]
+    answer: CheckerPracticeAnswer,
+    played: String,
+    best_equity: f64,
+    played_equity: f64,
+    /// Best minus played normalized cubeful equity, from the mover's perspective.
+    equity_loss: f64,
+}
+
 #[derive(FromRow)]
 struct Target {
     board: Vec<i32>,
@@ -67,7 +103,10 @@ struct Target {
 }
 
 pub(crate) fn routes() -> Router<AppState> {
-    Router::new().route("/api/positions/{id}/similar", get(search))
+    Router::new()
+        .route("/api/positions/{id}/similar", get(search))
+        .route("/api/positions/{id}/practice-answer", post(reveal))
+        .route("/api/positions/{id}/practice-score", post(score))
 }
 
 #[utoipa::path(get, path="/api/positions/{id}/similar",
@@ -183,6 +222,186 @@ async fn search(
     Ok(Json(SimilarPositions { items }))
 }
 
+#[utoipa::path(post, path="/api/positions/{id}/practice-answer",
+    params(("id"=Uuid, Path, description="Checker occurrence to reveal")),
+    responses((status=200,body=CheckerPracticeAnswer),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=500,body=ErrorBody)),
+    tag="Positions")]
+async fn reveal(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<CheckerPracticeAnswer>> {
+    let position = practice_position(&state, id).await?;
+    let answer = checker_answer(&state, &position).await?;
+    crate::play::require_review_available(&state.pool, position.match_uuid).await?;
+    Ok(Json(answer))
+}
+
+async fn practice_position(state: &AppState, id: Uuid) -> ApiResult<Position> {
+    let position = store::get_position(&state.pool, id)
+        .await?
+        .ok_or_else(ApiError::missing)?;
+    crate::play::require_review_available(&state.pool, position.match_uuid).await?;
+    if !matches!(position.dice.as_slice(), [1..=6, 1..=6]) {
+        return Err(ApiError::invalid("Practice requires a checker roll"));
+    }
+    Ok(position)
+}
+
+#[utoipa::path(post, path="/api/positions/{id}/practice-score",
+    params(("id"=Uuid, Path, description="Checker occurrence to score")),
+    request_body=CheckerPracticeMove,
+    responses((status=200,body=CheckerPracticeScore),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=500,body=ErrorBody)),
+    tag="Positions")]
+async fn score(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    input: Result<Json<CheckerPracticeMove>, JsonRejection>,
+) -> ApiResult<Json<CheckerPracticeScore>> {
+    let Json(input) = input.map_err(|error| ApiError::invalid(error.body_text()))?;
+    let position = practice_position(&state, id).await?;
+    let after = practice_turn(&position, &input.steps)
+        .ok_or_else(|| ApiError::invalid("Play a complete legal checker move"))?;
+
+    let _evaluation = EVALUATION.lock().await;
+    crate::play::require_review_available(&state.pool, position.match_uuid).await?;
+    let settings = crate::settings::load(&state).await?;
+    let analysis = Engine::new(settings.gnubg_path)
+        .analyze_checker_choices(
+            &position.position_id,
+            &position.gnubg_match_id,
+            settings.analysis_plies,
+            input.steps.is_empty(),
+        )
+        .await?;
+    let best = analysis
+        .candidates
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("GNUbg returned no checker choice"))?;
+    let played = analysis
+        .candidates
+        .iter()
+        .find(|candidate| after_play(&position, &candidate.notation) == Some(after))
+        .ok_or_else(|| anyhow::anyhow!("GNUbg did not evaluate the submitted checker choice"))?;
+    crate::play::require_review_available(&state.pool, position.match_uuid).await?;
+    Ok(Json(CheckerPracticeScore {
+        answer: CheckerPracticeAnswer {
+            best: best.notation.clone(),
+            engine: analysis.engine,
+            depth: Some(format!("{}-ply", analysis.plies)),
+        },
+        played: played.notation.clone(),
+        best_equity: best.equity,
+        played_equity: played.equity,
+        equity_loss: ((best.equity - played.equity) * 1e6).round().max(0.0) / 1e6,
+    }))
+}
+
+fn practice_turn(position: &Position, steps: &[PlayStep]) -> Option<[i32; 26]> {
+    if steps.len() > 4 || !matches!(position.player, 0 | 1) {
+        return None;
+    }
+    let white = position.player == 0;
+    let (bar, off) = if white { (25, -1) } else { (0, 26) };
+    let relative = |point| {
+        if white {
+            point as usize
+        } else {
+            (25 - point) as usize
+        }
+    };
+    let pairs = steps
+        .iter()
+        .map(|step| {
+            let from = match step.from {
+                from if from == bar => 25,
+                from @ 1..=24 => relative(from),
+                _ => return None,
+            };
+            let to = match step.to {
+                to if to == off => 0,
+                to @ 1..=24 => relative(to),
+                _ => return None,
+            };
+            Some((from, to))
+        })
+        .collect::<Option<Vec<_>>>()?;
+    apply_checker_turn(
+        position.board.as_slice().try_into().ok()?,
+        position.player,
+        position.dice.as_slice().try_into().ok()?,
+        &pairs,
+    )
+    .ok()
+}
+
+async fn checker_answer(state: &AppState, position: &Position) -> ApiResult<CheckerPracticeAnswer> {
+    if let Some((best, engine, plies)) =
+        crate::learning::saved_checker_move(&state.pool, position).await?
+    {
+        return Ok(CheckerPracticeAnswer {
+            best,
+            engine,
+            depth: Some(format!("{plies}-ply")),
+        });
+    }
+    for source in crate::imported_analysis::position_checker_records(&state.pool, position).await? {
+        if source.kind != "checker"
+            || source.player != position.player
+            || source.game_no != position.game_no
+            || source.checker_ply.is_some_and(|ply| ply != position.ply)
+            || source.engine.trim().is_empty()
+            || source
+                .position_id
+                .as_ref()
+                .is_some_and(|v| v != &position.position_id)
+            || source
+                .gnubg_match_id
+                .as_ref()
+                .is_some_and(|v| v != &position.gnubg_match_id)
+            || source.dice.is_some_and(|dice| {
+                !dice.iter().eq(&position.dice) && !dice.iter().rev().eq(&position.dice)
+            })
+        {
+            continue;
+        }
+        let mut top = source.candidates.into_iter().filter(|c| c.rank == 1);
+        if let Some(best) = top.next()
+            && top.next().is_none()
+            && best.equity.is_some_and(f64::is_finite)
+            && after_play(position, &best.notation).is_some()
+        {
+            return Ok(CheckerPracticeAnswer {
+                best: best.notation,
+                engine: source.engine,
+                depth: best.depth.or(source.depth),
+            });
+        }
+    }
+
+    let _evaluation = EVALUATION.lock().await;
+    crate::play::require_review_available(&state.pool, position.match_uuid).await?;
+    let settings = crate::settings::load(state).await?;
+    let analysis = Engine::new(settings.gnubg_path)
+        .analyze(
+            &position.position_id,
+            &position.gnubg_match_id,
+            settings.analysis_plies,
+            None,
+        )
+        .await?;
+    let best = analysis
+        .candidates
+        .into_iter()
+        .next()
+        .filter(|candidate| after_play(position, &candidate.notation).is_some())
+        .ok_or_else(|| ApiError::invalid("No usable checker answer for this position"))?;
+    Ok(CheckerPracticeAnswer {
+        best: best.notation,
+        engine: analysis.engine,
+        depth: Some(format!("{}-ply", analysis.plies)),
+    })
+}
+
 type CheckerProfile = [[i32; 25]; 2];
 
 fn profile(board: &[i32], player: i32) -> Option<CheckerProfile> {
@@ -224,7 +443,16 @@ fn distance(first: &CheckerProfile, second: &CheckerProfile) -> i32 {
 }
 
 #[derive(OpenApi)]
-#[openapi(paths(search), components(schemas(SimilarHit, SimilarPositions)))]
+#[openapi(
+    paths(search, reveal, score),
+    components(schemas(
+        SimilarHit,
+        SimilarPositions,
+        CheckerPracticeAnswer,
+        CheckerPracticeMove,
+        CheckerPracticeScore
+    ))
+)]
 pub(crate) struct SimilarPositionsDoc;
 
 #[cfg(test)]
@@ -356,5 +584,84 @@ mod tests {
         assert_eq!(status, 200, "{body}");
         assert_eq!(hits(&body), [(2, 0), (3, 0), (4, 0), (5, 1)]);
         assert_eq!(read(9, "").await.0, 422);
+    }
+    #[sqlx::test(migrations = "./migrations")]
+    #[ignore = "requires PostgreSQL and GNUbg"]
+    async fn practice_scores_a_non_best_legal_move_at_the_configured_depth(pool: sqlx::PgPool) {
+        use axum::{
+            body::{Body, to_bytes},
+            http::Request,
+        };
+        use serde_json::{Value, json};
+        use tower::ServiceExt;
+
+        let sgf = "(;GM[6]FF[4]PW[Practice]PB[Opponent]MI[length:7][ws:0][bs:0];W[31hefe])";
+        let imported = store::import_match(
+            &pool,
+            "practice.sgf",
+            "sgf",
+            sgf.as_bytes(),
+            sgf,
+            &crate::import::parse_sgf(sgf).unwrap(),
+        )
+        .await
+        .unwrap();
+        let id: Uuid = sqlx::query_scalar("SELECT id FROM positions WHERE match_uuid=$1")
+            .bind(imported.r#match.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let binary = std::env::var("GNUBG_BIN").unwrap_or_else(|_| "gnubg".into());
+        let app = crate::api::router(AppState::new(pool.clone(), Engine::new(binary)));
+        let post = |route: &str, body: Value| {
+            let app = app.clone();
+            let uri = format!("/api/positions/{id}/{route}");
+            async move {
+                let response = app
+                    .oneshot(
+                        Request::post(uri)
+                            .header("content-type", "application/json")
+                            .body(Body::from(body.to_string()))
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                let status = response.status().as_u16();
+                let body: Value = serde_json::from_slice(
+                    &to_bytes(response.into_body(), usize::MAX).await.unwrap(),
+                )
+                .unwrap();
+                (status, body)
+            }
+        };
+        let (status, error) = post("practice-score", json!({"steps":[{"from":24,"to":21}]})).await;
+        assert_eq!(status, 422, "{error}");
+        let (status, value) = post(
+            "practice-score",
+            json!({"steps":[{"from":24,"to":21},{"from":24,"to":23}]}),
+        )
+        .await;
+        assert_eq!(status, 200, "{value}");
+        assert_eq!(value["depth"], "2-ply");
+        assert_ne!(value["best"], value["played"]);
+        let loss = value["equity_loss"].as_f64().unwrap();
+        assert!(loss > 0.0, "{value}");
+        assert!(
+            (value["best_equity"].as_f64().unwrap()
+                - value["played_equity"].as_f64().unwrap()
+                - loss)
+                .abs()
+                < 1e-6
+        );
+        let (status, answer) = post("practice-answer", Value::Null).await;
+        assert_eq!(status, 200, "{answer}");
+        assert_eq!(answer["best"], value["best"]);
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM jobs")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            0
+        );
     }
 }

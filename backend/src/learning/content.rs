@@ -1,5 +1,5 @@
 use super::*;
-use crate::{engine::Analysis, store};
+use crate::{engine::Analysis, move_assessments::after_play, store};
 use anyhow::{Context, ensure};
 use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
 use std::collections::BTreeSet;
@@ -18,6 +18,58 @@ async fn names(pool: &PgPool, id: Uuid) -> anyhow::Result<[String; 2]> {
             .await?;
     Ok([white, black])
 }
+
+async fn individual_hint(
+    pool: &PgPool,
+    id: Uuid,
+) -> anyhow::Result<Option<(Uuid, serde_json::Value)>> {
+    Ok(sqlx::query_as("SELECT id,result FROM jobs WHERE position_uuid=$1 AND kind='analysis' AND status='completed' AND result IS NOT NULL ORDER BY plies DESC,created_at DESC,id DESC LIMIT 1")
+        .bind(id).fetch_optional(pool).await?)
+}
+
+#[derive(FromRow)]
+struct MatchCheckerAnalysis {
+    id: Uuid,
+    plies: i32,
+    data: serde_json::Value,
+    engine: String,
+}
+
+async fn match_checker_analysis(
+    pool: &PgPool,
+    id: Uuid,
+) -> anyhow::Result<Option<MatchCheckerAnalysis>> {
+    Ok(sqlx::query_as("SELECT j.id,j.plies,m.data,
+            CASE WHEN jsonb_typeof(j.result->'engine')='string' THEN j.result->>'engine' ELSE 'GNU Backgammon' END AS engine
+        FROM move_analyses m JOIN jobs j ON j.id=m.job_id WHERE m.position_uuid=$1 AND m.kind='checker' AND j.status='completed' ORDER BY j.plies DESC,j.created_at DESC,j.id DESC LIMIT 1")
+        .bind(id).fetch_optional(pool).await?)
+}
+
+/// Practice can continue to another source when the preferred stored analysis has no answer.
+pub(crate) async fn saved_checker_move(
+    pool: &PgPool,
+    position: &Position,
+) -> anyhow::Result<Option<(String, String, i32)>> {
+    if let Some((_, result)) = individual_hint(pool, position.id).await?
+        && let Ok(analysis) = serde_json::from_value::<Analysis>(result)
+        && let Some(best) = analysis.candidates.into_iter().next()
+        && best.rank == 1
+        && after_play(position, &best.notation).is_some()
+    {
+        return Ok(Some((best.notation, analysis.engine, analysis.plies)));
+    }
+    if let Some(row) = match_checker_analysis(pool, position.id).await?
+        && let Ok(decision) = serde_json::from_value::<Decision>(row.data)
+        && decision.kind == "checker"
+        && decision.player == position.player
+        && matches!(decision.evaluation_status.as_str(), "evaluated" | "forced")
+        && after_play(position, &decision.best).is_some()
+    {
+        return Ok(Some((decision.best, row.engine, row.plies)));
+    }
+    Ok(None)
+}
+
 async fn from_position(pool: &PgPool, id: Uuid, request: &AddCards) -> ApiResult<Vec<CardContent>> {
     let position = store::get_position(pool, id)
         .await?
@@ -29,8 +81,7 @@ async fn from_position(pool: &PgPool, id: Uuid, request: &AddCards) -> ApiResult
         return Ok(vec![]);
     }
     let players = names(pool, position.match_uuid).await?;
-    let individual:Option<(Uuid,serde_json::Value)>=sqlx::query_as("SELECT id,result FROM jobs WHERE position_uuid=$1 AND kind='analysis' AND status='completed' AND result IS NOT NULL ORDER BY plies DESC,created_at DESC,id DESC LIMIT 1").bind(id).fetch_optional(pool).await.map_err(anyhow::Error::from)?;
-    if let Some((job_id, result)) = individual {
+    if let Some((job_id, result)) = individual_hint(pool, id).await? {
         let analysis: Analysis = serde_json::from_value(result).map_err(anyhow::Error::from)?;
         if analysis.candidates.is_empty() {
             return Err(ApiError::invalid("Completed analysis has no candidates"));
@@ -57,33 +108,30 @@ async fn from_position(pool: &PgPool, id: Uuid, request: &AddCards) -> ApiResult
             players,
         }]);
     }
-    let full:Option<(Uuid,i32,serde_json::Value,Option<serde_json::Value>)>=sqlx::query_as("SELECT j.id,j.plies,m.data,j.result FROM move_analyses m JOIN jobs j ON j.id=m.job_id WHERE m.position_uuid=$1 AND m.kind='checker' AND j.status='completed' ORDER BY j.plies DESC,j.created_at DESC,j.id DESC LIMIT 1").bind(id).fetch_optional(pool).await.map_err(anyhow::Error::from)?;
-    if let Some((job_id, plies, data, result)) = full {
-        let decision: Decision = serde_json::from_value(data).map_err(anyhow::Error::from)?;
+    if let Some(analysis) = match_checker_analysis(pool, id).await? {
+        let decision: Decision =
+            serde_json::from_value(analysis.data).map_err(anyhow::Error::from)?;
         if request
             .min_loss
             .is_some_and(|loss| decision.equity_loss < loss)
         {
             return Ok(vec![]);
         }
-        let engine = result
-            .and_then(|r| r.get("engine").and_then(|s| s.as_str()).map(str::to_owned))
-            .unwrap_or_else(|| "GNU Backgammon".into());
         return Ok(vec![CardContent {
             kind: "checker".into(),
             prompt: prompt("checker").into(),
             played: decision.played.clone(),
             source: CardSource {
                 kind: "match".into(),
-                job_id,
+                job_id: analysis.id,
                 match_id: position.match_uuid,
                 position_id: Some(position.id),
                 game_no: position.game_no,
                 decision_no: Some(decision.decision_no),
             },
             solution: CardSolution {
-                engine,
-                plies,
+                engine: analysis.engine,
+                plies: analysis.plies,
                 candidates: vec![],
                 decision: Some(decision),
             },

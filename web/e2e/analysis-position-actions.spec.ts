@@ -234,6 +234,271 @@ test('similar search opens from the analysis board with the current match exclud
   await expect(results).toBeHidden();
 });
 
+test('practice uses the latest filtered similar positions in result order', async ({
+  page,
+}) => {
+  const position = await fixture(page);
+  const hit = (matchName: string, distance: number) => ({
+    position: { ...position, id: crypto.randomUUID(), notation: '8/5 6/5' },
+    match_name: matchName,
+    white: 'White',
+    black: 'Black',
+    distance,
+  });
+  const unfiltered = hit('Unfiltered position', 0);
+  const filtered = [
+    hit('Closest filtered position', 1),
+    hit('Second filtered position', 3),
+  ];
+  let releaseResults: () => void = () => {};
+  const waitForFilter = new Promise<void>((resolve) => {
+    releaseResults = resolve;
+  });
+  await page.route(
+    `**/api/positions/${position.id}/similar*`,
+    async (route) => {
+      const query = new URL(route.request().url()).searchParams;
+      if (!query.has('same_dice'))
+        return route.fulfill({ json: { items: [unfiltered] } });
+      expect(query.has('include_current_match')).toBe(false);
+      await waitForFilter;
+      return route.fulfill({ json: { items: filtered } });
+    },
+  );
+  const reveals: string[] = [];
+  await page.route('**/api/positions/*/practice-answer', (route) => {
+    const id = new URL(route.request().url()).pathname.split('/').at(-2)!;
+    reveals.push(id);
+    return route.fulfill({
+      json: { best: '8/5 6/5', engine: 'GNU Backgammon', depth: '2-ply' },
+    });
+  });
+  await page.getByRole('button', { name: 'Find similar positions' }).click();
+  await expect(
+    page.getByRole('button', { name: unfiltered.match_name }),
+  ).toBeVisible();
+  const practice = page.getByRole('button', {
+    name: 'Practice results',
+    exact: true,
+  });
+  await expect(practice).toBeEnabled();
+  await page.getByRole('checkbox', { name: 'Same dice', exact: true }).check();
+  await expect(practice).toBeDisabled();
+  releaseResults();
+  await practice.click();
+  const dialog = page.getByRole('dialog', {
+    name: 'Practice similar positions',
+  });
+  await expect(dialog.getByText('1 / 2', { exact: true })).toBeVisible();
+  await expect(dialog.getByText(filtered[0].match_name)).toBeVisible();
+  await expect(dialog.getByText('8/5 6/5', { exact: true })).toHaveCount(0);
+  expect(reveals).toEqual([]);
+  await dialog.getByRole('button', { name: 'Reveal answer' }).click();
+  await expect(dialog.getByText('8/5 6/5', { exact: true })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Your move' })).toHaveCount(
+    0,
+  );
+  expect(reveals).toEqual([filtered[0].position.id]);
+  await dialog.getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(dialog.getByText('2 / 2', { exact: true })).toBeVisible();
+  await expect(dialog.getByText(filtered[1].match_name)).toBeVisible();
+  await expect(dialog.getByText('8/5 6/5', { exact: true })).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Finish', exact: true }).click();
+  await expect(dialog.getByText('Practice complete')).toBeVisible();
+  await expect(dialog.getByText('No moves were scored.')).toBeVisible();
+  await expect(
+    dialog.getByRole('button', { name: 'Retry missed moves' }),
+  ).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(practice).toBeFocused();
+  await expect(
+    page.getByRole('checkbox', { name: 'Same dice', exact: true }),
+  ).toBeChecked();
+});
+
+test('practice scores the move played on the board', async ({ page }) => {
+  const position = await fixture(page);
+  await page.route(`**/api/positions/${position.id}/similar*`, (route) =>
+    route.fulfill({
+      json: {
+        items: [
+          {
+            position,
+            match_name: 'Practice example',
+            white: 'White',
+            black: 'Black',
+            distance: 2,
+          },
+        ],
+      },
+    }),
+  );
+  await page.route(
+    `**/api/positions/${position.id}/practice-score`,
+    (route) => {
+      expect(route.request().postDataJSON()).toEqual({
+        steps: [
+          { from: 24, to: 21 },
+          { from: 24, to: 23 },
+        ],
+      });
+      return route.fulfill({
+        json: {
+          best: '8/5 6/5',
+          played: '24/23 24/21',
+          best_equity: 0.22,
+          played_equity: -0.041,
+          equity_loss: 0.261,
+          engine: 'GNU Backgammon',
+          depth: '2-ply',
+        },
+      });
+    },
+  );
+  await page.getByRole('button', { name: 'Find similar positions' }).click();
+  await page
+    .getByRole('button', { name: 'Practice results', exact: true })
+    .click();
+  const dialog = page.getByRole('dialog', {
+    name: 'Practice similar positions',
+  });
+  const submit = dialog.getByRole('button', {
+    name: 'Check my move',
+    exact: true,
+  });
+  const point = dialog.getByRole('button', { name: 'Point 24', exact: true });
+  const yourMove = dialog.getByRole('button', {
+    name: 'Your move',
+    exact: true,
+  });
+  const bestPlay = dialog.getByRole('button', {
+    name: 'Best play',
+    exact: true,
+  });
+  await expect(yourMove).toHaveCount(0);
+  await expect(submit).toBeDisabled();
+  await point.click();
+  await expect(submit).toBeDisabled();
+  await point.click();
+  await expect(submit).toBeEnabled();
+  await dialog.getByRole('button', { name: 'Undo step', exact: true }).click();
+  await expect(submit).toBeDisabled();
+  await point.click();
+  await submit.click();
+  await expect(dialog.getByText('0.261', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('24/23 24/21', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('8/5 6/5', { exact: true })).toBeVisible();
+  await expect(point).toHaveCount(0);
+  await expect(bestPlay).toHaveAttribute('aria-pressed', 'true');
+  const arrows = dialog.locator('.move-arrows > [data-from]');
+  const paths = () =>
+    arrows.evaluateAll((nodes) =>
+      nodes.map(
+        (node) =>
+          `${node.getAttribute('data-from')}/${node.getAttribute('data-to')}`,
+      ),
+    );
+  await expect.poll(paths).toEqual(['8/5', '6/5']);
+  await yourMove.click();
+  await expect(yourMove).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(paths).toEqual(['24/21', '24/23']);
+  await expect(dialog.getByRole('img', { name: /^Your move/ })).toBeVisible();
+  await expect(dialog.getByText('0.261', { exact: true })).toBeVisible();
+  await bestPlay.click();
+  await expect(yourMove).toHaveAttribute('aria-pressed', 'false');
+  await expect.poll(paths).toEqual(['8/5', '6/5']);
+});
+
+test('practice summarizes scored moves and retries only missed positions', async ({
+  page,
+}) => {
+  const source = await fixture(page);
+  const hits = ['First miss', 'Correct play', 'Reveal only', 'Second miss'].map(
+    (match_name, distance) => ({
+      match_name,
+      distance,
+      position: { ...source, id: crypto.randomUUID() },
+      white: 'White',
+      black: 'Black',
+    }),
+  );
+  await page.route(`**/api/positions/${source.id}/similar*`, (route) =>
+    route.fulfill({ json: { items: hits } }),
+  );
+  const answer = { best: '8/5 6/5', engine: 'GNU Backgammon', depth: '2-ply' };
+  await page.route('**/api/positions/*/practice-answer', (route) =>
+    route.fulfill({ json: answer }),
+  );
+  const scored: string[] = [];
+  await page.route('**/api/positions/*/practice-score', (route) => {
+    const id = new URL(route.request().url()).pathname.split('/').at(-2)!;
+    const index = hits.findIndex((hit) => hit.position.id === id);
+    const loss = scored.includes(id) ? 0 : [0.3, 0, 0, 0.15][index];
+    scored.push(id);
+    return route.fulfill({
+      json: {
+        ...answer,
+        played: loss ? '24/23 24/21' : answer.best,
+        best_equity: 0.25,
+        played_equity: 0.25 - loss,
+        equity_loss: loss,
+      },
+    });
+  });
+  await page.getByRole('button', { name: 'Find similar positions' }).click();
+  await page
+    .getByRole('button', { name: 'Practice results', exact: true })
+    .click();
+  const dialog = page.getByRole('dialog', {
+    name: 'Practice similar positions',
+  });
+  const advance = (name: 'Next' | 'Finish') =>
+    dialog.getByRole('button', { name, exact: true }).click();
+  async function playMove(points: number[]) {
+    for (const point of points)
+      await dialog
+        .getByRole('button', { name: `Point ${point}`, exact: true })
+        .click();
+    await dialog
+      .getByRole('button', { name: 'Check my move', exact: true })
+      .click();
+    await expect(dialog.getByText('Normalized equity loss')).toBeVisible();
+  }
+  await playMove([24, 24]);
+  await advance('Next');
+  await playMove([8, 6]);
+  await advance('Next');
+  await dialog.getByRole('button', { name: 'Reveal answer' }).click();
+  await expect(dialog.getByText('8/5 6/5', { exact: true })).toBeVisible();
+  await advance('Next');
+  await playMove([24, 24]);
+  await advance('Finish');
+  await expect(
+    dialog.getByText('Average equity loss', { exact: true }),
+  ).toBeVisible();
+  await expect(dialog.getByText('0.150', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('3 / 4', { exact: true })).toBeVisible();
+  const retry = dialog.getByRole('button', {
+    name: 'Retry missed moves',
+    exact: true,
+  });
+  await retry.click();
+  await expect(dialog.getByText('1 / 2', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('First miss')).toBeVisible();
+  await expect(dialog.getByText('Normalized equity loss')).toHaveCount(0);
+  await playMove([8, 6]);
+  await advance('Next');
+  await expect(dialog.getByText('Second miss')).toBeVisible();
+  await playMove([8, 6]);
+  await advance('Finish');
+  await expect(dialog.getByText('0.000', { exact: true })).toBeVisible();
+  await expect(retry).toHaveCount(0);
+  expect(scored).toEqual(
+    [0, 1, 3, 0, 3].map((index) => hits[index].position.id),
+  );
+});
+
 test('search remains available when bookmark status cannot be loaded', async ({
   page,
 }) => {
