@@ -356,6 +356,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/engine-matches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list"];
+        put?: never;
+        post: operations["create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/engine-matches/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["details"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/engine-matches/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["cancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/engine-matches/{id}/matches/{index}/sgf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["sgf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/engines": {
         parameters: {
             query?: never;
@@ -1964,6 +2028,11 @@ export interface components {
             /** Format: double */
             played_equity: number;
         };
+        Competitor: {
+            engine_id: string;
+            /** Format: int32 */
+            plies: number;
+        };
         ConfigurationAnalysis: {
             engine: components["schemas"]["ConfigurationEngine"];
             /** Format: int32 */
@@ -2163,6 +2232,17 @@ export interface components {
             definition: components["schemas"]["PositionFilterDefinition"];
             name: string;
         };
+        CreateSeries: {
+            a: components["schemas"]["Competitor"];
+            b: components["schemas"]["Competitor"];
+            /** Format: int32 */
+            count: number;
+            /** Format: int32 */
+            match_length: number;
+            mode?: components["schemas"]["DiceMode"];
+            /** Format: uuid */
+            seed?: string | null;
+        };
         Database: {
             /** Format: date-time */
             created_at: string;
@@ -2331,6 +2411,8 @@ export interface components {
             /** Format: int32 */
             weight: number;
         };
+        /** @enum {string} */
+        DiceMode: "paired" | "random";
         DiceStats: {
             rolls: components["schemas"]["DiceCount"][];
             /** Format: int64 */
@@ -2725,6 +2807,18 @@ export interface components {
             items: components["schemas"]["MatchSummary"][];
             /** Format: uuid */
             next_cursor?: string | null;
+        };
+        MatchResult: {
+            /** Format: int32 */
+            games: number;
+            /** Format: int32 */
+            match_index: number;
+            /** Format: int32 */
+            score_a: number;
+            /** Format: int32 */
+            score_b: number;
+            /** Format: uuid */
+            seed: string;
         };
         MatchSummary: {
             black: string;
@@ -3500,6 +3594,62 @@ export interface components {
             updated_at: string;
             /** Format: int64 */
             version: number;
+        };
+        Series: {
+            /** Format: int32 */
+            completed_matches: number;
+            configuration: components["schemas"]["SeriesConfig"];
+            /** Format: date-time */
+            created_at: string;
+            dice_version: string;
+            engines: components["schemas"]["SeriesEngines"];
+            error?: string | null;
+            /** Format: uuid */
+            id: string;
+            status: string;
+            /** Format: int32 */
+            total_matches: number;
+        };
+        SeriesConfig: {
+            a: components["schemas"]["Competitor"];
+            b: components["schemas"]["Competitor"];
+            /** Format: int32 */
+            count: number;
+            /** Format: int32 */
+            match_length: number;
+            mode: components["schemas"]["DiceMode"];
+            /** Format: uuid */
+            seed: string;
+        };
+        SeriesDetails: {
+            matches: components["schemas"]["MatchResult"][];
+            /** Format: int32 */
+            next_offset?: number | null;
+            /** Format: int32 */
+            previous_offset?: number | null;
+            series: components["schemas"]["Series"];
+            statistics: components["schemas"]["SeriesStatistics"];
+        };
+        SeriesEngines: {
+            a: components["schemas"]["EngineSnapshot"];
+            b: components["schemas"]["EngineSnapshot"];
+            rules_version: string;
+        };
+        SeriesPage: {
+            /** Format: uuid */
+            next_cursor?: string | null;
+            runs: components["schemas"]["Series"][];
+        };
+        SeriesStatistics: {
+            /** Format: int32 */
+            complete_pairs: number;
+            confidence_interval_a?: number[] | null;
+            /** Format: double */
+            win_rate_a?: number | null;
+            /** Format: int32 */
+            wins_a: number;
+            /** Format: int32 */
+            wins_b: number;
         };
         SimilarHit: {
             black: string;
@@ -4721,6 +4871,156 @@ export interface operations {
                 };
             };
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list: {
+        parameters: {
+            query?: {
+                before?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeriesPage"];
+                };
+            };
+        };
+    };
+    create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSeries"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Series"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    details: {
+        parameters: {
+            query?: {
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeriesDetails"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    cancel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Series"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    sgf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

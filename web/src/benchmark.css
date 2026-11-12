@@ -109,23 +109,23 @@
 .benchmark-table-scroll {
   overflow-x: auto;
 }
-.benchmark-history table {
+:is(.benchmark-history, .engine-match-history) table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
 }
-.benchmark-history th,
-.benchmark-history td {
+:is(.benchmark-history, .engine-match-history) th,
+:is(.benchmark-history, .engine-match-history) td {
   text-align: left;
   vertical-align: top;
   padding: 12px 14px 12px 0;
   border-bottom: 1px solid var(--ui-border);
 }
-.benchmark-history th {
+:is(.benchmark-history, .engine-match-history) th {
   color: var(--ui-muted);
   font-weight: 500;
 }
-.benchmark-history small {
+:is(.benchmark-history, .engine-match-history) small {
   display: block;
   margin-top: 5px;
   color: var(--ui-muted);

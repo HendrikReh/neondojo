@@ -1,9 +1,11 @@
 import BenchmarkWorkspace from './BenchmarkWorkspace';
 import { useBenchmarkText } from './benchmark-messages';
+import EngineMatchWorkspace from './EngineMatchWorkspace';
+import { engineMatchText } from './engine-match-messages';
 import { useI18n } from './i18n';
 import VersionInfo from './VersionInfo';
 
-export type ExtrasTool = 'benchmark' | 'versions';
+export type ExtrasTool = 'benchmark' | 'matches' | 'versions';
 
 export default function ExtrasWorkspace({
   visible,
@@ -19,7 +21,7 @@ export default function ExtrasWorkspace({
   setTool: (tool: ExtrasTool) => void;
 }) {
   const benchmark = useBenchmarkText();
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
 
   return (
     <>
@@ -36,6 +38,13 @@ export default function ExtrasWorkspace({
         </button>
         <button
           type="button"
+          aria-current={tool === 'matches' ? 'page' : undefined}
+          onClick={() => setTool('matches')}
+        >
+          {engineMatchText(locale, 'title')}
+        </button>
+        <button
+          type="button"
           aria-current={tool === 'versions' ? 'page' : undefined}
           onClick={() => setTool('versions')}
         >
@@ -48,6 +57,9 @@ export default function ExtrasWorkspace({
           defaultPlies={defaultPlies}
           playPlies={playPlies}
         />
+      </div>
+      <div hidden={tool !== 'matches'}>
+        <EngineMatchWorkspace visible={visible && tool === 'matches'} />
       </div>
       {visible && tool === 'versions' && <VersionInfo />}
     </>

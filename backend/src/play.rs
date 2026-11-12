@@ -1,5 +1,6 @@
 //! Durable native GNUbg matches. Each action runs in a bounded isolated process;
 //! optimistic revisions fence concurrent requests without holding DB locks.
+pub(crate) mod engine_match;
 mod feedback;
 mod library;
 mod open_sage;
@@ -255,7 +256,7 @@ struct Saved {
     native_id: String,
     paused_from_database_id: Option<Uuid>,
 }
-#[derive(Serialize)]
+#[derive(Clone, Copy, Serialize)]
 struct NativeRequest<'a> {
     new: bool,
     external_bot: bool,
@@ -267,6 +268,8 @@ struct NativeRequest<'a> {
     action: &'a str,
     notation: Option<&'a str>,
     resign_level: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    match_bots: Option<[Option<i32>; 2]>,
 }
 #[derive(Deserialize)]
 struct NativeSnapshot {
@@ -285,6 +288,8 @@ struct NativeSnapshot {
     opening: Option<OpeningRoll>,
     #[serde(default)]
     resignation_declined: bool,
+    #[serde(default)]
+    match_rolls: Vec<[u8; 2]>,
 }
 
 pub(crate) fn routes() -> Router<AppState> {
@@ -665,7 +670,7 @@ async fn create_session(
         winner: None,
         opening: None,
     };
-    probe_engine(&session, &pinned_path)
+    probe_native(&session.rules_engine(&pinned_path)?)
         .await
         .map_err(native_error)?;
     stage_opening(&mut session, false)?;
@@ -743,11 +748,10 @@ fn stage_opening(session: &mut PlaySession, next: bool) -> anyhow::Result<()> {
     session.can_double = false;
     Ok(())
 }
-async fn probe_engine(session: &PlaySession, path: &str) -> anyhow::Result<()> {
+pub(crate) async fn probe_native(engine: &Engine) -> anyhow::Result<()> {
     let directory = tempfile::tempdir()?;
     tokio::fs::write(directory.path().join("probe.py"),"import gnubg\nassert all(callable(getattr(gnubg,key,None)) for key in ['command','nextturn','board','posinfo','gnubgid','match','hint','navigate'])\nopen('ready.txt','w').write('ready')\n").await?;
-    session
-        .rules_engine(path)?
+    engine
         .run_with_timeout(
             directory.path(),
             "load python probe.py\n",
@@ -763,7 +767,7 @@ async fn probe_engine(session: &PlaySession, path: &str) -> anyhow::Result<()> {
 // Internal checkpoints keep native names so old GNUbg's 31-byte name buffer
 // cannot truncate a user's UTF-8 name during restore. Export full saved names
 // by replacing root player properties outside escaped SGF values.
-fn named_export(sgf: &str, human: &str, player: i32, bot: &str) -> String {
+pub(crate) fn named_export(sgf: &str, human: &str, player: i32, bot: &str) -> String {
     let names = if player == 0 {
         [
             crate::import::sgf::escape_value(human),
@@ -1366,6 +1370,7 @@ async fn native(
         action,
         notation,
         resign_level,
+        match_bots: None,
     };
     let engine = session.rules_engine(path)?;
     run_native(&engine, &request, previous.map(|(sgf, _)| sgf)).await
@@ -1390,6 +1395,7 @@ pub(crate) async fn benchmark_checker_turn(
         action: "start_opening_move",
         notation: None,
         resign_level: None,
+        match_bots: None,
     };
     let (snapshot, _) = run_native(engine, &request, Some(previous.0)).await?;
     ensure!(
@@ -1405,7 +1411,20 @@ async fn run_native(
     request: &NativeRequest<'_>,
     sgf: Option<&str>,
 ) -> anyhow::Result<(NativeSnapshot, String)> {
+    run_native_with_dice(engine, request, sgf, None).await
+}
+
+async fn run_native_with_dice(
+    engine: &Engine,
+    request: &NativeRequest<'_>,
+    sgf: Option<&str>,
+    dice: Option<&[[u8; 2]]>,
+) -> anyhow::Result<(NativeSnapshot, String)> {
     let directory = tempfile::tempdir()?;
+    if let Some(dice) = dice {
+        let bytes: Vec<_> = dice.iter().flatten().map(|die| b'0' + die).collect();
+        tokio::fs::write(directory.path().join("dice.txt"), bytes).await?;
+    }
     if let Some(sgf) = sgf {
         tokio::fs::write(directory.path().join("input.sgf"), sgf).await?;
     }

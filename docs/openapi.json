@@ -1602,6 +1602,226 @@
         }
       }
     },
+    "/api/engine-matches": {
+      "get": {
+        "tags": [
+          "Engine matches"
+        ],
+        "operationId": "list",
+        "parameters": [
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesPage"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Engine matches"
+        ],
+        "operationId": "create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSeries"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Series"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/engine-matches/{id}": {
+      "get": {
+        "tags": [
+          "Engine matches"
+        ],
+        "operationId": "details",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/engine-matches/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Engine matches"
+        ],
+        "operationId": "cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Series"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/engine-matches/{id}/matches/{index}/sgf": {
+      "get": {
+        "tags": [
+          "Engine matches"
+        ],
+        "operationId": "sgf",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "index",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/engines": {
       "get": {
         "tags": [
@@ -8184,6 +8404,22 @@
           }
         ]
       },
+      "Competitor": {
+        "type": "object",
+        "required": [
+          "engine_id",
+          "plies"
+        ],
+        "properties": {
+          "engine_id": {
+            "type": "string"
+          },
+          "plies": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "ConfigurationAnalysis": {
         "type": "object",
         "required": [
@@ -8956,6 +9192,45 @@
         },
         "additionalProperties": false
       },
+      "CreateSeries": {
+        "type": "object",
+        "required": [
+          "a",
+          "b",
+          "match_length",
+          "count"
+        ],
+        "properties": {
+          "a": {
+            "$ref": "#/components/schemas/Competitor"
+          },
+          "b": {
+            "$ref": "#/components/schemas/Competitor"
+          },
+          "count": {
+            "type": "integer",
+            "format": "int32",
+            "maximum": 1000,
+            "minimum": 1
+          },
+          "match_length": {
+            "type": "integer",
+            "format": "int32",
+            "maximum": 25,
+            "minimum": 1
+          },
+          "mode": {
+            "$ref": "#/components/schemas/DiceMode"
+          },
+          "seed": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
       "Database": {
         "type": "object",
         "required": [
@@ -9429,6 +9704,13 @@
             "format": "int32"
           }
         }
+      },
+      "DiceMode": {
+        "type": "string",
+        "enum": [
+          "paired",
+          "random"
+        ]
       },
       "DiceStats": {
         "type": "object",
@@ -10787,6 +11069,38 @@
               "string",
               "null"
             ],
+            "format": "uuid"
+          }
+        }
+      },
+      "MatchResult": {
+        "type": "object",
+        "required": [
+          "match_index",
+          "seed",
+          "score_a",
+          "score_b",
+          "games"
+        ],
+        "properties": {
+          "games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "match_index": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "score_a": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "score_b": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "seed": {
+            "type": "string",
             "format": "uuid"
           }
         }
@@ -13400,6 +13714,204 @@
           "version": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "Series": {
+        "type": "object",
+        "required": [
+          "id",
+          "configuration",
+          "engines",
+          "dice_version",
+          "status",
+          "total_matches",
+          "completed_matches",
+          "created_at"
+        ],
+        "properties": {
+          "completed_matches": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "configuration": {
+            "$ref": "#/components/schemas/SeriesConfig"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dice_version": {
+            "type": "string"
+          },
+          "engines": {
+            "$ref": "#/components/schemas/SeriesEngines"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          },
+          "total_matches": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "SeriesConfig": {
+        "type": "object",
+        "required": [
+          "a",
+          "b",
+          "match_length",
+          "count",
+          "mode",
+          "seed"
+        ],
+        "properties": {
+          "a": {
+            "$ref": "#/components/schemas/Competitor"
+          },
+          "b": {
+            "$ref": "#/components/schemas/Competitor"
+          },
+          "count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "match_length": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/DiceMode"
+          },
+          "seed": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "SeriesDetails": {
+        "type": "object",
+        "required": [
+          "series",
+          "statistics",
+          "matches"
+        ],
+        "properties": {
+          "matches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MatchResult"
+            }
+          },
+          "next_offset": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "previous_offset": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "series": {
+            "$ref": "#/components/schemas/Series"
+          },
+          "statistics": {
+            "$ref": "#/components/schemas/SeriesStatistics"
+          }
+        }
+      },
+      "SeriesEngines": {
+        "type": "object",
+        "required": [
+          "rules_version",
+          "a",
+          "b"
+        ],
+        "properties": {
+          "a": {
+            "$ref": "#/components/schemas/EngineSnapshot"
+          },
+          "b": {
+            "$ref": "#/components/schemas/EngineSnapshot"
+          },
+          "rules_version": {
+            "type": "string"
+          }
+        }
+      },
+      "SeriesPage": {
+        "type": "object",
+        "required": [
+          "runs"
+        ],
+        "properties": {
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "runs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Series"
+            }
+          }
+        }
+      },
+      "SeriesStatistics": {
+        "type": "object",
+        "required": [
+          "wins_a",
+          "wins_b",
+          "complete_pairs"
+        ],
+        "properties": {
+          "complete_pairs": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "confidence_interval_a": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "win_rate_a": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "wins_a": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "wins_b": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },

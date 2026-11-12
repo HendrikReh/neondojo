@@ -1,7 +1,7 @@
 use crate::{import::ImportedMatch, model::*, search::literal_pattern};
 use anyhow::{Result, ensure};
 use sha2::{Digest, Sha256};
-use sqlx::{PgPool, Postgres, QueryBuilder};
+use sqlx::{PgPool, Postgres, QueryBuilder, Transaction};
 use uuid::Uuid;
 
 // Keep large source artifacts out of every summary/list response at the SQL boundary.
@@ -36,44 +36,97 @@ pub async fn import_match_in_database(
     imported: &ImportedMatch,
     database_id: Uuid,
 ) -> Result<ImportResponse> {
-    ensure!(
-        !imported.positions.is_empty(),
-        "The file contains no checker moves"
-    );
-    ensure!(
-        imported.positions.len() <= 100_000,
-        "Too many positions in one file"
-    );
-    let hash = format!("{:x}", Sha256::digest(bytes));
-    let id = Uuid::new_v4();
-    let metadata = crate::databases::source_metadata(sgf);
-    let analysis_source = sgf.to_owned();
-    let source_analysis =
-        tokio::task::spawn_blocking(move || crate::imported_analysis::extract(&analysis_source))
-            .await??;
+    let prepared = MatchImport::prepare(filename, format, bytes, sgf, imported).await?;
     let mut tx = pool.begin().await?;
+    let result = insert_match_import(&mut tx, database_id, prepared).await?;
+    tx.commit().await?;
+    Ok(result)
+}
+
+pub(crate) struct MatchImport<'a> {
+    filename: &'a str,
+    format: &'a str,
+    bytes: &'a [u8],
+    sgf: &'a str,
+    imported: &'a ImportedMatch,
+    hash: String,
+    metadata: crate::databases::SourceMetadata,
+    source_analysis: Vec<crate::imported_analysis::ImportedAnalysisData>,
+}
+
+impl<'a> MatchImport<'a> {
+    pub(crate) async fn prepare(
+        filename: &'a str,
+        format: &'a str,
+        bytes: &'a [u8],
+        sgf: &'a str,
+        imported: &'a ImportedMatch,
+    ) -> Result<Self> {
+        ensure!(
+            !imported.positions.is_empty(),
+            "The file contains no checker moves"
+        );
+        ensure!(
+            imported.positions.len() <= 100_000,
+            "Too many positions in one file"
+        );
+        let hash = format!("{:x}", Sha256::digest(bytes));
+        let metadata = crate::databases::source_metadata(sgf);
+        let analysis_source = sgf.to_owned();
+        let source_analysis = tokio::task::spawn_blocking(move || {
+            crate::imported_analysis::extract(&analysis_source)
+        })
+        .await??;
+        Ok(Self {
+            filename,
+            format,
+            bytes,
+            sgf,
+            imported,
+            hash,
+            metadata,
+            source_analysis,
+        })
+    }
+}
+
+pub(crate) async fn insert_match_import(
+    tx: &mut Transaction<'_, Postgres>,
+    database_id: Uuid,
+    prepared: MatchImport<'_>,
+) -> Result<ImportResponse> {
+    let MatchImport {
+        filename,
+        format,
+        bytes,
+        sgf,
+        imported,
+        hash,
+        metadata,
+        source_analysis,
+    } = prepared;
+    let id = Uuid::new_v4();
     // Match moves and database deletion lock the owner before touching matches.
     let available: Option<Uuid> = sqlx::query_scalar(
         "SELECT id FROM databases WHERE id=$1 AND NOT collection_only AND id<>$2 FOR KEY SHARE",
     )
     .bind(database_id)
     .bind(crate::play::PAUSED_MATCHES_DATABASE_ID)
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut **tx)
     .await?;
     ensure!(available.is_some(), "Database not found");
     let inserted: Option<Uuid> = sqlx::query_scalar("INSERT INTO matches(id,filename,format,sha256,white,black,match_length,position_count,original,sgf,database_id,played_on,tournament,round,place,result_state,white_score,black_score,source_metadata_loaded) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,true) ON CONFLICT(database_id,sha256) DO NOTHING RETURNING id")
         .bind(id).bind(filename).bind(format).bind(&hash).bind(&imported.players[0]).bind(&imported.players[1])
         .bind(imported.match_length).bind(imported.positions.len() as i32).bind(bytes).bind(sgf).bind(database_id).bind(metadata.played_on).bind(metadata.tournament).bind(metadata.round).bind(metadata.place).bind(metadata.result_state).bind(metadata.white_score).bind(metadata.black_score)
-        .fetch_optional(&mut *tx).await?;
+        .fetch_optional(&mut **tx).await?;
     if inserted.is_none() {
         let existing = sqlx::query_as::<_, MatchSummary>(&format!(
             "{MATCH_SUMMARY} WHERE sha256=$1 AND database_id=$2"
         ))
         .bind(hash)
         .bind(database_id)
-        .fetch_one(&mut *tx)
+        .fetch_one(&mut **tx)
         .await?;
-        tx.commit().await?;
         return Ok(ImportResponse {
             r#match: existing,
             duplicate: true,
@@ -96,15 +149,14 @@ pub async fn import_match_in_database(
                 .push_bind(&p.match_id)
                 .push_bind(&p.notation);
         });
-        query.build().execute(&mut *tx).await?;
+        query.build().execute(&mut **tx).await?;
     }
-    insert_games(&mut tx, id, &imported.games).await?;
-    crate::imported_analysis::insert_records(&mut tx, id, &source_analysis).await?;
+    insert_games(tx, id, &imported.games).await?;
+    crate::imported_analysis::insert_records(tx, id, &source_analysis).await?;
     let summary = sqlx::query_as::<_, MatchSummary>(&format!("{MATCH_SUMMARY} WHERE id=$1"))
         .bind(id)
-        .fetch_one(&mut *tx)
+        .fetch_one(&mut **tx)
         .await?;
-    tx.commit().await?;
     Ok(ImportResponse {
         r#match: summary,
         duplicate: false,

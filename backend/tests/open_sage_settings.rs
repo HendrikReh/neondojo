@@ -463,6 +463,16 @@ async fn fork_depths_are_pinned_and_old_installation_remains_usable(pool: PgPool
             fork
         );
     }
+    let (status, series) = call(app.clone(), "POST", "/api/engine-matches", json!({"a":{"engine_id":"bgsage","plies":1},"b":{"engine_id":"bgsage","plies":2},"match_length":1,"count":1})).await;
+    assert_eq!(status, 201, "{series}");
+    let id = uuid::Uuid::parse_str(series["id"].as_str().unwrap()).unwrap();
+    let engines: Value = sqlx::query_scalar("SELECT engines FROM engine_match_runs WHERE id=$1")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(engines["a"]["open_sage"]["plies"], 1);
+    assert_eq!(engines["b"]["open_sage"]["plies"], 2);
     // Previously saved snapshots continue to use the old, unchanged installation.
     let previous: bgtutor::engines::SageSnapshot =
         serde_json::from_value(initial["snapshot"].clone()).unwrap();

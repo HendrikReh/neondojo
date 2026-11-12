@@ -1,0 +1,67 @@
+.engine-match-setup {
+  padding: 20px 0;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.engine-match-fields,
+.engine-match-progress,
+.engine-match-statistics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.engine-match-fields fieldset {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: end;
+  gap: 8px;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--ui-border);
+}
+
+.engine-match-fields label {
+  display: grid;
+  gap: 6px;
+}
+
+.engine-match-fields input[type='number'] {
+  width: 7ch;
+}
+
+.engine-match-fields input[pattern] {
+  width: 39ch;
+}
+
+.engine-match-history {
+  margin-top: 24px;
+}
+
+.engine-match-progress {
+  align-items: center;
+  margin-top: 12px;
+}
+
+.engine-match-progress p {
+  margin: 0;
+}
+
+.engine-match-progress progress {
+  accent-color: var(--ui-accent);
+}
+
+.engine-match-statistics dt {
+  color: var(--ui-muted);
+}
+
+.engine-match-statistics dd {
+  margin: 6px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.engine-match-history > select + button {
+  margin-inline-start: 8px;
+}

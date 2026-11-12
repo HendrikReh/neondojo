@@ -58,8 +58,10 @@ Normale Einstellungsänderungen werden mit „Anwenden“ übernommen. Die Profi
 
 ## Extras
 
-Extras contains **Benchmark** for analysis speed and turn latency and
-**Version information** for the running backend and configured engines.
-The Open Sage row identifies recognized fork builds by repository and short
-commit, linked to the full commit on GitHub. The benchmark link in Settings
-always opens **Benchmark**.
+Extras contains **Benchmark** for analysis speed and turn latency,
+**Engine vs. engine** for playing point matches, and **Version information**
+for the running backend and configured engines. The Open Sage row identifies
+recognized fork builds by repository and short commit, linked to the full
+commit on GitHub. The benchmark link in
+Settings always opens **Benchmark**. Engine-match series keep running
+when the user switches tools or leaves Extras.

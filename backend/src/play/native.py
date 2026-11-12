@@ -27,6 +27,7 @@ plies = request['plies']
 action = request['action']
 resignation_declined = False
 external_bot = request.get('external_bot', False)
+match_bots = request.get('match_bots')
 assert type(external_bot) is bool
 assert type(human) is int and human in (0, 1)
 assert type(plies) is int and 0 <= plies <= 2
@@ -37,6 +38,8 @@ if request['new']:
     assert action == 'opening_roll'
     if length == 0:
         command('set jacoby on')
+    if match_bots is not None:
+        command('set rng file dice.txt')
     command('set display on')
     command('new session' if length == 0 else 'new match %d' % length)
     command('set display off')
@@ -52,17 +55,24 @@ else:
         if gnubg.posinfo()['gamestate'] != 1:
             gnubg.nextturn()
     assert gnubg.gnubgid() == request['native_id'], 'SGF did not restore exact saved state: %s != %s' % (gnubg.gnubgid(), request['native_id'])
+    if match_bots is not None:
+        command('set rng file dice.txt')
     if action == 'opening_roll':
         command('set display on')
         command('new game')
         command('set display off')
 
-# Apply the captured bot profile after restoration, before any ComputerTurn.
-for kind in ['chequerplay', 'cubedecision']:
-    for suffix in ['type evaluation', 'evaluation plies %d' % plies,
-                   'evaluation cubeful on', 'evaluation deterministic on',
-                   'evaluation noise 0']:
-        command('set player %d %s %s' % (1 - human, kind, suffix))
+def configure_player(player, depth):
+    for kind in ('chequerplay', 'cubedecision'):
+        for suffix in ('type evaluation', 'evaluation plies %d' % depth,
+                       'evaluation cubeful on', 'evaluation deterministic on',
+                       'evaluation noise 0'):
+            command('set player %d %s %s' % (player, kind, suffix))
+
+
+# Apply the captured bot profile before any ComputerTurn.
+if match_bots is None:
+    configure_player(1 - human, plies)
 
 
 # An opening result is always paused with both players human. Only explicit
@@ -123,6 +133,33 @@ for _ in range(3):
     assert pending['turn'] == human, 'Unexpected resignation recipient'
     command('decline')
 assert gnubg.posinfo()['gamestate'] != 1 or not gnubg.posinfo()['resigned'], 'Bot resignation did not resolve'
+
+# A native bot acts only on its own turn. Leave the other player human so GNUbg
+# yields at the next decision, including an external engine's cube response.
+if match_bots is not None and action != 'opening_roll':
+    for player, depth in enumerate(match_bots):
+        if depth is None:
+            continue
+        assert type(depth) is int and 0 <= depth <= 2
+        configure_player(player, depth)
+    for _ in range(4096):
+        state = gnubg.posinfo()
+        turn = state['turn']
+        if state['gamestate'] != 1 or match_bots[turn] is None:
+            break
+        before = gnubg.gnubgid()
+        command('set player %d gnubg' % turn)
+        gnubg.nextturn()
+        for _ in range(3):
+            pending = gnubg.posinfo()
+            if pending['gamestate'] != 1 or not pending['resigned']:
+                break
+            command('decline')
+        command('set player %d human' % turn)
+        state = gnubg.posinfo()
+        assert not state['resigned'] and gnubg.gnubgid() != before, 'Native bot did not complete its decision'
+    else:
+        raise RuntimeError('Native bot action limit exceeded')
 
 position = gnubg.posinfo()
 # cubeinfo() rejects final scores at/above match length. Decode the native
@@ -227,5 +264,11 @@ result = {'resignation_declined': resignation_declined, 'native_id': native_id, 
           'can_double': phase == 'roll' and not cube['crawford']
               and cube['cubeowner'] in (-1, position['turn'])
               and (cube['matchto'] == 0 or cube['cube'] < cube['matchto'] - scores[position['turn']])}
+if match_bots is not None:
+    rolls = [list(record['dice']) for record in games[-1]['game']
+             if record['action'] == 'move']
+    if phase == 'move':
+        rolls.append(list(position['dice']))
+    result['match_rolls'] = rolls
 with open('snapshot.json', 'w', encoding='utf-8') as f:
     json.dump(result, f, allow_nan=False)

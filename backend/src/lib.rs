@@ -50,4 +50,5 @@ mod analysis_timing;
 mod search;
 mod similar_positions;
 
+pub mod engine_matches;
 mod engine_process;

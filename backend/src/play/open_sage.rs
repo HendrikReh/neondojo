@@ -104,6 +104,46 @@ async fn chosen_move(bot: &SageEngine, snapshot: &NativeSnapshot) -> Result<Opti
     anyhow::bail!("Open Sage best move is absent from GNUbg legal results")
 }
 
+pub(super) async fn choose(
+    bot: &SageEngine,
+    snapshot: &NativeSnapshot,
+) -> Result<(&'static str, Option<String>)> {
+    let (position, context) = snapshot
+        .native_id
+        .split_once(':')
+        .context("Invalid native ID")?;
+    let mut notation = None;
+    let action = match snapshot.phase {
+        PlayPhase::Move => {
+            notation = chosen_move(bot, snapshot).await?;
+            if notation.is_some() { "move" } else { "pass" }
+        }
+        PlayPhase::Roll => {
+            if snapshot.can_double {
+                let cube = bot.cube(position, context).await?;
+                let (best, _, _) = crate::match_analysis::cube_options(
+                    "no double",
+                    cube.no_double,
+                    cube.take,
+                    cube.pass,
+                )
+                .context("Missing cube offer options")?;
+                if best == "double" { "double" } else { "roll" }
+            } else {
+                "roll"
+            }
+        }
+        PlayPhase::DoubleResponse => {
+            let cube = bot.cube(position, context).await?;
+            crate::match_analysis::cube_options("take", -cube.no_double, -cube.take, -cube.pass)
+                .context("Missing cube response options")?
+                .0
+        }
+        _ => anyhow::bail!("Unexpected Open Sage turn phase"),
+    };
+    Ok((action, notation))
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn advance(
     session: &PlaySession,
@@ -138,6 +178,7 @@ pub(super) async fn advance(
             action,
             notation,
             resign_level,
+            match_bots: None,
         };
         let process = RulesProcess::start(rules, previous.map(|(sgf, _)| sgf)).await?;
         let (mut process, mut snapshot, mut sgf) = process.execute(&request).await?;
@@ -154,44 +195,7 @@ pub(super) async fn advance(
                 process.finish().await?;
                 return Ok((snapshot, sgf));
             }
-            let (position, context) = snapshot
-                .native_id
-                .split_once(':')
-                .context("Invalid native ID")?;
-            let mut notation = None;
-            let action = match snapshot.phase {
-                PlayPhase::Move => {
-                    notation = chosen_move(bot, &snapshot).await?;
-                    if notation.is_some() { "move" } else { "pass" }
-                }
-                PlayPhase::Roll => {
-                    if snapshot.can_double {
-                        let cube = bot.cube(position, context).await?;
-                        let (best, _, _) = crate::match_analysis::cube_options(
-                            "no double",
-                            cube.no_double,
-                            cube.take,
-                            cube.pass,
-                        )
-                        .context("Missing cube offer options")?;
-                        if best == "double" { "double" } else { "roll" }
-                    } else {
-                        "roll"
-                    }
-                }
-                PlayPhase::DoubleResponse => {
-                    let cube = bot.cube(position, context).await?;
-                    crate::match_analysis::cube_options(
-                        "take",
-                        -cube.no_double,
-                        -cube.take,
-                        -cube.pass,
-                    )
-                    .context("Missing cube response options")?
-                    .0
-                }
-                _ => anyhow::bail!("Unexpected Open Sage turn phase"),
-            };
+            let (action, notation) = choose(bot, &snapshot).await?;
             let request = NativeRequest {
                 new: false,
                 external_bot: true,
@@ -203,6 +207,7 @@ pub(super) async fn advance(
                 action,
                 notation: notation.as_deref(),
                 resign_level: None,
+                match_bots: None,
             };
             (process, snapshot, sgf) = process.execute(&request).await?;
         }
@@ -230,6 +235,7 @@ pub(super) async fn benchmark_checker_turn(
             action: "inspect",
             notation: None,
             resign_level: None,
+            match_bots: None,
         };
         let process = RulesProcess::start(rules, Some(previous.0)).await?;
         let (process, before, _) = process.execute(&request).await?;
