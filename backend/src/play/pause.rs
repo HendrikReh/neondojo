@@ -118,5 +118,7 @@ pub(super) async fn transition(
     tx.commit().await.map_err(anyhow::Error::from)?;
     session.version += 1;
     session.paused = pausing;
-    Ok(Json(present_with_results(session, saved.sgf).await?))
+    let session = present_with_results(session, saved.sgf).await?;
+    super::open_sage::schedule_warmup(&session, &state.shutdown);
+    Ok(Json(session))
 }

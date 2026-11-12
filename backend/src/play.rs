@@ -422,7 +422,9 @@ async fn get_session(
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<PlaySession>> {
     let row = saved(&state, id).await?;
-    Ok(Json(present_with_results(row.state.0, row.sgf).await?))
+    let session = present_with_results(row.state.0, row.sgf).await?;
+    open_sage::schedule_warmup(&session, &state.shutdown);
+    Ok(Json(session))
 }
 #[utoipa::path(get,path="/api/play/sessions/{id}/history",params(("id"=Uuid,Path),("version"=i64,Query,description="Saved session revision")),responses((status=200,body=PlayHistorySnapshots),(status=404,body=ErrorBody),(status=409,body=ErrorBody)),tag="Playing")]
 async fn history_snapshots(
@@ -698,6 +700,7 @@ async fn create_session(
         .await
         .map_err(anyhow::Error::from)?;
     tx.commit().await.map_err(anyhow::Error::from)?;
+    open_sage::schedule_warmup(&session, &state.shutdown);
     Ok((StatusCode::CREATED, Json(session)))
 }
 // Staging does not consume RNG or begin a native game. For later games the
@@ -1340,7 +1343,7 @@ async fn native(
         .as_ref()
         .and_then(|snapshots| snapshots.bot.open_sage.as_ref())
     {
-        let bot = crate::engines::SageEngine::new(snapshot.clone())?;
+        let bot = crate::engines::SageEngine::for_play(snapshot.clone())?;
         return open_sage::advance(
             session,
             &bot,

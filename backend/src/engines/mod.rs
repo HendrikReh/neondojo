@@ -55,6 +55,7 @@ impl SageSnapshot {
 #[derive(Clone)]
 pub struct SageEngine {
     snapshot: SageSnapshot,
+    slot: process::Slot,
     version: String,
 }
 
@@ -110,7 +111,21 @@ impl SageEngine {
             snapshot.threads,
             snapshot.adapter_version
         );
-        Ok(Self { snapshot, version })
+        Ok(Self {
+            snapshot,
+            version,
+            slot: process::Slot::General,
+        })
+    }
+
+    pub(crate) fn for_play(snapshot: SageSnapshot) -> Result<Self> {
+        let mut engine = Self::new(snapshot)?;
+        engine.slot = process::Slot::Play;
+        Ok(engine)
+    }
+
+    pub(crate) async fn warm_play(&self) -> Result<()> {
+        process::warm_play(&self.snapshot).await
     }
 
     pub async fn probe(python: String, threads: u32) -> Result<SageSnapshot> {
@@ -183,6 +198,7 @@ impl SageEngine {
             &self.snapshot,
             json!({"operation":"identity"}),
             Duration::from_secs(120),
+            self.slot,
         )
         .await?;
         Ok(self.version.clone())
@@ -316,6 +332,7 @@ impl SageEngine {
             json!({"operation":"resignation", "board":board,
             "context":context, "dice":context.dice, "level":level}),
             Duration::from_secs(180),
+            self.slot,
         )
         .await?;
         result["accept"]
@@ -356,7 +373,7 @@ impl SageEngine {
         let timeout = Duration::from_secs(180);
         match batch {
             Some(batch) => batch.request(payload, timeout).await,
-            None => process::request(&self.snapshot, payload, timeout).await,
+            None => process::request(&self.snapshot, payload, timeout, self.slot).await,
         }
     }
 }

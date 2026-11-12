@@ -312,3 +312,19 @@ vom bisherigen Fork, auch wenn die Paketversion gleich bleibt. Frühere
 Aufträge und Spielsitzungen benötigen weiterhin ihre gespeicherte
 Installation. Die Testumgebung und die Rohdaten des Vergleichs befinden
 sich lokal unter `local-data/benchmarks/*-sage-cube-reuse/`.
+
+## Warm-up für Partien
+
+Beim Anlegen, Öffnen oder Fortsetzen einer aktiven Open-Sage-Partie kann BG Tutor
+deren gespeichertes Bot-Profil im Hintergrund laden. Die HTTP-Antwort wartet
+dabei nicht auf den Sidecar. Gleichzeitige Warm-up-Anfragen sind begrenzt.
+Ein Zug verwendet weiterhin seinen gespeicherten Snapshot und startet bei
+Bedarf selbst einen geprüften Worker.
+
+Spiel und andere Sage-Anfragen haben je einen Platz für einen laufenden
+Worker. Beide Plätze und vorübergehende Installationsprüfungen teilen sich
+die bisherige Zugriffssperre. Eine Analyse oder Installationsprüfung
+verdrängt den Spielprozess nicht. Änderungen am gespeicherten Spielprofil
+erfordern einen neuen Prozess für dieses Profil. Benchmarkläufe starten ihren
+eigenen Worker weiterhin kalt. Die Prüfungen von Artefakten, Threadgrenzen,
+Anfragen, Antworten und Spielständen gelten wie bisher.

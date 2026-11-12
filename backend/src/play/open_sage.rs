@@ -6,6 +6,46 @@ use super::{
 use crate::{engine::Engine, engines::SageEngine};
 use anyhow::{Context, Result, ensure};
 
+use tokio::sync::Semaphore;
+use tokio_util::sync::CancellationToken;
+
+// Session reads can arrive in bursts. Keep at most one speculative task
+// pending, including while an analysis or benchmark holds the engine gate.
+static WARMUP: Semaphore = Semaphore::const_new(1);
+
+pub(super) fn schedule_warmup(session: &PlaySession, shutdown: &CancellationToken) {
+    if session.paused
+        || session.money_session_ended
+        || matches!(session.phase, PlayPhase::MatchOver)
+    {
+        return;
+    }
+    let Some(snapshot) = session
+        .engine_snapshots
+        .as_ref()
+        .and_then(|snapshots| snapshots.bot.open_sage.as_ref())
+    else {
+        return;
+    };
+    let Ok(permit) = WARMUP.try_acquire() else {
+        return;
+    };
+    let snapshot = snapshot.clone();
+    let shutdown = shutdown.clone();
+    tokio::spawn(async move {
+        let _permit = permit;
+        tokio::select! {
+            biased;
+            _ = shutdown.cancelled() => {}
+            result = async { SageEngine::for_play(snapshot)?.warm_play().await } => {
+                if let Err(error) = result {
+                    tracing::debug!(%error, "Could not warm Open Sage for play");
+                }
+            }
+        }
+    });
+}
+
 fn resulting_board(
     board: &[i32],
     player: i32,
