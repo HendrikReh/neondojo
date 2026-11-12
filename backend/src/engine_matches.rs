@@ -190,19 +190,25 @@ async fn create(
     let settings = settings::load(&state).await?;
     let path =
         resolve_binary(&settings.gnubg_path).map_err(|e| ApiError::invalid(e.to_string()))?;
+    let gnubg_threads = settings.gnubg_threads.filter(|&threads| threads != 1);
     let version = Engine::new(path.clone())
+        .with_threads(gnubg_threads)
         .check_installation()
         .await
         .map_err(|error| {
             ApiError::invalid(format!("GNUbg installation check failed: {error:#}"))
         })?;
     crate::play::probe_native(
-        &Engine::new(path.clone()).with_expected_version(Some(version.clone())),
+        &Engine::new(path.clone())
+            .with_threads(gnubg_threads)
+            .with_expected_version(Some(version.clone())),
     )
     .await
     .map_err(|error| {
         ApiError::invalid(format!("GNUbg play installation check failed: {error:#}"))
     })?;
+    let sage_threads =
+        settings::sage_threads(settings.open_sage_threads, settings::SAGE_ANALYSIS_THREADS);
     let snapshot = |side: &Competitor| {
         let path = path.clone();
         let version = version.clone();
@@ -215,10 +221,11 @@ async fn create(
                     engine_id: id,
                     gnubg_path: path,
                     engine_version: Some(version),
+                    gnubg_threads,
                     open_sage: None,
                 })
             } else {
-                settings::snapshot_for(state, &id, &path, 4, plies)
+                settings::snapshot_for(state, &id, &path, None, sage_threads, plies)
                     .await
                     .map_err(|error| {
                         ApiError::invalid(format!("Open Sage installation check failed: {error:#}"))

@@ -201,14 +201,17 @@ pub(crate) async fn initialize(
     } else {
         crate::engine::resolve_binary(engine.binary())
     };
-    let benchmark = match path {
-        Ok(path) => {
+    let benchmark = match (engine, path) {
+        (crate::engines::AnalysisEngine::Gnubg(engine), _) if engine.calculation_threads() != 1 => {
+            None
+        }
+        (_, Ok(path)) => {
             crate::benchmarks::estimate::matching_benchmark(
                 pool, engine_id, &path, version, job.plies,
             )
             .await?
         }
-        Err(_) => None,
+        (_, Err(_)) => None,
     };
     let mut tx = pool.begin().await?;
     crate::match_jobs::assert_lease(&mut tx, job.id, token).await?;

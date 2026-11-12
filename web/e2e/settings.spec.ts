@@ -105,6 +105,38 @@ async function openSettings(page: Page) {
   return { dialog, trigger };
 }
 
+test('saves separate engine thread limits and restores them when reopened', async ({
+  page,
+}) => {
+  const backend = await settingsBackend(page);
+  await page.goto('/');
+  const { dialog } = await openSettings(page);
+  await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
+  await dialog
+    .getByRole('combobox', { name: 'GNUbg threads', exact: true })
+    .selectOption('3');
+  await dialog
+    .getByRole('combobox', { name: 'Open Sage threads', exact: true })
+    .selectOption('6');
+  expect(backend.writes).toHaveLength(0);
+  await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  expect(backend.writes).toContainEqual(
+    expect.objectContaining({
+      gnubg_threads: 3,
+      open_sage_threads: 6,
+    }),
+  );
+  await openSettings(page);
+  await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
+  await expect(
+    dialog.getByRole('combobox', { name: 'GNUbg threads', exact: true }),
+  ).toHaveValue('3');
+  await expect(
+    dialog.getByRole('combobox', { name: 'Open Sage threads', exact: true }),
+  ).toHaveValue('6');
+});
+
 test('English default, alphabetical languages, draft cancellation, focus trap and restore', async ({
   page,
 }) => {

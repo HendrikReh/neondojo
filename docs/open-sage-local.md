@@ -93,7 +93,8 @@ OPEN_SAGE_TEST_PYTHON=/path/to/venv/bin/python cargo test -p bgtutor --test open
 1. Die gehashte Umgebung installieren. Für diese lokale Umsetzung liegt sie dauerhaft unter `local-data/open-sage/venv` im Hauptrepository; dieses Verzeichnis ist von Git ausgeschlossen. Es wurden keine Pakete oder Gewichte in den Quellcode kopiert.
 2. Backend und Frontend aus dem Hauptrepository bauen und gemäß [README](../README.md#restart-bg-tutor-locally-on-port-8787) starten. Vor der ersten Anwendung von Migration `0041_open_sage.sql` die Benutzerdatenbank sichern. Die Migration ergänzt lokale Installationsmetadaten und Provider-Indizes; vorhandene Jobs bleiben GNUbg-kompatibel. Datenbank- und Browsertests verwenden weiterhin eigene Testdatenbanken.
 3. Unter **Einstellungen → Analyse → Lokale Open-Sage-Installation** den absoluten Pfad zum venv-Interpreter eintragen und **Prüfen und speichern** wählen. Danach Analyse-Engine und Spiel-Engine getrennt wählen und den Entwurf anwenden.
-4. Unter **Extras → Benchmark** Engine und Tiefe unabhängig einstellen. Für Open Sage gelten 4 Threads bei Analysen und 2 bei Spielentscheidungen. Neue Sitzungen/Aufträge behalten ihre festgehaltene Installation auch nach späteren Einstellungsänderungen.
+4. Unter **Einstellungen → Analyse → Open-Sage-Threads** das Rechenlimit auf 2–48 Threads einstellen. Bei **Standard** verwendet Open Sage 2 Threads beim Spielen und 4 für Analysen und Duelle. Neue Sitzungen, Aufträge und Duellserien speichern den gewählten Wert. Die Engine prüft das konfigurierte Limit mit einer echten Stellungsbewertung. Der geprüfte serielle 1-ply-Checkerpfad bleibt seriell.
+5. Unter **Extras → Benchmark** Engine und Tiefe unabhängig einstellen. Das Referenzprotokoll verwendet weiterhin 4 Threads für Analyse und 2 für Spielentscheidungen.
 
 Der Anwendungsprozess bleibt vollständig lokal. Der Sidecar verwendet keinen Downloadpfad; Installation und Updates sind ausdrücklich getrennte Schritte. Unbekannte oder geänderte Modelle, fehlende Python-Umgebung und Engineabstürze liefern Fehler, keine Ersatzbewertungen.
 
@@ -276,7 +277,8 @@ Jeder gestartete Worker prüft weiterhin das angeforderte Profil und das tatsäc
 RECORD-, Modell- und Native-Hashes sowie Prüfungen an Anfrage-/Spielblockgrenzen bleiben erhalten.
 Eine fehlende oder fehlgeschlagene 1-ply-Prüfung lässt nur 2-ply verfügbar.
 
-Spiel, Analyse und Benchmarks speichern die gewählte Tiefe pro Auftrag getrennt. Benchmarkprotokolle unterscheiden 1-ply von 2-ply; vorhandene 2-ply-Protokolle
+Spiel, Analyse, Benchmarks und Engine-Matches speichern die gewählte Tiefe pro Auftrag bzw.
+Spieler getrennt. Benchmarkprotokolle unterscheiden 1-ply von 2-ply; vorhandene 2-ply-Protokolle
 bleiben unverändert. Migration `0043` erweitert nur die zwei Sage-Tiefen-Constraints, ohne
 Benutzereinstellungen oder Datenzeilen zu ändern. Die Vorgaben bleiben Open Sage mit 2-ply.
 

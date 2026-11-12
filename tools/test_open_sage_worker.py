@@ -25,7 +25,11 @@ class WorkerTests(unittest.TestCase):
         worker.validate_profile(1, 4)
         worker.validate_profile(2, 2)
         worker.validate_profile(2, 4)
-        for plies, threads in [(0, 2), (3, 2), (2, 0), (2, 3), (2, 100)]:
+        limits = json.loads((PATH.parents[3] / 'shared/configuration-options.json').read_text())
+        minimum, maximum = (limits['engine_threads']['bgsage'][bound] for bound in ('min', 'max'))
+        for threads in range(minimum, maximum + 1):
+            worker.validate_profile(2, threads)
+        for plies, threads in [(0, 2), (3, 2), (2, minimum - 1), (2, maximum + 1), (2, 2.5)]:
             with self.subTest(plies=plies, threads=threads), self.assertRaises(ValueError):
                 worker.validate_profile(plies, threads)
 

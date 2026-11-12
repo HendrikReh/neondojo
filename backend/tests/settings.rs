@@ -73,7 +73,7 @@ async fn defaults_use_injected_engine_and_survive_new_app_states(pool: PgPool) {
     assert_eq!(status, 200, "{settings}");
     assert_eq!(
         settings,
-        json!({"version":0,"player_name":"","analysis_engine":"gnubg","analysis_plies":2,"play_engine":"gnubg","play_plies":0,"gnubg_path":"/missing/injected-gnubg","bearoff_direction":"right","default_play_mode":"coach","tutor_threshold":0.04,"training_auto_analysis":true})
+        json!({"version":0,"player_name":"","analysis_engine":"gnubg","analysis_plies":2,"play_engine":"gnubg","play_plies":0,"gnubg_path":"/missing/injected-gnubg","gnubg_threads":null,"open_sage_threads":null,"bearoff_direction":"right","default_play_mode":"coach","tutor_threshold":0.04,"training_auto_analysis":true})
     );
     let second = api::router(AppState::new(pool.clone(), Engine::new("different".into())));
     assert_eq!(
@@ -108,6 +108,75 @@ async fn defaults_use_injected_engine_and_survive_new_app_states(pool: PgPool) {
         schema["components"]["schemas"]["AppSettings"]["properties"]["play_plies"]["maximum"],
         2
     );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires isolated PostgreSQL and GNUbg with weights"]
+async fn thread_settings_are_validated_and_pinned_in_new_jobs(pool: PgPool) {
+    let imported = imported(&pool).await;
+    let app = api::router(AppState::new(pool.clone(), Engine::new(binary())));
+    let (_, mut settings) = call(app.clone(), "GET", "/api/settings", Value::Null).await;
+    let endpoint = format!("/api/matches/{}/analysis", imported.r#match.id);
+    let (status, before) = call(app.clone(), "POST", &endpoint, json!({})).await;
+    assert_eq!(status, 202, "{before}");
+
+    settings["gnubg_threads"] = json!(49);
+    let (status, invalid) = call(app.clone(), "PUT", "/api/settings", settings.clone()).await;
+    assert_eq!(status, 422, "{invalid}");
+    settings["gnubg_threads"] = json!(3);
+    settings["open_sage_threads"] = json!(6);
+    let (status, saved) = call(app.clone(), "PUT", "/api/settings", settings).await;
+    assert_eq!(status, 200, "{saved}");
+    assert_eq!(saved["gnubg_threads"], 3);
+    assert_eq!(saved["open_sage_threads"], 6);
+    let mut legacy = saved;
+    legacy.as_object_mut().unwrap().remove("gnubg_threads");
+    legacy.as_object_mut().unwrap().remove("open_sage_threads");
+    let (status, updated) = call(app.clone(), "PUT", "/api/settings", legacy).await;
+    assert_eq!(status, 200, "{updated}");
+    assert_eq!(updated["gnubg_threads"], 3);
+    assert_eq!(updated["open_sage_threads"], 6);
+    let (status, after) = call(app.clone(), "POST", &endpoint, json!({})).await;
+    assert_eq!(status, 202, "{after}");
+    assert_ne!(after["id"], before["id"]);
+    for (job, expected) in [(before, Value::Null), (after, json!(3))] {
+        let id = uuid::Uuid::parse_str(job["id"].as_str().unwrap()).unwrap();
+        let snapshot: Value = sqlx::query_scalar("SELECT engine_snapshot FROM jobs WHERE id=$1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(snapshot["gnubg_threads"], expected);
+    }
+    let (status, play) = call(
+        app.clone(),
+        "POST",
+        "/api/play/sessions",
+        json!({"human_player":0,"match_length":1}),
+    )
+    .await;
+    assert_eq!(status, 201, "{play}");
+    assert_eq!(play["engine_snapshots"]["bot"]["gnubg_threads"], 3);
+    assert_eq!(play["engine_snapshots"]["analysis"]["gnubg_threads"], 3);
+
+    let side = json!({"engine_id":"gnubg","plies":0});
+    let (status, duel) = call(
+        app.clone(),
+        "POST",
+        "/api/engine-matches",
+        json!({"a":side,"b":side,"match_length":1,"count":1}),
+    )
+    .await;
+    assert_eq!(status, 201, "{duel}");
+    assert_eq!(duel["engines"]["a"]["gnubg_threads"], 3);
+    assert_eq!(duel["engines"]["b"]["gnubg_threads"], 3);
+    let mut reset = updated;
+    reset["gnubg_threads"] = Value::Null;
+    reset["open_sage_threads"] = Value::Null;
+    let (status, cleared) = call(app, "PUT", "/api/settings", reset).await;
+    assert_eq!(status, 200, "{cleared}");
+    assert!(cleared["gnubg_threads"].is_null());
+    assert!(cleared["open_sage_threads"].is_null());
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -1031,6 +1100,7 @@ async fn queued_and_recovered_jobs_refuse_a_replaced_engine_version(pool: PgPool
 async fn snapshot_rejects_output_if_the_version_changes_during_evaluation() {
     let (_temp, engine) = versioned_fixture_engine(true);
     let snapshot = bgtutor::settings::EngineSnapshot {
+        gnubg_threads: None,
         open_sage: None,
         engine_id: "gnubg".into(),
         gnubg_path: engine.binary().into(),

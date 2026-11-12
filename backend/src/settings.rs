@@ -34,8 +34,46 @@ pub struct AppSettings {
     #[schema(minimum = 0, maximum = 2)]
     pub play_plies: i32,
     pub gnubg_path: String,
+    /// Host-local override. Null uses one GNUbg calculation thread. Omit on PUT to keep the saved value.
+    #[schema(minimum = 1, maximum = 48)]
+    pub gnubg_threads: Option<i32>,
+    /// Host-local override. Null uses four threads for analysis and two for play. Omit on PUT to keep the saved value.
+    #[schema(minimum = 2, maximum = 48)]
+    pub open_sage_threads: Option<i32>,
     #[serde(default = "default_bearoff_direction")]
     pub bearoff_direction: String,
+}
+
+#[derive(Deserialize)]
+struct SettingsUpdate {
+    #[serde(flatten)]
+    settings: AppSettings,
+    #[serde(default, deserialize_with = "thread_override")]
+    gnubg_threads: Option<Option<i32>>,
+    #[serde(default, deserialize_with = "thread_override")]
+    open_sage_threads: Option<Option<i32>>,
+}
+
+// Missing fields keep their saved values. Explicit null restores the default.
+fn thread_override<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Option<i32>>, D::Error> {
+    Option::deserialize(deserializer).map(Some)
+}
+
+pub(crate) const SAGE_ANALYSIS_THREADS: u32 = 4;
+pub(crate) const SAGE_PLAY_THREADS: u32 = 2;
+
+pub(crate) fn sage_threads(configured: Option<i32>, default: u32) -> u32 {
+    configured
+        .and_then(|threads| u32::try_from(threads).ok())
+        .unwrap_or(default)
+}
+
+impl AppSettings {
+    pub(crate) fn gnubg(&self) -> Engine {
+        Engine::new(self.gnubg_path.clone()).with_threads(self.gnubg_threads)
+    }
 }
 
 fn default_bearoff_direction() -> String {
@@ -64,6 +102,8 @@ pub struct EngineInfo {
 #[derive(Deserialize, ToSchema)]
 struct EngineCheckRequest {
     path: String,
+    #[schema(minimum = 1, maximum = 48)]
+    threads: Option<i32>,
 }
 #[derive(Serialize, ToSchema)]
 struct EngineCheckResponse {
@@ -77,6 +117,9 @@ pub struct EngineSnapshot {
     pub gnubg_path: String,
     pub engine_version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(minimum = 1, maximum = 48)]
+    pub gnubg_threads: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub open_sage: Option<SageSnapshot>,
 }
 impl EngineSnapshot {
@@ -88,6 +131,7 @@ impl EngineSnapshot {
         match self.engine_id.as_str() {
             "gnubg" => Ok(AnalysisEngine::Gnubg(
                 Engine::new(self.gnubg_path.clone())
+                    .with_threads(self.gnubg_threads)
                     .with_expected_version(self.engine_version.clone()),
             )),
             "bgsage" => Ok(AnalysisEngine::OpenSage(SageEngine::new(
@@ -133,7 +177,8 @@ pub(crate) async fn snapshot(
         state,
         &saved.settings.analysis_engine,
         &saved.settings.gnubg_path,
-        4,
+        saved.settings.gnubg_threads,
+        sage_threads(saved.settings.open_sage_threads, SAGE_ANALYSIS_THREADS),
         requested_plies.unwrap_or(saved.settings.analysis_plies),
     )
     .await?;
@@ -144,11 +189,12 @@ pub(crate) async fn snapshot_for(
     state: &AppState,
     id: &str,
     gnubg_path: &str,
-    threads: u32,
+    gnubg_threads: Option<i32>,
+    sage_threads: u32,
     plies: i32,
 ) -> anyhow::Result<EngineSnapshot> {
     let open_sage = if id == "bgsage" {
-        Some(open_sage::verified_profile(&state.pool, plies, threads).await?)
+        Some(open_sage::verified_profile(&state.pool, plies, sage_threads).await?)
     } else {
         None
     };
@@ -169,6 +215,7 @@ pub(crate) async fn snapshot_for(
         engine_id: id.into(),
         gnubg_path: gnubg_path.into(),
         engine_version,
+        gnubg_threads: gnubg_threads.filter(|&threads| id == "gnubg" && threads != 1),
         open_sage,
     })
 }
@@ -181,6 +228,18 @@ fn validate_path(path: &str) -> ApiResult<()> {
     }
     Ok(())
 }
+fn validate_threads(engine: &str, threads: Option<i32>) -> ApiResult<()> {
+    let range = crate::configuration::engine_thread_range(engine);
+    if threads.is_some_and(|threads| !range.contains(&threads)) {
+        return Err(ApiError::invalid(format!(
+            "{engine} threads must be between {} and {}",
+            range.start(),
+            range.end()
+        )));
+    }
+    Ok(())
+}
+
 fn validate(settings: &AppSettings) -> ApiResult<()> {
     if !(settings.tutor_threshold.is_finite()
         && 0.0 < settings.tutor_threshold
@@ -217,6 +276,8 @@ fn validate(settings: &AppSettings) -> ApiResult<()> {
     if !matches!(settings.bearoff_direction.as_str(), "right" | "left") {
         return Err(ApiError::invalid("bearoff direction must be right or left"));
     }
+    validate_threads("gnubg", settings.gnubg_threads)?;
+    validate_threads("bgsage", settings.open_sage_threads)?;
     validate_path(&settings.gnubg_path)
 }
 
@@ -228,39 +289,40 @@ async fn get_settings(State(state): State<AppState>) -> ApiResult<Json<AppSettin
 #[utoipa::path(put, path="/api/settings", request_body=AppSettings, responses((status=200,body=AppSettings),(status=409,body=ErrorBody),(status=422,body=ErrorBody)), tag="Settings")]
 async fn put_settings(
     State(state): State<AppState>,
-    payload: Result<Json<AppSettings>, axum::extract::rejection::JsonRejection>,
+    payload: Result<Json<SettingsUpdate>, axum::extract::rejection::JsonRejection>,
 ) -> ApiResult<Json<AppSettings>> {
-    let Json(settings) = payload.map_err(|e| ApiError::invalid(e.body_text()))?;
+    let Json(SettingsUpdate {
+        mut settings,
+        gnubg_threads,
+        open_sage_threads,
+    }) = payload.map_err(|e| ApiError::invalid(e.body_text()))?;
+    settings.gnubg_threads = gnubg_threads.flatten();
+    settings.open_sage_threads = open_sage_threads.flatten();
     validate(&settings)?;
     let current = load(&state).await?;
     if current.version != settings.version {
         return Err(conflict());
     }
+    settings.gnubg_threads = gnubg_threads.unwrap_or(current.gnubg_threads);
+    settings.open_sage_threads = open_sage_threads.unwrap_or(current.open_sage_threads);
     // Validate before the compare-and-swap. No partial changes are ever persisted,
     // and the final version predicate also fences concurrent checks/writes.
-    let version = Engine::new(settings.gnubg_path.clone())
+    let version = settings
+        .gnubg()
         .check_installation()
         .await
         .map_err(|e| ApiError::invalid(format!("GNUbg installation check failed: {e:#}")))?;
-    for (engine, plies, threads) in [
-        (&settings.analysis_engine, settings.analysis_plies, 4),
-        (&settings.play_engine, settings.play_plies, 2),
-    ] {
-        if engine == "bgsage" {
-            open_sage::verified_profile(&state.pool, plies, threads)
-                .await
-                .map_err(|e| {
-                    ApiError::invalid(format!("Open Sage installation check failed: {e:#}"))
-                })?;
-        }
-    }
+    open_sage::verify_settings(&state.pool, &current, &settings)
+        .await
+        .map_err(|e| ApiError::invalid(format!("Open Sage installation check failed: {e:#}")))?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     crate::configuration::store::lock(&mut tx)
         .await
         .map_err(anyhow::Error::from)?;
-    let saved: Option<AppSettings> = sqlx::query_as("UPDATE app_settings SET version=version+1,player_name=$2,analysis_engine=$3,analysis_plies=$4,play_engine=$5,play_plies=$6,gnubg_path=$7,gnubg_version=$8,bearoff_direction=$9,default_play_mode=$10,tutor_threshold=$11,training_auto_analysis=$12 WHERE singleton=true AND version=$1 RETURNING *")
+    let saved: Option<AppSettings> = sqlx::query_as("UPDATE app_settings SET version=version+1,player_name=$2,analysis_engine=$3,analysis_plies=$4,play_engine=$5,play_plies=$6,gnubg_path=$7,gnubg_version=$8,bearoff_direction=$9,default_play_mode=$10,tutor_threshold=$11,training_auto_analysis=$12,gnubg_threads=$13,open_sage_threads=$14 WHERE singleton=true AND version=$1 RETURNING *")
         .bind(settings.version).bind(settings.player_name).bind(settings.analysis_engine).bind(settings.analysis_plies)
         .bind(settings.play_engine).bind(settings.play_plies).bind(settings.gnubg_path).bind(version).bind(settings.bearoff_direction).bind(settings.default_play_mode).bind(settings.tutor_threshold).bind(settings.training_auto_analysis)
+        .bind(settings.gnubg_threads).bind(settings.open_sage_threads)
         .fetch_optional(&mut *tx).await.map_err(anyhow::Error::from)?;
     let saved = saved.ok_or_else(conflict)?;
     crate::configuration::store::legacy_app(&mut tx, &saved)
@@ -295,16 +357,20 @@ async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo
     } else {
         match crate::benchmarks::running_engine_version(&state.pool, &settings.gnubg_path).await? {
             Some(version) => Some(version),
-            None => Engine::new(settings.gnubg_path)
-                .check_installation()
-                .await
-                .ok(),
+            None => settings.gnubg().check_installation().await.ok(),
         }
     };
+    let threads = sage_threads(settings.open_sage_threads, SAGE_ANALYSIS_THREADS);
     let sage = if running {
-        open_sage::load(&state.pool).await?.snapshot
+        open_sage::load(&state.pool)
+            .await?
+            .snapshot
+            .map(|mut snapshot| {
+                snapshot.threads = threads;
+                snapshot
+            })
     } else {
-        open_sage::verified(&state.pool, 4).await.ok()
+        open_sage::verified(&state.pool, threads).await.ok()
     };
     let sage_version = match &sage {
         Some(s) => SageEngine::new(s.clone())?
@@ -345,7 +411,9 @@ async fn check_engine(
 ) -> ApiResult<Json<EngineCheckResponse>> {
     let Json(request) = payload.map_err(|e| ApiError::invalid(e.body_text()))?;
     validate_path(&request.path)?;
+    validate_threads("gnubg", request.threads)?;
     let version = Engine::new(request.path)
+        .with_threads(request.threads)
         .check_installation()
         .await
         .map_err(|e| ApiError::invalid(format!("GNUbg installation check failed: {e:#}")))?;

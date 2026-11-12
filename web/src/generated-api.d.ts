@@ -1736,6 +1736,16 @@ export interface components {
             bearoff_direction?: string;
             default_play_mode?: components["schemas"]["PlayMode"];
             gnubg_path: string;
+            /**
+             * Format: int32
+             * @description Host-local override. Null uses one GNUbg calculation thread. Omit on PUT to keep the saved value.
+             */
+            gnubg_threads?: number | null;
+            /**
+             * Format: int32
+             * @description Host-local override. Null uses four threads for analysis and two for play. Omit on PUT to keep the saved value.
+             */
+            open_sage_threads?: number | null;
             play_engine: string;
             /** Format: int32 */
             play_plies: number;
@@ -2428,6 +2438,8 @@ export interface components {
         };
         EngineCheckRequest: {
             path: string;
+            /** Format: int32 */
+            threads?: number | null;
         };
         EngineCheckResponse: {
             version: string;
@@ -2449,6 +2461,8 @@ export interface components {
             engine_id: string;
             engine_version?: string | null;
             gnubg_path: string;
+            /** Format: int32 */
+            gnubg_threads?: number | null;
             open_sage?: null | components["schemas"]["SageSnapshot"];
         };
         ErrorBody: {

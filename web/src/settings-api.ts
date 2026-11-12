@@ -1,3 +1,4 @@
+import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
 import type { components } from './generated-api';
 import { isAnalysisDepth } from './analysis-depth';
 import { isPlayMode, type PlayMode } from './play-mode-messages';
@@ -53,6 +54,17 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function isThreadLimit(value: unknown, engine: 'gnubg' | 'bgsage') {
+  const { min, max } = configurationOptions.engine_threads[engine];
+  return (
+    value == null ||
+    (typeof value === 'number' &&
+      Number.isInteger(value) &&
+      value >= min &&
+      value <= max)
+  );
+}
+
 function parseSettings(value: unknown): AppSettings {
   if (
     !isObject(value) ||
@@ -76,8 +88,16 @@ function parseSettings(value: unknown): AppSettings {
     typeof value.analysis_plies !== 'number' ||
     typeof value.play_plies !== 'number' ||
     typeof value.gnubg_path !== 'string' ||
-    (value.analysis_engine === 'bgsage' && value.analysis_plies !== 2) ||
-    (value.play_engine === 'bgsage' && value.play_plies !== 2)
+    !isThreadLimit(value.gnubg_threads, 'gnubg') ||
+    !isThreadLimit(value.open_sage_threads, 'bgsage') ||
+    (value.analysis_engine === 'bgsage' &&
+      !configurationOptions.engine_profiles.bgsage.analysis.includes(
+        value.analysis_plies,
+      )) ||
+    (value.play_engine === 'bgsage' &&
+      !configurationOptions.engine_profiles.bgsage.play.includes(
+        value.play_plies,
+      ))
   ) {
     throw new SettingsApiError(200, '');
   }
@@ -132,11 +152,15 @@ export async function saveSettings(value: AppSettings, signal?: AbortSignal) {
   );
 }
 
-export async function checkGnubg(path: string, signal?: AbortSignal) {
+export async function checkGnubg(
+  path: string,
+  signal?: AbortSignal,
+  threads?: number | null,
+) {
   const value = await settingsRequest('/engines/gnubg/check', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path }),
+    body: JSON.stringify({ path, threads }),
     signal,
   });
   if (
@@ -166,7 +190,7 @@ function parseSageInstallation(value: unknown): SageInstallation {
       typeof snapshot.artifact_fingerprint !== 'string' ||
       snapshot.plies !== 2 ||
       typeof snapshot.threads !== 'number' ||
-      ![2, 4].includes(snapshot.threads) ||
+      !isThreadLimit(snapshot.threads, 'bgsage') ||
       snapshot.adapter_version !== 1)
   )
     throw new SettingsApiError(200, 'Invalid Open Sage installation identity');

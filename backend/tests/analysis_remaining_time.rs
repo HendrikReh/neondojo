@@ -244,6 +244,7 @@ async fn timing_calibration_uses_saved_job_installation_and_plies(pool: PgPool) 
         .await
         .unwrap();
     let snapshot = bgtutor::settings::EngineSnapshot {
+        gnubg_threads: None,
         open_sage: None,
         engine_id: "gnubg".into(),
         gnubg_path: run["engine_path"].as_str().unwrap().into(),

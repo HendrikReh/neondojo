@@ -77,11 +77,16 @@ pub struct SageCubeEvaluation {
     pub probabilities: Vec<f64>,
 }
 
+fn valid_sage_threads(threads: u32) -> bool {
+    i32::try_from(threads)
+        .is_ok_and(|threads| crate::configuration::engine_thread_range("bgsage").contains(&threads))
+}
+
 impl SageEngine {
     pub fn new(snapshot: SageSnapshot) -> Result<Self> {
         ensure!(
-            matches!(snapshot.plies, 1 | 2) && matches!(snapshot.threads, 2 | 4),
-            "Only verified Open Sage 1/2-ply with 2 or 4 threads is supported"
+            matches!(snapshot.plies, 1 | 2) && valid_sage_threads(snapshot.threads),
+            "Unsupported Open Sage depth or thread count"
         );
         ensure!(
             snapshot.plies != 1 || snapshot.one_ply_verified,
@@ -141,8 +146,8 @@ impl SageEngine {
     pub async fn probe_profile(python: String, plies: i32, threads: u32) -> Result<SageSnapshot> {
         ensure!(matches!(plies, 1 | 2), "Unsupported Open Sage depth");
         ensure!(
-            matches!(threads, 2 | 4),
-            "Open Sage supports verified thread budgets 2 and 4 only"
+            valid_sage_threads(threads),
+            "Unsupported Open Sage thread count"
         );
         // Preserve the venv executable symlink; canonicalizing it loses pyvenv.cfg.
         let path = Path::new(&python);

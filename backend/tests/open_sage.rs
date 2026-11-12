@@ -14,7 +14,7 @@ fn snapshot() -> SageSnapshot {
 
 #[test]
 fn unsupported_profiles_are_rejected_before_starting_processes() {
-    for (plies, threads) in [(0, 2), (3, 2), (2, 0), (2, 3), (2, 40)] {
+    for (plies, threads) in [(0, 2), (3, 2), (2, 0), (2, 1), (2, 49)] {
         let mut value = snapshot();
         value.plies = plies;
         value.threads = threads;
@@ -23,6 +23,15 @@ fn unsupported_profiles_are_rejected_before_starting_processes() {
     let mut value = snapshot();
     value.artifact_fingerprint.clear();
     assert!(SageEngine::new(value).is_err());
+}
+
+#[test]
+fn custom_thread_count_is_part_of_the_sage_profile() {
+    let mut profile = snapshot();
+    profile.threads = 6;
+    let engine = SageEngine::new(profile).unwrap();
+    assert_eq!(engine.snapshot().threads, 6);
+    assert!(engine.saved_version().unwrap().contains("threads 6"));
 }
 
 #[tokio::test]
@@ -38,11 +47,12 @@ async fn missing_interpreter_fails_explicitly() {
 async fn native_checker_cube_and_match_analysis() {
     let python = std::env::var("BGTUTOR_SAGE_PYTHON")
         .expect("Set BGTUTOR_SAGE_PYTHON to the locked venv interpreter");
-    for depth in [1, 2] {
-        let profile = SageEngine::probe_profile(python.clone(), depth, 2)
+    for (depth, threads) in [(1, 2), (2, 6)] {
+        let profile = SageEngine::probe_profile(python.clone(), depth, threads)
             .await
             .unwrap();
         assert_eq!(profile.package_version, "2.0.20260907");
+        assert_eq!(profile.threads, threads);
         let engine = SageEngine::new(profile).unwrap();
         let version = engine.version().await.unwrap();
         assert!(

@@ -52,6 +52,50 @@ pub(crate) async fn verified_profile(
     current.one_ply_verified = saved.one_ply_verified;
     Ok(current)
 }
+pub(super) async fn verify_settings(
+    pool: &sqlx::PgPool,
+    current: &AppSettings,
+    proposed: &AppSettings,
+) -> anyhow::Result<()> {
+    let mut profiles = Vec::new();
+    for (engine, plies, default_threads) in [
+        (
+            &proposed.analysis_engine,
+            proposed.analysis_plies,
+            SAGE_ANALYSIS_THREADS,
+        ),
+        (
+            &proposed.play_engine,
+            proposed.play_plies,
+            SAGE_PLAY_THREADS,
+        ),
+    ] {
+        if engine == "bgsage" {
+            profiles.push((
+                plies,
+                sage_threads(proposed.open_sage_threads, default_threads),
+            ));
+        }
+    }
+    if proposed.open_sage_threads != current.open_sage_threads
+        && let Some(threads) = proposed.open_sage_threads
+        && let Some(installation) = load(pool).await?.snapshot
+    {
+        // A host override also applies when Sage is selected later, including in duels.
+        let threads = sage_threads(Some(threads), SAGE_ANALYSIS_THREADS);
+        profiles.push((2, threads));
+        if installation.one_ply_verified {
+            profiles.push((1, threads));
+        }
+    }
+    profiles.sort_unstable();
+    profiles.dedup();
+    for (plies, threads) in profiles {
+        verified_profile(pool, plies, threads).await?;
+    }
+    Ok(())
+}
+
 #[utoipa::path(get,path="/api/engines/bgsage",responses((status=200,body=Installation)),tag="Settings")]
 async fn get_installation(State(state): State<AppState>) -> ApiResult<Json<Installation>> {
     Ok(Json(load(&state.pool).await?))
@@ -69,7 +113,7 @@ async fn put_installation(
         return Err(conflict());
     }
     validate_path(&request.path)?;
-    let snapshot = SageEngine::probe(request.path, 4)
+    let snapshot = SageEngine::probe(request.path, SAGE_ANALYSIS_THREADS)
         .await
         .map_err(|e| ApiError::invalid(format!("Open Sage installation check failed: {e:#}")))?;
     let saved = sqlx::query_as("UPDATE engine_installations SET version=version+1,python_path=$2,snapshot=$3 WHERE engine_id='bgsage' AND version=$1 RETURNING version,python_path,snapshot")

@@ -81,6 +81,13 @@ async fn execute(pool: &PgPool, series: &Series, token: Uuid) -> Result<()> {
         "Unsupported saved dice version"
     );
     let rules = Engine::new(series.engines.a.gnubg_path.clone())
+        .with_threads(
+            series
+                .engines
+                .a
+                .gnubg_threads
+                .or(series.engines.b.gnubg_threads),
+        )
         .with_expected_version(Some(series.engines.rules_version.clone()));
     let a = series.engines.a.engine()?;
     let b = series.engines.b.engine()?;

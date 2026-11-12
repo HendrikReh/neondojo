@@ -7,7 +7,7 @@ import { useProfileText } from './profile-messages';
 import {
   applySettingsDraft,
   settingsFromConfiguration,
-  saveInstallationPath,
+  saveInstallationSettings,
 } from './configuration-settings';
 import { useBenchmarkText } from './benchmark-messages';
 import ActionButton from './ActionButton';
@@ -281,7 +281,7 @@ export default function SettingsDialog({
     setChecking(true);
     setCheck(null);
     try {
-      const result = await checkGnubg(path, abort.signal);
+      const result = await checkGnubg(path, abort.signal, draft.gnubg_threads);
       if (!abort.signal.aborted && currentSession === session.current) {
         setCheck({ path, version: result.version });
       }
@@ -323,10 +323,10 @@ export default function SettingsDialog({
     try {
       if (configuration) {
         // Machine installation is separate from the profile snapshot.
-        if (initial && draft.gnubg_path !== initial.gnubg_path) {
-          await saveInstallationPath(initial, draft.gnubg_path, abort.signal);
-          await configuration.refresh();
-        }
+        const installation =
+          initial &&
+          (await saveInstallationSettings(initial, draft, abort.signal));
+        if (installation) await configuration.refresh();
         await configuration.applyCurrent((current) =>
           applySettingsDraft(current, {
             settings: draft,
@@ -336,7 +336,15 @@ export default function SettingsDialog({
             sounds: draftSounds,
           }),
         );
-        settings = draft;
+        settings = installation
+          ? {
+              ...draft,
+              version: installation.version,
+              gnubg_path: installation.gnubg_path,
+              gnubg_threads: installation.gnubg_threads,
+              open_sage_threads: installation.open_sage_threads,
+            }
+          : draft;
       } else settings = await saveSettings(draft, abort.signal);
     } catch (error) {
       if (!abort.signal.aborted && session.current === currentSession) {
@@ -753,6 +761,48 @@ export default function SettingsDialog({
                     </select>
                   </label>
                   <p className="settings-help">{t('analysisHelp')}</p>
+                  {(
+                    [
+                      ['gnubg', 'gnubg_threads', 'gnubgThreads'],
+                      ['bgsage', 'open_sage_threads', 'sageThreads'],
+                    ] as const
+                  ).map(([provider, field, label]) => {
+                    const { min, max } =
+                      configurationOptions.engine_threads[provider];
+                    return (
+                      <label className="settings-field" key={field}>
+                        <span>{t(label)}</span>
+                        <select
+                          value={draft[field] ?? ''}
+                          aria-describedby={`${id}-threads-help`}
+                          onChange={(event) => {
+                            if (provider === 'gnubg') {
+                              checkAbort.current?.abort();
+                              setChecking(false);
+                              setCheck(null);
+                            }
+                            const value = event.target.value;
+                            update({
+                              [field]: value === '' ? null : Number(value),
+                            });
+                          }}
+                        >
+                          <option value="">{t('defaultThreads')}</option>
+                          {Array.from(
+                            { length: max - min + 1 },
+                            (_, index) => min + index,
+                          ).map((threads) => (
+                            <option key={threads} value={threads}>
+                              {threads}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    );
+                  })}
+                  <p className="settings-help" id={`${id}-threads-help`}>
+                    {t('threadsHelp')}
+                  </p>
                   <ActionButton
                     icon="open"
                     label={sourceT('books')}
@@ -806,7 +856,9 @@ export default function SettingsDialog({
                   >
                     {engine?.version &&
                       !check &&
-                      draft.gnubg_path === initial?.gnubg_path && (
+                      draft.gnubg_path === initial?.gnubg_path &&
+                      (draft.gnubg_threads ?? null) ===
+                        (initial?.gnubg_threads ?? null) && (
                         <p>{t('engineVersion', { version: engine.version })}</p>
                       )}
                     {!engine?.available && <p>{t('unavailable')}</p>}
@@ -820,9 +872,12 @@ export default function SettingsDialog({
                         {t('checkError')} {diagnostic(check.error)}
                       </p>
                     )}
-                    {!check && draft.gnubg_path !== initial?.gnubg_path && (
-                      <p>{t('checkNeeded')}</p>
-                    )}
+                    {!check &&
+                      (draft.gnubg_path !== initial?.gnubg_path ||
+                        (draft.gnubg_threads ?? null) !==
+                          (initial?.gnubg_threads ?? null)) && (
+                        <p>{t('checkNeeded')}</p>
+                      )}
                     {checking && <p role="status">{t('checking')}</p>}
                   </div>
                   <ActionButton

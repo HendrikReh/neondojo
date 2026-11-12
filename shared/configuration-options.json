@@ -17,6 +17,16 @@
     "bgblitz:gp-tan",
     "bgblitz:wycliffe_purple"
   ],
+  "engine_threads": {
+    "gnubg": {
+      "min": 1,
+      "max": 48
+    },
+    "bgsage": {
+      "min": 2,
+      "max": 48
+    }
+  },
   "engine_profiles": {
     "gnubg": {
       "analysis": [

@@ -344,6 +344,7 @@ mod tests {
         .await
         .unwrap();
         let snapshot = crate::settings::EngineSnapshot {
+            gnubg_threads: None,
             open_sage: None,
             engine_id: "gnubg".into(),
             gnubg_path: "/missing-native-engine".into(),
@@ -747,6 +748,7 @@ mod tests {
         let engine = Engine::new(path.to_string_lossy().into_owned());
         let version = engine.version().await.unwrap();
         let snapshot = crate::settings::EngineSnapshot {
+            gnubg_threads: None,
             open_sage: None,
             engine_id: "gnubg".into(),
             gnubg_path: engine.binary().into(),

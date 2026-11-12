@@ -581,13 +581,20 @@ async fn create_session(
         engine_id: "gnubg".into(),
         gnubg_path: pinned_path.clone(),
         engine_version: Some(rules_version),
+        gnubg_threads: settings
+            .gnubg_threads
+            .filter(|_| settings.play_engine == "gnubg"),
         open_sage: None,
     };
     let bot = crate::settings::snapshot_for(
         &state,
         &settings.play_engine,
         &pinned_path,
-        2,
+        settings.gnubg_threads,
+        crate::settings::sage_threads(
+            settings.open_sage_threads,
+            crate::settings::SAGE_PLAY_THREADS,
+        ),
         settings.play_plies,
     )
     .await
@@ -596,7 +603,11 @@ async fn create_session(
         &state,
         &settings.analysis_engine,
         &pinned_path,
-        4,
+        settings.gnubg_threads,
+        crate::settings::sage_threads(
+            settings.open_sage_threads,
+            crate::settings::SAGE_ANALYSIS_THREADS,
+        ),
         settings.analysis_plies,
     )
     .await

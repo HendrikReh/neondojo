@@ -102,6 +102,14 @@ async fn estimates_whole_match_and_single_game_without_starting_work(pool: PgPoo
     .await;
     assert_eq!(status, 200);
     assert_eq!(default["plies"], 2);
+    sqlx::query("UPDATE app_settings SET gnubg_threads=3 WHERE singleton=true")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (status, custom) = call(&app, "GET", &endpoint(id, "plies=2"), Value::Null).await;
+    assert_eq!(status, 200, "{custom}");
+    assert_eq!(custom["unavailable_reason"], "no_matching_benchmark");
+    assert!(custom["estimated_ms"].is_null());
     let (_, schema) = call(&app, "GET", "/api/openapi.json", Value::Null).await;
     assert!(schema["paths"]["/api/matches/{id}/analysis/estimate"].is_object());
 }

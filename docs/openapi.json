@@ -7337,6 +7337,26 @@
           "gnubg_path": {
             "type": "string"
           },
+          "gnubg_threads": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Host-local override. Null uses one GNUbg calculation thread. Omit on PUT to keep the saved value.",
+            "maximum": 48,
+            "minimum": 1
+          },
+          "open_sage_threads": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Host-local override. Null uses four threads for analysis and two for play. Omit on PUT to keep the saved value.",
+            "maximum": 48,
+            "minimum": 2
+          },
           "play_engine": {
             "type": "string"
           },
@@ -9767,6 +9787,15 @@
         "properties": {
           "path": {
             "type": "string"
+          },
+          "threads": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "maximum": 48,
+            "minimum": 1
           }
         }
       },
@@ -9858,6 +9887,15 @@
           },
           "gnubg_path": {
             "type": "string"
+          },
+          "gnubg_threads": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "maximum": 48,
+            "minimum": 1
           },
           "open_sage": {
             "oneOf": [

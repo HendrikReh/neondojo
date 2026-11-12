@@ -314,7 +314,12 @@ async fn enqueue(
             state,
             engine_id,
             &settings.gnubg_path,
-            if play.is_some() { 2 } else { 4 },
+            None,
+            if play.is_some() {
+                crate::settings::SAGE_PLAY_THREADS
+            } else {
+                crate::settings::SAGE_ANALYSIS_THREADS
+            },
             depth,
         )
         .await

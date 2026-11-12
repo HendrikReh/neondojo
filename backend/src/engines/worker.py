@@ -15,8 +15,8 @@ ADAPTER_VERSION = 1
 
 
 def validate_profile(plies, threads):
-    if plies not in (1, 2) or threads not in (2, 4):
-        raise ValueError('Only verified Open Sage 1/2-ply with 2 or 4 threads is supported')
+    if plies not in (1, 2) or type(threads) is not int or not 2 <= threads <= 48:
+        raise ValueError('Unsupported Open Sage depth or thread count')
 
 
 def probabilities(values):

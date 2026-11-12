@@ -1,5 +1,5 @@
 use super::*;
-use crate::{api::AppState, engine::Engine};
+use crate::api::AppState;
 use sqlx::{Postgres, Transaction};
 
 pub(crate) const LIBRARY_COLUMNS: &[(&str, i32)] = &[
@@ -467,28 +467,33 @@ pub(crate) async fn resources(
 ) -> Result<Vec<ConfigurationIssue>> {
     let mut issues = vec![];
     if engine {
-        let path: String =
-            sqlx::query_scalar("SELECT gnubg_path FROM app_settings WHERE singleton=true")
+        let settings: crate::settings::AppSettings =
+            sqlx::query_as("SELECT * FROM app_settings WHERE singleton=true")
                 .fetch_one(&mut **tx)
                 .await?;
-        if Engine::new(path).check_installation().await.is_err() {
+        if settings.gnubg().check_installation().await.is_err() {
             issues.push(ConfigurationIssue {
                 path: "analysis.engine".into(),
                 code: "engine_unavailable".into(),
                 message: "The configured GNUbg installation is unavailable".into(),
             });
         }
-    }
-    if engine {
-        for (path, selected, plies, threads) in [
+        for (path, selected, plies, default_threads) in [
             (
                 "analysis.engine",
                 &config.analysis.engine,
                 config.analysis.plies,
-                4,
+                crate::settings::SAGE_ANALYSIS_THREADS,
             ),
-            ("play.engine", &config.play.engine, config.play.plies, 2),
+            (
+                "play.engine",
+                &config.play.engine,
+                config.play.plies,
+                crate::settings::SAGE_PLAY_THREADS,
+            ),
         ] {
+            let threads =
+                crate::settings::sage_threads(settings.open_sage_threads, default_threads);
             if *selected == ConfigurationEngine::OpenSage
                 && crate::settings::open_sage::verified_profile(&state.pool, plies, threads)
                     .await

@@ -3,7 +3,7 @@ import { defaultConfiguration } from './configuration-model';
 import {
   applySettingsDraft,
   settingsFromConfiguration,
-  saveInstallationPath,
+  saveInstallationSettings,
 } from './configuration-settings';
 import type { AppSettings } from './settings-api';
 
@@ -35,7 +35,10 @@ describe('settings/profile boundary', () => {
         return Response.json({ ...body, version: 9 });
       }),
     );
-    await saveInstallationPath(installed, '/new/gnubg');
+    await saveInstallationSettings(installed, {
+      ...installed,
+      gnubg_path: '/new/gnubg',
+    });
     expect(bodies).toEqual([{ ...latest, gnubg_path: '/new/gnubg' }]);
   });
 
@@ -45,9 +48,27 @@ describe('settings/profile boundary', () => {
     );
     vi.stubGlobal('fetch', fetcher);
     await expect(
-      saveInstallationPath(installed, '/new/gnubg'),
+      saveInstallationSettings(installed, {
+        ...installed,
+        gnubg_path: '/new/gnubg',
+      }),
     ).rejects.toMatchObject({ status: 409 });
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it('applies a thread limit and preserves concurrent edits to the other engine', async () => {
+    const latest = { ...installed, version: 8, open_sage_threads: 8 };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url, options) => {
+        if (!options?.method) return Response.json(latest);
+        return Response.json(JSON.parse(options.body));
+      }),
+    );
+    const saved = await saveInstallationSettings(installed, {
+      ...installed,
+      gnubg_threads: 3,
+    });
+    expect(saved).toEqual({ ...latest, gnubg_threads: 3 });
   });
   it('projects the current configuration without changing the machine installation', () => {
     const config = structuredClone(defaultConfiguration);

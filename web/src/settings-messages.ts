@@ -36,7 +36,12 @@ const en = {
   checkHelp:
     'Checks the version and a real position evaluation, including the required neural weights.',
   checkSuccess: 'Installation checked: {version}',
-  checkNeeded: 'This edited path has not been checked yet.',
+  gnubgThreads: 'GNUbg threads',
+  sageThreads: 'Open Sage threads',
+  defaultThreads: 'Default',
+  threadsHelp:
+    'Applies to new analyses, games and engine duels. By default GNUbg uses 1 thread. Open Sage uses 2 for playing and 4 for analysis and duels.',
+  checkNeeded: 'The edited GNUbg settings have not been checked yet.',
   engineVersion: 'Detected version: {version}',
   unavailable: 'Not available',
   planned: 'Open Sage',
@@ -105,7 +110,13 @@ export const settingsMessages: Record<Locale, Messages> = {
     checkHelp:
       'Prüft Version und eine echte Positionsbewertung einschließlich benötigter Netzgewichte.',
     checkSuccess: 'Installation geprüft: {version}',
-    checkNeeded: 'Der geänderte Pfad wurde noch nicht geprüft.',
+    gnubgThreads: 'GNUbg-Threads',
+    sageThreads: 'Open-Sage-Threads',
+    defaultThreads: 'Standard',
+    threadsHelp:
+      'Gilt für neue Analysen, Partien und Engine-Duelle. Standardmäßig nutzt GNUbg 1 Thread. Open Sage nutzt 2 beim Spielen und 4 für Analysen und Duelle.',
+    checkNeeded:
+      'Die geänderten GNUbg-Einstellungen wurden noch nicht geprüft.',
     engineVersion: 'Erkannte Version: {version}',
     unavailable: 'Nicht verfügbar',
     planned: 'Open Sage',
@@ -171,7 +182,12 @@ export const settingsMessages: Record<Locale, Messages> = {
     checkHelp:
       'Comprueba la versión y una evaluación real, incluidos los pesos de la red neuronal necesarios.',
     checkSuccess: 'Instalación comprobada: {version}',
-    checkNeeded: 'La ruta modificada aún no se ha comprobado.',
+    gnubgThreads: 'Hilos de GNUbg',
+    sageThreads: 'Hilos de Open Sage',
+    defaultThreads: 'Predeterminado',
+    threadsHelp:
+      'Se aplica a nuevos análisis, partidas y duelos de motores. GNUbg usa 1 hilo por defecto. Open Sage usa 2 para jugar y 4 para análisis y duelos.',
+    checkNeeded: 'Los ajustes modificados de GNUbg aún no se han comprobado.',
     engineVersion: 'Versión detectada: {version}',
     unavailable: 'No disponible',
     planned: 'Open Sage',
@@ -236,7 +252,13 @@ export const settingsMessages: Record<Locale, Messages> = {
     checkHelp:
       'Vérifie la version et une véritable évaluation, y compris les poids du réseau neuronal requis.',
     checkSuccess: 'Installation vérifiée : {version}',
-    checkNeeded: 'Le chemin modifié n’a pas encore été vérifié.',
+    gnubgThreads: 'Threads de GNUbg',
+    sageThreads: 'Threads d’Open Sage',
+    defaultThreads: 'Par défaut',
+    threadsHelp:
+      'S’applique aux nouvelles analyses, parties et confrontations entre moteurs. Par défaut, GNUbg utilise 1 thread. Open Sage en utilise 2 pour jouer et 4 pour les analyses et les confrontations.',
+    checkNeeded:
+      'Les paramètres modifiés de GNUbg n’ont pas encore été vérifiés.',
     engineVersion: 'Version détectée : {version}',
     unavailable: 'Indisponible',
     planned: 'Open Sage',
@@ -301,7 +323,13 @@ export const settingsMessages: Record<Locale, Messages> = {
     checkHelp:
       'Verifica la versione e una valutazione reale, inclusi i pesi della rete neurale necessari.',
     checkSuccess: 'Installazione verificata: {version}',
-    checkNeeded: 'Il percorso modificato non è ancora stato verificato.',
+    gnubgThreads: 'Thread di GNUbg',
+    sageThreads: 'Thread di Open Sage',
+    defaultThreads: 'Predefinito',
+    threadsHelp:
+      'Si applica a nuove analisi, partite e sfide tra motori. Per impostazione predefinita GNUbg usa 1 thread. Open Sage ne usa 2 per giocare e 4 per analisi e sfide.',
+    checkNeeded:
+      'Le impostazioni modificate di GNUbg non sono ancora state verificate.',
     engineVersion: 'Versione rilevata: {version}',
     unavailable: 'Non disponibile',
     planned: 'Open Sage',
@@ -364,7 +392,12 @@ export const settingsMessages: Record<Locale, Messages> = {
     checkHelp:
       'Sprawdza wersję i rzeczywistą ocenę pozycji, w tym wymagane wagi sieci neuronowej.',
     checkSuccess: 'Instalacja sprawdzona: {version}',
-    checkNeeded: 'Zmieniona ścieżka nie została jeszcze sprawdzona.',
+    gnubgThreads: 'Wątki GNUbg',
+    sageThreads: 'Wątki Open Sage',
+    defaultThreads: 'Domyślnie',
+    threadsHelp:
+      'Dotyczy nowych analiz, partii i pojedynków silników. Domyślnie GNUbg używa 1 wątku. Open Sage używa 2 do gry i 4 do analiz oraz pojedynków.',
+    checkNeeded: 'Zmienione ustawienia GNUbg nie zostały jeszcze sprawdzone.',
     engineVersion: 'Wykryta wersja: {version}',
     unavailable: 'Niedostępny',
     planned: 'Open Sage',

@@ -1,7 +1,6 @@
 //! Rank library checker positions by the number of checker-pips separating their boards.
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
-    engine::Engine,
     import::sgf::apply_checker_turn,
     model::Position,
     move_assessments::after_play,
@@ -269,7 +268,8 @@ async fn score(
     let _evaluation = EVALUATION.lock().await;
     crate::play::require_review_available(&state.pool, position.match_uuid).await?;
     let settings = crate::settings::load(&state).await?;
-    let analysis = Engine::new(settings.gnubg_path)
+    let analysis = settings
+        .gnubg()
         .analyze_checker_choices(
             &position.position_id,
             &position.gnubg_match_id,
@@ -385,7 +385,8 @@ async fn checker_answer(state: &AppState, position: &Position) -> ApiResult<Chec
     let _evaluation = EVALUATION.lock().await;
     crate::play::require_review_available(&state.pool, position.match_uuid).await?;
     let settings = crate::settings::load(state).await?;
-    let analysis = Engine::new(settings.gnubg_path)
+    let analysis = settings
+        .gnubg()
         .analyze(
             &position.position_id,
             &position.gnubg_match_id,
@@ -616,7 +617,10 @@ mod tests {
             .await
             .unwrap();
         let binary = std::env::var("GNUBG_BIN").unwrap_or_else(|_| "gnubg".into());
-        let app = crate::api::router(AppState::new(pool.clone(), Engine::new(binary)));
+        let app = crate::api::router(AppState::new(
+            pool.clone(),
+            crate::engine::Engine::new(binary),
+        ));
         let post = |route: &str, body: Value| {
             let app = app.clone();
             let uri = format!("/api/positions/{id}/{route}");

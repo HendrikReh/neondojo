@@ -7,19 +7,41 @@ import { loadSettings, saveSettings, SettingsApiError } from './settings-api';
 import type { Locale } from './i18n-core';
 import type { UiAppearance } from './ui-appearance';
 
-export async function saveInstallationPath(
+const installationFields = [
+  'gnubg_path',
+  'gnubg_threads',
+  'open_sage_threads',
+] as const;
+
+export async function saveInstallationSettings(
   initial: AppSettings,
-  path: string,
+  draft: AppSettings,
   signal?: AbortSignal,
 ) {
+  const changed = installationFields.filter(
+    (field) => (initial[field] ?? null) !== (draft[field] ?? null),
+  );
+  if (!changed.length) return;
   const latest = await loadSettings(signal);
-  if (latest.gnubg_path !== initial.gnubg_path) {
+  const edits = changed.filter(
+    (field) => (latest[field] ?? null) !== (draft[field] ?? null),
+  );
+  if (
+    edits.some((field) => (latest[field] ?? null) !== (initial[field] ?? null))
+  ) {
     throw new SettingsApiError(
       409,
-      'The engine installation changed; reload before applying a new path',
+      'The local engine settings changed; reload before applying your changes',
     );
   }
-  return saveSettings({ ...latest, gnubg_path: path }, signal);
+  if (!edits.length) return latest;
+  return saveSettings(
+    {
+      ...latest,
+      ...Object.fromEntries(edits.map((field) => [field, draft[field]])),
+    },
+    signal,
+  );
 }
 
 export function settingsFromConfiguration(

@@ -301,6 +301,7 @@ async fn jobs_pin_provider_across_settings_changes_and_dice_keep_36_weight(pool:
     let (_, mut settings) = call(app.clone(), "GET", "/api/settings", Value::Null).await;
     settings["analysis_engine"] = json!("bgsage");
     settings["analysis_plies"] = json!(2);
+    settings["open_sage_threads"] = json!(6);
     let (status, saved) = call(app.clone(), "PUT", "/api/settings", settings).await;
     assert_eq!(status, 200, "{saved}");
     let (status, sage) = call(
@@ -322,6 +323,7 @@ async fn jobs_pin_provider_across_settings_changes_and_dice_keep_36_weight(pool:
     let mut settings = saved;
     settings["analysis_engine"] = json!("gnubg");
     settings["analysis_plies"] = json!(0);
+    settings["open_sage_threads"] = json!(4);
     assert_eq!(
         call(app.clone(), "PUT", "/api/settings", settings).await.0,
         200
@@ -349,6 +351,9 @@ async fn jobs_pin_provider_across_settings_changes_and_dice_keep_36_weight(pool:
         assert_eq!(done["status"], "completed", "{done}");
         assert_eq!(done["engine_snapshot"]["engine_id"], provider);
         assert_eq!(done["engine_snapshot"], job["engine_snapshot"]);
+        if provider == "bgsage" {
+            assert_eq!(done["engine_snapshot"]["open_sage"]["threads"], 6);
+        }
         if job["kind"] == "dice" {
             let rolls = done["result"]["rolls"].as_array().unwrap();
             assert_eq!(rolls.len(), 21);

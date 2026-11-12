@@ -54,6 +54,7 @@ pub(crate) fn resolve_binary(binary: &str) -> Result<String> {
 pub struct Engine {
     binary: String,
     expected_version: Option<String>,
+    threads: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -94,7 +95,17 @@ impl Engine {
         Self {
             binary,
             expected_version: None,
+            threads: None,
         }
+    }
+
+    pub(crate) fn with_threads(mut self, threads: Option<i32>) -> Self {
+        self.threads = threads.filter(|&threads| threads != 1);
+        self
+    }
+
+    pub(crate) fn calculation_threads(&self) -> i32 {
+        self.threads.unwrap_or(1)
     }
 
     pub(crate) fn with_expected_version(mut self, version: Option<String>) -> Self {
@@ -204,7 +215,20 @@ impl Engine {
                 .await
                 .context("Cannot execute the saved GNUbg job configuration")?;
         }
-        tokio::fs::write(directory.join("commands.txt"), commands).await?;
+        let commands_path = directory.join("commands.txt");
+        if let Some(threads) = self.threads {
+            ensure!(
+                crate::configuration::engine_thread_range("gnubg").contains(&threads),
+                "Unsupported GNUbg thread count: {threads}"
+            );
+            tokio::fs::write(
+                commands_path,
+                format!("set threads {threads}\nshow threads\n{commands}"),
+            )
+            .await?;
+        } else {
+            tokio::fs::write(commands_path, commands).await?;
+        }
         let mut child = Command::new(&binary)
             .args(["-t", "-q", "-r", "-c", "commands.txt"])
             .current_dir(directory)
@@ -255,6 +279,13 @@ impl Engine {
         } else {
             work.await?
         };
+        if let Some(threads) = self.threads {
+            let expected = format!("{threads} calculation threads.");
+            ensure!(
+                output.lines().any(|line| line.trim() == expected),
+                "GNUbg did not accept the requested {threads} calculation threads"
+            );
+        }
         // Discard output if an installation replacement raced the invocation;
         // no checkpoint or completed result may incorporate another version.
         if self.expected_version.is_some() {

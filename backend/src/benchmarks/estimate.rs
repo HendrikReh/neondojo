@@ -122,13 +122,14 @@ async fn estimate(
     }
     // The existing settings loader initializes missing rows. An estimate must
     // stay read-only, including on a fresh installation.
-    let (engine_id, default_plies, binary): (String, i32, String) = sqlx::query_as(
-        "SELECT analysis_engine,analysis_plies,gnubg_path FROM app_settings WHERE singleton=true",
+    let (engine_id, default_plies, binary, gnubg_threads, open_sage_threads):
+        (String, i32, String, Option<i32>, Option<i32>) = sqlx::query_as(
+        "SELECT analysis_engine,analysis_plies,gnubg_path,gnubg_threads,open_sage_threads FROM app_settings WHERE singleton=true",
     )
     .fetch_optional(&state.pool)
     .await
     .map_err(anyhow::Error::from)?
-    .unwrap_or_else(|| ("gnubg".into(), 2, state.engine.binary().to_owned()));
+    .unwrap_or_else(|| ("gnubg".into(), 2, state.engine.binary().to_owned(), None, None));
     let plies = query.plies.unwrap_or(default_plies);
     if !crate::configuration::engine_depths(&engine_id, "analysis").contains(&plies) {
         return Err(ApiError::invalid("plies must be 0..4"));
@@ -185,10 +186,17 @@ async fn estimate(
             .await
             .ok()
             .and_then(|i| i.snapshot)
-            .and_then(|s| crate::engines::SageEngine::new(s).ok())
+            .and_then(|mut snapshot| {
+                snapshot.plies = plies;
+                snapshot.threads = crate::settings::sage_threads(
+                    open_sage_threads,
+                    crate::settings::SAGE_ANALYSIS_THREADS,
+                );
+                crate::engines::SageEngine::new(snapshot).ok()
+            })
         {
             let version = match running_engine_version(&state.pool, engine.binary()).await? {
-                Some(value) => Some(value),
+                Some(_) => engine.saved_version().map(str::to_owned),
                 None => tokio::time::timeout(Duration::from_secs(2), engine.version())
                     .await
                     .ok()
@@ -218,6 +226,9 @@ async fn estimate(
         return Ok(result.unavailable(EstimateUnavailableReason::EngineUnavailable));
     };
     result.engine_version = Some(version.clone());
+    if result.engine_id == "gnubg" && gnubg_threads.unwrap_or(1) != 1 {
+        return Ok(result.unavailable(EstimateUnavailableReason::NoMatchingBenchmark));
+    }
     if let Some(benchmark) =
         matching_benchmark(&state.pool, &result.engine_id, &path, &version, plies).await?
     {
