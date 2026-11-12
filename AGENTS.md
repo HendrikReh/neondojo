@@ -11,6 +11,7 @@ Prioritize backgammon correctness, preservation of user data, database performan
 ## Working in this repository
 
 - Start with `git status` and inspect the relevant files and local changes. Preserve existing work. Read the relevant [README](README.md) sections and specifications in [docs](docs/). Check historical plans against current code and tests.
+- For a local restart, follow [Restart BG Tutor locally on port 8787](README.md#restart-bg-tutor-locally-on-port-8787).
 - Use `rg` to find existing modules, helpers, components, and tests before adding code. Make small, cohesive changes. Keep broad formatting, dependency upgrades, and unrelated cleanup out of the diff.
 - Make reversible implementation decisions independently. Clarify domain ambiguities that would materially change the data model, calculations, or user behavior.
 - Get explicit authorization for destructive Git commands, database resets, or deletion of user data. Commit, push, and publish within the requested scope.

@@ -48,6 +48,29 @@ BGTUTOR_WEB_DIR=web/dist cargo run -p bgtutor --release
 
 Open <http://127.0.0.1:8787>. By default the services listen on loopback. BG Tutor has no built-in user accounts, so network access requires separate access control.
 
+### Restart BG Tutor locally on port 8787
+
+1. From the repository root, keep the existing PostgreSQL database and `.env` configuration. Reuse any `DATABASE_URL` and `GNUBG_BIN` overrides from the previous launch. If you use the Compose database and it is stopped, start it with `docker compose up -d --wait db`. If the frontend dependencies are missing or the lockfile changed, run `npm ci --prefix web`.
+2. Build the updated application before stopping the running server.
+
+   ```sh
+   npm run build --prefix web
+   cargo build -p bgtutor --bin bgtutor --release
+   ```
+
+3. Stop BG Tutor with `Ctrl+C` in its terminal. If it runs in the background, use `lsof -nP -iTCP:8787 -sTCP:LISTEN` to find the listener. Confirm that it is the `bgtutor` process, then replace `PID` with its process ID in `kill -TERM PID`. Wait until the listener has stopped.
+4. Start the backend from the repository root. It applies pending migrations at startup and serves the built frontend on the same port.
+
+   ```sh
+   BGTUTOR_BIND=127.0.0.1:8787 BGTUTOR_WEB_DIR="$PWD/web/dist" cargo run -p bgtutor --bin bgtutor --release
+   ```
+
+5. In another terminal, check the health endpoint. Once it reports `"status":"ok"`, open or reload [BG Tutor](http://127.0.0.1:8787/). Check [the database list](http://127.0.0.1:8787/api/databases) for **Paused Matches** after applying migration `0040`.
+
+   ```sh
+   curl --fail --silent --show-error http://127.0.0.1:8787/api/health
+   ```
+
 ## Analyze your first match
 
 1. In **Match database**, choose **Import match** and open [tutorial.mat](backend/tests/fixtures/tutorial.mat) or the reference match [WC2014.xg](backend/tests/fixtures/WC2014.xg). You can also drop a file on the welcome screen. Search by player or file name to find an imported match. Results load in pages using stable cursors.
