@@ -405,6 +405,12 @@ BGTUTOR_FEEDBACK_NATIVE_TEST=1 \
   npx playwright test e2e/play-feedback-native.spec.ts
 ```
 
+## Version information
+
+Open **Extras → Version information** to see the version of the running BG Tutor backend and the verified versions of GNU Backgammon and Open Sage. The view shows an unavailable status when an engine version cannot be verified. The backend version is also available through `GET /api/version`.
+
+For a recognized Open Sage fork, the view shows **Open Sage fork**, the repository, and the short source commit above the engine version. The repository and short commit share a link to that exact commit on GitHub. `GET /api/engines` includes the repository and full commit in the optional `fork` field.
+
 ## Engine benchmark
 
 Use **Extras → Benchmark** to measure analysis speed for one or more depths. GNUbg supports 0–4 ply; Open Sage supports verified 2-ply. Benchmark engine and depth choices are independent of playing and analysis defaults. The selected depths run in selection order in the background and continue when you leave the view. **Cancel run** also stops the active engine process. Other BG Tutor engine work waits while a benchmark is in progress, and a notice appears across workspaces. Other programs on the machine can still affect the measurement.

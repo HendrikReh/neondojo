@@ -96,6 +96,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::move_assessments::routes())
         .merge(crate::game_plan::routes())
         .route("/api/health", get(health))
+        .route("/api/version", get(version))
         .route("/api/imports", post(upload))
         .route("/api/matches", get(matches))
         .route("/api/matches/{id}", get(get_match))
@@ -137,6 +138,18 @@ pub fn router(state: AppState) -> Router {
         )
         .layer(TraceLayer::new_for_http())
         .with_state(state)
+}
+
+#[derive(Serialize, ToSchema)]
+struct VersionInfo {
+    version: &'static str,
+}
+
+#[utoipa::path(get, path="/api/version", responses((status=200, body=VersionInfo)), tag="System")]
+async fn version() -> Json<VersionInfo> {
+    Json(VersionInfo {
+        version: env!("CARGO_PKG_VERSION"),
+    })
 }
 
 #[derive(Serialize, ToSchema)]
@@ -793,6 +806,7 @@ async fn events(
     ),
     paths(
         health,
+        version,
         upload,
         matches,
         get_match,
@@ -810,6 +824,7 @@ async fn events(
     ),
     components(schemas(
         Health,
+        VersionInfo,
         ErrorBody,
         UploadForm,
         ImportResponse,

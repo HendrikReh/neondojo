@@ -186,14 +186,6 @@ export default function BenchmarkWorkspace({
   const error = configurationError ?? historyError ?? actionError;
   return (
     <div className="benchmark-workspace">
-      <nav
-        className="text-navigation benchmark-navigation"
-        aria-label={t('navigation')}
-      >
-        <button type="button" aria-current="page">
-          {t('benchmark')}
-        </button>
-      </nav>
       <header className="benchmark-heading">
         <h1>{t('title')}</h1>
         <p>{t('description')}</p>

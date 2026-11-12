@@ -6505,6 +6505,26 @@
           }
         }
       }
+    },
+    "/api/version": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "operationId": "version",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionInfo"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -9479,6 +9499,21 @@
           }
         }
       },
+      "EngineFork": {
+        "type": "object",
+        "required": [
+          "repository",
+          "revision"
+        ],
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        }
+      },
       "EngineInfo": {
         "type": "object",
         "required": [
@@ -9490,6 +9525,16 @@
         "properties": {
           "available": {
             "type": "boolean"
+          },
+          "fork": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EngineFork"
+              }
+            ]
           },
           "id": {
             "type": "string"
@@ -13726,6 +13771,17 @@
           }
         },
         "additionalProperties": false
+      },
+      "VersionInfo": {
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "properties": {
+          "version": {
+            "type": "string"
+          }
+        }
       },
       "XgBookStatus": {
         "type": "object",

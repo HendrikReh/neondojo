@@ -55,3 +55,11 @@ Die globale Kopfzeile enthält die Profilauswahl mit aktivem Namen, Änderungsma
 Die Profilkategorie bietet Anlegen aus der aktuellen Konfiguration, Aktivieren, ausdrücklich bestätigtes Überschreiben und Löschen sowie Umbenennen, Zusammenfassung und Unterschiede. Ein nicht angewendeter Einstellungsentwurf wird vor dem Wechsel in diese Kategorie ausdrücklich angewendet oder verworfen; die Aktion kann auch abgebrochen werden.
 
 Normale Einstellungsänderungen werden mit „Anwenden“ übernommen. Die Profilsicherung bleibt eine eigene Aktion. Suchansichten übernehmen beim Profilwechsel die gespeicherten Kriterien, während Notizentwürfe, laufende Aufträge und bereits aktive Lernkarten ihren Arbeitsstand behalten.
+
+## Extras
+
+Extras contains **Benchmark** for analysis speed and turn latency and
+**Version information** for the running backend and configured engines.
+The Open Sage row identifies recognized fork builds by repository and short
+commit, linked to the full commit on GitHub. The benchmark link in Settings
+always opens **Benchmark**.

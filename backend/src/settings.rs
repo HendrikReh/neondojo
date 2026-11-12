@@ -1,6 +1,6 @@
 //! Persisted preferences and immutable engine configuration for new work.
 pub(crate) mod open_sage;
-use crate::engines::{AnalysisEngine, SageEngine, SageSnapshot};
+use crate::engines::{AnalysisEngine, EngineFork, SageEngine, SageSnapshot};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     engine::Engine,
@@ -56,6 +56,8 @@ pub struct EngineInfo {
     pub name: String,
     pub available: bool,
     pub version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fork: Option<EngineFork>,
     pub plies: Vec<i32>,
 }
 
@@ -304,6 +306,7 @@ async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo
             name: "GNUbg".into(),
             available: version.is_some(),
             version,
+            fork: None,
             plies: vec![0, 1, 2, 3, 4],
         },
         EngineInfo {
@@ -311,6 +314,7 @@ async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo
             name: "Open Sage".into(),
             available: sage_version.is_some(),
             version: sage_version,
+            fork: sage.as_ref().and_then(SageSnapshot::known_fork),
             plies: vec![2],
         },
     ]))
@@ -331,6 +335,12 @@ async fn check_engine(
 #[derive(OpenApi)]
 #[openapi(
     paths(get_settings, put_settings, engines, check_engine),
-    components(schemas(AppSettings, EngineInfo, EngineCheckRequest, EngineCheckResponse))
+    components(schemas(
+        AppSettings,
+        EngineInfo,
+        EngineFork,
+        EngineCheckRequest,
+        EngineCheckResponse
+    ))
 )]
 pub struct SettingsDoc;
