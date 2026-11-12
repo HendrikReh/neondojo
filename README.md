@@ -452,6 +452,8 @@ The default **Paired with sides swapped** plays two complete matches per seed. T
 
 Series keep running in the background. Each completed match is automatically saved under **Match database → Engine Duels** as the series advances. Replaying a seed creates new match entries. Existing series results stay in the series archive. Cancellation preserves completed results. If a worker loses its lease, the next worker restarts the unfinished match with the same seed. Download individual matches as SGF. In paired mode the win rates count only complete pairs, and a conservative 95% confidence interval on the pair means is shown from 20 complete pairs. A first leg without its return leg remains visible in the results.
 
+New duels retain Open Sage's checker evaluations from play, including up to five candidates, probabilities, depth and engine/model provenance. These appear alongside GNUbg's saved evaluations in Analysis and survive BG Tutor's SGF export/import. The Open Sage values use the custom `BGTSC` SGF property; other SGF applications may ignore it. These are each engine's own playing evaluations, not a full match analysis by a common engine. Previously completed duels without saved Sage evaluations remain unchanged; use **Analyze entire match** to obtain a new analysis of both players.
+
 ## Study
 
 **Study** contains **Flashcards & Anki**, **Reports**, **My recurring mistakes**, and **Practice history**. Use Left/Right to switch tabs and Home/End to jump to the first or last. Opening a deck from Positions selects **Flashcards & Anki** and preserves your deck selection, cards, and progress.

@@ -1,4 +1,5 @@
 //! Immutable analysis supplied by the imported artifact, separate from engine jobs.
+pub(crate) mod sage;
 use crate::import::sgf::{Node, SourceMove, parse_sgf_source_moves, parse_trees};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -296,6 +297,9 @@ pub(crate) fn extract(sgf: &str) -> Result<Vec<ImportedAnalysisData>> {
             .filter(|n| n.contains_key("W") || n.contains_key("B"))
             .zip(source_moves)
         {
+            if let Some(value) = text(node, "BGTSC") {
+                result.push(sage::extract(m, &value)?);
+            }
             for (property, kind) in [("XGA", "checker"), ("XGC", "cube")] {
                 if let Some(v) = text(node, property) {
                     result.push(foreign(

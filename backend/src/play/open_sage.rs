@@ -3,7 +3,10 @@ use super::{
     NativeRequest, NativeSnapshot, PlayAlternative, PlayMove, PlayPhase, PlaySession,
     rules_process::RulesProcess,
 };
-use crate::{engine::Engine, engines::SageEngine};
+use crate::{
+    engine::Engine,
+    engines::{SageCheckerCandidate, SageEngine},
+};
 use anyhow::{Context, Result, ensure};
 
 use tokio::sync::Semaphore;
@@ -74,7 +77,10 @@ fn resulting_board(
     crate::import::sgf::apply_checker_turn(&before, player, dice, &steps)
 }
 
-async fn chosen_move(bot: &SageEngine, snapshot: &NativeSnapshot) -> Result<Option<String>> {
+async fn chosen_move(
+    bot: &SageEngine,
+    snapshot: &NativeSnapshot,
+) -> Result<(Option<String>, Vec<SageCheckerCandidate>)> {
     let (position, context) = snapshot
         .native_id
         .split_once(':')
@@ -93,29 +99,35 @@ async fn chosen_move(bot: &SageEngine, snapshot: &NativeSnapshot) -> Result<Opti
             best.board == before,
             "Open Sage did not confirm forced pass"
         );
-        return Ok(None);
+        return Ok((None, candidates));
     }
     for choice in &snapshot.legal_moves {
         if resulting_board(&snapshot.board, snapshot.player, &snapshot.dice, choice)? == best.board
         {
-            return Ok(Some(choice.notation.clone()));
+            return Ok((Some(choice.notation.clone()), candidates));
         }
     }
     anyhow::bail!("Open Sage best move is absent from GNUbg legal results")
 }
 
-pub(super) async fn choose(
-    bot: &SageEngine,
-    snapshot: &NativeSnapshot,
-) -> Result<(&'static str, Option<String>)> {
+pub(super) struct ChosenAction {
+    pub action: &'static str,
+    pub notation: Option<String>,
+    pub checker: Option<Vec<SageCheckerCandidate>>,
+}
+
+pub(super) async fn choose(bot: &SageEngine, snapshot: &NativeSnapshot) -> Result<ChosenAction> {
     let (position, context) = snapshot
         .native_id
         .split_once(':')
         .context("Invalid native ID")?;
     let mut notation = None;
+    let mut checker = None;
     let action = match snapshot.phase {
         PlayPhase::Move => {
-            notation = chosen_move(bot, snapshot).await?;
+            let (chosen, candidates) = chosen_move(bot, snapshot).await?;
+            notation = chosen;
+            checker = Some(candidates);
             if notation.is_some() { "move" } else { "pass" }
         }
         PlayPhase::Roll => {
@@ -141,7 +153,11 @@ pub(super) async fn choose(
         }
         _ => anyhow::bail!("Unexpected Open Sage turn phase"),
     };
-    Ok((action, notation))
+    Ok(ChosenAction {
+        action,
+        notation,
+        checker,
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -195,7 +211,9 @@ pub(super) async fn advance(
                 process.finish().await?;
                 return Ok((snapshot, sgf));
             }
-            let (action, notation) = choose(bot, &snapshot).await?;
+            let ChosenAction {
+                action, notation, ..
+            } = choose(bot, &snapshot).await?;
             let request = NativeRequest {
                 new: false,
                 external_bot: true,
@@ -243,7 +261,7 @@ pub(super) async fn benchmark_checker_turn(
             before.player == bot_player && before.dice == dice,
             "Benchmark checkpoint differs from reference"
         );
-        let notation = chosen_move(bot, &before).await?;
+        let (notation, _) = chosen_move(bot, &before).await?;
         request.action = if notation.is_some() { "move" } else { "pass" };
         request.notation = notation.as_deref();
         request.native_id = &before.native_id;

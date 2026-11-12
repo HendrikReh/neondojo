@@ -6,6 +6,116 @@ use crate::{
 };
 use uuid::Uuid;
 
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires isolated PostgreSQL, GNUbg Python and locked BGTUTOR_SAGE_PYTHON"]
+async fn mixed_duels_retain_checker_evaluations_for_both_sides(pool: sqlx::PgPool) {
+    let rules = Engine::new(std::env::var("GNUBG_BIN").unwrap_or_else(|_| "gnubg".into()));
+    rules.check_installation().await.unwrap();
+    let sage = crate::engines::SageEngine::new(
+        crate::engines::SageEngine::probe(std::env::var("BGTUTOR_SAGE_PYTHON").unwrap(), 2)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let engines = [
+        AnalysisEngine::Gnubg(rules.clone()),
+        AnalysisEngine::OpenSage(sage),
+    ];
+    for sage_side in [1, 0] {
+        let bots = if sage_side == 1 {
+            [&engines[0], &engines[1]]
+        } else {
+            [&engines[1], &engines[0]]
+        };
+        let finished = engine_match::play(&rules, bots, [2, 2], 3, |game| {
+            Ok(GameDice {
+                opening: dice::opening(Uuid::nil(), game)?,
+                turns: dice::turns(Uuid::nil(), game),
+            })
+        })
+        .await
+        .unwrap();
+        let records = crate::imported_analysis::extract(&finished.sgf).unwrap();
+        let (_, moves) = crate::import::sgf::parse_sgf_source_moves(&finished.sgf).unwrap();
+        let sage_moves: Vec<_> = moves
+            .iter()
+            // GNUbg can automatically record a blocked roll without asking
+            // either playing engine. No evaluation exists for those passes.
+            .filter(|m| m.kind == "checker" && m.player == sage_side && m.board != m.after_board)
+            .collect();
+        assert!(!sage_moves.is_empty());
+        for m in sage_moves {
+            let record = records
+                .iter()
+                .find(|r| {
+                    r.kind == "checker" && r.game_no == m.game_no && r.source_move_no == m.move_no
+                })
+                .unwrap_or_else(|| panic!("Open Sage checker evaluation was discarded: {m:?}; retained {} checker records", records.iter().filter(|r| r.kind == "checker" && r.engine == "Open Sage").count()));
+            assert_eq!(record.engine, "Open Sage");
+            assert_eq!(record.depth_plies, Some(2));
+            assert_eq!(record.position_id.as_deref(), Some(m.position_id.as_str()));
+            assert_eq!(record.gnubg_match_id.as_deref(), Some(m.match_id.as_str()));
+            assert!(!record.candidates.is_empty());
+            assert!(
+                record
+                    .candidates
+                    .iter()
+                    .all(|c| c.equity.is_some() && c.equity_kind == "cubeful")
+            );
+        }
+        assert!(
+            records.iter().any(|r| r.engine == "GNU Backgammon"
+                && r.kind == "checker"
+                && r.player != sage_side)
+        );
+        assert!(
+            finished.games > 1,
+            "Exercise retained evaluations across games"
+        );
+        let imported = crate::import::parse_sgf(&finished.sgf).unwrap();
+        let stored = crate::store::import_match(
+            &pool,
+            "mixed-duel.sgf",
+            "sgf",
+            finished.sgf.as_bytes(),
+            &finished.sgf,
+            &imported,
+        )
+        .await
+        .unwrap();
+        let expected_count = records.iter().filter(|r| r.engine == "Open Sage").count() as i64;
+        let stored_count: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM imported_analyses WHERE match_uuid=$1 AND data->>'engine'='Open Sage'",
+        )
+        .bind(stored.r#match.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(stored_count, expected_count);
+        let position: Uuid = sqlx::query_scalar("SELECT position_uuid FROM imported_analyses WHERE match_uuid=$1 AND data->>'engine'='Open Sage' ORDER BY game_no,source_move_no LIMIT 1")
+            .bind(stored.r#match.id).fetch_one(&pool).await.unwrap();
+        let router = crate::api::router(crate::api::AppState::new(pool.clone(), rules.clone()));
+        let response = router
+            .oneshot(
+                Request::get(format!("/api/positions/{position}/imported-analysis"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = read_json(response).await;
+        let sage = body
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["engine"] == "Open Sage")
+            .unwrap();
+        assert_eq!(sage["depth_plies"], 2);
+        assert!(sage["candidates"][0]["equity"].is_number());
+    }
+}
+
 #[tokio::test]
 #[ignore = "requires local GNUbg with embedded Python"]
 async fn identical_engines_split_a_pair_with_multiple_games() {

@@ -1,4 +1,5 @@
 use super::{NativeRequest, PlayPhase, open_sage, run_native_with_dice};
+use crate::imported_analysis::sage::{RetainedChecker, retain};
 use crate::{engine::Engine, engines::AnalysisEngine};
 use anyhow::{Context, Result, ensure};
 
@@ -24,6 +25,7 @@ pub(crate) async fn play(
         matches!(bots[side], AnalysisEngine::Gnubg(_)).then_some(depths[side])
     }));
     let mut saved: Option<(super::NativeSnapshot, String)> = None;
+    let mut checker_evaluations = Vec::new();
     // In a point match each completed game awards at least one point.
     for game in 1..2 * length {
         let GameDice { opening, turns } = dice(game)?;
@@ -106,7 +108,8 @@ pub(crate) async fn play(
                     return Ok(FinishedMatch {
                         scores: snapshot.scores,
                         games: game,
-                        sgf,
+                        sgf: tokio::task::spawn_blocking(move || retain(&sgf, checker_evaluations))
+                            .await??,
                     });
                 }
                 PlayPhase::GameOver => break,
@@ -116,7 +119,14 @@ pub(crate) async fn play(
             let Some(AnalysisEngine::OpenSage(bot)) = bots.get(side) else {
                 anyhow::bail!("GNUbg did not yield to an external engine");
             };
-            choice = open_sage::choose(bot, &snapshot).await?;
+            let chosen = open_sage::choose(bot, &snapshot).await?;
+            if let Some(candidates) = chosen.checker {
+                checker_evaluations.push((
+                    snapshot.history.len(),
+                    RetainedChecker::new(snapshot.native_id.clone(), bot.snapshot(), candidates),
+                ));
+            }
+            choice = (chosen.action, chosen.notation);
         }
         ensure!(
             matches!(snapshot.phase, PlayPhase::GameOver),

@@ -383,7 +383,7 @@ impl SageEngine {
     }
 }
 
-fn validate_evaluation(equity: f64, probabilities: &[f64]) -> Result<()> {
+pub(crate) fn validate_evaluation(equity: f64, probabilities: &[f64]) -> Result<()> {
     ensure!(
         equity.is_finite()
             && probabilities.len() == 6
