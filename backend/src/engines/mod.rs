@@ -26,6 +26,32 @@ pub struct SageSnapshot {
     pub one_ply_verified: bool,
 }
 
+#[derive(Debug, Serialize, ToSchema)]
+pub struct EngineFork {
+    pub repository: &'static str,
+    pub revision: &'static str,
+}
+
+impl SageSnapshot {
+    pub fn known_fork(&self) -> Option<EngineFork> {
+        // Both wheels retain the upstream package version. Identify the
+        // documented builds by their full runtime fingerprints.
+        let revision = match self.artifact_fingerprint.as_str() {
+            "e76f82a04e35c3180e5837a76ce0f6f6b9ecfe459816284a2d25dc51e28d13d3" => {
+                "2e71beed9c24b5bbc7564c03374d6d588ff24119"
+            }
+            "5b741451d4f49e69eaa1063fc44f5de67d9e2a528cf9b75f32733136d55b352b" => {
+                "5b146c7d86fa965f2185e3871f3c56df030fd76f"
+            }
+            _ => return None,
+        };
+        Some(EngineFork {
+            repository: "HendrikReh/bgsage",
+            revision,
+        })
+    }
+}
+
 #[derive(Clone)]
 pub struct SageEngine {
     snapshot: SageSnapshot,

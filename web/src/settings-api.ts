@@ -19,7 +19,7 @@ export type AppSettings = Omit<
   tutor_threshold?: number;
   training_auto_analysis?: boolean;
 };
-export type EngineInfo = Required<Schema['EngineInfo']>;
+export type EngineInfo = Schema['EngineInfo'] & { version: string | null };
 
 export class SettingsApiError extends Error {
   constructor(
@@ -88,6 +88,13 @@ export async function loadSettings(signal?: AbortSignal) {
   return parseSettings(await settingsRequest('/settings', { signal }));
 }
 
+export async function loadAppVersion(signal?: AbortSignal) {
+  const value = await settingsRequest('/version', { signal });
+  if (!isObject(value) || typeof value.version !== 'string' || !value.version)
+    throw new SettingsApiError(200, '');
+  return value.version;
+}
+
 export async function loadEngines(signal?: AbortSignal): Promise<EngineInfo[]> {
   const value = await settingsRequest('/engines', { signal });
   if (
@@ -99,6 +106,13 @@ export async function loadEngines(signal?: AbortSignal): Promise<EngineInfo[]> {
         typeof engine.name === 'string' &&
         typeof engine.available === 'boolean' &&
         (engine.version === null || typeof engine.version === 'string') &&
+        (engine.fork === undefined ||
+          engine.fork === null ||
+          (isObject(engine.fork) &&
+            typeof engine.fork.repository === 'string' &&
+            engine.fork.repository.length > 0 &&
+            typeof engine.fork.revision === 'string' &&
+            /^[0-9a-f]{40}$/.test(engine.fork.revision))) &&
         Array.isArray(engine.plies) &&
         engine.plies.every((ply: unknown) => Number.isInteger(ply)),
     )

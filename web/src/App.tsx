@@ -2,7 +2,7 @@ import { useOptionalConfiguration } from './ConfigurationProvider';
 import ProfileSelector from './ProfileSelector';
 import { settingsFromConfiguration } from './configuration-settings';
 import { loadBenchmarkStatus } from './benchmark-api';
-import BenchmarkWorkspace from './BenchmarkWorkspace';
+import ExtrasWorkspace, { type ExtrasTool } from './ExtrasWorkspace';
 import { useBenchmarkText } from './benchmark-messages';
 import ActionButton from './ActionButton';
 import PlayWorkspace from './PlayWorkspace';
@@ -72,6 +72,7 @@ export default function App() {
   const playText = usePlayText();
   const benchmarkT = useBenchmarkText();
   const [benchmarkActive, setBenchmarkActive] = useState(false);
+  const [extrasTool, setExtrasTool] = useState<ExtrasTool>('benchmark');
   useEffect(() => {
     const abort = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
@@ -885,8 +886,10 @@ export default function App() {
           aria-labelledby="workspace-tab-extras"
           hidden={view !== 'extras'}
         >
-          <BenchmarkWorkspace
+          <ExtrasWorkspace
             visible={view === 'extras'}
+            tool={extrasTool}
+            setTool={setExtrasTool}
             defaultPlies={settings?.analysis_plies ?? DEFAULT_ANALYSIS_PLIES}
             playPlies={settings?.play_plies}
           />
@@ -927,6 +930,7 @@ export default function App() {
         onBenchmark={() => {
           cancelRestoration();
           setSettingsOpen(false);
+          setExtrasTool('benchmark');
           setView('extras');
         }}
         theme={theme}

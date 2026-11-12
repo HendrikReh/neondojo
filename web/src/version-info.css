@@ -1,0 +1,42 @@
+.version-info {
+  max-width: 44rem;
+}
+
+.version-info h1 {
+  margin: 0;
+  font-size: var(--font-size-page);
+  font-weight: var(--font-weight-semibold);
+}
+
+.version-info dl {
+  margin: 12px 0;
+  font-size: var(--font-size-body);
+}
+
+.version-info dl > div {
+  display: grid;
+  grid-template-columns: minmax(0, 11rem) minmax(0, 1fr);
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.version-info dt {
+  font-weight: var(--font-weight-semibold);
+}
+
+.version-info dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.version-info-fork {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.version-info-fork a {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
