@@ -60,9 +60,9 @@ Normale Einstellungsänderungen werden mit „Anwenden“ übernommen. Die Profi
 
 Extras contains **Benchmark** for analysis speed and turn latency,
 **Engine vs. engine** for playing point matches, and **Version information**
-for the running backend and configured engines. The BG Tutor row shows the full
-Git commit ID recorded at build time. The Open Sage row identifies
-recognized fork builds by repository and short commit, linked to the full
-commit on GitHub. The benchmark link in
+for the running backend and configured engines. The BG Tutor row shows the first
+seven characters of the build's Git commit ID, with the full ID on hover. The
+Open Sage row identifies recognized fork builds by repository and short commit,
+linked to the full commit on GitHub. The benchmark link in
 Settings always opens **Benchmark**. Engine-match series keep running
 when the user switches tools or leaves Extras.

@@ -49,8 +49,12 @@ test('shows the running app and engine versions under Extras', async ({
   });
   await versions.click({ timeout: 4000 });
   const panel = page.getByRole('region', { name: 'Version information' });
-  await expect(panel.getByText('BG Tutor', { exact: true })).toBeVisible();
-  await expect(panel.getByText(commit, { exact: true })).toBeVisible();
+  const appRow = panel.locator('dl > div').filter({
+    has: page.getByText('BG Tutor', { exact: true }),
+  });
+  const appCommit = appRow.getByText(commit.slice(0, 7), { exact: true });
+  await expect(appCommit).toBeVisible();
+  await expect(appCommit).toHaveAttribute('title', commit);
   await expect(panel.getByText('GNU Backgammon 1.08.003')).toBeVisible();
   await expect(panel.getByText('Open Sage 0.8.0 (adapter 1)')).toBeVisible();
   const fork = panel.getByText('Open Sage fork · HendrikReh/bgsage');
@@ -81,7 +85,7 @@ test('shows the running app and engine versions under Extras', async ({
   engineStatus = 503;
   await versions.click();
   await expect(panel.getByRole('alert')).toBeVisible();
-  await expect(panel.getByText(commit, { exact: true })).toBeVisible();
+  await expect(appCommit).toBeVisible();
 
   engineStatus = 200;
   sageFork = undefined;

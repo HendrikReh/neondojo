@@ -3,6 +3,10 @@ import { useI18n } from './i18n';
 import { loadAppVersion, loadEngines, type EngineInfo } from './settings-api';
 import './version-info.css';
 
+function CommitId({ revision }: { revision: string }) {
+  return <code title={revision}>{revision.slice(0, 7)}</code>;
+}
+
 export default function VersionInfo() {
   const { t } = useI18n();
   const [appVersion, setAppVersion] = useState<string | null>();
@@ -59,15 +63,16 @@ export default function VersionInfo() {
                     target="_blank"
                     rel="noreferrer"
                   >
-                    {fork.repository}{' '}
-                    <code title={fork.revision}>
-                      {fork.revision.slice(0, 7)}
-                    </code>
+                    {fork.repository} <CommitId revision={fork.revision} />
                   </a>
                 </strong>
               )}
               {version ? (
-                <code>{version}</code>
+                name === 'BG Tutor' ? (
+                  <CommitId revision={version} />
+                ) : (
+                  <code>{version}</code>
+                )
               ) : (
                 t(
                   version === undefined
