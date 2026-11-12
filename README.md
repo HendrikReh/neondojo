@@ -409,7 +409,7 @@ BGTUTOR_FEEDBACK_NATIVE_TEST=1 \
 
 ## Version information
 
-Open **Extras → Version information** to see the version of the running BG Tutor backend and the verified versions of GNU Backgammon and Open Sage. The view shows an unavailable status when an engine version cannot be verified. The backend version is also available through `GET /api/version`.
+Open **Extras → Version information** to see the full Git commit ID recorded when the running BG Tutor backend was built and the verified versions of GNU Backgammon and Open Sage. The view shows an unavailable status when the build has no Git commit ID or an engine version cannot be verified. `GET /api/version` returns the build's commit ID in `version`, or an empty string when it is unavailable.
 
 For a recognized Open Sage fork, the view shows **Open Sage fork**, the repository, and the short source commit above the engine version. The repository and short commit share a link to that exact commit on GitHub. `GET /api/engines` includes the repository and full commit in the optional `fork` field.
 

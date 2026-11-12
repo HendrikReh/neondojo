@@ -149,7 +149,7 @@ struct VersionInfo {
 #[utoipa::path(get, path="/api/version", responses((status=200, body=VersionInfo)), tag="System")]
 async fn version() -> Json<VersionInfo> {
     Json(VersionInfo {
-        version: env!("CARGO_PKG_VERSION"),
+        version: env!("BGTUTOR_GIT_COMMIT"),
     })
 }
 

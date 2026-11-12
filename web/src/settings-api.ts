@@ -107,7 +107,7 @@ export async function loadSettings(signal?: AbortSignal) {
 
 export async function loadAppVersion(signal?: AbortSignal) {
   const value = await settingsRequest('/version', { signal });
-  if (!isObject(value) || typeof value.version !== 'string' || !value.version)
+  if (!isObject(value) || typeof value.version !== 'string')
     throw new SettingsApiError(200, '');
   return value.version;
 }

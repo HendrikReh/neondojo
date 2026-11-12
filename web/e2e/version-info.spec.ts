@@ -1,8 +1,14 @@
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { expect, test } from './test';
 
 test('shows the running app and engine versions under Extras', async ({
   page,
 }, testInfo) => {
+  const commit = execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: fileURLToPath(new URL('../../', import.meta.url)),
+    encoding: 'utf8',
+  }).trim();
   let sageVersion: string | null = 'Open Sage 0.8.0 (adapter 1)';
   let sageFork: { repository: string; revision: string } | undefined = {
     repository: 'HendrikReh/bgsage',
@@ -44,7 +50,7 @@ test('shows the running app and engine versions under Extras', async ({
   await versions.click({ timeout: 4000 });
   const panel = page.getByRole('region', { name: 'Version information' });
   await expect(panel.getByText('BG Tutor', { exact: true })).toBeVisible();
-  await expect(panel.getByText(/^\d+\.\d+\.\d+/)).toBeVisible();
+  await expect(panel.getByText(commit, { exact: true })).toBeVisible();
   await expect(panel.getByText('GNU Backgammon 1.08.003')).toBeVisible();
   await expect(panel.getByText('Open Sage 0.8.0 (adapter 1)')).toBeVisible();
   const fork = panel.getByText('Open Sage fork · HendrikReh/bgsage');
@@ -75,7 +81,7 @@ test('shows the running app and engine versions under Extras', async ({
   engineStatus = 503;
   await versions.click();
   await expect(panel.getByRole('alert')).toBeVisible();
-  await expect(panel.getByText(/^\d+\.\d+\.\d+/)).toBeVisible();
+  await expect(panel.getByText(commit, { exact: true })).toBeVisible();
 
   engineStatus = 200;
   sageFork = undefined;
@@ -85,8 +91,11 @@ test('shows the running app and engine versions under Extras', async ({
 
   await page.getByRole('button', { name: 'Benchmark', exact: true }).click();
   sageVersion = null;
+  await page.route('**/api/version', (route) =>
+    route.fulfill({ json: { version: '' } }),
+  );
   await versions.click();
-  await expect(panel.getByRole('alert')).toHaveCount(0);
   await expect(panel.getByText('GNU Backgammon 1.08.003')).toBeVisible();
-  await expect(panel.getByText('Unavailable', { exact: true })).toBeVisible();
+  await expect(panel.getByText('Unavailable', { exact: true })).toHaveCount(2);
+  await expect(panel.getByRole('alert')).toHaveCount(0);
 });
