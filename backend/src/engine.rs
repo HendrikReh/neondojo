@@ -159,13 +159,18 @@ impl Engine {
             .unwrap_or("GNUbg")
             .trim()
             .to_owned();
-        if let Some(expected) = &self.expected_version {
+        self.validate_saved_version(&version)?;
+        Ok(version)
+    }
+
+    pub(crate) fn validate_saved_version(&self, version: &str) -> Result<()> {
+        if let Some(expected) = self.saved_version() {
             ensure!(
-                version == *expected,
+                version == expected,
                 "GNUbg version changed since job submission: expected '{expected}', found '{version}'. Restore the original installation or submit a new analysis job"
             );
         }
-        Ok(version)
+        Ok(())
     }
 
     async fn run(&self, directory: &Path, commands: &str) -> Result<String> {

@@ -67,7 +67,8 @@ class Runtime:
             return ThreadPoolExecutor(*args, **kwargs)
         with patch('bgsage.analyzer.ThreadPoolExecutor', side_effect=pool):
             opening = self.analyzer.checker_play(list(bgsage.STARTING_BOARD), 3, 1, beaver=False)
-        integrity['validate_thread_budget'](profile['threads'], observed)
+        serial = profile['plies'] == 1 and getattr(bgsage.analyzer, 'SERIAL_CUBEFUL_1PLY', False) is True
+        integrity['validate_thread_budget'](profile['threads'], observed, serial=serial)
         if not opening.moves:
             raise ValueError('Open Sage capability check returned no candidates')
         for move in opening.moves:

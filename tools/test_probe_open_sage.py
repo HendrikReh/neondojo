@@ -125,6 +125,13 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn('--levels', result.stdout)
 
+    def test_serial_capability_requires_zero_candidate_pools(self):
+        probe.validate_thread_budget(2, [], serial=True)
+        with self.assertRaises(probe.ProbeError):
+            probe.validate_thread_budget(2, [2], serial=True)
+        with self.assertRaises(probe.ProbeError):
+            probe.validate_thread_budget(2, [])
+
     def test_thread_budget_rejects_silent_oversubscription(self):
         self.assertTrue(hasattr(probe, 'validate_thread_budget'), 'thread budget validator missing')
         probe.validate_thread_budget(2, [2])

@@ -14,9 +14,11 @@ import gnubg
 MAX_FRAME = 65536
 MAX_ARTIFACT = 32 * 1024 * 1024
 resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_ARTIFACT, MAX_ARTIFACT))
+flush_native = ctypes.CDLL(None).fflush
+# Emit the running GNUbg process's banner before switching native stdout.
+flush_native(None)
 protocol = os.fdopen(os.dup(1), 'w', buffering=1)
 os.dup2(2, 1)
-flush_native = ctypes.CDLL(None).fflush
 adapter = compile(Path('adapter.py').read_text(), 'adapter.py', 'exec')
 protocol.write(json.dumps({'ready': True}) + '\n')
 last_id = 0

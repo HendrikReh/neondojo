@@ -49,8 +49,11 @@ def validate_record_digest(actual_hex, expected_base64, label):
             f'Installed wheel integrity mismatch for {label}. Reinstall from the locked wheels.')
 
 
-def validate_thread_budget(requested, observed):
-    require(observed and all(1 <= workers <= requested for workers in observed),
+def validate_thread_budget(requested, observed, *, serial=False):
+    if serial:
+        require(not observed, f'Declared serial checker path created pools: {observed}')
+        return
+    require(observed and all(type(workers) is int and 1 <= workers <= requested for workers in observed),
             f'Candidate thread budget ignored: requested {requested}, observed pool limits {observed}. '
             'Do not enable this profile without an explicit bounded integration solution.')
 
@@ -372,11 +375,12 @@ def run_worker(skip_platform=False, levels=None):
                     engine = sage.BgBotAnalyzer(eval_level=level, parallel_threads=threads)
                     with patch('bgsage.analyzer.ThreadPoolExecutor', side_effect=observe_pool):
                         engine.checker_play(opening, 3, 1, beaver=False)
-                    detail = {'level': level, 'requested_threads': threads,
+                    serial = level == '1ply' and getattr(sage.analyzer, 'SERIAL_CUBEFUL_1PLY', False) is True
+                    detail = {'level': level, 'requested_threads': threads, 'serial_checker': serial,
                               'observed_candidate_pool_limits': observed,
                               'scope': 'Real Python ThreadPoolExecutor constructor, not simultaneous native thread census'}
                     report['thread_budgets'].append(detail)
-                    validate_thread_budget(threads, observed)
+                    validate_thread_budget(threads, observed, serial=serial)
                     return detail
                 check(f'thread_budget_{level}_{threads}', thread_case)
 

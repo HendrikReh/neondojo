@@ -284,3 +284,31 @@ Die bisherige Umgebung `local-data/open-sage/venv` bleibt unverändert für alte
 Aufträge erhalten. Ein Rückwechsel erfolgt über „Lokale Open-Sage-Installation → Prüfen und
 speichern“ mit dem alten Python-Pfad; neue 1-ply-Vorgaben müssten dabei vorher auf 2-ply stehen.
 Prüf-/Sicherungsartefakte liegen unter `backups/sage-fork-activation-20261112/`.
+
+## Wiederverwendete Cube-Strategie und kürzerer Regelstart
+
+Der lokale Fork `HendrikReh/bgsage` (Commit `5b146c7d86fa965f2185e3871f3c56df030fd76f`) hält
+die native Cube-Strategie pro Analyzer vor. Sie wird beim ersten Cube-Aufruf
+aus den verifizierten Gewichten geladen und bleibt von der Checker-Strategie
+getrennt. Bearoff-Verarbeitung und temporäre Suchzustände bleiben an den
+jeweiligen Aufruf gebunden. Cubeful 1-ply konvertiert die Kandidaten seriell.
+BG Tutor prüft im realen Checkerpfad, dass der als seriell deklarierte Build
+keinen Kandidatenpool startet. Bei bisherigen Builds und bei 2-ply gelten
+weiter die beobachteten Poolgrenzen.
+
+Für direkte GNUbg-Binärdateien liest der Regeladapter die Versionsmeldung
+aus dem laufenden Prozess. Er prüft den aufgelösten Pfad und SHA-256 der
+Binärdatei vor dem Start und nach sauberer Beendigung des Prozesses.
+Für ausführbare Wrapper bleibt die getrennte Versionsprüfung vor und nach
+der Aktion erforderlich. Die Prüfung des Checkpoints und der legalen Züge
+sowie die Sage-Integritätsprüfungen an Spielblock- und Anfragegrenzen
+gelten weiterhin.
+
+Der vermessene Wheel (SHA-256
+`20695d1835a7af26fcfb8fe25b3ddb094d391157cb70b0b72b68aae6d7dff2dc`) ist
+mit der zugehörigen `requirements.lock` unter
+`local-data/open-sage-fork-optimized-20695d1/venv/bin/python` installiert. Der Laufzeit-Fingerprint unterscheidet ihn
+vom bisherigen Fork, auch wenn die Paketversion gleich bleibt. Frühere
+Aufträge und Spielsitzungen benötigen weiterhin ihre gespeicherte
+Installation. Die Testumgebung und die Rohdaten des Vergleichs befinden
+sich lokal unter `local-data/benchmarks/*-sage-cube-reuse/`.

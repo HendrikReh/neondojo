@@ -5,6 +5,7 @@ use crate::{
     engine_process::terminate_and_reap,
 };
 use anyhow::{Context, Result, ensure};
+use sha2::{Digest, Sha256};
 use std::{process::Stdio, time::Duration};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
@@ -18,12 +19,58 @@ const TIMEOUT: Duration = Duration::from_secs(180);
 pub(super) struct RulesProcess {
     directory: tempfile::TempDir,
     engine: Engine,
-    version: String,
+    installation: Installation,
+    wrapper_version: Option<String>,
     child: Option<Child>,
     input: Option<ChildStdin>,
     output: BufReader<ChildStdout>,
     diagnostics: Option<JoinHandle<Result<Vec<u8>>>>,
     sequence: u32,
+}
+
+/// Bind the worker to the resolved executable for this action chain. The
+/// startup banner supplies the saved version check, and both boundary reads
+/// detect replacement even when the new executable reports the same version.
+#[derive(PartialEq, Eq)]
+struct Installation {
+    executable: String,
+    digest: [u8; 32],
+    direct_native: bool,
+}
+
+impl Installation {
+    async fn read(engine: &Engine) -> Result<Self> {
+        let executable = resolve_binary(engine.binary())?;
+        let mut file = tokio::fs::File::open(&executable).await?;
+        ensure!(
+            file.metadata().await?.is_file(),
+            "GNUbg executable is not a regular file"
+        );
+        let mut magic = [0; 4];
+        file.read_exact(&mut magic).await?;
+        // Wrappers may launch a different executable whose version changes
+        // while the wrapper itself stays identical. Keep their version probes.
+        let direct_native = cfg!(target_os = "macos")
+            && matches!(
+                magic,
+                [0xcf, 0xfa, 0xed, 0xfe] | [0xca, 0xfe, 0xba, 0xbe] | [0xca, 0xfe, 0xba, 0xbf]
+            );
+        let mut hash = Sha256::new();
+        hash.update(magic);
+        let mut chunk = vec![0; 64 * 1024];
+        loop {
+            let len = file.read(&mut chunk).await?;
+            if len == 0 {
+                break;
+            }
+            hash.update(&chunk[..len]);
+        }
+        Ok(Self {
+            executable,
+            digest: hash.finalize().into(),
+            direct_native,
+        })
+    }
 }
 
 async fn read_frame(reader: &mut BufReader<ChildStdout>) -> Result<Vec<u8>> {
@@ -52,8 +99,15 @@ impl RulesProcess {
         ] {
             tokio::fs::write(directory.path().join(name), content).await?;
         }
-        let version = engine.version().await?;
-        let mut child = Command::new(resolve_binary(engine.binary())?)
+        let installation = tokio::time::timeout(Duration::from_secs(5), Installation::read(engine))
+            .await
+            .context("GNUbg executable verification timed out")??;
+        let wrapper_version = if installation.direct_native {
+            None
+        } else {
+            Some(engine.version().await?)
+        };
+        let mut child = Command::new(&installation.executable)
             .args(["-t", "-q", "-r", "-c", "commands.txt"])
             .current_dir(directory.path())
             .env("LC_ALL", "C")
@@ -82,7 +136,8 @@ impl RulesProcess {
         let mut process = Self {
             directory,
             engine: engine.clone(),
-            version,
+            installation,
+            wrapper_version,
             child: Some(child),
             input: Some(input),
             output,
@@ -91,15 +146,30 @@ impl RulesProcess {
         };
         tokio::time::timeout(TIMEOUT, async {
             let mut preamble = 0;
+            let mut version = None;
             loop {
                 let line = read_frame(&mut process.output).await?;
                 preamble += line.len();
                 ensure!(preamble <= FRAME_LIMIT, "GNUbg rule startup exceeds limit");
+                let banner = String::from_utf8_lossy(&line);
+                let banner = banner.trim_end();
+                if banner.starts_with("GNU Backgammon ") {
+                    ensure!(version.is_none(), "Duplicate GNUbg startup version");
+                    version = Some(banner.to_owned());
+                }
                 if serde_json::from_slice::<serde_json::Value>(&line).ok()
                     == Some(serde_json::json!({"ready": true}))
                 {
                     break;
                 }
+            }
+            let version = version.context("GNUbg startup version missing")?;
+            engine.validate_saved_version(&version)?;
+            if let Some(expected) = &process.wrapper_version {
+                ensure!(
+                    expected == &version,
+                    "GNUbg rules version changed at startup"
+                );
             }
             anyhow::Ok(())
         })
@@ -150,10 +220,6 @@ impl RulesProcess {
     }
 
     pub(super) async fn finish(mut self) -> Result<()> {
-        ensure!(
-            self.engine.version().await? == self.version,
-            "GNUbg rules version changed before commit"
-        );
         let child = self.child.as_mut().context("GNUbg rule child missing")?;
         ensure!(
             child.try_wait()?.is_none(),
@@ -180,6 +246,21 @@ impl RulesProcess {
                 String::from_utf8_lossy(&bytes)
             );
         }
+        if let Some(expected) = &self.wrapper_version {
+            ensure!(
+                self.engine.version().await? == *expected,
+                "GNUbg rules version changed before commit"
+            );
+        }
+        let current =
+            tokio::time::timeout(Duration::from_secs(5), Installation::read(&self.engine))
+                .await
+                .context("GNUbg executable verification timed out")?
+                .context("Cannot verify GNUbg rules installation before commit")?;
+        ensure!(
+            current == self.installation,
+            "GNUbg rules installation changed before commit"
+        );
         Ok(())
     }
 }
@@ -207,11 +288,12 @@ mod tests {
             r#"#!/usr/bin/env python3
 import os,sys,json,time
 if '--version' in sys.argv:
- print('GNU Backgammon test');sys.exit(0)
+ print(open({version_file:?}).read());sys.exit(0)
 open({pid:?},'w').write(str(os.getpid()))
+mode={mode:?}
+print('GNU Backgammon ' + ('different' if mode=='different-version' else 'test'),flush=True)
 print('{{"ready":true}}',flush=True)
 sys.stdin.readline()
-mode={mode:?}
 if mode=='wrong': print('{{"id":2,"ok":true}}',flush=True)
 elif mode=='oversize': print('x'*65537,flush=True)
 elif mode=='malformed': print('invalid-json',flush=True)
@@ -228,6 +310,7 @@ elif mode in ('premature', 'nonzero', 'diagnostic', 'clean'):
 time.sleep(60)
 "#,
             pid = directory.path().join("pid").to_str().unwrap(),
+            version_file = directory.path().join("version").to_str().unwrap(),
             snapshot = serde_json::json!({
                 "native_id": "checkpoint", "board": vec![0; 26], "player": 0,
                 "dice": [], "phase": "roll", "can_double": false,
@@ -236,6 +319,7 @@ time.sleep(60)
             })
             .to_string()
         );
+        std::fs::write(directory.path().join("version"), "GNU Backgammon test").unwrap();
         std::fs::write(&path, script).unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
         let engine = Engine::new(path.to_str().unwrap().into());
@@ -303,6 +387,56 @@ time.sleep(60)
                 tokio::time::timeout(Duration::from_millis(100), process.execute(&request()))
                     .await
                     .is_err()
+            );
+            assert_reaped(&directory).await;
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn replacement_with_same_version_discards_action_chain() {
+        let (directory, engine) = fake("clean");
+        crate::engine::with_shared_access(async {
+            let process = RulesProcess::start(&engine, None).await.unwrap();
+            let (process, _, _) = process.execute(&request()).await.unwrap();
+            let path = std::path::Path::new(engine.binary());
+            let replacement = directory.path().join("replacement");
+            let mut bytes = std::fs::read(path).unwrap();
+            bytes.extend_from_slice(b"\n# Replaced after start, same reported version\n");
+            std::fs::write(&replacement, bytes).unwrap();
+            std::fs::set_permissions(&replacement, std::fs::Permissions::from_mode(0o700)).unwrap();
+            std::fs::rename(replacement, path).unwrap();
+            let error = process.finish().await.unwrap_err();
+            assert!(
+                error.to_string().contains("installation changed"),
+                "{error:#}"
+            );
+            assert_reaped(&directory).await;
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn rejects_running_version_that_differs_from_saved_version() {
+        let (directory, engine) = fake("different-version");
+        let engine = engine.with_expected_version(Some("GNU Backgammon test".into()));
+        let result = RulesProcess::start(&engine, None).await;
+        let error = result.err().expect("different worker version must fail");
+        assert!(format!("{error:#}").contains("found 'GNU Backgammon different'"));
+        assert_reaped(&directory).await;
+    }
+
+    #[tokio::test]
+    async fn wrapper_target_version_is_rechecked_before_commit() {
+        let (directory, engine) = fake("clean");
+        crate::engine::with_shared_access(async {
+            let process = RulesProcess::start(&engine, None).await.unwrap();
+            let (process, _, _) = process.execute(&request()).await.unwrap();
+            std::fs::write(directory.path().join("version"), "GNU Backgammon new").unwrap();
+            let error = process.finish().await.unwrap_err();
+            assert!(
+                error.to_string().contains("rules version changed"),
+                "{error:#}"
             );
             assert_reaped(&directory).await;
         })
