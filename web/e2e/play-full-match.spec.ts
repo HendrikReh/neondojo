@@ -129,7 +129,9 @@ async function create(
     .getByRole('tabpanel', { name: 'Playing', exact: true })
     .getByLabel('Play mode', { exact: true })
     .selectOption('competition');
-  await page.getByLabel('Match length').selectOption(String(length));
+  await page
+    .getByRole('combobox', { name: 'Match length', exact: true })
+    .selectOption(String(length));
   const waiting = page.waitForResponse(
     (r) =>
       r.url().endsWith('/api/play/sessions') && r.request().method() === 'POST',
