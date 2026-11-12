@@ -181,6 +181,20 @@ for (const theme of ['graphite', 'club', 'paper'])
         page.locator('.database-collections [aria-pressed="true"]'),
         color,
       );
+      const collections = page.locator('.database-collections');
+      for (const name of ['Unsorted', 'Bot Matches', 'Paused Matches']) {
+        const entry = collections.getByRole('button', {
+          name: new RegExp(`\\b${name}\\b`),
+        });
+        const icon = entry.locator('[data-action-glyph="system-database"]');
+        await expect(icon).toBeVisible();
+        await expect(entry).toHaveAccessibleDescription(/System database/);
+        await expect(icon).toHaveCSS('color', color);
+        await expect(icon).not.toHaveCSS(
+          'background-color',
+          'rgba(0, 0, 0, 0)',
+        );
+      }
       await page.locator('.database-collections button').last().click();
       await activeText(
         page.locator('.database-collections [aria-pressed="true"]'),

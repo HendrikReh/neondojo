@@ -40,6 +40,8 @@ import type { AnnotationKind } from './annotation-api';
 import './workspace.css';
 import OpeningBookDialog from './OpeningBookDialog';
 import {
+  acceptsLibraryMatches,
+  PAUSED_MATCHES_DATABASE_ID,
   readDatabase,
   saveDatabase,
   type StoredMove,
@@ -93,6 +95,7 @@ export default function App() {
   const [requestedPlaySession, setRequestedPlaySession] = useState<{
     id: string;
     token: number;
+    resume?: boolean;
   }>();
   const { t, setLocale, formatError } = useI18n();
   const w = useWorkspaceText(),
@@ -239,7 +242,7 @@ export default function App() {
       if (!current()) return;
       if (
         metadata &&
-        isUnfinishedCompetition(metadata) &&
+        (metadata.play_paused || isUnfinishedCompetition(metadata)) &&
         metadata.play_session_id
       ) {
         navigation.clear();
@@ -352,9 +355,10 @@ export default function App() {
     setError(undefined);
     setNotice(undefined);
     setImportResults([]);
-    const target = databaseId
-      ? `?database_id=${encodeURIComponent(databaseId)}`
-      : '';
+    const target =
+      databaseId && acceptsLibraryMatches(databaseId)
+        ? `?database_id=${encodeURIComponent(databaseId)}`
+        : '';
     const navigationIntent = navigation.intent();
     const results: {
       name: string;
@@ -638,6 +642,12 @@ export default function App() {
             requestedSession={requestedPlaySession}
             onSaved={() => setRevision((n) => n + 1)}
             onModeChanged={playModeChanged}
+            onOpenPausedMatches={() => {
+              cancelRestoration();
+              changeDatabase(PAUSED_MATCHES_DATABASE_ID);
+              setView('database');
+              tabs.current.database?.focus();
+            }}
           />
         </section>
         {!!(error || navigation.error) && (
@@ -755,9 +765,11 @@ export default function App() {
           hidden={view !== 'database'}
         >
           <MatchDatabase
-            onResumePlay={(id) => {
+            onOpenPlay={(id, resume) => {
+              cancelRestoration();
               setRequestedPlaySession((previous) => ({
                 id,
+                resume,
                 token: (previous?.token ?? 0) + 1,
               }));
               setView('play');

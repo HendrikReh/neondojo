@@ -2167,6 +2167,8 @@ export interface components {
             place?: string | null;
             play_assisted: boolean;
             play_mode?: null | components["schemas"]["PlayMode"];
+            /** @description A live play checkpoint that must be explicitly resumed. */
+            play_paused: boolean;
             play_phase?: string | null;
             /** Format: uuid */
             play_session_id?: string | null;
@@ -2841,7 +2843,7 @@ export interface components {
             profile: string;
         };
         /** @enum {string} */
-        PlayAction: "opening_roll" | "start_opening_move" | "roll" | "move" | "pass" | "double" | "take" | "drop" | "resign" | "next_game" | "end_session";
+        PlayAction: "opening_roll" | "start_opening_move" | "roll" | "move" | "pass" | "double" | "take" | "drop" | "resign" | "next_game" | "end_session" | "pause" | "resume";
         PlayActionRequest: {
             action: components["schemas"]["PlayAction"];
             /** Format: uuid */
@@ -3042,6 +3044,8 @@ export interface components {
             /** @description An explicitly closed money session cannot start another game. */
             money_session_ended?: boolean;
             opening?: null | components["schemas"]["OpeningRoll"];
+            /** @description The saved checkpoint is available for explicit resumption. */
+            paused?: boolean;
             pending_decision?: null | components["schemas"]["PlayDecision"];
             phase: components["schemas"]["PlayPhase"];
             play_mode?: components["schemas"]["PlayMode"];
@@ -4848,6 +4852,15 @@ export interface operations {
                     "application/json": components["schemas"]["ImportResponse"];
                 };
             };
+            /** @description Target is reserved for paused sessions */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
             /** @description Upload too large */
             413: {
                 headers: {
@@ -5135,6 +5148,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActionResponse"];
+                };
+            };
+            /** @description Target is reserved for paused sessions */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             422: {

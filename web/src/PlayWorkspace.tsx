@@ -30,6 +30,7 @@ import type { Theme } from './themes';
 import { useI18n } from './i18n';
 import { AppError } from './i18n-core';
 import { usePlayText } from './play-messages';
+import { PAUSED_MATCHES_DATABASE_NAME } from './library-api';
 import {
   orderedLegalTurns,
   applySteps,
@@ -74,12 +75,14 @@ export default function PlayWorkspace({
   requestedSession,
   onSaved,
   onModeChanged,
+  onOpenPausedMatches,
 }: {
   visible: boolean;
   theme: Theme;
-  requestedSession?: { id: string; token: number };
+  requestedSession?: { id: string; token: number; resume?: boolean };
   onSaved?: () => void;
   onModeChanged?: (session: PlaySession) => void;
+  onOpenPausedMatches: () => void;
 }) {
   const playback = usePlayAnimation(visible);
   const boardAnchor = useRef<HTMLDivElement>(null);
@@ -87,6 +90,8 @@ export default function PlayWorkspace({
   const hintTrigger = useRef<HTMLButtonElement>(null);
   const learningReviewTrigger = useRef<HTMLButtonElement>(null);
   const moneyReviewTrigger = useRef<HTMLButtonElement>(null);
+  const resumeTrigger = useRef<HTMLButtonElement>(null);
+  const focusResume = useRef(false);
   const autoMoneyReviews = useRef(new Set<string>());
   const [learningReviewOpen, setLearningReviewOpen] = useState(false);
   const resignTrigger = useRef<HTMLButtonElement>(null);
@@ -116,6 +121,7 @@ export default function PlayWorkspace({
   const modeT = usePlayModeText();
   const resignT = usePlayResignText();
   const [session, setSession] = useState<PlaySession | null>(null);
+  const paused = Boolean(session?.paused);
   const moneyFinished =
     session?.match_length === 0 &&
     ['game_over', 'match_over'].includes(session.phase);
@@ -123,6 +129,11 @@ export default function PlayWorkspace({
     [error, setError] = useState<unknown>(),
     [setup, setSetup] = useState(true);
   const review = usePlayReview(session, visible && !setup);
+  useEffect(() => {
+    if (visible && paused && !busy && !setup && focusResume.current)
+      resumeTrigger.current?.focus({ preventScroll: true });
+    if (!visible || !busy) focusResume.current = false;
+  }, [visible, paused, busy, setup]);
   const reviewText = useBoardReviewText();
   const configuration = useOptionalConfiguration();
   const [localHuman, setLocalHuman] = useState(0),
@@ -257,9 +268,9 @@ export default function PlayWorkspace({
     if (requested) consumedRequest.current = requestedSession.token;
     const id = requested ? requestedSession.id : storedSession();
     if (!id) return;
-    load(id);
+    load(id, requested ? requestedSession.resume : false);
   }, [visible, requestedSession, busy]);
-  function load(id: string) {
+  function load(id: string, resume = false) {
     if (locked.current && !initialLoad.current) return;
     setError(undefined);
     retrySession.current = id;
@@ -271,7 +282,18 @@ export default function PlayWorkspace({
     setBusy(true);
     locked.current = true;
     void loadPlaySession(id, abort.signal)
-      .then((value) => {
+      .then(async (value) => {
+        if (token !== generation.current) return;
+        if (resume && value.paused) {
+          // Once the mutation starts, a later selection must wait for it.
+          initialLoad.current = null;
+          try {
+            value = await actInPlaySession(value, 'resume');
+          } catch (e) {
+            if (token === generation.current) accept(value);
+            throw e;
+          }
+        }
         if (token === generation.current) accept(value);
       })
       .catch((e) => {
@@ -317,13 +339,14 @@ export default function PlayWorkspace({
       setup ||
       !session ||
       !moneyFinished ||
+      paused ||
       session.review ||
       busy ||
       playback.animating ||
       locked.current
     )
       return;
-    const key = `${session.id}:${session.game_no}`;
+    const key = `${session.id}:${session.game_no}:${session.version}`;
     if (autoMoneyReviews.current.has(key)) return;
     autoMoneyReviews.current.add(key);
     void run(() => reviewPlaySession(session));
@@ -334,9 +357,24 @@ export default function PlayWorkspace({
     session?.game_no,
     session?.version,
     moneyFinished,
+    paused,
     busy,
     playback.animating,
   ]);
+  function pauseMatch() {
+    if (!session || playback.isPlaying()) return;
+    void run(
+      () => actInPlaySession(session, 'pause'),
+      () => {
+        focusResume.current = true;
+      },
+    );
+  }
+  function resumeMatch() {
+    if (!session) return;
+    if (session.paused) void run(() => actInPlaySession(session, 'resume'));
+    else setSetup(false);
+  }
   function openMatchSetup() {
     setSetup(true);
     setError(undefined);
@@ -365,7 +403,13 @@ export default function PlayWorkspace({
     decisionId?: string,
     resignLevel?: ResignLevel,
   ) {
-    if (!session || locked.current || playback.isPlaying() || review.isActive())
+    if (
+      !session ||
+      paused ||
+      locked.current ||
+      playback.isPlaying() ||
+      review.isActive()
+    )
       return;
     unlockPlayAudio();
     if (
@@ -389,7 +433,13 @@ export default function PlayWorkspace({
     );
   }
   function feedback(operation: 'hint' | 'reveal' | 'retry') {
-    if (!session || locked.current || playback.isPlaying() || review.isActive())
+    if (
+      !session ||
+      paused ||
+      locked.current ||
+      playback.isPlaying() ||
+      review.isActive()
+    )
       return;
     if (operation === 'hint') {
       setHintReady(false);
@@ -461,7 +511,7 @@ export default function PlayWorkspace({
   const feedbackMode = session?.play_mode ?? 'competition';
   const competition = feedbackMode === 'competition';
   const selectedSteps =
-    pending?.action === 'move' && pending.move_index != null
+    !paused && pending?.action === 'move' && pending.move_index != null
       ? (session?.legal_moves[pending.move_index]?.steps ?? [])
       : steps;
   const uiBusy = busy || playback.animating;
@@ -489,6 +539,7 @@ export default function PlayWorkspace({
   }, [hintOpen, uiBusy, visible, setup]);
   const canRoll = Boolean(
     visible &&
+    !paused &&
     !review.active &&
     !hintOpen &&
     !resignOpen &&
@@ -498,6 +549,7 @@ export default function PlayWorkspace({
   );
   const canMove = Boolean(
     session &&
+    !paused &&
     !busy &&
     !hintOpen &&
     !resignOpen &&
@@ -667,7 +719,12 @@ export default function PlayWorkspace({
         : t('cubeUnavailable');
   const matchResultKey = session ? `${session.id}:${session.game_no}` : '';
   const interruption =
-    !visible || setup || review.active || playback.animating || pendingRoll
+    !visible ||
+    setup ||
+    paused ||
+    review.active ||
+    playback.animating ||
+    pendingRoll
       ? null
       : resignOpen
         ? 'resign'
@@ -699,6 +756,7 @@ export default function PlayWorkspace({
     (interruption === 'game_over' || interruption === 'match_over');
   const showBoardActions = Boolean(
     session &&
+    !paused &&
     !review.active &&
     !interruption &&
     !awaitingFeedback &&
@@ -706,6 +764,19 @@ export default function PlayWorkspace({
     session.position.player === session.human_player &&
     nativeMoves.length > 0,
   );
+  const pauseButton = session &&
+    !paused &&
+    !session.money_session_ended &&
+    (session.phase !== 'match_over' || moneyFinished) && (
+      <ActionButton
+        type="button"
+        icon="pause"
+        label={t('endSession')}
+        tooltip={steps.length > 0 ? t('pauseDraftHelp') : undefined}
+        disabled={uiBusy}
+        onClick={pauseMatch}
+      />
+    );
   const cubeDecisionOpen = interruption === 'cube';
   const resignationDeclined =
     error instanceof AppError &&
@@ -766,7 +837,9 @@ export default function PlayWorkspace({
         <select
           aria-label={modeT('changeMode')}
           value={feedbackMode}
-          disabled={uiBusy || session.phase === 'match_over' || moneyFinished}
+          disabled={
+            uiBusy || paused || session.phase === 'match_over' || moneyFinished
+          }
           onChange={(event) => switchMode(event.target.value as PlayMode)}
         >
           {playModes.map((value) => (
@@ -789,7 +862,12 @@ export default function PlayWorkspace({
             step="any"
             required
             value={liveThreshold}
-            disabled={uiBusy || session.phase === 'match_over' || moneyFinished}
+            disabled={
+              uiBusy ||
+              paused ||
+              session.phase === 'match_over' ||
+              moneyFinished
+            }
             onChange={(event) => {
               setThresholdStatus('idle');
               setLiveThreshold(event.target.value);
@@ -864,6 +942,23 @@ export default function PlayWorkspace({
           <p>{t('opening')}</p>
         </div>
         <div className="play-actions">
+          <ActionButton
+            onClick={onOpenPausedMatches}
+            disabled={uiBusy}
+            icon="open"
+            label={PAUSED_MATCHES_DATABASE_NAME}
+          />
+          {!setup && !interruption && pauseButton}
+          {!setup && paused && (
+            <ActionButton
+              ref={resumeTrigger}
+              className="primary"
+              onClick={resumeMatch}
+              disabled={uiBusy}
+              icon="resume"
+              label={t('resumeMatch')}
+            />
+          )}
           <ActionButton
             onClick={openMatchSetup}
             disabled={uiBusy}
@@ -950,7 +1045,7 @@ export default function PlayWorkspace({
             {session && (
               <ActionButton
                 type="button"
-                onClick={() => setSetup(false)}
+                onClick={resumeMatch}
                 disabled={uiBusy}
                 icon="resume"
                 label={t('resumeMatch')}
@@ -974,6 +1069,7 @@ export default function PlayWorkspace({
               · {t('game')} {session.game_no} ·{' '}
               {session.bearoff_direction === 'left' ? t('left') : t('right')}
             </p>
+            {paused && <p role="status">{t('matchPaused')}</p>}
             <p className="play-engine">
               {session.engine.version} · {session.engine.plies}-ply
               {feedbackMode !== 'competition' && (
@@ -1013,7 +1109,7 @@ export default function PlayWorkspace({
                     ref={learningReviewTrigger}
                     tooltip={modeT('reviewTooltip')}
                     compact
-                    disabled={uiBusy}
+                    disabled={uiBusy || (paused && !session.review)}
                     icon="analysis"
                     label={modeT('review')}
                     onClick={() => {
@@ -1396,6 +1492,9 @@ export default function PlayWorkspace({
                         )}
                       </div>
                     )}
+                    <div className="play-actions play-cube-choices">
+                      {pauseButton}
+                    </div>
                     {dialogPreferences}
                   </PlayCubeDecision>
                 )}
@@ -1552,19 +1651,7 @@ export default function PlayWorkspace({
                                 >
                                   {t('next_game')}
                                 </ActionButton>
-                                {moneyFinished &&
-                                  !session.money_session_ended && (
-                                    <ActionButton
-                                      disabled={
-                                        uiBusy || (!session.review && !error)
-                                      }
-                                      onClick={() => action('end_session')}
-                                      icon="stop"
-                                      label={t('endSession')}
-                                    >
-                                      {t('endSession')}
-                                    </ActionButton>
-                                  )}
+                                {pauseButton}
                               </>
                             ) : (
                               <>
@@ -1606,6 +1693,12 @@ export default function PlayWorkspace({
                           </div>
                         </>
                       )}
+                      {interruption !== 'game_over' &&
+                        interruption !== 'match_over' && (
+                          <div className="play-actions play-cube-choices">
+                            {pauseButton}
+                          </div>
+                        )}
                       {dialogPreferences}
                     </PlayBoardDialog>
                   )}
@@ -1628,6 +1721,7 @@ export default function PlayWorkspace({
                   </p>
                 )}
                 {!busy &&
+                  !paused &&
                   !review.active &&
                   !interruption &&
                   !openingPhase &&

@@ -19,6 +19,14 @@ const rows = {
     'Baza danych',
     'Database',
   ],
+  systemDatabase: [
+    'System database',
+    'Systemdatenbank',
+    'Base de datos del sistema',
+    'Base de données système',
+    'Systemowa baza danych',
+    'Database di sistema',
+  ],
   occurrences: [
     'Occurrences',
     'Vorkommen',

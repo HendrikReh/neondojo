@@ -1,4 +1,4 @@
-//! A live session owns one ordinary library match. Deletion permanently detaches it.
+//! A live session owns one library match. Deletion detaches it until explicitly saved again.
 use super::{PlayPhase, PlaySession, named_export};
 use anyhow::{Result, ensure};
 use sha2::{Digest, Sha256};
@@ -6,6 +6,7 @@ use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 pub const BOT_DATABASE_ID: Uuid = Uuid::from_u128(3);
+pub const PAUSED_MATCHES_DATABASE_ID: Uuid = Uuid::from_u128(4);
 
 pub async fn lock_bot_database(tx: &mut Transaction<'_, Postgres>) -> Result<()> {
     sqlx::query_scalar::<_, Uuid>("SELECT id FROM databases WHERE id=$1 FOR UPDATE")
@@ -20,17 +21,22 @@ pub async fn lock_bot_database(tx: &mut Transaction<'_, Postgres>) -> Result<()>
 pub async fn lock_match(
     tx: &mut Transaction<'_, Postgres>,
     session_id: Uuid,
-) -> crate::api::ApiResult<Option<Uuid>> {
+    additional_databases: &[Uuid],
+) -> crate::api::ApiResult<Option<(Uuid, Uuid)>> {
     let owner: Option<(Uuid, Uuid)> = sqlx::query_as("SELECT m.id,m.database_id FROM matches m JOIN play_sessions s ON s.library_match_id=m.id WHERE s.id=$1")
         .bind(session_id).fetch_optional(&mut **tx).await.map_err(anyhow::Error::from)?;
+    let mut databases = additional_databases.to_vec();
+    databases.extend(owner.map(|(_, db)| db));
+    if !databases.is_empty() {
+        sqlx::query("SELECT id FROM databases WHERE id=ANY($1) ORDER BY id FOR UPDATE")
+            .bind(&databases)
+            .fetch_all(&mut **tx)
+            .await
+            .map_err(anyhow::Error::from)?;
+    }
     let Some((id, db)) = owner else {
         return Ok(None);
     };
-    sqlx::query("SELECT id FROM databases WHERE id=$1 FOR UPDATE")
-        .bind(db)
-        .execute(&mut **tx)
-        .await
-        .map_err(anyhow::Error::from)?;
     let actual: Option<Uuid> =
         sqlx::query_scalar("SELECT database_id FROM matches WHERE id=$1 FOR UPDATE")
             .bind(id)
@@ -43,7 +49,7 @@ pub async fn lock_match(
             "Library match moved; retry the play action".into(),
         ));
     }
-    Ok(actual.map(|_| id))
+    Ok(actual.map(|db| (id, db)))
 }
 
 fn source(session: &PlaySession, sgf: &str) -> String {
@@ -111,15 +117,23 @@ pub(super) fn normalize_native_setup_turn(source: String) -> Result<String> {
     Ok(output)
 }
 
-pub async fn sync(
+pub(super) enum ArchiveTarget {
+    Existing(Uuid),
+    NewIn(Uuid),
+}
+
+pub(super) async fn sync(
     tx: &mut Transaction<'_, Postgres>,
     session: &PlaySession,
     sgf: &str,
-    existing: Option<Uuid>,
+    target: ArchiveTarget,
 ) -> Result<Uuid> {
     let sgf = normalize_native_setup_turn(source(session, sgf))?;
     let (imported, _) = crate::import::sgf::parse_sgf_with_context(&sgf)?;
-    let id = existing.unwrap_or_else(Uuid::new_v4);
+    let id = match target {
+        ArchiveTarget::Existing(id) => id,
+        ArchiveTarget::NewIn(_) => Uuid::new_v4(),
+    };
     let hash = format!("{:x}", Sha256::digest(sgf.as_bytes()));
     let result = if matches!(session.phase, PlayPhase::MatchOver)
         || super::reports::money_finished(session)
@@ -129,9 +143,9 @@ pub async fn sync(
         "ongoing"
     };
     let filename = format!("Bot match {}.sgf", session.id);
-    if existing.is_none() {
+    if let ArchiveTarget::NewIn(database) = target {
         sqlx::query("INSERT INTO matches(id,filename,format,sha256,white,black,match_length,position_count,original,sgf,database_id,created_at,played_on,result_state,white_score,black_score,source_metadata_loaded,imported_analysis_loaded) SELECT $1,$2,'sgf',$3,$4,$5,$6,0,$7,$8,$9,created_at,created_at::date,$10,$11,$12,true,true FROM play_sessions WHERE id=$13")
-            .bind(id).bind(filename).bind(&hash).bind(&imported.players[0]).bind(&imported.players[1]).bind(session.match_length).bind(sgf.as_bytes()).bind(&sgf).bind(BOT_DATABASE_ID).bind(result).bind(session.scores[0]).bind(session.scores[1]).bind(session.id).execute(&mut **tx).await?;
+            .bind(id).bind(filename).bind(&hash).bind(&imported.players[0]).bind(&imported.players[1]).bind(session.match_length).bind(sgf.as_bytes()).bind(&sgf).bind(database).bind(result).bind(session.scores[0]).bind(session.scores[1]).bind(session.id).execute(&mut **tx).await?;
     }
     update_mode_metadata(tx, session, id).await?;
     let old_source: String = sqlx::query_scalar("SELECT sgf FROM matches WHERE id=$1")
@@ -177,7 +191,7 @@ pub async fn sync(
     }
     sqlx::query("UPDATE matches SET sha256=$2,original=$3,sgf=$4,white=$5,black=$6,position_count=$7,metadata_version=metadata_version+CASE WHEN result_state IS DISTINCT FROM $8 OR white_score IS DISTINCT FROM $9 OR black_score IS DISTINCT FROM $10 THEN 1 ELSE 0 END,result_state=$8,white_score=$9,black_score=$10,moves_cataloged=CASE WHEN sgf<>$4 THEN false ELSE moves_cataloged END,source_revision=source_revision+CASE WHEN sgf<>$4 THEN 1 ELSE 0 END WHERE id=$1")
         .bind(id).bind(hash).bind(sgf.as_bytes()).bind(&sgf).bind(&imported.players[0]).bind(&imported.players[1]).bind(imported.positions.len() as i32).bind(result).bind(session.scores[0]).bind(session.scores[1]).execute(&mut **tx).await?;
-    if existing.is_none() {
+    if matches!(target, ArchiveTarget::NewIn(_)) {
         sqlx::query(
             "UPDATE play_sessions SET library_match_id=$2,library_archived=true WHERE id=$1",
         )
@@ -200,7 +214,13 @@ pub async fn backfill(pool: &PgPool) -> Result<usize> {
         let row: Option<(sqlx::types::Json<PlaySession>, String)> = sqlx::query_as("SELECT state,sgf FROM play_sessions WHERE id=$1 AND NOT library_archived AND library_match_id IS NULL FOR UPDATE")
             .bind(id).fetch_optional(&mut *tx).await?;
         if let Some((session, sgf)) = row {
-            sync(&mut tx, &session, &sgf, None).await?;
+            sync(
+                &mut tx,
+                &session,
+                &sgf,
+                ArchiveTarget::NewIn(BOT_DATABASE_ID),
+            )
+            .await?;
             count += 1;
         }
         tx.commit().await?;

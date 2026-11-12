@@ -22,6 +22,7 @@ import { usePlayModeText } from './play-mode-messages';
 import { useWorkspaceText } from './workspace-messages';
 import { useLibraryText, type LibraryMessageKey } from './library-messages';
 import {
+  acceptsLibraryMatches,
   emptyFilters,
   loadLibrary,
   libraryRowKey,
@@ -81,7 +82,7 @@ export default function MatchDatabase({
   onPosition,
   onAnnotation,
   onImport,
-  onResumePlay,
+  onOpenPlay,
   onChanged,
   visible,
 }: {
@@ -97,7 +98,7 @@ export default function MatchDatabase({
   onPosition: (p: Position) => void;
   onAnnotation: (hit: AnnotationHit) => void;
   onImport: () => void;
-  onResumePlay?: (id: string) => void;
+  onOpenPlay?: (id: string, resume?: boolean) => void;
   onChanged: (deletedIds?: string[], validateSelection?: boolean) => void;
 }) {
   const { t, locale, formatNumber, formatError } = useI18n(),
@@ -358,8 +359,8 @@ export default function MatchDatabase({
     ) : null;
   function openMatchRow(match: LibraryMatch) {
     if (matchResultScope !== matchScope) return;
-    if (isUnfinishedCompetition(match)) {
-      if (match.play_session_id) onResumePlay?.(match.play_session_id);
+    if (match.play_paused || isUnfinishedCompetition(match)) {
+      if (match.play_session_id) onOpenPlay?.(match.play_session_id);
       return;
     }
     void matchOpening.open(match);
@@ -426,6 +427,10 @@ export default function MatchDatabase({
     return () => clearInterval(timer);
   }, [visible, matches]);
   const active = databases.find((d) => d.id === databaseId);
+  const importTarget = acceptsLibraryMatches(databaseId) ? active : undefined;
+  const pausedSelected = matches.some(
+    (m) => m.play_paused && selected.has(m.id),
+  );
   const pr = (value: number | null) =>
     value == null
       ? '—'
@@ -456,7 +461,7 @@ export default function MatchDatabase({
           <small>
             {l('importTarget', {
               name:
-                active?.name ??
+                importTarget?.name ??
                 databases.find((d) => d.is_default)?.name ??
                 '…',
             })}
@@ -634,6 +639,10 @@ export default function MatchDatabase({
                     label={l(action)}
                     compact
                     key={action}
+                    disabled={
+                      pausedSelected &&
+                      ['copy', 'move', 'delete'].includes(action)
+                    }
                     onClick={() =>
                       setDialog({
                         kind: 'batch',
@@ -986,8 +995,9 @@ export default function MatchDatabase({
                         <td>
                           <div className="library-row-actions">
                             {m.play_session_id &&
-                              m.play_phase !== 'match_over' &&
-                              onResumePlay && (
+                              (m.play_paused ||
+                                m.play_phase !== 'match_over') &&
+                              onOpenPlay && (
                                 <ActionButton
                                   icon="resume"
                                   label={l('resumePlay')}
@@ -996,7 +1006,7 @@ export default function MatchDatabase({
                                   disabled={matchResultScope !== matchScope}
                                   onClick={(event) => {
                                     event.stopPropagation();
-                                    onResumePlay(m.play_session_id!);
+                                    onOpenPlay(m.play_session_id!, true);
                                   }}
                                 />
                               )}

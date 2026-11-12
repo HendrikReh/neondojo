@@ -81,7 +81,12 @@ test('collections, independent copies, filters and metadata work together', asyn
     .getByRole('dialog')
     .getByRole('button', { name: 'Save', exact: true })
     .click();
-  await expect(page.locator('.database-sidebar')).toContainText(name);
+  const collection = page
+    .locator('.database-collections')
+    .getByRole('button', { name: new RegExp(name) });
+  const icon = collection.locator('[data-action-glyph="database"]');
+  await expect(icon).toBeVisible();
+  await expect(icon).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   const whitePlayer = `Library ${crypto.randomUUID()}`;
   await page.getByLabel('Match file', { exact: true }).setInputFiles({
     name: 'library.sgf',

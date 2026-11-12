@@ -1,7 +1,8 @@
 import Tooltip from './Tooltip';
 import ActionButton from './ActionButton';
+import ActionIcon from './action-icons';
 import { useLibraryText } from './library-messages';
-import type { Database } from './library-api';
+import { PAUSED_MATCHES_DATABASE_ID, type Database } from './library-api';
 export default function DatabaseSidebar({
   databases,
   selected,
@@ -37,13 +38,22 @@ export default function DatabaseSidebar({
           onClick={() => onSelect('')}
           aria-pressed={!selected}
         >
-          <span>▦ {l('allDatabases')}</span>
+          <span className="database-collection-label">
+            <ActionIcon name="deck" className="database-collection-icon" />
+            <span>{l('allDatabases')}</span>
+          </span>
           <small>{databases.reduce((n, d) => n + d.match_count, 0)}</small>
         </button>
         {databases.map((db) => {
           const description = db.description.trim();
           const repeatsName =
             description.toLowerCase() === db.name.trim().toLowerCase();
+          const tooltip = [
+            db.is_system ? l('systemDatabase') : '',
+            repeatsName ? '' : description,
+          ]
+            .filter(Boolean)
+            .join(' · ');
           return (
             <Tooltip
               as="button"
@@ -51,9 +61,15 @@ export default function DatabaseSidebar({
               className={selected === db.id ? 'active' : ''}
               aria-pressed={selected === db.id}
               onClick={() => onSelect(db.id)}
-              text={repeatsName ? undefined : description || undefined}
+              text={tooltip || undefined}
             >
-              <span>▤ {db.name}</span>
+              <span className="database-collection-label">
+                <ActionIcon
+                  name={db.is_system ? 'system-database' : 'database'}
+                  className="database-collection-icon"
+                />
+                <span>{db.name}</span>
+              </span>
               <small>{db.match_count}</small>
             </Tooltip>
           );
@@ -69,13 +85,15 @@ export default function DatabaseSidebar({
               compact
               onClick={() => onEdit(active)}
             />
-            <ActionButton
-              icon="delete"
-              label={l(active.is_system ? 'clearDatabase' : 'deleteDatabase')}
-              compact
-              disabled={active.is_system && active.match_count === 0}
-              onClick={() => onDelete(active)}
-            />
+            {active.id !== PAUSED_MATCHES_DATABASE_ID && (
+              <ActionButton
+                icon="delete"
+                label={l(active.is_system ? 'clearDatabase' : 'deleteDatabase')}
+                compact
+                disabled={active.is_system && active.match_count === 0}
+                onClick={() => onDelete(active)}
+              />
+            )}
           </div>
         </div>
       )}

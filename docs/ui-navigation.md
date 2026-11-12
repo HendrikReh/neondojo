@@ -10,6 +10,9 @@ underline. Hover remains transparent; keyboard focus has a visible accent
 outline. Disabled choices retain native disabled behavior and reduced opacity.
 The settings appearance preview depicts the same navigation.
 
+In the match database sidebar, system databases use a database-with-gear icon
+in the theme's accent color. The underline identifies the selected database.
+
 Use `text-navigation` on the container and keep buttons as direct children.
 Existing `aria-selected="true"`, `aria-pressed="true"`, `aria-current="page"` or
 `active` state drives the underline. Keep existing keyboard handlers and ARIA

@@ -189,7 +189,7 @@ struct UploadForm {
     file: String,
 }
 
-#[utoipa::path(post, path="/api/imports", params(ImportQuery), request_body(content=UploadForm, content_type="multipart/form-data"), responses((status=201, body=ImportResponse), (status=200, body=ImportResponse, description="Previously imported file"), (status=422, body=ErrorBody), (status=413, description="Upload too large"), (status=429, body=ErrorBody)), tag="Library")]
+#[utoipa::path(post, path="/api/imports", params(ImportQuery), request_body(content=UploadForm, content_type="multipart/form-data"), responses((status=201, body=ImportResponse), (status=200, body=ImportResponse, description="Previously imported file"), (status=409, body=ErrorBody, description="Target is reserved for paused sessions"), (status=422, body=ErrorBody), (status=413, description="Upload too large"), (status=429, body=ErrorBody)), tag="Library")]
 async fn upload(
     State(state): State<AppState>,
     Query(query): Query<ImportQuery>,
@@ -282,16 +282,7 @@ async fn upload(
             .await
             .map_err(anyhow::Error::from)?,
     };
-    let exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM databases WHERE id=$1 AND NOT collection_only)",
-    )
-    .bind(database_id)
-    .fetch_one(&state.pool)
-    .await
-    .map_err(anyhow::Error::from)?;
-    if !exists {
-        return Err(ApiError::missing());
-    }
+    crate::databases::require_library_destination(&state.pool, database_id).await?;
     let result = store::import_match_in_database(
         &state.pool,
         &filename,

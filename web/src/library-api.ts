@@ -6,11 +6,17 @@ import type { PlayMode } from './play-mode-messages';
 type Schema = components['schemas'];
 
 export type Database = Schema['Database'];
+export const PAUSED_MATCHES_DATABASE_ID =
+  '00000000-0000-0000-0000-000000000004';
+export const PAUSED_MATCHES_DATABASE_NAME = 'Paused Matches';
+export const acceptsLibraryMatches = (id: string) =>
+  id !== PAUSED_MATCHES_DATABASE_ID;
 export type LibraryMatch = Required<
   Omit<
     Schema['DatabaseMatch'],
     | 'play_session_id'
     | 'play_phase'
+    | 'play_paused'
     | 'play_mode'
     | 'play_assisted'
     | 'occurrence'
@@ -18,6 +24,7 @@ export type LibraryMatch = Required<
   >
 > &
   Pick<Schema['DatabaseMatch'], 'play_session_id' | 'play_phase'> & {
+    play_paused?: Schema['DatabaseMatch']['play_paused'];
     play_mode?: PlayMode | null;
     play_assisted?: boolean;
     occurrence?: Schema['LibraryOccurrence'] | null;

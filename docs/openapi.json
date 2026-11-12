@@ -1881,6 +1881,16 @@
               }
             }
           },
+          "409": {
+            "description": "Target is reserved for paused sessions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
           "413": {
             "description": "Upload too large"
           },
@@ -2315,6 +2325,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ActionResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Target is reserved for paused sessions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -8849,6 +8869,7 @@
         "required": [
           "id",
           "source_available",
+          "play_paused",
           "play_assisted",
           "match_no",
           "filename",
@@ -8956,6 +8977,10 @@
                 "$ref": "#/components/schemas/PlayMode"
               }
             ]
+          },
+          "play_paused": {
+            "type": "boolean",
+            "description": "A live play checkpoint that must be explicitly resumed."
           },
           "play_phase": {
             "type": [
@@ -11139,7 +11164,9 @@
           "drop",
           "resign",
           "next_game",
-          "end_session"
+          "end_session",
+          "pause",
+          "resume"
         ]
       },
       "PlayActionRequest": {
@@ -11846,6 +11873,10 @@
                 "$ref": "#/components/schemas/OpeningRoll"
               }
             ]
+          },
+          "paused": {
+            "type": "boolean",
+            "description": "The saved checkpoint is available for explicit resumption."
           },
           "pending_decision": {
             "oneOf": [

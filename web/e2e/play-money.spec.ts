@@ -128,15 +128,15 @@ test('money games continue with the score and keep each saved game report', asyn
   expect(reports[1].study_report_id).not.toBe(reports[0].study_report_id);
 });
 
-for (const [width, locale] of [
-  [1440, 'en'],
-  [390, 'en'],
-  [390, 'de'],
+for (const [width, height, locale] of [
+  [1800, 1169, 'en'],
+  [390, 1000, 'en'],
+  [390, 1000, 'de'],
 ] as const) {
-  test(`money sessions can end beside Next game and stay finished after reload at ${width}px (${locale})`, async ({
+  test(`money sessions can pause beside Next game and resume after reload at ${width}px (${locale})`, async ({
     page,
   }) => {
-    await page.setViewportSize({ width, height: 1000 });
+    await page.setViewportSize({ width, height });
     const { saved } = await historyFixture(page);
     const german = locale === 'de';
     const text = {
@@ -144,9 +144,8 @@ for (const [width, locale] of [
       result: german ? 'Spiel beendet' : 'Game finished',
       next: german ? 'Nächstes Spiel' : 'Next game',
       end: german ? 'Sitzung beenden' : 'End session',
-      ended: german ? 'Sitzung beendet' : 'Session ended',
-      back: german ? 'Zurück zum Brett' : 'Back to board',
-      newMatch: german ? 'Neues Match' : 'New match',
+      paused: german ? 'Match pausiert' : 'Match paused',
+      resume: german ? 'Match fortsetzen' : 'Resume match',
       review: german ? 'Lernauswertung' : 'Learning review',
       reviewButton: german ? 'Spielauswertung' : 'Learning review',
     };
@@ -183,7 +182,12 @@ for (const [width, locale] of [
       async (route) => {
         const body = route.request().postDataJSON();
         requests.push(body);
-        expect(body).toEqual({ version: 7, action: 'end_session' });
+        if (body.action === 'resume') {
+          expect(body).toEqual({ version: 8, action: 'resume' });
+          Object.assign(saved, { paused: false, version: 9 });
+          return route.fulfill({ json: saved });
+        }
+        expect(body).toEqual({ version: 7, action: 'pause' });
         if (fail) {
           fail = false;
           return route.fulfill({
@@ -191,11 +195,7 @@ for (const [width, locale] of [
             json: { error: 'Saved session is unchanged' },
           });
         }
-        Object.assign(saved, {
-          phase: 'match_over',
-          money_session_ended: true,
-          version: 8,
-        });
+        Object.assign(saved, { paused: true, version: 8 });
         return route.fulfill({ json: saved });
       },
     );
@@ -222,42 +222,30 @@ for (const [width, locale] of [
     await expect(result).toContainText('Saved session is unchanged');
     await expect(next).toBeEnabled();
     await end.click();
-    await expect(
-      page.getByRole('alertdialog', { name: text.ended, exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole('button', { name: text.next, exact: true }),
-    ).toHaveCount(0);
+    await expect(page.getByText(text.paused, { exact: true })).toBeVisible();
+    await expect(next).toHaveCount(0);
     await expect(page.locator('.play-match-heading')).toContainText('3 : 6');
     expect(saved.review).toEqual(report);
+
     await page.reload();
     await page.getByRole('tab', { name: text.play, exact: true }).click();
-    const finished = page.getByRole('alertdialog', {
-      name: text.ended,
-      exact: true,
-    });
-    await expect(finished).toBeVisible();
-    await expect(
-      finished.getByRole('button', { name: text.newMatch, exact: true }),
-    ).toHaveClass(/\bprimary\b/);
-    const directReview = finished.getByRole('button', {
+    await expect(page.getByText(text.paused, { exact: true })).toBeVisible();
+    expect(requests).toHaveLength(2);
+    await page.getByRole('button', { name: text.resume, exact: true }).click();
+    await expect(result).toBeVisible();
+    await expect(next).toBeEnabled();
+    const directReview = result.getByRole('button', {
       name: text.reviewButton,
-      exact: true,
-    });
-    const backToBoard = finished.getByRole('button', {
-      name: text.back,
       exact: true,
     });
     if (german) {
       await page.clock.install();
-      for (const button of [backToBoard, directReview]) {
-        await button.focus();
-        await expect(button.getByRole('tooltip')).toHaveCount(0);
-        await button.blur();
-        await button.hover();
-        await page.clock.runFor(400);
-        await expect(button.getByRole('tooltip')).toHaveCount(0);
-      }
+      await directReview.focus();
+      await expect(directReview.getByRole('tooltip')).toHaveCount(0);
+      await directReview.blur();
+      await directReview.hover();
+      await page.clock.runFor(400);
+      await expect(directReview.getByRole('tooltip')).toHaveCount(0);
     }
     await directReview.click();
     const reportDialog = page.getByRole('dialog', {
@@ -268,19 +256,7 @@ for (const [width, locale] of [
     await page.keyboard.press('Escape');
     await expect(reportDialog).toHaveCount(0);
     await expect(directReview).toBeFocused();
-    await backToBoard.click();
-    await expect(finished).toHaveCount(0);
-    await expect(
-      page.getByRole('button', { name: text.end, exact: true }),
-    ).toHaveCount(0);
-    await page
-      .locator('.play-history')
-      .getByRole('button', { name: text.review, exact: true })
-      .click();
-    await expect(
-      page.getByRole('dialog', { name: text.review, exact: true }),
-    ).toBeVisible();
     await expect(page.locator('.play-match-heading')).toContainText('3 : 6');
-    expect(requests).toHaveLength(2);
+    expect(requests).toHaveLength(3);
   });
 }

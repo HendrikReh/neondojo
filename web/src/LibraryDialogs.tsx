@@ -4,6 +4,7 @@ import { request } from './api';
 import LibraryDialog from './LibraryDialog';
 import { useLibraryText, type LibraryMessageKey } from './library-messages';
 import {
+  acceptsLibraryMatches,
   exportMatches,
   type Database,
   type LibraryMatch,
@@ -43,10 +44,12 @@ export default function LibraryDialogs({
   const match = state.kind === 'metadata' ? state.match : undefined;
   const [name, setName] = useState(db?.name ?? match?.display_name ?? ''),
     [description, setDescription] = useState(db?.description ?? '');
-  const [target, setTarget] = useState(
-    databases.find((d) => state.kind !== 'batch' || d.id !== state.source)
-      ?.id ?? '',
+  const targets = databases.filter(
+    (d) =>
+      acceptsLibraryMatches(d.id) &&
+      (state.kind !== 'batch' || d.id !== state.source),
   );
+  const [target, setTarget] = useState(targets[0]?.id ?? '');
   const [add, setAdd] = useState(''),
     [remove, setRemove] = useState(''),
     [format, setFormat] = useState<'sgf' | 'original'>('sgf');
@@ -286,13 +289,11 @@ export default function LibraryDialogs({
                     <option value="" disabled>
                       —
                     </option>
-                    {databases
-                      .filter((d) => d.id !== state.source)
-                      .map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.name}
-                        </option>
-                      ))}
+                    {targets.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
                   </select>
                 </label>
                 {state.action === 'copy' && <p>{l('copyHelp')}</p>}

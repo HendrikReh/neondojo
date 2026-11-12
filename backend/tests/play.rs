@@ -1213,6 +1213,141 @@ async fn legacy_sessions_without_opening_metadata_keep_their_active_native_turn(
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL and native GNUbg"]
+async fn pausing_and_resuming_preserves_the_checkpoint_and_library_identity(pool: PgPool) {
+    let app = api::router(AppState::new(pool.clone(), engine()));
+    let (status, session) = call(
+        app.clone(),
+        "POST",
+        "/api/play/sessions",
+        json!({"play_mode":"competition","human_player":0,"match_length":5}),
+    )
+    .await;
+    assert_eq!(status, 201, "{session}");
+    let session = ready(app.clone(), session).await;
+    let id = session["id"].as_str().unwrap();
+    let session_id: uuid::Uuid = id.parse().unwrap();
+    let library_id = session["library_match_id"].as_str().unwrap();
+    let uri = format!("/api/play/sessions/{id}");
+    let action_uri = format!("{uri}/actions");
+    let (_, databases) = call(app.clone(), "GET", "/api/databases", Value::Null).await;
+    let default = &databases.as_array().unwrap()[0]["id"];
+    let (status, copied) = call(
+        app.clone(),
+        "POST",
+        "/api/library/actions",
+        json!({"action":"copy","match_ids":[library_id],"target_database_id":default}),
+    )
+    .await;
+    assert_eq!(status, 200, "{copied}");
+    let copy_id = copied["results"][0]["created_id"].as_str().unwrap();
+    // Pause and resume must work with only the saved checkpoint.
+    sqlx::query("UPDATE play_sessions SET gnubg_path='/missing/gnubg' WHERE id=$1")
+        .bind(session_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let checkpoint = || {
+        sqlx::query_as::<_, (String, String)>("SELECT sgf,native_id FROM play_sessions WHERE id=$1")
+            .bind(session_id)
+            .fetch_one(&pool)
+    };
+    let original_checkpoint = checkpoint().await.unwrap();
+    let pause = json!({"version":session["version"],"action":"pause"});
+    let (first, second) = tokio::join!(
+        call(app.clone(), "POST", &action_uri, pause.clone()),
+        call(app.clone(), "POST", &action_uri, pause)
+    );
+    let ((status, paused), (competing_status, competing)) = if first.0 == 200 {
+        (first, second)
+    } else {
+        (second, first)
+    };
+    assert_eq!(status, 200, "{paused}");
+    assert_eq!(competing_status, 409, "{competing}");
+    let database = databases
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|db| db["name"] == "Paused Matches")
+        .unwrap();
+    assert_eq!(database["is_system"], true);
+    assert_eq!(paused["paused"], true);
+    for field in [
+        "phase",
+        "position",
+        "history",
+        "scores",
+        "engine",
+        "library_match_id",
+    ] {
+        assert_eq!(paused[field], session[field], "changed {field}");
+    }
+    let (_, restored) = call(app.clone(), "GET", &uri, Value::Null).await;
+    assert_eq!(restored, paused);
+    let database_id = database["id"].as_str().unwrap();
+    let (_, paused_library) = call(
+        app.clone(),
+        "GET",
+        &format!("/api/library/matches?database_id={database_id}"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(paused_library["items"][0]["id"], library_id);
+    assert_eq!(paused_library["items"][0]["play_paused"], true);
+    let (status, error) = call(
+        app.clone(),
+        "DELETE",
+        &format!(
+            "/api/databases/{database_id}/matches?version={}",
+            database["version"]
+        ),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 409, "{error}");
+    for (action, version) in [
+        ("roll", &paused["version"]),
+        ("resume", &session["version"]),
+    ] {
+        let (status, body) = call(
+            app.clone(),
+            "POST",
+            &action_uri,
+            json!({"action":action,"version":version}),
+        )
+        .await;
+        assert_eq!(status, 409, "{body}");
+    }
+    let (status, moved) = call(
+        app.clone(), "POST", "/api/library/actions",
+        json!({"action":"move","match_ids":[copy_id],"target_database_id":bgtutor::play::BOT_DATABASE_ID}),
+    ).await;
+    assert_eq!(status, 200, "{moved}");
+    assert_eq!(moved["results"][0]["status"], "moved");
+    let (status, resumed) = call(
+        app.clone(),
+        "POST",
+        &action_uri,
+        json!({"version":paused["version"],"action":"resume"}),
+    )
+    .await;
+    assert_eq!(status, 200, "{resumed}");
+    assert_eq!(resumed["paused"], false);
+    assert_eq!(resumed["position"], session["position"]);
+    assert_eq!(resumed["library_match_id"], library_id);
+    assert_eq!(checkpoint().await.unwrap(), original_checkpoint);
+    let (_, row) = call(
+        app,
+        "GET",
+        &format!("/api/matches/{library_id}/metadata"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(&row["database_id"], default);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL and native GNUbg"]
 async fn bot_sessions_are_library_matches_from_creation(pool: PgPool) {
     let _ = tracing_subscriber::fmt()
         .with_env_filter("bgtutor=debug")
@@ -1882,6 +2017,24 @@ async fn coach_checkpoints_feedback_before_dice_and_resumes_after_reload(pool: P
         .0,
         422
     );
+    let (status, paused) = call(
+        app.clone(),
+        "POST",
+        &format!("{uri}/actions"),
+        json!({"version":staged["version"],"action":"pause"}),
+    )
+    .await;
+    assert_eq!(status, 200, "{paused}");
+    let (status, resumed) = call(
+        app.clone(),
+        "POST",
+        &format!("{uri}/actions"),
+        json!({"version":paused["version"],"action":"resume"}),
+    )
+    .await;
+    assert_eq!(status, 200, "{resumed}");
+    assert_eq!(resumed["pending_decision"], *pending);
+    request["version"] = resumed["version"].clone();
     request["decision_id"] = pending["id"].clone();
     let (status, committed) = call(app, "POST", &format!("{uri}/actions"), request).await;
     assert_eq!(status, 200, "{committed}");
@@ -4021,11 +4174,31 @@ async fn money_end_session_keeps_final_score_sgf_and_all_game_reports(pool: PgPo
             )
             .await
             .1;
+            let (status, paused) = call(
+                app.clone(),
+                "POST",
+                &format!("{uri}/actions"),
+                json!({"version":reviewed["version"],"action":"pause"}),
+            )
+            .await;
+            assert_eq!(status, 200, "{paused}");
+            assert_eq!(paused["phase"], "game_over");
+            assert_eq!(paused["money_session_ended"], false);
+            let (status, resumed) = call(
+                app.clone(),
+                "POST",
+                &format!("{uri}/actions"),
+                json!({"version":paused["version"],"action":"resume"}),
+            )
+            .await;
+            assert_eq!(status, 200, "{resumed}");
+            assert_eq!(resumed["scores"], reviewed["scores"]);
+            assert_eq!(resumed["study_report_id"], reviewed["study_report_id"]);
             let (status, next) = call(
                 app.clone(),
                 "POST",
                 &format!("{uri}/actions"),
-                json!({"version":reviewed["version"],"action":"next_game"}),
+                json!({"version":resumed["version"],"action":"next_game"}),
             )
             .await;
             assert_eq!(status, 200, "{next}");

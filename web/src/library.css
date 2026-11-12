@@ -37,9 +37,22 @@
   text-align: left;
   width: 100%;
 }
-.database-collections button span {
+.database-collection-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
   overflow-wrap: anywhere;
   min-width: 0;
+}
+.database-collection-icon {
+  box-sizing: border-box;
+  flex: none;
+  padding: 2px;
+}
+.database-collection-icon[data-action-glyph='system-database'] {
+  color: var(--ui-accent);
+  background: var(--ui-selected);
+  border-radius: 4px;
 }
 .database-collections small {
   font-variant-numeric: tabular-nums;

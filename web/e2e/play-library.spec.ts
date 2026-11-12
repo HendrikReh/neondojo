@@ -1,5 +1,6 @@
 import { test, expect } from './test';
 import { nativeSteps } from '../src/play-sound-events';
+import { historyFixture } from './play-history-review-helpers';
 const id = '994b5330-bf4c-4d57-88c0-111111111111';
 const other = '994b5330-bf4c-4d57-88c0-222222222222';
 const db = '00000000-0000-0000-0000-000000000003';
@@ -333,3 +334,150 @@ for (const primary of ['white', 'black'] as const) {
     await expect(page.locator('th[data-column="play_mode"]')).toHaveCount(0);
   });
 }
+
+test('a paused match resumes from Paused Matches at its saved decision', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  const { saved: session } = await historyFixture(page);
+  const pausedDb = '00000000-0000-0000-0000-000000000004';
+  const match = row(session.id, 'roll');
+  const checkpoint = { ...session, phase: 'roll', paused: false };
+  Object.assign(session, checkpoint);
+  await page.route('**/api/databases', (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: '00000000-0000-0000-0000-000000000001',
+          name: 'Unsorted',
+          description: '',
+          version: 0,
+          is_default: true,
+          is_system: true,
+          created_at: '2026-11-09T10:00:00Z',
+          updated_at: '2026-11-09T10:00:00Z',
+          match_count: 0,
+        },
+        {
+          id: pausedDb,
+          name: 'Paused Matches',
+          description: '',
+          version: 0,
+          is_default: false,
+          is_system: true,
+          created_at: '2026-11-09T10:00:00Z',
+          updated_at: '2026-11-09T10:00:00Z',
+          match_count: Number(checkpoint.paused),
+        },
+      ],
+    }),
+  );
+  await page.route('**/api/library/matches?*', (route) => {
+    const scope = new URL(route.request().url()).searchParams.get(
+      'database_id',
+    );
+    return route.fulfill({
+      json: {
+        items:
+          checkpoint.paused && scope === pausedDb
+            ? [{ ...match, database_id: pausedDb, play_paused: true }]
+            : [],
+        next_cursor: null,
+      },
+    });
+  });
+  const actions: string[] = [];
+  await page.route(
+    `**/api/play/sessions/${session.id}/actions`,
+    async (route) => {
+      const body = route.request().postDataJSON();
+      actions.push(body.action);
+      expect(body).toEqual({
+        version: checkpoint.version,
+        action: checkpoint.paused ? 'resume' : 'pause',
+      });
+      checkpoint.paused = !checkpoint.paused;
+      checkpoint.version++;
+      Object.assign(session, checkpoint);
+      await route.fulfill({ json: checkpoint });
+    },
+  );
+  await page.reload();
+  await page.getByRole('tab', { name: 'Playing', exact: true }).click();
+  const decision = page.getByRole('alertdialog', {
+    name: 'Next roll',
+    exact: true,
+  });
+  await decision
+    .getByRole('button', { name: 'End session', exact: true })
+    .click();
+  await expect(page.getByText('Match paused', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Resume match', exact: true }),
+  ).toBeFocused();
+  await expect(decision).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('paused-playing.png') });
+  await page
+    .getByRole('button', { name: 'Paused Matches', exact: true })
+    .click();
+  await expect(
+    page.getByRole('tab', { name: 'Match database', exact: true }),
+  ).toHaveAttribute('aria-selected', 'true');
+  await expect(
+    page.getByRole('button', { name: 'Empty database', exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByText('Import into: Unsorted')).toBeVisible();
+  const matchRow = page
+    .getByRole('row')
+    .filter({ hasText: 'Library bot match' });
+  await expect(matchRow).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('paused-library.png') });
+  await matchRow.focus();
+  await matchRow.press('Enter');
+  await expect(page.getByText('Match paused', { exact: true })).toBeVisible();
+  expect(actions).toEqual(['pause']);
+  await page
+    .getByRole('button', { name: 'Paused Matches', exact: true })
+    .click();
+  await page
+    .getByRole('button', {
+      name: 'Resume match: Library bot match',
+      exact: true,
+    })
+    .click();
+  await expect(decision).toBeVisible();
+  await expect(
+    decision.getByRole('button', { name: 'Roll dice', exact: true }),
+  ).toBeEnabled();
+  expect(actions).toEqual(['pause', 'resume']);
+});
+
+test('pausing from the checker board keeps the confirmed turn checkpoint', async ({
+  page,
+}) => {
+  const { saved: session, point } = await historyFixture(page);
+  const actions: string[] = [];
+  await page.route(
+    `**/api/play/sessions/${session.id}/actions`,
+    async (route) => {
+      const body = route.request().postDataJSON();
+      actions.push(body.action);
+      expect(body.version).toBe(session.version);
+      Object.assign(session, {
+        paused: body.action === 'pause',
+        version: session.version + 1,
+      });
+      await route.fulfill({ json: session });
+    },
+  );
+  const undo = page.getByRole('button', { name: 'Undo step', exact: true });
+  await point(13).click();
+  await expect(undo).toBeEnabled();
+  await page.getByRole('button', { name: 'End session', exact: true }).click();
+  await expect(page.getByText('Match paused', { exact: true })).toBeVisible();
+  await expect(undo).toHaveCount(0);
+  await page.getByRole('button', { name: 'Resume match', exact: true }).click();
+  await expect(undo).toBeDisabled();
+  await expect(page.locator('.play-selected-steps')).toHaveCount(0);
+  expect(actions).toEqual(['pause', 'resume']);
+});

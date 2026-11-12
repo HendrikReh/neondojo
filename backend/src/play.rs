@@ -2,6 +2,7 @@
 //! optimistic revisions fence concurrent requests without holding DB locks.
 mod feedback;
 mod library;
+mod pause;
 mod reports;
 pub use feedback::{
     FeedbackOperation, PlayAlternative, PlayAttempt, PlayDecision, PlayFeedbackRequest, PlayMode,
@@ -9,7 +10,9 @@ pub use feedback::{
 };
 use feedback::{analyze_decision, default_analysis_plies, present, stage_choice};
 pub(crate) use feedback::{default_auto_analysis, default_play_mode, default_threshold};
-pub use library::{BOT_DATABASE_ID, backfill as backfill_library_matches};
+pub use library::{
+    BOT_DATABASE_ID, PAUSED_MATCHES_DATABASE_ID, backfill as backfill_library_matches,
+};
 
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
@@ -99,6 +102,9 @@ pub struct PlayGameResult {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PlaySession {
+    /// The saved checkpoint is available for explicit resumption.
+    #[serde(default)]
+    pub paused: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub game_results: Option<Vec<PlayGameResult>>,
     /// Current linked library entry; projected from the relational session link.
@@ -182,6 +188,8 @@ pub enum PlayAction {
     Resign,
     NextGame,
     EndSession,
+    Pause,
+    Resume,
 }
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
@@ -202,6 +210,7 @@ struct Saved {
     gnubg_path: String,
     sgf: String,
     native_id: String,
+    paused_from_database_id: Option<Uuid>,
 }
 #[derive(Serialize)]
 struct NativeRequest<'a> {
@@ -282,8 +291,10 @@ pub(crate) async fn require_job_review_available(
     }
     Ok(())
 }
+const SAVED_STATE: &str = "state || jsonb_build_object('library_match_id', library_match_id, 'paused', paused_from_database_id IS NOT NULL)";
+
 async fn saved(state: &AppState, id: Uuid) -> ApiResult<Saved> {
-    sqlx::query_as("SELECT jsonb_set(state,'{library_match_id}',coalesce(to_jsonb(library_match_id),'null'::jsonb)) AS state,gnubg_path,sgf,native_id FROM play_sessions WHERE id=$1")
+    sqlx::query_as(&format!("SELECT {SAVED_STATE} AS state,gnubg_path,sgf,native_id,paused_from_database_id FROM play_sessions WHERE id=$1"))
         .bind(id)
         .fetch_optional(&state.pool)
         .await
@@ -347,9 +358,9 @@ fn project_game_results(mut session: PlaySession, sgf: &str) -> PlaySession {
 
 #[utoipa::path(get,path="/api/play/sessions",responses((status=200,body=Vec<PlaySession>)),tag="Playing")]
 async fn list_sessions(State(state): State<AppState>) -> ApiResult<Json<Vec<PlaySession>>> {
-    let rows: Vec<(sqlx::types::Json<PlaySession>, String)> = sqlx::query_as(
-        "SELECT jsonb_set(state,'{library_match_id}',coalesce(to_jsonb(library_match_id),'null'::jsonb)),sgf FROM play_sessions ORDER BY updated_at DESC,id DESC LIMIT 100",
-    )
+    let rows: Vec<(sqlx::types::Json<PlaySession>, String)> = sqlx::query_as(&format!(
+        "SELECT {SAVED_STATE},sgf FROM play_sessions ORDER BY updated_at DESC,id DESC LIMIT 100"
+    ))
     .fetch_all(&state.pool)
     .await
     .map_err(anyhow::Error::from)?;
@@ -519,6 +530,7 @@ async fn create_session(
     let version = engine.version().await.map_err(native_error)?;
     let id = Uuid::new_v4();
     let mut session = PlaySession {
+        paused: false,
         money_session_ended: false,
         game_results: None,
         study_report_id: None,
@@ -594,7 +606,15 @@ async fn create_session(
     .execute(&mut *tx)
     .await
     .map_err(anyhow::Error::from)?;
-    session.library_match_id = Some(library::sync(&mut tx, &session, &sgf, None).await?);
+    session.library_match_id = Some(
+        library::sync(
+            &mut tx,
+            &session,
+            &sgf,
+            library::ArchiveTarget::NewIn(BOT_DATABASE_ID),
+        )
+        .await?,
+    );
     sqlx::query("UPDATE play_sessions SET state=$2 WHERE id=$1")
         .bind(id)
         .bind(sqlx::types::Json(&session))
@@ -719,15 +739,7 @@ fn validate_action<'a>(
     session: &'a PlaySession,
     request: &PlayActionRequest,
 ) -> ApiResult<(&'static str, Option<&'a str>)> {
-    if request.version != session.version {
-        return Err(ApiError(
-            StatusCode::CONFLICT,
-            "Session changed; reload before playing".into(),
-        ));
-    }
-    if request.version < 0 || request.version == i64::MAX {
-        return Err(ApiError::invalid("Invalid session version"));
-    }
+    pause::require_active(session)?;
     if !matches!(request.action, PlayAction::Move) && request.move_index.is_some() {
         return Err(ApiError::invalid("move is only valid for checker moves"));
     }
@@ -794,6 +806,7 @@ async fn change_mode(
     if request.version < 0 || request.version == i64::MAX {
         return Err(ApiError::invalid("Invalid session version"));
     }
+    pause::require_active(&session)?;
     if matches!(session.phase, PlayPhase::MatchOver) || reports::money_finished(&session) {
         return Err(ApiError::invalid(
             "Completed matches keep their playing mode",
@@ -842,6 +855,31 @@ async fn act(
     Json(request): Json<PlayActionRequest>,
 ) -> ApiResult<Json<PlaySession>> {
     let previous = saved(&state, id).await?;
+    if request.version != previous.state.version {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            "Session changed; reload before playing".into(),
+        ));
+    }
+    if request.version < 0 || request.version == i64::MAX {
+        return Err(ApiError::invalid("Invalid session version"));
+    }
+    if matches!(request.action, PlayAction::Pause | PlayAction::Resume) {
+        if request.move_index.is_some()
+            || request.resign_level.is_some()
+            || request.decision_id.is_some()
+        {
+            return Err(ApiError::invalid(
+                "Pausing and resuming only require a session version",
+            ));
+        }
+        return pause::transition(
+            &state,
+            previous,
+            matches!(request.action, PlayAction::Pause),
+        )
+        .await;
+    }
     let (action, notation) = validate_action(&previous.state, &request)?;
     let mut working = previous.state.0.clone();
     working.learning_used |= working.play_mode != PlayMode::Competition;
@@ -1002,7 +1040,9 @@ async fn persist_session_with_report(
     completed_report: Option<&PlaySession>,
 ) -> ApiResult<Json<PlaySession>> {
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
-    let linked = library::lock_match(&mut tx, session.id).await?;
+    let linked = library::lock_match(&mut tx, session.id, &[])
+        .await?
+        .map(|(id, _)| id);
     let mut current = session.clone();
     current.library_match_id = linked;
     if let Some(report) = completed_report {
@@ -1029,7 +1069,13 @@ async fn persist_session_with_report(
     }
     if let Some(match_id) = linked {
         if sync {
-            library::sync(&mut tx, &current, sgf, Some(match_id)).await?;
+            library::sync(
+                &mut tx,
+                &current,
+                sgf,
+                library::ArchiveTarget::Existing(match_id),
+            )
+            .await?;
         } else {
             library::update_mode_metadata(&mut tx, &current, match_id).await?;
         }
@@ -1054,6 +1100,7 @@ async fn feedback(
     if request.version < 0 || request.version == i64::MAX {
         return Err(ApiError::invalid("Invalid session version"));
     }
+    pause::require_active(&session)?;
     if session.play_mode == PlayMode::Competition {
         return Err(ApiError::invalid(
             "Feedback is available after a competition match",
@@ -1140,6 +1187,7 @@ async fn review(
     if request.version < 0 || request.version == i64::MAX {
         return Err(ApiError::invalid("Invalid session version"));
     }
+    pause::require_active(&session)?;
     if !matches!(session.phase, PlayPhase::MatchOver) && !reports::money_finished(&session) {
         return Err(ApiError::invalid(
             "Complete the match or money game before reviewing",

@@ -245,7 +245,7 @@ async fn match_deletion_retains_exact_saved_occurrences_with_source_context_and_
     assert_eq!(get(&pool, "/api/library/matches").await["items"], json!([]));
     assert_eq!(get(&pool, "/api/matches").await["items"], json!([]));
     let databases = get(&pool, "/api/databases").await;
-    assert_eq!(databases.as_array().unwrap().len(), 3);
+    assert_eq!(databases.as_array().unwrap().len(), 4);
     assert_eq!(databases[0]["match_count"], 0);
     let browser = get(&pool, "/api/position-browser").await;
     assert_eq!(browser["items"].as_array().unwrap().len(), 1);
@@ -313,7 +313,7 @@ async fn database_deletion_uses_the_same_retention_and_internal_hosts_are_protec
     assert_eq!(browser["items"][0]["database_id"], db);
     assert_eq!(
         get(&pool, "/api/databases").await.as_array().unwrap().len(),
-        3
+        4
     );
     assert_eq!(
         get(&pool, "/api/position-filters").await[0]["database_missing"],
@@ -849,7 +849,9 @@ async fn retention_migration_only_adds_infrastructure_and_preserves_existing_use
     all.run(&pool).await.unwrap();
     let unchanged:Value=sqlx::query_scalar("SELECT to_jsonb(m)-ARRAY['collection_only','source_match_id','source_match_no','source_database_id','source_database_name','source_revision','play_mode','play_assisted'] FROM matches m").fetch_one(&pool).await.unwrap();
     assert_eq!(unchanged, old_match);
-    let databases:Vec<Value>=sqlx::query_scalar("SELECT to_jsonb(d)-ARRAY['collection_only','is_default','is_system','version','updated_at'] FROM databases d WHERE NOT collection_only AND id<>$1 ORDER BY id").bind(bgtutor::play::BOT_DATABASE_ID).fetch_all(&pool).await.unwrap();
+    let databases:Vec<Value>=sqlx::query_scalar("SELECT to_jsonb(d)-ARRAY['collection_only','is_default','is_system','version','updated_at'] FROM databases d WHERE NOT collection_only AND id NOT IN ($1,$2) ORDER BY id")
+        .bind(bgtutor::play::BOT_DATABASE_ID).bind(bgtutor::play::PAUSED_MATCHES_DATABASE_ID)
+        .fetch_all(&pool).await.unwrap();
     assert_eq!(databases, old_databases);
     let default_id: Uuid = sqlx::query_scalar("SELECT id FROM databases WHERE is_default")
         .fetch_one(&pool)
@@ -883,10 +885,15 @@ async fn retention_migration_only_adds_infrastructure_and_preserves_existing_use
     .await
     .unwrap();
     assert_eq!(flags, (false, None, None));
-    assert_eq!(
-        get(&pool, "/api/databases").await.as_array().unwrap().len(),
-        3
-    );
+    let databases = get(&pool, "/api/databases").await;
+    let databases = databases.as_array().unwrap();
+    assert_eq!(databases.len(), 4);
+    let paused = databases
+        .iter()
+        .find(|db| db["id"] == bgtutor::play::PAUSED_MATCHES_DATABASE_ID.to_string())
+        .unwrap();
+    assert_eq!(paused["name"], "Paused Matches");
+    assert_eq!(paused["is_system"], true);
 }
 
 #[sqlx::test(migrations = "./migrations")]

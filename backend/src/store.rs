@@ -52,13 +52,15 @@ pub async fn import_match_in_database(
         tokio::task::spawn_blocking(move || crate::imported_analysis::extract(&analysis_source))
             .await??;
     let mut tx = pool.begin().await?;
-    let available: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM databases WHERE id=$1 AND NOT collection_only)",
+    // Match moves and database deletion lock the owner before touching matches.
+    let available: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM databases WHERE id=$1 AND NOT collection_only AND id<>$2 FOR KEY SHARE",
     )
     .bind(database_id)
-    .fetch_one(&mut *tx)
+    .bind(crate::play::PAUSED_MATCHES_DATABASE_ID)
+    .fetch_optional(&mut *tx)
     .await?;
-    ensure!(available, "Database not found");
+    ensure!(available.is_some(), "Database not found");
     let inserted: Option<Uuid> = sqlx::query_scalar("INSERT INTO matches(id,filename,format,sha256,white,black,match_length,position_count,original,sgf,database_id,played_on,tournament,round,place,result_state,white_score,black_score,source_metadata_loaded) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,true) ON CONFLICT(database_id,sha256) DO NOTHING RETURNING id")
         .bind(id).bind(filename).bind(format).bind(&hash).bind(&imported.players[0]).bind(&imported.players[1])
         .bind(imported.match_length).bind(imported.positions.len() as i32).bind(bytes).bind(sgf).bind(database_id).bind(metadata.played_on).bind(metadata.tournament).bind(metadata.round).bind(metadata.place).bind(metadata.result_state).bind(metadata.white_score).bind(metadata.black_score)

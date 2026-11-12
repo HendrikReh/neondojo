@@ -1,6 +1,7 @@
 //! Independent match databases, indexed library browsing and bounded bulk management.
 use crate::annotations::normalize_tag;
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
+use crate::play::PAUSED_MATCHES_DATABASE_ID;
 use crate::search::literal_pattern;
 use axum::{
     Json, Router,
@@ -91,6 +92,8 @@ pub struct DatabaseMatch {
     /// False for independent saved-position context whose source match was deleted.
     pub source_available: bool,
     pub play_session_id: Option<Uuid>,
+    /// A live play checkpoint that must be explicitly resumed.
+    pub play_paused: bool,
     /// Saved learning report available for this match; never implies generation.
     pub study_report_id: Option<Uuid>,
     pub play_phase: Option<String>,
@@ -338,14 +341,23 @@ async fn update_database(
             .map_err(anyhow::Error::from)?,
     ))
 }
-async fn database_exists(pool: &PgPool, id: Uuid) -> ApiResult<bool> {
-    Ok(sqlx::query_scalar(
+pub(crate) async fn require_library_destination(pool: &PgPool, id: Uuid) -> ApiResult<()> {
+    if id == PAUSED_MATCHES_DATABASE_ID {
+        return Err(conflict(
+            "Only paused sessions can be added to Paused Matches",
+        ));
+    }
+    let exists: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM databases WHERE id=$1 AND NOT collection_only)",
     )
     .bind(id)
     .fetch_one(pool)
     .await
-    .map_err(anyhow::Error::from)?)
+    .map_err(anyhow::Error::from)?;
+    if !exists {
+        return Err(ApiError::missing());
+    }
+    Ok(())
 }
 #[utoipa::path(delete,path="/api/databases/{id}",params(("id"=Uuid,Path),DatabaseDelete),responses((status=204),(status=409,body=ErrorBody)),tag="Databases")]
 async fn delete_database(
@@ -403,6 +415,9 @@ async fn remove_database_content(
         }
         DatabaseRemoval::Clear if !is_system => {
             return Err(conflict("Only system databases can be cleared"));
+        }
+        DatabaseRemoval::Clear if id == PAUSED_MATCHES_DATABASE_ID => {
+            return Err(conflict("Paused Matches cannot be cleared"));
         }
         _ => {}
     }
@@ -479,7 +494,7 @@ LEFT JOIN LATERAL (
 LEFT JOIN LATERAL (
     SELECT coalesce((SELECT CASE WHEN j.game_no IS NOT NULL AND j.status='completed' THEN 'partial' ELSE j.status END FROM jobs j WHERE j.match_uuid=m.id AND j.source_revision=m.source_revision AND j.kind='match' ORDER BY (j.game_no IS NULL) DESC,j.created_at DESC,j.id DESC LIMIT 1),CASE WHEN EXISTS(SELECT 1 FROM imported_analyses ia WHERE ia.match_uuid=m.id AND ia.kind IN ('checker','cube')) THEN 'imported' END) AS status
 ) analysis ON true";
-const MATCH_COLUMNS: &str = "coalesce((SELECT r.id FROM study_report_snapshots r WHERE r.session_id=ps.id ORDER BY r.game_no DESC,r.created_at DESC LIMIT 1),CASE WHEN ps.state->>'phase'='match_over' AND jsonb_typeof(ps.state->'review')='object' THEN ps.id END) AS study_report_id,ps.id AS play_session_id,ps.state->>'phase' AS play_phase,m.play_mode,m.play_assisted,m.id,NOT m.collection_only AS source_available,coalesce(m.source_match_no,m.match_no) AS match_no,m.filename,m.format,m.white,m.black,m.match_length,m.position_count,m.created_at,coalesce(m.source_database_id,m.database_id) AS database_id,coalesce(nullif(m.display_name,''),m.filename) AS display_name,m.played_on,m.tournament,m.round,m.place,m.result_state,m.white_score,m.black_score,(prj.result #>> '{performance_rating,players,0,value}')::float8 AS white_pr,(prj.result #>> '{performance_rating,players,1,value}')::float8 AS black_pr,prj.result #>> '{performance_rating,method}' AS pr_method,prj.result #>> '{performance_rating,profile}' AS pr_profile,analysis.status AS analysis_status,(SELECT count(*) FROM match_games g WHERE g.match_uuid=m.id) AS game_count,coalesce(a.tags,'{}'::text[]) AS tags,coalesce(a.comment,'') AS comment,m.metadata_version AS version";
+const MATCH_COLUMNS: &str = "coalesce((SELECT r.id FROM study_report_snapshots r WHERE r.session_id=ps.id ORDER BY r.game_no DESC,r.created_at DESC LIMIT 1),CASE WHEN ps.state->>'phase'='match_over' AND jsonb_typeof(ps.state->'review')='object' THEN ps.id END) AS study_report_id,ps.id AS play_session_id,ps.paused_from_database_id IS NOT NULL AS play_paused,ps.state->>'phase' AS play_phase,m.play_mode,m.play_assisted,m.id,NOT m.collection_only AS source_available,coalesce(m.source_match_no,m.match_no) AS match_no,m.filename,m.format,m.white,m.black,m.match_length,m.position_count,m.created_at,coalesce(m.source_database_id,m.database_id) AS database_id,coalesce(nullif(m.display_name,''),m.filename) AS display_name,m.played_on,m.tournament,m.round,m.place,m.result_state,m.white_score,m.black_score,(prj.result #>> '{performance_rating,players,0,value}')::float8 AS white_pr,(prj.result #>> '{performance_rating,players,1,value}')::float8 AS black_pr,prj.result #>> '{performance_rating,method}' AS pr_method,prj.result #>> '{performance_rating,profile}' AS pr_profile,analysis.status AS analysis_status,(SELECT count(*) FROM match_games g WHERE g.match_uuid=m.id) AS game_count,coalesce(a.tags,'{}'::text[]) AS tags,coalesce(a.comment,'') AS comment,m.metadata_version AS version";
 fn sort_spec(sort: &str) -> Option<(&'static str, &'static str)> {
     Some(match sort {
         "occurrence_database" => ("lower(occurrence_db.name)", "text"),
@@ -963,7 +978,7 @@ async fn update_metadata(
 async fn any_active(tx: &mut sqlx::Transaction<'_, Postgres>, ids: &[Uuid]) -> ApiResult<bool> {
     Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM jobs j LEFT JOIN positions p ON p.id=j.position_uuid WHERE coalesce(j.match_uuid,p.match_uuid)=ANY($1) AND j.status IN ('queued','running'))").bind(ids).fetch_one(&mut **tx).await.map_err(anyhow::Error::from)?)
 }
-#[utoipa::path(post,path="/api/library/actions",request_body=LibraryAction,responses((status=200,body=ActionResponse),(status=422,body=ErrorBody)),tag="Databases")]
+#[utoipa::path(post,path="/api/library/actions",request_body=LibraryAction,responses((status=200,body=ActionResponse),(status=409,body=ErrorBody,description="Target is reserved for paused sessions"),(status=422,body=ErrorBody)),tag="Databases")]
 async fn actions(
     State(s): State<AppState>,
     body: Result<Json<LibraryAction>, JsonRejection>,
@@ -979,9 +994,7 @@ async fn actions(
         let db = a
             .target_database_id
             .ok_or_else(|| ApiError::invalid("target_database_id is required"))?;
-        if !database_exists(&s.pool, db).await? {
-            return Err(ApiError::missing());
-        }
+        require_library_destination(&s.pool, db).await?;
     }
     a.add_tags = a
         .add_tags
@@ -1056,6 +1069,12 @@ async fn action_one(pool: &PgPool, a: &LibraryAction, id: Uuid) -> ApiResult<Act
     };
     if a.database_id.is_some_and(|scope| scope != source_db) {
         return Ok(action_item(id, "wrong_database", None, None));
+    }
+    if source_db == PAUSED_MATCHES_DATABASE_ID && a.action != "tags" {
+        return Ok(ActionItem {
+            error: Some("Resume the paused match before copying, moving or deleting it".into()),
+            ..action_item(id, "invalid", None, None)
+        });
     }
     let item = match a.action.as_str() {
         "copy" | "move" => {
