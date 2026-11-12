@@ -26,6 +26,8 @@ human = request['human_player']
 plies = request['plies']
 action = request['action']
 resignation_declined = False
+external_bot = request.get('external_bot', False)
+assert type(external_bot) is bool
 assert type(human) is int and human in (0, 1)
 assert type(plies) is int and 0 <= plies <= 2
 
@@ -65,11 +67,15 @@ for kind in ['chequerplay', 'cubedecision']:
 # An opening result is always paused with both players human. Only explicit
 # continuation activates the bot; its first move consumes the same native dice.
 if action != 'opening_roll':
-    command('set player %d gnubg' % (1 - human))
+    if not external_bot:
+        command('set player %d gnubg' % (1 - human))
     before = gnubg.gnubgid()
-    if action == 'start_opening_move':
+    if action == 'inspect':
+        assert external_bot
+    elif action == 'start_opening_move':
         assert gnubg.posinfo()['dice'][0] and not gnubg.posinfo()['doubled']
-        gnubg.nextturn()
+        if not external_bot:
+            gnubg.nextturn()
     elif action == 'move':
         notation = request['notation']
         assert notation and len(notation) <= 128
@@ -79,6 +85,10 @@ if action != 'opening_roll':
         level = request['resign_level']
         assert type(level) is int and 1 <= level <= 3
         command('resign %d' % level)
+        if external_bot:
+            accept = request['accept_resignation']
+            assert type(accept) is bool
+            command('accept' if accept else 'decline')
         if gnubg.posinfo()['gamestate'] == 1:
             assert gnubg.gnubgid() == before, 'Declined resignation changed native state'
             resignation_declined = True
@@ -97,7 +107,7 @@ if action != 'opening_roll':
     else:
         assert action in ('roll', 'double', 'take', 'drop')
         command(action)
-    if action != 'start_opening_move' and not resignation_declined:
+    if action not in ('start_opening_move', 'inspect') and not resignation_declined:
         assert gnubg.gnubgid() != before, 'GNUbg rejected action without changing state'
 
 # GNUbg can offer a bot resignation during ComputerTurn. The UI has no human
@@ -141,7 +151,7 @@ elif position['dice'][0]:
     phase = 'move'
 else:
     phase = 'roll'
-assert phase in ('opening_result', 'game_over', 'match_over') or position['turn'] == human, 'Bot did not yield to human'
+assert external_bot or phase in ('opening_result', 'game_over', 'match_over') or position['turn'] == human, 'Bot did not yield to human'
 
 # msBoard is relative to cubeinfo.move, which differs from turn while doubled.
 board = [0] * 26
@@ -204,8 +214,8 @@ if phase == 'move':
         notation = hint['move']
         def absolute(n):
             if n == 0:
-                return -1 if human == 0 else 26
-            return n if human == 0 else 25 - n
+                return -1 if position['turn'] == 0 else 26
+            return n if position['turn'] == 0 else 25 - n
         steps = [{'from': absolute(a), 'to': absolute(b)} for a, b in gnubg.parsemove(notation)]
         legal_moves.append({'notation': notation, 'steps': steps})
 
@@ -214,7 +224,7 @@ result = {'resignation_declined': resignation_declined, 'native_id': native_id, 
           'phase': phase, 'legal_moves': legal_moves, 'history': history,
           'scores': scores, 'game_no': len(games), 'winner': winner,
           'can_double': phase == 'roll' and not cube['crawford']
-              and cube['cubeowner'] in (-1, human)
-              and (cube['matchto'] == 0 or cube['cube'] < cube['matchto'] - scores[human])}
+              and cube['cubeowner'] in (-1, position['turn'])
+              and (cube['matchto'] == 0 or cube['cube'] < cube['matchto'] - scores[position['turn']])}
 with open('snapshot.json', 'w', encoding='utf-8') as f:
     json.dump(result, f, allow_nan=False)

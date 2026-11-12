@@ -92,7 +92,7 @@ WITH eligible AS (
         j.id AS job_id,m.id AS match_id,c.game_no,j.plies,
         coalesce(j.result->>'engine','GNU Backgammon') AS engine
     FROM eligible m
-    JOIN jobs j ON j.match_uuid=m.id
+    JOIN selected_engine_jobs j ON j.match_uuid=m.id
     JOIN match_analysis_games c ON c.job_id=j.id
     WHERE j.kind='match' AND j.status='completed'
       AND j.source_revision=m.source_revision

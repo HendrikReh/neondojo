@@ -396,7 +396,7 @@ fn moves(nodes: &[Node]) -> Result<Vec<(i32, &str, &Node)>> {
     Ok(moves)
 }
 
-fn decision(
+pub(crate) fn decision(
     player: i32,
     kind: &str,
     played: &str,
@@ -504,7 +504,7 @@ fn cube_decision(block: &str, player: i32, played: &str) -> Result<Decision> {
 /// ownership and Crawford.
 /// https://sources.debian.org/src/gnubg/1.05.002-2/analysis.c/
 /// https://sources.debian.org/src/gnubg/1.05.002-2/eval.c/
-fn requires_cube_analysis(position: &crate::import::ImportedPosition) -> Result<bool> {
+pub(crate) fn requires_cube_analysis(position: &crate::import::ImportedPosition) -> Result<bool> {
     if position.board.as_slice() == crate::import::sgf::initial_board() {
         return Ok(false);
     }

@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   checkGnubg,
+  loadSageInstallation,
+  saveSageInstallation,
   loadEngines,
   loadSettings,
   saveSettings,
@@ -157,5 +159,27 @@ describe('settings API', () => {
       throw new DOMException('Aborted', 'AbortError');
     });
     await expect(loadSettings()).rejects.toMatchObject({ name: 'AbortError' });
+  });
+});
+
+it('rejects malformed local installation metadata without crashing the settings form', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json([])));
+  await expect(loadSageInstallation()).rejects.toBeInstanceOf(SettingsApiError);
+});
+it('keeps local installation revision and path separate from portable preferences', async () => {
+  const fetcher = vi
+    .fn()
+    .mockResolvedValue(
+      Response.json({
+        version: 2,
+        python_path: '/local/python',
+        snapshot: null,
+      }),
+    );
+  vi.stubGlobal('fetch', fetcher);
+  expect((await saveSageInstallation(1, '/local/python')).version).toBe(2);
+  expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({
+    version: 1,
+    path: '/local/python',
   });
 });

@@ -1,4 +1,6 @@
 //! Persisted preferences and immutable engine configuration for new work.
+pub(crate) mod open_sage;
+use crate::engines::{AnalysisEngine, SageEngine, SageSnapshot};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     engine::Engine,
@@ -44,7 +46,8 @@ fn default_bearoff_direction() -> String {
 struct SavedSettings {
     #[sqlx(flatten)]
     settings: AppSettings,
-    gnubg_version: Option<String>,
+    #[sqlx(rename = "gnubg_version")]
+    _gnubg_version: Option<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -66,25 +69,38 @@ struct EngineCheckResponse {
 }
 
 /// Internal job payload, never derived again from mutable application settings.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct EngineSnapshot {
     pub engine_id: String,
     pub gnubg_path: String,
     pub engine_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub open_sage: Option<SageSnapshot>,
 }
 impl EngineSnapshot {
     pub fn fingerprint(&self) -> String {
         let value = serde_json::to_vec(self).expect("engine snapshot is serializable");
         format!("{:x}", Sha256::digest(value))
     }
-    pub fn engine(&self) -> anyhow::Result<Engine> {
-        anyhow::ensure!(self.engine_id == "gnubg", "Unsupported saved job engine");
-        Ok(Engine::new(self.gnubg_path.clone()).with_expected_version(self.engine_version.clone()))
+    pub fn engine(&self) -> anyhow::Result<AnalysisEngine> {
+        match self.engine_id.as_str() {
+            "gnubg" => Ok(AnalysisEngine::Gnubg(
+                Engine::new(self.gnubg_path.clone())
+                    .with_expected_version(self.engine_version.clone()),
+            )),
+            "bgsage" => Ok(AnalysisEngine::OpenSage(SageEngine::new(
+                self.open_sage
+                    .clone()
+                    .ok_or_else(|| anyhow::anyhow!("Missing saved Open Sage installation"))?,
+            )?)),
+            _ => anyhow::bail!("Unsupported saved job engine"),
+        }
     }
 }
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
+        .merge(open_sage::routes())
         .route("/api/settings", get(get_settings).put(put_settings))
         .route("/api/engines", get(engines))
         .route("/api/engines/gnubg/check", post(check_engine))
@@ -108,17 +124,46 @@ pub(crate) async fn snapshot(state: &AppState) -> anyhow::Result<(AppSettings, E
     // distinguish an executable upgraded in place from an existing active job.
     // Unavailable initial/fake engines still produce a job whose worker reports
     // its normal durable failure; reading settings never probes the executable.
-    let version = Engine::new(saved.settings.gnubg_path.clone())
-        .version()
-        .await
-        .ok()
-        .or(saved.gnubg_version);
-    let snapshot = EngineSnapshot {
-        engine_id: saved.settings.analysis_engine.clone(),
-        gnubg_path: saved.settings.gnubg_path.clone(),
-        engine_version: version,
-    };
+    let snapshot = snapshot_for(
+        state,
+        &saved.settings.analysis_engine,
+        &saved.settings.gnubg_path,
+        4,
+    )
+    .await?;
     Ok((saved.settings, snapshot))
+}
+
+pub(crate) async fn snapshot_for(
+    state: &AppState,
+    id: &str,
+    gnubg_path: &str,
+    threads: u32,
+) -> anyhow::Result<EngineSnapshot> {
+    let open_sage = if id == "bgsage" {
+        Some(open_sage::verified(&state.pool, threads).await?)
+    } else {
+        None
+    };
+    anyhow::ensure!(matches!(id, "gnubg" | "bgsage"), "Unsupported engine");
+    let engine_version = match &open_sage {
+        Some(snapshot) => Some(SageEngine::new(snapshot.clone())?.version().await?),
+        None => {
+            let current = Engine::new(gnubg_path.to_owned()).version().await.ok();
+            let saved = load_row(state).await?;
+            current.or_else(|| {
+                (saved.settings.gnubg_path == gnubg_path)
+                    .then_some(saved._gnubg_version)
+                    .flatten()
+            })
+        }
+    };
+    Ok(EngineSnapshot {
+        engine_id: id.into(),
+        gnubg_path: gnubg_path.into(),
+        engine_version,
+        open_sage,
+    })
 }
 
 fn validate_path(path: &str) -> ApiResult<()> {
@@ -148,16 +193,19 @@ fn validate(settings: &AppSettings) -> ApiResult<()> {
             "Player name must be at most 120 characters and contain no control characters",
         ));
     }
-    if settings.analysis_engine != "gnubg" || settings.play_engine != "gnubg" {
-        return Err(ApiError::invalid(
-            "Only the available GNUbg engine can be selected",
-        ));
-    }
-    if !(0..=4).contains(&settings.analysis_plies) {
-        return Err(ApiError::invalid("analysis plies must be 0..4"));
-    }
-    if !(0..=2).contains(&settings.play_plies) {
-        return Err(ApiError::invalid("play plies must be 0..2"));
+    for (id, purpose, plies) in [
+        (
+            &settings.analysis_engine,
+            "analysis",
+            settings.analysis_plies,
+        ),
+        (&settings.play_engine, "play", settings.play_plies),
+    ] {
+        if !crate::configuration::engine_depths(id, purpose).contains(&plies) {
+            return Err(ApiError::invalid(
+                "Engine or depth is not verified for this purpose",
+            ));
+        }
     }
     if !matches!(settings.bearoff_direction.as_str(), "right" | "left") {
         return Err(ApiError::invalid("bearoff direction must be right or left"));
@@ -187,6 +235,11 @@ async fn put_settings(
         .check_installation()
         .await
         .map_err(|e| ApiError::invalid(format!("GNUbg installation check failed: {e:#}")))?;
+    if settings.analysis_engine == "bgsage" || settings.play_engine == "bgsage" {
+        open_sage::verified(&state.pool, 4).await.map_err(|e| {
+            ApiError::invalid(format!("Open Sage installation check failed: {e:#}"))
+        })?;
+    }
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     crate::configuration::store::lock(&mut tx)
         .await
@@ -211,15 +264,40 @@ fn conflict() -> ApiError {
 
 #[utoipa::path(get, path="/api/engines", responses((status=200,body=Vec<EngineInfo>)), tag="Settings")]
 async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo>>> {
-    let settings = load(&state).await?;
-    let version =
+    let saved = load_row(&state).await?;
+    let settings = saved.settings;
+    let running: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM benchmark_runs WHERE status='running')")
+            .fetch_one(&state.pool)
+            .await
+            .map_err(anyhow::Error::from)?;
+    let version = if running {
+        saved
+            ._gnubg_version
+            .or(
+                crate::benchmarks::running_engine_version(&state.pool, &settings.gnubg_path)
+                    .await?,
+            )
+    } else {
         match crate::benchmarks::running_engine_version(&state.pool, &settings.gnubg_path).await? {
             Some(version) => Some(version),
             None => Engine::new(settings.gnubg_path)
                 .check_installation()
                 .await
                 .ok(),
-        };
+        }
+    };
+    let sage = if running {
+        open_sage::load(&state.pool).await?.snapshot
+    } else {
+        open_sage::verified(&state.pool, 4).await.ok()
+    };
+    let sage_version = match &sage {
+        Some(s) => SageEngine::new(s.clone())?
+            .saved_version()
+            .map(str::to_owned),
+        None => None,
+    };
     Ok(Json(vec![
         EngineInfo {
             id: "gnubg".into(),
@@ -230,10 +308,10 @@ async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo
         },
         EngineInfo {
             id: "bgsage".into(),
-            name: "BGSage".into(),
-            available: false,
-            version: None,
-            plies: vec![],
+            name: "Open Sage".into(),
+            available: sage_version.is_some(),
+            version: sage_version,
+            plies: vec![2],
         },
     ]))
 }

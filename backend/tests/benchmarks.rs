@@ -60,7 +60,7 @@ async fn play_latency_migration_preserves_existing_analysis_history(pool: PgPool
             .await
             .unwrap();
     all.run(&pool).await.unwrap();
-    let after: Vec<Value> = sqlx::query_scalar("SELECT to_jsonb(r) - 'play_reference' - 'completed_turns' - 'average_turn_ms' FROM benchmark_runs r ORDER BY queue_no")
+    let after: Vec<Value> = sqlx::query_scalar("SELECT to_jsonb(r) - 'play_reference' - 'completed_turns' - 'average_turn_ms' - 'engine_snapshot' - 'startup_elapsed_ms' FROM benchmark_runs r ORDER BY queue_no")
         .fetch_all(&pool).await.unwrap();
     assert_eq!(after, before);
     let app = api::router(AppState::new(pool, engine()));
@@ -371,7 +371,11 @@ os.execv(real,[real]+sys.argv[1:])
         } else {
             "/api/benchmarks"
         },
-        json!({"engine_id":"gnubg","plies":[0]}),
+        if play {
+            json!({"engine_id":"gnubg","plies":0})
+        } else {
+            json!({"engine_id":"gnubg","plies":[0]})
+        },
     )
     .await;
     let runs = if play { json!([response]) } else { response };

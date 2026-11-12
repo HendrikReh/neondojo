@@ -154,7 +154,13 @@ async fn health(State(state): State<AppState>) -> (StatusCode, Json<Health>) {
             match crate::benchmarks::running_engine_version(&state.pool, &settings.gnubg_path).await
             {
                 Ok(Some(version)) => Some(version),
-                Ok(None) => Engine::new(settings.gnubg_path).version().await.ok(),
+                Ok(None) => tokio::time::timeout(
+                    std::time::Duration::from_millis(300),
+                    Engine::new(settings.gnubg_path).version(),
+                )
+                .await
+                .ok()
+                .and_then(Result::ok),
                 Err(_) => None,
             }
         }
@@ -515,7 +521,7 @@ struct JobRequest {
     position_id: Uuid,
     /// analysis: five candidate moves; dice: 21 weighted rolls.
     kind: PositionJobKind,
-    /// GNUbg search depth, 0 to 4. Omitted uses saved analysis depth.
+    /// Verified search depth of the selected engine. Omitted uses saved analysis depth.
     #[serde(default)]
     #[schema(minimum = 0, maximum = 4)]
     plies: Option<i32>,
@@ -530,6 +536,11 @@ async fn create_job(
     crate::play::require_position_review_available(&state.pool, request.position_id).await?;
     let (settings, snapshot) = crate::settings::snapshot(&state).await?;
     let plies = request.plies.unwrap_or(settings.analysis_plies);
+    if !crate::configuration::engine_depths(&snapshot.engine_id, "analysis").contains(&plies) {
+        return Err(ApiError::invalid(
+            "Depth is not verified for the selected engine",
+        ));
+    }
     if !(0..=4).contains(&plies) {
         return Err(ApiError::invalid("plies must be 0..4"));
     }
@@ -555,7 +566,7 @@ async fn create_job(
 struct MatchAnalysisRequest {
     /// Analyze one source game in its original match context; omitted means the whole match.
     game_no: Option<i32>,
-    /// Native GNUbg checker and cube search depth. Omitted uses saved analysis depth.
+    /// Verified checker and cube depth of the selected engine. Omitted uses saved analysis depth.
     #[serde(default)]
     #[schema(minimum = 0, maximum = 4)]
     plies: Option<i32>,
@@ -579,6 +590,11 @@ async fn create_match_analysis(
     }
     let (settings, snapshot) = crate::settings::snapshot(&state).await?;
     let plies = request.plies.unwrap_or(settings.analysis_plies);
+    if !crate::configuration::engine_depths(&snapshot.engine_id, "analysis").contains(&plies) {
+        return Err(ApiError::invalid(
+            "Depth is not verified for the selected engine",
+        ));
+    }
     if !(0..=4).contains(&plies) {
         return Err(ApiError::invalid("plies must be 0..4"));
     }
@@ -773,7 +789,7 @@ async fn events(
     info(
         title = "BG Tutor API",
         version = "0.1.0",
-        description = "Local headless backgammon library and GNUbg analysis. No authentication; bind to loopback."
+        description = "Local headless backgammon library with GNUbg and Open Sage analysis. No authentication; bind to loopback."
     ),
     paths(
         health,
@@ -828,6 +844,7 @@ impl OpenApi for ApiDoc {
     fn openapi() -> utoipa::openapi::OpenApi {
         let mut doc = BaseApiDoc::openapi();
         doc.merge(crate::settings::SettingsDoc::openapi());
+        doc.merge(crate::settings::open_sage::OpenSageDoc::openapi());
         doc.merge(crate::configuration::ConfigurationDoc::openapi());
         doc.merge(crate::profiles::ProfilesDoc::openapi());
         doc.merge(crate::benchmarks::BenchmarkDoc::openapi());

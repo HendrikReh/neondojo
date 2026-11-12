@@ -1,3 +1,7 @@
+import BenchmarkComparison, {
+  BenchmarkInitialization,
+} from './BenchmarkComparison';
+import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
 import { useEffect, useRef, useState } from 'react';
 import { ANALYSIS_PLIES } from './analysis-depth';
 import { useI18n } from './i18n';
@@ -28,6 +32,12 @@ export default function BenchmarkWorkspace({
   const [reference, setReference] = useState<BenchmarkReference>();
   const [engines, setEngines] = useState<EngineInfo[]>([]);
   const [engineId, setEngineId] = useState('gnubg');
+  const [playDepth, setPlayDepth] = useState(playPlies ?? 2);
+  const playDepthEdited = useRef(false);
+  useEffect(() => {
+    if (!playDepthEdited.current && playPlies !== undefined)
+      setPlayDepth(playPlies);
+  }, [playPlies]);
   const [plies, setPlies] = useState([defaultPlies]);
   const edited = useRef(false);
   const [runs, setRuns] = useState<BenchmarkRun[]>([]);
@@ -111,9 +121,7 @@ export default function BenchmarkWorkspace({
   const canStartAnalysis =
     canStart && !!reference && !!engine && selected.length > 0;
   const canStartPlay =
-    canStart &&
-    playPlies !== undefined &&
-    engines.some((e) => e.id === 'gnubg' && e.available);
+    canStart && !!engine && engine.plies.includes(playDepth) && playDepth <= 2;
   async function start(kind: 'analysis' | 'play') {
     if (kind === 'analysis' ? !canStartAnalysis : !canStartPlay) return;
     setStarting(kind);
@@ -121,7 +129,7 @@ export default function BenchmarkWorkspace({
     try {
       const created =
         kind === 'play'
-          ? [await startPlayBenchmark()]
+          ? [await startPlayBenchmark(engineId, playDepth)]
           : await startBenchmarks(engineId, selected);
       setRuns((current) => [...created, ...current]);
       setQueueActive(true);
@@ -251,7 +259,14 @@ export default function BenchmarkWorkspace({
             <select
               aria-label={t('engine')}
               value={engineId}
-              onChange={(event) => setEngineId(event.target.value)}
+              onChange={(event) => {
+                setEngineId(event.target.value);
+                if (event.target.value === 'bgsage') {
+                  setPlies([2]);
+                  playDepthEdited.current = true;
+                  setPlayDepth(2);
+                }
+              }}
             >
               {engines.map((e) => (
                 <option key={e.id} value={e.id} disabled={!e.available}>
@@ -301,10 +316,37 @@ export default function BenchmarkWorkspace({
           <p className="benchmark-help">{t('playTiming')}</p>
           {playPlies !== undefined && (
             <p className="benchmark-help">
-              {t('playDepth', { ply: formatNumber(playPlies) })}
+              {t('playDepth', { ply: formatNumber(playDepth) })}
             </p>
           )}
         </div>
+        <label>
+          {t('plies')}
+          <select
+            aria-label={t('playLatency')}
+            value={playDepth}
+            onChange={(e) => {
+              playDepthEdited.current = true;
+              setPlayDepth(Number(e.target.value));
+            }}
+          >
+            {[0, 1, 2].map((ply) => (
+              <option
+                key={ply}
+                value={ply}
+                disabled={
+                  !(
+                    engineId === 'bgsage'
+                      ? configurationOptions.engine_profiles.bgsage.play
+                      : configurationOptions.engine_profiles.gnubg.play
+                  ).includes(ply)
+                }
+              >
+                {ply}-ply
+              </option>
+            ))}
+          </select>
+        </label>
         <button
           type="button"
           disabled={!canStartPlay}
@@ -313,6 +355,7 @@ export default function BenchmarkWorkspace({
           {t(starting === 'play' ? 'starting' : 'startPlay')}
         </button>
       </section>
+      <BenchmarkComparison runs={runs} />
       {queueActive && (
         <p className="benchmark-help" role="status">
           {t('engineBusy')}
@@ -415,6 +458,9 @@ export default function BenchmarkWorkspace({
                     <td>
                       {run.engine_name}
                       <small>{run.engine_version}</small>
+                      <BenchmarkInitialization
+                        milliseconds={run.startup_elapsed_ms}
+                      />
                       <small className="benchmark-path">
                         {run.engine_path}
                       </small>

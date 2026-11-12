@@ -1,5 +1,6 @@
 pub mod api;
 pub mod engine;
+pub mod engines;
 pub mod game_plan;
 pub mod import;
 pub mod jobs;

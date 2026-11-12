@@ -106,6 +106,10 @@ pub struct Position {
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct Job {
+    /// Immutable provider, installation and model identity; absent for legacy GNUbg work.
+    #[serde(default)]
+    #[sqlx(json(nullable))]
+    pub engine_snapshot: Option<crate::settings::EngineSnapshot>,
     pub id: Uuid,
     pub position_uuid: Option<Uuid>,
     pub match_uuid: Option<Uuid>,

@@ -1,3 +1,4 @@
+import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
 import AnalysisRemainingTime from './AnalysisRemainingTime';
 import AnalysisTimeEstimate from './AnalysisTimeEstimate';
 import { useProfileValue } from './useProfileValue';
@@ -85,6 +86,10 @@ export default function MatchAnalysisPanel({
   }) => void;
 }) {
   const profile = useOptionalConfiguration();
+  const supportedPlies =
+    configurationOptions.engine_profiles[
+      profile?.current?.analysis.engine ?? 'gnubg'
+    ].analysis;
   const {
     t,
     formatNumber,
@@ -109,7 +114,10 @@ export default function MatchAnalysisPanel({
     onAccepted,
   );
   const [plies, setPlies] = useState(defaultPlies);
-  useEffect(() => setPlies(defaultPlies), [defaultPlies]);
+  useEffect(
+    () => setPlies(defaultPlies),
+    [defaultPlies, profile?.current?.analysis.engine],
+  );
   useEffect(() => onJob?.(job), [job, onJob]);
   const filterScope = `${match.id}:${scoped ? (gameNo ?? 'none') : 'match'}`;
   const [selection, setLocalSelection] = useState<{
@@ -323,11 +331,21 @@ export default function MatchAnalysisPanel({
             }
             onChange={(event) => setPlies(Number(event.target.value))}
           >
-            <option value={0}>{t('matchAnalysis.fast')}</option>
-            <option value={1}>1-Ply</option>
-            <option value={2}>{t('matchAnalysis.thorough')}</option>
-            <option value={3}>3-ply</option>
-            <option value={4}>4-ply</option>
+            <option value={0} disabled={!supportedPlies.includes(0)}>
+              {t('matchAnalysis.fast')}
+            </option>
+            <option value={1} disabled={!supportedPlies.includes(1)}>
+              1-Ply
+            </option>
+            <option value={2} disabled={!supportedPlies.includes(2)}>
+              {t('matchAnalysis.thorough')}
+            </option>
+            <option value={3} disabled={!supportedPlies.includes(3)}>
+              3-ply
+            </option>
+            <option value={4} disabled={!supportedPlies.includes(4)}>
+              4-ply
+            </option>
           </select>
         </label>
         <ActionButton

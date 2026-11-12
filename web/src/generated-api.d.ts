@@ -372,6 +372,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/engines/bgsage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_installation"];
+        put: operations["put_installation"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/engines/gnubg/check": {
         parameters: {
             query?: never;
@@ -1655,6 +1671,10 @@ export interface components {
         };
         /** @enum {string} */
         AssessmentSource: "native" | "imported";
+        BenchmarkEngines: {
+            engine: components["schemas"]["EngineSnapshot"];
+            rules_version?: string | null;
+        };
         BenchmarkHistory: {
             active: boolean;
             runs: components["schemas"]["BenchmarkRun"][];
@@ -1706,6 +1726,7 @@ export interface components {
             engine_id: string;
             engine_name: string;
             engine_path: string;
+            engine_snapshot?: null | components["schemas"]["BenchmarkEngines"];
             engine_version: string;
             error?: string | null;
             /** Format: date-time */
@@ -1720,6 +1741,11 @@ export interface components {
             reference?: null | components["schemas"]["BenchmarkReference"];
             /** Format: date-time */
             started_at?: string | null;
+            /**
+             * Format: double
+             * @description Cold Open Sage worker initialization, outside the warm pipeline timer.
+             */
+            startup_elapsed_ms?: number | null;
             status: string;
             /** Format: double */
             total_elapsed_ms?: number | null;
@@ -1977,7 +2003,7 @@ export interface components {
         /** @enum {string} */
         ConfigurationDirection: "Left" | "Right";
         /** @enum {string} */
-        ConfigurationEngine: "Gnubg";
+        ConfigurationEngine: "Gnubg" | "OpenSage";
         ConfigurationErrorBody: {
             code: string;
             error: string;
@@ -2315,6 +2341,13 @@ export interface components {
             plies: number[];
             version?: string | null;
         };
+        /** @description Internal job payload, never derived again from mutable application settings. */
+        EngineSnapshot: {
+            engine_id: string;
+            engine_version?: string | null;
+            gnubg_path: string;
+            open_sage?: null | components["schemas"]["SageSnapshot"];
+        };
         ErrorBody: {
             error: string;
         };
@@ -2498,6 +2531,17 @@ export interface components {
             /** Format: int64 */
             expected_settings_version: number;
         };
+        Installation: {
+            python_path: string;
+            snapshot?: null | components["schemas"]["SageSnapshot"];
+            /** Format: int64 */
+            version: number;
+        };
+        InstallationRequest: {
+            path: string;
+            /** Format: int64 */
+            version: number;
+        };
         Job: {
             /** Format: int32 */
             attempts: number;
@@ -2505,6 +2549,7 @@ export interface components {
             completed_games: number;
             /** Format: date-time */
             created_at: string;
+            engine_snapshot?: null | components["schemas"]["EngineSnapshot"];
             error?: string | null;
             /**
              * Format: int32
@@ -2568,7 +2613,7 @@ export interface components {
             kind: components["schemas"]["PositionJobKind"];
             /**
              * Format: int32
-             * @description GNUbg search depth, 0 to 4. Omitted uses saved analysis depth.
+             * @description Verified search depth of the selected engine. Omitted uses saved analysis depth.
              */
             plies?: number | null;
             /**
@@ -2624,7 +2669,7 @@ export interface components {
             game_no?: number | null;
             /**
              * Format: int32
-             * @description Native GNUbg checker and cube search depth. Omitted uses saved analysis depth.
+             * @description Verified checker and cube depth of the selected engine. Omitted uses saved analysis depth.
              */
             plies?: number | null;
         };
@@ -2888,6 +2933,11 @@ export interface components {
             /** Format: int32 */
             total_turns: number;
         };
+        PlayBenchmarkRequest: {
+            engine_id: string;
+            /** Format: int32 */
+            plies: number;
+        };
         PlayDecision: {
             action?: string | null;
             alternatives: components["schemas"]["PlayAlternative"][];
@@ -2924,6 +2974,11 @@ export interface components {
             /** Format: int32 */
             plies: number;
             version: string;
+        };
+        PlayEngineSnapshots: {
+            analysis: components["schemas"]["EngineSnapshot"];
+            bot: components["schemas"]["EngineSnapshot"];
+            rules: components["schemas"]["EngineSnapshot"];
         };
         PlayFeedbackRequest: {
             /** Format: uuid */
@@ -3022,6 +3077,7 @@ export interface components {
             can_double: boolean;
             decisions?: components["schemas"]["PlayDecision"][];
             engine: components["schemas"]["PlayEngine"];
+            engine_snapshots?: null | components["schemas"]["PlayEngineSnapshots"];
             game_learning_used?: boolean;
             /** Format: int32 */
             game_no: number;
@@ -3374,6 +3430,17 @@ export interface components {
             /** Format: int64 */
             version: number;
         };
+        SageSnapshot: {
+            /** Format: int32 */
+            adapter_version: number;
+            artifact_fingerprint: string;
+            package_version: string;
+            /** Format: int32 */
+            plies: number;
+            python: string;
+            /** Format: int32 */
+            threads: number;
+        };
         SaveConfigurationProfile: {
             configuration: components["schemas"]["ProfileConfiguration"];
             /** Format: int64 */
@@ -3705,7 +3772,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["PlayBenchmarkRequest"];
+            };
+        };
         responses: {
             202: {
                 headers: {
@@ -4648,6 +4719,64 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EngineInfo"][];
+                };
+            };
+        };
+    };
+    get_installation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Installation"];
+                };
+            };
+        };
+    };
+    put_installation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InstallationRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Installation"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };

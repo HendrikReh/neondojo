@@ -30,13 +30,13 @@ export interface ProfileConfiguration {
   schema_version: 1;
   general: { player_name: string; locale: Locale; play_sounds: boolean };
   analysis: {
-    engine: 'gnubg';
+    engine: 'gnubg' | 'bgsage';
     plies: number;
     scope: 'game' | 'match';
     search_filter: 'engine_default';
   };
   play: {
-    engine: 'gnubg';
+    engine: 'gnubg' | 'bgsage';
     plies: number;
     default_mode: PlayMode;
     tutor_threshold: number;
@@ -215,19 +215,21 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
   )
     invalid('general');
   if (
-    c.analysis.engine !== 'gnubg' ||
+    !['gnubg', 'bgsage'].includes(c.analysis.engine) ||
     !Number.isInteger(c.analysis.plies) ||
-    c.analysis.plies < 0 ||
-    c.analysis.plies > 4 ||
+    !configurationOptions.engine_profiles[c.analysis.engine].analysis.includes(
+      c.analysis.plies,
+    ) ||
     !['game', 'match'].includes(c.analysis.scope) ||
     c.analysis.search_filter !== 'engine_default'
   )
     invalid('analysis');
   if (
-    c.play.engine !== 'gnubg' ||
+    !['gnubg', 'bgsage'].includes(c.play.engine) ||
     !Number.isInteger(c.play.plies) ||
-    c.play.plies < 0 ||
-    c.play.plies > 2 ||
+    !configurationOptions.engine_profiles[c.play.engine].play.includes(
+      c.play.plies,
+    ) ||
     !isPlayMode(c.play.default_mode) ||
     !Number.isFinite(c.play.tutor_threshold) ||
     c.play.tutor_threshold <= 0 ||

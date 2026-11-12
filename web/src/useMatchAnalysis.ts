@@ -10,7 +10,7 @@ export function useMatchAnalysis(
   onAccepted?: (job: Job) => void,
 ) {
   const configuration = useOptionalConfiguration();
-  const scope = `${matchId}:${gameNo ?? 'match'}`;
+  const scope = `${matchId}:${gameNo ?? 'match'}:${configuration?.current?.analysis.engine ?? 'gnubg'}`;
   const [stored, setStored] = useState<{ scope: string; job: Job }>();
   const [failure, setFailure] = useState<{ scope: string; error: unknown }>();
   const [pending, setPending] = useState<string>();

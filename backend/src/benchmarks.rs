@@ -57,6 +57,26 @@ fn protocol() -> BenchmarkProtocol {
         move_filter: "gnubg-startup-defaults".into(),
     }
 }
+fn protocol_for(engine: &str) -> BenchmarkProtocol {
+    let mut value = protocol();
+    if engine == "bgsage" {
+        value.id = "bgsage-match-v2-2ply-4threads".into();
+        value.process_strategy = "persistent-worker-verified-before-each-request".into();
+        value.timing_scope = "cold-worker-startup-once-plus-full-game-pipeline".into();
+        value.move_filter = "all-cubeful-2ply-candidates-played-board-included".into();
+    }
+    value
+}
+fn reference_for(engine: &str) -> BenchmarkReference {
+    let mut value = reference();
+    value.protocol = protocol_for(engine);
+    value
+}
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct PlayBenchmarkRequest {
+    pub engine_id: String,
+    pub plies: i32,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct BenchmarkReference {
     pub id: String,
@@ -80,8 +100,15 @@ pub fn reference() -> BenchmarkReference {
         protocol: protocol(),
     }
 }
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct BenchmarkEngines {
+    pub engine: crate::settings::EngineSnapshot,
+    pub rules_version: Option<String>,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct BenchmarkRun {
+    #[sqlx(json(nullable))]
+    pub engine_snapshot: Option<BenchmarkEngines>,
     pub id: Uuid,
     pub status: String,
     pub created_at: DateTime<Utc>,
@@ -100,6 +127,8 @@ pub struct BenchmarkRun {
     pub protocol: Option<BenchmarkProtocol>,
     #[sqlx(json(nullable))]
     pub play_reference: Option<PlayBenchmarkReference>,
+    /// Cold Open Sage worker initialization, outside the warm pipeline timer.
+    pub startup_elapsed_ms: Option<f64>,
     pub total_elapsed_ms: Option<f64>,
     pub average_move_ms: Option<f64>,
     pub average_turn_ms: Option<f64>,
@@ -169,16 +198,26 @@ pub(crate) async fn running_engine_version(
     pool: &sqlx::PgPool,
     path: &str,
 ) -> anyhow::Result<Option<String>> {
-    let run: Option<(String, String)> = sqlx::query_as(
-        "SELECT engine_path,engine_version FROM benchmark_runs WHERE status='running' LIMIT 1",
+    let run: Option<(String, String, Option<serde_json::Value>)> = sqlx::query_as(
+        "SELECT engine_path,engine_version,engine_snapshot FROM benchmark_runs WHERE status='running' LIMIT 1",
     )
     .fetch_optional(pool)
     .await?;
-    Ok(run.and_then(|(saved, version)| {
-        resolve_binary(path)
-            .ok()
-            .filter(|p| *p == saved)
-            .map(|_| version)
+    Ok(run.and_then(|(saved, version, snapshot)| {
+        let same_path =
+            |saved: &str| path == saved || resolve_binary(path).ok().as_deref() == Some(saved);
+        if same_path(&saved) {
+            return Some(version);
+        }
+        let snapshot = snapshot?;
+        let rules_path = snapshot["engine"]["gnubg_path"].as_str()?;
+        if same_path(rules_path)
+            || resolve_binary(rules_path).ok().as_deref() == resolve_binary(path).ok().as_deref()
+        {
+            snapshot["rules_version"].as_str().map(str::to_owned)
+        } else {
+            None
+        }
     }))
 }
 
@@ -188,10 +227,11 @@ async fn create(
     payload: Result<Json<BenchmarkRequest>, axum::extract::rejection::JsonRejection>,
 ) -> ApiResult<(StatusCode, Json<Vec<BenchmarkRun>>)> {
     let Json(request) = payload.map_err(|e| ApiError::invalid(e.body_text()))?;
-    if request.engine_id != "gnubg"
-        || request.plies.is_empty()
+    if request.plies.is_empty()
         || request.plies.len() > 5
-        || request.plies.iter().any(|p| !(0..=4).contains(p))
+        || request.plies.iter().any(|p| {
+            !crate::configuration::engine_depths(&request.engine_id, "analysis").contains(p)
+        })
         || request
             .plies
             .iter()
@@ -202,13 +242,34 @@ async fn create(
             "Select an available engine and distinct analysis depths from 0 to 4",
         ));
     }
-    let runs = enqueue(&state, Workload::Analysis(request.plies)).await?;
+    let runs = enqueue(
+        &state,
+        &request.engine_id,
+        Workload::Analysis(request.plies),
+    )
+    .await?;
     Ok((StatusCode::ACCEPTED, Json(runs)))
 }
 
-#[utoipa::path(post, path="/api/benchmarks/play", responses((status=202,body=BenchmarkRun),(status=422,body=ErrorBody),(status=409,body=ErrorBody)),tag="Benchmark")]
-async fn create_play(State(state): State<AppState>) -> ApiResult<(StatusCode, Json<BenchmarkRun>)> {
-    let mut runs = enqueue(&state, Workload::Play).await?;
+#[utoipa::path(post, path="/api/benchmarks/play", request_body=Option<PlayBenchmarkRequest>, responses((status=202,body=BenchmarkRun),(status=422,body=ErrorBody),(status=409,body=ErrorBody)),tag="Benchmark")]
+async fn create_play(
+    State(state): State<AppState>,
+    body: axum::body::Bytes,
+) -> ApiResult<(StatusCode, Json<BenchmarkRun>)> {
+    let settings = crate::settings::load(&state).await?;
+    let payload: Option<PlayBenchmarkRequest> = if body.is_empty() {
+        None
+    } else {
+        serde_json::from_slice(&body).map_err(|e| ApiError::invalid(e.to_string()))?
+    };
+    let request = payload.unwrap_or(PlayBenchmarkRequest {
+        engine_id: settings.play_engine,
+        plies: settings.play_plies,
+    });
+    if !crate::configuration::engine_depths(&request.engine_id, "play").contains(&request.plies) {
+        return Err(ApiError::invalid("Unsupported play benchmark profile"));
+    }
+    let mut runs = enqueue(&state, &request.engine_id, Workload::Play(request.plies)).await?;
     let run = runs
         .pop()
         .ok_or_else(|| anyhow::anyhow!("Missing queued play benchmark"))?;
@@ -217,10 +278,14 @@ async fn create_play(State(state): State<AppState>) -> ApiResult<(StatusCode, Js
 
 enum Workload {
     Analysis(Vec<i32>),
-    Play,
+    Play(i32),
 }
 
-async fn enqueue(state: &AppState, workload: Workload) -> ApiResult<Vec<BenchmarkRun>> {
+async fn enqueue(
+    state: &AppState,
+    engine_id: &str,
+    workload: Workload,
+) -> ApiResult<Vec<BenchmarkRun>> {
     let running: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM benchmark_runs WHERE status='running')")
             .fetch_one(&state.pool)
@@ -234,28 +299,58 @@ async fn enqueue(state: &AppState, workload: Workload) -> ApiResult<Vec<Benchmar
     }
     let settings = crate::settings::load(state).await?;
     let (plies, analysis, play) = match workload {
-        Workload::Analysis(plies) => (plies, Some(reference()), None),
-        Workload::Play => (
-            vec![settings.play_plies],
+        Workload::Analysis(plies) => (plies, Some(reference_for(engine_id)), None),
+        Workload::Play(plies) => (
+            vec![plies],
             None,
-            Some(play_latency::reference()?),
+            Some(play_latency::reference_for(engine_id)?),
         ),
     };
-    let path = resolve_binary(&settings.gnubg_path)
-        .map_err(|e| ApiError::invalid(format!("GNUbg unavailable: {e:#}")))?;
-    let engine = crate::engine::Engine::new(path.clone());
-    let version = engine
-        .check_installation()
-        .await
-        .map_err(|e| ApiError::invalid(format!("GNUbg installation check failed: {e:#}")))?;
+    let snapshot = crate::settings::snapshot_for(
+        state,
+        engine_id,
+        &settings.gnubg_path,
+        if play.is_some() { 2 } else { 4 },
+    )
+    .await
+    .map_err(|e| ApiError::invalid(format!("Engine unavailable: {e:#}")))?;
+    let engine = snapshot.engine()?;
+    let path = if engine_id == "bgsage" {
+        engine.binary().to_owned()
+    } else {
+        resolve_binary(engine.binary())
+            .map_err(|e| ApiError::invalid(format!("Engine unavailable: {e:#}")))?
+    };
+    let version = match &engine {
+        crate::engines::AnalysisEngine::Gnubg(engine) => engine.check_installation().await,
+        crate::engines::AnalysisEngine::OpenSage(engine) => engine.version().await,
+    }
+    .map_err(|e| ApiError::invalid(format!("Engine check failed: {e:#}")))?;
+    let rules_version = if engine_id == "gnubg" {
+        Some(version.clone())
+    } else if play.is_some() {
+        Some(
+            crate::engine::Engine::new(settings.gnubg_path.clone())
+                .check_installation()
+                .await
+                .map_err(|e| ApiError::invalid(format!("GNUbg rules unavailable: {e:#}")))?,
+        )
+    } else {
+        crate::engine::Engine::new(settings.gnubg_path.clone())
+            .version()
+            .await
+            .ok()
+    };
+    let saved_snapshot = serde_json::json!({"engine":snapshot,"rules_version":rules_version});
     let machine = machine::snapshot(&state.pool).await?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     let mut runs = Vec::new();
     for plies in plies {
-        let run: BenchmarkRun = sqlx::query_as("INSERT INTO benchmark_runs(id,machine,engine_id,engine_name,engine_version,engine_path,plies,reference,protocol,reference_sgf,play_reference) VALUES($1,$2,'gnubg','GNUbg',$3,$4,$5,$6,$7,$8,$9) RETURNING *")
+        let run: BenchmarkRun = sqlx::query_as("INSERT INTO benchmark_runs(id,machine,engine_id,engine_name,engine_version,engine_path,plies,reference,protocol,reference_sgf,play_reference,engine_snapshot) VALUES($1,$2,$10,$11,$3,$4,$5,$6,$7,$8,$9,$12) RETURNING *")
             .bind(Uuid::new_v4()).bind(SqlJson(&machine)).bind(&version).bind(&path).bind(plies)
             .bind(analysis.as_ref().map(SqlJson)).bind(analysis.as_ref().map(|reference| SqlJson(&reference.protocol)))
             .bind(analysis.as_ref().map(|_| REFERENCE_SGF)).bind(play.as_ref().map(SqlJson))
+            .bind(engine_id).bind(if engine_id == "bgsage" {"Open Sage"} else {"GNUbg"}).bind(&saved_snapshot)
             .fetch_one(&mut *tx).await.map_err(anyhow::Error::from)?;
         runs.push(run);
     }
@@ -281,8 +376,10 @@ async fn cancel(
         BenchmarkProtocol,
         BenchmarkReference,
         BenchmarkRun,
+        BenchmarkEngines,
         PlayBenchmarkReference,
         BenchmarkRequest,
+        PlayBenchmarkRequest,
         BenchmarkHistory,
         BenchmarkStatus
     ))

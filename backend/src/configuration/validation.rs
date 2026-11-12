@@ -114,16 +114,18 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
         120,
         false,
     )?;
-    if !(0..=4).contains(&config.analysis.plies) {
+    if !engine_depths(&enum_string(&config.analysis.engine), "analysis")
+        .contains(&config.analysis.plies)
+    {
         return Err(ConfigurationError::invalid(
             "analysis.plies",
-            "Analysis depth must be 0..4",
+            "Analysis depth is not verified for the selected engine",
         ));
     }
-    if !(0..=2).contains(&config.play.plies) {
+    if !engine_depths(&enum_string(&config.play.engine), "play").contains(&config.play.plies) {
         return Err(ConfigurationError::invalid(
             "play.plies",
-            "Play depth must be 0..2",
+            "Play depth is not verified for the selected engine",
         ));
     }
     if !(0..=1).contains(&config.play.human_player) || !(0..=25).contains(&config.play.match_length)
@@ -475,6 +477,27 @@ pub(crate) async fn resources(
                 code: "engine_unavailable".into(),
                 message: "The configured GNUbg installation is unavailable".into(),
             });
+        }
+    }
+    if engine
+        && (config.analysis.engine == ConfigurationEngine::OpenSage
+            || config.play.engine == ConfigurationEngine::OpenSage)
+        && crate::settings::open_sage::verified(&state.pool, 4)
+            .await
+            .is_err()
+    {
+        for (path, selected) in [
+            ("analysis.engine", &config.analysis.engine),
+            ("play.engine", &config.play.engine),
+        ] {
+            if *selected == ConfigurationEngine::OpenSage {
+                issues.push(ConfigurationIssue {
+                    path: path.into(),
+                    code: "engine_unavailable".into(),
+                    message: "The configured Open Sage installation is unavailable or changed"
+                        .into(),
+                });
+            }
         }
     }
     if book && config.opening_book.provider != ConfigurationBookProvider::Off {

@@ -273,10 +273,11 @@ def prepare(source, output, manifest, options_manifest=None):
         manifest, (json.dumps(catalog, ensure_ascii=False, indent=2) + "\n").encode()
     )
     if options_manifest is not None:
+        options = json.loads(options_manifest.read_text()) if options_manifest.exists() else {}
+        options["board_themes"] = ["forest", "walnut", "slate"] + [theme["id"] for theme in catalog]
         write_changed(
             options_manifest,
-            (json.dumps({"board_themes": ["forest", "walnut", "slate"]
-                         + [theme["id"] for theme in catalog]}, indent=2) + "\n").encode(),
+            (json.dumps(options, indent=2) + "\n").encode(),
         )
     return catalog
 

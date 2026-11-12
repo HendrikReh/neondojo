@@ -311,7 +311,7 @@ pub(super) fn build_review(
             .unwrap_or(0),
         first_attempt_rating_method: "gnubg-original-choices-emg500-reached-positions-v1".into(),
         first_attempt_rating_profile: crate::match_analysis::performance_rating_profile(
-            &session.engine.version,
+            session.analysis_version(),
             session.analysis_plies,
         ),
         independent_first_attempt_count: first_attempt_count
@@ -329,6 +329,13 @@ pub(super) async fn analyze_decision(
     session: &PlaySession,
     path: &str,
 ) -> anyhow::Result<Vec<PlayAlternative>> {
+    let engine = session.analysis_engine(path)?;
+    if let crate::engines::AnalysisEngine::OpenSage(engine) = &engine {
+        return super::open_sage::alternatives(session, engine).await;
+    }
+    let crate::engines::AnalysisEngine::Gnubg(engine) = engine else {
+        unreachable!()
+    };
     let directory = tempfile::tempdir()?;
     let mut commands = crate::engine::decision_hint_commands(
         &session.position.position_id,
@@ -340,8 +347,7 @@ pub(super) async fn analyze_decision(
         commands.push_str("load python cube.py\n");
     }
     commands.push_str("hint 10000\n");
-    let output = Engine::new(path.into())
-        .with_expected_version(Some(session.engine.version.clone()))
+    let output = engine
         .run_with_timeout(
             directory.path(),
             &commands,

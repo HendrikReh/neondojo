@@ -39,32 +39,63 @@ pub(super) fn reference() -> Result<PlayBenchmarkReference> {
     })
 }
 
+pub(super) fn reference_for(engine: &str) -> Result<PlayBenchmarkReference> {
+    let mut value = reference()?;
+    if engine == "bgsage" {
+        value.protocol_id = "bgsage-checker-turn-v2-2ply-2threads-gnubg-rules".into();
+    }
+    Ok(value)
+}
+
 pub(super) async fn measure(pool: &PgPool, run: &BenchmarkRun, token: Uuid) -> Result<f64> {
-    let expected = reference()?;
+    let expected = reference_for(&run.engine_id)?;
     ensure!(
         run.play_reference.as_ref() == Some(&expected),
         "Unsupported play benchmark protocol or reference version"
     );
     let turns: Vec<Turn> = serde_json::from_str(TURNS)?;
-    let engine = Engine::new(run.engine_path.clone())
-        .with_expected_version(Some(run.engine_version.clone()));
+    let engine = super::runner::saved_engine(pool, run).await?;
+    let startup = super::runner::prepare(pool, run, token, &engine).await?;
+    let saved = super::runner::saved_snapshot(pool, run.id).await?;
+    let rules = if let Some(saved) = saved {
+        let snapshot: crate::settings::EngineSnapshot =
+            serde_json::from_value(saved["engine"].clone())?;
+        Engine::new(snapshot.gnubg_path)
+            .with_expected_version(saved["rules_version"].as_str().map(str::to_owned))
+    } else {
+        Engine::new(run.engine_path.clone()).with_expected_version(Some(run.engine_version.clone()))
+    };
     engine
         .version()
         .await
         .context("Benchmark engine changed or is unavailable")?;
     super::runner::mark_started(pool, run.id, token).await?;
-    let mut elapsed_ms = 0.0;
+    let mut elapsed_ms = startup;
     for (index, turn) in turns.iter().enumerate() {
         let start = Instant::now();
-        benchmark_checker_turn(
-            &engine,
-            (&turn.sgf, &turn.native_id),
-            turn.bot_player,
-            turn.dice,
-            run.plies,
-        )
-        .await
-        .with_context(|| {
+        let result = match &engine {
+            crate::engines::AnalysisEngine::Gnubg(engine) => {
+                benchmark_checker_turn(
+                    engine,
+                    (&turn.sgf, &turn.native_id),
+                    turn.bot_player,
+                    turn.dice,
+                    run.plies,
+                )
+                .await
+            }
+            crate::engines::AnalysisEngine::OpenSage(engine) => {
+                crate::play::benchmark_sage_checker_turn(
+                    engine,
+                    &rules,
+                    (&turn.sgf, &turn.native_id),
+                    turn.bot_player,
+                    turn.dice,
+                )
+                .await
+            }
+        };
+        result.with_context(|| {
             format!(
                 "Play benchmark game {}, checker turn {} failed",
                 turn.game, turn.ply

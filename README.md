@@ -1,6 +1,6 @@
 # BG Tutor
 
-BG Tutor is a local backgammon application for importing matches, finding positions, analyzing decisions with GNU Backgammon (GNUbg), playing, and studying. Its headless Rust backend uses Tokio, Axum, PostgreSQL, and SQLx. The React and TypeScript client connects through REST and server-sent events (SSE).
+BG Tutor is a local backgammon application for importing matches, finding positions, analyzing decisions with GNU Backgammon (GNUbg) or Open Sage, playing, and studying. Its headless Rust backend uses Tokio, Axum, PostgreSQL, and SQLx. The React and TypeScript client connects through REST and server-sent events (SSE).
 
 [Quick start](#quick-start) · [Analyze a match](#analyze-your-first-match) · [Match databases](#match-databases) · [Playing](#playing-against-gnubg) · [Study](#study) · [API](#api-reference) · [Verification](#verification)
 
@@ -58,6 +58,8 @@ Open <http://127.0.0.1:8787>. By default the services listen on loopback. BG Tut
    cargo build -p bgtutor --bin bgtutor --release
    ```
 
+   On macOS 27, a `mis-aligned LINKEDIT string pool` error while loading a Rust procedural macro can require `CARGO_PROFILE_RELEASE_STRIP=none` before the Cargo command. This retains release optimization while disabling the affected strip step; see the [Rust issue](https://github.com/rust-lang/rust/issues/157750). Use the same environment setting for later release builds or `cargo run --release`.
+
 3. Stop BG Tutor with `Ctrl+C` in its terminal. If it runs in the background, use `lsof -nP -iTCP:8787 -sTCP:LISTEN` to find the listener. Confirm that it is the `bgtutor` process, then replace `PID` with its process ID in `kill -TERM PID`. Wait until the listener has stopped.
 4. Start the backend from the repository root. It applies pending migrations at startup and serves the built frontend on the same port.
 
@@ -114,11 +116,15 @@ The desktop layout is designed for side-by-side review using a mouse or keyboard
 
 Text tabs use the active theme's accent and a 2 px underline. The same pattern covers workspace and analysis tabs, board views, analysis sources, checker and cube selection, note scopes, settings, and database selection. [Navigation style](docs/ui-navigation.md)
 
-## Settings and GNUbg
+## Settings and engines
 
 **Settings** opens a dialog with **General**, **Appearance**, **Analysis**, **Playing**, **Board**, and **Profiles**. The **General → Language** menu lists Deutsch, English, Español, Français, Italiano, and Polski alphabetically. New installations default to English. **Board** offers previews of Forest, Walnut, Slate, and local BGBlitz themes from `themes/*.zip`. Use **Apply** to use the draft settings. [Configuration profiles](#configuration-profiles)
 
-Set a player name, default analysis depth (0–4 ply, default 2), separate playing strength (0–2 ply), and bear-off direction. New matches use the playing settings in effect at creation. The engine selector lists GNUbg and marks BGSage as planned.
+Set a player name, default analysis depth (0–4 ply, default 2), separate playing strength (0–2 ply), and bear-off direction. New matches use the playing settings in effect at creation. Choose GNUbg or Open Sage independently for analysis and playing. Open Sage currently supports the verified 2-ply profile only. New sessions pin the bot, analysis and GNUbg rules installations separately. There is no automatic fallback to another engine.
+
+Open Sage requires the locked native ARM64 Python 3.12 environment described in [Local Open Sage](docs/open-sage-local.md). In **Settings → Analysis → Local Open Sage installation**, enter that environment's `bin/python` path and choose **Verify and save**. The backend checks package/model integrity and real evaluation capabilities before enabling selection. Installation paths are host-local and excluded from portable profiles. GNUbg remains required for imports and for play rules, dice and SGF; Open Sage makes bot decisions when selected. The first release disables 1-ply because this upstream build ignores its thread limit; 3/4-ply and rollouts are not enabled.
+
+Automatic result readers stay within the selected analysis provider. Historical results and explicitly selected jobs retain their original provider and profile; copying a match retains completed results from both providers. Sage results carry model/profile identity but do not claim GNUbg PR statistics.
 
 The executable path is specific to the backend computer. Installation checks, analysis, playing, and benchmarks use the same resolution rules. An absolute path is resolved directly, a relative path containing a directory separator is resolved from the backend's working directory, and a bare name such as `gnubg` uses the first matching file on the backend's `PATH`. The backend reports an error if resolving or running that file fails. The resolved path must be valid UTF-8.
 
@@ -401,13 +407,13 @@ BGTUTOR_FEEDBACK_NATIVE_TEST=1 \
 
 ## Engine benchmark
 
-Use **Extras → Benchmark** to measure analysis speed for one or more depths. GNUbg supports 0–4 ply. The selected depths run in selection order in the background and continue when you leave the view. **Cancel run** also stops the active engine process. Other BG Tutor engine work waits while a benchmark is in progress, and a notice appears across workspaces. Other programs on the machine can still affect the measurement.
+Use **Extras → Benchmark** to measure analysis speed for one or more depths. GNUbg supports 0–4 ply; Open Sage supports verified 2-ply. Benchmark engine and depth choices are independent of playing and analysis defaults. The selected depths run in selection order in the background and continue when you leave the view. **Cancel run** also stops the active engine process. Other BG Tutor engine work waits while a benchmark is in progress, and a notice appears across workspaces. Other programs on the machine can still affect the measurement.
 
 The fixed **WC2014 v1** reference is the 11-point match between Akiko Yazawa and Douglas Mayfield, with ten games and 460 checker moves. The app bundles an immutable copy of the unanalysed GNUbg SGF fixture, with a reference ID, version, and SHA-256 checksum. See the [fixture documentation](backend/tests/fixtures/README.md) for provenance and reproduction. Existing evaluations are cleared before analysis.
 
 **Total analysis time** sums the full analysis pipeline for each game, including process startup, loading, checker and cube analysis, and result preparation. Each game starts a fresh GNUbg process. The analysis is cubeful and deterministic, with zero noise and luck analysis disabled. The timer excludes waiting, installation and version checks, and database writes. **Ø analysis time / move** divides the total by all 460 checker moves, including forced moves. It represents the match-wide average. New runs use `gnubg-match-v2-unlimited` with no fixed per-game timeout. Older runs retain the timeout recorded in their protocol snapshot.
 
-**Measure play-turn latency** queues a separate run using the saved GNUbg installation and playing depth (0–2 ply). The `gnubg-checker-turn-v1` protocol plays 11 fixed checker turns with dice already rolled, sampled from opening, contact, race and bear-off positions in the WC2014 reference. Each sample restores its own SGF checkpoint in a fresh process through the Playing adapter, plays one bot turn, and reads the resulting snapshot. The timer includes preparation, native process startup, checkpoint restoration, version guards, and result processing. Queue wait, installation checks, database writes, network time and animation are outside the timed scope. The history reports the arithmetic mean in milliseconds. Play measurements use the same queue and cancellation controls. They are independent of analysis-time estimates and do not create games in the library.
+**Measure play-turn latency** queues a separate run using the benchmark engine and play-depth selectors (GNUbg 0–2 ply; Open Sage 2-ply). The `gnubg-checker-turn-v1` protocol plays 11 fixed checker turns with dice already rolled, sampled from opening, contact, race and bear-off positions in the WC2014 reference. Each sample restores its own SGF checkpoint in a fresh process through the Playing adapter, plays one bot turn, and reads the resulting snapshot. The timer includes preparation, native process startup, checkpoint restoration, version guards, and result processing. Queue wait, installation checks, database writes, network time and animation are outside the timed scope. The history reports the arithmetic mean in milliseconds. Play measurements use the same queue and cancellation controls. They are independent of analysis-time estimates and do not create games in the library.
 
 Every attempt records its date, backend machine and hardware, engine version and executable path, ply depth, reference, protocol, progress, and status. Successful runs add total time and average time per move in milliseconds. History is independent of library matches and profiles. Backend restarts mark interrupted runs as failed. A new run starts its timing from the beginning. During a run, the engine availability indicator reuses the verified installation snapshot to avoid starting a competing probe.
 
@@ -417,8 +423,10 @@ Every attempt records its date, backend machine and hardware, engine version and
 | GET    | `/api/benchmarks/status`      | Read the active status shown in the global notice.                                  |
 | GET    | `/api/benchmarks`             | List the latest 1,000 attempts, newest first.                                       |
 | POST   | `/api/benchmarks`             | Queue attempts with a request such as `{ "engine_id": "gnubg", "plies": [0, 2] }`.  |
-| POST   | `/api/benchmarks/play`        | Queue a play-turn latency run using the saved GNUbg installation and playing depth. |
+| POST   | `/api/benchmarks/play`        | Queue a play-turn run with `{ "engine_id": "bgsage", "plies": 2 }`; omitted body preserves the legacy saved-play-default behavior. |
 | POST   | `/api/benchmarks/{id}/cancel` | Cancel a queued or running attempt. Finished results are retained.                  |
+
+Open Sage uses distinct `bgsage-match-v2-2ply-4threads` and `bgsage-checker-turn-v2-2ply-2threads-gnubg-rules` protocols. A fresh sidecar starts once per run and is then reused. Total elapsed time includes that one initialization plus the measured application pipeline; initialization is also shown separately. Playing includes GNUbg rule-process preparation, SGF restoration and action execution. Once three complete runs share the same machine, provider, full installation/model/rules snapshot, profile and workload, the view shows the median and minimum–maximum range of the three latest runs. Times measure application execution, not engine playing strength. ETA calibration never borrows GNUbg timings for Sage.
 
 The server creates all attempts for a multi-depth request together before starting them. New requests during a benchmark return HTTP 409. Unavailable engines and invalid depths return HTTP 422. OpenAPI documents the endpoints and types.
 

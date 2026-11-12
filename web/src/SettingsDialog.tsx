@@ -1,3 +1,5 @@
+import OpenSageInstallation from './OpenSageInstallation';
+import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
 import { ConfigurationApiError } from './configuration-api';
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import ProfileSettingsPanel from './ProfileSettingsPanel';
@@ -245,7 +247,14 @@ export default function SettingsDialog({
   }, [open, configuration?.generation]);
   const engine = engines.find(({ id }) => id === 'gnubg');
   const selectedTheme = themes.find(({ id }) => id === draftTheme) ?? themes[0];
-  const plies = engine?.plies.filter(isAnalysisDepth) ?? [];
+  const analysisPlies =
+    engines
+      .find((e) => e.id === draft?.analysis_engine)
+      ?.plies.filter(isAnalysisDepth) ?? [];
+  const playPlies = draft
+    ? configurationOptions.engine_profiles[draft.play_engine].play
+    : [];
+  const rememberedDepths = useRef<Record<string, number>>({});
 
   function diagnostic(error: unknown) {
     if (error instanceof SettingsApiError && error.status === 200)
@@ -403,22 +412,40 @@ export default function SettingsDialog({
   }
 
   function engineSelect(label: SettingsMessageKey, name: string) {
+    const area = name === 'analysis-engine' ? 'analysis' : 'play';
+    const selected =
+      area === 'analysis' ? draft?.analysis_engine : draft?.play_engine;
     return (
       <label className="settings-field" htmlFor={`${id}-${name}`}>
         <span>{t(label)}</span>
         <select
           aria-label={t(label)}
           id={`${id}-${name}`}
-          value="gnubg"
-          onChange={() => {}}
+          value={selected}
+          onChange={(event) => {
+            const value = event.target.value;
+            if (!draft || (value !== 'gnubg' && value !== 'bgsage')) return;
+            rememberedDepths.current[`${area}-${selected}`] =
+              area === 'analysis' ? draft.analysis_plies : draft.play_plies;
+            const options = configurationOptions.engine_profiles[value][area];
+            const remembered =
+              rememberedDepths.current[`${area}-${value}`] ?? 2;
+            const depth = options.includes(remembered)
+              ? remembered
+              : options[0];
+            update(
+              area === 'analysis'
+                ? { analysis_engine: value, analysis_plies: depth }
+                : { play_engine: value, play_plies: depth },
+            );
+          }}
         >
-          <option value="gnubg">
-            {engine?.name ?? 'GNU Backgammon'}
-            {engine?.available ? '' : ` — ${t('unavailable')}`}
-          </option>
-          <option value="bgsage" disabled>
-            {t('planned')}
-          </option>
+          {engines.map((item) => (
+            <option key={item.id} value={item.id} disabled={!item.available}>
+              {item.name}
+              {item.available ? '' : ` — ${t('unavailable')}`}
+            </option>
+          ))}
         </select>
       </label>
     );
@@ -684,6 +711,18 @@ export default function SettingsDialog({
                   hidden={category !== 'analysis'}
                 >
                   <legend>{t('analysis')}</legend>
+                  <OpenSageInstallation
+                    onVerified={() => {
+                      const current = session.current;
+                      void loadEngines()
+                        .then((value) => {
+                          if (session.current === current) setEngines(value);
+                        })
+                        .catch((error) => {
+                          if (session.current === current) setSaveError(error);
+                        });
+                    }}
+                  />
                   {engineSelect('analysisEngine', 'analysis-engine')}
                   <label
                     className="settings-field"
@@ -702,9 +741,11 @@ export default function SettingsDialog({
                         <option
                           key={ply}
                           value={ply}
-                          disabled={!plies.includes(ply)}
+                          disabled={!analysisPlies.includes(ply)}
                         >
-                          {ply === 3 || ply === 4
+                          {draft.analysis_engine === 'bgsage' ||
+                          ply === 3 ||
+                          ply === 4
                             ? `${ply}-ply`
                             : t((['fast', 'deep', 'thorough'] as const)[ply])}
                         </option>
@@ -895,13 +936,19 @@ export default function SettingsDialog({
                         <option
                           key={ply}
                           value={ply}
-                          disabled={!plies.includes(ply)}
+                          disabled={!playPlies.includes(ply)}
                         >
-                          {t(
-                            (['strength0', 'strength1', 'strength2'] as const)[
-                              ply
-                            ],
-                          )}
+                          {draft.play_engine === 'bgsage'
+                            ? `${ply}-ply`
+                            : t(
+                                (
+                                  [
+                                    'strength0',
+                                    'strength1',
+                                    'strength2',
+                                  ] as const
+                                )[ply],
+                              )}
                         </option>
                       ))}
                     </select>

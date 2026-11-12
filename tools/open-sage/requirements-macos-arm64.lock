@@ -1,0 +1,8 @@
+# CPython 3.12, native Apple Silicon; macOS >= 14 (NumPy wheel minimum).
+# Install with --only-binary=:all: --require-hashes. No source builds.
+# bgsage-2.0.20260907-cp312-cp312-macosx_11_0_arm64.whl
+bgsage==2.0.20260907 \
+    --hash=sha256:cab9e54fd64813756ce9b0b5ed017901535fc906dbd9e474e74535c30628a1c3
+# numpy-2.5.4-cp312-cp312-macosx_14_0_arm64.whl
+numpy==2.5.4 \
+    --hash=sha256:9cb18a327b49c5c337f972b03682f6a49855525faaf3c0d3e9c96cd0fd8880a8

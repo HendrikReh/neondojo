@@ -24,7 +24,24 @@ macro_rules! string_enum {
     };
 }
 string_enum!(ConfigurationLocale { De=>"de", En=>"en", Es=>"es", Fr=>"fr", It=>"it", Pl=>"pl" });
-string_enum!(ConfigurationEngine { Gnubg=>"gnubg" });
+string_enum!(ConfigurationEngine { Gnubg=>"gnubg", OpenSage=>"bgsage" });
+
+/// Verified provider profiles, shared with client normalization and catalogs.
+pub(crate) fn engine_depths(engine: &str, purpose: &str) -> Vec<i32> {
+    static OPTIONS: std::sync::LazyLock<Value> = std::sync::LazyLock::new(|| {
+        serde_json::from_str(include_str!("../../shared/configuration-options.json"))
+            .expect("valid embedded configuration options")
+    });
+    OPTIONS["engine_profiles"][engine][purpose]
+        .as_array()
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|v| v.as_i64().and_then(|n| i32::try_from(n).ok()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
 string_enum!(ConfigurationScope { Game=>"game", Match=>"match" });
 string_enum!(ConfigurationSearchFilter { EngineDefault=>"engine_default" });
 string_enum!(ConfigurationMode { Light=>"light", Dark=>"dark", System=>"system" });
@@ -470,6 +487,33 @@ pub struct ConfigurationDoc;
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn independent_engines_accept_only_verified_sage_profiles() {
+        let fixture: Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/configuration-normalization.json"
+        ))
+        .unwrap();
+        for area in ["analysis", "play"] {
+            let mut value = fixture["base"].clone();
+            value[area]["engine"] = serde_json::json!("bgsage");
+            value[area]["plies"] = serde_json::json!(2);
+            let decoded = serde_json::from_value::<ProfileConfiguration>(value.clone());
+            assert!(
+                decoded.is_ok(),
+                "verified Open Sage must be selectable in {area}"
+            );
+            assert!(validation::normalize(decoded.unwrap()).is_ok());
+            for unverified in [0, 1, 3, 4] {
+                value[area]["plies"] = serde_json::json!(unverified);
+                let decoded =
+                    serde_json::from_value::<ProfileConfiguration>(value.clone()).unwrap();
+                assert!(
+                    validation::normalize(decoded).is_err(),
+                    "unverified Sage {unverified}-ply accepted in {area}"
+                );
+            }
+        }
+    }
     #[test]
     fn normalization_matches_shared_semantic_vectors() {
         let fixture: Value = serde_json::from_str(include_str!(

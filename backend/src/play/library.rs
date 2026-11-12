@@ -61,6 +61,7 @@ fn source(session: &PlaySession, sgf: &str) -> String {
         if sgf.is_empty() { &shell } else { sgf },
         &session.human_name,
         session.human_player,
+        session.bot_name(),
     );
     // Distinguish otherwise identical empty/short matches for ordinary copy/import deduplication.
     if let Some(root) = source.find(';') {

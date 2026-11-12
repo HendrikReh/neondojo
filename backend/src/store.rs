@@ -424,7 +424,7 @@ pub async fn latest_match_job_scoped(
     match_id: Uuid,
     game_no: Option<i32>,
 ) -> Result<Option<Job>> {
-    Ok(sqlx::query_as("SELECT * FROM jobs WHERE source_revision=(SELECT source_revision FROM matches WHERE id=$1) AND match_uuid=$1 AND game_no IS NOT DISTINCT FROM $2 AND kind='match' ORDER BY created_at DESC,id DESC LIMIT 1")
+    Ok(sqlx::query_as("SELECT * FROM selected_engine_jobs WHERE source_revision=(SELECT source_revision FROM matches WHERE id=$1) AND match_uuid=$1 AND game_no IS NOT DISTINCT FROM $2 AND kind='match' ORDER BY created_at DESC,id DESC LIMIT 1")
         .bind(match_id).bind(game_no).fetch_optional(pool).await?)
 }
 
@@ -617,7 +617,7 @@ pub(crate) async fn job_engine(
     pool: &PgPool,
     job_id: Uuid,
     fallback: &crate::engine::Engine,
-) -> Result<crate::engine::Engine> {
+) -> Result<crate::engines::AnalysisEngine> {
     let snapshot: Option<serde_json::Value> =
         sqlx::query_scalar("SELECT engine_snapshot FROM jobs WHERE id=$1")
             .bind(job_id)
@@ -627,6 +627,6 @@ pub(crate) async fn job_engine(
         Some(snapshot) => {
             serde_json::from_value::<crate::settings::EngineSnapshot>(snapshot)?.engine()
         }
-        None => Ok(fallback.clone()),
+        None => Ok(crate::engines::AnalysisEngine::Gnubg(fallback.clone())),
     }
 }

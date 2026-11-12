@@ -20,8 +20,15 @@ export const startBenchmarks = (engine_id: string, plies: number[]) => {
     body: JSON.stringify(body),
   });
 };
-export const startPlayBenchmark = () =>
-  request<BenchmarkRun>('/benchmarks/play', { method: 'POST' });
+export const startPlayBenchmark = (engine_id?: string, plies?: number) =>
+  request<BenchmarkRun>('/benchmarks/play', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:
+      engine_id === undefined
+        ? undefined
+        : JSON.stringify({ engine_id, plies }),
+  });
 export const cancelBenchmark = (id: string) =>
   request<BenchmarkRun>(`/benchmarks/${encodeURIComponent(id)}/cancel`, {
     method: 'POST',

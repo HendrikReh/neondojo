@@ -99,7 +99,7 @@ async fn measure(state: &AppState, run: &BenchmarkRun, token: Uuid) -> Result<f6
         source == REFERENCE_SGF
             && matches!(
                 protocol.id.as_str(),
-                "gnubg-match-v1" | "gnubg-match-v2-unlimited"
+                "gnubg-match-v1" | "gnubg-match-v2-unlimited" | "bgsage-match-v2-2ply-4threads"
             ),
         "Unsupported benchmark protocol or reference version"
     );
@@ -109,16 +109,15 @@ async fn measure(state: &AppState, run: &BenchmarkRun, token: Uuid) -> Result<f6
             && crate::match_analysis::game_count(&source)? == reference.total_games,
         "Incomplete reference workload"
     );
-    let engine = Engine::new(run.engine_path.clone());
-    let guard_engine = engine
-        .clone()
-        .with_expected_version(Some(run.engine_version.clone()));
+    let engine = saved_engine(&state.pool, run).await?;
+    let startup = prepare(&state.pool, run, token, &engine).await?;
+    let guard_engine = engine.clone();
     guard_engine
         .version()
         .await
         .context("Benchmark engine changed or is unavailable")?;
     mark_started(&state.pool, run.id, token).await?;
-    let mut elapsed_ms = 0.0;
+    let mut elapsed_ms = startup;
     let mut moves = 0;
     for game_no in 1..=reference.total_games {
         guard_engine
@@ -183,4 +182,56 @@ async fn measure(state: &AppState, run: &BenchmarkRun, token: Uuid) -> Result<f6
         .await
         .context("Engine changed at benchmark completion")?;
     Ok(elapsed_ms)
+}
+
+pub(super) async fn saved_snapshot(pool: &PgPool, id: Uuid) -> Result<Option<serde_json::Value>> {
+    Ok(
+        sqlx::query_scalar("SELECT engine_snapshot FROM benchmark_runs WHERE id=$1")
+            .bind(id)
+            .fetch_one(pool)
+            .await?,
+    )
+}
+pub(super) async fn saved_engine(
+    pool: &PgPool,
+    run: &BenchmarkRun,
+) -> Result<crate::engines::AnalysisEngine> {
+    if let Some(value) = saved_snapshot(pool, run.id).await? {
+        let snapshot: crate::settings::EngineSnapshot =
+            serde_json::from_value(value["engine"].clone())?;
+        ensure!(
+            snapshot.engine_id == run.engine_id,
+            "Benchmark engine identity mismatch"
+        );
+        snapshot.engine()
+    } else {
+        ensure!(
+            run.engine_id == "gnubg",
+            "Missing benchmark engine snapshot"
+        );
+        Ok(Engine::new(run.engine_path.clone())
+            .with_expected_version(Some(run.engine_version.clone()))
+            .into())
+    }
+}
+
+pub(super) async fn prepare(
+    pool: &PgPool,
+    run: &BenchmarkRun,
+    token: Uuid,
+    engine: &crate::engines::AnalysisEngine,
+) -> Result<f64> {
+    if let crate::engines::AnalysisEngine::OpenSage(engine) = engine {
+        let start = Instant::now();
+        engine.restart().await?;
+        let elapsed = start.elapsed().as_secs_f64() * 1000.0;
+        let updated = sqlx::query("UPDATE benchmark_runs SET startup_elapsed_ms=$3 WHERE id=$1 AND worker_token=$2 AND status='running' AND lease_until>now()")
+            .bind(run.id).bind(token).bind(elapsed).execute(pool).await?;
+        ensure!(
+            updated.rows_affected() == 1,
+            "Benchmark cancelled during initialization"
+        );
+        return Ok(elapsed);
+    }
+    Ok(0.0)
 }

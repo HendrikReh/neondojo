@@ -16,5 +16,29 @@
     "bgblitz:gp-greyred",
     "bgblitz:gp-tan",
     "bgblitz:wycliffe_purple"
-  ]
+  ],
+  "engine_profiles": {
+    "gnubg": {
+      "analysis": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "play": [
+        0,
+        1,
+        2
+      ]
+    },
+    "bgsage": {
+      "analysis": [
+        2
+      ],
+      "play": [
+        2
+      ]
+    }
+  }
 }

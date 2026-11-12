@@ -1,3 +1,5 @@
+import { useOptionalConfiguration } from './ConfigurationProvider';
+import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
 import Tooltip from './Tooltip';
 import ActionButton from './ActionButton';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
@@ -47,6 +49,11 @@ export default function AnalysisPanel({
     formatDecision,
     formatError,
   } = useI18n();
+  const configuredEngine =
+    useOptionalConfiguration()?.current?.analysis.engine ?? 'gnubg';
+  const engineName = configuredEngine === 'bgsage' ? 'Open Sage' : 'GNUbg';
+  const supportedPlies =
+    configurationOptions.engine_profiles[configuredEngine].analysis;
   const l = useSourceText();
   const review = useBoardReviewText();
   const sources = useAnalysisSources(positionId, sourceRevision);
@@ -90,7 +97,7 @@ export default function AnalysisPanel({
     sourceRefs.current[options[next]]?.focus();
   }
   const [plies, setPlies] = useState(defaultPlies);
-  useEffect(() => setPlies(defaultPlies), [defaultPlies]);
+  useEffect(() => setPlies(defaultPlies), [defaultPlies, configuredEngine]);
   const [view, setView] = useState<'analysis' | 'dice' | 'observed'>(
     'analysis',
   );
@@ -128,12 +135,13 @@ export default function AnalysisPanel({
           {view === 'observed'
             ? t('analysis.observed')
             : view === 'dice'
-              ? (distribution?.engine ?? `GNUbg · ${t('common.local')}`)
+              ? (distribution?.engine ?? `${engineName} · ${t('common.local')}`)
               : selectedSource === 'file' && sources.records[0]
                 ? sources.records[0].engine
                 : selectedSource === 'book'
                   ? l('book')
-                  : `GNUbg · ${t('common.local')}`}
+                  : (analysis?.engine ??
+                    `${engineName} · ${t('common.local')}`)}
         </span>
       </div>
       <div className="analysis-controls">
@@ -144,11 +152,21 @@ export default function AnalysisPanel({
             value={plies}
             onChange={(e) => setPlies(Number(e.target.value))}
           >
-            <option value={0}>{t('analysis.fast')}</option>
-            <option value={1}>1-ply</option>
-            <option value={2}>{t('analysis.accurate')}</option>
-            <option value={3}>3-ply</option>
-            <option value={4}>4-ply</option>
+            <option value={0} disabled={!supportedPlies.includes(0)}>
+              {t('analysis.fast')}
+            </option>
+            <option value={1} disabled={!supportedPlies.includes(1)}>
+              1-ply
+            </option>
+            <option value={2} disabled={!supportedPlies.includes(2)}>
+              {t('analysis.accurate')}
+            </option>
+            <option value={3} disabled={!supportedPlies.includes(3)}>
+              3-ply
+            </option>
+            <option value={4} disabled={!supportedPlies.includes(4)}>
+              4-ply
+            </option>
           </select>
         </label>
         <ActionButton

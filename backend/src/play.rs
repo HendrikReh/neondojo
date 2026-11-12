@@ -2,6 +2,7 @@
 //! optimistic revisions fence concurrent requests without holding DB locks.
 mod feedback;
 mod library;
+mod open_sage;
 mod pause;
 mod reports;
 pub use feedback::{
@@ -106,6 +107,8 @@ pub struct PlaySession {
     #[serde(default)]
     pub paused: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine_snapshots: Option<PlayEngineSnapshots>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub game_results: Option<Vec<PlayGameResult>>,
     /// Current linked library entry; projected from the relational session link.
     #[serde(default)]
@@ -154,6 +157,45 @@ pub struct PlaySession {
     pub winner: Option<i32>,
     #[serde(default)]
     pub opening: Option<OpeningRoll>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PlayEngineSnapshots {
+    pub rules: crate::settings::EngineSnapshot,
+    pub bot: crate::settings::EngineSnapshot,
+    pub analysis: crate::settings::EngineSnapshot,
+}
+impl PlaySession {
+    fn rules_engine(&self, path: &str) -> anyhow::Result<Engine> {
+        match &self.engine_snapshots {
+            Some(snapshots) => match snapshots.rules.engine()? {
+                crate::engines::AnalysisEngine::Gnubg(engine) => Ok(engine),
+                _ => anyhow::bail!("Saved play rules engine must be GNUbg"),
+            },
+            None => {
+                Ok(Engine::new(path.into())
+                    .with_expected_version(Some(self.engine.version.clone())))
+            }
+        }
+    }
+    fn analysis_engine(&self, path: &str) -> anyhow::Result<crate::engines::AnalysisEngine> {
+        match &self.engine_snapshots {
+            Some(snapshots) => snapshots.analysis.engine(),
+            None => Ok(self.rules_engine(path)?.into()),
+        }
+    }
+    fn analysis_version(&self) -> &str {
+        self.engine_snapshots
+            .as_ref()
+            .and_then(|snapshots| snapshots.analysis.engine_version.as_deref())
+            .unwrap_or(&self.engine.version)
+    }
+    fn bot_name(&self) -> &str {
+        if self.engine.id == "bgsage" {
+            "Open Sage"
+        } else {
+            "GNUbg"
+        }
+    }
 }
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
@@ -215,6 +257,8 @@ struct Saved {
 #[derive(Serialize)]
 struct NativeRequest<'a> {
     new: bool,
+    external_bot: bool,
+    accept_resignation: Option<bool>,
     human_player: i32,
     match_length: i32,
     plies: i32,
@@ -522,15 +566,35 @@ async fn create_session(
             "tutor_threshold must be greater than 0 and at most 1",
         ));
     }
-    if settings.play_engine != "gnubg" {
-        return Err(ApiError::invalid("Only GNUbg is available for playing"));
-    }
     let pinned_path = resolve_binary(&settings.gnubg_path).map_err(native_error)?;
     let engine = Engine::new(pinned_path.clone());
-    let version = engine.version().await.map_err(native_error)?;
+    let rules_version = engine.version().await.map_err(native_error)?;
+    let rules = crate::settings::EngineSnapshot {
+        engine_id: "gnubg".into(),
+        gnubg_path: pinned_path.clone(),
+        engine_version: Some(rules_version),
+        open_sage: None,
+    };
+    let bot = crate::settings::snapshot_for(&state, &settings.play_engine, &pinned_path, 2)
+        .await
+        .map_err(native_error)?;
+    let analysis =
+        crate::settings::snapshot_for(&state, &settings.analysis_engine, &pinned_path, 4)
+            .await
+            .map_err(native_error)?;
+    let version = bot
+        .engine_version
+        .clone()
+        .context("Playing engine has no verified version")
+        .map_err(native_error)?;
     let id = Uuid::new_v4();
     let mut session = PlaySession {
         paused: false,
+        engine_snapshots: Some(PlayEngineSnapshots {
+            rules,
+            bot,
+            analysis,
+        }),
         money_session_ended: false,
         game_results: None,
         study_report_id: None,
@@ -667,8 +731,8 @@ fn stage_opening(session: &mut PlaySession, next: bool) -> anyhow::Result<()> {
 async fn probe_engine(session: &PlaySession, path: &str) -> anyhow::Result<()> {
     let directory = tempfile::tempdir()?;
     tokio::fs::write(directory.path().join("probe.py"),"import gnubg\nassert all(callable(getattr(gnubg,key,None)) for key in ['command','nextturn','board','posinfo','gnubgid','match','hint','navigate'])\nopen('ready.txt','w').write('ready')\n").await?;
-    Engine::new(path.to_owned())
-        .with_expected_version(Some(session.engine.version.clone()))
+    session
+        .rules_engine(path)?
         .run_with_timeout(
             directory.path(),
             "load python probe.py\n",
@@ -684,11 +748,17 @@ async fn probe_engine(session: &PlaySession, path: &str) -> anyhow::Result<()> {
 // Internal checkpoints keep native names so old GNUbg's 31-byte name buffer
 // cannot truncate a user's UTF-8 name during restore. Export full saved names
 // by replacing root player properties outside escaped SGF values.
-fn named_export(sgf: &str, human: &str, player: i32) -> String {
+fn named_export(sgf: &str, human: &str, player: i32, bot: &str) -> String {
     let names = if player == 0 {
-        [crate::import::sgf::escape_value(human), "GNUbg".into()]
+        [
+            crate::import::sgf::escape_value(human),
+            crate::import::sgf::escape_value(bot),
+        ]
     } else {
-        ["GNUbg".into(), crate::import::sgf::escape_value(human)]
+        [
+            crate::import::sgf::escape_value(bot),
+            crate::import::sgf::escape_value(human),
+        ]
     };
     let bytes = sgf.as_bytes();
     let mut replacements = Vec::new();
@@ -729,10 +799,12 @@ fn named_export(sgf: &str, human: &str, player: i32) -> String {
     result
 }
 fn native_error(error: anyhow::Error) -> ApiError {
-    tracing::warn!(error=?error,"GNUbg play action failed; no session changes saved");
+    tracing::warn!(error=?error,"Play action failed; no session changes saved");
     ApiError(
         StatusCode::SERVICE_UNAVAILABLE,
-        format!("GNUbg could not complete this action; the saved session is unchanged. {error}"),
+        format!(
+            "The engines could not complete this action; the saved session is unchanged. {error}"
+        ),
     )
 }
 fn validate_action<'a>(
@@ -993,7 +1065,7 @@ async fn act(
         .map_err(native_error)?;
         if snapshot.resignation_declined {
             return Err(ApiError::invalid(
-                "GNUbg declined this resignation. Choose a higher level or continue playing; the saved game is unchanged",
+                "The bot declined this resignation. Choose a higher level or continue playing; the saved game is unchanged",
             ));
         }
         working.version += 1;
@@ -1239,6 +1311,7 @@ async fn export_sgf(
             },
             &row.state.human_name,
             row.state.human_player,
+            row.state.bot_name(),
         ),
     ))
 }
@@ -1250,7 +1323,26 @@ async fn native(
     notation: Option<&str>,
     resign_level: Option<i32>,
 ) -> anyhow::Result<(NativeSnapshot, String)> {
+    if let Some(snapshot) = session
+        .engine_snapshots
+        .as_ref()
+        .and_then(|snapshots| snapshots.bot.open_sage.as_ref())
+    {
+        let bot = crate::engines::SageEngine::new(snapshot.clone())?;
+        return open_sage::advance(
+            session,
+            &bot,
+            &session.rules_engine(path)?,
+            previous,
+            action,
+            notation,
+            resign_level,
+        )
+        .await;
+    }
     let request = NativeRequest {
+        external_bot: false,
+        accept_resignation: None,
         new: previous.is_none(),
         human_player: session.human_player,
         match_length: session.match_length,
@@ -1260,8 +1352,7 @@ async fn native(
         notation,
         resign_level,
     };
-    let engine =
-        Engine::new(path.to_owned()).with_expected_version(Some(session.engine.version.clone()));
+    let engine = session.rules_engine(path)?;
     run_native(&engine, &request, previous.map(|(sgf, _)| sgf)).await
 }
 
@@ -1273,6 +1364,8 @@ pub(crate) async fn benchmark_checker_turn(
     plies: i32,
 ) -> anyhow::Result<()> {
     let request = NativeRequest {
+        external_bot: false,
+        accept_resignation: None,
         new: false,
         human_player: 1 - bot_player,
         match_length: 11,
@@ -1437,3 +1530,13 @@ fn apply_snapshot(session: &mut PlaySession, snapshot: NativeSnapshot) -> anyhow
     ))
 )]
 pub(crate) struct PlayDoc;
+
+pub(crate) async fn benchmark_sage_checker_turn(
+    bot: &crate::engines::SageEngine,
+    rules: &Engine,
+    previous: (&str, &str),
+    bot_player: i32,
+    dice: [i32; 2],
+) -> anyhow::Result<()> {
+    open_sage::benchmark_checker_turn(bot, rules, previous, bot_player, dice).await
+}

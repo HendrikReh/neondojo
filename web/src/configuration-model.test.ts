@@ -8,6 +8,23 @@ import {
 import vectors from '../../tests/fixtures/configuration-normalization.json';
 
 describe('configuration comparison', () => {
+  it('supports independent verified Open Sage profiles and rejects unverified depths', () => {
+    for (const area of ['analysis', 'play'] as const) {
+      const current = structuredClone(defaultConfiguration);
+      const input = {
+        ...current,
+        [area]: { ...current[area], engine: 'bgsage', plies: 2 },
+      };
+      expect(normalizeConfiguration(input)[area].engine).toBe('bgsage');
+      for (const plies of [0, 1, 3, 4])
+        expect(() =>
+          normalizeConfiguration({
+            ...input,
+            [area]: { ...input[area], plies },
+          }),
+        ).toThrow();
+    }
+  });
   it('represents missing optional field values as explicit null in differences', () => {
     const current = structuredClone(defaultConfiguration);
     current.positions.definition.tag = 'retained';

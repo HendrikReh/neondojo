@@ -1,3 +1,4 @@
+import { useSettingsText } from './settings-messages';
 import Tooltip from './Tooltip';
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import ActionButton from './ActionButton';
@@ -136,6 +137,13 @@ export default function PlayWorkspace({
   }, [visible, paused, busy, setup]);
   const reviewText = useBoardReviewText();
   const configuration = useOptionalConfiguration();
+  const settingsT = useSettingsText();
+  const [engineDefaults, setEngineDefaults] = useState<{
+    play_engine: string;
+    analysis_engine: string;
+    play_plies: number;
+    analysis_plies: number;
+  }>();
   const [localHuman, setLocalHuman] = useState(0),
     [localLength, setLocalLength] = useState(7);
   const [localMode, setLocalMode] = useState<PlayMode>('coach');
@@ -198,6 +206,7 @@ export default function PlayWorkspace({
     void loadSettings(abort.signal)
       .then((settings) => {
         if (abort.signal.aborted) return;
+        setEngineDefaults(settings);
         setMode(settings.default_play_mode ?? 'coach');
         setThreshold(settings.tutor_threshold ?? 0.04);
         setAutomatic(settings.training_auto_analysis ?? true);
@@ -781,7 +790,10 @@ export default function PlayWorkspace({
   const resignationDeclined =
     error instanceof AppError &&
     String(error.params.status) === '422' &&
-    error.diagnostic.startsWith('GNUbg declined this resignation.');
+    [
+      'GNUbg declined this resignation.',
+      'The bot declined this resignation.',
+    ].some((prefix) => error.diagnostic.startsWith(prefix));
   const currentResult = session?.game_results?.find(
     (result) => result.game_no === session.game_no,
   )?.result;
@@ -1033,6 +1045,29 @@ export default function PlayWorkspace({
                 {modeT('automatic')}
               </label>
             )}
+            <p className="play-engine">
+              {settingsT('playEngine')}:{' '}
+              {(configuration?.current?.play.engine ??
+                engineDefaults?.play_engine) === 'bgsage'
+                ? 'Open Sage'
+                : 'GNUbg'}{' '}
+              ·{' '}
+              {configuration?.current?.play.plies ??
+                engineDefaults?.play_plies ??
+                0}
+              -ply
+              {' · '}
+              {settingsT('analysisEngine')}:{' '}
+              {(configuration?.current?.analysis.engine ??
+                engineDefaults?.analysis_engine) === 'bgsage'
+                ? 'Open Sage'
+                : 'GNUbg'}{' '}
+              ·{' '}
+              {configuration?.current?.analysis.plies ??
+                engineDefaults?.analysis_plies ??
+                2}
+              -ply
+            </p>
             {defaultsError && <p role="status">{modeT('defaultsError')}</p>}
             <ActionButton
               type="submit"

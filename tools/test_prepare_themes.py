@@ -9,6 +9,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ThemePreparationTests(unittest.TestCase):
+    def test_preparation_preserves_non_theme_configuration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)
+            source = target / "source"
+            source.mkdir()
+            options = target / "configuration-options.json"
+            engines = {"gnubg": {"analysis": [0, 1, 2, 3, 4]}, "bgsage": {"analysis": [2]}}
+            options.write_text(json.dumps({"board_themes": [], "engine_profiles": engines}))
+            prepare(source, target / "public", target / "catalog.json", options)
+            self.assertEqual(json.loads(options.read_text()).get("engine_profiles"), engines)
+
     def test_configuration_options_include_builtin_and_generated_theme_ids(self):
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp)

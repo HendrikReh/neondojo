@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "BG Tutor API",
-    "description": "Local headless backgammon library and GNUbg analysis. No authentication; bind to loopback.",
+    "description": "Local headless backgammon library with GNUbg and Open Sage analysis. No authentication; bind to loopback.",
     "license": {
       "name": ""
     },
@@ -194,6 +194,22 @@
           "Benchmark"
         ],
         "operationId": "create_play",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PlayBenchmarkRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "description": "",
@@ -1602,6 +1618,74 @@
                   "items": {
                     "$ref": "#/components/schemas/EngineInfo"
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/engines/bgsage": {
+      "get": {
+        "tags": [
+          "Settings"
+        ],
+        "operationId": "get_installation",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Installation"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Settings"
+        ],
+        "operationId": "put_installation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Installation"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -7046,6 +7130,23 @@
           "imported"
         ]
       },
+      "BenchmarkEngines": {
+        "type": "object",
+        "required": [
+          "engine"
+        ],
+        "properties": {
+          "engine": {
+            "$ref": "#/components/schemas/EngineSnapshot"
+          },
+          "rules_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "BenchmarkHistory": {
         "type": "object",
         "required": [
@@ -7229,6 +7330,16 @@
           "engine_path": {
             "type": "string"
           },
+          "engine_snapshot": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BenchmarkEngines"
+              }
+            ]
+          },
           "engine_version": {
             "type": "string"
           },
@@ -7292,6 +7403,14 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "startup_elapsed_ms": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Cold Open Sage worker initialization, outside the warm pipeline timer."
           },
           "status": {
             "type": "string"
@@ -8261,7 +8380,8 @@
       "ConfigurationEngine": {
         "type": "string",
         "enum": [
-          "Gnubg"
+          "Gnubg",
+          "OpenSage"
         ]
       },
       "ConfigurationErrorBody": {
@@ -9392,6 +9512,38 @@
           }
         }
       },
+      "EngineSnapshot": {
+        "type": "object",
+        "description": "Internal job payload, never derived again from mutable application settings.",
+        "required": [
+          "engine_id",
+          "gnubg_path"
+        ],
+        "properties": {
+          "engine_id": {
+            "type": "string"
+          },
+          "engine_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gnubg_path": {
+            "type": "string"
+          },
+          "open_sage": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SageSnapshot"
+              }
+            ]
+          }
+        }
+      },
       "ErrorBody": {
         "type": "object",
         "required": [
@@ -9995,6 +10147,48 @@
         },
         "additionalProperties": false
       },
+      "Installation": {
+        "type": "object",
+        "required": [
+          "version",
+          "python_path"
+        ],
+        "properties": {
+          "python_path": {
+            "type": "string"
+          },
+          "snapshot": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SageSnapshot"
+              }
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "InstallationRequest": {
+        "type": "object",
+        "required": [
+          "version",
+          "path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "Job": {
         "type": "object",
         "required": [
@@ -10021,6 +10215,17 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "engine_snapshot": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EngineSnapshot",
+                "description": "Immutable provider, installation and model identity; absent for legacy GNUbg work."
+              }
+            ]
           },
           "error": {
             "type": [
@@ -10232,7 +10437,7 @@
               "null"
             ],
             "format": "int32",
-            "description": "GNUbg search depth, 0 to 4. Omitted uses saved analysis depth.",
+            "description": "Verified search depth of the selected engine. Omitted uses saved analysis depth.",
             "maximum": 4,
             "minimum": 0
           },
@@ -10418,7 +10623,7 @@
               "null"
             ],
             "format": "int32",
-            "description": "Native GNUbg checker and cube search depth. Omitted uses saved analysis depth.",
+            "description": "Verified checker and cube depth of the selected engine. Omitted uses saved analysis depth.",
             "maximum": 4,
             "minimum": 0
           }
@@ -11327,6 +11532,22 @@
           }
         }
       },
+      "PlayBenchmarkRequest": {
+        "type": "object",
+        "required": [
+          "engine_id",
+          "plies"
+        ],
+        "properties": {
+          "engine_id": {
+            "type": "string"
+          },
+          "plies": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "PlayDecision": {
         "type": "object",
         "required": [
@@ -11478,6 +11699,25 @@
           },
           "version": {
             "type": "string"
+          }
+        }
+      },
+      "PlayEngineSnapshots": {
+        "type": "object",
+        "required": [
+          "rules",
+          "bot",
+          "analysis"
+        ],
+        "properties": {
+          "analysis": {
+            "$ref": "#/components/schemas/EngineSnapshot"
+          },
+          "bot": {
+            "$ref": "#/components/schemas/EngineSnapshot"
+          },
+          "rules": {
+            "$ref": "#/components/schemas/EngineSnapshot"
           }
         }
       },
@@ -11805,6 +12045,16 @@
           },
           "engine": {
             "$ref": "#/components/schemas/PlayEngine"
+          },
+          "engine_snapshots": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PlayEngineSnapshots"
+              }
+            ]
           },
           "game_learning_used": {
             "type": "boolean"
@@ -12962,6 +13212,42 @@
           "version": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "SageSnapshot": {
+        "type": "object",
+        "required": [
+          "python",
+          "package_version",
+          "artifact_fingerprint",
+          "threads",
+          "plies",
+          "adapter_version"
+        ],
+        "properties": {
+          "adapter_version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "artifact_fingerprint": {
+            "type": "string"
+          },
+          "package_version": {
+            "type": "string"
+          },
+          "plies": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "python": {
+            "type": "string"
+          },
+          "threads": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
           }
         }
       },

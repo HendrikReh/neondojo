@@ -473,7 +473,7 @@ async fn remove_database_content(
 // legacy or incomplete result must never revive an older rating.
 const MATCH_FROM: &str = "FROM matches m LEFT JOIN play_sessions ps ON ps.library_match_id=m.id LEFT JOIN annotations a ON a.match_uuid=m.id
 LEFT JOIN LATERAL (
-    SELECT j.result,j.total_games,j.completed_games FROM jobs j
+    SELECT j.result,j.total_games,j.completed_games FROM selected_engine_jobs j
     WHERE j.match_uuid=m.id AND j.source_revision=m.source_revision AND j.kind='match' AND j.game_no IS NULL AND j.status='completed' AND NOT m.collection_only
     ORDER BY j.created_at DESC,j.id DESC LIMIT 1
 ) rawpr ON true
@@ -492,7 +492,7 @@ LEFT JOIN LATERAL (
     AND rawpr.result #>> '{performance_rating,players,1,player}'='1'
 ) prj ON true
 LEFT JOIN LATERAL (
-    SELECT coalesce((SELECT CASE WHEN j.game_no IS NOT NULL AND j.status='completed' THEN 'partial' ELSE j.status END FROM jobs j WHERE j.match_uuid=m.id AND j.source_revision=m.source_revision AND j.kind='match' ORDER BY (j.game_no IS NULL) DESC,j.created_at DESC,j.id DESC LIMIT 1),CASE WHEN EXISTS(SELECT 1 FROM imported_analyses ia WHERE ia.match_uuid=m.id AND ia.kind IN ('checker','cube')) THEN 'imported' END) AS status
+    SELECT coalesce((SELECT CASE WHEN j.game_no IS NOT NULL AND j.status='completed' THEN 'partial' ELSE j.status END FROM selected_engine_jobs j WHERE j.match_uuid=m.id AND j.source_revision=m.source_revision AND j.kind='match' ORDER BY (j.game_no IS NULL) DESC,j.created_at DESC,j.id DESC LIMIT 1),CASE WHEN EXISTS(SELECT 1 FROM imported_analyses ia WHERE ia.match_uuid=m.id AND ia.kind IN ('checker','cube')) THEN 'imported' END) AS status
 ) analysis ON true";
 const MATCH_COLUMNS: &str = "coalesce((SELECT r.id FROM study_report_snapshots r WHERE r.session_id=ps.id ORDER BY r.game_no DESC,r.created_at DESC LIMIT 1),CASE WHEN ps.state->>'phase'='match_over' AND jsonb_typeof(ps.state->'review')='object' THEN ps.id END) AS study_report_id,ps.id AS play_session_id,ps.paused_from_database_id IS NOT NULL AS play_paused,ps.state->>'phase' AS play_phase,m.play_mode,m.play_assisted,m.id,NOT m.collection_only AS source_available,coalesce(m.source_match_no,m.match_no) AS match_no,m.filename,m.format,m.white,m.black,m.match_length,m.position_count,m.created_at,coalesce(m.source_database_id,m.database_id) AS database_id,coalesce(nullif(m.display_name,''),m.filename) AS display_name,m.played_on,m.tournament,m.round,m.place,m.result_state,m.white_score,m.black_score,(prj.result #>> '{performance_rating,players,0,value}')::float8 AS white_pr,(prj.result #>> '{performance_rating,players,1,value}')::float8 AS black_pr,prj.result #>> '{performance_rating,method}' AS pr_method,prj.result #>> '{performance_rating,profile}' AS pr_profile,analysis.status AS analysis_status,(SELECT count(*) FROM match_games g WHERE g.match_uuid=m.id) AS game_count,coalesce(a.tags,'{}'::text[]) AS tags,coalesce(a.comment,'') AS comment,m.metadata_version AS version";
 fn sort_spec(sort: &str) -> Option<(&'static str, &'static str)> {
@@ -1246,13 +1246,13 @@ async fn copy_children(
         sqlx::query("INSERT INTO annotations(id,match_uuid,position_uuid,game_uuid,move_uuid,tags,comment,version,updated_at) SELECT $2,$3,$4,$5,$6,tags,comment,version,updated_at FROM annotations WHERE id=$1").bind(old).bind(Uuid::new_v4()).bind(mat.map(|_|target)).bind(pos.and_then(|id|positions.get(&id).copied())).bind(game.and_then(|id|games.get(&id).copied())).bind(mov.and_then(|id|moves.get(&id).copied())).execute(&mut **tx).await.map_err(anyhow::Error::from)?;
     }
     // Completed snapshots only: queued/running/failed work and learning state stay with the source.
-    let jobs:Vec<(Uuid,Option<Uuid>,Option<Uuid>)>=sqlx::query_as("SELECT id,match_uuid,position_uuid FROM (SELECT DISTINCT ON (j.match_uuid,j.position_uuid,j.kind,coalesce(j.game_no,0)) j.* FROM jobs j LEFT JOIN positions p ON p.id=j.position_uuid WHERE coalesce(j.match_uuid,p.match_uuid)=$1 AND j.status='completed' ORDER BY j.match_uuid,j.position_uuid,j.kind,coalesce(j.game_no,0),j.created_at DESC,j.id DESC) completed").bind(source).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
+    let jobs:Vec<(Uuid,Option<Uuid>,Option<Uuid>)>=sqlx::query_as("SELECT id,match_uuid,position_uuid FROM (SELECT DISTINCT ON (j.match_uuid,j.position_uuid,j.kind,coalesce(j.game_no,0),coalesce(j.engine_snapshot->>'engine_id','gnubg')) j.* FROM jobs j LEFT JOIN positions p ON p.id=j.position_uuid WHERE coalesce(j.match_uuid,p.match_uuid)=$1 AND j.status='completed' ORDER BY j.match_uuid,j.position_uuid,j.kind,coalesce(j.game_no,0),coalesce(j.engine_snapshot->>'engine_id','gnubg'),j.created_at DESC,j.id DESC) completed").bind(source).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
     for (old, mat, pos) in jobs {
         let new_id = Uuid::new_v4();
         sqlx::query("INSERT INTO jobs SELECT (jsonb_populate_record(NULL::jobs,to_jsonb(j)||jsonb_build_object('id',$2::uuid,'match_uuid',$3::uuid,'position_uuid',$4::uuid,'lease_token',NULL,'lease_until',NULL))).* FROM jobs j WHERE id=$1").bind(old).bind(new_id).bind(mat.map(|_|target)).bind(pos.and_then(|id|positions.get(&id).copied())).execute(&mut **tx).await.map_err(anyhow::Error::from)?;
         sqlx::query("INSERT INTO job_events(job_id,event,data) SELECT id,'completed',jsonb_build_object('status','completed','progress',progress,'error',NULL,'completed_games',completed_games,'total_games',total_games) FROM jobs WHERE id=$1")
             .bind(new_id).execute(&mut **tx).await.map_err(anyhow::Error::from)?;
-        sqlx::query("INSERT INTO match_analysis_games(job_id,game_no) SELECT $2,game_no FROM match_analysis_games WHERE job_id=$1").bind(old).bind(new_id).execute(&mut **tx).await.map_err(anyhow::Error::from)?;
+        sqlx::query("INSERT INTO match_analysis_games(job_id,game_no,summary) SELECT $2,game_no,summary FROM match_analysis_games WHERE job_id=$1").bind(old).bind(new_id).execute(&mut **tx).await.map_err(anyhow::Error::from)?;
         type CopiedDecision = (Option<Uuid>, i32, i32, i32, String, f64, serde_json::Value);
         let decisions:Vec<CopiedDecision>=sqlx::query_as("SELECT position_uuid,game_no,decision_no,player,kind,equity_loss,data FROM move_analyses WHERE job_id=$1 ORDER BY id").bind(old).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
         for (pos, game, decision, player, kind, loss, data) in decisions {

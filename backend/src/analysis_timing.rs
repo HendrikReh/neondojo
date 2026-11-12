@@ -182,7 +182,7 @@ pub(crate) async fn initialize(
     pool: &PgPool,
     job: &Job,
     token: Uuid,
-    engine: &crate::engine::Engine,
+    engine: &crate::engines::AnalysisEngine,
     version: &str,
     total_moves: i32,
     completed_moves: i32,
@@ -196,7 +196,12 @@ pub(crate) async fn initialize(
         .as_ref()
         .and_then(|s| s["engine_id"].as_str())
         .unwrap_or("gnubg");
-    let benchmark = match crate::engine::resolve_binary(engine.binary()) {
+    let path = if engine_id == "bgsage" {
+        Ok(engine.binary().to_owned())
+    } else {
+        crate::engine::resolve_binary(engine.binary())
+    };
+    let benchmark = match path {
         Ok(path) => {
             crate::benchmarks::estimate::matching_benchmark(
                 pool, engine_id, &path, version, job.plies,
@@ -307,7 +312,8 @@ mod tests {
         let token = Uuid::new_v4();
         sqlx::query("UPDATE jobs SET status='running',attempts=1,lease_token=$2,lease_until=now()+interval '120 seconds' WHERE id=$1").bind(job.id).bind(token).execute(&pool).await.unwrap();
         let job = store::get_job(&pool, job.id).await.unwrap().unwrap();
-        let engine = crate::engine::Engine::new("/no-process-needed".into());
+        let engine: crate::engines::AnalysisEngine =
+            crate::engine::Engine::new("/no-process-needed".into()).into();
         assert!(
             initialize(
                 &pool,

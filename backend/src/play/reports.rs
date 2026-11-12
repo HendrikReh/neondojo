@@ -9,8 +9,7 @@ pub(super) fn money_finished(session: &PlaySession) -> bool {
 }
 pub(super) async fn build(session: &mut PlaySession, sgf: &str, path: &str) -> Result<()> {
     let source = library::normalize_native_setup_turn(sgf.to_owned())?;
-    let engine = crate::engine::Engine::new(path.into())
-        .with_expected_version(Some(session.engine.version.clone()));
+    let engine = session.analysis_engine(path)?;
     let numbers = if session.match_length == 0 {
         vec![session.game_no]
     } else {
@@ -26,7 +25,7 @@ pub(super) async fn build(session: &mut PlaySession, sgf: &str, path: &str) -> R
                 .any(|position| position.game_no == game)
         {
             games.push(crate::match_analysis::AnalyzedGame {
-                engine: session.engine.version.clone(),
+                engine: session.analysis_version().into(),
                 game_no: game,
                 decisions: Vec::new(),
                 statistics: None,

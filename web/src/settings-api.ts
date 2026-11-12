@@ -12,8 +12,8 @@ export type AppSettings = Omit<
   | 'tutor_threshold'
   | 'training_auto_analysis'
 > & {
-  analysis_engine: 'gnubg';
-  play_engine: 'gnubg';
+  analysis_engine: 'gnubg' | 'bgsage';
+  play_engine: 'gnubg' | 'bgsage';
   bearoff_direction?: 'right' | 'left';
   default_play_mode?: PlayMode;
   tutor_threshold?: number;
@@ -58,8 +58,8 @@ function parseSettings(value: unknown): AppSettings {
     !isObject(value) ||
     !Number.isInteger(value.version) ||
     typeof value.player_name !== 'string' ||
-    value.analysis_engine !== 'gnubg' ||
-    value.play_engine !== 'gnubg' ||
+    !['gnubg', 'bgsage'].includes(String(value.analysis_engine)) ||
+    !['gnubg', 'bgsage'].includes(String(value.play_engine)) ||
     (value.bearoff_direction !== undefined &&
       !['left', 'right'].includes(String(value.bearoff_direction))) ||
     (value.default_play_mode !== undefined &&
@@ -75,7 +75,9 @@ function parseSettings(value: unknown): AppSettings {
     ![0, 1, 2].includes(Number(value.play_plies)) ||
     typeof value.analysis_plies !== 'number' ||
     typeof value.play_plies !== 'number' ||
-    typeof value.gnubg_path !== 'string'
+    typeof value.gnubg_path !== 'string' ||
+    (value.analysis_engine === 'bgsage' && value.analysis_plies !== 2) ||
+    (value.play_engine === 'bgsage' && value.play_plies !== 2)
   ) {
     throw new SettingsApiError(200, '');
   }
@@ -131,4 +133,47 @@ export async function checkGnubg(path: string, signal?: AbortSignal) {
     throw new SettingsApiError(200, '');
   }
   return { version: value.version };
+}
+
+export type SageInstallation = Schema['Installation'];
+function parseSageInstallation(value: unknown): SageInstallation {
+  if (
+    !isObject(value) ||
+    !Number.isSafeInteger(value.version) ||
+    typeof value.python_path !== 'string'
+  )
+    throw new SettingsApiError(200, 'Invalid Open Sage installation response');
+  const snapshot = value.snapshot;
+  if (
+    snapshot != null &&
+    (!isObject(snapshot) ||
+      typeof snapshot.python !== 'string' ||
+      typeof snapshot.package_version !== 'string' ||
+      typeof snapshot.artifact_fingerprint !== 'string' ||
+      snapshot.plies !== 2 ||
+      typeof snapshot.threads !== 'number' ||
+      ![2, 4].includes(snapshot.threads) ||
+      snapshot.adapter_version !== 1)
+  )
+    throw new SettingsApiError(200, 'Invalid Open Sage installation identity');
+  return value as SageInstallation;
+}
+export async function loadSageInstallation(signal?: AbortSignal) {
+  return parseSageInstallation(
+    await settingsRequest('/engines/bgsage', { signal }),
+  );
+}
+export async function saveSageInstallation(
+  version: number,
+  path: string,
+  signal?: AbortSignal,
+) {
+  return parseSageInstallation(
+    await settingsRequest('/engines/bgsage', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version, path }),
+      signal,
+    }),
+  );
 }

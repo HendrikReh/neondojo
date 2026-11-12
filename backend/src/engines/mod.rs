@@ -1,0 +1,392 @@
+//! Local analysis adapters. GNUbg remains the independent import/rules engine.
+mod context;
+mod game;
+mod process;
+
+use crate::{
+    engine::{Analysis, Candidate, Engine},
+    match_analysis::AnalyzedGame,
+};
+use anyhow::{Context as _, Result, ensure};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use std::{path::Path, time::Duration};
+use utoipa::ToSchema;
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct SageSnapshot {
+    pub python: String,
+    pub package_version: String,
+    pub artifact_fingerprint: String,
+    pub threads: u32,
+    pub plies: i32,
+    pub adapter_version: u32,
+}
+
+#[derive(Clone)]
+pub struct SageEngine {
+    snapshot: SageSnapshot,
+    version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SageCheckerCandidate {
+    pub board: [i32; 26],
+    pub notation: String,
+    pub equity: f64,
+    pub probabilities: Vec<f64>,
+}
+
+/// All equities and probabilities are from the ORIGINAL doubler/on-roll player.
+/// Take/drop response decisions negate take/pass; never reevaluate a flipped board.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SageCubeEvaluation {
+    pub no_double: f64,
+    pub take: f64,
+    pub pass: f64,
+    pub probabilities: Vec<f64>,
+}
+
+impl SageEngine {
+    pub fn new(snapshot: SageSnapshot) -> Result<Self> {
+        ensure!(
+            snapshot.plies == 2 && matches!(snapshot.threads, 2 | 4),
+            "Only verified Open Sage 2-ply with 2 or 4 threads is supported"
+        );
+        ensure!(
+            snapshot.adapter_version == 1 && snapshot.package_version == "2.0.20260907",
+            "Unsupported Open Sage adapter or package version"
+        );
+        ensure!(
+            snapshot.artifact_fingerprint.len() == 64
+                && snapshot
+                    .artifact_fingerprint
+                    .bytes()
+                    .all(|b| b.is_ascii_hexdigit()),
+            "Invalid Open Sage artifact fingerprint"
+        );
+        ensure!(
+            Path::new(&snapshot.python).is_absolute(),
+            "Open Sage Python path must be absolute"
+        );
+        let version = format!(
+            "Open Sage {}; model {}; 2ply cubeful; threads {}; adapter {}",
+            snapshot.package_version,
+            snapshot.artifact_fingerprint,
+            snapshot.threads,
+            snapshot.adapter_version
+        );
+        Ok(Self { snapshot, version })
+    }
+
+    pub async fn probe(python: String, threads: u32) -> Result<SageSnapshot> {
+        ensure!(
+            matches!(threads, 2 | 4),
+            "Open Sage supports verified thread budgets 2 and 4 only"
+        );
+        // Preserve the venv executable symlink; canonicalizing it loses pyvenv.cfg.
+        let path = Path::new(&python);
+        let python = if path.is_absolute() {
+            path.to_path_buf()
+        } else if python.contains(std::path::is_separator) {
+            std::env::current_dir()?.join(path)
+        } else {
+            std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+                .map(|base| base.join(path))
+                .find(|path| path.is_file())
+                .context("Open Sage Python was not found on PATH")?
+        };
+        let mut snapshot = SageSnapshot {
+            python: python
+                .to_str()
+                .context("Open Sage Python path is not UTF-8")?
+                .into(),
+            package_version: "2.0.20260907".into(),
+            artifact_fingerprint: String::new(),
+            threads,
+            plies: 2,
+            adapter_version: 1,
+        };
+        let identity = process::probe(&snapshot).await?;
+        snapshot.package_version = identity["package_version"]
+            .as_str()
+            .context("Missing Sage package identity")?
+            .into();
+        snapshot.artifact_fingerprint = identity["artifact_fingerprint"]
+            .as_str()
+            .context("Missing Sage asset identity")?
+            .into();
+        Self::new(snapshot.clone())?;
+        Ok(snapshot)
+    }
+
+    pub fn snapshot(&self) -> &SageSnapshot {
+        &self.snapshot
+    }
+    pub fn binary(&self) -> &str {
+        &self.snapshot.python
+    }
+    pub fn saved_version(&self) -> Option<&str> {
+        Some(&self.version)
+    }
+    pub async fn restart(&self) -> Result<()> {
+        process::restart(&self.snapshot).await
+    }
+    pub async fn version(&self) -> Result<String> {
+        process::request(
+            &self.snapshot,
+            json!({"operation":"identity"}),
+            Duration::from_secs(120),
+        )
+        .await?;
+        Ok(self.version.clone())
+    }
+    fn check_depth(&self, plies: i32) -> Result<()> {
+        ensure!(
+            plies == self.snapshot.plies,
+            "Requested depth differs from immutable Open Sage profile"
+        );
+        Ok(())
+    }
+
+    pub async fn checker_boards(
+        &self,
+        position_id: &str,
+        match_id: &str,
+        dice: Option<[i32; 2]>,
+        force_board: Option<[i32; 26]>,
+    ) -> Result<Vec<SageCheckerCandidate>> {
+        let context = context::Context::decode(match_id)?;
+        ensure!(
+            !context.pending_double,
+            "Cannot play checkers before cube response"
+        );
+        let board = context.board(position_id, match_id)?;
+        let dice = dice.unwrap_or(context.dice);
+        ensure!(
+            dice.iter().all(|die| (1..=6).contains(die)),
+            "Invalid checker dice"
+        );
+        let result = process::request(&self.snapshot, json!({"operation":"checker", "board":board, "context":context, "dice":dice, "force_board":force_board.map(|board| context::to_sage(&board, context.player))}), Duration::from_secs(180)).await?;
+        let mut candidates: Vec<SageCheckerCandidate> = serde_json::from_value(result)?;
+        ensure!(
+            !candidates.is_empty(),
+            "Open Sage returned no checker candidates"
+        );
+        for candidate in &mut candidates {
+            validate_evaluation(candidate.equity, &candidate.probabilities)?;
+            if candidate.board == board {
+                ensure!(
+                    candidate.notation.is_empty(),
+                    "Invalid forced-pass notation"
+                );
+                // Existing rule validation independently proves that no die can be played.
+                let absolute = context::from_sage(&board, context.player)?;
+                crate::import::sgf::apply_checker_turn(&absolute, context.player, dice, &[])?;
+                candidate.notation = "Cannot move".into();
+            } else {
+                ensure!(
+                    !candidate.notation.is_empty(),
+                    "Open Sage omitted checker notation"
+                );
+            }
+            candidate.board = context::from_sage(&candidate.board, context.player)?;
+        }
+        candidates.sort_by(|a, b| b.equity.total_cmp(&a.equity));
+        Ok(candidates)
+    }
+
+    pub async fn analyze(
+        &self,
+        position_id: &str,
+        match_id: &str,
+        plies: i32,
+        dice: Option<[i32; 2]>,
+    ) -> Result<Analysis> {
+        self.check_depth(plies)?;
+        let candidates = self
+            .checker_boards(position_id, match_id, dice, None)
+            .await?;
+        Ok(Analysis {
+            engine: self.version.clone(),
+            plies,
+            candidates: candidates
+                .into_iter()
+                .enumerate()
+                .map(|(index, candidate)| Candidate {
+                    rank: index as i32 + 1,
+                    notation: candidate.notation,
+                    equity: candidate.equity,
+                    probabilities: candidate.probabilities,
+                })
+                .collect(),
+        })
+    }
+
+    pub async fn analyze_checker_choices(
+        &self,
+        position_id: &str,
+        match_id: &str,
+        plies: i32,
+        forced_pass: bool,
+    ) -> Result<Analysis> {
+        let result = self.analyze(position_id, match_id, plies, None).await?;
+        ensure!(
+            !forced_pass
+                || result.candidates.len() == 1 && result.candidates[0].notation == "Cannot move",
+            "Expected a forced pass but Open Sage returned playable moves"
+        );
+        Ok(result)
+    }
+
+    pub async fn accepts_resignation(
+        &self,
+        position_id: &str,
+        match_id: &str,
+        level: i32,
+    ) -> Result<bool> {
+        ensure!((1..=3).contains(&level), "Invalid resignation level");
+        let context = context::Context::decode(match_id)?;
+        ensure!(
+            !context.pending_double,
+            "Cannot resign with cube response pending"
+        );
+        let board = context.board(position_id, match_id)?;
+        let result = process::request(
+            &self.snapshot,
+            json!({"operation":"resignation", "board":board,
+            "context":context, "dice":context.dice, "level":level}),
+            Duration::from_secs(180),
+        )
+        .await?;
+        result["accept"]
+            .as_bool()
+            .context("Open Sage omitted resignation decision")
+    }
+
+    pub async fn cube(&self, position_id: &str, match_id: &str) -> Result<SageCubeEvaluation> {
+        let context = context::Context::decode(match_id)?;
+        let board = context.board(position_id, match_id)?;
+        let value = process::request(
+            &self.snapshot,
+            json!({"operation":"cube", "board":board, "context":context}),
+            Duration::from_secs(180),
+        )
+        .await?;
+        let result: SageCubeEvaluation = serde_json::from_value(value)?;
+        for equity in [result.no_double, result.take, result.pass] {
+            validate_evaluation(equity, &result.probabilities)?;
+        }
+        Ok(result)
+    }
+}
+
+fn validate_evaluation(equity: f64, probabilities: &[f64]) -> Result<()> {
+    ensure!(
+        equity.is_finite()
+            && probabilities.len() == 6
+            && probabilities
+                .iter()
+                .all(|p| p.is_finite() && (0.0..=1.0).contains(p)),
+        "Invalid Open Sage evaluation"
+    );
+    ensure!(
+        (probabilities[0] + probabilities[3] - 1.0).abs() <= 1e-9
+            && probabilities[2] <= probabilities[1]
+            && probabilities[1] <= probabilities[0]
+            && probabilities[5] <= probabilities[4]
+            && probabilities[4] <= probabilities[3] + 1e-12,
+        "Inconsistent Open Sage probabilities"
+    );
+    Ok(())
+}
+
+#[derive(Clone)]
+pub enum AnalysisEngine {
+    Gnubg(Engine),
+    OpenSage(SageEngine),
+}
+impl AnalysisEngine {
+    pub async fn version(&self) -> Result<String> {
+        match self {
+            Self::Gnubg(engine) => engine.version().await,
+            Self::OpenSage(engine) => engine.version().await,
+        }
+    }
+    pub fn saved_version(&self) -> Option<&str> {
+        match self {
+            Self::Gnubg(engine) => engine.saved_version(),
+            Self::OpenSage(engine) => engine.saved_version(),
+        }
+    }
+    pub fn binary(&self) -> &str {
+        match self {
+            Self::Gnubg(engine) => engine.binary(),
+            Self::OpenSage(engine) => engine.binary(),
+        }
+    }
+    pub async fn analyze(
+        &self,
+        position_id: &str,
+        match_id: &str,
+        plies: i32,
+        dice: Option<[i32; 2]>,
+    ) -> Result<Analysis> {
+        match self {
+            Self::Gnubg(engine) => engine.analyze(position_id, match_id, plies, dice).await,
+            Self::OpenSage(engine) => engine.analyze(position_id, match_id, plies, dice).await,
+        }
+    }
+    pub async fn analyze_checker_choices(
+        &self,
+        position_id: &str,
+        match_id: &str,
+        plies: i32,
+        forced_pass: bool,
+    ) -> Result<Analysis> {
+        match self {
+            Self::Gnubg(engine) => {
+                engine
+                    .analyze_checker_choices(position_id, match_id, plies, forced_pass)
+                    .await
+            }
+            Self::OpenSage(engine) => {
+                engine
+                    .analyze_checker_choices(position_id, match_id, plies, forced_pass)
+                    .await
+            }
+        }
+    }
+    pub async fn analyze_game(&self, sgf: &str, game_no: i32, plies: i32) -> Result<AnalyzedGame> {
+        match self {
+            Self::Gnubg(engine) => engine.analyze_game(sgf, game_no, plies).await,
+            Self::OpenSage(engine) => engine.analyze_game(sgf, game_no, plies).await,
+        }
+    }
+    pub async fn analyze_game_with_limit(
+        &self,
+        sgf: &str,
+        game_no: i32,
+        plies: i32,
+        timeout: Option<Duration>,
+    ) -> Result<AnalyzedGame> {
+        match self {
+            Self::Gnubg(engine) => {
+                engine
+                    .analyze_game_with_limit(sgf, game_no, plies, timeout)
+                    .await
+            }
+            Self::OpenSage(engine) => {
+                engine
+                    .analyze_game_with_limit(sgf, game_no, plies, timeout)
+                    .await
+            }
+        }
+    }
+}
+
+impl From<Engine> for AnalysisEngine {
+    fn from(engine: Engine) -> Self {
+        Self::Gnubg(engine)
+    }
+}

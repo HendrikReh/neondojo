@@ -231,6 +231,23 @@
         }
       ],
       "expected_paths": []
+    },
+    {
+      "name": "independent Open Sage playing engine",
+      "changes": [
+        {
+          "path": "play.engine",
+          "value": "bgsage"
+        },
+        {
+          "path": "play.plies",
+          "value": 2
+        }
+      ],
+      "expected_paths": [
+        "play.engine",
+        "play.plies"
+      ]
     }
   ]
 }

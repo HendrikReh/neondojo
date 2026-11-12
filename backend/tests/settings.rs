@@ -87,7 +87,7 @@ async fn defaults_use_injected_engine_and_survive_new_app_states(pool: PgPool) {
     assert_eq!(engines[0]["plies"], json!([0, 1, 2, 3, 4]));
     assert_eq!(
         engines[1],
-        json!({"id":"bgsage","name":"BGSage","available":false,"version":null,"plies":[]})
+        json!({"id":"bgsage","name":"Open Sage","available":false,"version":null,"plies":[2]})
     );
     let (_, schema) = call(app, "GET", "/api/openapi.json", Value::Null).await;
     for route in ["/api/settings", "/api/engines", "/api/engines/gnubg/check"] {
@@ -1031,6 +1031,7 @@ async fn queued_and_recovered_jobs_refuse_a_replaced_engine_version(pool: PgPool
 async fn snapshot_rejects_output_if_the_version_changes_during_evaluation() {
     let (_temp, engine) = versioned_fixture_engine(true);
     let snapshot = bgtutor::settings::EngineSnapshot {
+        open_sage: None,
         engine_id: "gnubg".into(),
         gnubg_path: engine.binary().into(),
         engine_version: Some(engine.version().await.unwrap()),

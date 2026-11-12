@@ -1,0 +1,156 @@
+use super::SageEngine;
+use crate::{
+    import::sgf::parse_sgf_source_moves,
+    match_analysis::{
+        AnalyzedGame, Decision, cube_options, decision, game_count, requires_cube_analysis,
+    },
+};
+use anyhow::{Context, Result, ensure};
+use std::time::Duration;
+
+impl SageEngine {
+    pub async fn analyze_game(&self, sgf: &str, game_no: i32, plies: i32) -> Result<AnalyzedGame> {
+        self.analyze_game_with_limit(sgf, game_no, plies, Some(Duration::from_secs(600)))
+            .await
+    }
+
+    pub async fn analyze_game_with_limit(
+        &self,
+        sgf: &str,
+        game_no: i32,
+        plies: i32,
+        limit: Option<Duration>,
+    ) -> Result<AnalyzedGame> {
+        self.check_depth(plies)?;
+        ensure!(
+            (1..=game_count(sgf)?).contains(&game_no),
+            "Game number outside match"
+        );
+        crate::engine::with_shared_access(async {
+            let work = self.game(sgf, game_no);
+            match limit {
+                Some(limit) => tokio::time::timeout(limit, work)
+                    .await
+                    .context("Open Sage game analysis timed out; active worker terminated")?,
+                None => work.await,
+            }
+        })
+        .await
+    }
+
+    async fn game(&self, sgf: &str, game_no: i32) -> Result<AnalyzedGame> {
+        let (imported, moves) = parse_sgf_source_moves(sgf)?;
+        let mut decisions = Vec::new();
+        let expected_checkers = imported
+            .positions
+            .iter()
+            .filter(|position| position.game_no == game_no)
+            .count();
+        let mut analyzed_checkers = 0;
+        for event in moves.iter().filter(|event| event.game_no == game_no) {
+            if event.kind == "resign" {
+                continue;
+            }
+            if event.kind == "checker" {
+                let position = imported
+                    .positions
+                    .iter()
+                    .find(|position| {
+                        position.game_no == game_no && Some(position.ply) == event.checker_ply
+                    })
+                    .context("Missing imported checker context")?;
+                if requires_cube_analysis(position)? {
+                    let cube = self.cube(&event.position_id, &event.match_id).await?;
+                    let mut result = cube_decision(
+                        event.player,
+                        "no double",
+                        cube.no_double,
+                        cube.take,
+                        cube.pass,
+                    )?;
+                    result.checker_no = event.checker_ply;
+                    decisions.push(result);
+                }
+                let after: [i32; 26] = event
+                    .after_board
+                    .clone()
+                    .try_into()
+                    .ok()
+                    .context("Invalid played board")?;
+                let candidates = self
+                    .checker_boards(&event.position_id, &event.match_id, None, Some(after))
+                    .await?;
+                let best = candidates
+                    .first()
+                    .context("Open Sage omitted best checker move")?;
+                let played = candidates
+                    .iter()
+                    .find(|candidate| candidate.board == after)
+                    .context("Open Sage omitted played checker move")?;
+                let forced = event.board == event.after_board;
+                let mut result = decision(
+                    event.player,
+                    "checker",
+                    &event.notation,
+                    &best.notation,
+                    (!forced).then_some((played.equity, best.equity)),
+                );
+                result.checker_no = event.checker_ply;
+                result.dice = Some(event.dice);
+                decisions.push(result);
+                analyzed_checkers += 1;
+            } else {
+                let played = event.notation.to_ascii_lowercase();
+                let cube = self.cube(&event.position_id, &event.match_id).await?;
+                let response = matches!(played.as_str(), "take" | "drop");
+                let sign = if response { -1.0 } else { 1.0 };
+                decisions.push(cube_decision(
+                    event.player,
+                    &played,
+                    sign * cube.no_double,
+                    sign * cube.take,
+                    sign * cube.pass,
+                )?);
+            }
+        }
+        ensure!(
+            analyzed_checkers == expected_checkers,
+            "Incomplete Open Sage game coverage"
+        );
+        for (index, decision) in decisions.iter_mut().enumerate() {
+            decision.decision_no = i32::try_from(index + 1)?;
+        }
+        Ok(AnalyzedGame {
+            engine: self.version.clone(),
+            game_no,
+            decisions,
+            statistics: None,
+        })
+    }
+}
+
+fn cube_decision(player: i32, played: &str, nd: f64, dt: f64, dp: f64) -> Result<Decision> {
+    let (best, actual, optimal) =
+        cube_options(played, nd, dt, dp).context("Unknown cube action")?;
+    Ok(decision(
+        player,
+        "cube",
+        played,
+        best,
+        Some((actual, optimal)),
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn response_uses_negated_original_offer_units() {
+        let take = cube_decision(1, "take", -1.0, -2.0, -1.0).unwrap();
+        assert_eq!(take.best, "drop");
+        assert_eq!(take.played_equity, Some(-2.0));
+        assert_eq!(take.equity_loss, 1.0);
+        let drop = cube_decision(1, "drop", -1.0, -2.0, -1.0).unwrap();
+        assert_eq!(drop.equity_loss, 0.0);
+    }
+}

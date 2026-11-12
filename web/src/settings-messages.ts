@@ -30,7 +30,7 @@ const en = {
   path: 'GNUbg executable path',
   pathHelp:
     'This path is on the backend computer, which may differ from the computer running your browser.',
-  installation: 'Shared engine installation',
+  installation: 'GNUbg',
   check: 'Check installation',
   checking: 'Checking version and position evaluation…',
   checkHelp:
@@ -39,7 +39,7 @@ const en = {
   checkNeeded: 'This edited path has not been checked yet.',
   engineVersion: 'Detected version: {version}',
   unavailable: 'Not available',
-  planned: 'BGSage / Open Sage — planned, unavailable',
+  planned: 'Open Sage',
   playEngine: 'Engine for future games',
   playStrength: 'Strength for future games',
   playHelp:
@@ -99,7 +99,7 @@ export const settingsMessages: Record<Locale, Messages> = {
     path: 'GNUbg-Programmpfad',
     pathHelp:
       'Dieser Pfad bezeichnet den Rechner des Backends. Das kann ein anderer Rechner als der deines Browsers sein.',
-    installation: 'Gemeinsame Engineinstallation',
+    installation: 'GNUbg',
     check: 'Installation prüfen',
     checking: 'Version und Positionsbewertung werden geprüft…',
     checkHelp:
@@ -108,7 +108,7 @@ export const settingsMessages: Record<Locale, Messages> = {
     checkNeeded: 'Der geänderte Pfad wurde noch nicht geprüft.',
     engineVersion: 'Erkannte Version: {version}',
     unavailable: 'Nicht verfügbar',
-    planned: 'BGSage / Open Sage — geplant, nicht verfügbar',
+    planned: 'Open Sage',
     playEngine: 'Engine für künftige Spiele',
     playStrength: 'Spielstärke für künftige Spiele',
     playHelp:
@@ -165,7 +165,7 @@ export const settingsMessages: Record<Locale, Messages> = {
     path: 'Ruta del ejecutable GNUbg',
     pathHelp:
       'Esta ruta corresponde al equipo del backend, que puede ser distinto del equipo de tu navegador.',
-    installation: 'Instalación compartida del motor',
+    installation: 'GNUbg',
     check: 'Comprobar instalación',
     checking: 'Comprobando versión y evaluación de posición…',
     checkHelp:
@@ -174,7 +174,7 @@ export const settingsMessages: Record<Locale, Messages> = {
     checkNeeded: 'La ruta modificada aún no se ha comprobado.',
     engineVersion: 'Versión detectada: {version}',
     unavailable: 'No disponible',
-    planned: 'BGSage / Open Sage — previsto, no disponible',
+    planned: 'Open Sage',
     playEngine: 'Motor para partidas futuras',
     playStrength: 'Fuerza para partidas futuras',
     playHelp:
@@ -230,7 +230,7 @@ export const settingsMessages: Record<Locale, Messages> = {
     path: 'Chemin de l’exécutable GNUbg',
     pathHelp:
       'Ce chemin désigne l’ordinateur du backend, qui peut être différent de celui de votre navigateur.',
-    installation: 'Installation commune du moteur',
+    installation: 'GNUbg',
     check: 'Vérifier l’installation',
     checking: 'Vérification de la version et de l’évaluation d’une position…',
     checkHelp:
@@ -239,7 +239,7 @@ export const settingsMessages: Record<Locale, Messages> = {
     checkNeeded: 'Le chemin modifié n’a pas encore été vérifié.',
     engineVersion: 'Version détectée : {version}',
     unavailable: 'Indisponible',
-    planned: 'BGSage / Open Sage — prévu, indisponible',
+    planned: 'Open Sage',
     playEngine: 'Moteur pour les futures parties',
     playStrength: 'Force pour les futures parties',
     playHelp:
@@ -295,7 +295,7 @@ export const settingsMessages: Record<Locale, Messages> = {
     path: 'Percorso dell’eseguibile GNUbg',
     pathHelp:
       'Questo percorso si riferisce al computer del backend, che può essere diverso da quello del browser.',
-    installation: 'Installazione condivisa del motore',
+    installation: 'GNUbg',
     check: 'Verifica installazione',
     checking: 'Verifica della versione e della valutazione di una posizione…',
     checkHelp:
@@ -304,7 +304,7 @@ export const settingsMessages: Record<Locale, Messages> = {
     checkNeeded: 'Il percorso modificato non è ancora stato verificato.',
     engineVersion: 'Versione rilevata: {version}',
     unavailable: 'Non disponibile',
-    planned: 'BGSage / Open Sage — previsto, non disponibile',
+    planned: 'Open Sage',
     playEngine: 'Motore per le partite future',
     playStrength: 'Forza per le partite future',
     playHelp:
@@ -358,7 +358,7 @@ export const settingsMessages: Record<Locale, Messages> = {
     path: 'Ścieżka do programu GNUbg',
     pathHelp:
       'Ta ścieżka dotyczy komputera backendu, który może być inny niż komputer przeglądarki.',
-    installation: 'Wspólna instalacja silnika',
+    installation: 'GNUbg',
     check: 'Sprawdź instalację',
     checking: 'Sprawdzanie wersji i oceny pozycji…',
     checkHelp:
@@ -367,7 +367,7 @@ export const settingsMessages: Record<Locale, Messages> = {
     checkNeeded: 'Zmieniona ścieżka nie została jeszcze sprawdzona.',
     engineVersion: 'Wykryta wersja: {version}',
     unavailable: 'Niedostępny',
-    planned: 'BGSage / Open Sage — planowany, niedostępny',
+    planned: 'Open Sage',
     playEngine: 'Silnik dla przyszłych gier',
     playStrength: 'Siła gry dla przyszłych gier',
     playHelp:

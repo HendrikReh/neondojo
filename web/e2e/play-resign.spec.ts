@@ -106,7 +106,7 @@ test('a declined offer keeps the selected level, error and unconfirmed turn unti
       status: 422,
       json: {
         error:
-          'GNUbg declined this resignation. Choose a higher level or continue playing; the saved game is unchanged',
+          'The bot declined this resignation. Choose a higher level or continue playing; the saved game is unchanged',
       },
     });
   });

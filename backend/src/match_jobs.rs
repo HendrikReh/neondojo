@@ -10,7 +10,7 @@ pub(crate) async fn execute(
     state: &AppState,
     job: &Job,
     token: Uuid,
-    engine: &crate::engine::Engine,
+    engine: &crate::engines::AnalysisEngine,
 ) -> Result<Value> {
     let match_id = job.match_uuid.context("Match job has no match target")?;
     let source: String = sqlx::query_scalar("SELECT sgf FROM matches WHERE id=$1")
@@ -344,6 +344,7 @@ mod tests {
         .await
         .unwrap();
         let snapshot = crate::settings::EngineSnapshot {
+            open_sage: None,
             engine_id: "gnubg".into(),
             gnubg_path: "/missing-native-engine".into(),
             engine_version: Some("GNU Backgammon saved".into()),
@@ -746,6 +747,7 @@ mod tests {
         let engine = Engine::new(path.to_string_lossy().into_owned());
         let version = engine.version().await.unwrap();
         let snapshot = crate::settings::EngineSnapshot {
+            open_sage: None,
             engine_id: "gnubg".into(),
             gnubg_path: engine.binary().into(),
             engine_version: Some(version.clone()),

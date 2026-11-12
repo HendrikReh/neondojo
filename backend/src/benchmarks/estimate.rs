@@ -1,5 +1,7 @@
 //! Read-only scope estimates calibrated by complete local native measurements.
-use super::{BenchmarkRun, Machine, machine, protocol, reference, running_engine_version};
+use super::{
+    BenchmarkRun, Machine, machine, protocol_for, reference, reference_for, running_engine_version,
+};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     engine::{Engine, resolve_binary},
@@ -69,15 +71,14 @@ fn same_hardware(a: &Machine, b: &Machine) -> bool {
         && a.memory_bytes == b.memory_bytes
 }
 fn compatible(run: &BenchmarkRun, machine: &Machine) -> bool {
-    let expected = reference();
+    let expected = reference_for(&run.engine_id);
     let (Some(saved_reference), Some(protocol_snapshot)) = (&run.reference, &run.protocol) else {
         return false;
     };
     let mut normalized = protocol_snapshot.clone();
-    if !matches!(
-        normalized.id.as_str(),
-        "gnubg-match-v1" | "gnubg-match-v2-unlimited"
-    ) {
+    if normalized.id != expected.protocol.id
+        && !(run.engine_id == "gnubg" && normalized.id == "gnubg-match-v1")
+    {
         return false;
     }
     normalized.id = expected.protocol.id.clone();
@@ -86,7 +87,7 @@ fn compatible(run: &BenchmarkRun, machine: &Machine) -> bool {
     let average = run.average_move_ms.unwrap_or(f64::NAN);
     let expected_average = total / f64::from(expected.total_moves);
     same_hardware(&run.machine, machine)
-        && normalized == protocol()
+        && normalized == protocol_for(&run.engine_id)
         && saved_reference.id == expected.id
         && saved_reference.version == expected.version
         && saved_reference.sha256 == expected.sha256
@@ -129,7 +130,7 @@ async fn estimate(
     .map_err(anyhow::Error::from)?
     .unwrap_or_else(|| ("gnubg".into(), 2, state.engine.binary().to_owned()));
     let plies = query.plies.unwrap_or(default_plies);
-    if !(0..=4).contains(&plies) {
+    if !crate::configuration::engine_depths(&engine_id, "analysis").contains(&plies) {
         return Err(ApiError::invalid("plies must be 0..4"));
     }
     if query
@@ -179,19 +180,41 @@ async fn estimate(
     if count == 0 {
         return Ok(result.unavailable(EstimateUnavailableReason::NoCheckerMoves));
     }
-    let Ok(path) = resolve_binary(&binary) else {
-        return Ok(result.unavailable(EstimateUnavailableReason::EngineUnavailable));
-    };
-    let cached = running_engine_version(&state.pool, &path).await?;
-    let version = match cached {
-        Some(version) => Some(version),
-        // A metadata request must not wait behind an unrelated exclusive run.
-        None => tokio::time::timeout(Duration::from_secs(2), Engine::new(path.clone()).version())
+    let identity = if result.engine_id == "bgsage" {
+        if let Some(engine) = crate::settings::open_sage::load(&state.pool)
             .await
             .ok()
-            .and_then(Result::ok),
+            .and_then(|i| i.snapshot)
+            .and_then(|s| crate::engines::SageEngine::new(s).ok())
+        {
+            let version = match running_engine_version(&state.pool, engine.binary()).await? {
+                Some(value) => Some(value),
+                None => tokio::time::timeout(Duration::from_secs(2), engine.version())
+                    .await
+                    .ok()
+                    .and_then(Result::ok),
+            };
+            version.map(|v| (engine.binary().to_owned(), v))
+        } else {
+            None
+        }
+    } else if let Ok(path) = resolve_binary(&binary) {
+        let version = match running_engine_version(&state.pool, &path).await? {
+            Some(version) => Some(version),
+            None => {
+                tokio::time::timeout(Duration::from_secs(2), Engine::new(path.clone()).version())
+                    .await
+                    .ok()
+                    .and_then(Result::ok)
+            }
+        };
+        version
+            .filter(|v| v.starts_with("GNU Backgammon "))
+            .map(|v| (path, v))
+    } else {
+        None
     };
-    let Some(version) = version.filter(|version| version.starts_with("GNU Backgammon ")) else {
+    let Some((path, version)) = identity else {
         return Ok(result.unavailable(EstimateUnavailableReason::EngineUnavailable));
     };
     result.engine_version = Some(version.clone());

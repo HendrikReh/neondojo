@@ -23,7 +23,7 @@ async fn individual_hint(
     pool: &PgPool,
     id: Uuid,
 ) -> anyhow::Result<Option<(Uuid, serde_json::Value)>> {
-    Ok(sqlx::query_as("SELECT id,result FROM jobs WHERE position_uuid=$1 AND kind='analysis' AND status='completed' AND result IS NOT NULL ORDER BY plies DESC,created_at DESC,id DESC LIMIT 1")
+    Ok(sqlx::query_as("SELECT id,result FROM selected_engine_jobs WHERE position_uuid=$1 AND kind='analysis' AND status='completed' AND result IS NOT NULL ORDER BY plies DESC,created_at DESC,id DESC LIMIT 1")
         .bind(id).fetch_optional(pool).await?)
 }
 
@@ -41,7 +41,7 @@ async fn match_checker_analysis(
 ) -> anyhow::Result<Option<MatchCheckerAnalysis>> {
     Ok(sqlx::query_as("SELECT j.id,j.plies,m.data,
             CASE WHEN jsonb_typeof(j.result->'engine')='string' THEN j.result->>'engine' ELSE 'GNU Backgammon' END AS engine
-        FROM move_analyses m JOIN jobs j ON j.id=m.job_id WHERE m.position_uuid=$1 AND m.kind='checker' AND j.status='completed' ORDER BY j.plies DESC,j.created_at DESC,j.id DESC LIMIT 1")
+        FROM move_analyses m JOIN selected_engine_jobs j ON j.id=m.job_id WHERE m.position_uuid=$1 AND m.kind='checker' AND j.status='completed' ORDER BY j.plies DESC,j.created_at DESC,j.id DESC LIMIT 1")
         .bind(id).fetch_optional(pool).await?)
 }
 

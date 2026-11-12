@@ -172,7 +172,10 @@ test('play-turn latency starts independently and has its own history metric', as
   };
   await page.route('**/api/benchmarks/play', (route) => {
     expect(route.request().method()).toBe('POST');
-    expect(route.request().postData()).toBeNull();
+    expect(route.request().postDataJSON()).toEqual({
+      engine_id: 'gnubg',
+      plies: 1,
+    });
     playStarts++;
     return route.fulfill({ status: 202, json: playRun });
   });
