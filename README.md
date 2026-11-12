@@ -24,21 +24,20 @@ The backend applies migrations at startup. Cargo can compile with PostgreSQL sto
 
 Check that `gnubg --version` works. If the executable is outside the backend's `PATH`, set `GNUBG_BIN` in `.env` before the first launch or configure the executable under **Settings → Analysis**. Use **Check installation** to verify that GNUbg can evaluate a position with its installed weights.
 
-In a second terminal at the repository root, start the development client.
+### Frontend development with Vite
+
+In a second terminal at the repository root, start the Vite development server.
 
 ```sh
 npm ci --prefix web
 npm run dev --prefix web
 ```
 
-| Service     | Address                                                                |
-| ----------- | ---------------------------------------------------------------------- |
-| Web client  | <http://127.0.0.1:5173>                                                |
-| API health  | <http://127.0.0.1:8787/api/health>                                     |
-| OpenAPI 3.1 | <http://127.0.0.1:8787/api/openapi.json>                               |
-| PostgreSQL  | `127.0.0.1:54329`, backed by the `bgtutor_postgres_data` Docker volume |
+Open <http://127.0.0.1:5173> while developing the frontend. By default, Vite forwards `/api` requests to the backend on port `8787`.
 
-To serve the built client from the backend, keep PostgreSQL running and start the backend with `BGTUTOR_WEB_DIR` set.
+### Local use with the built frontend
+
+For regular local use, the backend serves the built frontend and the API on port `8787`. Keep PostgreSQL running and stop any BG Tutor backend already listening on that port before starting the release build with `BGTUTOR_WEB_DIR` set.
 
 ```sh
 npm ci --prefix web
@@ -46,7 +45,13 @@ npm run build --prefix web
 BGTUTOR_WEB_DIR=web/dist cargo run -p bgtutor --release
 ```
 
-Open <http://127.0.0.1:8787>. By default the services listen on loopback. BG Tutor has no built-in user accounts, so network access requires separate access control.
+Open <http://127.0.0.1:8787> to use BG Tutor. By default the services listen on loopback. BG Tutor has no built-in user accounts, so network access requires separate access control.
+
+| Service     | Address                                                               |
+| ----------- | --------------------------------------------------------------------- |
+| API health  | <http://127.0.0.1:8787/api/health>                                     |
+| OpenAPI 3.1 | <http://127.0.0.1:8787/api/openapi.json>                               |
+| PostgreSQL  | `127.0.0.1:54329`, backed by the `bgtutor_postgres_data` Docker volume |
 
 ### Restart BG Tutor locally on port 8787
 
