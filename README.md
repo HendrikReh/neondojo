@@ -295,7 +295,7 @@ The move history follows the latest saved action and uses the same row layout as
 
 Opening rolls and their results, pre-roll choices, cube responses, blocking feedback, forced passes, and game or match results use a modal dialog. It opens over the center of the board. Drag its title to see the checkers underneath. The position is retained while the dialog is open and stays within the viewport when the window or dialog changes size. Keyboard focus stays inside, and the dialog requires a decision before you can use the board again. Escape and outside clicks leave it open. Errors and pending acknowledgments appear inside the dialog. Expand **Active mode** to access the mode and [Tutor warning threshold](#playing-feedback-modes).
 
-**Hint** opens a movable dialog with its own loading and error states. Select a checker suggestion with the mouse or Up/Down to see the full saved turn on a separate, read-only board. Use **Initial**, **Arrows**, or **Final** to see the starting position, move arrows, or projected result. Cube hints are text only. **Close** or Escape returns to the game or to the required decision dialog. The live dice order and unconfirmed steps are preserved.
+**Hint** opens a movable dialog with its own loading and error states. Select a checker suggestion with the mouse or Up/Down to see the full saved turn on a separate, read-only board. Use **Initial**, **Arrows**, or **Final** to see the starting position, move arrows, or projected result. Cube hints are text only. **Close** or Escape returns to the game or to the required decision dialog. Decision feedback is shown in dialogs. The live dice order and unconfirmed steps are preserved.
 
 ### Resigning
 

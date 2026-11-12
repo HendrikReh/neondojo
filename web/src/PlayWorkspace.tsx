@@ -1034,10 +1034,6 @@ export default function PlayWorkspace({
               }
             />
             <section className="play-table">
-              {!review.active &&
-                !interruption &&
-                feedbackMode !== 'coach' &&
-                feedbackPanel}
               {visible &&
                 !setup &&
                 (!interruption || moneyResultDialog) &&

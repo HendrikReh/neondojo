@@ -105,30 +105,42 @@ for (const width of [1440, 390])
       { version: 8, action: 'roll', decision_id: decisionId },
     ]);
   });
-test('Tutor retry releases the board and preserves nonblocking hint', async ({
+test('closing a Hint after a Tutor retry leaves the board free of feedback', async ({
   page,
 }) => {
+  await page.setViewportSize({ width: 1800, height: 1169 });
   const { saved } = await historyFixture(page);
+  const firstAttempt = {
+    ...pending,
+    original_action: 'move',
+    original_move_index: 0,
+    original_notation: '13/10 6/5',
+  };
   Object.assign(saved, {
     play_mode: 'tutor',
     pending_decision: {
-      ...pending,
+      ...firstAttempt,
       action: 'move',
-      original_action: 'move',
       move_index: 0,
       warning: true,
       revealed: false,
     },
   });
   await page.route(`**/api/play/sessions/${id}/feedback`, (r) => {
-    expect(r.request().postDataJSON()).toMatchObject({
-      version: 7,
-      operation: 'retry',
+    expect(r.request().postDataJSON()).toEqual({
+      version: saved.version,
+      operation: saved.version === 7 ? 'retry' : 'hint',
       decision_id: decisionId,
     });
     Object.assign(saved, {
-      version: 8,
-      pending_decision: { ...pending, action: null, revealed: true },
+      version: saved.version + 1,
+      pending_decision: {
+        ...firstAttempt,
+        action: null,
+        revealed: saved.version === 8,
+        assisted: true,
+        retry_count: 1,
+      },
     });
     return r.fulfill({ json: saved });
   });
@@ -136,7 +148,16 @@ test('Tutor retry releases the board and preserves nonblocking hint', async ({
   const dialog = await mandatory(page, 'Tutor');
   await dialog.getByRole('button', { name: 'Try again', exact: true }).click();
   await expect(page.getByRole('alertdialog')).toHaveCount(0);
-  await expect(page.getByTestId('play-feedback')).toBeVisible();
+  const hint = page.getByRole('button', { name: 'Hint', exact: true });
+  await hint.click();
+  const hintDialog = page.getByRole('dialog', { name: 'Hint', exact: true });
+  await expect(hintDialog.getByTestId('play-feedback')).toContainText(
+    '13/10 6/5',
+  );
+  await hintDialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(hintDialog).toHaveCount(0);
+  await expect(page.getByTestId('play-feedback')).toHaveCount(0);
+  await expect(hint).toBeFocused();
   await expect(page.locator('[data-play-point="13"]')).toHaveAttribute(
     'data-enabled',
     'true',
