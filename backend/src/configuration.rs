@@ -503,7 +503,9 @@ mod tests {
                 "verified Open Sage must be selectable in {area}"
             );
             assert!(validation::normalize(decoded.unwrap()).is_ok());
-            for unverified in [0, 1, 3, 4] {
+            value[area]["plies"] = serde_json::json!(1);
+            assert!(validation::normalize(serde_json::from_value(value.clone()).unwrap()).is_ok());
+            for unverified in [0, 3, 4] {
                 value[area]["plies"] = serde_json::json!(unverified);
                 let decoded =
                     serde_json::from_value::<ProfileConfiguration>(value.clone()).unwrap();

@@ -16,7 +16,8 @@ describe('configuration comparison', () => {
         [area]: { ...current[area], engine: 'bgsage', plies: 2 },
       };
       expect(normalizeConfiguration(input)[area].engine).toBe('bgsage');
-      for (const plies of [0, 1, 3, 4])
+      expect(normalizeConfiguration({ ...input, [area]: { ...input[area], plies: 1 } })[area].plies).toBe(1);
+      for (const plies of [0, 3, 4])
         expect(() =>
           normalizeConfiguration({
             ...input,

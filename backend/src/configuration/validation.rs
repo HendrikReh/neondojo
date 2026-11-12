@@ -479,24 +479,23 @@ pub(crate) async fn resources(
             });
         }
     }
-    if engine
-        && (config.analysis.engine == ConfigurationEngine::OpenSage
-            || config.play.engine == ConfigurationEngine::OpenSage)
-        && crate::settings::open_sage::verified(&state.pool, 4)
-            .await
-            .is_err()
-    {
-        for (path, selected) in [
-            ("analysis.engine", &config.analysis.engine),
-            ("play.engine", &config.play.engine),
+    if engine {
+        for (path, selected, plies, threads) in [
+            (
+                "analysis.engine",
+                &config.analysis.engine,
+                config.analysis.plies,
+                4,
+            ),
+            ("play.engine", &config.play.engine, config.play.plies, 2),
         ] {
-            if *selected == ConfigurationEngine::OpenSage {
-                issues.push(ConfigurationIssue {
-                    path: path.into(),
-                    code: "engine_unavailable".into(),
-                    message: "The configured Open Sage installation is unavailable or changed"
-                        .into(),
-                });
+            if *selected == ConfigurationEngine::OpenSage
+                && crate::settings::open_sage::verified_profile(&state.pool, plies, threads)
+                    .await
+                    .is_err()
+            {
+                issues.push(ConfigurationIssue { path: path.into(), code: "engine_unavailable".into(),
+                    message: "The configured Open Sage installation or requested depth is unavailable or changed".into() });
             }
         }
     }

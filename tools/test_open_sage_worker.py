@@ -21,9 +21,11 @@ class WorkerTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location('sage_worker', PATH)
         worker = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(worker)
+        worker.validate_profile(1, 2)
+        worker.validate_profile(1, 4)
         worker.validate_profile(2, 2)
         worker.validate_profile(2, 4)
-        for plies, threads in [(1, 2), (3, 2), (2, 0), (2, 3), (2, 100)]:
+        for plies, threads in [(0, 2), (3, 2), (2, 0), (2, 3), (2, 100)]:
             with self.subTest(plies=plies, threads=threads), self.assertRaises(ValueError):
                 worker.validate_profile(plies, threads)
 

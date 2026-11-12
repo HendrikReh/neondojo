@@ -13234,6 +13234,10 @@
           "artifact_fingerprint": {
             "type": "string"
           },
+          "one_ply_verified": {
+            "type": "boolean",
+            "description": "Capability proven during installation verification; absent in legacy snapshots."
+          },
           "package_version": {
             "type": "string"
           },

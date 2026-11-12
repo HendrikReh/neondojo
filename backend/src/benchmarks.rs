@@ -57,19 +57,19 @@ fn protocol() -> BenchmarkProtocol {
         move_filter: "gnubg-startup-defaults".into(),
     }
 }
-fn protocol_for(engine: &str) -> BenchmarkProtocol {
+fn protocol_for(engine: &str, plies: i32) -> BenchmarkProtocol {
     let mut value = protocol();
     if engine == "bgsage" {
-        value.id = "bgsage-match-v3-2ply-4threads".into();
+        value.id = format!("bgsage-match-v3-{plies}ply-4threads");
         value.process_strategy = "persistent-worker-atomic-game-verified-at-both-boundaries".into();
         value.timing_scope = "cold-worker-startup-once-plus-full-game-pipeline".into();
-        value.move_filter = "all-cubeful-2ply-candidates-played-board-included".into();
+        value.move_filter = format!("all-cubeful-{plies}ply-candidates-played-board-included");
     }
     value
 }
-fn reference_for(engine: &str) -> BenchmarkReference {
+fn reference_for(engine: &str, plies: i32) -> BenchmarkReference {
     let mut value = reference();
-    value.protocol = protocol_for(engine);
+    value.protocol = protocol_for(engine, plies);
     value
 }
 #[derive(Debug, Deserialize, ToSchema)]
@@ -298,54 +298,61 @@ async fn enqueue(
         ));
     }
     let settings = crate::settings::load(state).await?;
-    let (plies, analysis, play) = match workload {
-        Workload::Analysis(plies) => (plies, Some(reference_for(engine_id)), None),
-        Workload::Play(plies) => (
-            vec![plies],
-            None,
-            Some(play_latency::reference_for(engine_id)?),
-        ),
+    let (depths, is_play) = match workload {
+        Workload::Analysis(plies) => (plies, false),
+        Workload::Play(plies) => (vec![plies], true),
     };
-    let snapshot = crate::settings::snapshot_for(
-        state,
-        engine_id,
-        &settings.gnubg_path,
-        if play.is_some() { 2 } else { 4 },
-    )
-    .await
-    .map_err(|e| ApiError::invalid(format!("Engine unavailable: {e:#}")))?;
-    let engine = snapshot.engine()?;
-    let path = if engine_id == "bgsage" {
-        engine.binary().to_owned()
-    } else {
-        resolve_binary(engine.binary())
-            .map_err(|e| ApiError::invalid(format!("Engine unavailable: {e:#}")))?
-    };
-    let version = match &engine {
-        crate::engines::AnalysisEngine::Gnubg(engine) => engine.check_installation().await,
-        crate::engines::AnalysisEngine::OpenSage(engine) => engine.version().await,
-    }
-    .map_err(|e| ApiError::invalid(format!("Engine check failed: {e:#}")))?;
-    let rules_version = if engine_id == "gnubg" {
-        Some(version.clone())
-    } else if play.is_some() {
-        Some(
-            crate::engine::Engine::new(settings.gnubg_path.clone())
-                .check_installation()
-                .await
-                .map_err(|e| ApiError::invalid(format!("GNUbg rules unavailable: {e:#}")))?,
+    let mut prepared = Vec::new();
+    for depth in depths {
+        let analysis = (!is_play).then(|| reference_for(engine_id, depth));
+        let play = if is_play {
+            Some(play_latency::reference_for(engine_id, depth)?)
+        } else {
+            None
+        };
+        let snapshot = crate::settings::snapshot_for(
+            state,
+            engine_id,
+            &settings.gnubg_path,
+            if play.is_some() { 2 } else { 4 },
+            depth,
         )
-    } else {
-        crate::engine::Engine::new(settings.gnubg_path.clone())
-            .version()
-            .await
-            .ok()
-    };
-    let saved_snapshot = serde_json::json!({"engine":snapshot,"rules_version":rules_version});
+        .await
+        .map_err(|e| ApiError::invalid(format!("Engine unavailable: {e:#}")))?;
+        let engine = snapshot.engine()?;
+        let path = if engine_id == "bgsage" {
+            engine.binary().to_owned()
+        } else {
+            resolve_binary(engine.binary())
+                .map_err(|e| ApiError::invalid(format!("Engine unavailable: {e:#}")))?
+        };
+        let version = match &engine {
+            crate::engines::AnalysisEngine::Gnubg(engine) => engine.check_installation().await,
+            crate::engines::AnalysisEngine::OpenSage(engine) => engine.version().await,
+        }
+        .map_err(|e| ApiError::invalid(format!("Engine check failed: {e:#}")))?;
+        let rules_version = if engine_id == "gnubg" {
+            Some(version.clone())
+        } else if play.is_some() {
+            Some(
+                crate::engine::Engine::new(settings.gnubg_path.clone())
+                    .check_installation()
+                    .await
+                    .map_err(|e| ApiError::invalid(format!("GNUbg rules unavailable: {e:#}")))?,
+            )
+        } else {
+            crate::engine::Engine::new(settings.gnubg_path.clone())
+                .version()
+                .await
+                .ok()
+        };
+        let saved_snapshot = serde_json::json!({"engine":snapshot,"rules_version":rules_version});
+        prepared.push((depth, analysis, play, version, path, saved_snapshot));
+    }
     let machine = machine::snapshot(&state.pool).await?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     let mut runs = Vec::new();
-    for plies in plies {
+    for (plies, analysis, play, version, path, saved_snapshot) in prepared {
         let run: BenchmarkRun = sqlx::query_as("INSERT INTO benchmark_runs(id,machine,engine_id,engine_name,engine_version,engine_path,plies,reference,protocol,reference_sgf,play_reference,engine_snapshot) VALUES($1,$2,$10,$11,$3,$4,$5,$6,$7,$8,$9,$12) RETURNING *")
             .bind(Uuid::new_v4()).bind(SqlJson(&machine)).bind(&version).bind(&path).bind(plies)
             .bind(analysis.as_ref().map(SqlJson)).bind(analysis.as_ref().map(|reference| SqlJson(&reference.protocol)))

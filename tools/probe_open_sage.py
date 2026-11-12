@@ -125,7 +125,7 @@ def run_worker(skip_platform=False, levels=None):
     report = {'schema_version': 1, 'status': 'failed', 'checks': [],
               'requested_levels': levels, 'primary_functional_level': levels[0],
               'excluded_profiles': {'3ply': 'Not validated or benchmarked', '4ply': 'Not validated or benchmarked',
-                                    **({'1ply': 'Candidate pool ignores explicit thread budget in this build'} if '1ply' not in levels else {})},
+                                    **({'1ply': 'Not requested in this probe run'} if '1ply' not in levels else {})},
               'platform': {'system': platform.system(), 'architecture': platform.machine(),
                            'python': platform.python_version(), 'macos': platform.mac_ver()[0]},
               'offline': {'python_network_audit': True,
@@ -410,7 +410,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path)
     parser.add_argument('--levels', nargs='+', choices=('1ply', '2ply'), default=['1ply', '2ply'],
-                        help='Explicit compatibility scope; 2ply is the supported bounded subset')
+                        help='Explicit compatibility scope; 1ply requires a build with bounded candidate threads')
     parser.add_argument('--timeout', type=float, default=300)
     parser.add_argument('--worker', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--skip-platform-check', action='store_true', help=argparse.SUPPRESS)

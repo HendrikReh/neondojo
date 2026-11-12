@@ -28,16 +28,28 @@ pub(crate) async fn load(pool: &sqlx::PgPool) -> anyhow::Result<Installation> {
     .await?)
 }
 pub(crate) async fn verified(pool: &sqlx::PgPool, threads: u32) -> anyhow::Result<SageSnapshot> {
+    verified_profile(pool, 2, threads).await
+}
+pub(crate) async fn verified_profile(
+    pool: &sqlx::PgPool,
+    plies: i32,
+    threads: u32,
+) -> anyhow::Result<SageSnapshot> {
     let saved = load(pool)
         .await?
         .snapshot
         .ok_or_else(|| anyhow::anyhow!("Open Sage has not been installed and verified"))?;
-    let current = SageEngine::probe(saved.python.clone(), threads).await?;
+    anyhow::ensure!(
+        plies != 1 || saved.one_ply_verified,
+        "Open Sage 1-ply capability has not been verified"
+    );
+    let mut current = SageEngine::probe_profile(saved.python.clone(), plies, threads).await?;
     anyhow::ensure!(
         current.artifact_fingerprint == saved.artifact_fingerprint
             && current.package_version == saved.package_version,
         "Open Sage installation changed; verify the installation again"
     );
+    current.one_ply_verified = saved.one_ply_verified;
     Ok(current)
 }
 #[utoipa::path(get,path="/api/engines/bgsage",responses((status=200,body=Installation)),tag="Settings")]

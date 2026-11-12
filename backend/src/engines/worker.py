@@ -15,8 +15,8 @@ ADAPTER_VERSION = 1
 
 
 def validate_profile(plies, threads):
-    if plies != 2 or threads not in (2, 4):
-        raise ValueError('Only verified Open Sage 2-ply with 2 or 4 threads is supported')
+    if plies not in (1, 2) or threads not in (2, 4):
+        raise ValueError('Only verified Open Sage 1/2-ply with 2 or 4 threads is supported')
 
 
 def probabilities(values):
@@ -57,7 +57,7 @@ class Runtime:
         expected = profile.get('artifact_fingerprint')
         if expected and expected != self.identity['artifact_fingerprint']:
             raise ValueError('Open Sage assets changed since submission; restore the saved installation')
-        self.analyzer = bgsage.BgBotAnalyzer(eval_level='2ply', parallel_threads=profile['threads'])
+        self.analyzer = bgsage.BgBotAnalyzer(eval_level=f"{profile['plies']}ply", parallel_threads=profile['threads'])
         # Exercise the real candidate path and observe its configured pool bound.
         from concurrent.futures import ThreadPoolExecutor
         from unittest.mock import patch
@@ -135,7 +135,7 @@ class Runtime:
                         self.integrity['validate_result'](move, probabilities)
                     except Exception as error:
                         raise ValueError(f'Invalid checker evaluation: probabilities={move.probs.to_list()}, board={before}, dice={dice}, context={context}; {error}') from error
-                    if move.eval_level != '2-ply':
+                    if move.eval_level != f"{self.profile['plies']}-ply":
                         raise ValueError('Open Sage returned a candidate below the requested depth')
                     moves.append({'board': board(move.board), 'notation': compute_move_notation(before, move.board, *dice),
                                   'equity': move.equity, 'probabilities': probabilities(move.probs.to_list())})

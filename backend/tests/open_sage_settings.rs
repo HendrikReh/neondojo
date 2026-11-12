@@ -94,9 +94,9 @@ async fn verified_installation_allows_independent_analysis_and_preserves_snapsho
         .find(|e| e["id"] == "bgsage")
         .unwrap();
     assert_eq!(sage["available"], true);
-    assert_eq!(sage["plies"], json!([2]));
+    assert_eq!(sage["plies"], json!([1, 2]));
     let mut invalid = changed;
-    invalid["analysis_plies"] = json!(1);
+    invalid["analysis_plies"] = json!(3);
     assert_eq!(call(app, "PUT", "/api/settings", invalid).await.0, 422);
 }
 
@@ -195,7 +195,7 @@ async fn sage_benchmark_snapshots_are_independent_and_complete(pool: PgPool) {
             app.clone(),
             "POST",
             "/api/benchmarks",
-            json!({"engine_id":"bgsage","plies":[1]})
+            json!({"engine_id":"bgsage","plies":[3]})
         )
         .await
         .0,
@@ -408,4 +408,146 @@ async fn provider_lookup_uses_index_with_many_other_engine_results(pool: PgPool)
         "provider lookup: 10000 synthetic jobs, one matching Sage result; database execution_ms={}, shared_hit_blocks={}",
         plan[0]["Execution Time"], plan[0]["Plan"]["Shared Hit Blocks"]
     );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires isolated PostgreSQL, GNUbg, fork and original Sage interpreters"]
+async fn fork_depths_are_pinned_and_old_installation_remains_usable(pool: PgPool) {
+    let old = std::env::var("OPEN_SAGE_ORIGINAL_PYTHON").unwrap();
+    let fork = std::env::var("OPEN_SAGE_TEST_PYTHON").unwrap();
+    let state = AppState::new(pool.clone(), Engine::new("gnubg".into()));
+    let app = api::router(state.clone());
+    let (status, initial) = call(
+        app.clone(),
+        "PUT",
+        "/api/engines/bgsage",
+        json!({"version":0,"path":old}),
+    )
+    .await;
+    assert_eq!(status, 200, "{initial}");
+    let (_, mut settings) = call(app.clone(), "GET", "/api/settings", Value::Null).await;
+    settings["analysis_engine"] = json!("bgsage");
+    settings["analysis_plies"] = json!(1);
+    assert_eq!(
+        call(app.clone(), "PUT", "/api/settings", settings.clone())
+            .await
+            .0,
+        422
+    );
+    let (status, changed) = call(
+        app.clone(),
+        "PUT",
+        "/api/engines/bgsage",
+        json!({"version":1,"path":fork}),
+    )
+    .await;
+    assert_eq!(status, 200, "{changed}");
+    settings["play_engine"] = json!("bgsage");
+    settings["play_plies"] = json!(1);
+    assert_eq!(
+        call(app.clone(), "PUT", "/api/settings", settings).await.0,
+        200
+    );
+    let (status, session) = call(
+        app.clone(),
+        "POST",
+        "/api/play/sessions",
+        json!({"play_mode":"competition","human_player":0,"match_length":5}),
+    )
+    .await;
+    assert_eq!(status, 201, "{session}");
+    for side in ["bot", "analysis"] {
+        assert_eq!(session["engine_snapshots"][side]["open_sage"]["plies"], 1);
+        assert_eq!(
+            session["engine_snapshots"][side]["open_sage"]["python"],
+            fork
+        );
+    }
+    // Previously saved snapshots continue to use the old, unchanged installation.
+    let previous: bgtutor::engines::SageSnapshot =
+        serde_json::from_value(initial["snapshot"].clone()).unwrap();
+    assert!(
+        bgtutor::engines::SageEngine::new(previous)
+            .unwrap()
+            .version()
+            .await
+            .is_ok()
+    );
+    let (status, runs) = call(
+        app.clone(),
+        "POST",
+        "/api/benchmarks",
+        json!({"engine_id":"bgsage","plies":[1,2]}),
+    )
+    .await;
+    assert_eq!(status, 202, "{runs}");
+    for (index, depth) in [1, 2].into_iter().enumerate() {
+        let id = uuid::Uuid::parse_str(runs[index]["id"].as_str().unwrap()).unwrap();
+        let saved: Value =
+            sqlx::query_scalar("SELECT engine_snapshot FROM benchmark_runs WHERE id=$1")
+                .bind(id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(saved["engine"]["open_sage"]["plies"], depth);
+        assert_eq!(saved["engine"]["open_sage"]["python"], fork);
+        assert_eq!(
+            runs[index]["protocol"]["id"],
+            format!("bgsage-match-v3-{depth}ply-4threads")
+        );
+    }
+    // Exercise both complete analysis depths through the durable benchmark worker.
+    for _ in 0..2 {
+        assert!(bgtutor::benchmarks::run_one(&state).await.unwrap());
+    }
+    let complete: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM benchmark_runs WHERE status='completed' AND analyzed_moves=460",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(complete, 2);
+    let (status, play) = call(
+        app.clone(),
+        "POST",
+        "/api/benchmarks/play",
+        json!({"engine_id":"bgsage","plies":1}),
+    )
+    .await;
+    assert_eq!(status, 202, "{play}");
+    assert!(bgtutor::benchmarks::run_one(&state).await.unwrap());
+    let (_, history) = call(app.clone(), "GET", "/api/benchmarks", Value::Null).await;
+    assert_eq!(history["runs"][0]["status"], "completed", "{history}");
+    assert_eq!(history["runs"][0]["completed_turns"], 11);
+    let sgf = "(;GM[6]FF[4]MI[length:5][ws:0][bs:0];W[31hefe])";
+    let source = bgtutor::store::import_match(
+        &pool,
+        "depth.sgf",
+        "sgf",
+        sgf.as_bytes(),
+        sgf,
+        &bgtutor::import::parse_sgf(sgf).unwrap(),
+    )
+    .await
+    .unwrap();
+    let uri = format!("/api/matches/{}/analysis", source.r#match.id);
+    let (status, job) = call(app.clone(), "POST", &uri, json!({"plies":2})).await;
+    assert_eq!(status, 202, "{job}");
+    let job_id = uuid::Uuid::parse_str(job["id"].as_str().unwrap()).unwrap();
+    let saved: Value = sqlx::query_scalar("SELECT engine_snapshot FROM jobs WHERE id=$1")
+        .bind(job_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        saved["open_sage"]["plies"], 2,
+        "request overrides the 1-ply default"
+    );
+    assert!(bgtutor::jobs::run_one(&state).await.unwrap());
+    let status: String = sqlx::query_scalar("SELECT status FROM jobs WHERE id=$1")
+        .bind(job_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(status, "completed");
 }

@@ -1,6 +1,6 @@
 # Lokaler Open-Sage-Kompatibilitätsnachweis
 
-Open Sage `bgsage==2.0.20260907` mit NumPy `2.5.4` wurde am 12. November 2026 unter nativem macOS ARM64 und CPython 3.12.13 geprüft. Die Anwendung darf zunächst ausschließlich das explizit geprüfte **2-ply-Profil** verwenden. Dies ist ein lokaler Nachweis für diesen Build und diese Referenzstellungen, keine Aussage über Spielstärke oder allgemeine GNUbg-Gleichwertigkeit.
+Open Sage `bgsage==2.0.20260907` mit NumPy `2.5.4` wurde am 12. November 2026 unter nativem macOS ARM64 und CPython 3.12.13 geprüft. Dieser ursprüngliche Wheel-Nachweis gilt für **2-ply**. Der zusätzlich geprüfte lokale Fork ist unten für **1-/2-ply** dokumentiert. Dies ist ein lokaler Nachweis für diesen Build und diese Referenzstellungen, keine Aussage über Spielstärke oder allgemeine GNUbg-Gleichwertigkeit.
 
 ## Reproduzierbare Installation
 
@@ -43,7 +43,7 @@ Die Funktionsprüfung umfasst:
 
 Die gewöhnlichen Tests benötigen weder NumPy noch Sage und prüfen insbesondere Fehlerbehandlung, Hashabweichungen, Prozess-Timeout, Netzwerksperre und übergangene Threadgrenzen.
 
-## Bekannte Einschränkung: 1-ply-Threadbudget
+## Einschränkung des ursprünglichen Wheels: 1-ply-Threadbudget
 
 Der [vollständige 1-/2-ply-Bericht](../tools/open-sage/probe-macos-arm64.json) ist absichtlich **fehlgeschlagen**. Bei `BgBotAnalyzer(eval_level='1ply', parallel_threads=2)` beziehungsweise `4` erzeugt der cubeful Checkerpfad einen Pool mit Limit **10** auf dem Testrechner. Der öffentliche Parameter wird beim Erzeugen von `_OnePlyAnalyzer` nicht weitergereicht; `_CubefulAnalyzer.checker_play_analytics` fällt auf `max(2, os.cpu_count())` zurück. `BGBOT_MULTIPLY_THREADS` begrenzt diesen konkreten Pfad ebenfalls nicht. Eine alternative öffentliche 1-ply-Begrenzung wurde in diesem Build nicht gefunden.
 
@@ -244,3 +244,43 @@ werden API-Gesundheit, verfügbare Engines, unveränderte Einstellungen und Inha
 sämtlicher Benutzertabellen geprüft. Die bestehenden Open-Sage-Vorgaben für Spiel und
 Analyse bleiben bestehen. Aktivierungsnachweise liegen außerhalb von Git unter
 `backups/sage-performance-activation-*/`.
+
+
+## Gepatchter lokaler Fork und 1-ply – 12. November 2026
+
+Die lokale Installation verwendet einen separat gebauten, nicht editierbaren ARM64-Wheel aus
+`HendrikReh/bgsage`, Commit `2e71beed9c24b5bbc7564c03374d6d588ff24119` (Issue #6).
+Basis: `139427d826dd67798226e7d23c003c90315306ba`. Der Paketname und die Upstream-Version
+`2.0.20260907` bleiben erhalten; Commit, Wheel-Hash und vollständiger Laufzeit-Fingerprint
+unterscheiden diesen Build vom ursprünglichen PyPI-Wheel.
+
+Installation: `local-data/open-sage-fork-2e71bee/venv/bin/python`.
+Die daneben gespeicherten `requirements.lock`, `wheels/`, `provenance.json` und
+`probe-1ply-2ply.json` dokumentieren und reproduzieren exakt diesen lokalen Build.
+Der Sage-Wheel hat SHA256 `d836dad115c39d8fc88e49c76500618a1fe421d3dadfb6420736324cfada2597`;
+der Build ist für das geprüfte macOS 27 ARM64, Python 3.12 bestimmt.
+
+```sh
+python3.12 -m venv /path/to/new-venv
+/path/to/new-venv/bin/python -m pip install --no-index --only-binary=:all: --require-hashes \
+  --find-links local-data/open-sage-fork-2e71bee/wheels \
+  -r local-data/open-sage-fork-2e71bee/requirements.lock
+/path/to/new-venv/bin/python tools/probe_open_sage.py --levels 1ply 2ply --output /tmp/sage-fork-probe.json
+```
+
+Die Freigabe ergänzt einen optionalen `one_ply_verified`-Nachweis im unveränderlichen
+Installations-/Auftragssnapshot. Alte Snapshots ohne dieses Feld bleiben 2-ply und behalten
+bei der Serialisierung ihre bisherige Form. Die Installationsprüfung setzt den Nachweis erst
+nach echter 1-ply-Auswertung mit eingehaltenem Threadbudget und identischer Artefaktidentität.
+Jeder gestartete Worker prüft weiterhin das angeforderte Profil und das tatsächliche Budget;
+RECORD-, Modell- und Native-Hashes sowie Prüfungen an Anfrage-/Spielblockgrenzen bleiben erhalten.
+Eine fehlende oder fehlgeschlagene 1-ply-Prüfung lässt nur 2-ply verfügbar.
+
+Spiel, Analyse und Benchmarks speichern die gewählte Tiefe pro Auftrag getrennt. Benchmarkprotokolle unterscheiden 1-ply von 2-ply; vorhandene 2-ply-Protokolle
+bleiben unverändert. Migration `0043` erweitert nur die zwei Sage-Tiefen-Constraints, ohne
+Benutzereinstellungen oder Datenzeilen zu ändern. Die Vorgaben bleiben Open Sage mit 2-ply.
+
+Die bisherige Umgebung `local-data/open-sage/venv` bleibt unverändert für alte Partien und
+Aufträge erhalten. Ein Rückwechsel erfolgt über „Lokale Open-Sage-Installation → Prüfen und
+speichern“ mit dem alten Python-Pfad; neue 1-ply-Vorgaben müssten dabei vorher auf 2-ply stehen.
+Prüf-/Sicherungsartefakte liegen unter `backups/sage-fork-activation-20261112/`.

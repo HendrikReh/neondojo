@@ -447,6 +447,7 @@ for line in sys.stdin:
                     threads: 2,
                     plies: 2,
                     adapter_version: 1,
+                    one_ply_verified: false,
                 },
                 directory,
             }

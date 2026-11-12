@@ -534,7 +534,9 @@ async fn create_job(
 ) -> ApiResult<(StatusCode, Json<Job>)> {
     let Json(request) = payload.map_err(|e| ApiError::invalid(e.body_text()))?;
     crate::play::require_position_review_available(&state.pool, request.position_id).await?;
-    let (settings, snapshot) = crate::settings::snapshot(&state).await?;
+    let (settings, snapshot) = crate::settings::snapshot(&state, request.plies)
+        .await
+        .map_err(|e| ApiError::invalid(format!("Engine unavailable: {e:#}")))?;
     let plies = request.plies.unwrap_or(settings.analysis_plies);
     if !crate::configuration::engine_depths(&snapshot.engine_id, "analysis").contains(&plies) {
         return Err(ApiError::invalid(
@@ -588,7 +590,9 @@ async fn create_match_analysis(
             "The source match was removed; analyze the saved position instead",
         ));
     }
-    let (settings, snapshot) = crate::settings::snapshot(&state).await?;
+    let (settings, snapshot) = crate::settings::snapshot(&state, request.plies)
+        .await
+        .map_err(|e| ApiError::invalid(format!("Engine unavailable: {e:#}")))?;
     let plies = request.plies.unwrap_or(settings.analysis_plies);
     if !crate::configuration::engine_depths(&snapshot.engine_id, "analysis").contains(&plies) {
         return Err(ApiError::invalid(

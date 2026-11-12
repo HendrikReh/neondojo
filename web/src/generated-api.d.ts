@@ -3434,6 +3434,8 @@ export interface components {
             /** Format: int32 */
             adapter_version: number;
             artifact_fingerprint: string;
+            /** @description Capability proven during installation verification; absent in legacy snapshots. */
+            one_ply_verified?: boolean;
             package_version: string;
             /** Format: int32 */
             plies: number;

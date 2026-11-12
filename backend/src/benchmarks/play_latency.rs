@@ -39,16 +39,16 @@ pub(super) fn reference() -> Result<PlayBenchmarkReference> {
     })
 }
 
-pub(super) fn reference_for(engine: &str) -> Result<PlayBenchmarkReference> {
+pub(super) fn reference_for(engine: &str, plies: i32) -> Result<PlayBenchmarkReference> {
     let mut value = reference()?;
     if engine == "bgsage" {
-        value.protocol_id = "bgsage-checker-turn-v3-2ply-2threads-gnubg-rules".into();
+        value.protocol_id = format!("bgsage-checker-turn-v3-{plies}ply-2threads-gnubg-rules");
     }
     Ok(value)
 }
 
 pub(super) async fn measure(pool: &PgPool, run: &BenchmarkRun, token: Uuid) -> Result<f64> {
-    let expected = reference_for(&run.engine_id)?;
+    let expected = reference_for(&run.engine_id, run.plies)?;
     ensure!(
         run.play_reference.as_ref() == Some(&expected),
         "Unsupported play benchmark protocol or reference version"

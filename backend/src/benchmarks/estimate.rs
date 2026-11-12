@@ -71,7 +71,7 @@ fn same_hardware(a: &Machine, b: &Machine) -> bool {
         && a.memory_bytes == b.memory_bytes
 }
 fn compatible(run: &BenchmarkRun, machine: &Machine) -> bool {
-    let expected = reference_for(&run.engine_id);
+    let expected = reference_for(&run.engine_id, run.plies);
     let (Some(saved_reference), Some(protocol_snapshot)) = (&run.reference, &run.protocol) else {
         return false;
     };
@@ -87,7 +87,7 @@ fn compatible(run: &BenchmarkRun, machine: &Machine) -> bool {
     let average = run.average_move_ms.unwrap_or(f64::NAN);
     let expected_average = total / f64::from(expected.total_moves);
     same_hardware(&run.machine, machine)
-        && normalized == protocol_for(&run.engine_id)
+        && normalized == protocol_for(&run.engine_id, run.plies)
         && saved_reference.id == expected.id
         && saved_reference.version == expected.version
         && saved_reference.sha256 == expected.sha256

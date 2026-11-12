@@ -576,13 +576,24 @@ async fn create_session(
         engine_version: Some(rules_version),
         open_sage: None,
     };
-    let bot = crate::settings::snapshot_for(&state, &settings.play_engine, &pinned_path, 2)
-        .await
-        .map_err(native_error)?;
-    let analysis =
-        crate::settings::snapshot_for(&state, &settings.analysis_engine, &pinned_path, 4)
-            .await
-            .map_err(native_error)?;
+    let bot = crate::settings::snapshot_for(
+        &state,
+        &settings.play_engine,
+        &pinned_path,
+        2,
+        settings.play_plies,
+    )
+    .await
+    .map_err(native_error)?;
+    let analysis = crate::settings::snapshot_for(
+        &state,
+        &settings.analysis_engine,
+        &pinned_path,
+        4,
+        settings.analysis_plies,
+    )
+    .await
+    .map_err(native_error)?;
     let version = bot
         .engine_version
         .clone()

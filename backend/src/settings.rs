@@ -118,7 +118,10 @@ async fn load_row(state: &AppState) -> anyhow::Result<SavedSettings> {
 pub(crate) async fn load(state: &AppState) -> anyhow::Result<AppSettings> {
     Ok(load_row(state).await?.settings)
 }
-pub(crate) async fn snapshot(state: &AppState) -> anyhow::Result<(AppSettings, EngineSnapshot)> {
+pub(crate) async fn snapshot(
+    state: &AppState,
+    requested_plies: Option<i32>,
+) -> anyhow::Result<(AppSettings, EngineSnapshot)> {
     let saved = load_row(state).await?;
     // Record the installed version even before the first settings save, and
     // distinguish an executable upgraded in place from an existing active job.
@@ -129,6 +132,7 @@ pub(crate) async fn snapshot(state: &AppState) -> anyhow::Result<(AppSettings, E
         &saved.settings.analysis_engine,
         &saved.settings.gnubg_path,
         4,
+        requested_plies.unwrap_or(saved.settings.analysis_plies),
     )
     .await?;
     Ok((saved.settings, snapshot))
@@ -139,9 +143,10 @@ pub(crate) async fn snapshot_for(
     id: &str,
     gnubg_path: &str,
     threads: u32,
+    plies: i32,
 ) -> anyhow::Result<EngineSnapshot> {
     let open_sage = if id == "bgsage" {
-        Some(open_sage::verified(&state.pool, threads).await?)
+        Some(open_sage::verified_profile(&state.pool, plies, threads).await?)
     } else {
         None
     };
@@ -235,10 +240,17 @@ async fn put_settings(
         .check_installation()
         .await
         .map_err(|e| ApiError::invalid(format!("GNUbg installation check failed: {e:#}")))?;
-    if settings.analysis_engine == "bgsage" || settings.play_engine == "bgsage" {
-        open_sage::verified(&state.pool, 4).await.map_err(|e| {
-            ApiError::invalid(format!("Open Sage installation check failed: {e:#}"))
-        })?;
+    for (engine, plies, threads) in [
+        (&settings.analysis_engine, settings.analysis_plies, 4),
+        (&settings.play_engine, settings.play_plies, 2),
+    ] {
+        if engine == "bgsage" {
+            open_sage::verified_profile(&state.pool, plies, threads)
+                .await
+                .map_err(|e| {
+                    ApiError::invalid(format!("Open Sage installation check failed: {e:#}"))
+                })?;
+        }
     }
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     crate::configuration::store::lock(&mut tx)
@@ -298,6 +310,14 @@ async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo
             .map(str::to_owned),
         None => None,
     };
+    let sage_plies = if sage
+        .as_ref()
+        .is_some_and(|snapshot| snapshot.one_ply_verified)
+    {
+        vec![1, 2]
+    } else {
+        vec![2]
+    };
     Ok(Json(vec![
         EngineInfo {
             id: "gnubg".into(),
@@ -311,7 +331,7 @@ async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo
             name: "Open Sage".into(),
             available: sage_version.is_some(),
             version: sage_version,
-            plies: vec![2],
+            plies: sage_plies,
         },
     ]))
 }

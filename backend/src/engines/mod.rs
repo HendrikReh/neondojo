@@ -21,6 +21,9 @@ pub struct SageSnapshot {
     pub threads: u32,
     pub plies: i32,
     pub adapter_version: u32,
+    /// Capability proven during installation verification; absent in legacy snapshots.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub one_ply_verified: bool,
 }
 
 #[derive(Clone)]
@@ -50,8 +53,12 @@ pub struct SageCubeEvaluation {
 impl SageEngine {
     pub fn new(snapshot: SageSnapshot) -> Result<Self> {
         ensure!(
-            snapshot.plies == 2 && matches!(snapshot.threads, 2 | 4),
-            "Only verified Open Sage 2-ply with 2 or 4 threads is supported"
+            matches!(snapshot.plies, 1 | 2) && matches!(snapshot.threads, 2 | 4),
+            "Only verified Open Sage 1/2-ply with 2 or 4 threads is supported"
+        );
+        ensure!(
+            snapshot.plies != 1 || snapshot.one_ply_verified,
+            "Open Sage 1-ply capability has not been verified"
         );
         ensure!(
             snapshot.adapter_version == 1 && snapshot.package_version == "2.0.20260907",
@@ -70,9 +77,10 @@ impl SageEngine {
             "Open Sage Python path must be absolute"
         );
         let version = format!(
-            "Open Sage {}; model {}; 2ply cubeful; threads {}; adapter {}",
+            "Open Sage {}; model {}; {}ply cubeful; threads {}; adapter {}",
             snapshot.package_version,
             snapshot.artifact_fingerprint,
+            snapshot.plies,
             snapshot.threads,
             snapshot.adapter_version
         );
@@ -80,6 +88,17 @@ impl SageEngine {
     }
 
     pub async fn probe(python: String, threads: u32) -> Result<SageSnapshot> {
+        let mut snapshot = Self::probe_profile(python.clone(), 2, threads).await?;
+        // A failed 1-ply probe keeps the legacy 2-ply installation usable.
+        if let Ok(one_ply) = Self::probe_profile(python, 1, threads).await {
+            snapshot.one_ply_verified =
+                one_ply.artifact_fingerprint == snapshot.artifact_fingerprint;
+        }
+        Ok(snapshot)
+    }
+
+    pub async fn probe_profile(python: String, plies: i32, threads: u32) -> Result<SageSnapshot> {
+        ensure!(matches!(plies, 1 | 2), "Unsupported Open Sage depth");
         ensure!(
             matches!(threads, 2 | 4),
             "Open Sage supports verified thread budgets 2 and 4 only"
@@ -104,8 +123,9 @@ impl SageEngine {
             package_version: "2.0.20260907".into(),
             artifact_fingerprint: String::new(),
             threads,
-            plies: 2,
+            plies,
             adapter_version: 1,
+            one_ply_verified: plies == 1,
         };
         let identity = process::probe(&snapshot).await?;
         snapshot.package_version = identity["package_version"]
