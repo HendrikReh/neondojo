@@ -292,7 +292,8 @@ test('analysis statistics and move errors use the shared table roles', async ({
   await expect(page.locator('.match-analysis-progress')).toContainText(
     'Match analysis complete',
   );
-  const stats = page.locator('.overview-statistics .statistics-games-table');
+  await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
+  const stats = page.locator('.match-statistics .statistics-games-table');
   await expect(stats.locator('tbody td').first()).toHaveCSS(
     'font-size',
     '12px',
@@ -305,6 +306,7 @@ test('analysis statistics and move errors use the shared table roles', async ({
     'font-size',
     '11px',
   );
+  await page.getByRole('tab', { name: 'Overview', exact: true }).click();
   await page
     .locator('.overview-errors .match-analysis-filters input[type="checkbox"]')
     .uncheck();
@@ -321,6 +323,7 @@ test('analysis statistics and move errors use the shared table roles', async ({
     'font-size',
     '13px',
   );
+  await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
   for (const locale of ['en', 'de', 'es', 'fr', 'pl', 'it']) {
     if (locale !== 'en') {
       await page.locator('.settings-trigger').click();
@@ -338,7 +341,7 @@ test('analysis statistics and move errors use the shared table roles', async ({
       await page.setViewportSize(viewport);
       const labels = await page
         .locator(
-          '.overview-statistics .statistics-error-matrix [role="columnheader"]',
+          '.match-statistics .statistics-error-matrix [role="columnheader"]',
         )
         .evaluateAll((nodes) =>
           nodes.map((node) => {
@@ -363,7 +366,7 @@ test('analysis statistics and move errors use the shared table roles', async ({
         expect(label.fits).toBe(true);
       }
       for (const matrix of await page
-        .locator('.overview-statistics .statistics-error-matrix')
+        .locator('.match-statistics .statistics-error-matrix')
         .all()) {
         const columns = await matrix.evaluate((el) => {
           const rows = [...el.querySelectorAll('[role="row"]')];

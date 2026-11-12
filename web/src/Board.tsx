@@ -315,16 +315,6 @@ export default function Board({
           </span>
         )}
       </div>
-      {custom && (
-        <a
-          className="theme-credit"
-          href="https://www.bgblitz.com/themes.html"
-          target="_blank"
-          rel="noreferrer"
-        >
-          {t('board.themeSource', { name: custom.name })} ↗
-        </a>
-      )}
     </div>
   );
 }

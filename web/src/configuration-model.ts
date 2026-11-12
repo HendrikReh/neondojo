@@ -50,6 +50,8 @@ export interface ProfileConfiguration {
     board_theme: string;
     bearoff_direction: 'left' | 'right';
     board_view: 'before' | 'arrows' | 'after';
+    analysis_board_width: number | null;
+    analysis_overview_board_width: number | null;
   };
   opening_book: {
     provider: 'off' | 'automatic' | 'backgammondb' | 'xg';
@@ -108,6 +110,8 @@ export const defaultConfiguration: ProfileConfiguration = {
     board_theme: 'forest',
     bearoff_direction: 'right',
     board_view: 'arrows',
+    analysis_board_width: null,
+    analysis_overview_board_width: null,
   },
   opening_book: { provider: 'automatic', path: '', xg_path: '' },
   library: {
@@ -192,19 +196,27 @@ function canonical(value: unknown): unknown {
     );
   return value;
 }
+const boardWidthFields = [
+  'analysis_board_width',
+  'analysis_overview_board_width',
+] as const;
+
 export function normalizeConfiguration(value: unknown): ProfileConfiguration {
   exactKeys(value, Object.keys(defaultConfiguration), [], 'configuration');
   for (const key of Object.keys(defaultConfiguration).filter(
     (k) => k !== 'schema_version',
-  ))
+  )) {
+    const optional: readonly string[] =
+      key === 'appearance' ? boardWidthFields : [];
     exactKeys(
       value[key],
       Object.keys(
         defaultConfiguration[key as keyof ProfileConfiguration] as object,
-      ),
-      [],
+      ).filter((field) => !optional.includes(field)),
+      optional,
       key,
     );
+  }
   const c = structuredClone(value) as unknown as ProfileConfiguration;
   if (c.schema_version !== 1) invalid('schema_version');
   if (
@@ -249,6 +261,15 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
     !['before', 'arrows', 'after'].includes(c.appearance.board_view)
   )
     invalid('appearance');
+  const { min, max } = configurationOptions.analysis_board_width;
+  for (const field of boardWidthFields) {
+    const width = (c.appearance[field] ??= null);
+    if (
+      width !== null &&
+      (!Number.isInteger(width) || width < min || width > max)
+    )
+      invalid(`appearance.${field}`);
+  }
   if (
     !['off', 'automatic', 'backgammondb', 'xg'].includes(
       c.opening_book.provider,

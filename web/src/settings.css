@@ -200,9 +200,6 @@
   max-height: 340px;
   margin: 8px 0;
 }
-.settings-preview .theme-credit {
-  font-size: var(--font-size-micro);
-}
 .settings-theme-gallery {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
@@ -250,8 +247,7 @@
   top: 8%;
   right: 12%;
 }
-.settings-theme-thumbnail .player-bar,
-.settings-theme-thumbnail .theme-credit {
+.settings-theme-thumbnail .player-bar {
   display: none;
 }
 .settings-theme-thumbnail .board {

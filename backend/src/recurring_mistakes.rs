@@ -19,8 +19,8 @@ use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
 
 mod imported;
-mod imported_projection;
-mod source;
+pub(crate) mod imported_projection;
+pub(crate) mod source;
 use source::{load, players};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize, ToSchema)]

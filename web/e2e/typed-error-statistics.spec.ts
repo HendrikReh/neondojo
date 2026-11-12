@@ -35,12 +35,18 @@ for (const scope of ['match', 'game'] as const) {
       scope === 'game' ? 'Game analysis complete' : 'Match analysis complete',
       { timeout: 30000 },
     );
-    const stats = page.locator('.overview-statistics');
+    const statisticsTab = page.getByRole('tab', {
+      name: 'Statistics',
+      exact: true,
+    });
+    await statisticsTab.click();
+    const stats = page.locator('.match-statistics');
     await expect(stats.locator('.statistics-error-matrix')).toHaveCount(
       scope === 'game' ? 4 : 6,
     );
     const position = await page.locator('.position-code code').textContent();
     for (const kind of ['checker', 'cube'] as const) {
+      await statisticsTab.click();
       const cell = stats
         .locator(
           `.statistics-summary [data-statistics-kind="${kind}"][data-statistics-metric="very_bad"]`,
@@ -50,7 +56,7 @@ for (const scope of ['match', 'game'] as const) {
       const response = page.waitForResponse((r) => {
         const url = new URL(r.url());
         return (
-          url.pathname.endsWith('/moves') &&
+          url.pathname.endsWith('/review-decisions') &&
           url.searchParams.get('kind') === kind &&
           url.searchParams.get('severity') === 'very_bad'
         );
@@ -71,6 +77,7 @@ for (const scope of ['match', 'game'] as const) {
       await expect(page.locator('.position-code code')).toHaveText(position!);
     }
     if (scope === 'match') {
+      await statisticsTab.click();
       const cell = stats
         .locator('.statistics-games-table tbody tr')
         .nth(1)
@@ -81,7 +88,7 @@ for (const scope of ['match', 'game'] as const) {
       const response = page.waitForResponse((r) => {
         const url = new URL(r.url());
         return (
-          url.pathname.endsWith('/moves') &&
+          url.pathname.endsWith('/review-decisions') &&
           url.searchParams.get('game_no') === '2' &&
           url.searchParams.get('kind') === 'checker'
         );
@@ -91,6 +98,7 @@ for (const scope of ['match', 'game'] as const) {
       await expect(
         page.getByLabel('Filter by game', { exact: true }),
       ).toHaveValue('2');
+      await statisticsTab.click();
       await stats
         .locator(
           '.statistics-summary [data-statistics-metric="bad"]:not([data-statistics-kind])',

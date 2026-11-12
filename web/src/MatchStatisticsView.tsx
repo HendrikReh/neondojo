@@ -191,7 +191,7 @@ function PlayerStatisticsCard({
   );
 }
 
-export function PlayerStatisticsSummary({
+function PlayerStatisticsSummary({
   summary,
   names,
   onSelect,
@@ -233,10 +233,8 @@ export default function MatchStatisticsView({
   loading = false,
   error,
   progress,
-  overview = false,
 }: {
   job?: Job;
-  overview?: boolean;
   statistics?: JobAnalysisStatistics;
   names: string[];
   onSelect: SelectMetric;
@@ -253,9 +251,9 @@ export default function MatchStatisticsView({
   const summary = current?.summary;
   return (
     <section
-      className={`match-statistics${overview ? ' overview-statistics' : ''}`}
+      className="match-statistics"
       id="inspector-panel-statistics"
-      role={overview ? 'region' : 'tabpanel'}
+      role="tabpanel"
       aria-labelledby="inspector-tab-statistics"
       hidden={hidden}
       data-job-id={job?.id}

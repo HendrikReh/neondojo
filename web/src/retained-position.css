@@ -5,9 +5,11 @@
 }
 
 @media (min-width: 961px) {
+  .analysis-workspace.analysis-retained .analysis-grid {
+    --analysis-moves-width: 175px;
+  }
   .analysis-workspace.analysis-overview.analysis-retained .analysis-grid {
-    grid-template-columns: 175px minmax(0, 1.35fr) minmax(325px, 1fr);
     grid-template-rows: minmax(0, 1fr);
-    grid-template-areas: 'moves board evaluation';
+    grid-template-areas: 'moves board splitter evaluation';
   }
 }

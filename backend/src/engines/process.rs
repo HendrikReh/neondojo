@@ -662,14 +662,23 @@ for line in sys.stdin:
         for mode in ["batch_block", "batch_end_block"] {
             let fake = FakeWorker::new(mode);
             let engine = super::super::SageEngine::new(fake.profile.clone()).unwrap();
-            assert!(
-                engine
-                    .analyze_game_with_limit(SINGLE_GAME, 1, 2, Some(Duration::from_millis(250)))
-                    .await
-                    .is_err()
-            );
+            // Start Python before measuring the active batch timeout. Process
+            // startup can exceed the short limit on a busy test machine.
+            request(
+                &fake.profile,
+                json!({"operation": "identity"}),
+                Duration::from_secs(5),
+            )
+            .await
+            .unwrap();
+            let pid = fake.pid();
+            let error = engine
+                .analyze_game_with_limit(SINGLE_GAME, 1, 2, Some(Duration::from_millis(250)))
+                .await
+                .unwrap_err();
+            assert!(error.to_string().contains("game analysis timed out"));
             assert!(WORKER.lock().await.general.is_none());
-            assert_reaped(&fake.pid()).await;
+            assert_reaped(&pid).await;
         }
     }
 

@@ -7,16 +7,61 @@ use crate::{
 };
 use uuid::Uuid;
 
-pub(super) struct Projection {
-    pub(super) decision: Decision,
-    pub(super) position: Position,
-    pub(super) depth: Option<String>,
-    pub(super) depth_plies: Option<i32>,
+/// Reconstruct the original event from the immutable catalog, without parsing a full match.
+pub(crate) fn source_move(
+    event: &crate::move_catalog::StoredMove,
+    checker_ply: Option<i32>,
+) -> Option<SourceMove> {
+    let kind = match event.kind.as_str() {
+        "checker" => "checker",
+        "cube" => "cube",
+        _ => return None,
+    };
+    let dice = event.dice.as_slice().try_into().ok()?;
+    let after_board = if kind == "checker" {
+        let position = Position {
+            id: event.position_uuid.unwrap_or(Uuid::nil()),
+            match_uuid: event.match_uuid,
+            ordinal: checker_ply.unwrap_or(event.move_no),
+            game_no: event.game_no,
+            ply: checker_ply.unwrap_or(0),
+            player: event.player,
+            dice: event.dice.clone(),
+            board: event.board.clone(),
+            position_id: event.position_id.clone(),
+            gnubg_match_id: event.gnubg_match_id.clone(),
+            notation: String::new(),
+        };
+        crate::move_assessments::after_play(&position, &event.notation)?.to_vec()
+    } else {
+        event.board.clone()
+    };
+    Some(SourceMove {
+        game_no: event.game_no,
+        move_no: event.move_no,
+        kind,
+        player: event.player,
+        notation: event.notation.clone(),
+        checker_ply,
+        board: event.board.clone(),
+        dice,
+        position_id: event.position_id.clone(),
+        match_id: event.gnubg_match_id.clone(),
+        after_board,
+        after_match_id: String::new(),
+    })
+}
+
+pub(crate) struct Projection {
+    pub(crate) decision: Decision,
+    pub(crate) position: Position,
+    pub(crate) depth: Option<String>,
+    pub(crate) depth_plies: Option<i32>,
 }
 
 /// Validate identity and context before deriving a normalized decision. No source
 /// record, engine job, or learning history is changed by this projection.
-pub(super) fn project(
+pub(crate) fn project(
     record: &ImportedAnalysisData,
     source: &SourceMove,
     match_id: Uuid,
@@ -24,7 +69,8 @@ pub(super) fn project(
     source_format: &str,
 ) -> Option<Projection> {
     use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
-    if !matches!(source_format, "xg" | "bgf")
+    if !(matches!(source_format, "xg" | "bgf")
+        || source_format == "sgf" && record.kind == "checker")
         || record.game_no != source.game_no
         || record.source_move_no != source.move_no
         || record.player != source.player
@@ -124,7 +170,11 @@ pub(super) fn project(
             }
         }
         let played_eq = played_eq?;
-        let loss = loss(best_eq, played_eq)?;
+        let loss = if source_format == "sgf" {
+            crate::move_assessments::rounded_loss(played_eq, best_eq)?
+        } else {
+            loss(best_eq, played_eq)?
+        };
         (
             source.notation.clone(),
             best.notation.clone(),

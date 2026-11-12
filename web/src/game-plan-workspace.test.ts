@@ -30,6 +30,7 @@ vi.mock('react', async (original) => ({
     return callback;
   },
   useEffect() {},
+  useLayoutEffect() {},
 }));
 vi.mock('./i18n', () => ({
   useI18n: () => ({
@@ -114,7 +115,13 @@ function props(player: 0 | 1 = 0) {
       openMatch: async () => false,
       resume: async () => {},
     },
-    jobs: { jobs: {}, error: null, submitting: false, run: async () => {} },
+    jobs: {
+      jobs: {},
+      error: null,
+      submitting: false,
+      restoring: false,
+      run: async () => {},
+    },
     theme: 'forest',
     defaultPlies: 2,
     sourceRevision: 0,

@@ -852,6 +852,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matches/{id}/review-decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["review"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matches/{id}/source": {
         parameters: {
             query?: never;
@@ -2060,6 +2076,16 @@ export interface components {
             filters?: null | components["schemas"]["ConfigurationAnnotationFilters"];
         };
         ConfigurationAppearance: {
+            /**
+             * Format: int32
+             * @description Preferred board pane width in analysis detail tabs; null uses the responsive default.
+             */
+            analysis_board_width?: number | null;
+            /**
+             * Format: int32
+             * @description Preferred board pane width in the analysis overview; null uses the responsive default.
+             */
+            analysis_overview_board_width?: number | null;
             bearoff_direction: components["schemas"]["ConfigurationDirection"];
             board_theme: string;
             board_view: components["schemas"]["ConfigurationBoardView"];
@@ -3547,6 +3573,32 @@ export interface components {
             new: number;
             /** Format: int64 */
             total: number;
+        };
+        ReviewDecision: components["schemas"]["Decision"] & {
+            depth?: string | null;
+            /** Format: int32 */
+            depth_plies?: number | null;
+            engine: string;
+            /** Format: int32 */
+            game_no: number;
+            /** @description Source-qualified identity, independent of pagination. */
+            id: string;
+            /** Format: uuid */
+            job_id?: string | null;
+            /**
+             * Format: uuid
+             * @description Actual source event for cube navigation; virtual no-double links its checker event.
+             */
+            move_id?: string | null;
+            /** Format: uuid */
+            position_uuid?: string | null;
+            review_position?: null | components["schemas"]["Position"];
+            source: components["schemas"]["AssessmentSource"];
+        };
+        ReviewDecisionPage: {
+            items: components["schemas"]["ReviewDecision"][];
+            /** @description A bounded scan can return an empty page with a continuation. Follow it until null. */
+            next_cursor?: string | null;
         };
         ReviewResult: {
             /** Format: uuid */
@@ -6248,6 +6300,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GameMoveAssessments"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    review: {
+        parameters: {
+            query?: {
+                /** @description Optional pinned match-analysis job; imported data covers its uncheckpointed games. */
+                job_id?: string;
+                game_no?: number;
+                /** @description 0 = White, 1 = Black. */
+                player?: number;
+                /** @description checker or cube. */
+                kind?: string;
+                severity?: components["schemas"]["MoveSeverity"];
+                errors_only?: boolean;
+                /** @description 1–100, default 50. */
+                limit?: number;
+                /** @description Opaque continuation; preserve filters. Restart if the job's checkpoints change. */
+                after?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewDecisionPage"];
                 };
             };
             404: {

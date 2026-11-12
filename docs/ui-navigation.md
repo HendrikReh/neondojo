@@ -33,6 +33,25 @@ focus states in all six light/dark theme variants, actual spacing between labels
 and the established desktop viewports. Related workflow tests cover settings,
 notes, sources, board views and header navigation.
 
+## Match analysis
+
+**Overview** places the position analysis beside the board, with the error list
+below both. Its analysis views are **Candidates**, **Dice equity**, and **Game
+rolls**. Native match and game statistics are available in **Statistics**.
+Candidate columns size to their contents so notation and evaluation values
+stay close on wide displays.
+Switching tabs keeps the selected game and move. Selecting a statistics metric
+opens **Errors** with the matching filters. Selecting a metric for a different
+game opens that game.
+
+In every desktop analysis tab, a focusable separator resizes the board. Left/Right
+changes its width, Shift uses larger steps, Home/End select the available limits,
+and Enter or double-click restores the default for the current view. Escape
+cancels a drag. The profile stores separate widths for **Overview** and for the
+four detail tabs as a group. Overview caps the board to leave space for the error
+list below. The other tabs use the available window height for a larger board.
+The displayed limit can change without overwriting either preferred width.
+
 ## Study areas
 
 Study contains Flashcards & Anki, Reports, My recurring mistakes, and Practice
@@ -66,3 +85,15 @@ Open Sage row identifies recognized fork builds by repository and short commit,
 linked to the full commit on GitHub. The benchmark link in
 Settings always opens **Benchmark**. Engine-match series keep running
 when the user switches tools or leaves Extras.
+
+## Dice equity
+
+Selecting **Dice equity** in the position evaluation automatically requests the
+21 dice-pair evaluations used by its 36-cell grid. There is no separate Dice
+Distribution action. The latest saved result for the current position and
+engine is reused if its search depth matches, after saved jobs have loaded.
+Changing position or depth while this view is visible requests missing results;
+hidden evaluation views
+do not start work. Running jobs keep their captured depth and configuration.
+After a submission or engine failure, selecting **Dice equity** again retries
+once; failures never cause an automatic retry loop.

@@ -17,6 +17,10 @@
     "bgblitz:gp-tan",
     "bgblitz:wycliffe_purple"
   ],
+  "analysis_board_width": {
+    "min": 320,
+    "max": 960
+  },
   "engine_threads": {
     "gnubg": {
       "min": 1

@@ -960,7 +960,15 @@ export default function PlayWorkspace({
             icon="open"
             label={PAUSED_MATCHES_DATABASE_NAME}
           />
-          {!setup && !interruption && pauseButton}
+          {!setup && pauseButton && (
+            <span
+              className="play-pause-slot"
+              aria-hidden={Boolean(interruption)}
+              inert={Boolean(interruption)}
+            >
+              {pauseButton}
+            </span>
+          )}
           {!setup && paused && (
             <ActionButton
               ref={resumeTrigger}

@@ -177,7 +177,7 @@ test('native match and game metrics open the exact visible decision filters', as
   );
   const request = page.waitForResponse(
     (r) =>
-      new URL(r.url()).pathname.endsWith('/moves') &&
+      new URL(r.url()).pathname.endsWith('/review-decisions') &&
       new URL(r.url()).searchParams.get('kind') === 'cube' &&
       new URL(r.url()).searchParams.get('player') === '0',
   );
@@ -214,7 +214,7 @@ test('native match and game metrics open the exact visible decision filters', as
   await expect(page.locator('.board-heading')).toContainText('Game 1');
   const nextError = page.waitForRequest(
     (r) =>
-      new URL(r.url()).pathname.endsWith('/moves') &&
+      new URL(r.url()).pathname.endsWith('/review-decisions') &&
       new URL(r.url()).searchParams.get('limit') === '100',
   );
   await page.getByRole('button', { name: /^Next error/ }).click();
@@ -279,7 +279,7 @@ test('a delayed next-error response cannot undo manual move navigation', async (
     fulfilled = new Promise<void>((resolve) => {
       finished = resolve;
     });
-  await page.route('**/api/jobs/*/moves?**', async (route) => {
+  await page.route('**/api/matches/*/review-decisions?**', async (route) => {
     if (new URL(route.request().url()).searchParams.get('limit') !== '100')
       return route.continue();
     const response = await route.fetch();

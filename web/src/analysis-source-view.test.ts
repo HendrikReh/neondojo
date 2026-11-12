@@ -68,3 +68,100 @@ test('explicit BackgammonDB mode disables the XG option that was not requested',
   )?.[0];
   expect(button).toContain('disabled');
 });
+
+const checkerBook: BookLookup = {
+  provider: 'backgammondb',
+  hit: true,
+  provenance: {
+    provider: 'backgammondb',
+    engine: 'GNUbg',
+    evaluation_kind: 'evaluation',
+    equity_kind: 'normalized_cubeful',
+    context: 'money',
+  },
+  checker: {
+    plies: 3,
+    candidates: [
+      { rank: 1, notation: '8/5 6/5', equity: 0.2, probabilities: [0.55] },
+      { rank: 2, notation: '13/10 6/5', equity: 0.1, probabilities: [0.52] },
+    ],
+  },
+};
+test('book comparison preserves the authoritative normalized equity unit', () => {
+  const html = render(checkerBook);
+  expect(html).toContain('Normalized cubeful');
+  expect(html).toContain('>0.100</td>');
+  expect(html).not.toContain('>Cubeful</span>');
+});
+test('book comparison without provenance leaves its unit and difference unavailable', () => {
+  const html = render({ ...checkerBook, provenance: null });
+  expect(html).toContain('Unit unknown');
+  expect(html).not.toContain('>0.100</td>');
+});
+const emptyRecord: import('./source-analysis-api').SourceAnalysis = {
+  id: 'record',
+  match_uuid: 'match',
+  position_uuid: null,
+  source_format: 'sgf',
+  kind: 'checker',
+  engine: 'GNUbg',
+  engine_version: '1.08.003',
+  depth: '2-ply',
+  depth_plies: 2,
+  checker_ply: 1,
+  dice: [3, 1],
+  game_no: 1,
+  gnubg_match_id: null,
+  position_id: null,
+  source_move_no: 1,
+  player: 0,
+  played: '8/5 6/5',
+  method: 'evaluation',
+  candidates: [],
+  cube: null,
+  raw: {},
+};
+function renderRecords(
+  records: (typeof emptyRecord)[],
+  preferredKind?: 'checker' | 'cube',
+) {
+  return renderToStaticMarkup(
+    createElement(I18nProvider, {
+      children: createElement(SourceAnalysisView, {
+        source: 'file',
+        records,
+        preferredKind,
+      }),
+    }),
+  );
+}
+test('an empty checker record keeps provenance and explicitly reports unavailable candidates', () => {
+  const html = renderRecords([emptyRecord]);
+  expect(html).toContain('GNUbg 1.08.003');
+  expect(html).toContain('2-ply');
+  expect(html).toContain('evaluation');
+  expect(html).toContain('No candidate values recorded.');
+  expect(html).not.toContain('<table');
+});
+test('a cube review defaults to the cube record when checker and cube records share a move', () => {
+  const html = renderRecords(
+    [
+      emptyRecord,
+      {
+        ...emptyRecord,
+        id: 'cube',
+        kind: 'cube',
+        cube: {
+          no_double: 0.15,
+          double_take: 0.1,
+          double_pass: 1,
+          equity_kind: 'cubeful',
+        },
+      },
+    ],
+    'cube',
+  );
+  expect(html).toContain('Cube decision before this roll');
+  expect(html).toContain('+0.150');
+  expect(html).not.toContain('No candidate values recorded.');
+});

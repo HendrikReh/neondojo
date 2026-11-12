@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { type Match } from './api';
+import { type Match, type Position } from './api';
 import {
   loadDecisions,
   movePosition,
@@ -17,6 +17,9 @@ export interface MoveNotesTarget {
   match: Match;
   gameNo: number;
   moveId?: string;
+  decisionKind?: 'checker' | 'cube';
+  reviewPosition?: Position;
+  reviewPlayed?: string;
 }
 export default function MoveNotesDialog({
   target,
@@ -51,6 +54,7 @@ export default function MoveNotesDialog({
     (m) => m.id === moveId,
   );
   const kind = move?.position_uuid ? 'position' : 'move';
+  const reviewingTarget = move?.id === target.moveId;
   return (
     <LibraryDialog title={l('cubeNotes')} onClose={onClose}>
       <p>
@@ -85,13 +89,22 @@ export default function MoveNotesDialog({
         <div className="move-notes-content">
           <div>
             <Board
-              position={movePosition(move)}
+              position={
+                (reviewingTarget && target.reviewPosition) || movePosition(move)
+              }
               white={target.match.white}
               black={target.match.black}
               theme={theme}
             />
-            <p>{formatDecision(move.notation)}</p>
-            <ImportedMoveAnalysis moveId={move.id} />
+            <p>
+              {formatDecision(
+                (reviewingTarget && target.reviewPlayed) || move.notation,
+              )}
+            </p>
+            <ImportedMoveAnalysis
+              moveId={move.id}
+              decisionKind={reviewingTarget ? target.decisionKind : undefined}
+            />
           </div>
           <AnnotationPanel
             key={move.id}

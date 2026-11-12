@@ -24,14 +24,15 @@ test('single-game statistics pin errors to their source game across views, reset
   );
   await page.locator('.moves-list button').nth(1).click();
   const before = await page.locator('.position-code code').textContent();
+  await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
   const moveRequest = page.waitForResponse(
     (r) =>
-      new URL(r.url()).pathname.endsWith('/moves') &&
+      new URL(r.url()).pathname.endsWith('/review-decisions') &&
       new URL(r.url()).searchParams.get('severity') === 'very_bad',
   );
   const veryBad = page
     .locator(
-      '.overview-statistics .statistics-summary [data-statistics-metric="very_bad"]',
+      '.match-statistics .statistics-summary [data-statistics-metric="very_bad"]',
     )
     .first();
   const expected = Number(await veryBad.locator('strong').textContent());
@@ -79,7 +80,7 @@ test('single-game statistics pin errors to their source game across views, reset
   ).toHaveValue('checker');
   await expect(page.locator('.position-code code')).toHaveText(before!);
   await page.getByLabel('Select game', { exact: true }).selectOption('1');
-  await expect(page.locator('.match-analysis')).toContainText('Choose a scope');
+  await expect(page.locator('.match-moves-table tbody tr')).toHaveCount(0);
   await page.getByLabel('Select game', { exact: true }).selectOption('2');
   await expect(page.getByLabel('Filter by game', { exact: true })).toHaveValue(
     '2',

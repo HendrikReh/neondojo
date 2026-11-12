@@ -16,7 +16,7 @@ pub(super) const MAX_SOURCE_BYTES: i64 = 64 * 1024 * 1024;
 pub(super) const TOO_BROAD: &str =
     "Too many analyzed decisions or source games; choose a database to narrow this request";
 
-fn evaluated(d: &Decision) -> bool {
+pub(crate) fn evaluated(d: &Decision) -> bool {
     d.evaluation_status == "evaluated"
         && (0..=1).contains(&d.player)
         && matches!(d.kind.as_str(), "checker" | "cube")

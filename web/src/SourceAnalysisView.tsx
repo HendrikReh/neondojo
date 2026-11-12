@@ -1,12 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useI18n } from './i18n';
 import XgPositionView from './XgPositionView';
-import { useBoardReviewText } from './board-review-messages';
-import {
-  focusCandidateRow,
-  navigateCandidatePreview,
-  type PreviewCandidate,
-} from './candidate-preview';
+import { type PreviewCandidate } from './candidate-preview';
+import CandidateTable from './CandidateTable';
+import type { Position } from './api';
 import { useSourceText } from './analysis-source-messages';
 import type { SourceAnalysis, BookLookup } from './source-analysis-api';
 export default function SourceAnalysisView({
@@ -15,16 +12,21 @@ export default function SourceAnalysisView({
   source,
   onPreview,
   selectedPreview,
+  position,
+  playerName,
+  preferredKind,
 }: {
   records: SourceAnalysis[];
   book?: BookLookup;
   source: 'file' | 'book';
   onPreview?: (candidate: PreviewCandidate | null) => void;
   selectedPreview?: PreviewCandidate;
+  position?: Position;
+  playerName?: string;
+  preferredKind?: 'checker' | 'cube';
 }) {
-  const review = useBoardReviewText();
   const l = useSourceText(),
-    { t, formatEquity, formatPercent, formatDecision } = useI18n();
+    { formatEquity, formatPercent } = useI18n();
   const [bookChoice, setBookChoice] = useState<'backgammondb' | 'xg'>();
   const [recordId, setRecordId] = useState<string>(),
     [decision, setDecision] = useState<'checker' | 'cube'>('checker');
@@ -33,17 +35,17 @@ export default function SourceAnalysisView({
     setRecordId(undefined);
     setDecision('checker');
     setBookChoice(undefined);
-  }, [records, book, onPreview]);
+  }, [records, book, onPreview, preferredKind]);
   const record =
     records.find((r) => r.id === recordId) ??
-    records.find((r) => r.kind === 'checker') ??
+    records.find((r) => r.kind === (preferredKind ?? 'checker')) ??
     records[0];
   const candidates =
     source === 'file'
       ? (record?.candidates ?? [])
       : (book?.checker?.candidates.map((c) => ({
           ...c,
-          equity_kind: 'cubeful',
+          equity_kind: book?.provenance?.equity_kind ?? 'unknown',
           depth:
             book.checker?.plies == null ? null : `${book.checker.plies}-ply`,
           method: 'evaluation',
@@ -54,7 +56,7 @@ export default function SourceAnalysisView({
       : book?.cube
         ? {
             ...book.cube.equities,
-            equity_kind: 'cubeful',
+            equity_kind: book?.provenance?.equity_kind ?? 'unknown',
             verdict: book.cube.verdict,
           }
         : null;
@@ -78,16 +80,6 @@ export default function SourceAnalysisView({
         ? formatPercent(value, 3)
         : formatEquity(value)
       : '—';
-  const win = (probabilities: unknown) => {
-    const p = Array.isArray(probabilities)
-      ? probabilities[0]
-      : probabilities &&
-          typeof probabilities === 'object' &&
-          'win' in probabilities
-        ? probabilities.win
-        : undefined;
-    return typeof p === 'number' && p >= 0 && p <= 1 ? formatPercent(p) : '—';
-  };
   const selectedDecision =
     decision === 'checker' && !book?.checker && book?.cube ? 'cube' : decision;
   const checker =
@@ -132,10 +124,8 @@ export default function SourceAnalysisView({
     ) : null;
   const previewSource =
     source === 'file'
-      ? `${record?.engine ?? ''} · ${record?.depth ?? l('unknownDepth')}`
-      : `BackgammonDB · ${book?.provenance?.engine ?? ''} · ${book?.checker?.plies ?? '—'}-ply`;
-  const preview = (candidate: { notation: string; rank: number }) =>
-    onPreview?.({ ...candidate, source: previewSource });
+      ? `${[record?.engine, record?.engine_version].filter(Boolean).join(' ')} · ${record?.depth ?? l('unknownDepth')}`
+      : `${['BackgammonDB', book?.provenance?.engine].filter(Boolean).join(' · ')} · ${book?.checker?.plies == null ? l('unknownDepth') : `${book.checker.plies}-ply`}`;
   if (source === 'book' && selectedBook === 'xg')
     return (
       <div className="source-analysis">
@@ -148,7 +138,7 @@ export default function SourceAnalysisView({
       {bookControls}
       {source === 'file' ? (
         <>
-          <p className="fineprint">{l('sourceHelp')}</p>
+          {!checker && <p className="fineprint">{l('sourceHelp')}</p>}
           {records.length > 1 && (
             <label className="source-record">
               {l('decision')}
@@ -169,7 +159,7 @@ export default function SourceAnalysisView({
               </select>
             </label>
           )}
-          {record ? (
+          {record && !checker ? (
             <p className="source-provenance">
               <strong>
                 {record.engine} {record.engine_version}
@@ -180,12 +170,12 @@ export default function SourceAnalysisView({
               </small>
             </p>
           ) : (
-            <p>{l('noSource')}</p>
+            !record && <p>{l('noSource')}</p>
           )}
         </>
       ) : (
         <>
-          {book?.provenance && (
+          {book?.provenance && !checker && (
             <p className="source-provenance">
               <strong>BackgammonDB · {book.provenance.engine}</strong>
               <span>
@@ -225,83 +215,27 @@ export default function SourceAnalysisView({
           )}
         </>
       )}
-      {checker && candidates.length > 0 && (
-        <div className="source-candidates">
-          <table className="candidates">
-            <thead>
-              <tr>
-                <th>{t('analysis.rank')}</th>
-                <th>{t('common.move')}</th>
-                <th>{t('common.equity')}</th>
-                <th>{t('analysis.win')}</th>
-              </tr>
-            </thead>
-            <tbody
-              onKeyDown={
-                onPreview
-                  ? (event) =>
-                      navigateCandidatePreview(event, (index) =>
-                        preview(candidates[index]),
-                      )
-                  : undefined
-              }
-            >
-              {candidates.map((c) => (
-                <tr
-                  key={c.rank}
-                  className={[
-                    c.rank === 1 ? 'best-move' : '',
-                    onPreview ? 'candidate-preview-row' : '',
-                  ]
-                    .filter(Boolean)
-                    .join(' ')}
-                  data-preview-selected={
-                    onPreview
-                      ? selectedPreview?.notation === c.notation &&
-                        selectedPreview?.source === previewSource
-                      : undefined
-                  }
-                  onClick={
-                    onPreview
-                      ? (event) => {
-                          focusCandidateRow(event.currentTarget);
-                          preview(c);
-                        }
-                      : undefined
-                  }
-                >
-                  <td>{c.rank}</td>
-                  <td>
-                    {onPreview ? (
-                      <button
-                        type="button"
-                        className="candidate-preview-button"
-                        aria-label={review('previewMove', {
-                          rank: c.rank,
-                          move: formatDecision(c.notation),
-                        })}
-                        aria-pressed={
-                          selectedPreview?.notation === c.notation &&
-                          selectedPreview?.source === previewSource
-                        }
-                      >
-                        {formatDecision(c.notation)}
-                      </button>
-                    ) : (
-                      formatDecision(c.notation)
-                    )}
-                    <small>{c.depth ?? '—'}</small>
-                  </td>
-                  <td title={unit(c.equity_kind)}>
-                    {eq(c.equity, c.equity_kind)}
-                    <small>{unit(c.equity_kind)}</small>
-                  </td>
-                  <td>{win(c.probabilities)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {checker && (source === 'file' ? record : book?.checker) && (
+        <CandidateTable
+          candidates={candidates}
+          source={previewSource}
+          depth={
+            source === 'file'
+              ? record?.depth
+              : book?.checker?.plies == null
+                ? null
+                : `${book.checker.plies}-ply`
+          }
+          played={
+            position?.notation ??
+            (source === 'file' ? record?.played : undefined)
+          }
+          position={position}
+          playerName={playerName}
+          method={source === 'file' ? record?.method : undefined}
+          onPreview={onPreview}
+          selectedPreview={selectedPreview}
+        />
       )}
       {!checker && cube && (
         <>

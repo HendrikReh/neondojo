@@ -40,3 +40,11 @@ it('keeps candidate provenance and an explicit preview reset', () => {
   expect(html).toContain('Reset preview');
   expect(html).not.toContain('Played move');
 });
+
+it('localizes the arrows label for German board navigation', () => {
+  vi.stubGlobal('localStorage', { getItem: () => 'de' });
+  const html = render();
+  expect(html).toContain('>Pfeile</button>');
+  expect(html).toContain('>Initial</button>');
+  expect(html).toContain('>Final</button>');
+});

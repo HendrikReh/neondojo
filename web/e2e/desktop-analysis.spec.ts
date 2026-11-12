@@ -1,4 +1,5 @@
 import { expect, test, type Page } from './test';
+import { test as nativeTest } from '@playwright/test';
 
 test.use({ actionTimeout: 10000 });
 
@@ -35,6 +36,176 @@ async function openAnalyzedMatch(page: Page) {
   await expect(page.locator('.candidates tbody tr').first()).toBeVisible();
   return match;
 }
+
+nativeTest(
+  'analysis board resizes with pointer and keyboard, persists and resets',
+  async ({ page }) => {
+    await page.setViewportSize({ width: 1800, height: 1169 });
+    await importDesktopMatch(page);
+    await expect(page.getByRole('button', { name: /^Profile:/ })).toBeVisible();
+    const separator = page.getByRole('separator', {
+      name: 'Resize analysis board',
+      exact: true,
+    });
+    await expect(separator).toBeVisible();
+    const width = async (selector: string) =>
+      (await page.locator(selector).boundingBox())!.width;
+    const before = await width('.board-panel');
+    const saved = () =>
+      page.request
+        .get('/api/configuration')
+        .then((r) => r.json())
+        .then((c) => c.current_configuration.appearance);
+    const savedOverview = () =>
+      saved().then((appearance) => appearance.analysis_overview_board_width);
+    await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
+    await separator.press('End');
+    const detailWidth = Number(await separator.getAttribute('aria-valuenow'));
+    await expect.poll(saved).toMatchObject({ analysis_board_width: detailWidth });
+    await page.getByRole('tab', { name: 'Overview', exact: true }).click();
+    await expect.poll(() => width('.board-panel')).toBeCloseTo(before, 0);
+    const candidateBefore = await width('.overview-evaluation');
+    const handle = (await separator.boundingBox())!;
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + 100);
+    await page.mouse.down();
+    await page.mouse.move(handle.x + handle.width / 2 + 100, handle.y + 100, {
+      steps: 8,
+    });
+    await page.mouse.up();
+    await expect.poll(() => width('.board-panel')).toBeCloseTo(before + 100, 0);
+    expect(await width('.overview-evaluation')).toBeLessThan(candidateBefore);
+    await expect.poll(saved).toMatchObject({
+      analysis_board_width: detailWidth,
+      analysis_overview_board_width: Math.round(before + 100),
+    });
+    await page.reload();
+    await expect(separator).toHaveAttribute(
+      'aria-valuenow',
+      String(Math.round(before + 100)),
+    );
+    await page.setViewportSize({ width: 1200, height: 900 });
+    await expect.poll(() => width('.board-panel')).toBeLessThanOrEqual(350);
+    expect(await savedOverview()).toBe(Math.round(before + 100));
+    await page.setViewportSize({ width: 1800, height: 1169 });
+    await expect.poll(() => width('.board-panel')).toBeCloseTo(before + 100, 0);
+    const moveBeforeKeys = await page.locator('.board-heading').textContent();
+    await separator.focus();
+    await separator.press('ArrowLeft');
+    await expect.poll(savedOverview).toBe(Math.round(before + 90));
+    await separator.press('Home');
+    await expect(separator).toHaveAttribute('aria-valuenow', '320');
+    await separator.press('End');
+    expect(await width('.overview-evaluation')).toBeGreaterThanOrEqual(400);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(1800);
+    await separator.press('Enter');
+    await expect.poll(savedOverview).toBeNull();
+    await expect.poll(() => width('.board-panel')).toBeCloseTo(before, 0);
+    await separator.press('ArrowRight');
+    await expect.poll(savedOverview).toBe(Math.round(before + 10));
+    await separator.dblclick();
+    await expect.poll(savedOverview).toBeNull();
+    await expect(page.locator('.board-heading')).toHaveText(moveBeforeKeys!);
+    const original = (await separator.boundingBox())!;
+    await page.mouse.move(original.x + original.width / 2, original.y + 100);
+    await page.mouse.down();
+    await page.mouse.move(
+      original.x + original.width / 2 + 80,
+      original.y + 100,
+    );
+    await separator.press('Escape');
+    await page.mouse.up();
+    await expect.poll(() => width('.board-panel')).toBeCloseTo(before, 0);
+    await expect.poll(saved).toMatchObject({
+      analysis_board_width: detailWidth,
+      analysis_overview_board_width: null,
+    });
+    await page.getByRole('tab', { name: 'Notes', exact: true }).click();
+    await expect(separator).toHaveAttribute('aria-valuenow', String(detailWidth));
+    await separator.press('Enter');
+    await expect.poll(saved).toMatchObject({
+      analysis_board_width: null,
+      analysis_overview_board_width: null,
+    });
+  },
+);
+
+test('detail tabs share a larger board preference independent from overview', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  await openAnalyzedMatch(page);
+  await page.getByRole('button', { name: 'Next move', exact: true }).click();
+  const board = page.locator('.board-panel .board');
+  const move = page.locator('.board-heading');
+  await expect(move).toContainText('Move 2');
+  const separator = page.getByRole('separator', {
+    name: 'Resize analysis board',
+    exact: true,
+  });
+  const width = async () => (await board.boundingBox())!.width;
+  let currentWidth = await width();
+  for (const name of ['Statistics', 'Errors', 'Notes', 'Study cards']) {
+    await page.getByRole('tab', { name, exact: true }).click();
+    await expect(separator).toBeVisible();
+    await expect.poll(width).toBeCloseTo(currentWidth, 0);
+    await separator.press('ArrowRight');
+    currentWidth += 10;
+    await expect.poll(width).toBeCloseTo(currentWidth, 0);
+    await expect(move).toContainText('Move 2');
+  }
+  const handle = (await separator.boundingBox())!;
+  const x = handle.x + handle.width / 2;
+  const y = handle.y + handle.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x - 40, y, { steps: 4 });
+  await page.mouse.up();
+  currentWidth -= 40;
+  await expect.poll(width).toBeCloseTo(currentWidth, 0);
+  await page.getByRole('tab', { name: 'Overview', exact: true }).click();
+  await expect.poll(width).toBeCloseTo(currentWidth, 0);
+  await expect(move).toContainText('Move 2');
+
+  const overviewMax = Number(await separator.getAttribute('aria-valuemax'));
+  await separator.press('End');
+  await expect(separator).toHaveAttribute('aria-valuenow', String(overviewMax));
+  const overviewBoard = await width();
+  await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
+  await expect
+    .poll(async () => Number(await separator.getAttribute('aria-valuemax')))
+    .toBeGreaterThan(overviewMax);
+  await separator.press('End');
+  await expect.poll(width).toBeGreaterThan(overviewBoard + 100);
+  const largeBoard = await width();
+  await page.screenshot({ path: testInfo.outputPath('Statistics.png') });
+  await page.getByRole('tab', { name: 'Overview', exact: true }).click();
+  await expect(separator).toHaveAttribute('aria-valuenow', String(overviewMax));
+  await expect.poll(width).toBeCloseTo(overviewBoard, 0);
+  await separator.press('Home');
+  await expect(separator).toHaveAttribute('aria-valuenow', '320');
+  for (const name of ['Errors', 'Notes', 'Study cards']) {
+    await page.getByRole('tab', { name, exact: true }).click();
+    await expect.poll(width).toBeCloseTo(largeBoard, 0);
+    await expect(move).toContainText('Move 2');
+    await page.screenshot({ path: testInfo.outputPath(`${name}.png`) });
+  }
+  for (const viewport of [
+    { width: 2560, height: 1440 },
+    { width: 3840, height: 2160 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect.poll(width).toBeCloseTo(largeBoard, 0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth))
+      .toBeLessThanOrEqual(viewport.width);
+    await page.screenshot({
+      path: testInfo.outputPath(`Study cards-${viewport.width}.png`),
+    });
+  }
+  await page.getByRole('tab', { name: 'Overview', exact: true }).click();
+  await expect(separator).toHaveAttribute('aria-valuenow', '320');
+});
 
 test('move assessments stay scoped while switching games during a delayed response', async ({
   page,
@@ -136,7 +307,6 @@ for (const viewport of [
       '.board-panel',
       '.overview-evaluation',
       '.overview-errors',
-      '.overview-statistics',
     ];
     for (const selector of regions) {
       const region = page.locator(`.analysis-workspace ${selector}`);
@@ -150,6 +320,27 @@ for (const viewport of [
         viewport.height,
       );
     }
+    const evaluationBounds = (await page
+      .locator('.overview-evaluation')
+      .boundingBox())!;
+    const errorBounds = (await page.locator('.overview-errors').boundingBox())!;
+    const stats = page.getByRole('tabpanel', {
+      name: 'Statistics',
+      exact: true,
+    });
+    await expect(
+      page.getByRole('heading', { name: 'Native analysis statistics' }),
+    ).toBeHidden();
+    const boardBounds = (await page.locator('.board-panel').boundingBox())!;
+    expect(boardBounds.width).toBeLessThanOrEqual(440);
+    expect(evaluationBounds.width).toBeGreaterThanOrEqual(1000);
+    expect(errorBounds.y).toBeGreaterThanOrEqual(
+      evaluationBounds.y + evaluationBounds.height,
+    );
+    expect(errorBounds.x + errorBounds.width).toBeCloseTo(
+      evaluationBounds.x + evaluationBounds.width,
+      0,
+    );
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth),
     ).toBeLessThanOrEqual(viewport.width);
@@ -177,16 +368,30 @@ for (const viewport of [
     await page.getByRole('tab', { name: 'Overview', exact: true }).click();
     await expect(errorsOnly).toBeChecked();
     await page.screenshot({ path: testInfo.outputPath('overview.png') });
-    await page
-      .locator('.overview-statistics [data-statistics-metric="checker"]')
-      .first()
-      .click();
+    await page.getByRole('button', { name: 'Next move', exact: true }).click();
+    const boardHeading = page.locator('.board-heading');
+    await expect(boardHeading).toContainText('Move 2');
+    await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
     await expect(
-      page.getByRole('tab', { name: 'Overview', exact: true }),
+      stats.getByRole('heading', { name: 'Native analysis statistics' }),
+    ).toBeVisible();
+    await expect(boardHeading).toContainText('Move 2');
+    await page.getByRole('tab', { name: 'Overview', exact: true }).click();
+    await expect(boardHeading).toContainText('Move 2');
+    await expect(stats).toBeHidden();
+    await page
+      .getByRole('button', { name: 'Previous move', exact: true })
+      .click();
+    await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
+    await stats.locator('[data-statistics-metric="checker"]').first().click();
+    await expect(
+      page.getByRole('tab', { name: 'Errors', exact: true }),
     ).toHaveAttribute('aria-selected', 'true');
     await expect(
       page.getByLabel('Filter analysis by decision', { exact: true }),
     ).toHaveValue('checker');
+    await expect(page.locator('.statistics-summary:visible')).toHaveCount(0);
+    await page.getByRole('tab', { name: 'Overview', exact: true }).click();
     await page.locator('.candidate-preview-button').first().click();
     await expect(page.locator('.board-review-selection')).toBeVisible();
     await page

@@ -1,0 +1,77 @@
+.candidate-comparison {
+  container: candidate-comparison / inline-size;
+}
+.candidates.candidate-comparison-table {
+  width: auto;
+}
+.candidate-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 10px;
+  margin: 8px 0 4px;
+  color: var(--ui-muted);
+  font-size: var(--font-size-micro);
+  line-height: 1.5;
+}
+.candidate-metadata strong {
+  font-weight: var(--font-weight-medium);
+  color: var(--ui-text);
+}
+.candidate-comparison-table .candidate-number {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.candidate-comparison-table thead th.candidate-outcome-heading {
+  text-align: center;
+  border-bottom: 1px solid var(--ui-border);
+}
+.candidate-comparison-table .candidate-outcome-heading,
+.candidate-comparison-table [data-outcome='total'] {
+  border-left: 1px solid var(--ui-border);
+}
+.candidate-probability-line {
+  /* Keep screen-reader labels inside the table's scroll area. */
+  position: relative;
+  display: block;
+  line-height: 1.35;
+}
+.candidate-probability-line.loss {
+  color: var(--ui-muted);
+}
+.candidate-comparison-table .candidate-move-heading {
+  min-width: 64px;
+}
+.candidate-backgammon-short {
+  display: none;
+}
+@container candidate-comparison (max-width: 450px) {
+  .candidate-backgammon-full {
+    display: none;
+  }
+  .candidate-backgammon-short {
+    display: inline;
+  }
+}
+.candidate-markers {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 3px 6px;
+  margin-left: 5px;
+  font-size: var(--font-size-micro);
+}
+.candidate-marker-best {
+  color: var(--ui-success-text);
+}
+.candidate-marker-played {
+  color: var(--ui-text);
+  font-weight: var(--font-weight-semibold);
+}
+.candidate-marker-preview {
+  color: var(--ui-accent);
+}
+.candidate-comparison-table .candidate-depth {
+  display: block;
+  font-size: var(--font-size-micro);
+  color: var(--ui-muted);
+}

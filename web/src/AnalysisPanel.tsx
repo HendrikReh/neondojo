@@ -3,18 +3,19 @@ import configurationOptions from '../../shared/configuration-options.json' with 
 import Tooltip from './Tooltip';
 import ActionButton from './ActionButton';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { type Analysis, type Distribution, type DiceStats } from './api';
+import {
+  type Analysis,
+  type Distribution,
+  type DiceStats,
+  type Position,
+} from './api';
 import type { Jobs } from './useJobs';
 import { useI18n } from './i18n';
 import { useAnalysisSources } from './useAnalysisSources';
 import { useSourceText } from './analysis-source-messages';
 import SourceAnalysisView from './SourceAnalysisView';
-import {
-  focusCandidateRow,
-  navigateCandidatePreview,
-  type PreviewCandidate,
-} from './candidate-preview';
-import { useBoardReviewText } from './board-review-messages';
+import { type PreviewCandidate } from './candidate-preview';
+import CandidateTable from './CandidateTable';
 import './analysis-sources.css';
 import { DEFAULT_ANALYSIS_PLIES } from './analysis-depth';
 
@@ -23,23 +24,37 @@ export default function AnalysisPanel({
   stats,
   gameNo,
   disabled,
+  active = true,
+  restoring = false,
   onAnalyze,
   defaultPlies = DEFAULT_ANALYSIS_PLIES,
   positionId,
   sourceRevision = 0,
   onPreview,
   selectedPreview,
+  position,
+  playerName,
+  preferredSource,
 }: {
   jobs: Jobs;
   stats: DiceStats | null;
   gameNo?: number;
   disabled: boolean;
+  active?: boolean;
+  restoring?: boolean;
   onAnalyze: (kind: 'analysis' | 'dice', plies: number) => void;
   defaultPlies?: number;
   positionId?: string;
   sourceRevision?: number;
   onPreview?: (candidate: PreviewCandidate | null) => void;
   selectedPreview?: PreviewCandidate;
+  position?: Position;
+  playerName?: string;
+  preferredSource?: {
+    positionId: string;
+    source: 'file' | 'engine';
+    token: number;
+  };
 }) {
   const {
     t,
@@ -55,12 +70,17 @@ export default function AnalysisPanel({
   const supportedPlies =
     configurationOptions.engine_profiles[configuredEngine].analysis;
   const l = useSourceText();
-  const review = useBoardReviewText();
   const sources = useAnalysisSources(positionId, sourceRevision);
   const [sourceChoice, setSourceChoice] = useState<{
     positionId?: string;
     source: 'file' | 'book' | 'engine';
   }>();
+  useEffect(() => {
+    if (preferredSource && preferredSource.positionId === positionId) {
+      setSourceChoice({ positionId, source: preferredSource.source });
+      onPreview?.(null);
+    }
+  }, [preferredSource, positionId, onPreview]);
   const selectedSource =
     sourceChoice && sourceChoice.positionId === positionId
       ? sourceChoice.source
@@ -102,10 +122,11 @@ export default function AnalysisPanel({
     'analysis',
   );
   const [selectedRoll, setSelectedRoll] = useState('1-1');
+  const diceJob = jobs.dice?.plies === plies ? jobs.dice : undefined;
   const job =
     Object.values(jobs).find(
       (j) => j.status === 'queued' || j.status === 'running',
-    ) || jobs[view === 'dice' ? 'dice' : 'analysis'];
+    ) || (view === 'dice' ? diceJob : jobs.analysis);
   const pending =
     !!job && (job.status === 'queued' || job.status === 'running');
   const analysis =
@@ -113,13 +134,49 @@ export default function AnalysisPanel({
       ? (jobs.analysis.result as Analysis)
       : null;
   const distribution =
-    jobs.dice?.status === 'completed'
-      ? (jobs.dice.result as Distribution)
-      : null;
-  const choose = (kind: 'analysis' | 'dice') => {
-    setView(kind);
+    diceJob?.status === 'completed' ? (diceJob.result as Distribution) : null;
+  const requestedDice = useRef<string | undefined>(undefined);
+  const [diceSelection, setDiceSelection] = useState(0);
+  useEffect(() => {
+    if (
+      view !== 'dice' ||
+      !active ||
+      !positionId ||
+      disabled ||
+      restoring ||
+      pending ||
+      distribution
+    )
+      return;
+    const key = JSON.stringify([positionId, configuredEngine, plies]);
+    if (requestedDice.current === key) return;
+    requestedDice.current = key;
+    onAnalyze('dice', plies);
+  }, [
+    view,
+    active,
+    positionId,
+    disabled,
+    restoring,
+    pending,
+    distribution,
+    configuredEngine,
+    plies,
+    onAnalyze,
+    diceSelection,
+  ]);
+  const chooseDice = () => {
+    setView('dice');
+    onPreview?.(null);
+    if (!disabled && !restoring && !pending) {
+      requestedDice.current = undefined;
+      setDiceSelection((selection) => selection + 1);
+    }
+  };
+  const analyze = () => {
+    setView('analysis');
     selectSource('engine');
-    onAnalyze(kind, plies);
+    onAnalyze('analysis', plies);
   };
   const best = distribution?.rolls.find(
     (r) => r.dice.join('-') === selectedRoll,
@@ -174,13 +231,7 @@ export default function AnalysisPanel({
           label={t('analysis.analyze')}
           className="primary"
           disabled={disabled || pending}
-          onClick={() => choose('analysis')}
-        />
-        <ActionButton
-          icon="dice"
-          label={t('analysis.distribution')}
-          disabled={disabled || pending}
-          onClick={() => choose('dice')}
+          onClick={analyze}
         />
       </div>
       {pending && (
@@ -221,11 +272,7 @@ export default function AnalysisPanel({
         >
           {t('analysis.candidates')}
         </button>
-        <button
-          role="tab"
-          aria-selected={view === 'dice'}
-          onClick={() => setView('dice')}
-        >
+        <button role="tab" aria-selected={view === 'dice'} onClick={chooseDice}>
           {t('analysis.diceEquity')}
         </button>
         <button
@@ -281,6 +328,8 @@ export default function AnalysisPanel({
               source={selectedSource}
               onPreview={onPreview}
               selectedPreview={selectedPreview}
+              position={position}
+              playerName={playerName}
             />
           )}
         </>
@@ -289,95 +338,20 @@ export default function AnalysisPanel({
         selectedSource === 'engine' &&
         (analysis ? (
           <>
-            <table className="candidates">
-              <thead>
-                <tr>
-                  <th>{t('analysis.rank')}</th>
-                  <th>{t('common.move')}</th>
-                  <th>{t('common.equity')}</th>
-                  <th>{t('analysis.win')}</th>
-                </tr>
-              </thead>
-              <tbody
-                onKeyDown={
-                  onPreview
-                    ? (event) =>
-                        navigateCandidatePreview(event, (index) =>
-                          onPreview({
-                            ...analysis.candidates[index],
-                            source: `${analysis.engine} · ${analysis.plies}-ply`,
-                          }),
-                        )
-                    : undefined
-                }
-              >
-                {analysis.candidates.map((c) => (
-                  <tr
-                    key={c.rank}
-                    className={[
-                      c.rank === 1 ? 'best-move' : '',
-                      onPreview ? 'candidate-preview-row' : '',
-                    ]
-                      .filter(Boolean)
-                      .join(' ')}
-                    data-preview-selected={
-                      onPreview
-                        ? selectedPreview?.notation === c.notation &&
-                          selectedPreview?.source ===
-                            `${analysis.engine} · ${analysis.plies}-ply`
-                        : undefined
-                    }
-                    onClick={
-                      onPreview
-                        ? (event) => {
-                            focusCandidateRow(event.currentTarget);
-                            onPreview({
-                              ...c,
-                              source: `${analysis.engine} · ${analysis.plies}-ply`,
-                            });
-                          }
-                        : undefined
-                    }
-                  >
-                    <td>{formatNumber(c.rank, { minimumIntegerDigits: 2 })}</td>
-                    <td>
-                      {onPreview ? (
-                        <button
-                          type="button"
-                          className="candidate-preview-button"
-                          aria-label={review('previewMove', {
-                            rank: c.rank,
-                            move: formatDecision(c.notation),
-                          })}
-                          aria-pressed={
-                            selectedPreview?.notation === c.notation &&
-                            selectedPreview?.source ===
-                              `${analysis.engine} · ${analysis.plies}-ply`
-                          }
-                        >
-                          {formatDecision(c.notation)}
-                        </button>
-                      ) : (
-                        formatDecision(c.notation)
-                      )}
-                      {c.rank === 1 && (
-                        <span className="best-label">
-                          {t('analysis.bestMove')}
-                        </span>
-                      )}
-                    </td>
-                    <td>{formatEquity(c.equity)}</td>
-                    <td>{formatPercent(c.probabilities[0], 1)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p className="fineprint">
-              {t('analysis.method', {
-                engine: analysis.engine,
-                plies: analysis.plies,
-              })}
-            </p>
+            <CandidateTable
+              candidates={analysis.candidates.map((candidate) => ({
+                ...candidate,
+                equity_kind: 'cubeful',
+                depth: `${analysis.plies}-ply`,
+              }))}
+              source={`${analysis.engine} · ${analysis.plies}-ply`}
+              depth={`${analysis.plies}-ply`}
+              played={position?.notation}
+              position={position}
+              playerName={playerName}
+              onPreview={onPreview}
+              selectedPreview={selectedPreview}
+            />
           </>
         ) : (
           <div className="panel-empty">

@@ -188,11 +188,11 @@ test('an analyzed annotated position becomes a shared study card and a downloada
   await expect(
     position.getByText('Notizen gespeichert.', { exact: true }),
   ).toBeVisible();
-  await page.getByRole('tab', { name: 'Bewertung', exact: true }).click();
+  await page.getByRole('tab', { name: 'Übersicht', exact: true }).click();
   await page
     .getByRole('button', { name: 'Position analysieren', exact: true })
     .click();
-  await expect(page.getByText('BESTER ZUG', { exact: true })).toBeVisible({
+  await expect(page.getByText('Bester', { exact: true })).toBeVisible({
     timeout: 30_000,
   });
   await page.getByRole('tab', { name: 'Lernkarten', exact: true }).click();

@@ -25,11 +25,12 @@ test('real import, search, GNUbg analysis, distribution, themes and mobile layou
     page.getByRole('img', { name: /Backgammon-Position/ }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Position analysieren' }).click();
-  await expect(page.getByText('BESTER ZUG')).toBeVisible({ timeout: 30_000 });
-  await expect(page.locator('.best-move')).toContainText('8/5 6/5');
-  await page
-    .getByRole('button', { name: 'Dice Distribution', exact: true })
-    .click();
+  const bestCandidate = page.locator(
+    '.analysis-panel .candidates tbody tr[data-candidate-best="true"]',
+  );
+  await expect(bestCandidate).toBeVisible({ timeout: 30_000 });
+  await expect(bestCandidate).toContainText('8/5 6/5');
+  await page.getByRole('tab', { name: 'Würfel-Equity', exact: true }).click();
   await expect(page.locator('.dice-grid button')).toHaveCount(36, {
     timeout: 45_000,
   });
@@ -37,7 +38,7 @@ test('real import, search, GNUbg analysis, distribution, themes and mobile layou
     '21 Kombinationen',
   );
   await page.getByRole('tab', { name: 'Zugkandidaten' }).click();
-  await expect(page.getByText('BESTER ZUG')).toBeVisible();
+  await expect(bestCandidate).toBeVisible();
   await page
     .getByRole('button', { name: 'Einstellungen', exact: true })
     .click();
@@ -86,7 +87,7 @@ test('real import, search, GNUbg analysis, distribution, themes and mobile layou
     .filter({ hasText: 'Tutor Demo' })
     .first()
     .click();
-  await expect(page.getByText('BESTER ZUG')).toBeVisible();
+  await expect(bestCandidate).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(
     page.getByRole('img', { name: /Backgammon-Position/ }),
@@ -166,7 +167,15 @@ test('full match analysis, errors, board navigation and persisted results', asyn
   ).toBeVisible({ timeout: 45_000 });
   await expect(panel.getByRole('progressbar')).toHaveAttribute('value', '100');
   await expect(panel).toContainText('2 / 2 Spiele');
-  await expect(panel).toContainText('4 / 4 Züge ausgewertet');
+  await page.getByRole('tab', { name: 'Statistik', exact: true }).click();
+  const statistics = page.getByRole('tabpanel', {
+    name: 'Statistik',
+    exact: true,
+  });
+  await expect(statistics).toBeVisible();
+  await expect(statistics).toHaveAttribute('data-job-id', created.id);
+  await expect(statistics).toContainText('4 von 4 Checkerzügen analysiert');
+  await page.getByRole('tab', { name: 'Fehler', exact: true }).click();
   await panel.getByLabel('Nur Auffälligkeiten').check();
   await expect(panel.locator('tbody tr').first()).toContainText('24/21 6/5');
   await expect(panel.locator('tbody tr').first()).toContainText('8/5 6/5');

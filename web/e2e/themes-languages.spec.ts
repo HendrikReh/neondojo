@@ -2,6 +2,7 @@ import { profileText } from '../src/profile-messages';
 import { test, expect, type Locator, type Page } from './test';
 import { readFileSync } from 'node:fs';
 import { catalogs } from '../src/i18n-catalogs';
+import { candidateMessages } from '../src/candidate-messages';
 import type { Locale } from '../src/i18n-core';
 import { learningMessages } from '../src/learning-messages';
 import { settingsText } from '../src/settings-messages';
@@ -319,13 +320,13 @@ test('all six languages switch complete views on save and persist with the theme
   await analysis(page)
     .getByRole('button', { name: catalogs.en['analysis.analyze'], exact: true })
     .click();
-  await expect(
-    analysis(page).getByText(catalogs.en['analysis.bestMove'], { exact: true }),
-  ).toBeVisible({ timeout: 30_000 });
+  const bestMarker = analysis(page).locator(
+    '.analysis-panel [data-candidate-best="true"] .candidate-marker-best',
+  );
+  await expect(bestMarker).toBeVisible({ timeout: 30_000 });
+  await expect(bestMarker).toHaveText(candidateMessages.en.best);
   await applyLanguage(page, 'fr');
-  await expect(
-    analysis(page).getByText(catalogs.fr['analysis.bestMove'], { exact: true }),
-  ).toBeVisible();
+  await expect(bestMarker).toHaveText(candidateMessages.fr.best);
   await page.screenshot({ path: 'test-results/french-ui.png', fullPage: true });
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('lang', 'fr');
@@ -338,9 +339,8 @@ test('all six languages switch complete views on save and persist with the theme
     .click();
   await expect(dialog).not.toBeVisible();
   await reopenTutor(page);
-  await expect(
-    analysis(page).getByText(catalogs.fr['analysis.bestMove'], { exact: true }),
-  ).toBeVisible();
+  await expect(bestMarker).toBeVisible();
+  await expect(bestMarker).toHaveText(candidateMessages.fr.best);
   expect(errors).toEqual([]);
 });
 

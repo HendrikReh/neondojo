@@ -150,8 +150,12 @@
   padding: 10px;
   border-left: 3px solid var(--accent, #b6c57c);
 }
-.play-mode-slot[aria-hidden='true'] {
+.play-mode-slot[aria-hidden='true'],
+.play-pause-slot[aria-hidden='true'] {
   visibility: hidden;
+}
+.play-pause-slot {
+  display: inline-flex;
 }
 .play-mode-slot {
   display: flow-root;
@@ -203,9 +207,6 @@
   transform-origin: center;
 }
 
-.play-board[data-human-player='1'] .board-shell > .theme-credit {
-  order: 4;
-}
 /* Points stay transparent; legal destinations are shown only as dots. */
 .board-play-targets [data-play-point] {
   outline: none;

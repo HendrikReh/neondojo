@@ -215,12 +215,27 @@ test('text tabs retain keyboard focus, selection and desktop containment', async
   await fixture(page);
   const color = await accent(page);
   const overview = page.getByRole('tab', { name: 'Overview', exact: true });
+  const positionDetails = overview.locator('..');
+  await expect(
+    positionDetails.getByRole('tab', { name: 'Evaluation', exact: true }),
+  ).toHaveCount(0);
+  const overviewPanel = page.getByRole('tabpanel', {
+    name: 'Overview',
+    exact: true,
+  });
+  for (const name of ['Candidate moves', 'Dice equity', 'Game rolls'])
+    await expect(
+      overviewPanel.getByRole('tab', { name, exact: true }),
+    ).toBeVisible();
   await overview.focus();
   await page.keyboard.press('ArrowRight');
-  const evaluation = page.getByRole('tab', { name: 'Evaluation', exact: true });
-  await expect(evaluation).toBeFocused();
-  await activeText(evaluation, color);
-  await expect(evaluation).toHaveCSS('outline-style', 'solid');
+  const statistics = positionDetails.getByRole('tab', {
+    name: 'Statistics',
+    exact: true,
+  });
+  await expect(statistics).toBeFocused();
+  await activeText(statistics, color);
+  await expect(statistics).toHaveCSS('outline-style', 'solid');
   await page.getByRole('tab', { name: 'Notes', exact: true }).click();
   const scopes = page.locator('.notes-scope-tabs [role="tab"]');
   await scopes.first().focus();

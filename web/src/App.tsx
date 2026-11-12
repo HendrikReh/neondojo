@@ -745,11 +745,15 @@ export default function App() {
             onTrackJob={track}
             onNotesSaved={notesSaved}
             notesSuspended={!!moveNotes || view !== 'analysis'}
-            onMoveNotes={() => {
+            onMoveNotes={(target) => {
               if (navigation.match && navigation.game)
                 setMoveNotes({
                   match: navigation.match,
-                  gameNo: navigation.game.game_no,
+                  gameNo: target?.gameNo ?? navigation.game.game_no,
+                  moveId: target?.moveId,
+                  decisionKind: target?.decisionKind,
+                  reviewPosition: target?.reviewPosition,
+                  reviewPlayed: target?.reviewPlayed,
                 });
             }}
             deckRevision={deckRevision}

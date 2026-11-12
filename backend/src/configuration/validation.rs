@@ -144,10 +144,10 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
             "Threshold must be greater than zero and at most one",
         ));
     }
-    let themes: Value =
+    let options: Value =
         serde_json::from_str(include_str!("../../../shared/configuration-options.json"))
             .expect("valid embedded configuration options");
-    if !themes["board_themes"].as_array().is_some_and(|values| {
+    if !options["board_themes"].as_array().is_some_and(|values| {
         values
             .iter()
             .any(|v| v.as_str() == Some(&config.appearance.board_theme))
@@ -156,6 +156,30 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
             "appearance.board_theme",
             "Unknown board theme",
         ));
+    }
+    let bounds = &options["analysis_board_width"];
+    let min = bounds["min"]
+        .as_i64()
+        .expect("embedded minimum board width");
+    let max = bounds["max"]
+        .as_i64()
+        .expect("embedded maximum board width");
+    for (path, width) in [
+        (
+            "appearance.analysis_board_width",
+            config.appearance.analysis_board_width,
+        ),
+        (
+            "appearance.analysis_overview_board_width",
+            config.appearance.analysis_overview_board_width,
+        ),
+    ] {
+        if width.is_some_and(|width| !(min..=max).contains(&i64::from(width))) {
+            return Err(ConfigurationError::invalid(
+                path,
+                "Board width is out of range",
+            ));
+        }
     }
     for (name, value) in [
         ("opening_book.path", &config.opening_book.path),

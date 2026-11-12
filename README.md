@@ -84,9 +84,9 @@ Open <http://127.0.0.1:8787> to use BG Tutor. By default the services listen on 
 1. In **Match database**, choose **Import match** and open [tutorial.mat](backend/tests/fixtures/tutorial.mat) or the reference match [WC2014.xg](backend/tests/fixtures/WC2014.xg). You can also drop a file on the welcome screen. Search by player or file name to find an imported match. Results load in pages using stable cursors.
 2. In **Analysis**, use **Select game** or its adjacent arrows to choose a game. The selector shows the game number, starting score, move count, and Crawford status when applicable. The move history stays within the selected game and loads more moves as needed.
 3. Select a move. The board shows the decision position before the recorded play, together with the score and doubling cube. Point numbering and notation follow the player on roll. Pip counts include checkers on the bar.
-4. In **Overview** or **Evaluation**, choose **Analyze position** to queue a persistent GNUbg job. Choose 0–4 ply, with 2-ply as the default. The result includes up to five candidate moves, cubeful equity, and win probabilities.
+4. In **Overview**, choose **Analyze position** to queue a persistent GNUbg job. Choose 0–4 ply, with 2-ply as the default. The result includes up to five candidate moves, cubeful equity, and win probabilities.
 5. Use **Analyze game** to evaluate the selected game, or set **Analysis scope → Entire match** and choose **Analyze entire match**. Both accept 0–4 ply. The chosen scope determines the jobs, progress, statistics, and errors shown. Games with no checker moves, including cube-only games, can also be selected and analyzed.
-6. Open **Evaluation → Dice distribution** to evaluate all 21 unordered dice pairs. The matrix represents 36 equally likely ordered rolls, with weight 1 for doubles and 2 for other pairs. The weighted mean gives the expected equity. When a player has no legal play for a roll, GNUbg evaluates the forced pass. **Game rolls** shows the rolls recorded in the selected game.
+6. Open **Overview → Dice equity** to evaluate all 21 unordered dice pairs. The matrix represents 36 equally likely ordered rolls, with weight 1 for doubles and 2 for other pairs. The weighted mean gives the expected equity. When a player has no legal play for a roll, GNUbg evaluates the forced pass. **Game rolls** shows the rolls recorded in the selected game.
 
 **Match database → Find a position in the library** searches for an exact GNUbg position ID, which represents the checker arrangement from the perspective of the player on roll. Analysis also uses the GNUbg match ID for context such as the score, cube, and dice. Each occurrence in the library has its own row with the database, game, and move. Opening a row selects that exact occurrence, even when the same position appears more than once in a match. Use **Find similar positions** beside the analysis board to search for related positions.
 
@@ -94,7 +94,7 @@ Open <http://127.0.0.1:8787> to use BG Tutor. By default the services listen on 
 
 The top navigation opens **Playing**, **Analysis**, **Match database**, **Positions**, **Study**, and **Extras**, with **Settings** on the right. Arrow keys and Home/End navigate the main and detail tabs. The app restores the last match, game, and position locally. Switching tabs preserves filters, note drafts, and SSE subscriptions. A submitted job continues to be tracked if you change the selected game or position while the request is pending.
 
-The desktop **Overview** places move history on the left, the board and candidates above the errors in the center, and player and game statistics on the right. Long lists scroll independently and keep the current move visible. Dedicated tabs include **Evaluation**, **Statistics**, **Errors**, **Notes**, and **Study cards**. The header shows the players, match ID and length, saved score, date, event, and PR per player. Date and event come from saved metadata and show `n/a` when unavailable. Match PR updates when a complete native match analysis finishes.
+The desktop **Overview** places move history on the left and position evaluation beside the board, with errors below. Long lists scroll independently and keep the current move visible. Dedicated tabs include **Statistics**, **Errors**, **Notes**, and **Study cards**. The header shows the players, match ID and length, saved score, date, event, and PR per player. Date and event come from saved metadata and show `n/a` when unavailable. Match PR updates when a complete native match analysis finishes.
 
 ### Moves, errors, and statistics
 
@@ -104,9 +104,37 @@ Move history shows notation, player, dice, and localized equity loss to three de
 
 Checker rows show the played and best moves, their equities, and the loss. Cube rows include missed doubles and double, take, and drop decisions. Selecting a move number opens the corresponding board position. Game buttons in **Statistics** open that game, and changing a decision filter restarts pagination. Native PR uses GNUbg job statistics. New jobs save complete per-game statistics atomically. Older jobs can show totals reconstructed from their decisions, with per-game PR shown as unavailable where it was never saved.
 
+### Candidate comparison and decision review
+
+Candidate tables share a compact layout for local, imported and opening-book results.
+They identify the best and played moves separately from the current preview, show
+comparable loss to the best result, and show win and loss probabilities for the
+total and for each separate outcome: single, gammon, and backgammon. Win is on
+top and loss below within each cell. Percentages use one decimal place. Missing
+or inconsistent probabilities appear as dashes.
+Equity differences stay within the same source and known equity unit; MWC differences
+use percentage points. Unknown or incompatible values remain unavailable. Engine,
+depth, unit and player perspective stay visible, including differing candidate depths.
+
+The decision list and **Next error** also work without a local analysis job. Review
+pages use saved local game checkpoints from the selected job and imported evaluations
+for games not covered by that job. Each decision identifies its source and depth;
+filters and pagination apply to those reviewed decisions. Imported evaluations do not
+supply native GNUbg PR or imply a complete native match analysis. Source cube decisions
+can open their original board and analysis in the move dialog. Next error cycles
+through the selected game's matching decisions and wraps to the beginning; changing
+selection or filters cancels pending navigation.
+
+`GET /api/matches/{id}/review-decisions` supplies this paginated view. Only
+evaluations with known units and a validated decision context enter imported
+review. GNUbg SGF checker evaluations are supported; SGF cube records without
+unambiguous units and perspective remain visible in their original source view
+but are excluded from the combined error list. Missed-double dialogs use the
+validated position before the roll, rather than the following checker move.
+
 ### Preview a move
 
-**Initial**, **Arrows**, and **Final** show the starting position, the move path, and the resulting position. The default view uses outlined green arrows for the played move and shows legal intermediate points. Select a candidate row from an import, BackgammonDB, or local analysis to preview it. Use Enter or Space on the move name. Up/Down selects the previous or next candidate and keeps it in view. Left shows **Initial**, Right shows **Final**, and other controls keep their normal keyboard behavior. The selected board view persists when changing candidates. **Reset preview** returns to the recorded move.
+**Initial**, **Arrows** (German: **Pfeile**), and **Final** show the starting position, the move path, and the resulting position. The default view uses outlined green arrows for the played move and shows legal intermediate points. Select a candidate row from an import, BackgammonDB, or local analysis to preview it. Use Enter or Space on the move name. Up/Down selects the previous or next candidate and keeps it in view. Left shows **Initial**, Right shows **Final**, and other controls keep their normal keyboard behavior. The selected board view persists when changing candidates. **Reset preview** returns to the recorded move.
 
 The board identifies the candidate source and rank. **Final** keeps the board orientation and hides the dice. All themes use the same legality checks for bar entry, hits, multi-step moves, doubles, and bear-off. Unrecognized or illegal notation shows the starting position. Analysis, notes, position IDs, and study cards continue to use the pre-move decision. Changing position or source clears the previous candidate preview.
 
@@ -117,6 +145,19 @@ In Analysis, **Save position** and the magnifying glass share a toolbar above th
 Select **Search this position** to open Match database and run an exact search for the displayed position. The position ID appears in the expanded search form and as an active filter. The action selects **All databases**, clears the other filters, and keeps the current sort order. Selecting the action again reruns the search. Switching tabs preserves any subsequent decision to remove the filter.
 
 ### Desktop layout
+
+**Overview** pairs a compact board with a wider candidate table and places the
+error list directly below both. Open **Statistics** for native match and game
+statistics. Switching tabs keeps the selected game and move.
+
+Drag the divider beside the board to resize it in **Overview**, **Statistics**,
+**Errors**, **Notes**, or **Study cards**. The divider also accepts Left/Right
+arrows, with Shift for larger steps. Double-click or Enter restores the default
+for the current view. The profile stores an independent width for **Overview**
+and a shared width for the four detail tabs. Overview limits the board to leave
+room for the error list below. The other tabs can use the full available height.
+Existing saved widths apply to the detail tabs, and Overview starts at its
+compact default until resized.
 
 The desktop layout is designed for side-by-side review using a mouse or keyboard. Layout checks use logical viewports of 1800×1169, 2560×1440, and 3840×2160, including under macOS **More Space**. The shared type scale uses 24 px page titles, 14 px section titles, 13 px controls and body text, and 12 px tables. CSS tokens define the type scale, with monospace for position IDs and separate type for the board and logo. [Typography](docs/typography.md)
 
@@ -468,7 +509,7 @@ The overview shows date, match name, score and match length, play mode, learning
 
 The dialog uses the same title grip and keyboard behavior as **Hint**. Summary statistics sit above the scrollable decisions and attempts. On short screens the full report scrolls below the title. **Close** or Escape returns focus to the control that opened it.
 
-Select a decision to see the original position and the saved recommendation. The board uses your chosen theme. **Initial**, **Arrows**, and **Final** show the starting position, move arrows, and projected result. Use the arrow keys or Home/End to move through decisions, and Enter or Space to select one. On narrow screens the preview is brought into view. **Decisions and attempts** returns you to the selected row.
+Select a decision to see the original position and the saved recommendation. The board uses your chosen theme. **Initial**, **Arrows** (German: **Pfeile**), and **Final** show the starting position, move arrows, and projected result. Use the arrow keys or Home/End to move through decisions, and Enter or Space to select one. On narrow screens the preview is brought into view. **Decisions and attempts** returns you to the selected row.
 
 Checker decisions are matched by game, color, dice, and native checker decision number. A pre-roll no-double decision shows the board with no dice. Cube actions show their original cube context and the recommended action. Missing positions and moves that cannot be projected legally are marked. The first selection loads the versioned archived positions, which later selections reuse. Previewing requires neither a library entry nor a new engine job.
 

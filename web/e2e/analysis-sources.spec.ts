@@ -124,7 +124,7 @@ test('opening-book preferences and a real opening lookup expose source and depth
       r.request().method() === 'POST',
   );
   await page
-    .getByRole('button', { name: 'Dice distribution', exact: true })
+    .getByRole('tab', { name: 'Dice equity', exact: true })
     .click();
   const diceJob = await (await submitted).json();
   await expect(page.locator('.dice-grid button')).toHaveCount(36, {

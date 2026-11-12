@@ -437,7 +437,7 @@ test('hides pre-start estimate during submission and queued engine work', async 
   await page.route('**/api/jobs/fixture-queued/statistics', (route) =>
     route.fulfill({ json: { job_id: job.id, games: [], summary: null } }),
   );
-  await page.route('**/api/jobs/fixture-queued/moves?*', (route) =>
+  await page.route('**/api/matches/*/review-decisions?*', (route) =>
     route.fulfill({ json: { items: [], next_cursor: null } }),
   );
   await page.route('**/api/jobs/fixture-queued/events', (route) =>

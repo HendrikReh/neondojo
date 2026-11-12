@@ -1,10 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { request } from './api';
 import type { SourceAnalysis } from './source-analysis-api';
 import SourceAnalysisView from './SourceAnalysisView';
 import { useSourceText } from './analysis-source-messages';
 import { useI18n } from './i18n';
-export default function ImportedMoveAnalysis({ moveId }: { moveId: string }) {
+export default function ImportedMoveAnalysis({
+  moveId,
+  decisionKind,
+}: {
+  moveId: string;
+  decisionKind?: 'checker' | 'cube';
+}) {
   const l = useSourceText(),
     { formatError } = useI18n();
   const [state, setState] = useState<{
@@ -12,6 +18,13 @@ export default function ImportedMoveAnalysis({ moveId }: { moveId: string }) {
     records: SourceAnalysis[];
     error?: unknown;
   }>({ id: moveId, records: [] });
+  const records = useMemo(
+    () =>
+      decisionKind
+        ? state.records.filter((record) => record.kind === decisionKind)
+        : state.records,
+    [state.records, decisionKind],
+  );
   useEffect(() => {
     const abort = new AbortController();
     setState({ id: moveId, records: [] });
@@ -33,10 +46,10 @@ export default function ImportedMoveAnalysis({ moveId }: { moveId: string }) {
         {formatError(state.error)}
       </p>
     );
-  return state.records.length ? (
+  return records.length ? (
     <section className="imported-move-analysis">
       <h3>{l('imported')}</h3>
-      <SourceAnalysisView records={state.records} source="file" />
+      <SourceAnalysisView records={records} source="file" />
     </section>
   ) : null;
 }

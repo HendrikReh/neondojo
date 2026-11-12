@@ -419,10 +419,10 @@ for (const plies of [3, 4]) {
                 )),
         );
         await page
-          .getByRole('button', {
+          .getByRole(scope === 'dice' ? 'tab' : 'button', {
             name:
               scope === 'dice'
-                ? 'Dice distribution'
+                ? 'Dice equity'
                 : scope === 'game'
                   ? 'Analyze game'
                   : 'Analyze entire match',

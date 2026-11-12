@@ -208,7 +208,7 @@ async fn assessments(
     }))
 }
 
-fn rounded_loss(played: f64, best: f64) -> Option<f64> {
+pub(crate) fn rounded_loss(played: f64, best: f64) -> Option<f64> {
     let loss = ((best - played) * 1_000_000.0).round() / 1_000_000.0;
     (played.is_finite() && best.is_finite() && loss.is_finite() && loss >= 0.0).then_some(loss)
 }

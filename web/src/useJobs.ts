@@ -1,5 +1,5 @@
 import { useOptionalConfiguration } from './ConfigurationProvider';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { request, terminal, mergeJob, type Job } from './api';
 
 export type Jobs = Partial<Record<'analysis' | 'dice', Job>>;
@@ -27,11 +27,14 @@ export function useJobs(
     engineId === 'gnubg' ? positionId : `${positionId}.${engineId}`;
   const [jobs, setJobs] = useState<Jobs>({});
   const [revision, setRevision] = useState(0);
+  const restoreKey = JSON.stringify([storageKey, revision]);
+  const [restoredKey, setRestoredKey] = useState<string>();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const currentPosition = useRef(storageKey);
   currentPosition.current = storageKey;
   useEffect(() => {
+    setRestoredKey(undefined);
     setJobs({});
     setError(null);
     setSubmitting(false);
@@ -39,6 +42,7 @@ export function useJobs(
     const abort = new AbortController();
     const streams: EventSource[] = [];
     const timers: ReturnType<typeof setInterval>[] = [];
+    const restorations: Promise<void>[] = [];
     for (const [kind, id] of Object.entries(saved(storageKey!))) {
       let stream: EventSource | undefined;
       let timer: ReturnType<typeof setInterval> | undefined;
@@ -66,34 +70,39 @@ export function useJobs(
           if (!abort.signal.aborted) setError(error);
         }
       };
-      void refresh().then((job) => {
-        if (!job || terminal(job) || abort.signal.aborted) return;
-        stream = new EventSource(`/api/jobs/${id}/events`);
-        streams.push(stream);
-        for (const event of [
-          'queued',
-          'running',
-          'progress',
-          'completed',
-          'failed',
-        ]) {
-          stream.addEventListener(event, () => {
+      restorations.push(
+        refresh().then((job) => {
+          if (!job || terminal(job) || abort.signal.aborted) return;
+          stream = new EventSource(`/api/jobs/${id}/events`);
+          streams.push(stream);
+          for (const event of [
+            'queued',
+            'running',
+            'progress',
+            'completed',
+            'failed',
+          ]) {
+            stream.addEventListener(event, () => {
+              void refresh();
+            });
+          }
+          // Polling also reconciles a terminal transition if a proxy closes SSE.
+          timer = setInterval(() => {
             void refresh();
-          });
-        }
-        // Polling also reconciles a terminal transition if a proxy closes SSE.
-        timer = setInterval(() => {
-          void refresh();
-        }, 3000);
-        timers.push(timer);
-      });
+          }, 3000);
+          timers.push(timer);
+        }),
+      );
     }
+    void Promise.all(restorations).then(() => {
+      if (!abort.signal.aborted) setRestoredKey(restoreKey);
+    });
     return () => {
       abort.abort();
       streams.forEach((s) => s.close());
       timers.forEach(clearInterval);
     };
-  }, [positionId, storageKey, engineId, revision]);
+  }, [positionId, storageKey, engineId, restoreKey]);
 
   async function run(kind: 'analysis' | 'dice', plies: number) {
     if (!positionId) return;
@@ -126,5 +135,26 @@ export function useJobs(
       if (currentPosition.current === storageKey) setSubmitting(false);
     }
   }
-  return { jobs, run, submitting, error };
+  // A position/engine switch renders before the restoration effect runs.
+  // Never expose the previous scope's results during that render.
+  const currentJobs = useMemo(() => {
+    const current: Jobs = {};
+    for (const kind of ['analysis', 'dice'] as const) {
+      const job = jobs[kind];
+      if (
+        job &&
+        job.position_uuid === positionId &&
+        (job.engine_snapshot?.engine_id ?? 'gnubg') === engineId
+      )
+        current[kind] = job;
+    }
+    return current;
+  }, [jobs, positionId, engineId]);
+  return {
+    jobs: currentJobs,
+    run,
+    submitting,
+    error,
+    restoring: !!positionId && restoredKey !== restoreKey,
+  };
 }

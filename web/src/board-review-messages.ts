@@ -1,6 +1,22 @@
 import { useI18n, type Locale } from './i18n';
 import { interpolate, type TranslationParams } from './i18n-core';
 const entries = {
+  resizeBoard: [
+    'Resize analysis board',
+    'Brettgröße ändern',
+    'Cambiar tamaño del tablero',
+    'Redimensionner le plateau',
+    'Zmień rozmiar planszy',
+    'Ridimensiona tavola di analisi',
+  ],
+  resizeBoardHelp: [
+    'Drag or use Left/Right arrows. Shift changes faster. Double-click or Enter resets the width.',
+    'Ziehen oder Pfeiltasten links/rechts nutzen. Umschalt ändert schneller. Doppelklick oder Enter setzt die Breite zurück.',
+    'Arrastra o usa las flechas izquierda/derecha. Mayús cambia más rápido. Doble clic o Intro restablece el ancho.',
+    'Glissez ou utilisez les flèches gauche/droite. Maj accélère. Double-clic ou Entrée rétablit la largeur.',
+    'Przeciągnij lub użyj strzałek lewo/prawo. Shift przyspiesza. Dwuklik lub Enter przywraca szerokość.',
+    'Trascina o usa le frecce sinistra/destra. Maiusc accelera. Doppio clic o Invio ripristina la larghezza.',
+  ],
   pipsLabel: [
     '{white} {whitePips} pips, {black} {blackPips} pips',
     '{white} {whitePips} Pips, {black} {blackPips} Pips',
@@ -18,7 +34,7 @@ const entries = {
     'Vista della tavola',
   ],
   before: ['Initial', 'Initial', 'Initial', 'Initial', 'Initial', 'Initial'],
-  arrows: ['Arrows', 'Arrows', 'Arrows', 'Arrows', 'Arrows', 'Arrows'],
+  arrows: ['Arrows', 'Pfeile', 'Flechas', 'Flèches', 'Strzałki', 'Frecce'],
   after: ['Final', 'Final', 'Final', 'Final', 'Final', 'Final'],
   reset: [
     'Reset preview',

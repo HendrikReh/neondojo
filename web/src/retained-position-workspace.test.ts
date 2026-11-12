@@ -101,7 +101,13 @@ function props(
       openMatch: async () => false,
       resume: async () => {},
     },
-    jobs: { jobs: {}, error: null, submitting: false, run: async () => {} },
+    jobs: {
+      jobs: {},
+      error: null,
+      submitting: false,
+      restoring: false,
+      run: async () => {},
+    },
     theme: 'forest',
     defaultPlies: 2,
     sourceRevision: 0,
@@ -149,6 +155,7 @@ it('keeps individual review and saved-game navigation while unmounting match ana
   expect(html).not.toContain('data-full-match-analysis');
   expect(html).not.toContain('class="workspace-analysis-command"');
   expect(html).not.toContain('class="next-error"');
+  expect(html).not.toContain('id="inspector-tab-evaluation"');
   expect(html).not.toContain('id="inspector-tab-statistics"');
   expect(html).not.toContain('id="inspector-tab-errors"');
   expect(useMoveAssessments).toHaveBeenCalledWith(
@@ -168,7 +175,7 @@ it.each(['statistics', 'errors'] as const)(
   },
 );
 
-it.each(['notes', 'cards', 'evaluation'] as const)(
+it.each(['notes', 'cards'] as const)(
   'preserves the selected %s view',
   (detail) => {
     const html = render(detail);

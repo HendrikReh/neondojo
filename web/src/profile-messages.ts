@@ -609,6 +609,22 @@ const rows = {
     'Anteprima tavoliere',
     'Podgląd planszy',
   ],
+  analysis_board_width: [
+    'Board width in analysis details',
+    'Brettbreite in den Detail-Tabs',
+    'Ancho del tablero en los detalles del análisis',
+    'Largeur du plateau dans les détails de l’analyse',
+    'Larghezza della tavola nei dettagli dell’analisi',
+    'Szerokość planszy w szczegółach analizy',
+  ],
+  analysis_overview_board_width: [
+    'Board width in analysis overview',
+    'Brettbreite in der Übersicht',
+    'Ancho del tablero en la vista general del análisis',
+    'Largeur du plateau dans la vue d’ensemble de l’analyse',
+    'Larghezza della tavola nella panoramica dell’analisi',
+    'Szerokość planszy w przeglądzie analizy',
+  ],
   provider: [
     'Provider',
     'Anbieter',

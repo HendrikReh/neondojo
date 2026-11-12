@@ -133,6 +133,13 @@ for (const source of ['engine', 'file', 'book'] as const)
             depth: '2-ply',
             candidates: candidates.map((c) => ({
               ...c,
+              probabilities: {
+                win: c.probabilities[0],
+                win_gammon: c.probabilities[1],
+                win_backgammon: c.probabilities[2],
+                lose_gammon: c.probabilities[4],
+                lose_backgammon: c.probabilities[5],
+              },
               equity_kind: 'cubeful',
               depth: '2-ply',
               raw: {},
@@ -147,6 +154,13 @@ for (const source of ['engine', 'file', 'book'] as const)
         json: {
           provider: 'backgammondb',
           hit: true,
+          provenance: {
+            provider: 'backgammondb',
+            engine: 'GNUbg',
+            evaluation_kind: 'evaluation',
+            equity_kind: 'normalized_cubeful',
+            context: 'money',
+          },
           cube: null,
           checker: { plies: 3, candidates },
         },
@@ -181,7 +195,35 @@ for (const source of ['engine', 'file', 'book'] as const)
         : page.locator('.source-analysis');
     const rows = panel.locator('.candidates tbody tr');
     await expect(rows).toHaveCount(2);
-    for (let column = 0; column < 4; column++) {
+    await expect(
+      panel.getByRole('columnheader', { name: 'Loss', exact: true }),
+    ).toBeVisible();
+    await expect(rows.first()).toHaveAttribute('data-candidate-best', 'true');
+    await expect(rows.first()).toHaveAttribute('data-candidate-played', 'true');
+    await expect(rows.last().locator('td').nth(3)).toHaveText('0.100');
+    await expect(rows.first().locator('[data-probability="win"]')).toHaveText([
+      '55.0%',
+      '45.0%',
+      '9.0%',
+      '1.0%',
+    ]);
+    await expect(rows.first().locator('[data-probability="loss"]')).toHaveText([
+      '45.0%',
+      '37.0%',
+      '7.0%',
+      '1.0%',
+    ]);
+    await expect(
+      rows.last().locator('td[data-outcome="total"] [data-probability="win"]'),
+    ).toHaveText('52.0%');
+    await expect(panel.locator('.candidate-metadata')).toContainText(
+      source === 'book' ? 'Normalized cubeful' : 'Cubeful',
+    );
+    await expect(panel.locator('.candidate-metadata')).toContainText('Player');
+    await expect(
+      page.locator('.board a[href*="bgblitz.com/themes.html"]'),
+    ).toHaveCount(0);
+    for (let column = 0; column < 8; column++) {
       const rank = (column % 2) + 1;
       await rows
         .nth(rank - 1)
@@ -214,6 +256,16 @@ for (const source of ['engine', 'file', 'book'] as const)
       .getByRole('button', { name: /^Preview move 2:/ });
     await second.focus();
     await page.keyboard.press(' ');
+    await expect(rows.last().locator('.candidate-marker-preview')).toHaveText(
+      'Preview',
+    );
+    await expect(rows.first().locator('.candidate-marker-best')).toHaveText(
+      'Best',
+    );
+    await expect(rows.first().locator('.candidate-marker-played')).toHaveText(
+      'Played',
+    );
+    await expect(rows.first()).not.toHaveClass(/best-move/);
     await expect(page.locator('.board-review-selection')).toContainText(
       'Candidate 2',
     );
@@ -354,6 +406,17 @@ for (const source of ['engine', 'file', 'book'] as const)
     await expect(playedMove).toContainText('8/5 6/5');
     await expect(page.locator('.board-review-selection')).toHaveCount(0);
     await expect(board).toHaveAttribute('data-preview-mode', 'after');
+    for (const [width, height] of [
+      [1800, 1169],
+      [2560, 1440],
+      [3840, 2160],
+    ]) {
+      await page.setViewportSize({ width, height });
+      await expect(rows.last().locator('td').last()).toBeInViewport();
+      await page.screenshot({
+        path: `/tmp/bgtutor-candidates-${source}-${width}.png`,
+      });
+    }
     await expect(board.locator('[data-point="13"]')).toHaveAttribute(
       'data-count',
       '5',

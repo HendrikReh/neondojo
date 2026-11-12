@@ -1,6 +1,14 @@
 import { useI18n } from './i18n';
 import { interpolate, type Locale, type TranslationParams } from './i18n-core';
 const rows = {
+  reviewSources: [
+    'Available evaluations · source and depth per decision',
+    'Verfügbare Bewertungen · Quelle und Tiefe je Entscheidung',
+    'Evaluaciones disponibles · fuente y profundidad por decisión',
+    'Évaluations disponibles · source et profondeur par décision',
+    'Dostępne oceny · źródło i głębokość przy każdej decyzji',
+    'Valutazioni disponibili · fonte e profondità per decisione',
+  ],
   decisionsByMove: [
     'Decisions by move',
     'Entscheidungen pro Zug',

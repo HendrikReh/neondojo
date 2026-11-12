@@ -115,56 +115,12 @@ pub(super) fn reconstruct(imported: Imported) -> Vec<SourceDecision> {
     // Reuse it so analysis-bearing SGFs are not parsed or loaded on every request.
     let mut moves = HashMap::new();
     for ImportedEvent { event, checker_ply } in imported.events {
-        let kind = match event.kind.as_str() {
-            "checker" => "checker",
-            "cube" => "cube",
-            _ => continue,
-        };
-        let Ok(dice) = <[i32; 2]>::try_from(event.dice.as_slice()) else {
-            continue;
-        };
-        let after_board = if kind == "checker" {
-            let position = crate::model::Position {
-                id: event.position_uuid.unwrap_or(Uuid::nil()),
-                match_uuid: event.match_uuid,
-                ordinal: checker_ply.unwrap_or(event.move_no),
-                game_no: event.game_no,
-                ply: checker_ply.unwrap_or(0),
-                player: event.player,
-                dice: event.dice.clone(),
-                board: event.board.clone(),
-                position_id: event.position_id.clone(),
-                gnubg_match_id: event.gnubg_match_id.clone(),
-                notation: String::new(),
-            };
-            let Some(board) = crate::move_assessments::after_play(&position, &event.notation)
-            else {
-                continue;
-            };
-            board.to_vec()
-        } else {
-            event.board.clone()
-        };
-        moves.insert(
-            (event.match_uuid, event.game_no, event.move_no),
-            (
-                event.position_uuid,
-                crate::import::sgf::SourceMove {
-                    game_no: event.game_no,
-                    move_no: event.move_no,
-                    kind,
-                    player: event.player,
-                    notation: event.notation,
-                    checker_ply,
-                    board: event.board,
-                    dice,
-                    position_id: event.position_id,
-                    match_id: event.gnubg_match_id,
-                    after_board,
-                    after_match_id: String::new(),
-                },
-            ),
-        );
+        if let Some(source) = imported_projection::source_move(&event, checker_ply) {
+            moves.insert(
+                (event.match_uuid, event.game_no, event.move_no),
+                (event.position_uuid, source),
+            );
+        }
     }
     let mut by_game = HashMap::<_, Vec<_>>::new();
     for row in imported.rows {

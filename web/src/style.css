@@ -838,19 +838,6 @@ main {
 .candidates td:nth-child(2) {
   font-weight: var(--font-weight-medium);
 }
-.candidates tr.best-move {
-  background: var(--ui-selected);
-}
-.best-label {
-  font-size: var(--font-size-label);
-  color: var(--ui-success-text);
-  border: 1px solid var(--ui-success-text);
-  padding: 2px 5px;
-  border-radius: 3px;
-  margin-left: 13px;
-  letter-spacing: 0.5px;
-  white-space: nowrap;
-}
 .fineprint {
   font-size: var(--font-size-micro);
   color: var(--ui-muted);
@@ -1177,9 +1164,6 @@ progress::-webkit-progress-value {
   }
   .analysis-panel {
     padding: 20px 18px 8px;
-  }
-  .best-label {
-    display: none;
   }
 }
 @media (max-width: 850px) {
@@ -1655,13 +1639,6 @@ progress::-webkit-progress-value {
 .bgblitz-board {
   border-radius: 5px;
   background: #22362b;
-}
-.theme-credit {
-  display: block;
-  font-size: var(--font-size-micro);
-  text-align: right;
-  padding: 0 0 7px;
-  color: var(--ui-muted);
 }
 .theme-load-error {
   font-size: var(--font-size-table);

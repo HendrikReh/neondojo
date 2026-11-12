@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
   type KeyboardEvent,
+  type CSSProperties,
 } from 'react';
 import Board, { type Theme } from './Board';
 import BoardReviewControls from './BoardReviewControls';
@@ -22,7 +23,9 @@ import MatchAnalysisPanel from './MatchAnalysisPanel';
 import NotesPanel from './NotesPanel';
 import GameSelector from './GameSelector';
 import { AddCardsPanel } from './LearningPanel';
-import { request, type Job, type MoveAnalysisPage } from './api';
+import { type Job } from './api';
+import { reviewDecisions, type ReviewDecision } from './review-decisions-api';
+import { statisticsRevision } from './match-statistics-api';
 import { useGameNavigation } from './useGameNavigation';
 import { useJobs } from './useJobs';
 import { useI18n } from './i18n';
@@ -38,12 +41,13 @@ import './retained-position.css';
 import GamePlanPanel from './GamePlanPanel';
 import { displayedBoardPosition } from './displayed-board';
 import { usePositionText } from './position-browser-messages';
+import type { MoveNotesTarget } from './MoveNotesDialog';
+import { useAnalysisBoardResize } from './useAnalysisBoardResize';
 
 export type AnalysisDetail =
-  'overview' | 'evaluation' | 'statistics' | 'errors' | 'notes' | 'cards';
+  'overview' | 'statistics' | 'errors' | 'notes' | 'cards';
 const detailTabs: AnalysisDetail[] = [
   'overview',
-  'evaluation',
   'statistics',
   'errors',
   'notes',
@@ -93,7 +97,7 @@ export default function AnalysisWorkspace({
   onFindSimilar: () => void;
   onTrackJob: (job: Job | undefined) => void;
   onNotesSaved: () => void;
-  onMoveNotes: () => void;
+  onMoveNotes: (target?: Omit<MoveNotesTarget, 'match'>) => void;
   notesSuspended: boolean;
   deckRevision: number;
   onDeckChanged: () => void;
@@ -123,11 +127,25 @@ export default function AnalysisWorkspace({
     null,
   );
   const overview = detail === 'overview';
+  const analysisGrid = useRef<HTMLDivElement>(null);
+  const boardResize = useAnalysisBoardResize(
+    analysisGrid,
+    active && !!match,
+    overview,
+  );
+  const gridStyle: CSSProperties & { '--analysis-board-width': string } = {
+    '--analysis-board-width': `${boardResize.width}px`,
+  };
   const [matchJob, setMatchJob] = useState<Job>();
+  const reviewJob =
+    matchJob?.match_uuid === match?.id &&
+    (matchJob?.game_no == null || matchJob.game_no === game?.game_no)
+      ? matchJob
+      : undefined;
   const moveAssessments = useMoveAssessments({
     matchId: sourceAvailable ? match?.id : undefined,
     gameNo: game?.game_no,
-    job: matchJob,
+    job: reviewJob,
     analysisRevision,
   });
   const moveList = useRef<HTMLDivElement>(null);
@@ -186,6 +204,47 @@ export default function AnalysisWorkspace({
 
   const [nextErrorFailure, setNextErrorFailure] = useState<unknown>();
   const [noErrors, setNoErrors] = useState(false);
+  const [findingError, setFindingError] = useState(false);
+  const [reviewSelection, setReviewSelection] = useState<{
+    id: string;
+    positionId?: string;
+    scope: string;
+  }>();
+  const [preferredSource, setPreferredSource] = useState<{
+    positionId: string;
+    source: 'file' | 'engine';
+    token: number;
+  }>();
+  const reviewScope = `${match?.id}:${game?.game_no}:${reviewJob ? statisticsRevision(reviewJob) : ''}:${moveFilter.player}:${moveFilter.kind}:${moveFilter.severity}:${moveFilter.game_no}`;
+  const errorIdentity = `${reviewScope}:${position?.id}:${active}:${notesSuspended}`;
+  const currentErrorIdentity = useRef(errorIdentity);
+  currentErrorIdentity.current = errorIdentity;
+  function openReviewDecision(row: ReviewDecision) {
+    setReviewSelection({
+      id: row.id,
+      positionId:
+        row.kind === 'cube' && row.move_id
+          ? position?.id
+          : (row.position_uuid ?? position?.id),
+      scope: reviewScope,
+    });
+    if (row.kind === 'cube' && row.move_id) {
+      onMoveNotes({
+        gameNo: row.game_no,
+        moveId: row.move_id,
+        decisionKind: 'cube',
+        reviewPosition: row.review_position ?? undefined,
+        reviewPlayed: row.played,
+      });
+    } else if (row.position_uuid) {
+      setPreferredSource({
+        positionId: row.position_uuid,
+        source: row.source === 'imported' ? 'file' : 'engine',
+        token: Date.now(),
+      });
+      onPosition(row.position_uuid);
+    }
+  }
   const tabRefs = useRef<
     Partial<Record<AnalysisDetail, HTMLButtonElement | null>>
   >({});
@@ -208,61 +267,67 @@ export default function AnalysisWorkspace({
   useEffect(() => {
     setNoErrors(false);
     setNextErrorFailure(undefined);
+    setFindingError(false);
     return () => errorRequest.current?.abort();
-  }, [
-    match?.id,
-    game?.game_no,
-    position?.id,
-    matchJob?.id,
-    moveFilter.player,
-    moveFilter.kind,
-    moveFilter.severity,
-    moveFilter.game_no,
-  ]);
+  }, [errorIdentity]);
   async function nextError() {
     setNextErrorFailure(undefined);
     setNoErrors(false);
-    if (!overview) onDetail('errors');
-    if (
-      !matchJob ||
-      !sourceAvailable ||
-      !match ||
-      !game ||
-      moveFilter.kind === 'cube' ||
-      matchJob.match_uuid !== match.id ||
-      (matchJob.game_no != null && matchJob.game_no !== game.game_no)
-    ) {
-      setNoErrors(true);
-      return;
-    }
+    if (!sourceAvailable || !match || !game) return;
     errorRequest.current?.abort();
     const abort = new AbortController();
     errorRequest.current = abort;
-    const wantedGame = moveFilter.game_no ?? game.game_no;
+    const identity = errorIdentity;
+    const current = () =>
+      !abort.signal.aborted && currentErrorIdentity.current === identity;
+    setFindingError(true);
+    const anchor =
+      reviewSelection?.scope === reviewScope &&
+      reviewSelection.positionId === position?.id
+        ? reviewSelection.id
+        : undefined;
     try {
-      let after: number | null = null;
-      let first: string | undefined;
+      let after: string | null = null;
+      let first: ReviewDecision | undefined;
+      let passedAnchor = false;
       do {
-        const page: MoveAnalysisPage = await request(
-          `/jobs/${matchJob.id}/moves?errors_only=true&kind=checker${moveFilter.player ? `&player=${moveFilter.player}` : ''}${moveFilter.severity ? `&severity=${moveFilter.severity}` : ''}&game_no=${wantedGame}&limit=100${after ? `&after=${after}` : ''}`,
-          { signal: abort.signal },
+        const page = await reviewDecisions(
+          match.id,
+          {
+            ...moveFilter,
+            errors_only: true,
+            game_no: moveFilter.game_no ?? game.game_no,
+          },
+          { jobId: reviewJob?.id, after, limit: 100, signal: abort.signal },
         );
-        if (abort.signal.aborted) return;
+        if (!current()) return;
         for (const row of page.items) {
-          if (!row.position_uuid) continue;
-          first ??= row.position_uuid;
-          const target = positions.findIndex((p) => p.id === row.position_uuid);
-          if (target > index) {
-            onPosition(row.position_uuid);
+          if (!row.position_uuid && !row.move_id) continue;
+          first ??= row;
+          if (
+            passedAnchor ||
+            (!anchor &&
+              row.checker_no != null &&
+              row.checker_no > (position?.ply ?? 0))
+          ) {
+            openReviewDecision(row);
             return;
           }
+          if (
+            anchor
+              ? row.id === anchor
+              : row.position_uuid === position?.id && row.kind === 'checker'
+          )
+            passedAnchor = true;
         }
         after = page.next_cursor ?? null;
       } while (after);
-      if (first) onPosition(first);
+      if (first) openReviewDecision(first);
       else setNoErrors(true);
     } catch (e) {
-      if (!abort.signal.aborted) setNextErrorFailure(e);
+      if (current()) setNextErrorFailure(e);
+    } finally {
+      if (current()) setFindingError(false);
     }
   }
   if (!match)
@@ -318,7 +383,9 @@ export default function AnalysisWorkspace({
         ))}
       </div>
       <div
-        className="analysis-grid"
+        className={`analysis-grid${boardResize.dragging ? ' analysis-resizing' : ''}`}
+        ref={analysisGrid}
+        style={gridStyle}
         id="inspector-panel-overview"
         role={overview ? 'tabpanel' : undefined}
         aria-labelledby={overview ? 'inspector-tab-overview' : undefined}
@@ -360,7 +427,7 @@ export default function AnalysisWorkspace({
                 label={w('nextError')}
                 className="next-error"
                 onClick={() => void nextError()}
-                disabled={!matchJob || !game}
+                disabled={!game || loading || findingError}
               />
               {noErrors && <p role="status">{w('noErrors')}</p>}
               {!!nextErrorFailure && (
@@ -369,7 +436,7 @@ export default function AnalysisWorkspace({
             </>
           )}
         </aside>
-        <section className="board-panel">
+        <section className="board-panel" id="analysis-board-panel">
           {position ? (
             <>
               <div className="board-heading">
@@ -492,13 +559,13 @@ export default function AnalysisWorkspace({
             </div>
           )}
         </section>
+        {boardResize.handle}
         <aside className="position-inspector">
           <div
-            id="inspector-panel-evaluation"
-            className={overview ? 'overview-evaluation' : undefined}
-            role={overview ? 'region' : 'tabpanel'}
-            aria-labelledby="inspector-tab-evaluation"
-            hidden={!overview && detail !== 'evaluation'}
+            className="overview-evaluation"
+            role="region"
+            aria-label={w('evaluation')}
+            hidden={!overview}
           >
             {!!jobs.error && (
               <p className="error" role="alert">
@@ -507,10 +574,21 @@ export default function AnalysisWorkspace({
             )}
             <AnalysisPanel
               jobs={jobs.jobs}
+              restoring={jobs.restoring}
+              active={active && overview}
               stats={sourceAvailable ? stats : null}
               gameNo={game?.game_no}
               defaultPlies={defaultPlies}
               positionId={position?.id}
+              position={position ?? undefined}
+              playerName={
+                position
+                  ? position.player === 0
+                    ? match.white
+                    : match.black
+                  : undefined
+              }
+              preferredSource={preferredSource}
               sourceRevision={sourceRevision}
               onPreview={onPreview}
               selectedPreview={selectedPreview}
@@ -529,12 +607,11 @@ export default function AnalysisWorkspace({
               detail={detail}
               target={commandTarget}
               onPosition={onPosition}
+              onDecision={openReviewDecision}
               onTrackJob={onTrackJob}
               onCurrentJob={setMatchJob}
               onFilterChange={setMoveFilter}
-              onShowErrors={() => {
-                if (!overview) onDetail('errors');
-              }}
+              onShowErrors={() => onDetail('errors')}
               selectedPositionId={position?.id}
             />
           )}
@@ -585,6 +662,7 @@ function MatchResults({
   detail,
   target,
   onPosition,
+  onDecision,
   onTrackJob,
   onCurrentJob,
   onFilterChange,
@@ -600,6 +678,7 @@ function MatchResults({
   detail: AnalysisDetail;
   target: HTMLElement | null;
   onPosition: (id: string) => void;
+  onDecision: (decision: ReviewDecision) => void;
   onTrackJob: (job: Job | undefined) => void;
   onCurrentJob: (job: Job | undefined) => void;
   onFilterChange: (filter: {
@@ -628,6 +707,8 @@ function MatchResults({
       <MatchAnalysisPanel
         key={navigation.match!.id}
         match={navigation.match!}
+        games={navigation.games}
+        onDecision={onDecision}
         gameNo={navigation.game?.game_no}
         defaultPlies={defaultPlies}
         configured={configured}
@@ -636,7 +717,7 @@ function MatchResults({
         overview={detail === 'overview'}
         selectedPositionId={selectedPositionId}
         showResults={detail === 'overview' || detail === 'errors'}
-        showStatistics={detail === 'overview' || detail === 'statistics'}
+        showStatistics={detail === 'statistics'}
         onShowErrors={onShowErrors}
         onGame={(number) => void navigation.selectGame(number)}
         onJob={onJob}

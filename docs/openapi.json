@@ -3802,6 +3802,130 @@
         }
       }
     },
+    "/api/matches/{id}/review-decisions": {
+      "get": {
+        "tags": [
+          "Match analysis"
+        ],
+        "operationId": "review",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "job_id",
+            "in": "query",
+            "description": "Optional pinned match-analysis job; imported data covers its uncheckpointed games.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "game_no",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "player",
+            "in": "query",
+            "description": "0 = White, 1 = Black.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "description": "checker or cube.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "severity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/MoveSeverity"
+            }
+          },
+          {
+            "name": "errors_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "1–100, default 50.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "description": "Opaque continuation; preserve filters. Restart if the job's checkpoints change.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewDecisionPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/matches/{id}/source": {
       "get": {
         "tags": [
@@ -8515,6 +8639,22 @@
           "board_view"
         ],
         "properties": {
+          "analysis_board_width": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Preferred board pane width in analysis detail tabs; null uses the responsive default."
+          },
+          "analysis_overview_board_width": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Preferred board pane width in the analysis overview; null uses the responsive default."
+          },
           "bearoff_direction": {
             "$ref": "#/components/schemas/ConfigurationDirection"
           },
@@ -13572,6 +13712,105 @@
           "total": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "ReviewDecision": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Decision"
+          },
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "game_no",
+              "source",
+              "engine"
+            ],
+            "properties": {
+              "depth": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "depth_plies": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "int32"
+              },
+              "engine": {
+                "type": "string"
+              },
+              "game_no": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "id": {
+                "type": "string",
+                "description": "Source-qualified identity, independent of pagination."
+              },
+              "job_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "move_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Actual source event for cube navigation; virtual no-double links its checker event."
+              },
+              "position_uuid": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "review_position": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Position",
+                    "description": "Exact source cube context, including pre-roll dice for a virtual no-double."
+                  }
+                ]
+              },
+              "source": {
+                "$ref": "#/components/schemas/AssessmentSource"
+              }
+            }
+          }
+        ]
+      },
+      "ReviewDecisionPage": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewDecision"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A bounded scan can return an empty page with a continuation. Follow it until null."
           }
         }
       },

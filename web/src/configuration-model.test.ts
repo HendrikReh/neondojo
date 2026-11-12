@@ -8,6 +8,37 @@ import {
 import vectors from '../../tests/fixtures/configuration-normalization.json';
 
 describe('configuration comparison', () => {
+  it('normalizes legacy and independently saved board widths', () => {
+    const legacy = structuredClone(vectors.base);
+    expect(normalizeConfiguration(legacy).appearance).toMatchObject({
+      analysis_board_width: null,
+      analysis_overview_board_width: null,
+    });
+    const appearance = { ...legacy.appearance, analysis_board_width: 540 };
+    expect(
+      normalizeConfiguration({ ...legacy, appearance }).appearance,
+    ).toMatchObject({
+      analysis_board_width: 540,
+      analysis_overview_board_width: null,
+    });
+    expect(
+      normalizeConfiguration({
+        ...legacy,
+        appearance: { ...appearance, analysis_overview_board_width: 360 },
+      }).appearance,
+    ).toMatchObject({
+      analysis_board_width: 540,
+      analysis_overview_board_width: 360,
+    });
+    for (const field of ['analysis_board_width', 'analysis_overview_board_width'])
+      for (const width of [0, 319, 961, 400.5, Number.NaN])
+        expect(() =>
+          normalizeConfiguration({
+            ...legacy,
+            appearance: { ...appearance, [field]: width },
+          }),
+        ).toThrow(`appearance.${field}`);
+  });
   it('supports independent verified Open Sage profiles and rejects unverified depths', () => {
     for (const area of ['analysis', 'play'] as const) {
       const current = structuredClone(defaultConfiguration);
@@ -16,7 +47,12 @@ describe('configuration comparison', () => {
         [area]: { ...current[area], engine: 'bgsage', plies: 2 },
       };
       expect(normalizeConfiguration(input)[area].engine).toBe('bgsage');
-      expect(normalizeConfiguration({ ...input, [area]: { ...input[area], plies: 1 } })[area].plies).toBe(1);
+      expect(
+        normalizeConfiguration({
+          ...input,
+          [area]: { ...input[area], plies: 1 },
+        })[area].plies,
+      ).toBe(1);
       for (const plies of [0, 3, 4])
         expect(() =>
           normalizeConfiguration({

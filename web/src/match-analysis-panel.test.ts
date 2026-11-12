@@ -57,10 +57,10 @@ it('keeps failed native-job progress and errors available on the statistics tab'
   expect(stats).toContain('analysis failed');
   expect(stats).toContain('role="status"');
 });
-it('shows progress once while overview exposes both results and statistics', () => {
-  const html = render(true, true);
+it('shows progress and the review list in the overview with statistics hidden', () => {
+  const html = render(false, true);
   expect(html).toContain('overview-errors');
-  expect(html).toContain('overview-statistics');
+  expect(html).toMatch(/id="inspector-panel-statistics"[^>]* hidden=""/);
   expect(html.match(/class="match-analysis-progress"/g)).toHaveLength(1);
   expect(html.match(/native failure/g)).toHaveLength(1);
   expect(html).toContain('aria-label="Filter by severity"');

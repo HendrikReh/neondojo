@@ -248,6 +248,23 @@
         "play.engine",
         "play.plies"
       ]
+    },
+    {
+      "name": "independent analysis board widths",
+      "changes": [
+        {
+          "path": "appearance.analysis_board_width",
+          "value": 540
+        },
+        {
+          "path": "appearance.analysis_overview_board_width",
+          "value": 360
+        }
+      ],
+      "expected_paths": [
+        "appearance.analysis_board_width",
+        "appearance.analysis_overview_board_width"
+      ]
     }
   ]
 }

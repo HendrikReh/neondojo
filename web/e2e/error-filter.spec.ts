@@ -53,9 +53,10 @@ test('error lists exclude good zero-loss decisions after reset and label explici
     .getByRole('button', { name: 'Reset filters', exact: true })
     .click();
   await assertErrors();
+  await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
   await page
     .locator(
-      '.overview-statistics .statistics-summary [data-statistics-metric="checker"]',
+      '.match-statistics .statistics-summary [data-statistics-metric="checker"]',
     )
     .first()
     .click();

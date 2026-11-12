@@ -40,6 +40,7 @@ vi.mock('react', async (original) => ({
   useMemo(factory: () => unknown) {
     return factory();
   },
+  useLayoutEffect() {},
   useEffect(effect: () => (() => void) | void, deps: unknown[]) {
     const index = hooks.index++;
     const previous = hooks.slots[index] as EffectSlot | undefined;
@@ -361,7 +362,13 @@ it('uses the real source occurrence beside review controls during candidate and 
       openMatch: async () => false,
       resume: async () => {},
     },
-    jobs: { jobs: {}, error: null, submitting: false, run: async () => {} },
+    jobs: {
+      jobs: {},
+      error: null,
+      submitting: false,
+      restoring: false,
+      run: async () => {},
+    },
     theme: 'forest',
     defaultPlies: 2,
     sourceRevision: 0,

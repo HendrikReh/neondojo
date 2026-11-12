@@ -122,7 +122,6 @@ export const de = {
   'analysis.fast': '0-ply · schnell',
   'analysis.accurate': '2-ply · genauer',
   'analysis.analyze': 'Position analysieren',
-  'analysis.distribution': 'Dice Distribution',
   'analysis.queued': 'Wartet auf GNUbg …',
   'analysis.diceRunning': 'Würfelpaare werden berechnet …',
   'analysis.movesRunning': 'Züge werden analysiert …',
@@ -148,7 +147,7 @@ export const de = {
     'Grün: über der mittleren Equity. Pasch zählt 1/36, andere Kombinationen 2/36. {plies}-ply.',
   'analysis.diceEmptyHeading': 'Was bringt der nächste Wurf?',
   'analysis.diceEmptyDescription':
-    '„Dice Distribution“ berechnet für diese Position alle Würfelpaare mit GNUbg.',
+    'Alle Würfelpaare werden bei Auswahl automatisch berechnet. Bei einem Fehler wähle „Würfel-Equity“ erneut, um es nochmals zu versuchen.',
   'analysis.observedMethod':
     '{count} aufgezeichnete Würfe dieser Partie. Häufigkeiten sind keine Equity-Analyse; Eröffnungswürfe enthalten keinen Pasch.',
   'analysis.selectMatch': 'Wähle eine Partie aus.',
@@ -345,7 +344,6 @@ export const en = {
   'analysis.fast': '0-ply · fast',
   'analysis.accurate': '2-ply · more accurate',
   'analysis.analyze': 'Analyze position',
-  'analysis.distribution': 'Dice distribution',
   'analysis.queued': 'Waiting for GNUbg …',
   'analysis.diceRunning': 'Calculating dice pairs …',
   'analysis.movesRunning': 'Analyzing moves …',
@@ -371,7 +369,7 @@ export const en = {
     'Green: above mean equity. Doubles count 1/36, other combinations 2/36. {plies}-ply.',
   'analysis.diceEmptyHeading': 'What will the next roll bring?',
   'analysis.diceEmptyDescription':
-    'Dice distribution uses GNUbg to calculate all dice pairs for this position.',
+    'All dice pairs are calculated automatically when selected. If an error occurs, select Dice equity again to retry.',
   'analysis.observedMethod':
     '{count} recorded rolls in this match. Frequencies are not an equity analysis; opening rolls contain no doubles.',
   'analysis.selectMatch': 'Select a match.',
@@ -563,7 +561,6 @@ export const es = {
   'analysis.fast': '0-ply · rápido',
   'analysis.accurate': '2-ply · más preciso',
   'analysis.analyze': 'Analizar posición',
-  'analysis.distribution': 'Distribución de dados',
   'analysis.queued': 'Esperando a GNUbg …',
   'analysis.diceRunning': 'Calculando pares de dados …',
   'analysis.movesRunning': 'Analizando jugadas …',
@@ -589,7 +586,7 @@ export const es = {
     'Verde: por encima de la equidad media. Los dobles cuentan 1/36; otras combinaciones, 2/36. {plies}-ply.',
   'analysis.diceEmptyHeading': '¿Qué traerá la próxima tirada?',
   'analysis.diceEmptyDescription':
-    'La distribución de dados calcula con GNUbg todos los pares de dados para esta posición.',
+    'Todos los pares de dados se calculan automáticamente al seleccionar esta vista. Si se produce un error, selecciona Equidad de los dados de nuevo para reintentar.',
   'analysis.observedMethod':
     '{count} tiradas registradas en esta partida. Las frecuencias no son un análisis de equidad; las tiradas iniciales no incluyen dobles.',
   'analysis.selectMatch': 'Selecciona una partida.',
@@ -784,7 +781,6 @@ export const fr = {
   'analysis.fast': '0-ply · rapide',
   'analysis.accurate': '2-ply · plus précis',
   'analysis.analyze': 'Analyser la position',
-  'analysis.distribution': 'Distribution des dés',
   'analysis.queued': 'En attente de GNUbg …',
   'analysis.diceRunning': 'Calcul des paires de dés …',
   'analysis.movesRunning': 'Analyse des coups …',
@@ -810,7 +806,7 @@ export const fr = {
     'Vert : au-dessus de l’équité moyenne. Les doubles comptent pour 1/36, les autres combinaisons pour 2/36. {plies}-ply.',
   'analysis.diceEmptyHeading': 'Que réserve le prochain jet ?',
   'analysis.diceEmptyDescription':
-    'La distribution des dés calcule avec GNUbg toutes les paires de dés pour cette position.',
+    'Toutes les paires de dés sont calculées automatiquement à la sélection. En cas d’erreur, sélectionnez à nouveau Équité des dés pour réessayer.',
   'analysis.observedMethod':
     '{count} jets enregistrés dans cette partie. Les fréquences ne sont pas une analyse d’équité ; les jets d’ouverture ne comportent pas de doubles.',
   'analysis.selectMatch': 'Sélectionnez une partie.',
@@ -1004,7 +1000,6 @@ export const pl = {
   'analysis.fast': '0-ply · szybko',
   'analysis.accurate': '2-ply · dokładniej',
   'analysis.analyze': 'Analizuj pozycję',
-  'analysis.distribution': 'Rozkład rzutów',
   'analysis.queued': 'Oczekiwanie na GNUbg …',
   'analysis.diceRunning': 'Obliczanie par kości …',
   'analysis.movesRunning': 'Analizowanie ruchów …',
@@ -1030,7 +1025,7 @@ export const pl = {
     'Zielony: powyżej średniej equity. Duble liczą się jako 1/36, inne kombinacje jako 2/36. {plies}-ply.',
   'analysis.diceEmptyHeading': 'Co przyniesie następny rzut?',
   'analysis.diceEmptyDescription':
-    'Rozkład rzutów oblicza z GNUbg wszystkie pary kości dla tej pozycji.',
+    'Wszystkie pary kości są obliczane automatycznie po wybraniu tego widoku. W razie błędu wybierz ponownie Equity rzutów, aby spróbować jeszcze raz.',
   'analysis.observedMethod':
     '{count} zapisanych rzutów w tym meczu. Częstości nie są analizą equity; rzuty otwarcia nie zawierają dubli.',
   'analysis.selectMatch': 'Wybierz mecz.',
@@ -1224,7 +1219,6 @@ export const it = {
   'analysis.fast': '0-ply · veloce',
   'analysis.accurate': '2-ply · più preciso',
   'analysis.analyze': 'Analizza posizione',
-  'analysis.distribution': 'Distribuzione dei dadi',
   'analysis.queued': 'In attesa di GNUbg …',
   'analysis.diceRunning': 'Calcolo delle coppie di dadi …',
   'analysis.movesRunning': 'Analisi delle mosse …',
@@ -1250,7 +1244,7 @@ export const it = {
     'Verde: sopra l’equity media. I doppi valgono 1/36, le altre combinazioni 2/36. {plies}-ply.',
   'analysis.diceEmptyHeading': 'Cosa porterà il prossimo lancio?',
   'analysis.diceEmptyDescription':
-    'La distribuzione dei dadi calcola con GNUbg tutte le coppie di dadi per questa posizione.',
+    'Tutte le coppie di dadi vengono calcolate automaticamente quando selezioni questa vista. In caso di errore, seleziona di nuovo Equity dei dadi per riprovare.',
   'analysis.observedMethod':
     '{count} lanci registrati in questa partita. Le frequenze non sono un’analisi dell’equity; i lanci iniziali non contengono doppi.',
   'analysis.selectMatch': 'Seleziona una partita.',

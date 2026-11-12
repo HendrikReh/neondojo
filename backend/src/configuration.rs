@@ -114,6 +114,12 @@ pub struct ConfigurationAppearance {
     pub board_theme: String,
     pub bearoff_direction: ConfigurationDirection,
     pub board_view: ConfigurationBoardView,
+    /// Preferred board pane width in analysis detail tabs; null uses the responsive default.
+    #[serde(default)]
+    pub analysis_board_width: Option<i32>,
+    /// Preferred board pane width in the analysis overview; null uses the responsive default.
+    #[serde(default)]
+    pub analysis_overview_board_width: Option<i32>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
@@ -501,6 +507,33 @@ pub struct ConfigurationDoc;
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn analysis_board_widths_are_optional_and_bounded() {
+        let fixture: Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/configuration-normalization.json"
+        ))
+        .unwrap();
+        let legacy: ProfileConfiguration = serde_json::from_value(fixture["base"].clone()).unwrap();
+        let legacy = serde_json::to_value(
+            validation::normalize(legacy).unwrap_or_else(|error| panic!("{}", error.1.error)),
+        )
+        .unwrap();
+        for field in ["analysis_board_width", "analysis_overview_board_width"] {
+            assert_eq!(legacy["appearance"].get(field), Some(&Value::Null));
+            for width in [320, 540, 960] {
+                let mut value = fixture["base"].clone();
+                value["appearance"][field] = serde_json::json!(width);
+                let decoded = serde_json::from_value(value).unwrap();
+                assert!(validation::normalize(decoded).is_ok());
+            }
+            for width in [0, 319, 961] {
+                let mut value = fixture["base"].clone();
+                value["appearance"][field] = serde_json::json!(width);
+                let decoded = serde_json::from_value(value).unwrap();
+                assert!(validation::normalize(decoded).is_err());
+            }
+        }
+    }
     #[test]
     fn independent_engines_accept_only_verified_sage_profiles() {
         let fixture: Value = serde_json::from_str(include_str!(

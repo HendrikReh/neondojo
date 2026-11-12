@@ -88,6 +88,7 @@
 }
 .statistics-games-table thead th {
   color: var(--ui-muted);
+  font-size: var(--font-size-table-heading);
 }
 .statistics-games-table th small {
   display: block;
@@ -96,6 +97,7 @@
   font-weight: var(--font-weight-normal);
 }
 .statistics-games-table .position-link {
+  font-size: var(--font-size-table);
   white-space: nowrap;
 }
 .statistics-player-compact {
@@ -205,23 +207,17 @@
 .match-statistics .statistics-player-compact .statistics-error-matrix {
   margin-top: 4px;
 }
-@media (min-width: 1280px) {
-  .analysis-workspace.analysis-overview
-    .match-statistics
-    .statistics-player-compact
-    .statistics-metrics
-    .statistics-metric {
-    flex-direction: column;
-    align-items: flex-start;
-    min-height: 38px;
-  }
-  .analysis-workspace.analysis-overview
-    .match-statistics
-    .statistics-player-compact
-    .statistics-metrics
-    .statistics-metric
-    span {
-    font-size: var(--font-size-micro);
-    line-height: 1.2;
-  }
+
+.review-source-note {
+  color: var(--ui-muted);
+  font-size: var(--font-size-meta);
+  margin: 0 0 8px;
+}
+.match-moves-table .review-provenance {
+  font-size: var(--font-size-meta);
+  min-width: 115px;
+}
+.match-moves-table .review-provenance small {
+  display: block;
+  color: var(--ui-muted);
 }
