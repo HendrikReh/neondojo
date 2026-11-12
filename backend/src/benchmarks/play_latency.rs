@@ -42,7 +42,7 @@ pub(super) fn reference() -> Result<PlayBenchmarkReference> {
 pub(super) fn reference_for(engine: &str) -> Result<PlayBenchmarkReference> {
     let mut value = reference()?;
     if engine == "bgsage" {
-        value.protocol_id = "bgsage-checker-turn-v2-2ply-2threads-gnubg-rules".into();
+        value.protocol_id = "bgsage-checker-turn-v3-2ply-2threads-gnubg-rules".into();
     }
     Ok(value)
 }

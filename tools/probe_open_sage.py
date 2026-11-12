@@ -81,21 +81,30 @@ def deny_network():
 
 
 def identity(sage, native):
+    # Model slots and bearoff can refer to assets already in the manifest.
+    # Reuse bytes only during this complete check, never across requests.
+    digests = {}
+    def checked_hash(path, label):
+        key = path.resolve()
+        if key not in digests:
+            digests[key] = hash_required_file(path, label)
+        return digests[key]
+
     package = Path(sage.__file__).parent
-    files = {str(p.relative_to(package)): hash_required_file(p, str(p.relative_to(package)))
+    files = {str(p.relative_to(package)): checked_hash(p, str(p.relative_to(package)))
              for p in sorted(package.rglob('*'))
              if p.is_file() and (p.suffix == '.py' or '_assets' in p.parts)}
     require(any(name.startswith('_assets/models/') for name in files),
             'Missing model assets. Reinstall from the locked wheels.')
     weights = sage.default_weights()
     for path in weights.weight_paths_list:
-        hash_required_file(Path(path), Path(path).name)
+        checked_hash(Path(path), Path(path).name)
     from bgsage.weights import bearoff_db_path
     bearoff = bearoff_db_path()
     require(bearoff is not None, 'Missing bearoff model. Reinstall from the locked wheels.')
-    hash_required_file(Path(bearoff), 'bearoff database')
+    checked_hash(Path(bearoff), 'bearoff database')
     native_path = Path(native.__file__)
-    files[native_path.name] = hash_required_file(native_path, native_path.name)
+    files[native_path.name] = checked_hash(native_path, native_path.name)
     records = {str(file): file.hash for file in importlib.metadata.distribution('bgsage').files or []}
     for label, file_digest in files.items():
         record = records.get(label if label == native_path.name else 'bgsage/' + label)

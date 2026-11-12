@@ -1,6 +1,7 @@
 //! Sage chooses actions; GNUbg alone executes rules, rolls dice and scores games.
 use super::{
-    NativeRequest, NativeSnapshot, PlayAlternative, PlayMove, PlayPhase, PlaySession, run_native,
+    NativeRequest, NativeSnapshot, PlayAlternative, PlayMove, PlayPhase, PlaySession,
+    rules_process::RulesProcess,
 };
 use crate::{engine::Engine, engines::SageEngine};
 use anyhow::{Context, Result, ensure};
@@ -98,9 +99,10 @@ pub(super) async fn advance(
             notation,
             resign_level,
         };
-        let (mut snapshot, mut sgf) =
-            run_native(rules, &request, previous.map(|(sgf, _)| sgf)).await?;
+        let process = RulesProcess::start(rules, previous.map(|(sgf, _)| sgf)).await?;
+        let (mut process, mut snapshot, mut sgf) = process.execute(&request).await?;
         if action == "opening_roll" || snapshot.resignation_declined {
+            process.finish().await?;
             return Ok((snapshot, sgf));
         }
         // A pass can leave the bot on roll again after a blocked human turn, but
@@ -109,6 +111,7 @@ pub(super) async fn advance(
             if snapshot.player == session.human_player
                 || matches!(snapshot.phase, PlayPhase::GameOver | PlayPhase::MatchOver)
             {
+                process.finish().await?;
                 return Ok((snapshot, sgf));
             }
             let (position, context) = snapshot
@@ -161,7 +164,7 @@ pub(super) async fn advance(
                 notation: notation.as_deref(),
                 resign_level: None,
             };
-            (snapshot, sgf) = run_native(rules, &request, Some(&sgf)).await?;
+            (process, snapshot, sgf) = process.execute(&request).await?;
         }
         anyhow::bail!("Open Sage did not yield within the bounded action chain")
     })
@@ -188,7 +191,8 @@ pub(super) async fn benchmark_checker_turn(
             notation: None,
             resign_level: None,
         };
-        let (before, _) = run_native(rules, &request, Some(previous.0)).await?;
+        let process = RulesProcess::start(rules, Some(previous.0)).await?;
+        let (process, before, _) = process.execute(&request).await?;
         ensure!(
             before.player == bot_player && before.dice == dice,
             "Benchmark checkpoint differs from reference"
@@ -196,7 +200,8 @@ pub(super) async fn benchmark_checker_turn(
         let notation = chosen_move(bot, &before).await?;
         request.action = if notation.is_some() { "move" } else { "pass" };
         request.notation = notation.as_deref();
-        let (after, _) = run_native(rules, &request, Some(previous.0)).await?;
+        request.native_id = &before.native_id;
+        let (process, after, _) = process.execute(&request).await?;
         ensure!(
             after.history.len() == before.history.len() + 1
                 && after
@@ -205,6 +210,7 @@ pub(super) async fn benchmark_checker_turn(
                     .is_some_and(|turn| turn.player == bot_player && turn.dice == dice),
             "Open Sage did not complete exactly one checker turn"
         );
+        process.finish().await?;
         Ok(())
     })
     .await
@@ -334,5 +340,53 @@ mod tests {
             .await
             .unwrap();
         }
+    }
+}
+
+#[cfg(test)]
+mod reuse_tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    #[tokio::test]
+    #[ignore = "requires GNUbg Python and locked BGTUTOR_SAGE_PYTHON"]
+    async fn sage_reference_uses_one_rules_process_per_turn() {
+        let python = std::env::var("BGTUTOR_SAGE_PYTHON").unwrap();
+        let bot = SageEngine::new(SageEngine::probe(python, 2).await.unwrap()).unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let binary =
+            crate::engine::resolve_binary(&std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()))
+                .unwrap();
+        let counter = directory.path().join("starts");
+        let wrapper = directory.path().join("gnubg-wrapper");
+        let script = format!(
+            "#!/usr/bin/env python3\nimport os,sys\nif '-c' in sys.argv:\n with open({},'a') as f: f.write('start\\n')\nbinary={}\nos.execv(binary,[binary,*sys.argv[1:]])\n",
+            serde_json::to_string(counter.to_str().unwrap()).unwrap(),
+            serde_json::to_string(&binary).unwrap()
+        );
+        std::fs::write(&wrapper, script).unwrap();
+        std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let rules = Engine::new(wrapper.to_str().unwrap().into());
+        let turns: Vec<serde_json::Value> =
+            serde_json::from_str(include_str!("../benchmarks/play_turns_v1.json")).unwrap();
+        for turn in &turns {
+            benchmark_checker_turn(
+                &bot,
+                &rules,
+                (
+                    turn["sgf"].as_str().unwrap(),
+                    turn["native_id"].as_str().unwrap(),
+                ),
+                turn["bot_player"].as_i64().unwrap() as i32,
+                serde_json::from_value(turn["dice"].clone()).unwrap(),
+            )
+            .await
+            .unwrap();
+        }
+        assert_eq!(
+            std::fs::read_to_string(counter).unwrap().lines().count(),
+            turns.len(),
+            "Each Sage checker turn must retain one GNUbg process for inspection and execution"
+        );
     }
 }

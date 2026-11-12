@@ -183,7 +183,7 @@ async fn sage_benchmark_snapshots_are_independent_and_complete(pool: PgPool) {
     .await;
     assert_eq!(status, 202, "{runs}");
     assert_eq!(runs[0]["engine_id"], "bgsage");
-    assert_eq!(runs[0]["protocol"]["id"], "bgsage-match-v2-2ply-4threads");
+    assert_eq!(runs[0]["protocol"]["id"], "bgsage-match-v3-2ply-4threads");
     assert_eq!(
         call(app.clone(), "GET", "/api/settings", Value::Null)
             .await

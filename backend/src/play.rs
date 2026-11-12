@@ -5,6 +5,7 @@ mod library;
 mod open_sage;
 mod pause;
 mod reports;
+mod rules_process;
 pub use feedback::{
     FeedbackOperation, PlayAlternative, PlayAttempt, PlayDecision, PlayFeedbackRequest, PlayMode,
     PlayReview, PlayReviewRequest,
@@ -1411,18 +1412,32 @@ async fn run_native(
             std::time::Duration::from_secs(180),
         )
         .await?;
-    let bytes = tokio::fs::read(directory.path().join("snapshot.json"))
+    read_native_result(directory.path(), request, &output).await
+}
+
+async fn read_native_artifact(directory: &std::path::Path, name: &str) -> anyhow::Result<Vec<u8>> {
+    use tokio::io::AsyncReadExt;
+    const LIMIT: u64 = 32 * 1024 * 1024;
+    let file = tokio::fs::File::open(directory.join(name))
         .await
-        .context("GNUbg produced no complete snapshot")?;
-    ensure!(
-        bytes.len() <= 32 * 1024 * 1024,
-        "GNUbg snapshot exceeds limit"
-    );
+        .with_context(|| format!("GNUbg produced no complete {name}"))?;
+    let mut bytes = Vec::new();
+    file.take(LIMIT + 1).read_to_end(&mut bytes).await?;
+    ensure!(bytes.len() <= LIMIT as usize, "GNUbg {name} exceeds limit");
+    Ok(bytes)
+}
+
+async fn read_native_result(
+    directory: &std::path::Path,
+    request: &NativeRequest<'_>,
+    output: &str,
+) -> anyhow::Result<(NativeSnapshot, String)> {
+    let bytes = read_native_artifact(directory, "snapshot.json").await?;
     let mut snapshot: NativeSnapshot = serde_json::from_slice(&bytes)?;
     if request.action == "opening_roll" {
         let expression = regex::Regex::new(r"(?m)^.* rolls ([1-6]), .* rolls ([1-6])\.\r?$")?;
         let rolls: Vec<[i32; 2]> = expression
-            .captures_iter(&output)
+            .captures_iter(output)
             .map(|hit| [hit[1].parse().unwrap(), hit[2].parse().unwrap()])
             .collect();
         let last = *rolls
@@ -1448,7 +1463,7 @@ async fn run_native(
             rolls,
         });
     }
-    let sgf = tokio::fs::read_to_string(directory.path().join("output.sgf")).await?;
+    let sgf = String::from_utf8(read_native_artifact(directory, "output.sgf").await?)?;
     ensure!(
         !sgf.is_empty() && sgf.len() <= 32 * 1024 * 1024,
         "GNUbg SGF missing or exceeds limit"

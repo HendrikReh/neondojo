@@ -6,6 +6,10 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import base64
+import hashlib
+from types import SimpleNamespace
+from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location('probe_open_sage', Path(__file__).with_name('probe_open_sage.py'))
 probe = importlib.util.module_from_spec(SPEC)
@@ -48,6 +52,50 @@ class ProbeTests(unittest.TestCase):
             first = probe.hash_required_file(path, 'model')
             path.write_bytes(b'second')
             self.assertNotEqual(first, probe.hash_required_file(path, 'model'))
+
+    def test_identity_hashes_each_path_once_but_rechecks_next_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / 'bgsage'
+            models = package / '_assets/models'
+            models.mkdir(parents=True)
+            source, model, native = package / '__init__.py', models / 'model', root / 'native.so'
+            for path, data in ((source, b'source'), (model, b'weights'), (native, b'native')):
+                path.write_bytes(data)
+            files = {'__init__.py': hashlib.sha256(b'source').hexdigest(),
+                     '_assets/models/model': hashlib.sha256(b'weights').hexdigest(),
+                     'native.so': hashlib.sha256(b'native').hexdigest()}
+            records = []
+            for label, digest in files.items():
+                entry = __import__('importlib.metadata', fromlist=['PackagePath']).PackagePath(
+                    label if label == 'native.so' else 'bgsage/' + label)
+                entry.hash = SimpleNamespace(mode='sha256', value=base64.urlsafe_b64encode(bytes.fromhex(digest)).decode().rstrip('='))
+                records.append(entry)
+            sage = SimpleNamespace(__file__=str(source), PRODUCTION_MODEL='fixture',
+                                   default_weights=lambda: SimpleNamespace(weight_paths_list=[str(model)] * 24, strategy_type='fixture'))
+            weights = SimpleNamespace(bearoff_db_path=lambda: str(model))
+            with patch.dict(sys.modules, {'bgsage.weights': weights}), \
+                 patch.object(probe.importlib.metadata, 'distribution', return_value=SimpleNamespace(files=records)), \
+                 patch.object(probe.importlib.metadata, 'version', return_value='fixture'), \
+                 patch.object(probe, 'hash_required_file', wraps=probe.hash_required_file) as hashing:
+                result = probe.identity(sage, SimpleNamespace(__file__=str(native)))
+                self.assertEqual(result['files_sha256'], files)
+                self.assertEqual(result['identity_sha256'], hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest())
+                self.assertEqual(hashing.call_count, 3, 'Repeated model slots must reuse this check\'s digest')
+                missing = records.pop()
+                with self.assertRaisesRegex(probe.ProbeError, 'Missing SHA256 wheel RECORD'):
+                    probe.identity(sage, SimpleNamespace(__file__=str(native)))
+                records.append(missing)
+                records[0].hash.mode = 'md5'
+                with self.assertRaisesRegex(probe.ProbeError, 'Missing SHA256 wheel RECORD'):
+                    probe.identity(sage, SimpleNamespace(__file__=str(native)))
+                records[0].hash.mode = 'sha256'
+                model.write_bytes(b'changed')
+                with self.assertRaisesRegex(probe.ProbeError, 'integrity mismatch'):
+                    probe.identity(sage, SimpleNamespace(__file__=str(native)))
+                model.unlink()
+                with self.assertRaisesRegex(probe.ProbeError, 'Missing model assets'):
+                    probe.identity(sage, SimpleNamespace(__file__=str(native)))
 
     def test_missing_dependency_subprocess_produces_failed_report(self):
         self.assertTrue(Path(SPEC.origin).exists(), 'probe command missing')

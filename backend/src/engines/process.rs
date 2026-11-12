@@ -1,11 +1,12 @@
 use super::SageSnapshot;
+use crate::engine_process::{reap_child, terminate_and_reap};
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 use std::{process::Stdio, time::Duration};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     process::{Child, ChildStdin, ChildStdout, Command},
-    sync::Mutex,
+    sync::{Mutex, MutexGuard},
 };
 
 const MAX_REQUEST: usize = 262_144;
@@ -25,36 +26,30 @@ struct Worker {
 impl Drop for Worker {
     fn drop(&mut self) {
         self.stderr.abort();
-        if let Some(mut child) = self.child.take() {
-            let _ = child.start_kill();
-            // The task owns the child until wait() reaps it, also on request cancellation.
-            if let Ok(runtime) = tokio::runtime::Handle::try_current() {
-                runtime.spawn(async move {
-                    let _ = reap_child(&mut child).await;
-                });
-            }
+        if let Some(child) = self.child.take() {
+            terminate_and_reap(child);
         }
     }
 }
 
-/// Unlike Child::wait, try_wait does not depend on the runtime that registered
-/// the child process. This also works after that runtime's reactor has closed.
-async fn reap_child(child: &mut Child) -> Result<()> {
-    tokio::time::timeout(Duration::from_secs(5), async {
-        while child
-            .try_wait()
-            .context("Cannot reap Open Sage worker")?
-            .is_none()
-        {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-        Ok(())
-    })
-    .await
-    .context("Timed out reaping Open Sage worker")?
-}
-
 impl Worker {
+    async fn checkout(slot: &mut Option<Self>, profile: &SageSnapshot) -> Result<Self> {
+        match slot.take() {
+            Some(worker)
+                if worker.profile == *profile
+                    && worker.runtime_id == tokio::runtime::Handle::current().id() =>
+            {
+                Ok(worker)
+            }
+            previous => {
+                if let Some(previous) = previous {
+                    previous.shutdown().await?;
+                }
+                Self::initialize(profile).await
+            }
+        }
+    }
+
     async fn start(profile: &SageSnapshot) -> Result<Self> {
         let probe = include_str!("../../../tools/probe_open_sage.py");
         let script = format!(
@@ -153,6 +148,68 @@ impl Worker {
             .cloned()
             .context("Open Sage response omitted result")
     }
+
+    async fn validated_exchange(&mut self, payload: Value) -> Result<Value> {
+        let result = self.exchange(payload.clone()).await?;
+        // Framing alone is insufficient: reject invalid typed results before
+        // either a single request or a game block can reuse this worker.
+        validate_payload(&self.profile, &payload, &result)?;
+        Ok(result)
+    }
+}
+
+/// Exclusive game-scoped ownership. Callers keep provisional results private
+/// until finish succeeds and hold the shared engine gate throughout this scope.
+/// Dropping an unfinished block kills/reaps its worker rather than caching it.
+pub(super) struct VerifiedBatch {
+    worker: Option<Worker>,
+    slot: MutexGuard<'static, Option<Worker>>,
+}
+
+impl VerifiedBatch {
+    pub(super) async fn begin(profile: &SageSnapshot) -> Result<Self> {
+        let mut slot = WORKER.lock().await;
+        let worker = tokio::time::timeout(Duration::from_secs(120), async {
+            let mut worker = Worker::checkout(&mut slot, profile).await?;
+            worker
+                .validated_exchange(json!({"operation":"begin_batch"}))
+                .await?;
+            Ok::<_, anyhow::Error>(worker)
+        })
+        .await
+        .context("Open Sage batch initialization timed out; worker terminated")??;
+        Ok(Self {
+            worker: Some(worker),
+            slot,
+        })
+    }
+
+    pub(super) async fn request(&mut self, payload: Value, timeout: Duration) -> Result<Value> {
+        let mut worker = self.worker.take().context("Open Sage batch was aborted")?;
+        ensure!(
+            matches!(payload["operation"].as_str(), Some("checker" | "cube")),
+            "Unsupported Open Sage game operation"
+        );
+        // Removing ownership also poisons the block if this individual future
+        // is cancelled while its caller still retains the batch object.
+        let result = tokio::time::timeout(timeout, worker.validated_exchange(payload))
+            .await
+            .context("Open Sage evaluation timed out; worker terminated")??;
+        self.worker = Some(worker);
+        Ok(result)
+    }
+
+    pub(super) async fn finish(mut self) -> Result<()> {
+        let mut worker = self.worker.take().context("Open Sage batch was aborted")?;
+        tokio::time::timeout(
+            Duration::from_secs(120),
+            worker.validated_exchange(json!({"operation":"end_batch"})),
+        )
+        .await
+        .context("Open Sage final integrity check timed out; worker terminated")??;
+        *self.slot = Some(worker);
+        Ok(())
+    }
 }
 
 pub(super) async fn request(
@@ -160,30 +217,20 @@ pub(super) async fn request(
     payload: Value,
     timeout: Duration,
 ) -> Result<Value> {
+    ensure!(
+        matches!(
+            payload["operation"].as_str(),
+            Some("identity" | "checker" | "cube" | "resignation")
+        ),
+        "Unsupported Open Sage single-request operation"
+    );
     crate::engine::with_shared_access(async {
         // Worker is removed from the slot while awaiting I/O, so dropping this
         // future always drops/kills its process instead of caching a dirty stream.
         let mut slot = WORKER.lock().await;
         tokio::time::timeout(timeout, async {
-            let mut worker = match slot.take() {
-                Some(worker)
-                    if worker.profile == *profile
-                        && worker.runtime_id == tokio::runtime::Handle::current().id() =>
-                {
-                    worker
-                }
-                previous => {
-                    if let Some(previous) = previous {
-                        previous.shutdown().await?;
-                    }
-                    Worker::initialize(profile).await?
-                }
-            };
-            let result = worker.exchange(payload.clone()).await?;
-            // A complete JSON frame is not yet a valid engine response. Keep
-            // ownership here until its typed contents have passed validation;
-            // every failure then drops, kills and reaps this worker.
-            validate_payload(profile, &payload, &result)?;
+            let mut worker = Worker::checkout(&mut slot, profile).await?;
+            let result = worker.validated_exchange(payload).await?;
             *slot = Some(worker);
             Ok(result)
         })
@@ -232,7 +279,7 @@ pub(super) async fn restart(profile: &SageSnapshot) -> Result<()> {
 
 fn validate_payload(profile: &SageSnapshot, request: &Value, result: &Value) -> Result<()> {
     match request.get("operation").and_then(Value::as_str) {
-        Some("identity") => validate_identity(profile, result),
+        Some("identity" | "begin_batch" | "end_batch") => validate_identity(profile, result),
         Some("checker") => {
             let candidates: Vec<super::SageCheckerCandidate> =
                 serde_json::from_value(result.clone())
@@ -334,12 +381,35 @@ root = pathlib.Path(__file__).parent
 mode = MODE
 for line in sys.stdin:
     request = json.loads(line)
+    with (root / 'operations').open('a') as log:
+        log.write(request['operation'] + '\n')
     if request['operation'] == 'initialize':
         profile = request['profile']
         result = {key: profile[key] for key in ('package_version', 'artifact_fingerprint')}
         print(json.dumps({'id': request['id'], 'result': result}), flush=True)
         continue
     (root / 'started').write_text('ready')
+    if mode.startswith('batch_'):
+        operation = request['operation']
+        if mode == 'batch_end_block' and operation == 'end_batch':
+            time.sleep(60)
+        if operation == 'checker':
+            (root / 'checker_started').write_text('ready')
+            if mode == 'batch_block':
+                time.sleep(60)
+            result = [{'board': request['force_board'], 'notation': '8/5 6/5', 'equity': .2,
+                       'probabilities': [.6, .1, .01, .4, .1, .01]}]
+            if mode == 'batch_bad_checker':
+                del result[0]['probabilities']
+            if mode == 'batch_bad_json':
+                print('{invalid}', flush=True)
+                continue
+        else:
+            result = {key: profile[key] for key in ('package_version', 'artifact_fingerprint')}
+            if (mode == 'batch_bad_end' and operation == 'end_batch') or (mode == 'batch_bad_begin' and operation == 'begin_batch'):
+                result['artifact_fingerprint'] = 'changed'
+        print(json.dumps({'id': request['id'], 'result': result}), flush=True)
+        continue
     if mode == 'block':
         time.sleep(60)
     elif mode == 'bad_checker':
@@ -416,6 +486,141 @@ for line in sys.stdin:
         })
         .await
         .expect("Sidecar process survived or was not reaped");
+    }
+
+    const SINGLE_GAME: &str = "(;GM[6]FF[4]MI[length:5][ws:0][bs:0];W[31hefe])";
+
+    #[tokio::test]
+    async fn ordinary_requests_cannot_cache_worker_with_open_batch() {
+        let _serial = TEST_LOCK.lock().await;
+        let fake = FakeWorker::new("batch_healthy");
+        let result = request(
+            &fake.profile,
+            json!({"operation":"begin_batch"}),
+            Duration::from_secs(5),
+        )
+        .await;
+        let cached = WORKER.lock().await.take();
+        let was_cached = cached.is_some();
+        drop(cached);
+        if fake.directory.path().join("pid").exists() {
+            assert_reaped(&fake.pid()).await;
+        }
+        assert!(
+            result.is_err(),
+            "An ordinary request started an unowned batch"
+        );
+        assert!(!was_cached, "Cached a worker with an unfinished batch");
+    }
+
+    #[tokio::test]
+    async fn game_rejects_final_integrity_failure_without_caching_worker() {
+        let _serial = TEST_LOCK.lock().await;
+        for mode in ["batch_bad_begin", "batch_bad_end"] {
+            let fake = FakeWorker::new(mode);
+            let engine = super::super::SageEngine::new(fake.profile.clone()).unwrap();
+            let result = engine.analyze_game(SINGLE_GAME, 1, 2).await;
+            let cached = WORKER.lock().await.take();
+            let was_cached = cached.is_some();
+            drop(cached);
+            assert_reaped(&fake.pid()).await;
+            assert!(
+                result.is_err(),
+                "Released a game before its final integrity check"
+            );
+            assert!(
+                !was_cached,
+                "Cached a worker after failed final verification"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn complete_games_have_exclusive_integrity_boundaries() {
+        let _serial = TEST_LOCK.lock().await;
+        let fake = FakeWorker::new("batch_healthy");
+        let engine = super::super::SageEngine::new(fake.profile.clone()).unwrap();
+        let (first, second) = tokio::join!(
+            engine.analyze_game(SINGLE_GAME, 1, 2),
+            engine.analyze_game(SINGLE_GAME, 1, 2)
+        );
+        engine.version().await.unwrap();
+        let operations = std::fs::read_to_string(fake.directory.path().join("operations")).unwrap();
+        drop(WORKER.lock().await.take());
+        assert_reaped(&fake.pid()).await;
+        assert_eq!(first.unwrap().decisions.len(), 1);
+        assert_eq!(second.unwrap().decisions.len(), 1);
+        assert_eq!(
+            operations,
+            "initialize\nbegin_batch\nchecker\nend_batch\nbegin_batch\nchecker\nend_batch\nidentity\n"
+        );
+    }
+
+    #[tokio::test]
+    async fn invalid_batch_frames_and_typed_results_discard_worker() {
+        let _serial = TEST_LOCK.lock().await;
+        for mode in ["batch_bad_checker", "batch_bad_json"] {
+            let fake = FakeWorker::new(mode);
+            let engine = super::super::SageEngine::new(fake.profile.clone()).unwrap();
+            assert!(engine.analyze_game(SINGLE_GAME, 1, 2).await.is_err());
+            assert!(WORKER.lock().await.is_none());
+            assert_reaped(&fake.pid()).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn cancelling_game_discards_active_batch() {
+        let _serial = TEST_LOCK.lock().await;
+        let fake = FakeWorker::new("batch_block");
+        let engine = super::super::SageEngine::new(fake.profile.clone()).unwrap();
+        let task = tokio::spawn(async move { engine.analyze_game(SINGLE_GAME, 1, 2).await });
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while !fake.directory.path().join("checker_started").is_file() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+        assert!(WORKER.lock().await.is_none());
+        assert_reaped(&fake.pid()).await;
+    }
+
+    #[tokio::test]
+    async fn game_timeout_discards_active_batch() {
+        let _serial = TEST_LOCK.lock().await;
+        for mode in ["batch_block", "batch_end_block"] {
+            let fake = FakeWorker::new(mode);
+            let engine = super::super::SageEngine::new(fake.profile.clone()).unwrap();
+            assert!(
+                engine
+                    .analyze_game_with_limit(SINGLE_GAME, 1, 2, Some(Duration::from_millis(250)))
+                    .await
+                    .is_err()
+            );
+            assert!(WORKER.lock().await.is_none());
+            assert_reaped(&fake.pid()).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn cancelling_one_request_prevents_finishing_retained_batch() {
+        let _serial = TEST_LOCK.lock().await;
+        let fake = FakeWorker::new("batch_block");
+        let mut batch = VerifiedBatch::begin(&fake.profile).await.unwrap();
+        let cancelled = tokio::time::timeout(
+            Duration::from_millis(100),
+            batch.request(
+                json!({"operation":"checker", "force_board":vec![0; 26]}),
+                Duration::from_secs(30),
+            ),
+        )
+        .await;
+        assert!(cancelled.is_err());
+        assert!(batch.finish().await.is_err());
+        assert!(WORKER.lock().await.is_none());
+        assert_reaped(&fake.pid()).await;
     }
 
     #[tokio::test]

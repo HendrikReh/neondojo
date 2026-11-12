@@ -156,6 +156,18 @@ impl SageEngine {
         dice: Option<[i32; 2]>,
         force_board: Option<[i32; 26]>,
     ) -> Result<Vec<SageCheckerCandidate>> {
+        self.checker_boards_with_batch(position_id, match_id, dice, force_board, None)
+            .await
+    }
+
+    async fn checker_boards_with_batch(
+        &self,
+        position_id: &str,
+        match_id: &str,
+        dice: Option<[i32; 2]>,
+        force_board: Option<[i32; 26]>,
+        batch: Option<&mut process::VerifiedBatch>,
+    ) -> Result<Vec<SageCheckerCandidate>> {
         let context = context::Context::decode(match_id)?;
         ensure!(
             !context.pending_double,
@@ -167,7 +179,8 @@ impl SageEngine {
             dice.iter().all(|die| (1..=6).contains(die)),
             "Invalid checker dice"
         );
-        let result = process::request(&self.snapshot, json!({"operation":"checker", "board":board, "context":context, "dice":dice, "force_board":force_board.map(|board| context::to_sage(&board, context.player))}), Duration::from_secs(180)).await?;
+        let payload = json!({"operation":"checker", "board":board, "context":context, "dice":dice, "force_board":force_board.map(|board| context::to_sage(&board, context.player))});
+        let result = self.request_with_batch(payload, batch).await?;
         let mut candidates: Vec<SageCheckerCandidate> = serde_json::from_value(result)?;
         ensure!(
             !candidates.is_empty(),
@@ -265,19 +278,40 @@ impl SageEngine {
     }
 
     pub async fn cube(&self, position_id: &str, match_id: &str) -> Result<SageCubeEvaluation> {
+        self.cube_with_batch(position_id, match_id, None).await
+    }
+
+    async fn cube_with_batch(
+        &self,
+        position_id: &str,
+        match_id: &str,
+        batch: Option<&mut process::VerifiedBatch>,
+    ) -> Result<SageCubeEvaluation> {
         let context = context::Context::decode(match_id)?;
         let board = context.board(position_id, match_id)?;
-        let value = process::request(
-            &self.snapshot,
-            json!({"operation":"cube", "board":board, "context":context}),
-            Duration::from_secs(180),
-        )
-        .await?;
+        let value = self
+            .request_with_batch(
+                json!({"operation":"cube", "board":board, "context":context}),
+                batch,
+            )
+            .await?;
         let result: SageCubeEvaluation = serde_json::from_value(value)?;
         for equity in [result.no_double, result.take, result.pass] {
             validate_evaluation(equity, &result.probabilities)?;
         }
         Ok(result)
+    }
+
+    async fn request_with_batch(
+        &self,
+        payload: serde_json::Value,
+        batch: Option<&mut process::VerifiedBatch>,
+    ) -> Result<serde_json::Value> {
+        let timeout = Duration::from_secs(180);
+        match batch {
+            Some(batch) => batch.request(payload, timeout).await,
+            None => process::request(&self.snapshot, payload, timeout).await,
+        }
     }
 }
 

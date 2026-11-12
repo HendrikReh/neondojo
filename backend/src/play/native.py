@@ -41,15 +41,16 @@ if request['new']:
     command('new session' if length == 0 else 'new match %d' % length)
     command('set display off')
 else:
-    command('load match input.sgf')
-    # The loader deliberately navigates backwards for a one-move match.
-    # Advance through all games and records before checking the exact state.
-    gnubg.navigate(game=10000)
-    gnubg.navigate(next=100000)
-    # The SGF loader replays scoring but not NextTurn's post-game Crawford
-    # transition. Finish that native transition before checking the checkpoint.
-    if gnubg.posinfo()['gamestate'] != 1:
-        gnubg.nextturn()
+    if not globals().get('_reuse_checkpoint', False):
+        command('load match input.sgf')
+        # The loader deliberately navigates backwards for a one-move match.
+        # Advance through all games and records before checking the exact state.
+        gnubg.navigate(game=10000)
+        gnubg.navigate(next=100000)
+        # The SGF loader replays scoring but not NextTurn's post-game Crawford
+        # transition. Finish that native transition before checking the checkpoint.
+        if gnubg.posinfo()['gamestate'] != 1:
+            gnubg.nextturn()
     assert gnubg.gnubgid() == request['native_id'], 'SGF did not restore exact saved state: %s != %s' % (gnubg.gnubgid(), request['native_id'])
     if action == 'opening_roll':
         command('set display on')

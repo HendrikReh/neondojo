@@ -52,6 +52,7 @@ class Runtime:
         import bgbot_cpp
         self.sage, self.native, self.integrity = bgsage, bgbot_cpp, integrity
         self.profile = profile
+        self.batch_active = False
         self.identity = self.check_identity()
         expected = profile.get('artifact_fingerprint')
         if expected and expected != self.identity['artifact_fingerprint']:
@@ -92,7 +93,23 @@ class Runtime:
             raise ValueError('Open Sage installation changed during evaluation')
 
     def dispatch(self, request):
-        self.verify()
+        operation = request['operation']
+        if operation == 'begin_batch':
+            if self.batch_active:
+                raise ValueError('Integrity batch already active')
+            self.verify()
+            self.batch_active = True
+            return self.identity
+        if operation == 'end_batch':
+            if not self.batch_active:
+                raise ValueError('No active integrity batch')
+            self.verify()
+            self.batch_active = False
+            return self.identity
+        if self.batch_active and operation not in ('checker', 'cube'):
+            raise ValueError('Unsupported integrity batch operation')
+        if not self.batch_active:
+            self.verify()
         if request['operation'] == 'identity':
             result = self.identity
         else:
@@ -154,7 +171,8 @@ class Runtime:
                           'probabilities': probabilities(result.probs.to_list())}
             else:
                 raise ValueError('Unsupported sidecar operation')
-        self.verify()
+        if not self.batch_active:
+            self.verify()
         return result
 
 

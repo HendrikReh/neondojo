@@ -6,6 +6,8 @@ import subprocess
 import sys
 sys.dont_write_bytecode = True
 import json
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 PATH = Path(__file__).resolve().parents[1] / 'backend/src/engines/worker.py'
 
@@ -76,6 +78,89 @@ main({})
         result = self.run_protocol(b'{"id":1,"operation":"initialize","profile":{}}\n{"id":2,"operation":"test","value":NaN}\n')
         response = json.loads(result.stdout.splitlines()[-1])
         self.assertIn('error', response)
+
+class BatchTests(unittest.TestCase):
+    def setUp(self):
+        spec = importlib.util.spec_from_file_location('sage_worker', PATH)
+        worker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(worker)
+        self.runtime = worker.Runtime.__new__(worker.Runtime)
+        self.runtime.batch_active = False
+        self.runtime.identity = {'package_version': 'fixture', 'artifact_fingerprint': 'original'}
+        self.runtime.check_identity = Mock(side_effect=lambda: dict(self.current_identity))
+        self.current_identity = dict(self.runtime.identity)
+        self.runtime.integrity = {'validate_result': lambda result, validator: validator(result.probs.to_list())}
+        self.runtime.analyzer = SimpleNamespace(cube_action=lambda *args, **kwargs: SimpleNamespace(
+            equity_nd=.2, equity_dt=.3, equity_dp=1, probs=SimpleNamespace(to_list=lambda: [.6, .1, .02, .1, .01])))
+        self.cube = {'operation': 'cube', 'board': [0] * 26,
+                     'context': dict(cube_value=1, cube_owner='centered', away1=0, away2=0, is_crawford=False, jacoby=True)}
+
+    def test_batch_checks_only_boundaries_and_later_single_request_is_protected(self):
+        self.assertEqual(self.runtime.dispatch({'operation': 'begin_batch'}), self.runtime.identity)
+        first = self.runtime.dispatch(self.cube)
+        self.assertEqual(self.runtime.dispatch(self.cube), first)
+        self.assertEqual(self.runtime.check_identity.call_count, 1)
+        self.assertEqual(self.runtime.dispatch({'operation': 'end_batch'}), self.runtime.identity)
+        self.assertEqual(self.runtime.check_identity.call_count, 2)
+        self.assertEqual(self.runtime.dispatch(self.cube), first)
+        self.assertEqual(self.runtime.check_identity.call_count, 4)
+        self.current_identity['artifact_fingerprint'] = 'changed'
+        with self.assertRaisesRegex(ValueError, 'changed'):
+            self.runtime.dispatch(self.cube)
+
+    def test_changed_identity_is_rejected_at_each_boundary(self):
+        for boundary in ('begin_batch', 'end_batch'):
+            with self.subTest(boundary=boundary):
+                self.setUp()
+                if boundary == 'end_batch':
+                    self.runtime.dispatch({'operation': 'begin_batch'})
+                    self.runtime.dispatch(self.cube)
+                self.current_identity['artifact_fingerprint'] = 'changed'
+                with self.assertRaisesRegex(ValueError, 'changed'):
+                    self.runtime.dispatch({'operation': boundary})
+
+    def test_batch_lifecycle_rejects_nested_begin_and_unmatched_end(self):
+        with self.assertRaisesRegex(ValueError, 'No active'):
+            self.runtime.dispatch({'operation': 'end_batch'})
+        self.runtime.dispatch({'operation': 'begin_batch'})
+        with self.assertRaisesRegex(ValueError, 'already active'):
+            self.runtime.dispatch({'operation': 'begin_batch'})
+
+    def test_batch_cannot_bypass_normal_identity_request_checks(self):
+        self.runtime.dispatch({'operation': 'begin_batch'})
+        with self.assertRaisesRegex(ValueError, 'Unsupported integrity batch operation'):
+            self.runtime.dispatch({'operation': 'identity'})
+
+    def test_next_batch_rechecks_identity(self):
+        self.runtime.dispatch({'operation': 'begin_batch'})
+        self.runtime.dispatch({'operation': 'end_batch'})
+        self.current_identity['package_version'] = 'changed'
+        with self.assertRaisesRegex(ValueError, 'changed'):
+            self.runtime.dispatch({'operation': 'begin_batch'})
+
+    def test_real_fingerprint_rejects_metadata_and_asset_identity_changes(self):
+        for field in ('RECORD', 'production_model', 'strategy', 'identity_sha256', 'numpy', 'bgsage'):
+            for boundary in ('begin_batch', 'end_batch'):
+                with self.subTest(field=field, boundary=boundary):
+                    self.setUp()
+                    del self.runtime.check_identity
+                    self.runtime.sage = self.runtime.native = None
+                    manifest = dict(identity_sha256='original', bgsage='2.0.20260907', numpy='2.5.4',
+                                    production_model='stage11', strategy='backgame_pair_phased')
+                    self.runtime.integrity['identity'] = lambda *args: dict(manifest)
+                    distribution = Mock()
+                    distribution.read_text.return_value = 'original RECORD'
+                    with patch('importlib.metadata.distribution', return_value=distribution):
+                        self.runtime.identity = self.runtime.check_identity()
+                        if boundary == 'end_batch':
+                            self.runtime.dispatch({'operation': 'begin_batch'})
+                            self.runtime.dispatch(self.cube)
+                        if field == 'RECORD':
+                            distribution.read_text.return_value = 'modified RECORD'
+                        else:
+                            manifest[field] = 'modified'
+                        with self.assertRaises(ValueError):
+                            self.runtime.dispatch({'operation': boundary})
 
 if __name__ == '__main__':
     unittest.main()

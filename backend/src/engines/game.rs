@@ -27,7 +27,14 @@ impl SageEngine {
             "Game number outside match"
         );
         crate::engine::with_shared_access(async {
-            let work = self.game(sgf, game_no);
+            let work = async {
+                let mut batch = super::process::VerifiedBatch::begin(&self.snapshot).await?;
+                let game = self.game(sgf, game_no, Some(&mut batch)).await?;
+                // Provisional decisions never leave this scope or reach persistence
+                // until the final package/RECORD/model verification succeeds.
+                batch.finish().await?;
+                Ok(game)
+            };
             match limit {
                 Some(limit) => tokio::time::timeout(limit, work)
                     .await
@@ -38,7 +45,12 @@ impl SageEngine {
         .await
     }
 
-    async fn game(&self, sgf: &str, game_no: i32) -> Result<AnalyzedGame> {
+    async fn game(
+        &self,
+        sgf: &str,
+        game_no: i32,
+        mut batch: Option<&mut super::process::VerifiedBatch>,
+    ) -> Result<AnalyzedGame> {
         let (imported, moves) = parse_sgf_source_moves(sgf)?;
         let mut decisions = Vec::new();
         let expected_checkers = imported
@@ -60,7 +72,9 @@ impl SageEngine {
                     })
                     .context("Missing imported checker context")?;
                 if requires_cube_analysis(position)? {
-                    let cube = self.cube(&event.position_id, &event.match_id).await?;
+                    let cube = self
+                        .cube_with_batch(&event.position_id, &event.match_id, batch.as_deref_mut())
+                        .await?;
                     let mut result = cube_decision(
                         event.player,
                         "no double",
@@ -78,7 +92,13 @@ impl SageEngine {
                     .ok()
                     .context("Invalid played board")?;
                 let candidates = self
-                    .checker_boards(&event.position_id, &event.match_id, None, Some(after))
+                    .checker_boards_with_batch(
+                        &event.position_id,
+                        &event.match_id,
+                        None,
+                        Some(after),
+                        batch.as_deref_mut(),
+                    )
                     .await?;
                 let best = candidates
                     .first()
@@ -101,7 +121,9 @@ impl SageEngine {
                 analyzed_checkers += 1;
             } else {
                 let played = event.notation.to_ascii_lowercase();
-                let cube = self.cube(&event.position_id, &event.match_id).await?;
+                let cube = self
+                    .cube_with_batch(&event.position_id, &event.match_id, batch.as_deref_mut())
+                    .await?;
                 let response = matches!(played.as_str(), "take" | "drop");
                 let sign = if response { -1.0 } else { 1.0 };
                 decisions.push(cube_decision(
@@ -152,5 +174,33 @@ mod tests {
         assert_eq!(take.equity_loss, 1.0);
         let drop = cube_decision(1, "drop", -1.0, -2.0, -1.0).unwrap();
         assert_eq!(drop.equity_loss, 0.0);
+    }
+
+    #[tokio::test]
+    #[ignore = "requires locked native Open Sage; compares all WC2014 decisions; no database"]
+    async fn native_atomic_games_match_individual_requests() {
+        let python = std::env::var("BGTUTOR_SAGE_PYTHON").unwrap();
+        let engine = SageEngine::new(SageEngine::probe(python, 4).await.unwrap()).unwrap();
+        let source = crate::benchmarks::REFERENCE_SGF;
+        let mut checkers = 0;
+        let mut cubes = 0;
+        for game_no in 1..=10 {
+            // Same authoritative game mapping, but the established ordinary
+            // transport verifies each request before and after evaluation.
+            let individual = engine.game(source, game_no, None).await.unwrap();
+            let atomic = engine.analyze_game(source, game_no, 2).await.unwrap();
+            assert_eq!(
+                serde_json::to_value(&individual).unwrap(),
+                serde_json::to_value(&atomic).unwrap(),
+                "game {game_no}"
+            );
+            checkers += atomic
+                .decisions
+                .iter()
+                .filter(|d| d.kind == "checker")
+                .count();
+            cubes += atomic.decisions.iter().filter(|d| d.kind == "cube").count();
+        }
+        assert_eq!((checkers, cubes), (460, 278));
     }
 }

@@ -60,8 +60,8 @@ fn protocol() -> BenchmarkProtocol {
 fn protocol_for(engine: &str) -> BenchmarkProtocol {
     let mut value = protocol();
     if engine == "bgsage" {
-        value.id = "bgsage-match-v2-2ply-4threads".into();
-        value.process_strategy = "persistent-worker-verified-before-each-request".into();
+        value.id = "bgsage-match-v3-2ply-4threads".into();
+        value.process_strategy = "persistent-worker-atomic-game-verified-at-both-boundaries".into();
         value.timing_scope = "cold-worker-startup-once-plus-full-game-pipeline".into();
         value.move_filter = "all-cubeful-2ply-candidates-played-board-included".into();
     }

@@ -99,7 +99,7 @@ async fn measure(state: &AppState, run: &BenchmarkRun, token: Uuid) -> Result<f6
         source == REFERENCE_SGF
             && matches!(
                 protocol.id.as_str(),
-                "gnubg-match-v1" | "gnubg-match-v2-unlimited" | "bgsage-match-v2-2ply-4threads"
+                "gnubg-match-v1" | "gnubg-match-v2-unlimited" | "bgsage-match-v3-2ply-4threads"
             ),
         "Unsupported benchmark protocol or reference version"
     );

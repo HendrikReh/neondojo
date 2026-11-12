@@ -71,7 +71,7 @@ Keine Anwendungstabellen, Benutzerpartien oder Enginequellen wurden durch diesen
 
 ## Anwendungsadapter und numerische Grenzen
 
-Der Rust-Adapter bündelt einen lokalen JSON-Sidecar; ein einziger Worker wird pro aktivem, unveränderlichem Profil wiederverwendet. Vor und nach jeder Anfrage werden Paket-/RECORD-/Modellidentität geprüft. Profilwechsel und explizite Benchmark-Neustarts beenden und reapen den vorherigen Prozess. Timeout, Abbruch, fehlerhafte Protokollrahmen und ungültige typisierte Ergebnisse verwerfen den Worker. Der gemeinsame Engine-Zugriffsschutz umfasst auch den Sidecar.
+Der Rust-Adapter bündelt einen lokalen JSON-Sidecar; ein einziger Worker wird pro aktivem, unveränderlichem Profil wiederverwendet. Vor und nach jeder Einzelanfrage werden Paket-/RECORD-/Modellidentität geprüft. Vollständige Spielanalysen verwenden stattdessen die unten beschriebenen atomaren Blöcke mit vollständiger Prüfung an beiden Grenzen. Profilwechsel und explizite Benchmark-Neustarts beenden und reapen den vorherigen Prozess. Timeout, Abbruch, fehlerhafte Protokollrahmen und ungültige typisierte Ergebnisse verwerfen den Worker. Der gemeinsame Engine-Zugriffsschutz umfasst auch den Sidecar.
 
 Im vollständigen WC2014-Referenzspiel 5 lieferte die Float32-Berechnung einer Bearoff-Variante `1.0000000074505806` als Gewinnwahrscheinlichkeit und `-7.450580596923828e-09` als Verlust-Gammon/-Backgammon-Wahrscheinlichkeit. Der Adapter begrenzt ausschließlich solche endlichen Abweichungen von den Endpunkten 0/1 bis `1e-7` (kleiner als ein Float32-Epsilon) auf den jeweiligen Endpunkt. Größere Abweichungen, nichtendliche Werte und inkonsistente verschachtelte Wahrscheinlichkeiten bleiben Fehler. Equities werden dabei nicht verändert. Die unabhängige Diagnoseprobe behält standardmäßig ihre strikte Prüfung.
 
@@ -137,3 +137,110 @@ Nach dem Zusammenführen erneut erfolgreich geprüft:
 - 492 Frontendtests, 43 betroffene Browsertests, OpenAPI-/TypeScript-Generierung und Frontend-Produktionsbuild. Die Browserdatenbanken waren vom Benutzerbestand getrennt.
 - 39 Python-/Theme-Tests: 34 erfolgreich, fünf optionale Tests übersprungen.
 - Optimierter Backendbuild mit deaktiviertem Strip-Schritt, tatsächliche Installationsprüfung über die laufende API, beide Engines im Katalog verfügbar und gespeicherte Sage-Vorgaben nachgelesen.
+
+
+## Performance und Integritätsgrenzen
+
+Neue Benchmarks verwenden `bgsage-match-v3-2ply-4threads` beziehungsweise
+`bgsage-checker-turn-v3-2ply-2threads-gnubg-rules`. Historische Ergebnisse bleiben
+unverändert und werden nicht mit neuen Protokollen aggregiert.
+
+Eine vollständige Identitätsprüfung hasht jede Datei nur einmal innerhalb dieser
+Prüfung. Die nächste Prüfung liest alle Dateien erneut; Manifest, Fingerprint und
+bestehende Installations-Snapshots bleiben kompatibel. Eine Spielanalyse hält den
+Worker exklusiv und prüft Installation, RECORD und Gewichte vollständig vor und
+nach dem Spiel. Erst nach der Endprüfung darf der vollständige Block zurückgegeben
+und gespeichert werden. Fehler, Timeout oder Abbruch verwerfen den Block und
+beenden den Worker. Einzelpositionen behalten ihre bisherigen Prüfgrenzen.
+
+Für eine Sage-Spielaktion bleibt der isolierte GNUbg-Regelprozess zwischen
+Inspektion und Ausführung sowie während der begrenzten Bot-Aktionskette erhalten.
+Jeder Folgeschritt prüft die exakte GNUbg-ID. Regeln, Würfel und SGF erzeugt weiterhin
+GNUbg; Revision und endgültiger SGF/Snapshot werden wie bisher atomar gespeichert.
+Der Prozess wird vor dem Speichern beendet; bei Fehlern bleibt der zuvor gespeicherte
+Spielstand bestehen. Protokollzeilen, Artefakte, Laufzeit und Aktionszahl sind begrenzt.
+
+
+## Nachmessung der drei Optimierungen – 12. November 2026
+
+Zum Zeitpunkt der Nachmessung lag die Implementierung uncommitted im Hauptworktree. Vorhandene Änderungen an
+Engine Matches und anderen Dateien wurden per Dreiwege-Zusammenführung erhalten;
+separate Sicherungen liegen unter `backups/sage-optimization-20261112-073609` und
+`backups/sage-performance-merge-20261112-075315`. Die laufende Benutzerinstanz wurde während der Nachmessung
+nicht ersetzt oder neugestartet. Insbesondere wurde deren Datenbank nicht für Tests
+oder Benchmarks verwendet und die unabhängige Migration 0042 dort nicht durch diese
+Arbeit aktiviert. Gemessen wurde der optimierte Release-Build des zusammengeführten
+Hauptworktrees auf Port 8891 mit `bgtutor_e2e_sage_perf_20261112`.
+
+Je drei Analyse- und Spielmessungen pro Engine, sequenziell in wechselnder Reihenfolge,
+ohne parallele Builds oder Tests. Hardware: Apple M2 Pro, 10 logische CPUs, 16 GiB RAM,
+macOS 27.0.1. GNUbg 1.08.003 20261108 mit einem Thread; Sage 2.0.20260907 mit vier
+Analyse- beziehungsweise zwei Spielthreads. Tiefe jeweils numerisch 2-ply; das ist kein
+Nachweis identischer Suchstärke. Die Engine-/Modellsnapshots und Referenzprüfsummen sind
+gegenüber der Ausgangsmessung identisch. Die OS-Dateicaches wurden nicht geleert.
+
+Analyse: zehn Spiele, 460 Checkerzüge einschließlich erzwungener Züge und Cube-Analyse.
+Spiel: elf feste Checkerzüge mit bereits gewürfelten Würfeln. Zeiten enthalten die
+vollständige BG-Tutor-Strecke und bei Sage einen kalten Sidecarstart je Lauf; Wartezeit,
+Installationstest, Datenbankschreiben und UI-Animation sind ausgeschlossen. Die Spielzahl
+ist der Median der drei laufweisen Mittelwerte, keine Perzentile einzelner Benutzerzüge.
+
+| Messung | Engine | Vorher: Median | Nachher: Median | Nachher: Min–Max | Zeitreduktion |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Analyse gesamt (s) | gnubg | 20.215 | 18.442 | 18.368–18.636 | 8.8 % |
+| Analyse gesamt (s) | bgsage | 49.750 | 12.915 | 12.893–12.955 | 74.0 % |
+| Spielzug im Mittel (ms) | gnubg | 229.470 | 224.945 | 224.723–226.190 | 2.0 % |
+| Spielzug im Mittel (ms) | bgsage | 484.310 | 302.656 | 301.610–304.460 | 37.5 % |
+
+Sage benötigt damit 74,0 % weniger Analysezeit (3,85-facher Durchsatz) und 37,5 % weniger
+Zeit pro Referenzzug (Faktor 1,60). Im aktuellen Vergleich liegt Sage bei der Analyse
+30,0 % unter GNUbg, beim Spielzug weiterhin 34,5 % darüber. Auch die GNUbg-Kontrolle
+wurde um 8,8 % beziehungsweise 2,0 % schneller: Der gesamte Vorher/Nachher-Unterschied
+ist deshalb nicht ausschließlich der Implementierung zuzuschreiben. Normiert auf die
+jeweilige GNUbg-Kontrolle sinkt das Sage/GNUbg-Zeitverhältnis um etwa 71,5 % bei Analyse
+und 36,3 % beim Spiel. Es wurden nur Laufzeiten, keine Spielstärkeunterschiede gemessen.
+
+Die drei Änderungen sind unabhängig nachvollziehbar: Eine native Identitätsprüfung
+liest 42 statt 67 Dateien beziehungsweise 16.854.849 statt 31.035.709 Bytes; Hashes gelten
+nur innerhalb dieser Prüfung. Die 738 Einzelentscheidungen des Referenzmatches laufen
+in zehn exklusiven Spielblöcken mit vollständiger Anfangs-/Endprüfung. Die elf Sage-
+Referenzzüge starten elf statt 22 GNUbg-Regelprozesse. Ein Regelprozess muss vor der
+Rückgabe des Ergebnisses sauber enden; Absturz, Fehlerexit, stderr, Timeout, ungültige oder
+überlange Antworten und Abbruch verwerfen die Aktion.
+
+Prüfungen des Hauptworktrees: `cargo fmt --all --check`, Clippy für alle Targets ohne
+Warnungen, 199 bestandene Workspace-Tests (338 optionale Tests ignoriert), 492
+Frontendtests, Frontend-/Release-Build. Python-Gesamtlauf: 49 Tests, davon fünf vorhandene
+optionale Tests übersprungen. Zusätzlich bestanden vier native Sage-Spieltests nach der
+Zusammenführung, sechs Sage-Konfigurations-/Job-/Benchmarktests, die nativen Adaptertests
+und der exakte Vergleich aller 460 Checker- und 278 Cube-Entscheidungen zwischen
+Einzelanfragepfad und Spielblöcken. Neue Fehler-, Abbruch-, Abschluss- und Konkurrenztests
+prüfen die Prozess- und Batchgrenzen. Keine UI-Verträge oder Ansichten wurden geändert;
+ein zusätzlicher Browser-End-to-End-Lauf wurde nicht ausgeführt.
+
+Die erweiterte GNUbg-Spieltestsuite hat 34 bestandene und vier fehlgeschlagene Tests.
+Alle vier Fehler wurden am unveränderten Ausgangscommit `d2e0291` reproduziert: Die
+Tests ändern `play_sessions.gnubg_path`, während neue Sitzungen den unveränderlichen
+Engine-Snapshot verwenden; erwartet wird deshalb fälschlich HTTP 503 statt des tatsächlich
+erfolgreichen HTTP 200. Die Tests wurden weder abgeschwächt noch in diesem Auftrag
+umgebaut. Details stehen in den archivierten Protokollen.
+
+Messdaten, vollständige Einzelwerte, Quell-/Binärhashes und Prüfprotokolle:
+`local-data/benchmarks/20261112-075923-2ply-optimized/` (`results.json`, `summary.json`,
+`comparison.json`, `source-manifest.json`). Ausgangsmessung:
+`local-data/benchmarks/20261112-065856-2ply-comparison/`. Das separate Benchmark-Backend
+wurde nach dem Lauf beendet; die Testdatenbank und Messartefakte bleiben zur Nachprüfung
+erhalten. Während der Nachmessung wurden keine Änderungen committet oder gepusht.
+
+
+### Aktivierung der Optimierungen
+
+Die Optimierungen benötigen keine neue Datenbankmigration. Für die lokale Aktivierung
+wird ausschließlich der geprüfte Open-Sage-Commit gebaut; unabhängige lokale Änderungen
+und deren Migrationen bleiben im Hauptworktree erhalten. Vor dem Austausch von
+`local-data/bin/bgtutor` werden die bisherige Binärdatei und ein vollständiger PostgreSQL-
+Dump gesichert. Aktive Aufträge müssen vor dem Neustart abgeschlossen sein. Danach
+werden API-Gesundheit, verfügbare Engines, unveränderte Einstellungen und Inhaltsdigests
+sämtlicher Benutzertabellen geprüft. Die bestehenden Open-Sage-Vorgaben für Spiel und
+Analyse bleiben bestehen. Aktivierungsnachweise liegen außerhalb von Git unter
+`backups/sage-performance-activation-*/`.
