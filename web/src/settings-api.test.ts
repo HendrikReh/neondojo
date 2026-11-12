@@ -141,6 +141,28 @@ describe('settings API', () => {
     expect(await loadEngines()).toEqual(engines);
   });
 
+  it('reads saved thread counts without imposing a client-side maximum', async () => {
+    const saved = { ...settings, gnubg_threads: 64, open_sage_threads: 64 };
+    vi.stubGlobal('fetch', async () => Response.json(saved));
+    expect(await loadSettings()).toEqual(saved);
+  });
+
+  it('rejects an invalid detected parallel thread maximum', async () => {
+    vi.stubGlobal('fetch', async () =>
+      Response.json([
+        {
+          id: 'gnubg',
+          name: 'GNUbg',
+          available: true,
+          version: '1.08',
+          plies: [2],
+          max_parallel_threads: 0,
+        },
+      ]),
+    );
+    await expect(loadEngines()).rejects.toBeInstanceOf(SettingsApiError);
+  });
+
   it('checks the backend executable path and surfaces its actual version', async () => {
     const fetch = vi.fn(async () =>
       Response.json({ version: 'GNU Backgammon 1.08.003' }),

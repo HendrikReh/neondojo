@@ -15,7 +15,7 @@ ADAPTER_VERSION = 1
 
 
 def validate_profile(plies, threads):
-    if plies not in (1, 2) or type(threads) is not int or not 2 <= threads <= 48:
+    if plies not in (1, 2) or type(threads) is not int or threads < 2:
         raise ValueError('Unsupported Open Sage depth or thread count')
 
 

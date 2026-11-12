@@ -85,10 +85,16 @@ async fn defaults_use_injected_engine_and_survive_new_app_states(pool: PgPool) {
     assert_eq!(engines[0]["available"], false);
     assert_eq!(engines[0]["version"], Value::Null);
     assert_eq!(engines[0]["plies"], json!([0, 1, 2, 3, 4]));
-    assert_eq!(
-        engines[1],
-        json!({"id":"bgsage","name":"Open Sage","available":false,"version":null,"plies":[2]})
-    );
+    assert_eq!(engines[1]["id"], "bgsage");
+    assert_eq!(engines[1]["name"], "Open Sage");
+    assert_eq!(engines[1]["available"], false);
+    assert_eq!(engines[1]["version"], Value::Null);
+    assert_eq!(engines[1]["plies"], json!([2]));
+    assert!(engines[0]["max_parallel_threads"].is_null());
+    let cpu_threads = std::thread::available_parallelism()
+        .ok()
+        .map(|count| count.get());
+    assert_eq!(engines[1]["max_parallel_threads"], json!(cpu_threads));
     let (_, schema) = call(app, "GET", "/api/openapi.json", Value::Null).await;
     for route in ["/api/settings", "/api/engines", "/api/engines/gnubg/check"] {
         assert!(schema["paths"][route].is_object(), "{route}");
@@ -120,26 +126,36 @@ async fn thread_settings_are_validated_and_pinned_in_new_jobs(pool: PgPool) {
     let (status, before) = call(app.clone(), "POST", &endpoint, json!({})).await;
     assert_eq!(status, 202, "{before}");
 
-    settings["gnubg_threads"] = json!(49);
+    let cpu_threads = std::thread::available_parallelism().unwrap().get();
+    let (_, engines) = call(app.clone(), "GET", "/api/engines", Value::Null).await;
+    let gnu_max = engines[0]["max_parallel_threads"].as_u64().unwrap() as usize;
+    assert!((2..=cpu_threads).contains(&gnu_max));
+    assert_eq!(engines[1]["max_parallel_threads"], json!(cpu_threads));
+    let gnu_threads = gnu_max.min(3);
+    let sage_threads = cpu_threads.min(6);
+    settings["gnubg_threads"] = json!(cpu_threads + 1);
     let (status, invalid) = call(app.clone(), "PUT", "/api/settings", settings.clone()).await;
     assert_eq!(status, 422, "{invalid}");
-    settings["gnubg_threads"] = json!(3);
-    settings["open_sage_threads"] = json!(6);
+    settings["gnubg_threads"] = json!(gnu_threads);
+    settings["open_sage_threads"] = json!(cpu_threads + 1);
+    let (status, invalid) = call(app.clone(), "PUT", "/api/settings", settings.clone()).await;
+    assert_eq!(status, 422, "{invalid}");
+    settings["open_sage_threads"] = json!(sage_threads);
     let (status, saved) = call(app.clone(), "PUT", "/api/settings", settings).await;
     assert_eq!(status, 200, "{saved}");
-    assert_eq!(saved["gnubg_threads"], 3);
-    assert_eq!(saved["open_sage_threads"], 6);
+    assert_eq!(saved["gnubg_threads"], json!(gnu_threads));
+    assert_eq!(saved["open_sage_threads"], json!(sage_threads));
     let mut legacy = saved;
     legacy.as_object_mut().unwrap().remove("gnubg_threads");
     legacy.as_object_mut().unwrap().remove("open_sage_threads");
     let (status, updated) = call(app.clone(), "PUT", "/api/settings", legacy).await;
     assert_eq!(status, 200, "{updated}");
-    assert_eq!(updated["gnubg_threads"], 3);
-    assert_eq!(updated["open_sage_threads"], 6);
+    assert_eq!(updated["gnubg_threads"], json!(gnu_threads));
+    assert_eq!(updated["open_sage_threads"], json!(sage_threads));
     let (status, after) = call(app.clone(), "POST", &endpoint, json!({})).await;
     assert_eq!(status, 202, "{after}");
     assert_ne!(after["id"], before["id"]);
-    for (job, expected) in [(before, Value::Null), (after, json!(3))] {
+    for (job, expected) in [(before, Value::Null), (after, json!(gnu_threads))] {
         let id = uuid::Uuid::parse_str(job["id"].as_str().unwrap()).unwrap();
         let snapshot: Value = sqlx::query_scalar("SELECT engine_snapshot FROM jobs WHERE id=$1")
             .bind(id)
@@ -156,8 +172,14 @@ async fn thread_settings_are_validated_and_pinned_in_new_jobs(pool: PgPool) {
     )
     .await;
     assert_eq!(status, 201, "{play}");
-    assert_eq!(play["engine_snapshots"]["bot"]["gnubg_threads"], 3);
-    assert_eq!(play["engine_snapshots"]["analysis"]["gnubg_threads"], 3);
+    assert_eq!(
+        play["engine_snapshots"]["bot"]["gnubg_threads"],
+        json!(gnu_threads)
+    );
+    assert_eq!(
+        play["engine_snapshots"]["analysis"]["gnubg_threads"],
+        json!(gnu_threads)
+    );
 
     let side = json!({"engine_id":"gnubg","plies":0});
     let (status, duel) = call(
@@ -168,8 +190,8 @@ async fn thread_settings_are_validated_and_pinned_in_new_jobs(pool: PgPool) {
     )
     .await;
     assert_eq!(status, 201, "{duel}");
-    assert_eq!(duel["engines"]["a"]["gnubg_threads"], 3);
-    assert_eq!(duel["engines"]["b"]["gnubg_threads"], 3);
+    assert_eq!(duel["engines"]["a"]["gnubg_threads"], json!(gnu_threads));
+    assert_eq!(duel["engines"]["b"]["gnubg_threads"], json!(gnu_threads));
     let mut reset = updated;
     reset["gnubg_threads"] = Value::Null;
     reset["open_sage_threads"] = Value::Null;

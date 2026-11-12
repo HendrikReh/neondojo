@@ -35,10 +35,10 @@ pub struct AppSettings {
     pub play_plies: i32,
     pub gnubg_path: String,
     /// Host-local override. Null uses one GNUbg calculation thread. Omit on PUT to keep the saved value.
-    #[schema(minimum = 1, maximum = 48)]
+    #[schema(minimum = 1)]
     pub gnubg_threads: Option<i32>,
     /// Host-local override. Null uses four threads for analysis and two for play. Omit on PUT to keep the saved value.
-    #[schema(minimum = 2, maximum = 48)]
+    #[schema(minimum = 2)]
     pub open_sage_threads: Option<i32>,
     #[serde(default = "default_bearoff_direction")]
     pub bearoff_direction: String,
@@ -97,12 +97,16 @@ pub struct EngineInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fork: Option<EngineFork>,
     pub plies: Vec<i32>,
+    /// Upper bound on simultaneous CPU execution for this engine on the backend host.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(minimum = 1)]
+    pub max_parallel_threads: Option<i32>,
 }
 
 #[derive(Deserialize, ToSchema)]
 struct EngineCheckRequest {
     path: String,
-    #[schema(minimum = 1, maximum = 48)]
+    #[schema(minimum = 1)]
     threads: Option<i32>,
 }
 #[derive(Serialize, ToSchema)]
@@ -117,7 +121,7 @@ pub struct EngineSnapshot {
     pub gnubg_path: String,
     pub engine_version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schema(minimum = 1, maximum = 48)]
+    #[schema(minimum = 1)]
     pub gnubg_threads: Option<i32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub open_sage: Option<SageSnapshot>,
@@ -229,12 +233,20 @@ fn validate_path(path: &str) -> ApiResult<()> {
     Ok(())
 }
 fn validate_threads(engine: &str, threads: Option<i32>) -> ApiResult<()> {
-    let range = crate::configuration::engine_thread_range(engine);
-    if threads.is_some_and(|threads| !range.contains(&threads)) {
+    let Some(threads) = threads else {
+        return Ok(());
+    };
+    let minimum = crate::configuration::engine_min_threads(engine);
+    let maximum = crate::configuration::available_cpu_threads()
+        .filter(|&maximum| maximum >= minimum)
+        .ok_or_else(|| {
+            ApiError::invalid(format!(
+                "No configurable thread range is available for {engine}"
+            ))
+        })?;
+    if !(minimum..=maximum).contains(&threads) {
         return Err(ApiError::invalid(format!(
-            "{engine} threads must be between {} and {}",
-            range.start(),
-            range.end()
+            "{engine} threads must be between {minimum} and {maximum}"
         )));
     }
     Ok(())
@@ -276,8 +288,6 @@ fn validate(settings: &AppSettings) -> ApiResult<()> {
     if !matches!(settings.bearoff_direction.as_str(), "right" | "left") {
         return Err(ApiError::invalid("bearoff direction must be right or left"));
     }
-    validate_threads("gnubg", settings.gnubg_threads)?;
-    validate_threads("bgsage", settings.open_sage_threads)?;
     validate_path(&settings.gnubg_path)
 }
 
@@ -305,6 +315,13 @@ async fn put_settings(
     }
     settings.gnubg_threads = gnubg_threads.unwrap_or(current.gnubg_threads);
     settings.open_sage_threads = open_sage_threads.unwrap_or(current.open_sage_threads);
+    // Existing settings and submitted jobs can outlive a change in CPU availability.
+    if settings.gnubg_threads != current.gnubg_threads {
+        validate_threads("gnubg", settings.gnubg_threads)?;
+    }
+    if settings.open_sage_threads != current.open_sage_threads {
+        validate_threads("bgsage", settings.open_sage_threads)?;
+    }
     // Validate before the compare-and-swap. No partial changes are ever persisted,
     // and the final version predicate also fences concurrent checks/writes.
     let version = settings
@@ -386,6 +403,18 @@ async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo
     } else {
         vec![2]
     };
+    let cpu_threads = crate::configuration::available_cpu_threads();
+    let gnubg_parallel_limit = if !running
+        && version.is_some()
+        && let Some(cpu_threads) = cpu_threads
+    {
+        Engine::new(settings.gnubg_path.clone())
+            .max_parallel_threads(cpu_threads)
+            .await
+            .ok()
+    } else {
+        None
+    };
     Ok(Json(vec![
         EngineInfo {
             id: "gnubg".into(),
@@ -394,6 +423,7 @@ async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo
             version,
             fork: None,
             plies: vec![0, 1, 2, 3, 4],
+            max_parallel_threads: gnubg_parallel_limit,
         },
         EngineInfo {
             id: "bgsage".into(),
@@ -402,6 +432,7 @@ async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo
             version: sage_version,
             fork: sage.as_ref().and_then(SageSnapshot::known_fork),
             plies: sage_plies,
+            max_parallel_threads: cpu_threads,
         },
     ]))
 }

@@ -14,7 +14,7 @@ fn snapshot() -> SageSnapshot {
 
 #[test]
 fn unsupported_profiles_are_rejected_before_starting_processes() {
-    for (plies, threads) in [(0, 2), (3, 2), (2, 0), (2, 1), (2, 49)] {
+    for (plies, threads) in [(0, 2), (3, 2), (2, 0), (2, 1)] {
         let mut value = snapshot();
         value.plies = plies;
         value.threads = threads;
@@ -28,10 +28,10 @@ fn unsupported_profiles_are_rejected_before_starting_processes() {
 #[test]
 fn custom_thread_count_is_part_of_the_sage_profile() {
     let mut profile = snapshot();
-    profile.threads = 6;
+    profile.threads = 64;
     let engine = SageEngine::new(profile).unwrap();
-    assert_eq!(engine.snapshot().threads, 6);
-    assert!(engine.saved_version().unwrap().contains("threads 6"));
+    assert_eq!(engine.snapshot().threads, 64);
+    assert!(engine.saved_version().unwrap().contains("threads 64"));
 }
 
 #[tokio::test]

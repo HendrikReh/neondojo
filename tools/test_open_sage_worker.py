@@ -15,7 +15,7 @@ class WorkerTests(unittest.TestCase):
     def test_worker_exists(self):
         self.assertTrue(PATH.exists(), 'bundled sidecar is missing')
 
-    def test_rejects_unbounded_or_unvalidated_profiles(self):
+    def test_validates_depth_and_minimum_threads(self):
         if not PATH.exists():
             self.fail('bundled sidecar is missing')
         spec = importlib.util.spec_from_file_location('sage_worker', PATH)
@@ -26,10 +26,10 @@ class WorkerTests(unittest.TestCase):
         worker.validate_profile(2, 2)
         worker.validate_profile(2, 4)
         limits = json.loads((PATH.parents[3] / 'shared/configuration-options.json').read_text())
-        minimum, maximum = (limits['engine_threads']['bgsage'][bound] for bound in ('min', 'max'))
-        for threads in range(minimum, maximum + 1):
-            worker.validate_profile(2, threads)
-        for plies, threads in [(0, 2), (3, 2), (2, minimum - 1), (2, maximum + 1), (2, 2.5)]:
+        minimum = limits['engine_threads']['bgsage']['min']
+        worker.validate_profile(2, minimum)
+        worker.validate_profile(2, 64)
+        for plies, threads in [(0, 2), (3, 2), (2, minimum - 1), (2, 2.5)]:
             with self.subTest(plies=plies, threads=threads), self.assertRaises(ValueError):
                 worker.validate_profile(plies, threads)
 

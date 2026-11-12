@@ -116,6 +116,15 @@
   margin-top: 8px;
   max-width: 610px;
 }
+.settings-thread-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 12px;
+}
+.settings-thread-label .settings-help {
+  margin: 0;
+}
 .settings-intro {
   margin: 0 0 22px;
 }

@@ -79,7 +79,7 @@ pub struct SageCubeEvaluation {
 
 fn valid_sage_threads(threads: u32) -> bool {
     i32::try_from(threads)
-        .is_ok_and(|threads| crate::configuration::engine_thread_range("bgsage").contains(&threads))
+        .is_ok_and(|threads| threads >= crate::configuration::engine_min_threads("bgsage"))
 }
 
 impl SageEngine {

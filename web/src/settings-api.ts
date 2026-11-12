@@ -55,13 +55,10 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 function isThreadLimit(value: unknown, engine: 'gnubg' | 'bgsage') {
-  const { min, max } = configurationOptions.engine_threads[engine];
+  const { min } = configurationOptions.engine_threads[engine];
   return (
     value == null ||
-    (typeof value === 'number' &&
-      Number.isInteger(value) &&
-      value >= min &&
-      value <= max)
+    (typeof value === 'number' && Number.isSafeInteger(value) && value >= min)
   );
 }
 
@@ -126,6 +123,10 @@ export async function loadEngines(signal?: AbortSignal): Promise<EngineInfo[]> {
         typeof engine.name === 'string' &&
         typeof engine.available === 'boolean' &&
         (engine.version === null || typeof engine.version === 'string') &&
+        (engine.max_parallel_threads == null ||
+          (typeof engine.max_parallel_threads === 'number' &&
+            Number.isSafeInteger(engine.max_parallel_threads) &&
+            engine.max_parallel_threads > 0)) &&
         (engine.fork === undefined ||
           engine.fork === null ||
           (isObject(engine.fork) &&

@@ -2452,6 +2452,11 @@ export interface components {
             available: boolean;
             fork?: null | components["schemas"]["EngineFork"];
             id: string;
+            /**
+             * Format: int32
+             * @description Upper bound on simultaneous CPU execution for this engine on the backend host.
+             */
+            max_parallel_threads?: number | null;
             name: string;
             plies: number[];
             version?: string | null;

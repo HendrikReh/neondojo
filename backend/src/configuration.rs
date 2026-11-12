@@ -31,15 +31,17 @@ static OPTIONS: std::sync::LazyLock<Value> = std::sync::LazyLock::new(|| {
         .expect("valid embedded configuration options")
 });
 
-pub(crate) fn engine_thread_range(engine: &str) -> std::ops::RangeInclusive<i32> {
-    let limits = &OPTIONS["engine_threads"][engine];
-    let limit = |key| {
-        limits[key]
-            .as_i64()
-            .and_then(|number| i32::try_from(number).ok())
-            .expect("valid embedded thread limit")
-    };
-    limit("min")..=limit("max")
+pub(crate) fn available_cpu_threads() -> Option<i32> {
+    std::thread::available_parallelism()
+        .ok()
+        .and_then(|count| i32::try_from(count.get()).ok())
+}
+
+pub(crate) fn engine_min_threads(engine: &str) -> i32 {
+    OPTIONS["engine_threads"][engine]["min"]
+        .as_i64()
+        .and_then(|number| i32::try_from(number).ok())
+        .expect("valid embedded minimum thread count")
 }
 
 /// Verified provider profiles, shared with client normalization and catalogs.

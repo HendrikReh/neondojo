@@ -52,9 +52,7 @@ fn collect(id: Uuid) -> Machine {
         .into(),
         architecture: std::env::consts::ARCH.into(),
         cpu_model,
-        logical_cpus: std::thread::available_parallelism()
-            .ok()
-            .map(|n| n.get() as i32),
+        logical_cpus: crate::configuration::available_cpu_threads(),
         memory_bytes,
     }
 }

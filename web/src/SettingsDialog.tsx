@@ -767,14 +767,36 @@ export default function SettingsDialog({
                       ['bgsage', 'open_sage_threads', 'sageThreads'],
                     ] as const
                   ).map(([provider, field, label]) => {
-                    const { min, max } =
+                    const { min } =
                       configurationOptions.engine_threads[provider];
+                    const max = engines.find(
+                      (engine) => engine.id === provider,
+                    )?.max_parallel_threads;
+                    const count = draft[field];
+                    const validRange = max != null && max >= min;
+                    const retained =
+                      count != null &&
+                      (!validRange || count < min || count > max);
+                    const labelId = `${id}-${field}-label`;
+                    const limitsId = `${id}-${field}-limits`;
                     return (
                       <label className="settings-field" key={field}>
-                        <span>{t(label)}</span>
+                        <span className="settings-thread-label">
+                          <span id={labelId}>{t(label)}</span>
+                          <span className="settings-help" id={limitsId}>
+                            {validRange
+                              ? t('configurableThreadRange', { min, max })
+                              : t('threadRangeUnavailable')}
+                            {retained && (
+                              <> {t('retainedThreadCount', { count })}</>
+                            )}
+                          </span>
+                        </span>
                         <select
-                          value={draft[field] ?? ''}
-                          aria-describedby={`${id}-threads-help`}
+                          value={count ?? ''}
+                          disabled={!validRange && count == null}
+                          aria-labelledby={labelId}
+                          aria-describedby={`${limitsId} ${id}-threads-help`}
                           onChange={(event) => {
                             if (provider === 'gnubg') {
                               checkAbort.current?.abort();
@@ -788,14 +810,20 @@ export default function SettingsDialog({
                           }}
                         >
                           <option value="">{t('defaultThreads')}</option>
-                          {Array.from(
-                            { length: max - min + 1 },
-                            (_, index) => min + index,
-                          ).map((threads) => (
-                            <option key={threads} value={threads}>
-                              {threads}
+                          {retained && (
+                            <option value={count} disabled>
+                              {count}
                             </option>
-                          ))}
+                          )}
+                          {validRange &&
+                            Array.from(
+                              { length: max - min + 1 },
+                              (_, index) => min + index,
+                            ).map((threads) => (
+                              <option key={threads} value={threads}>
+                                {threads}
+                              </option>
+                            ))}
                         </select>
                       </label>
                     );

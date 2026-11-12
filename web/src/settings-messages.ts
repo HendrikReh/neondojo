@@ -39,6 +39,9 @@ const en = {
   gnubgThreads: 'GNUbg threads',
   sageThreads: 'Open Sage threads',
   defaultThreads: 'Default',
+  threadRangeUnavailable: 'Thread range unavailable.',
+  retainedThreadCount: 'Saved value {count}.',
+  configurableThreadRange: 'Configurable range {min}–{max}.',
   threadsHelp:
     'Applies to new analyses, games and engine duels. By default GNUbg uses 1 thread. Open Sage uses 2 for playing and 4 for analysis and duels.',
   checkNeeded: 'The edited GNUbg settings have not been checked yet.',
@@ -113,6 +116,9 @@ export const settingsMessages: Record<Locale, Messages> = {
     gnubgThreads: 'GNUbg-Threads',
     sageThreads: 'Open-Sage-Threads',
     defaultThreads: 'Standard',
+    threadRangeUnavailable: 'Der Threadbereich ist derzeit nicht verfügbar.',
+    retainedThreadCount: 'Gespeicherter Wert {count}.',
+    configurableThreadRange: 'Einstellbarer Bereich {min}–{max}.',
     threadsHelp:
       'Gilt für neue Analysen, Partien und Engine-Duelle. Standardmäßig nutzt GNUbg 1 Thread. Open Sage nutzt 2 beim Spielen und 4 für Analysen und Duelle.',
     checkNeeded:
@@ -185,6 +191,9 @@ export const settingsMessages: Record<Locale, Messages> = {
     gnubgThreads: 'Hilos de GNUbg',
     sageThreads: 'Hilos de Open Sage',
     defaultThreads: 'Predeterminado',
+    threadRangeUnavailable: 'El intervalo de hilos no está disponible.',
+    retainedThreadCount: 'Valor guardado {count}.',
+    configurableThreadRange: 'Intervalo configurable {min}–{max}.',
     threadsHelp:
       'Se aplica a nuevos análisis, partidas y duelos de motores. GNUbg usa 1 hilo por defecto. Open Sage usa 2 para jugar y 4 para análisis y duelos.',
     checkNeeded: 'Los ajustes modificados de GNUbg aún no se han comprobado.',
@@ -255,6 +264,9 @@ export const settingsMessages: Record<Locale, Messages> = {
     gnubgThreads: 'Threads de GNUbg',
     sageThreads: 'Threads d’Open Sage',
     defaultThreads: 'Par défaut',
+    threadRangeUnavailable: 'La plage de threads est indisponible.',
+    retainedThreadCount: 'Valeur enregistrée {count}.',
+    configurableThreadRange: 'Plage configurable de {min} à {max}.',
     threadsHelp:
       'S’applique aux nouvelles analyses, parties et confrontations entre moteurs. Par défaut, GNUbg utilise 1 thread. Open Sage en utilise 2 pour jouer et 4 pour les analyses et les confrontations.',
     checkNeeded:
@@ -326,6 +338,9 @@ export const settingsMessages: Record<Locale, Messages> = {
     gnubgThreads: 'Thread di GNUbg',
     sageThreads: 'Thread di Open Sage',
     defaultThreads: 'Predefinito',
+    threadRangeUnavailable: 'L’intervallo di thread non è disponibile.',
+    retainedThreadCount: 'Valore salvato {count}.',
+    configurableThreadRange: 'Intervallo configurabile {min}–{max}.',
     threadsHelp:
       'Si applica a nuove analisi, partite e sfide tra motori. Per impostazione predefinita GNUbg usa 1 thread. Open Sage ne usa 2 per giocare e 4 per analisi e sfide.',
     checkNeeded:
@@ -395,6 +410,9 @@ export const settingsMessages: Record<Locale, Messages> = {
     gnubgThreads: 'Wątki GNUbg',
     sageThreads: 'Wątki Open Sage',
     defaultThreads: 'Domyślnie',
+    threadRangeUnavailable: 'Zakres wątków jest niedostępny.',
+    retainedThreadCount: 'Zapisana wartość {count}.',
+    configurableThreadRange: 'Zakres ustawień {min}–{max}.',
     threadsHelp:
       'Dotyczy nowych analiz, partii i pojedynków silników. Domyślnie GNUbg używa 1 wątku. Open Sage używa 2 do gry i 4 do analiz oraz pojedynków.',
     checkNeeded: 'Zmienione ustawienia GNUbg nie zostały jeszcze sprawdzone.',

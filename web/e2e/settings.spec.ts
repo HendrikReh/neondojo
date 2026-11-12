@@ -72,6 +72,7 @@ async function settingsBackend(
           name: 'GNU Backgammon',
           available: true,
           version: 'GNUbg 1.08',
+          max_parallel_threads: 7,
           plies: [0, 1, 2, 3, 4],
         },
         {
@@ -79,6 +80,7 @@ async function settingsBackend(
           name: 'BGSage',
           available: false,
           version: null,
+          max_parallel_threads: 9,
           plies: [],
         },
       ],
@@ -112,6 +114,22 @@ test('saves separate engine thread limits and restores them when reopened', asyn
   await page.goto('/');
   const { dialog } = await openSettings(page);
   await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
+  await expect(
+    dialog.getByRole('combobox', { name: 'GNUbg threads', exact: true }),
+  ).toHaveAccessibleDescription(/Configurable range 1–7/);
+  await expect(
+    dialog.getByRole('combobox', { name: 'Open Sage threads', exact: true }),
+  ).toHaveAccessibleDescription(/Configurable range 2–9/);
+  for (const [label, max] of [
+    ['GNUbg threads', 7],
+    ['Open Sage threads', 9],
+  ] as const) {
+    const field = dialog.getByRole('combobox', { name: label, exact: true });
+    await expect(field.locator('option').last()).toHaveAttribute(
+      'value',
+      String(max),
+    );
+  }
   await dialog
     .getByRole('combobox', { name: 'GNUbg threads', exact: true })
     .selectOption('3');

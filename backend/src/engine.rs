@@ -50,6 +50,16 @@ pub(crate) fn resolve_binary(binary: &str) -> Result<String> {
         .to_owned())
 }
 
+fn reported_threads(output: &str) -> Option<i32> {
+    output.lines().find_map(|line| {
+        let line = line.trim();
+        line.strip_suffix(" calculation threads.")
+            .or_else(|| line.strip_suffix(" calculation thread."))?
+            .parse()
+            .ok()
+    })
+}
+
 #[derive(Clone)]
 pub struct Engine {
     binary: String,
@@ -218,7 +228,7 @@ impl Engine {
         let commands_path = directory.join("commands.txt");
         if let Some(threads) = self.threads {
             ensure!(
-                crate::configuration::engine_thread_range("gnubg").contains(&threads),
+                threads >= crate::configuration::engine_min_threads("gnubg"),
                 "Unsupported GNUbg thread count: {threads}"
             );
             tokio::fs::write(
@@ -280,9 +290,8 @@ impl Engine {
             work.await?
         };
         if let Some(threads) = self.threads {
-            let expected = format!("{threads} calculation threads.");
             ensure!(
-                output.lines().any(|line| line.trim() == expected),
+                reported_threads(&output) == Some(threads),
                 "GNUbg did not accept the requested {threads} calculation threads"
             );
         }
@@ -294,6 +303,17 @@ impl Engine {
                 .context("GNUbg changed during execution; discarding the result")?;
         }
         Ok(output)
+    }
+
+    pub(crate) async fn max_parallel_threads(&self, cpu_threads: i32) -> Result<i32> {
+        let temp = tempfile::tempdir()?;
+        let commands = format!("set threads {cpu_threads}\nshow threads\n");
+        let output = self
+            .run_with_timeout(temp.path(), &commands, Duration::from_secs(5))
+            .await?;
+        reported_threads(&output)
+            .filter(|count| (1..=cpu_threads).contains(count))
+            .context("GNUbg did not report its calculation thread count")
     }
 
     pub async fn normalize_mat(&self, bytes: &[u8]) -> Result<String> {
