@@ -382,15 +382,18 @@ The fixed **WC2014 v1** reference is the 11-point match between Akiko Yazawa and
 
 **Total analysis time** sums the full analysis pipeline for each game, including process startup, loading, checker and cube analysis, and result preparation. Each game starts a fresh GNUbg process. The analysis is cubeful and deterministic, with zero noise and luck analysis disabled. The timer excludes waiting, installation and version checks, and database writes. **Ø analysis time / move** divides the total by all 460 checker moves, including forced moves. It represents the match-wide average. New runs use `gnubg-match-v2-unlimited` with no fixed per-game timeout. Older runs retain the timeout recorded in their protocol snapshot.
 
+**Measure play-turn latency** queues a separate run using the saved GNUbg installation and playing depth (0–2 ply). The `gnubg-checker-turn-v1` protocol plays 11 fixed checker turns with dice already rolled, sampled from opening, contact, race and bear-off positions in the WC2014 reference. Each sample restores its own SGF checkpoint in a fresh process through the Playing adapter, plays one bot turn, and reads the resulting snapshot. The timer includes preparation, native process startup, checkpoint restoration, version guards, and result processing. Queue wait, installation checks, database writes, network time and animation are outside the timed scope. The history reports the arithmetic mean in milliseconds. Play measurements use the same queue and cancellation controls. They are independent of analysis-time estimates and do not create games in the library.
+
 Every attempt records its date, backend machine and hardware, engine version and executable path, ply depth, reference, protocol, progress, and status. Successful runs add total time and average time per move in milliseconds. History is independent of library matches and profiles. Backend restarts mark interrupted runs as failed. A new run starts its timing from the beginning. During a run, the engine availability indicator reuses the verified installation snapshot to avoid starting a competing probe.
 
-| Method | Endpoint                      | Purpose                                                                            |
-| ------ | ----------------------------- | ---------------------------------------------------------------------------------- |
-| GET    | `/api/benchmarks/reference`   | Read the versioned reference and measurement protocol.                             |
-| GET    | `/api/benchmarks/status`      | Read the active status shown in the global notice.                                 |
-| GET    | `/api/benchmarks`             | List the latest 1,000 attempts, newest first.                                      |
-| POST   | `/api/benchmarks`             | Queue attempts with a request such as `{ "engine_id": "gnubg", "plies": [0, 2] }`. |
-| POST   | `/api/benchmarks/{id}/cancel` | Cancel a queued or running attempt. Finished results are retained.                 |
+| Method | Endpoint                      | Purpose                                                                             |
+| ------ | ----------------------------- | ----------------------------------------------------------------------------------- |
+| GET    | `/api/benchmarks/reference`   | Read the versioned reference and measurement protocol.                              |
+| GET    | `/api/benchmarks/status`      | Read the active status shown in the global notice.                                  |
+| GET    | `/api/benchmarks`             | List the latest 1,000 attempts, newest first.                                       |
+| POST   | `/api/benchmarks`             | Queue attempts with a request such as `{ "engine_id": "gnubg", "plies": [0, 2] }`.  |
+| POST   | `/api/benchmarks/play`        | Queue a play-turn latency run using the saved GNUbg installation and playing depth. |
+| POST   | `/api/benchmarks/{id}/cancel` | Cancel a queued or running attempt. Finished results are retained.                  |
 
 The server creates all attempts for a multi-depth request together before starting them. New requests during a benchmark return HTTP 409. Unavailable engines and invalid depths return HTTP 422. OpenAPI documents the endpoints and types.
 

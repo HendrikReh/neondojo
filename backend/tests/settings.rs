@@ -492,6 +492,56 @@ async fn configured_relative_gnubg_path_is_shared_by_analysis_play_and_benchmark
     assert_eq!(benchmark[0]["engine_version"], session["engine"]["version"]);
 }
 
+#[cfg(unix)]
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL and native GNUbg with embedded Python"]
+async fn play_latency_uses_the_saved_play_depth_and_installation(pool: PgPool) {
+    let state = AppState::new(pool.clone(), Engine::new("/missing/backend-default".into()));
+    let app = api::router(state.clone());
+    call(app.clone(), "GET", "/api/settings", Value::Null).await;
+    sqlx::query("UPDATE app_settings SET play_plies=1,analysis_plies=4,gnubg_path=$1")
+        .bind(binary())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (status, queued) = call(app.clone(), "POST", "/api/benchmarks/play", Value::Null).await;
+    assert_eq!(status, 202, "{queued}");
+    assert_eq!(queued["plies"], 1);
+    assert!(queued["reference"].is_null());
+    assert!(queued["play_reference"]["total_turns"].as_i64().unwrap() > 1);
+    assert!(queued["average_turn_ms"].is_null());
+    let executable = absolute_binary();
+    assert_eq!(queued["engine_path"], executable.to_str().unwrap());
+
+    sqlx::query("UPDATE app_settings SET play_plies=0,gnubg_path='/missing/after-queueing'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(bgtutor::benchmarks::run_one(&state).await.unwrap());
+    let (_, history) = call(app, "GET", "/api/benchmarks", Value::Null).await;
+    let run = &history["runs"][0];
+    assert_eq!(run["id"], queued["id"]);
+    assert_eq!(run["status"], "completed", "{run}");
+    assert_eq!(run["plies"], 1);
+    assert_eq!(run["engine_path"], queued["engine_path"]);
+    assert_eq!(
+        run["completed_turns"],
+        queued["play_reference"]["total_turns"]
+    );
+    let total = run["total_elapsed_ms"].as_f64().unwrap();
+    let mean = run["average_turn_ms"].as_f64().unwrap();
+    assert!(mean > 0.0 && (mean - total / run["completed_turns"].as_f64().unwrap()).abs() < 1e-9);
+    assert!(run["average_move_ms"].is_null());
+    assert_eq!(run["analyzed_moves"], 0);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM play_sessions")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+}
+
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL and GNUbg"]
 async fn jobs_use_saved_defaults_snapshot_installations_and_deduplicate_by_configuration(

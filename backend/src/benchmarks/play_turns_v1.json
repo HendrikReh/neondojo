@@ -1,0 +1,123 @@
+[
+  {
+    "game": 1,
+    "ply": 1,
+    "bot_player": 0,
+    "native_id": "4HPwATDgc/ABMA:MAFrAQAAAAAE",
+    "dice": [
+      6,
+      2
+    ],
+    "sgf": "(;FF[4]GM[6]CA[UTF-8]MI[length:11][game:0][ws:0][bs:0]PW[White]PB[Black]RU[Crawford]\n;PL[W]AE[a:y]AW[f][f][f][f][f][h][h][h][m][m][m][m][m][x][x]AB[s][s][s][s][s][q][q][q][l][l][l][l][l][a][a]\n;PL[W]DI[62])\n"
+  },
+  {
+    "game": 1,
+    "ply": 7,
+    "bot_player": 0,
+    "native_id": "4NvBQSCYZ8oBMA:MAF7AQAAAAAE",
+    "dice": [
+      6,
+      6
+    ],
+    "sgf": "(;FF[4]GM[6]CA[UTF-8]MI[length:11][game:0][ws:0][bs:0]PW[White]PB[Black]RU[Crawford]\n;PL[W]AE[a:y]AW[d][d][f][f][f][f][h][h][j][k][m][m][m][x][x]AB[s][s][s][s][s][r][r][q][q][q][l][l][l][g][a]\n;PL[W]DI[66])\n"
+  },
+  {
+    "game": 2,
+    "ply": 7,
+    "bot_player": 0,
+    "native_id": "cJ+DMQDQ1+AARg:MAFmARAAAAAE",
+    "dice": [
+      4,
+      1
+    ],
+    "sgf": "(;FF[4]GM[6]CA[UTF-8]MI[length:11][game:0][ws:1][bs:0]PW[White]PB[Black]RU[Crawford]\n;PL[W]AE[a:y]AW[e][f][f][f][f][f][g][h][h][m][m][m][v][v][y]AB[t][t][t][s][s][s][s][s][q][q][q][l][l][i][i]\n;PL[W]DI[41])\n"
+  },
+  {
+    "game": 3,
+    "ply": 3,
+    "bot_player": 0,
+    "native_id": "yOfgATDgc+EBUA:MIFmARAACAAE",
+    "dice": [
+      5,
+      1
+    ],
+    "sgf": "(;FF[4]GM[6]CA[UTF-8]MI[length:11][game:0][ws:1][bs:1]PW[White]PB[Black]RU[Crawford]\n;PL[W]AE[a:y]AW[f][f][f][f][f][h][h][h][i][m][m][m][m][x][y]AB[u][s][s][s][s][s][q][q][q][l][l][l][l][a][a]\n;PL[W]DI[51])\n"
+  },
+  {
+    "game": 3,
+    "ply": 14,
+    "bot_player": 1,
+    "native_id": "mPPCIQhjBjxgWA:cAlpARAACAAE",
+    "dice": [
+      2,
+      2
+    ],
+    "sgf": "(;FF[4]GM[6]CA[UTF-8]MI[length:11][game:0][ws:1][bs:1]PW[White]PB[Black]RU[Crawford]\n;PL[B]AE[a:y]AW[d][d][f][f][f][h][h][h][h][i][m][m][m][q][v]AB[x][x][u][u][s][s][l][l][l][l][e][e][a][a][y]\n;PL[B]DI[22])\n"
+  },
+  {
+    "game": 5,
+    "ply": 6,
+    "bot_player": 0,
+    "native_id": "yOfgASSwW+IBIQ:MAFzATAACAAE",
+    "dice": [
+      6,
+      4
+    ],
+    "sgf": "(;FF[4]GM[6]CA[UTF-8]MI[length:11][game:0][ws:3][bs:1]PW[White]PB[Black]RU[Crawford]\n;PL[W]AE[a:y]AW[e][e][f][f][f][g][g][h][j][m][m][m][m][t][x]AB[u][s][s][s][s][s][q][q][q][l][l][l][l][c][a]\n;PL[W]DI[64])\n"
+  },
+  {
+    "game": 5,
+    "ply": 31,
+    "bot_player": 1,
+    "native_id": "m70dAADvtgEADA:UYllATAACAAE",
+    "dice": [
+      3,
+      1
+    ],
+    "sgf": "(;FF[4]GM[6]CA[UTF-8]MI[length:11][game:0][ws:3][bs:1]PW[White]PB[Black]RU[Crawford]\n;CP[b]\n;CV[2]\n;PL[B]AE[a:y]AW[a][a][b][b][d][d][e][e][e][e][f][f][g][g][g]AB[x][x][x][x][w][w][w][v][v][u][u][t][t][c][c]\n;PL[B]DI[31])\n"
+  },
+  {
+    "game": 6,
+    "ply": 53,
+    "bot_player": 0,
+    "native_id": "m9sRIBAzAAAGAA:AQFmAVAACAAE",
+    "dice": [
+      4,
+      1
+    ],
+    "sgf": "(;FF[4]GM[6]CA[UTF-8]MI[length:11][game:0][ws:5][bs:1]PW[White]PB[Black]RU[Crawford]\n;CP[w]\n;CV[2]\n;PL[W]AE[a:y]AW[a][a][c][c][v][v]AB[x][x][w][w][u][u][u][t][t][s][s][s][p][h][b]\n;PL[W]DI[41])\n"
+  },
+  {
+    "game": 7,
+    "ply": 46,
+    "bot_player": 1,
+    "native_id": "2J0B4AbbOMYwAA:UQluAVAAGAAE",
+    "dice": [
+      4,
+      3
+    ],
+    "sgf": "(;FF[4]GM[6]CA[UTF-8]MI[length:11][game:0][ws:5][bs:3]PW[White]PB[Black]RU[Crawford]\n;CP[b]\n;CV[2]\n;PL[B]AE[a:y]AW[d][d][e][e][e][f][f][f][h][h][t][t][t][u][u]AB[x][x][w][w][v][v][s][s][s][p][p][m][m][i][i]\n;PL[B]DI[43])\n"
+  },
+  {
+    "game": 8,
+    "ply": 58,
+    "bot_player": 1,
+    "native_id": "57aZAADu7gEAGA:UgluAVAAKAAE",
+    "dice": [
+      4,
+      3
+    ],
+    "sgf": "(;FF[4]GM[6]CA[UTF-8]MI[length:11][game:0][ws:5][bs:5]PW[White]PB[Black]RU[Crawford]\n;CP[b]\n;CV[4]\n;PL[B]AE[a:y]AW[a][a][a][c][c][c][d][d][e][e][f][f][h][h][j]AB[w][w][w][v][v][v][u][u][u][t][t][t][t][b][b]\n;PL[B]DI[43])\n"
+  },
+  {
+    "game": 10,
+    "ply": 24,
+    "bot_player": 0,
+    "native_id": "G+4OAhDMbhOAQQ:AQF3AZAASAAE",
+    "dice": [
+      6,
+      5
+    ],
+    "sgf": "(;FF[4]GM[6]CA[UTF-8]MI[length:11][game:0][ws:9][bs:9]PW[White]PB[Black]RU[Crawford]\n;CP[w]\n;CV[2]\n;PL[W]AE[a:y]AW[c][c][e][e][f][f][f][g][g][h][h][j][t][t][y]AB[x][x][w][w][s][s][s][r][r][r][q][q][q][l][b]\n;PL[W]DI[65])\n"
+  }
+]

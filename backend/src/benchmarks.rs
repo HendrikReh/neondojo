@@ -16,7 +16,9 @@ use uuid::Uuid;
 
 pub(crate) mod estimate;
 mod machine;
+mod play_latency;
 mod runner;
+use play_latency::PlayBenchmarkReference;
 pub use runner::{recover_interrupted, run_one};
 pub const REFERENCE_SGF: &str = include_str!("benchmarks/reference.sgf");
 
@@ -92,14 +94,18 @@ pub struct BenchmarkRun {
     pub engine_version: String,
     pub engine_path: String,
     pub plies: i32,
-    #[sqlx(json)]
-    pub reference: BenchmarkReference,
-    #[sqlx(json)]
-    pub protocol: BenchmarkProtocol,
+    #[sqlx(json(nullable))]
+    pub reference: Option<BenchmarkReference>,
+    #[sqlx(json(nullable))]
+    pub protocol: Option<BenchmarkProtocol>,
+    #[sqlx(json(nullable))]
+    pub play_reference: Option<PlayBenchmarkReference>,
     pub total_elapsed_ms: Option<f64>,
     pub average_move_ms: Option<f64>,
+    pub average_turn_ms: Option<f64>,
     pub completed_games: i32,
     pub analyzed_moves: i32,
+    pub completed_turns: i32,
     pub error: Option<String>,
 }
 #[derive(Debug, Deserialize, ToSchema)]
@@ -121,6 +127,7 @@ pub(crate) fn routes() -> Router<AppState> {
     Router::new()
         .merge(estimate::routes())
         .route("/api/benchmarks", get(history).post(create))
+        .route("/api/benchmarks/play", post(create_play))
         .route("/api/benchmarks/reference", get(get_reference))
         .route("/api/benchmarks/status", get(status))
         .route("/api/benchmarks/{id}/cancel", post(cancel))
@@ -195,6 +202,25 @@ async fn create(
             "Select an available engine and distinct analysis depths from 0 to 4",
         ));
     }
+    let runs = enqueue(&state, Workload::Analysis(request.plies)).await?;
+    Ok((StatusCode::ACCEPTED, Json(runs)))
+}
+
+#[utoipa::path(post, path="/api/benchmarks/play", responses((status=202,body=BenchmarkRun),(status=422,body=ErrorBody),(status=409,body=ErrorBody)),tag="Benchmark")]
+async fn create_play(State(state): State<AppState>) -> ApiResult<(StatusCode, Json<BenchmarkRun>)> {
+    let mut runs = enqueue(&state, Workload::Play).await?;
+    let run = runs
+        .pop()
+        .ok_or_else(|| anyhow::anyhow!("Missing queued play benchmark"))?;
+    Ok((StatusCode::ACCEPTED, Json(run)))
+}
+
+enum Workload {
+    Analysis(Vec<i32>),
+    Play,
+}
+
+async fn enqueue(state: &AppState, workload: Workload) -> ApiResult<Vec<BenchmarkRun>> {
     let running: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM benchmark_runs WHERE status='running')")
             .fetch_one(&state.pool)
@@ -206,7 +232,15 @@ async fn create(
             "A benchmark is already running; wait for it to finish".into(),
         ));
     }
-    let settings = crate::settings::load(&state).await?;
+    let settings = crate::settings::load(state).await?;
+    let (plies, analysis, play) = match workload {
+        Workload::Analysis(plies) => (plies, Some(reference()), None),
+        Workload::Play => (
+            vec![settings.play_plies],
+            None,
+            Some(play_latency::reference()?),
+        ),
+    };
     let path = resolve_binary(&settings.gnubg_path)
         .map_err(|e| ApiError::invalid(format!("GNUbg unavailable: {e:#}")))?;
     let engine = crate::engine::Engine::new(path.clone());
@@ -215,20 +249,19 @@ async fn create(
         .await
         .map_err(|e| ApiError::invalid(format!("GNUbg installation check failed: {e:#}")))?;
     let machine = machine::snapshot(&state.pool).await?;
-    let reference = reference();
-    let protocol = protocol();
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     let mut runs = Vec::new();
-    for plies in request.plies {
-        let run: BenchmarkRun = sqlx::query_as("INSERT INTO benchmark_runs(id,machine,engine_id,engine_name,engine_version,engine_path,plies,reference,protocol,reference_sgf) VALUES($1,$2,'gnubg','GNUbg',$3,$4,$5,$6,$7,$8) RETURNING *")
+    for plies in plies {
+        let run: BenchmarkRun = sqlx::query_as("INSERT INTO benchmark_runs(id,machine,engine_id,engine_name,engine_version,engine_path,plies,reference,protocol,reference_sgf,play_reference) VALUES($1,$2,'gnubg','GNUbg',$3,$4,$5,$6,$7,$8,$9) RETURNING *")
             .bind(Uuid::new_v4()).bind(SqlJson(&machine)).bind(&version).bind(&path).bind(plies)
-            .bind(SqlJson(&reference)).bind(SqlJson(&protocol)).bind(REFERENCE_SGF)
+            .bind(analysis.as_ref().map(SqlJson)).bind(analysis.as_ref().map(|reference| SqlJson(&reference.protocol)))
+            .bind(analysis.as_ref().map(|_| REFERENCE_SGF)).bind(play.as_ref().map(SqlJson))
             .fetch_one(&mut *tx).await.map_err(anyhow::Error::from)?;
         runs.push(run);
     }
     tx.commit().await.map_err(anyhow::Error::from)?;
     state.wake.notify_one();
-    Ok((StatusCode::ACCEPTED, Json(runs)))
+    Ok(runs)
 }
 #[utoipa::path(post,path="/api/benchmarks/{id}/cancel",params(("id"=Uuid,Path)),responses((status=200,body=BenchmarkRun),(status=404,body=ErrorBody)),tag="Benchmark")]
 async fn cancel(
@@ -242,12 +275,13 @@ async fn cancel(
 }
 #[derive(OpenApi)]
 #[openapi(
-    paths(get_reference, history, status, create, cancel),
+    paths(get_reference, history, status, create, create_play, cancel),
     components(schemas(
         Machine,
         BenchmarkProtocol,
         BenchmarkReference,
         BenchmarkRun,
+        PlayBenchmarkReference,
         BenchmarkRequest,
         BenchmarkHistory,
         BenchmarkStatus

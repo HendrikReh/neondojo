@@ -31,6 +31,100 @@ fn engine() -> Engine {
     Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()))
 }
 
+#[sqlx::test(migrations = false)]
+#[ignore = "requires PostgreSQL"]
+async fn play_latency_migration_preserves_existing_analysis_history(pool: PgPool) {
+    let all = sqlx::migrate!("./migrations");
+    let previous = sqlx::migrate::Migrator {
+        migrations: std::borrow::Cow::Owned(
+            all.iter().filter(|m| m.version < 39).cloned().collect(),
+        ),
+        ..sqlx::migrate::Migrator::DEFAULT
+    };
+    previous.run(&pool).await.unwrap();
+    let reference = serde_json::to_value(bgtutor::benchmarks::reference()).unwrap();
+    let machine = json!({
+        "id": uuid::Uuid::new_v4(), "name": "Historical backend",
+        "os": "macOS", "architecture": "aarch64",
+        "cpu_model": null, "logical_cpus": null, "memory_bytes": null
+    });
+    for status in ["queued", "running", "completed", "failed", "cancelled"] {
+        sqlx::query("INSERT INTO benchmark_runs(id,status,machine,engine_id,engine_name,engine_version,engine_path,plies,reference,protocol,reference_sgf,completed_games,analyzed_moves,total_elapsed_ms,average_move_ms,finished_at) VALUES($1,$2,$3,'gnubg','GNUbg','historical version','/historical/gnubg',2,$4,$5,$6,CASE WHEN $2='completed' THEN 10 ELSE 0 END,CASE WHEN $2='completed' THEN 460 ELSE 0 END,CASE WHEN $2='completed' THEN 4600 END,CASE WHEN $2='completed' THEN 10 END,CASE WHEN $2 IN ('completed','failed','cancelled') THEN now() END)")
+            .bind(uuid::Uuid::new_v4()).bind(status).bind(&machine).bind(&reference)
+            .bind(&reference["protocol"]).bind(bgtutor::benchmarks::REFERENCE_SGF)
+            .execute(&pool).await.unwrap();
+    }
+    let before: Vec<Value> =
+        sqlx::query_scalar("SELECT to_jsonb(r) FROM benchmark_runs r ORDER BY queue_no")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    all.run(&pool).await.unwrap();
+    let after: Vec<Value> = sqlx::query_scalar("SELECT to_jsonb(r) - 'play_reference' - 'completed_turns' - 'average_turn_ms' FROM benchmark_runs r ORDER BY queue_no")
+        .fetch_all(&pool).await.unwrap();
+    assert_eq!(after, before);
+    let app = api::router(AppState::new(pool, engine()));
+    let (status, history) = call(app, "GET", "/api/benchmarks", Value::Null).await;
+    assert_eq!(status, 200, "{history}");
+    assert_eq!(history["runs"].as_array().unwrap().len(), 5);
+    for run in history["runs"].as_array().unwrap() {
+        assert!(run["play_reference"].is_null());
+        assert!(run["average_turn_ms"].is_null());
+        assert_eq!(run["completed_turns"], 0);
+        assert_eq!(run["reference"], reference);
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL and GNUbg"]
+async fn interrupted_play_measurements_never_publish_partial_times(pool: PgPool) {
+    let state = AppState::new(pool.clone(), engine());
+    let app = api::router(state.clone());
+    for interruption in ["restart", "lease expired", "cancel"] {
+        let (status, run) = call(app.clone(), "POST", "/api/benchmarks/play", Value::Null).await;
+        assert_eq!(status, 202, "{run}");
+        assert_eq!(run["play_reference"]["total_turns"], 11);
+        let id = uuid::Uuid::parse_str(run["id"].as_str().unwrap()).unwrap();
+        sqlx::query("UPDATE benchmark_runs SET status='running',started_at=now(),completed_turns=1,worker_token=$2,lease_until=now()-interval '1 second' WHERE id=$1")
+            .bind(id).bind(uuid::Uuid::new_v4()).execute(&pool).await.unwrap();
+        match interruption {
+            "restart" => bgtutor::benchmarks::recover_interrupted(&pool)
+                .await
+                .unwrap(),
+            "lease expired" => assert!(!bgtutor::benchmarks::run_one(&state).await.unwrap()),
+            _ => {
+                let (status, _) = call(
+                    app.clone(),
+                    "POST",
+                    &format!("/api/benchmarks/{id}/cancel"),
+                    Value::Null,
+                )
+                .await;
+                assert_eq!(status, 200);
+            }
+        }
+        let (_, history) = call(app.clone(), "GET", "/api/benchmarks", Value::Null).await;
+        let saved = &history["runs"][0];
+        assert_eq!(saved["id"], run["id"]);
+        assert_eq!(
+            saved["status"],
+            if interruption == "cancel" {
+                "cancelled"
+            } else {
+                "failed"
+            }
+        );
+        assert_eq!(saved["completed_turns"], 1);
+        assert!(saved["total_elapsed_ms"].is_null());
+        assert!(saved["average_turn_ms"].is_null());
+        assert!(saved["average_move_ms"].is_null());
+        if interruption != "cancel" {
+            assert!(saved["error"].as_str().unwrap().contains(interruption));
+        }
+        assert_eq!(history["active"], false);
+    }
+}
+
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
 async fn reference_and_openapi_describe_the_fixed_workload(pool: PgPool) {
@@ -46,6 +140,7 @@ async fn reference_and_openapi_describe_the_fixed_workload(pool: PgPool) {
     let (_, schema) = call(app, "GET", "/api/openapi.json", Value::Null).await;
     for path in [
         "/api/benchmarks",
+        "/api/benchmarks/play",
         "/api/benchmarks/reference",
         "/api/benchmarks/{id}/cancel",
     ] {
@@ -226,6 +321,18 @@ async fn changed_engine_fails_without_a_partial_timing(pool: PgPool) {
 async fn cancelling_running_measurement_kills_native_process_and_never_publishes_times(
     pool: PgPool,
 ) {
+    assert_cancellation_kills_native_process(pool, false).await;
+}
+
+#[cfg(unix)]
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL and GNUbg"]
+async fn cancelling_play_measurement_kills_native_process_and_never_publishes_times(pool: PgPool) {
+    assert_cancellation_kills_native_process(pool, true).await;
+}
+
+#[cfg(unix)]
+async fn assert_cancellation_kills_native_process(pool: PgPool, play: bool) {
     use std::os::unix::fs::PermissionsExt;
     let directory = tempfile::tempdir().unwrap();
     let script = directory.path().join("gnubg-benchmark-test");
@@ -240,24 +347,34 @@ async fn cancelling_running_measurement_kills_native_process_and_never_publishes
             r#"#!/usr/bin/env python3
 import os,sys
 real={real:?}
-if '--version' not in sys.argv and 'analyse game' in open('commands.txt').read():
+if '--version' not in sys.argv and {command:?} in open('commands.txt').read():
     with open({pidfile:?},'w') as f: f.write(str(os.getpid()))
     os.execv(sys.executable,[sys.executable,'-c','import time; time.sleep(30)'])
 os.execv(real,[real]+sys.argv[1:])
-"#
+"#,
+            command = if play {
+                "load python adapter.py"
+            } else {
+                "analyse game"
+            },
         ),
     )
     .unwrap();
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
     let state = AppState::new(pool, Engine::new(script.to_string_lossy().into_owned()));
     let app = api::router(state.clone());
-    let (status, runs) = call(
+    let (status, response) = call(
         app.clone(),
         "POST",
-        "/api/benchmarks",
+        if play {
+            "/api/benchmarks/play"
+        } else {
+            "/api/benchmarks"
+        },
         json!({"engine_id":"gnubg","plies":[0]}),
     )
     .await;
+    let runs = if play { json!([response]) } else { response };
     assert_eq!(status, 202, "{runs}");
     let worker = tokio::spawn(async move { bgtutor::jobs::run_one(&state).await.unwrap() });
     tokio::time::timeout(std::time::Duration::from_secs(5), async {
@@ -324,6 +441,7 @@ os.execv(real,[real]+sys.argv[1:])
     assert_eq!(list["runs"][0]["status"], "cancelled");
     assert!(list["runs"][0]["total_elapsed_ms"].is_null());
     assert!(list["runs"][0]["average_move_ms"].is_null());
+    assert!(list["runs"][0]["average_turn_ms"].is_null());
 }
 
 #[sqlx::test(migrations = "./migrations")]

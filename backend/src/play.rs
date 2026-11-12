@@ -1202,10 +1202,6 @@ async fn native(
     notation: Option<&str>,
     resign_level: Option<i32>,
 ) -> anyhow::Result<(NativeSnapshot, String)> {
-    let directory = tempfile::tempdir()?;
-    if let Some((sgf, _)) = previous {
-        tokio::fs::write(directory.path().join("input.sgf"), sgf).await?;
-    }
     let request = NativeRequest {
         new: previous.is_none(),
         human_player: session.human_player,
@@ -1216,9 +1212,50 @@ async fn native(
         notation,
         resign_level,
     };
+    let engine =
+        Engine::new(path.to_owned()).with_expected_version(Some(session.engine.version.clone()));
+    run_native(&engine, &request, previous.map(|(sgf, _)| sgf)).await
+}
+
+pub(crate) async fn benchmark_checker_turn(
+    engine: &Engine,
+    previous: (&str, &str),
+    bot_player: i32,
+    dice: [i32; 2],
+    plies: i32,
+) -> anyhow::Result<()> {
+    let request = NativeRequest {
+        new: false,
+        human_player: 1 - bot_player,
+        match_length: 11,
+        plies,
+        native_id: previous.1,
+        // Resume with dice already on the board, exactly as for a bot opening.
+        action: "start_opening_move",
+        notation: None,
+        resign_level: None,
+    };
+    let (snapshot, _) = run_native(engine, &request, Some(previous.0)).await?;
+    ensure!(
+        matches!(snapshot.history.as_slice(), [turn] if turn.player == bot_player
+            && turn.dice == dice && turn.notation != "pass" && !turn.notation.is_empty()),
+        "GNUbg did not complete the expected checker turn"
+    );
+    Ok(())
+}
+
+async fn run_native(
+    engine: &Engine,
+    request: &NativeRequest<'_>,
+    sgf: Option<&str>,
+) -> anyhow::Result<(NativeSnapshot, String)> {
+    let directory = tempfile::tempdir()?;
+    if let Some(sgf) = sgf {
+        tokio::fs::write(directory.path().join("input.sgf"), sgf).await?;
+    }
     tokio::fs::write(
         directory.path().join("request.json"),
-        serde_json::to_vec(&request)?,
+        serde_json::to_vec(request)?,
     )
     .await?;
     tokio::fs::write(
@@ -1226,8 +1263,6 @@ async fn native(
         include_str!("play/native.py"),
     )
     .await?;
-    let engine =
-        Engine::new(path.to_owned()).with_expected_version(Some(session.engine.version.clone()));
     let output = engine
         .run_with_timeout(
             directory.path(),
@@ -1243,7 +1278,7 @@ async fn native(
         "GNUbg snapshot exceeds limit"
     );
     let mut snapshot: NativeSnapshot = serde_json::from_slice(&bytes)?;
-    if action == "opening_roll" {
+    if request.action == "opening_roll" {
         let expression = regex::Regex::new(r"(?m)^.* rolls ([1-6]), .* rolls ([1-6])\.\r?$")?;
         let rolls: Vec<[i32; 2]> = expression
             .captures_iter(&output)

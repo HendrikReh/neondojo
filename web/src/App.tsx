@@ -876,6 +876,7 @@ export default function App() {
           <BenchmarkWorkspace
             visible={view === 'extras'}
             defaultPlies={settings?.analysis_plies ?? DEFAULT_ANALYSIS_PLIES}
+            playPlies={settings?.play_plies}
           />
         </div>
         <footer className="app-footer">

@@ -61,7 +61,7 @@ pub async fn run_one(state: &AppState) -> Result<bool> {
     };
     match result {
         Ok(elapsed) => {
-            sqlx::query("UPDATE benchmark_runs SET status='completed',finished_at=now(),total_elapsed_ms=$3,average_move_ms=$3/analyzed_moves,worker_token=NULL,lease_until=NULL WHERE id=$1 AND worker_token=$2 AND status='running' AND lease_until>now()")
+            sqlx::query("UPDATE benchmark_runs SET status='completed',finished_at=now(),total_elapsed_ms=$3,average_move_ms=CASE WHEN play_reference IS NULL THEN $3/analyzed_moves END,average_turn_ms=CASE WHEN play_reference IS NOT NULL THEN $3/completed_turns END,worker_token=NULL,lease_until=NULL WHERE id=$1 AND worker_token=$2 AND status='running' AND lease_until>now()")
                 .bind(run.id).bind(token).bind(elapsed).execute(&state.pool).await?;
         }
         Err(error) => {
@@ -72,27 +72,41 @@ pub async fn run_one(state: &AppState) -> Result<bool> {
     Ok(true)
 }
 
+pub(super) async fn mark_started(pool: &PgPool, id: Uuid, token: Uuid) -> Result<()> {
+    let started = sqlx::query("UPDATE benchmark_runs SET started_at=now() WHERE id=$1 AND worker_token=$2 AND status='running' AND lease_until>now()").bind(id).bind(token).execute(pool).await?;
+    ensure!(started.rows_affected() == 1, "Benchmark cancelled");
+    Ok(())
+}
+
 async fn measure(state: &AppState, run: &BenchmarkRun, token: Uuid) -> Result<f64> {
+    if run.play_reference.is_some() {
+        return super::play_latency::measure(&state.pool, run, token).await;
+    }
+    let reference = run
+        .reference
+        .as_ref()
+        .context("Missing analysis reference")?;
+    let protocol = run.protocol.as_ref().context("Missing analysis protocol")?;
     let source: String = sqlx::query_scalar("SELECT reference_sgf FROM benchmark_runs WHERE id=$1")
         .bind(run.id)
         .fetch_one(&state.pool)
         .await?;
     ensure!(
-        format!("{:x}", Sha256::digest(source.as_bytes())) == run.reference.sha256,
+        format!("{:x}", Sha256::digest(source.as_bytes())) == reference.sha256,
         "Reference checksum mismatch"
     );
     ensure!(
         source == REFERENCE_SGF
             && matches!(
-                run.protocol.id.as_str(),
+                protocol.id.as_str(),
                 "gnubg-match-v1" | "gnubg-match-v2-unlimited"
             ),
         "Unsupported benchmark protocol or reference version"
     );
     let imported = crate::import::parse_sgf(&source)?;
     ensure!(
-        imported.positions.len() == run.reference.total_moves as usize
-            && crate::match_analysis::game_count(&source)? == run.reference.total_games,
+        imported.positions.len() == reference.total_moves as usize
+            && crate::match_analysis::game_count(&source)? == reference.total_games,
         "Incomplete reference workload"
     );
     let engine = Engine::new(run.engine_path.clone());
@@ -103,11 +117,10 @@ async fn measure(state: &AppState, run: &BenchmarkRun, token: Uuid) -> Result<f6
         .version()
         .await
         .context("Benchmark engine changed or is unavailable")?;
-    let started = sqlx::query("UPDATE benchmark_runs SET started_at=now() WHERE id=$1 AND worker_token=$2 AND status='running' AND lease_until>now()").bind(run.id).bind(token).execute(&state.pool).await?;
-    ensure!(started.rows_affected() == 1, "Benchmark cancelled");
+    mark_started(&state.pool, run.id, token).await?;
     let mut elapsed_ms = 0.0;
     let mut moves = 0;
-    for game_no in 1..=run.reference.total_games {
+    for game_no in 1..=reference.total_games {
         guard_engine
             .version()
             .await
@@ -118,20 +131,19 @@ async fn measure(state: &AppState, run: &BenchmarkRun, token: Uuid) -> Result<f6
                 &source,
                 game_no,
                 run.plies,
-                run.protocol
+                protocol
                     .game_timeout_seconds
                     .map(|seconds| Duration::from_secs(seconds as u64)),
             )
             .await
             .with_context(|| {
-                let limit = run
-                    .protocol
+                let limit = protocol
                     .game_timeout_seconds
                     .map(|seconds| format!("{seconds} second timeout per game"))
                     .unwrap_or_else(|| "no time limit".into());
                 format!(
                     "Benchmark game {game_no}/{} failed ({limit})",
-                    run.reference.total_games
+                    reference.total_games
                 )
             })?;
         elapsed_ms += start.elapsed().as_secs_f64() * 1000.0;
@@ -163,7 +175,7 @@ async fn measure(state: &AppState, run: &BenchmarkRun, token: Uuid) -> Result<f6
         ensure!(changed.rows_affected() == 1, "Benchmark cancelled");
     }
     ensure!(
-        moves == run.reference.total_moves && elapsed_ms > 0.0 && elapsed_ms.is_finite(),
+        moves == reference.total_moves && elapsed_ms > 0.0 && elapsed_ms.is_finite(),
         "Incomplete benchmark or invalid elapsed time"
     );
     guard_engine

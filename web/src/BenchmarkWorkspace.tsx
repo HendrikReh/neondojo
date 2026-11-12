@@ -7,6 +7,7 @@ import {
   loadBenchmarkReference,
   loadBenchmarks,
   startBenchmarks,
+  startPlayBenchmark,
   type BenchmarkReference,
   type BenchmarkRun,
 } from './benchmark-api';
@@ -16,9 +17,11 @@ import './benchmark.css';
 export default function BenchmarkWorkspace({
   visible,
   defaultPlies,
+  playPlies,
 }: {
   visible: boolean;
   defaultPlies: number;
+  playPlies: number | undefined;
 }) {
   const t = useBenchmarkText();
   const { locale, formatNumber, formatError } = useI18n();
@@ -32,7 +35,7 @@ export default function BenchmarkWorkspace({
   const [configurationError, setConfigurationError] = useState<unknown>();
   const [historyError, setHistoryError] = useState<unknown>();
   const [actionError, setActionError] = useState<unknown>();
-  const [starting, setStarting] = useState(false);
+  const [starting, setStarting] = useState<'analysis' | 'play'>();
   const [cancelling, setCancelling] = useState<string>();
   const [revision, setRevision] = useState(0);
   const [configurationRevision, setConfigurationRevision] = useState(0);
@@ -103,12 +106,23 @@ export default function BenchmarkWorkspace({
   const active = runs.filter(
     (run) => run.status === 'running' || run.status === 'queued',
   );
-  async function start() {
-    if (!engine || !selected.length || starting || queueActive) return;
-    setStarting(true);
+  const canStart =
+    !starting && !queueActive && !loading && configurationError === undefined;
+  const canStartAnalysis =
+    canStart && !!reference && !!engine && selected.length > 0;
+  const canStartPlay =
+    canStart &&
+    playPlies !== undefined &&
+    engines.some((e) => e.id === 'gnubg' && e.available);
+  async function start(kind: 'analysis' | 'play') {
+    if (kind === 'analysis' ? !canStartAnalysis : !canStartPlay) return;
+    setStarting(kind);
     setActionError(undefined);
     try {
-      const created = await startBenchmarks(engine.id, selected);
+      const created =
+        kind === 'play'
+          ? [await startPlayBenchmark()]
+          : await startBenchmarks(engineId, selected);
       setRuns((current) => [...created, ...current]);
       setQueueActive(true);
       previousActive.current = true;
@@ -116,7 +130,7 @@ export default function BenchmarkWorkspace({
     } catch (error) {
       setActionError(error);
     } finally {
-      setStarting(false);
+      setStarting(undefined);
     }
   }
   async function cancel(id: string) {
@@ -132,18 +146,35 @@ export default function BenchmarkWorkspace({
       setCancelling(undefined);
     }
   }
-  const time = (run: BenchmarkRun, value: number | null) =>
-    run.status === 'completed' && value !== null
+  const time = (run: BenchmarkRun, value: number | null | undefined) =>
+    run.status === 'completed' && typeof value === 'number'
       ? `${formatNumber(value, { maximumFractionDigits: 2 })} ms`
       : '—';
   const date = (value: string) => new Date(value).toLocaleString(locale);
   const progress = (run: BenchmarkRun) =>
-    t('progress', {
-      completed: run.completed_games,
-      total: run.reference.total_games,
-      moves: run.analyzed_moves,
-      totalMoves: run.reference.total_moves,
-    });
+    run.play_reference
+      ? t('playProgress', {
+          completed: formatNumber(run.completed_turns),
+          total: formatNumber(run.play_reference.total_turns),
+        })
+      : t('progress', {
+          completed: run.completed_games,
+          total: run.reference?.total_games ?? 0,
+          moves: run.analyzed_moves,
+          totalMoves: run.reference?.total_moves ?? 0,
+        });
+  const statusLabel = (status: string) => {
+    switch (status) {
+      case 'queued':
+      case 'running':
+      case 'completed':
+      case 'failed':
+      case 'cancelled':
+        return t(status);
+      default:
+        return status;
+    }
+  };
   const error = configurationError ?? historyError ?? actionError;
   return (
     <div className="benchmark-workspace">
@@ -193,7 +224,7 @@ export default function BenchmarkWorkspace({
               </p>
               <p>
                 {t('protocol')}: {reference.protocol.id} ·{' '}
-                {reference.protocol.game_timeout_seconds === null
+                {reference.protocol.game_timeout_seconds == null
                   ? t('noTimeout')
                   : t('timeout', {
                       seconds: reference.protocol.game_timeout_seconds,
@@ -212,7 +243,7 @@ export default function BenchmarkWorkspace({
           className="benchmark-configuration"
           onSubmit={(event) => {
             event.preventDefault();
-            void start();
+            void start('analysis');
           }}
         >
           <label>
@@ -239,7 +270,7 @@ export default function BenchmarkWorkspace({
                   <input
                     type="checkbox"
                     checked={selected.includes(ply)}
-                    disabled={!engine?.plies.includes(ply) || starting}
+                    disabled={!engine?.plies.includes(ply) || Boolean(starting)}
                     onChange={(event) => {
                       edited.current = true;
                       setPlies((current) =>
@@ -254,24 +285,34 @@ export default function BenchmarkWorkspace({
               ))}
             </div>
           </fieldset>
-          <button
-            type="submit"
-            disabled={
-              !reference ||
-              !engine ||
-              !selected.length ||
-              starting ||
-              Boolean(configurationError) ||
-              queueActive ||
-              loading
-            }
-          >
-            {t(starting ? 'starting' : 'start')}
+          <button type="submit" disabled={!canStartAnalysis}>
+            {t(starting === 'analysis' ? 'starting' : 'start')}
           </button>
           <p className="benchmark-help">{t('serial')}</p>
         </form>
       </div>
       <p className="benchmark-help benchmark-timing">{t('timing')}</p>
+      <section
+        className="benchmark-play"
+        aria-labelledby="benchmark-play-title"
+      >
+        <div>
+          <h2 id="benchmark-play-title">{t('playLatency')}</h2>
+          <p className="benchmark-help">{t('playTiming')}</p>
+          {playPlies !== undefined && (
+            <p className="benchmark-help">
+              {t('playDepth', { ply: formatNumber(playPlies) })}
+            </p>
+          )}
+        </div>
+        <button
+          type="button"
+          disabled={!canStartPlay}
+          onClick={() => void start('play')}
+        >
+          {t(starting === 'play' ? 'starting' : 'startPlay')}
+        </button>
+      </section>
       {queueActive && (
         <p className="benchmark-help" role="status">
           {t('engineBusy')}
@@ -284,15 +325,25 @@ export default function BenchmarkWorkspace({
             <article key={run.id}>
               <div>
                 <strong>
-                  {run.engine_name} · {run.plies}-ply · {t(run.status)}
+                  {run.play_reference && `${t('playLatency')} · `}
+                  {run.engine_name} · {run.plies}-ply ·{' '}
+                  {statusLabel(run.status)}
                 </strong>
                 <p>{progress(run)}</p>
-                {(run.status === 'queued' || run.started_at === null) && (
+                {(run.status === 'queued' || !run.started_at) && (
                   <p>{t('waiting')}</p>
                 )}
                 <progress
-                  max={run.reference.total_games}
-                  value={run.completed_games}
+                  max={
+                    run.play_reference?.total_turns ??
+                    run.reference?.total_games ??
+                    1
+                  }
+                  value={
+                    run.play_reference
+                      ? run.completed_turns
+                      : run.completed_games
+                  }
                   aria-label={progress(run)}
                 />
               </div>
@@ -327,6 +378,7 @@ export default function BenchmarkWorkspace({
                       'reference',
                       'total',
                       'average',
+                      'playAverage',
                       'status',
                     ] as const
                   ).map((key) => (
@@ -351,11 +403,11 @@ export default function BenchmarkWorkspace({
                       </small>
                       <small>
                         {run.machine.cpu_model ?? '—'} ·{' '}
-                        {run.machine.logical_cpus === null
+                        {run.machine.logical_cpus == null
                           ? '—'
                           : t('cpus', { count: run.machine.logical_cpus })}{' '}
                         ·{' '}
-                        {run.machine.memory_bytes === null
+                        {run.machine.memory_bytes == null
                           ? '—'
                           : `${formatNumber(run.machine.memory_bytes / 2 ** 30, { maximumFractionDigits: 1 })} GiB`}
                       </small>
@@ -369,25 +421,43 @@ export default function BenchmarkWorkspace({
                     </td>
                     <td>{run.plies}-ply</td>
                     <td>
-                      {run.reference.name}
-                      <small>
-                        {t('referenceVersion', {
-                          version: run.reference.version,
-                        })}{' '}
-                        · {run.protocol.id}
-                      </small>
+                      {run.play_reference ? (
+                        <>
+                          {t('playLatency')}
+                          <small>{run.play_reference.id}</small>
+                          <small>{run.play_reference.protocol_id}</small>
+                        </>
+                      ) : (
+                        run.reference && (
+                          <>
+                            {run.reference.name}
+                            <small>
+                              {t('referenceVersion', {
+                                version: run.reference.version,
+                              })}{' '}
+                              · {run.protocol?.id}
+                            </small>
+                          </>
+                        )
+                      )}
                     </td>
                     <td data-benchmark-time>
-                      {time(run, run.total_elapsed_ms)}
+                      {time(
+                        run,
+                        run.play_reference ? null : run.total_elapsed_ms,
+                      )}
                     </td>
                     <td data-benchmark-time>
                       {time(run, run.average_move_ms)}
+                    </td>
+                    <td className="benchmark-latency">
+                      {time(run, run.average_turn_ms)}
                     </td>
                     <td>
                       <span
                         className={`benchmark-status benchmark-status-${run.status}`}
                       >
-                        {t(run.status)}
+                        {statusLabel(run.status)}
                       </span>
                       <small>{progress(run)}</small>
                       {run.error && (

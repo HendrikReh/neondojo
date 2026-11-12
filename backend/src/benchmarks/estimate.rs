@@ -70,7 +70,10 @@ fn same_hardware(a: &Machine, b: &Machine) -> bool {
 }
 fn compatible(run: &BenchmarkRun, machine: &Machine) -> bool {
     let expected = reference();
-    let mut normalized = run.protocol.clone();
+    let (Some(saved_reference), Some(protocol_snapshot)) = (&run.reference, &run.protocol) else {
+        return false;
+    };
+    let mut normalized = protocol_snapshot.clone();
     if !matches!(
         normalized.id.as_str(),
         "gnubg-match-v1" | "gnubg-match-v2-unlimited"
@@ -84,12 +87,12 @@ fn compatible(run: &BenchmarkRun, machine: &Machine) -> bool {
     let expected_average = total / f64::from(expected.total_moves);
     same_hardware(&run.machine, machine)
         && normalized == protocol()
-        && run.reference.id == expected.id
-        && run.reference.version == expected.version
-        && run.reference.sha256 == expected.sha256
-        && run.reference.total_games == expected.total_games
-        && run.reference.total_moves == expected.total_moves
-        && run.reference.match_length == expected.match_length
+        && saved_reference.id == expected.id
+        && saved_reference.version == expected.version
+        && saved_reference.sha256 == expected.sha256
+        && saved_reference.total_games == expected.total_games
+        && saved_reference.total_moves == expected.total_moves
+        && saved_reference.match_length == expected.match_length
         && run.completed_games == expected.total_games
         && run.analyzed_moves == expected.total_moves
         && run.finished_at.is_some()
@@ -217,18 +220,24 @@ pub(crate) async fn matching_benchmark(
         return Ok(None);
     };
     let expected = reference();
-    let mut rows=sqlx::query_as::<_,BenchmarkRun>("SELECT * FROM benchmark_runs WHERE status='completed' AND engine_id=$1 AND engine_path=$2 AND engine_version=$3 AND plies=$4 AND machine->>'id'=$5 AND reference->>'sha256'=$6 ORDER BY finished_at DESC,created_at DESC,queue_no DESC")
+    let mut rows=sqlx::query_as::<_,BenchmarkRun>("SELECT * FROM benchmark_runs WHERE status='completed' AND play_reference IS NULL AND engine_id=$1 AND engine_path=$2 AND engine_version=$3 AND plies=$4 AND machine->>'id'=$5 AND reference->>'sha256'=$6 ORDER BY finished_at DESC,created_at DESC,queue_no DESC")
         .bind(engine_id).bind(path).bind(version).bind(plies).bind(machine.id.to_string()).bind(expected.sha256).fetch(pool);
     while let Some(run) = rows.try_next().await? {
         if compatible(&run, &machine) {
             return Ok(Some(EstimateBenchmark {
                 id: run.id,
                 finished_at: run.finished_at.expect("compatible measurement is finished"),
-                reference_name: run.reference.name,
+                reference_name: run
+                    .reference
+                    .expect("compatible measurement has a reference")
+                    .name,
                 average_move_ms: run
                     .average_move_ms
                     .expect("compatible measurement has average"),
-                protocol_id: run.protocol.id,
+                protocol_id: run
+                    .protocol
+                    .expect("compatible measurement has a protocol")
+                    .id,
             }));
         }
     }

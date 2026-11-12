@@ -1,5 +1,48 @@
 import { expect, test } from '@playwright/test';
 
+test('native play-turn latency uses the saved playing depth and persists', async ({
+  page,
+}) => {
+  test.skip(
+    process.env.BGTUTOR_NATIVE_BENCHMARK !== '1',
+    'requires explicit native benchmark opt-in',
+  );
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('bgtutor.locale', 'en');
+  });
+  const settings = await (await page.request.get('/api/settings')).json();
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Extras', exact: true }).click();
+  const started = page.waitForResponse((response) =>
+    response.url().endsWith('/api/benchmarks/play'),
+  );
+  await page.getByRole('button', { name: 'Measure play-turn latency' }).click();
+  const response = await started;
+  expect(response.status()).toBe(202);
+  const queued = await response.json();
+  expect(queued.plies).toBe(settings.play_plies);
+  const history = async () => {
+    const { runs } = await (await page.request.get('/api/benchmarks')).json();
+    return runs.find((run: { id: string }) => run.id === queued.id);
+  };
+  await expect
+    .poll(async () => (await history())?.status, { timeout: 45_000 })
+    .toBe('completed');
+  const run = await history();
+  expect(run.completed_turns).toBe(queued.play_reference.total_turns);
+  expect(run.average_turn_ms).toBeGreaterThan(0);
+  expect(run.average_move_ms).toBeNull();
+  await page.reload();
+  await page.getByRole('tab', { name: 'Extras', exact: true }).click();
+  const row = page
+    .getByRole('row')
+    .filter({ hasText: queued.play_reference.id })
+    .first();
+  await expect(row).toContainText('Completed');
+  await expect(row.locator('.benchmark-latency')).toHaveText(/\d.* ms/);
+});
+
 // Explicit opt-in: creates one retained measurement in the configured backend.
 test('native zero-ply benchmark completes and survives a page reload', async ({
   page,

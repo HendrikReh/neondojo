@@ -70,6 +70,23 @@
   max-width: 1100px;
   margin: 18px 0 28px;
 }
+.benchmark-play {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 28px;
+  padding: 16px 0;
+  border-block: 1px solid var(--ui-border);
+}
+.benchmark-play h2 {
+  font-size: var(--font-size-panel);
+  margin-bottom: 8px;
+}
+.benchmark-play p {
+  margin: 4px 0 0;
+}
 .benchmark-active {
   margin: 0 0 32px;
 }
@@ -113,7 +130,8 @@
   margin-top: 5px;
   color: var(--ui-muted);
 }
-.benchmark-history [data-benchmark-time] {
+.benchmark-history [data-benchmark-time],
+.benchmark-latency {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }

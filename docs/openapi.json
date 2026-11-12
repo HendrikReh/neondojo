@@ -188,6 +188,46 @@
         }
       }
     },
+    "/api/benchmarks/play": {
+      "post": {
+        "tags": [
+          "Benchmark"
+        ],
+        "operationId": "create_play",
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenchmarkRun"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/benchmarks/reference": {
       "get": {
         "tags": [
@@ -7125,10 +7165,9 @@
           "engine_version",
           "engine_path",
           "plies",
-          "reference",
-          "protocol",
           "completed_games",
-          "analyzed_moves"
+          "analyzed_moves",
+          "completed_turns"
         ],
         "properties": {
           "analyzed_moves": {
@@ -7142,7 +7181,18 @@
             ],
             "format": "double"
           },
+          "average_turn_ms": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
           "completed_games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "completed_turns": {
             "type": "integer",
             "format": "int32"
           },
@@ -7182,15 +7232,39 @@
           "machine": {
             "$ref": "#/components/schemas/Machine"
           },
+          "play_reference": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PlayBenchmarkReference"
+              }
+            ]
+          },
           "plies": {
             "type": "integer",
             "format": "int32"
           },
           "protocol": {
-            "$ref": "#/components/schemas/BenchmarkProtocol"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BenchmarkProtocol"
+              }
+            ]
           },
           "reference": {
-            "$ref": "#/components/schemas/BenchmarkReference"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BenchmarkReference"
+              }
+            ]
           },
           "started_at": {
             "type": [
@@ -11199,6 +11273,30 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "PlayBenchmarkReference": {
+        "type": "object",
+        "required": [
+          "id",
+          "sha256",
+          "total_turns",
+          "protocol_id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "protocol_id": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "total_turns": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },

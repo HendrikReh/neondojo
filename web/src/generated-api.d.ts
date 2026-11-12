@@ -36,6 +36,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/benchmarks/play": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["create_play"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/benchmarks/reference": {
         parameters: {
             query?: never;
@@ -1679,8 +1695,12 @@ export interface components {
             analyzed_moves: number;
             /** Format: double */
             average_move_ms?: number | null;
+            /** Format: double */
+            average_turn_ms?: number | null;
             /** Format: int32 */
             completed_games: number;
+            /** Format: int32 */
+            completed_turns: number;
             /** Format: date-time */
             created_at: string;
             engine_id: string;
@@ -1693,10 +1713,11 @@ export interface components {
             /** Format: uuid */
             id: string;
             machine: components["schemas"]["Machine"];
+            play_reference?: null | components["schemas"]["PlayBenchmarkReference"];
             /** Format: int32 */
             plies: number;
-            protocol: components["schemas"]["BenchmarkProtocol"];
-            reference: components["schemas"]["BenchmarkReference"];
+            protocol?: null | components["schemas"]["BenchmarkProtocol"];
+            reference?: null | components["schemas"]["BenchmarkReference"];
             /** Format: date-time */
             started_at?: string | null;
             status: string;
@@ -2858,6 +2879,13 @@ export interface components {
             rating_decisions?: number | null;
             severity?: string | null;
         };
+        PlayBenchmarkReference: {
+            id: string;
+            protocol_id: string;
+            sha256: string;
+            /** Format: int32 */
+            total_turns: number;
+        };
         PlayDecision: {
             action?: string | null;
             alternatives: components["schemas"]["PlayAlternative"][];
@@ -3646,6 +3674,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BenchmarkRun"][];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_play: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarkRun"];
                 };
             };
             409: {

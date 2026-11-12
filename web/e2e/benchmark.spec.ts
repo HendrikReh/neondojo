@@ -147,6 +147,72 @@ async function open(page: Page) {
   ).toBeVisible();
   await expect(page.getByLabel('Benchmark engine')).toHaveValue('gnubg');
 }
+test('play-turn latency starts independently and has its own history metric', async ({
+  page,
+}, testInfo) => {
+  const api = await backend(page);
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  let playStarts = 0;
+  const playRun = {
+    ...run('play-completed', 'completed', settings.play_plies),
+    reference: null,
+    protocol: null,
+    play_reference: {
+      id: 'wc2014-checker-turns-v1',
+      protocol_id: 'gnubg-checker-turn-v1',
+      sha256: 'abc',
+      total_turns: 11,
+    },
+    completed_turns: 11,
+    completed_games: 0,
+    analyzed_moves: 0,
+    average_move_ms: null,
+    total_elapsed_ms: 462,
+    average_turn_ms: 42,
+  };
+  await page.route('**/api/benchmarks/play', (route) => {
+    expect(route.request().method()).toBe('POST');
+    expect(route.request().postData()).toBeNull();
+    playStarts++;
+    return route.fulfill({ status: 202, json: playRun });
+  });
+  await page.route('**/api/benchmarks', (route) =>
+    route.request().method() === 'GET'
+      ? route.fulfill({
+          json: {
+            active: false,
+            runs: playStarts ? [playRun, run('analysis')] : [run('analysis')],
+          },
+        })
+      : route.fallback(),
+  );
+  await open(page);
+  await page.getByRole('checkbox', { name: '2-ply', exact: true }).uncheck();
+  await page.getByRole('button', { name: 'Measure play-turn latency' }).click();
+  const row = page
+    .getByRole('row')
+    .filter({ hasText: 'wc2014-checker-turns-v1' });
+  await expect(row).toContainText('1-ply');
+  await expect(row).toContainText('11 / 11 checker turns');
+  await expect(row).toContainText('42 ms');
+  await expect(row.locator('[data-benchmark-time]')).toHaveText(['—', '—']);
+  expect(playStarts).toBe(1);
+  expect(api.starts).toHaveLength(0);
+  for (const [width, height] of [
+    [1800, 1169],
+    [2560, 1440],
+    [3840, 2160],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await expect(row.locator('.benchmark-latency')).toBeInViewport();
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(width);
+    await page.screenshot({
+      path: testInfo.outputPath(`play-latency-${width}.png`),
+    });
+  }
+});
 test('Extras shows reference, saved history and only the saved default ply', async ({
   page,
 }) => {
