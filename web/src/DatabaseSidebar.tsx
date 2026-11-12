@@ -2,7 +2,11 @@ import Tooltip from './Tooltip';
 import ActionButton from './ActionButton';
 import ActionIcon from './action-icons';
 import { useLibraryText } from './library-messages';
-import { PAUSED_MATCHES_DATABASE_ID, type Database } from './library-api';
+import {
+  BOT_DATABASE_ID,
+  PAUSED_MATCHES_DATABASE_ID,
+  type Database,
+} from './library-api';
 export default function DatabaseSidebar({
   databases,
   selected,
@@ -48,9 +52,15 @@ export default function DatabaseSidebar({
           const description = db.description.trim();
           const repeatsName =
             description.toLowerCase() === db.name.trim().toLowerCase();
+          const defaultDescription =
+            db.id === PAUSED_MATCHES_DATABASE_ID
+              ? l('pausedMatchesDescription')
+              : db.id === BOT_DATABASE_ID
+                ? l('botMatchesDescription')
+                : '';
           const tooltip = [
             db.is_system ? l('systemDatabase') : '',
-            repeatsName ? '' : description,
+            (!repeatsName && description) || defaultDescription,
           ]
             .filter(Boolean)
             .join(' · ');

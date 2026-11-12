@@ -54,17 +54,18 @@ Open <http://127.0.0.1:8787>. By default the services listen on loopback. BG Tut
 2. Build the updated application before stopping the running server.
 
    ```sh
-   npm run build --prefix web
-   cargo build -p bgtutor --bin bgtutor --release
+   ./tools/build_local_restart.sh
    ```
 
-   On macOS 27, a `mis-aligned LINKEDIT string pool` error while loading a Rust procedural macro can require `CARGO_PROFILE_RELEASE_STRIP=none` before the Cargo command. This retains release optimization while disabling the affected strip step; see the [Rust issue](https://github.com/rust-lang/rust/issues/157750). Use the same environment setting for later release builds or `cargo run --release`.
+   The script builds from the current checkout, including uncommitted changes. It uses `target/local-restart` to keep the restart build separate from other Cargo builds and recompiles the BG Tutor package on each run so SQLx embeds the current migration files. Continue once both builds succeed and the script prints the path to the new binary.
+
+   If macOS 27 reports `mis-aligned LINKEDIT string pool` while loading a Rust procedural macro, rerun with `CARGO_PROFILE_RELEASE_STRIP=none ./tools/build_local_restart.sh`. This keeps release optimization and disables stripping. [Rust issue](https://github.com/rust-lang/rust/issues/157750)
 
 3. Stop BG Tutor with `Ctrl+C` in its terminal. If it runs in the background, use `lsof -nP -iTCP:8787 -sTCP:LISTEN` to find the listener. Confirm that it is the `bgtutor` process, then replace `PID` with its process ID in `kill -TERM PID`. Wait until the listener has stopped.
-4. Start the backend from the repository root. It applies pending migrations at startup and serves the built frontend on the same port.
+4. From the repository root, start the binary produced by step 2. It applies pending migrations at startup and serves the built frontend on the same port.
 
    ```sh
-   BGTUTOR_BIND=127.0.0.1:8787 BGTUTOR_WEB_DIR="$PWD/web/dist" cargo run -p bgtutor --bin bgtutor --release
+   BGTUTOR_BIND=127.0.0.1:8787 BGTUTOR_WEB_DIR="$PWD/web/dist" ./target/local-restart/bgtutor
    ```
 
 5. In another terminal, check the health endpoint. Once it reports `"status":"ok"`, open or reload [BG Tutor](http://127.0.0.1:8787/). Check [the database list](http://127.0.0.1:8787/api/databases) for **Paused Matches** after applying migration `0040`.
@@ -167,7 +168,7 @@ Keep the downloaded book files outside Git, for example in `~/Library/Applicatio
 
 **Match database** organizes named collections within a single PostgreSQL instance. Choose a database to filter the list and target imports, or choose **All databases** to search across the library. Multi-file imports process each file separately and report duplicates and failures per file.
 
-BG Tutor automatically provides **Unsorted** for imports without an explicit target, **Bot Matches** for games played against GNUbg, **Paused Matches** for resumable sessions, and **Engine Duels** for completed engine-vs.-engine matches. These system databases have fixed names and are protected from deletion. You can edit their descriptions. **Empty database** is available for **Unsorted**, **Bot Matches**, and **Engine Duels**. It requires confirmation and preserves saved positions and their relevant notes, flashcards and review history. BG Tutor rejects the operation if any of the database's matches has a queued or running analysis. **Paused Matches** is populated by pausing games in Playing. You can create, describe, rename and delete your own databases.
+BG Tutor automatically provides **Unsorted** for imports without an explicit target, **Bot Matches** for matches played against an engine such as GNUbg or Open Sage, **Paused Matches** for resumable sessions, and **Engine Duels** for completed engine-vs.-engine matches. These system databases have fixed names and are protected from deletion. You can edit their descriptions. The sidebar tooltips for **Bot Matches** and **Paused Matches** show a localized default when the description is empty or repeats the database name. **Empty database** is available for **Unsorted**, **Bot Matches**, and **Engine Duels**. It requires confirmation and preserves saved positions and their relevant notes, flashcards and review history. BG Tutor rejects the operation if any of the database's matches has a queued or running analysis. **Paused Matches** is populated by pausing games in Playing. You can create, describe, rename and delete your own databases.
 
 ### Filtering and navigating matches
 

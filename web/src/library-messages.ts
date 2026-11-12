@@ -27,6 +27,22 @@ const rows = {
     'Systemowa baza danych',
     'Database di sistema',
   ],
+  pausedMatchesDescription: [
+    'Resume paused matches from where you left off.',
+    'Pausierte Matches beim letzten gespeicherten Stand fortsetzen.',
+    'Reanuda las partidas pausadas desde el punto en que las dejaste.',
+    'Reprenez les matchs en pause là où vous les avez laissés.',
+    'Wznów wstrzymane mecze od miejsca, w którym zostały przerwane.',
+    'Riprendi le partite in pausa da dove le avevi lasciate.',
+  ],
+  botMatchesDescription: [
+    'Matches against an engine such as GNU Backgammon or Open Sage are saved here automatically.',
+    'Matches gegen eine Engine wie GNU Backgammon oder Open Sage werden hier automatisch gespeichert.',
+    'Las partidas contra un motor como GNU Backgammon u Open Sage se guardan aquí automáticamente.',
+    'Les matchs contre un moteur comme GNU Backgammon ou Open Sage sont automatiquement enregistrés ici.',
+    'Mecze z silnikiem takim jak GNU Backgammon lub Open Sage są tutaj zapisywane automatycznie.',
+    'Le partite contro un motore come GNU Backgammon o Open Sage vengono salvate qui automaticamente.',
+  ],
   occurrences: [
     'Occurrences',
     'Vorkommen',
