@@ -65,12 +65,12 @@ type View =
   | 'play'
   | 'extras';
 const views: View[] = [
-  'play',
   'analysis',
-  'database',
-  'players',
   'positions',
   'learning',
+  'play',
+  'database',
+  'players',
   'extras',
 ];
 export default function App() {

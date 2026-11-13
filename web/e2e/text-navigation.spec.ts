@@ -209,6 +209,39 @@ for (const theme of ['graphite', 'club', 'paper'])
       }
     });
 
+test('header tabs follow the workspace order with mouse and keyboard', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
+  await page.goto('/');
+  const header = page.getByRole('tablist', { name: 'Arbeitsbereiche' });
+  const tabs = header.getByRole('tab');
+  await expect(tabs).toHaveText([
+    'Analyse',
+    'Positionen',
+    'Study',
+    'Spielen',
+    'Matchdatenbank',
+    'Spielerdatenbank',
+    'Extras',
+  ]);
+  await expect(tabs.first()).toHaveAttribute('aria-selected', 'true');
+  await header.getByRole('tab', { name: 'Spielen', exact: true }).click();
+  await page.keyboard.press('ArrowRight');
+  const matches = header.getByRole('tab', { name: 'Matchdatenbank' });
+  await expect(matches).toBeFocused();
+  await expect(matches).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('ArrowRight');
+  const players = header.getByRole('tab', { name: 'Spielerdatenbank' });
+  await expect(players).toBeFocused();
+  await expect(players).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('End');
+  await expect(tabs.last()).toBeFocused();
+  await page.keyboard.press('Home');
+  await expect(tabs.first()).toBeFocused();
+  await expect(tabs.first()).toHaveAttribute('aria-selected', 'true');
+});
+
 test('text tabs retain keyboard focus, selection and desktop containment', async ({
   page,
 }) => {
