@@ -14,7 +14,7 @@ fn snapshot() -> SageSnapshot {
 
 #[test]
 fn unsupported_profiles_are_rejected_before_starting_processes() {
-    for (plies, threads) in [(0, 2), (3, 2), (2, 0), (2, 1)] {
+    for (plies, threads) in [(0, 2), (5, 2), (2, 0), (2, 1)] {
         let mut value = snapshot();
         value.plies = plies;
         value.threads = threads;

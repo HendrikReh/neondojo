@@ -330,3 +330,25 @@ verdrängt den Spielprozess nicht. Änderungen am gespeicherten Spielprofil
 erfordern einen neuen Prozess für dieses Profil. Benchmarkläufe starten ihren
 eigenen Worker weiterhin kalt. Die Prüfungen von Artefakten, Threadgrenzen,
 Anfragen, Antworten und Spielständen gelten wie bisher.
+
+
+## 3-/4-ply-Analyse und -Duelle
+
+Wähle in der Analyseansicht **Analyse-Engine → Open Sage** und als Tiefe
+**4-ply**. Das gilt für ein einzelnes Spiel und für das gesamte Match.
+Jeder Auftrag prüft und speichert Engine, Tiefe und Modell-Fingerprint.
+Migration 0047 erlaubt außerdem 3- und 4-ply als gespeicherte Analysevorgabe.
+
+Der installierte Fork `5b146c7d86fa965f2185e3871f3c56df030fd76f` wurde
+für beide höheren Stufen mit einer realen Checker- und Cube-Bewertung im
+5-Punkte-Kontext geprüft. Der Sidecar kontrolliert das Threadlimit, die
+Installationsidentität und die von Open Sage ausgegebene Bewertungstiefe.
+Die Ergebnisse gelten für das angeforderte Profil und den gespeicherten
+Modell-Fingerprint. Normale Partien gegen den Computer verwenden weiterhin
+die bisherigen Spielprofile.
+
+
+Beim letzten Ausspielzug kann Sage ein vorzeitiges Endbrett anbieten, obwohl
+GNUbg die Verwendung weiterer spielbarer Würfel verlangt. In diesem
+Sonderfall verwendet BG Tutor das bestplatzierte gemeinsame Endbrett und
+speichert die ausgeführte GNUbg-Zugnotation.

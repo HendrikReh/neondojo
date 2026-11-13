@@ -77,6 +77,10 @@ pub struct SageCubeEvaluation {
     pub probabilities: Vec<f64>,
 }
 
+pub(crate) fn valid_sage_depth(plies: i32) -> bool {
+    (1..=4).contains(&plies)
+}
+
 fn valid_sage_threads(threads: u32) -> bool {
     i32::try_from(threads)
         .is_ok_and(|threads| threads >= crate::configuration::engine_min_threads("bgsage"))
@@ -85,7 +89,7 @@ fn valid_sage_threads(threads: u32) -> bool {
 impl SageEngine {
     pub fn new(snapshot: SageSnapshot) -> Result<Self> {
         ensure!(
-            matches!(snapshot.plies, 1 | 2) && valid_sage_threads(snapshot.threads),
+            valid_sage_depth(snapshot.plies) && valid_sage_threads(snapshot.threads),
             "Unsupported Open Sage depth or thread count"
         );
         ensure!(
@@ -144,7 +148,7 @@ impl SageEngine {
     }
 
     pub async fn probe_profile(python: String, plies: i32, threads: u32) -> Result<SageSnapshot> {
-        ensure!(matches!(plies, 1 | 2), "Unsupported Open Sage depth");
+        ensure!(valid_sage_depth(plies), "Unsupported Open Sage depth");
         ensure!(
             valid_sage_threads(threads),
             "Unsupported Open Sage thread count"

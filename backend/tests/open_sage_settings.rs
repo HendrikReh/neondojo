@@ -94,9 +94,14 @@ async fn verified_installation_allows_independent_analysis_and_preserves_snapsho
         .find(|e| e["id"] == "bgsage")
         .unwrap();
     assert_eq!(sage["available"], true);
-    assert_eq!(sage["plies"], json!([1, 2]));
-    let mut invalid = changed;
-    invalid["analysis_plies"] = json!(3);
+    assert_eq!(sage["plies"], json!([1, 2, 3, 4]));
+    let mut deep = changed;
+    deep["analysis_plies"] = json!(4);
+    let (status, saved) = call(app.clone(), "PUT", "/api/settings", deep).await;
+    assert_eq!(status, 200, "{saved}");
+    assert_eq!(saved["analysis_plies"], 4);
+    let mut invalid = saved;
+    invalid["analysis_plies"] = json!(5);
     assert_eq!(call(app, "PUT", "/api/settings", invalid).await.0, 422);
 }
 
@@ -195,7 +200,7 @@ async fn sage_benchmark_snapshots_are_independent_and_complete(pool: PgPool) {
             app.clone(),
             "POST",
             "/api/benchmarks",
-            json!({"engine_id":"bgsage","plies":[3]})
+            json!({"engine_id":"bgsage","plies":[4]})
         )
         .await
         .0,

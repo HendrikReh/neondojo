@@ -557,7 +557,21 @@ mod tests {
             assert!(validation::normalize(decoded.unwrap()).is_ok());
             value[area]["plies"] = serde_json::json!(1);
             assert!(validation::normalize(serde_json::from_value(value.clone()).unwrap()).is_ok());
-            for unverified in [0, 3, 4] {
+            if area == "analysis" {
+                for depth in [3, 4] {
+                    value[area]["plies"] = serde_json::json!(depth);
+                    assert!(
+                        validation::normalize(serde_json::from_value(value.clone()).unwrap())
+                            .is_ok()
+                    );
+                }
+            }
+            let unverified_depths: &[i32] = if area == "analysis" {
+                &[0, 5]
+            } else {
+                &[0, 3, 4]
+            };
+            for &unverified in unverified_depths {
                 value[area]["plies"] = serde_json::json!(unverified);
                 let decoded =
                     serde_json::from_value::<ProfileConfiguration>(value.clone()).unwrap();

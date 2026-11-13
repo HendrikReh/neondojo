@@ -25,11 +25,13 @@ class WorkerTests(unittest.TestCase):
         worker.validate_profile(1, 4)
         worker.validate_profile(2, 2)
         worker.validate_profile(2, 4)
+        worker.validate_profile(3, 2)
+        worker.validate_profile(4, 2)
         limits = json.loads((PATH.parents[3] / 'shared/configuration-options.json').read_text())
         minimum = limits['engine_threads']['bgsage']['min']
         worker.validate_profile(2, minimum)
         worker.validate_profile(2, 64)
-        for plies, threads in [(0, 2), (3, 2), (2, minimum - 1), (2, 2.5)]:
+        for plies, threads in [(0, 2), (5, 2), (2, minimum - 1), (2, 2.5)]:
             with self.subTest(plies=plies, threads=threads), self.assertRaises(ValueError):
                 worker.validate_profile(plies, threads)
 
@@ -92,14 +94,20 @@ class BatchTests(unittest.TestCase):
         spec.loader.exec_module(worker)
         self.runtime = worker.Runtime.__new__(worker.Runtime)
         self.runtime.batch_active = False
+        self.runtime.profile = {'plies': 2}
         self.runtime.identity = {'package_version': 'fixture', 'artifact_fingerprint': 'original'}
         self.runtime.check_identity = Mock(side_effect=lambda: dict(self.current_identity))
         self.current_identity = dict(self.runtime.identity)
         self.runtime.integrity = {'validate_result': lambda result, validator: validator(result.probs.to_list())}
         self.runtime.analyzer = SimpleNamespace(cube_action=lambda *args, **kwargs: SimpleNamespace(
-            equity_nd=.2, equity_dt=.3, equity_dp=1, probs=SimpleNamespace(to_list=lambda: [.6, .1, .02, .1, .01])))
+            eval_level='2-ply', equity_nd=.2, equity_dt=.3, equity_dp=1, probs=SimpleNamespace(to_list=lambda: [.6, .1, .02, .1, .01])))
         self.cube = {'operation': 'cube', 'board': [0] * 26,
                      'context': dict(cube_value=1, cube_owner='centered', away1=0, away2=0, is_crawford=False, jacoby=True)}
+
+    def test_rejects_cube_depth_below_profile(self):
+        self.runtime.profile = {'plies': 3}
+        with self.assertRaisesRegex(ValueError, 'below the requested depth'):
+            self.runtime.dispatch(self.cube)
 
     def test_batch_checks_only_boundaries_and_later_single_request_is_protected(self):
         self.assertEqual(self.runtime.dispatch({'operation': 'begin_batch'}), self.runtime.identity)

@@ -2,7 +2,20 @@
   "board_themes": [
     "forest",
     "walnut",
-    "slate"
+    "slate",
+    "bgblitz:bg-earth",
+    "bgblitz:bg-earthboard",
+    "bgblitz:bg-moon",
+    "bgblitz:bg-poseidon",
+    "bgblitz:bg-quantum",
+    "bgblitz:bg-void",
+    "bgblitz:bg_blitz_cassio",
+    "bgblitz:bg_blitz_x22",
+    "bgblitz:cl_green",
+    "bgblitz:gp-blackorange",
+    "bgblitz:gp-greyred",
+    "bgblitz:gp-tan",
+    "bgblitz:wycliffe_purple"
   ],
   "analysis_board_width": {
     "min": 320,
@@ -34,7 +47,9 @@
     "bgsage": {
       "analysis": [
         1,
-        2
+        2,
+        3,
+        4
       ],
       "play": [
         1,

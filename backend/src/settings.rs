@@ -418,9 +418,12 @@ async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo
         .as_ref()
         .is_some_and(|snapshot| snapshot.one_ply_verified)
     {
-        vec![1, 2]
+        crate::configuration::engine_depths("bgsage", "analysis")
     } else {
-        vec![2]
+        crate::configuration::engine_depths("bgsage", "analysis")
+            .into_iter()
+            .filter(|&depth| depth != 1)
+            .collect()
     };
     let cpu_threads = crate::configuration::available_cpu_threads();
     let gnubg_parallel_limit = if !running

@@ -101,6 +101,7 @@ async fn measure(state: &AppState, run: &BenchmarkRun, token: Uuid) -> Result<f6
                 protocol.id.as_str(),
                 "gnubg-match-v1"
                     | "gnubg-match-v2-unlimited"
+                    | "bgsage-match-v3-3ply-4threads"
                     | "bgsage-match-v3-2ply-4threads"
                     | "bgsage-match-v3-1ply-4threads"
             ),

@@ -15,7 +15,7 @@ ADAPTER_VERSION = 1
 
 
 def validate_profile(plies, threads):
-    if plies not in (1, 2) or type(threads) is not int or threads < 2:
+    if type(plies) is not int or not 1 <= plies <= 4 or type(threads) is not int or threads < 2:
         raise ValueError('Unsupported Open Sage depth or thread count')
 
 
@@ -166,6 +166,8 @@ class Runtime:
                 result = self.analyzer.cube_action(before, **kwargs)
                 try:
                     self.integrity['validate_result'](result, probabilities)
+                    if result.eval_level != f"{self.profile['plies']}-ply":
+                        raise ValueError('Open Sage returned a cube evaluation below the requested depth')
                 except Exception as error:
                     raise ValueError(f'Invalid cube evaluation: probabilities={result.probs.to_list()}, board={before}, context={context}; {error}') from error
                 result = {'no_double': result.equity_nd, 'take': result.equity_dt, 'pass': result.equity_dp,
