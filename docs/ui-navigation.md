@@ -59,7 +59,9 @@ history. Left/Right wrap between all four tabs; Home and End choose the first an
 deck from another workspace still selects Flashcards & Anki.
 
 My recurring mistakes requires a player selection and offers database, game-plan
-and minimum-loss filters. Practice opens a modal from the selected group, with
+and minimum-loss filters. Players in the selected database remain selectable
+before their matches are analyzed. The view reports when the current filters
+yield no evaluable decisions. Practice opens a modal from the selected group, with
 the original board and a separate Reveal action. Next hides the solution again.
 Escape closes practice and returns focus to its trigger. Leaving the area or
 changing its filters dismisses practice and cancels outstanding requests.

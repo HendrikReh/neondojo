@@ -161,7 +161,18 @@ pub(super) async fn players(pool: &PgPool, database: Option<Uuid>) -> ApiResult<
             return Err(ApiError::invalid("Choose an existing database"));
         }
     }
-    let names:Vec<String>=sqlx::query_scalar(&format!("{CHOSEN} SELECT DISTINCT name FROM eligible m CROSS JOIN LATERAL (VALUES(btrim(m.white)),(btrim(m.black))) names(name) WHERE name<>'' AND (EXISTS(SELECT 1 FROM chosen c WHERE c.match_id=m.id) OR (m.format IN ('xg','bgf') AND (NOT m.imported_analysis_loaded OR EXISTS(SELECT 1 FROM imported_analyses a WHERE a.match_uuid=m.id AND a.kind IN ('checker','cube') AND NOT EXISTS(SELECT 1 FROM chosen c WHERE c.match_id=m.id AND c.game_no=a.game_no))))) ORDER BY name LIMIT 10001")).bind(database).bind(None::<Uuid>).bind(None::<String>).fetch_all(pool).await.map_err(anyhow::Error::from)?;
+    let names: Vec<String> = sqlx::query_scalar(&format!(
+        "{CHOSEN}
+         SELECT DISTINCT name FROM eligible m
+         CROSS JOIN LATERAL (VALUES(btrim(m.white)), (btrim(m.black))) names(name)
+         WHERE name<>'' ORDER BY name LIMIT 10001"
+    ))
+    .bind(database)
+    .bind(None::<Uuid>)
+    .bind(None::<String>)
+    .fetch_all(pool)
+    .await
+    .map_err(anyhow::Error::from)?;
     if names.len() > 10000 {
         return Err(ApiError::invalid(
             "Too many available players; choose a database to narrow this request",

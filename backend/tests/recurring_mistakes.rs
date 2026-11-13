@@ -89,6 +89,49 @@ fn game1(loss: f64) -> Vec<(i32, Value)> {
         (1, decision(4, 1, "24/20 24/22", "13/9 13/11", loss)),
     ]
 }
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn database_player_choices_include_matches_without_analysis(pool: PgPool) {
+    source(&pool).await;
+    let database = Uuid::new_v4();
+    sqlx::query("INSERT INTO databases(id,name) VALUES($1,'Online')")
+        .bind(database)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let sgf = SOURCE.replace("Alice", "Hendrik Reh");
+    store::import_match_in_database(
+        &pool,
+        "online.sgf",
+        "sgf",
+        sgf.as_bytes(),
+        &sgf,
+        &import::parse_sgf(&sgf).unwrap(),
+        database,
+    )
+    .await
+    .unwrap();
+
+    let router = app(&pool);
+    let url = format!("/api/study/mistakes?database_id={database}");
+    let (status, choices) = call(&router, "GET", &url, Value::Null).await;
+    assert_eq!(status, 200, "{choices}");
+    assert_eq!(choices["players"], json!(["Bob", "Hendrik Reh"]));
+    let (status, result) = call(
+        &router,
+        "GET",
+        &format!("{url}&player=hEndrik%20reh"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{result}");
+    assert_eq!(result["players"], choices["players"]);
+    assert_eq!(result["analyzed_matches"], 0);
+    assert_eq!(result["analyzed_decisions"], 0);
+    assert_eq!(result["groups"], json!([]));
+}
+
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
 async fn selects_deepest_per_game_before_filters_and_uses_actual_decision_player(pool: PgPool) {

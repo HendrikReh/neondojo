@@ -216,7 +216,9 @@ export default function RecurringMistakes({
                 {page.analyzed_matches}
               </p>
               {!page.groups.length ? (
-                <p role="status">{t('empty')}</p>
+                <p role="status">
+                  {t(page.analyzed_decisions ? 'empty' : 'noCoverage')}
+                </p>
               ) : (
                 <div className="study-report-table-scroll">
                   <table className="study-report-table">
