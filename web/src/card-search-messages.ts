@@ -1,6 +1,22 @@
 import { useI18n } from './i18n';
 import { interpolate, type Locale, type TranslationParams } from './i18n-core';
 const rows = {
+  resizePreview: [
+    'Resize card preview',
+    'Breite der Kartenvorschau ändern',
+    'Cambiar el ancho de la vista previa',
+    'Redimensionner l’aperçu de la carte',
+    'Zmień szerokość podglądu karty',
+    'Ridimensiona l’anteprima della scheda',
+  ],
+  resizePreviewHelp: [
+    'Drag or use Left/Right arrows. Double-click or Enter resets the width.',
+    'Ziehen oder Pfeiltasten links/rechts nutzen. Doppelklick oder Enter setzt die Breite zurück.',
+    'Arrastra o usa las flechas izquierda/derecha. Doble clic o Intro restablece el ancho.',
+    'Glissez ou utilisez les flèches gauche/droite. Double-clic ou Entrée rétablit la largeur.',
+    'Przeciągnij lub użyj strzałek lewo/prawo. Dwuklik lub Enter przywraca szerokość.',
+    'Trascina o usa le frecce sinistra/destra. Doppio clic o Invio ripristina la larghezza.',
+  ],
   withoutDeck: [
     'Without a deck',
     'Ohne Deck',

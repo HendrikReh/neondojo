@@ -155,3 +155,45 @@
   width: 36px;
   text-align: center;
 }
+
+.learning-preview-divider {
+  display: none;
+}
+
+@media (width > 1150px) {
+  .learning-card-browser.position-browser-layout {
+    grid-template-columns: minmax(0, 1fr) 20px var(--card-preview-width, 400px);
+    column-gap: 0;
+  }
+
+  .learning-preview-divider {
+    display: grid;
+    place-items: center;
+    position: sticky;
+    top: 18px;
+    height: clamp(120px, 45vh, 480px);
+    cursor: col-resize;
+    touch-action: none;
+    user-select: none;
+  }
+
+  .learning-preview-divider::before {
+    content: '';
+    width: 3px;
+    height: 56px;
+    border-radius: 3px;
+    background: var(--ui-border-strong);
+  }
+
+  .learning-preview-divider:hover::before,
+  .learning-preview-divider:focus-visible::before,
+  .learning-preview-divider[data-dragging='true']::before {
+    background: var(--ui-accent);
+  }
+
+  .learning-preview-divider[data-dragging='true']
+    ~ .learning-card-preview
+    iframe {
+    pointer-events: none;
+  }
+}

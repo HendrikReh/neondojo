@@ -8,18 +8,22 @@ export function SearchResultList({
   busy,
   count,
   preview,
+  divider,
   children,
+  ...layout
 }: {
   className?: string;
   listClassName?: string;
   busy?: boolean;
   count: ReactNode;
   preview: ReactNode;
+  divider?: ReactNode;
   children: ReactNode;
-}) {
+} & ComponentPropsWithRef<'div'>) {
   const t = usePositionText();
   return (
     <div
+      {...layout}
       className={
         className
           ? `${className} position-browser-layout`
@@ -40,6 +44,7 @@ export function SearchResultList({
         </div>
         {children}
       </div>
+      {divider}
       {preview}
     </div>
   );

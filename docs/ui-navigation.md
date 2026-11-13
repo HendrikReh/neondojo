@@ -73,6 +73,9 @@ card when the due list is empty.
 In Flashcards & Anki, **Manage decks** opens a list searchable by deck name.
 Create a deck there, or open, rename or delete a deck from the list. When a
 specific deck is selected, its study and export actions appear below the search.
+On wide windows, drag the divider between the card list and the preview. The
+Left and Right arrow keys move the focused divider. Double-click it or press
+Enter to restore the default width. The browser remembers the chosen width.
 The results have selection checkboxes and actions above the table. Cards can be added to a deck or deleted
 from the collection after confirmation. Select a deck to move cards or remove
 its memberships, or choose **Without a deck** to find unassigned cards. **Find duplicates**

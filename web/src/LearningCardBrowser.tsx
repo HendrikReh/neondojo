@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import type { Theme } from './themes';
 import SearchPagination, { useSearchResultPage } from './SearchPagination';
 import {
@@ -26,6 +26,7 @@ import {
 import { useCardSearchText } from './card-search-messages';
 import { usePositionText } from './position-browser-messages';
 import { useDeckLibraryText } from './deck-library-messages';
+import { useCardPreviewResize } from './useCardPreviewResize';
 
 export default function LearningCardBrowser({
   cards,
@@ -59,6 +60,7 @@ export default function LearningCardBrowser({
   actions?: ReactNode;
 }) {
   const deckText = useDeckLibraryText();
+  const resize = useCardPreviewResize(visible);
   const searchT = useCardSearchText(),
     p = usePositionText();
   const deckName = (deck: { id: string; name: string }) =>
@@ -117,6 +119,7 @@ export default function LearningCardBrowser({
   const preview = (
     <SearchResultPreview
       className="learning-card-preview"
+      id={resize.previewId}
       title={t('cardPreview')}
       hint={t('previewHint')}
       data-card-id={selected?.id}
@@ -162,6 +165,9 @@ export default function LearningCardBrowser({
   return (
     <SearchResultList
       className="learning-card-browser"
+      ref={resize.layout}
+      style={{ '--card-preview-width': `${resize.width}px` } as CSSProperties}
+      divider={resize.divider}
       listClassName="learning-card-list"
       busy={loading || moreLoading}
       count={

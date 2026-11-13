@@ -356,3 +356,47 @@ test('filters preserve scope and a delayed old search cannot replace newer resul
   );
   expect(writes).toEqual([]);
 });
+
+test('the card preview can be resized and keeps its width after reload', async ({
+  page,
+}) => {
+  const { study } = await setup(page);
+  const preview = study.locator('.learning-card-preview');
+  const handle = study.getByRole('separator', { name: 'Resize card preview' });
+  await expect(preview.locator('.board')).toBeVisible();
+  await expect(handle).toBeVisible({ timeout: 4000 });
+  const originalWidth = (await preview.boundingBox())!.width;
+  await handle.scrollIntoViewIfNeeded();
+  const { x, y, width, height } = (await handle.boundingBox())!;
+  await page.mouse.move(x + width / 2, y + Math.min(height / 2, 30));
+  await page.mouse.down();
+  await page.mouse.move(x - 240 + width / 2, y + Math.min(height / 2, 30), {
+    steps: 8,
+  });
+  await page.mouse.up();
+  await expect
+    .poll(async () => (await preview.boundingBox())!.width)
+    .toBe(originalWidth + 240);
+  await handle.press('ArrowRight');
+  const adjustedWidth = (await preview.boundingBox())!.width;
+  expect(adjustedWidth).toBeLessThan(originalWidth + 240);
+
+  await page.reload();
+  await page.getByRole('tab', { name: 'Study', exact: true }).click();
+  await page
+    .getByRole('tab', { name: 'Flashcards & Anki', exact: true })
+    .click();
+  await expect
+    .poll(async () => (await preview.boundingBox())!.width)
+    .toBe(adjustedWidth);
+
+  await handle.press('End');
+  await expect(handle).toHaveAttribute(
+    'aria-valuenow',
+    (await handle.getAttribute('aria-valuemax'))!,
+  );
+  await expect(study.locator('.learning-card-list')).toBeVisible();
+  await page.setViewportSize({ width: 1100, height: 1000 });
+  await expect(handle).toBeHidden();
+  await expect(preview.locator('.board')).toBeVisible();
+});
