@@ -450,7 +450,7 @@ test('a paused match resumes from Paused Matches at its saved decision', async (
   await expect(
     page.getByRole('button', { name: 'Empty database', exact: true }),
   ).toHaveCount(0);
-  await expect(page.getByText('Import into: Unsorted')).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Import destination' }).locator('option:checked')).toHaveText('Unsorted');
   const matchRow = page
     .getByRole('row')
     .filter({ hasText: 'Library bot match' });

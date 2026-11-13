@@ -15,7 +15,7 @@ const entries = Array.from({ length: 50 }, (_, index) => ({
     index === 1
       ? 'A very long player name which still needs to be accessible'
       : `Alice ${index}`,
-  black: `Bob ${index}`,
+  black: index === 1 ? 'Longer Opponent' : `Bob ${index}`,
   match_length: 11,
   position_count: 460,
   game_count: 10,
@@ -190,3 +190,136 @@ for (const [width, height] of [
     }
   });
 }
+
+test('keeps row actions visible with wide saved columns', async ({ page }) => {
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  await library(page);
+  const columns = page.locator('.library-column-picker');
+  await columns.locator('summary').click();
+  await columns.getByRole('button', { name: 'Show all columns' }).click();
+  await page.keyboard.press('Escape');
+  const table = page.locator('.database-table');
+  const white = table.locator('th[data-column="white"]');
+  await white.getByRole('separator').press('End');
+  const wrapper = page.locator('.database-table-wrap');
+  await wrapper.evaluate((element) => (element.scrollLeft = 0));
+  const row = table.locator('tbody tr').first();
+  const viewport = (await wrapper.boundingBox())!;
+  for (const action of [
+    row.getByRole('button', { name: /Open match:/ }),
+    row.getByRole('button', { name: /Edit match details:/ }),
+    row.getByRole('link', { name: 'Export: SGF' }),
+  ]) {
+    await expect(action).toBeInViewport();
+    const box = (await action.boundingBox())!;
+    expect(box.x + box.width).toBeLessThanOrEqual(viewport.x + viewport.width);
+  }
+  await row.getByRole('button', { name: /Edit match details:/ }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+});
+
+test('uses desktop table space for both player names', async ({ page }) => {
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  await library(page);
+  for (const column of ['white', 'black']) {
+    const header = page.locator(`.database-table th[data-column="${column}"]`);
+    expect((await header.boundingBox())!.width).toBeGreaterThanOrEqual(155);
+  }
+  expect(
+    (await page.locator('.database-table tbody tr').first().boundingBox())!
+      .height,
+  ).toBeLessThanOrEqual(44);
+});
+
+test('keeps player names readable in narrow saved columns', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  await library(page);
+  const black = page.locator('.database-table th[data-column="black"]');
+  const handle = black.getByRole('separator');
+  await handle.press('Home');
+  for (let step = 0; step < 4; step++) await handle.press('ArrowRight');
+  expect((await black.boundingBox())!.width).toBeCloseTo(100, 0);
+  const player = page.getByText('Longer Opponent', { exact: true });
+  const sizes = await player.evaluate((element) => ({
+    height: element.clientHeight,
+    contentHeight: element.scrollHeight,
+    lineHeight: Number.parseFloat(getComputedStyle(element).lineHeight),
+  }));
+  expect(sizes.height).toBeGreaterThan(sizes.lineHeight);
+  expect(sizes.contentHeight).toBe(sizes.height);
+});
+
+test('removes one applied filter by keyboard and keeps the other filters', async ({
+  page,
+}) => {
+  await library(page);
+  const search = page.getByLabel('Search matches', { exact: true });
+  const filters = page.getByRole('button', { name: 'Filters', exact: true });
+  const fields = page.locator('.library-filters');
+  const eventField = fields.getByLabel('Event', { exact: true });
+  const resultField = fields.getByLabel('Result', { exact: true });
+  await search.fill('Alice');
+  await filters.click();
+  await eventField.fill('Test Open');
+  await resultField.selectOption('white_won');
+  await filters.click();
+  const chips = page.getByRole('list', { name: 'Applied filters' });
+  const event = chips.getByRole('button', {
+    name: 'Remove filter: Event: Test Open',
+  });
+  await expect(event).toBeVisible();
+  await expect(chips).toContainText('White won');
+  const request = page.waitForRequest((req) => {
+    const url = new URL(req.url());
+    return (
+      url.pathname === '/api/library/matches' &&
+      url.searchParams.get('q') === 'Alice' &&
+      url.searchParams.get('result') === 'white_won' &&
+      !url.searchParams.get('tournament')
+    );
+  });
+  await event.press('Enter');
+  await request;
+  await expect(event).toHaveCount(0);
+  await expect(filters).toBeFocused();
+  await expect(chips).toContainText('Alice');
+  await expect(chips).toContainText('White won');
+  await filters.click();
+  await expect(eventField).toHaveValue('');
+  await expect(resultField).toHaveValue('white_won');
+});
+
+test('opens search panels from one toolbar and keeps the notes draft', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  await library(page);
+  const toolbar = page.locator('.library-search-toolbar');
+  const filters = toolbar.getByRole('button', { name: 'Filters', exact: true });
+  const notes = toolbar.getByRole('button', { name: 'Notes', exact: true });
+  const position = toolbar.getByRole('button', {
+    name: 'Position ID',
+    exact: true,
+  });
+  await expect(
+    toolbar.getByRole('textbox', { name: 'Search matches' }),
+  ).toBeVisible();
+  await filters.click();
+  await expect(filters).toHaveAttribute('aria-expanded', 'true');
+  await notes.click();
+  await expect(filters).toHaveAttribute('aria-expanded', 'false');
+  const text = page
+    .locator('.annotation-search')
+    .getByRole('searchbox', { name: 'Text' });
+  await text.fill('Remember this note search');
+  await position.click();
+  await expect(notes).toHaveAttribute('aria-expanded', 'false');
+  await expect(text).toBeHidden();
+  await expect(
+    page.locator('.position-search').getByRole('textbox'),
+  ).toBeVisible();
+  await notes.click();
+  await expect(text).toHaveValue('Remember this note search');
+});

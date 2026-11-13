@@ -7,6 +7,7 @@ import ActionIcon from './action-icons';
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -27,7 +28,6 @@ import {
   type LibraryMessageKey,
 } from './library-messages';
 import {
-  acceptsLibraryMatches,
   emptyFilters,
   loadLibrary,
   libraryRowKey,
@@ -54,7 +54,11 @@ import {
 } from './library-columns';
 import { type LibraryDataColumn } from './library-column-preferences';
 import LibraryColumnPicker from './LibraryColumnPicker';
-import LibraryFilters from './LibraryFilters';
+import LibraryImport from './LibraryImport';
+import LibraryFilters, {
+  LibraryFilterChips,
+  type LibraryFilterKey,
+} from './LibraryFilters';
 import LibraryDialogs, { type LibraryDialogState } from './LibraryDialogs';
 import './library.css';
 
@@ -62,6 +66,8 @@ export interface PositionSearchRequest {
   positionId: string;
   token: number;
 }
+
+type SearchPanel = 'filters' | 'notes' | 'position';
 
 const resultKey: Record<string, LibraryMessageKey> = {
   copied: 'copied',
@@ -87,6 +93,7 @@ export default function MatchDatabase({
   onPosition,
   onAnnotation,
   onImport,
+  uploading,
   onOpenPlay,
   onChanged,
   visible,
@@ -102,7 +109,8 @@ export default function MatchDatabase({
   onOpen: (match: Match, gameNo?: number) => void;
   onPosition: (p: Position) => void;
   onAnnotation: (hit: AnnotationHit) => void;
-  onImport: () => void;
+  onImport: (databaseId: string) => void;
+  uploading: boolean;
   onOpenPlay?: (id: string, resume?: boolean) => void;
   onChanged: (deletedIds?: string[], validateSelection?: boolean) => void;
 }) {
@@ -130,7 +138,7 @@ export default function MatchDatabase({
   const showColumn = (id: LibraryColumn) => columns.activeColumns.includes(id);
   const [databases, setDatabases] = useState<Database[]>([]),
     [localRevision, setRevision] = useState(0),
-    [expanded, setExpanded] = useState(false),
+    [searchPanel, setSearchPanel] = useState<SearchPanel>(),
     [databaseError, setDatabaseError] = useState<unknown>(),
     [selectedRows, setSelectedRows] = useState<LibraryMatch[]>([]),
     [dialog, setDialog] = useState<LibraryDialogState>(),
@@ -142,9 +150,28 @@ export default function MatchDatabase({
     emptyFilters,
   );
   const columns = useLibraryColumns(visible, !!filters.position_id);
-  const compactActions = !showColumn('white') && !showColumn('black');
   const [draftFilters, setDraftFilters] = useState<Filters>(filters);
   const filterDraft = useRef(draftFilters);
+  const filterToggle = useRef<HTMLButtonElement>(null);
+  const notesToggle = useRef<HTMLButtonElement>(null);
+  const positionToggle = useRef<HTMLButtonElement>(null);
+  const searchId = useId();
+  const selectionHintId = `${searchId}-selection`;
+  const searchPanels = [
+    {
+      id: 'filters',
+      label: l('filters'),
+      icon: 'filter',
+      trigger: filterToggle,
+    },
+    { id: 'notes', label: w('notes'), icon: 'notes', trigger: notesToggle },
+    {
+      id: 'position',
+      label: l('positionSearch'),
+      icon: 'similar',
+      trigger: positionToggle,
+    },
+  ] as const;
   filterDraft.current = draftFilters;
   // Preserve editable whitespace while canonical filters drive persisted queries.
   // Only a profile replacement rebases a user's still-editable filter inputs.
@@ -163,6 +190,13 @@ export default function MatchDatabase({
       // A partially edited invalid field remains a draft until it is valid.
     }
   };
+  function removeFilter(key: LibraryFilterKey) {
+    (key === 'position_id' ? positionToggle : filterToggle).current?.focus();
+    setAppliedFilters((previous) => ({ ...previous, [key]: '' }));
+    const draft = { ...filterDraft.current, [key]: '' };
+    filterDraft.current = draft;
+    setDraftFilters(draft);
+  }
   const [preferredSort, setSort] = useProfileValue<LibrarySort>(
     (c) => c.library.sort,
     (c, sort) => ({ ...c, library: { ...c.library, sort } }),
@@ -183,7 +217,6 @@ export default function MatchDatabase({
   const selected = new Set(selectedRows.map((row) => row.id));
   const [exact, setExact] = useState(''),
     [positionInputError, setPositionInputError] = useState(false);
-  const positionSearchForm = useRef<HTMLDetailsElement>(null);
   const consumedPositionSearch = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (
@@ -202,7 +235,7 @@ export default function MatchDatabase({
       ...emptyFilters(),
       position_id: requestedPositionSearch.positionId,
     });
-    if (positionSearchForm.current) positionSearchForm.current.open = true;
+    setSearchPanel('position');
   }, [requestedPositionSearch]);
   const matchScope = JSON.stringify([
     databaseId,
@@ -364,6 +397,33 @@ export default function MatchDatabase({
     }
     void matchOpening.open(match);
   }
+  const rowOpeningDisabled = (match: LibraryMatch) =>
+    matchResultScope !== matchScope ||
+    matchOpening.openingId === libraryRowKey(match);
+  function primaryRowAction(match: LibraryMatch) {
+    const resumeId =
+      match.play_session_id &&
+      (match.play_paused || match.play_phase !== 'match_over')
+        ? match.play_session_id
+        : undefined;
+    const canResume = !!(resumeId && onOpenPlay);
+    const label = canResume ? l('resumePlay') : w('openMatch');
+    return (
+      <ActionButton
+        icon={canResume ? 'resume' : 'open'}
+        label={label}
+        compact
+        className={canResume ? 'library-row-resume' : 'library-row-open'}
+        aria-label={`${label}: ${match.display_name}`}
+        disabled={rowOpeningDisabled(match)}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (resumeId && onOpenPlay) onOpenPlay(resumeId, true);
+          else openMatchRow(match);
+        }}
+      />
+    );
+  }
   function isCurrentRow(match: LibraryMatch) {
     return match.occurrence
       ? match.occurrence.id === currentPosition?.id
@@ -373,10 +433,7 @@ export default function MatchDatabase({
     return (
       <button
         className={`match-card ${isCurrentRow(match) ? 'active' : ''}`}
-        disabled={
-          matchResultScope !== matchScope ||
-          matchOpening.openingId === libraryRowKey(match)
-        }
+        disabled={rowOpeningDisabled(match)}
         aria-busy={matchOpening.openingId === libraryRowKey(match)}
         onClick={(event) => {
           event.stopPropagation();
@@ -426,7 +483,12 @@ export default function MatchDatabase({
     return () => clearInterval(timer);
   }, [visible, matches]);
   const active = databases.find((d) => d.id === databaseId);
-  const importTarget = acceptsLibraryMatches(databaseId) ? active : undefined;
+  const hasFilters = Object.entries(filters).some(
+    ([key, value]) => key !== 'date_field' && value.trim(),
+  );
+  const allOnPageSelected =
+    matches.length > 0 && matches.every((match) => selected.has(match.id));
+  const someOnPageSelected = matches.some((match) => selected.has(match.id));
   const pausedSelected = selectedRows.some(
     (m) => m.play_paused && selected.has(m.id),
   );
@@ -456,22 +518,12 @@ export default function MatchDatabase({
           <h1>{w('databaseTitle')}</h1>
           <p>{w('databaseDescription')}</p>
         </div>
-        <div>
-          <small>
-            {l('importTarget', {
-              name:
-                importTarget?.name ??
-                databases.find((d) => d.is_default)?.name ??
-                '…',
-            })}
-          </small>
-          <ActionButton
-            icon="import"
-            label={t('app.import')}
-            className="primary"
-            onClick={onImport}
-          />
-        </div>
+        <LibraryImport
+          databases={databases}
+          databaseId={databaseId}
+          uploading={uploading}
+          onImport={onImport}
+        />
       </div>
       <div className="library-layout">
         <DatabaseSidebar
@@ -498,43 +550,55 @@ export default function MatchDatabase({
                 }
               />
             </label>
-            <ActionButton
-              icon="filter"
-              label={l('filters')}
-              compact
-              onClick={() => setExpanded((v) => !v)}
-              aria-expanded={expanded}
-            />
+            {searchPanels.map(({ id, label, icon, trigger }) => (
+              <ActionButton
+                key={id}
+                ref={trigger}
+                icon={icon}
+                label={label}
+                type="button"
+                onClick={() =>
+                  setSearchPanel((current) => (current === id ? undefined : id))
+                }
+                aria-controls={`${searchId}-${id}`}
+                aria-expanded={searchPanel === id}
+              />
+            ))}
           </div>
-          {expanded && (
+          <div
+            onKeyDown={(event) => {
+              if (
+                event.key !== 'Escape' ||
+                !searchPanel ||
+                event.defaultPrevented
+              )
+                return;
+              event.preventDefault();
+              searchPanels
+                .find(({ id }) => id === searchPanel)
+                ?.trigger.current?.focus();
+              setSearchPanel(undefined);
+            }}
+          >
             <LibraryFilters
               filters={draftFilters}
               onChange={setFilters}
               onClear={() => setFilters(emptyFilters())}
-              currentPosition={currentPosition}
+              panelId={`${searchId}-filters`}
+              open={searchPanel === 'filters'}
             />
-          )}
-          {!!error && (
-            <p className="error" role="alert">
-              {formatError(error)}
-            </p>
-          )}
-          {!!matchOpening.error && (
-            <p className="error" role="alert">
-              {formatError(matchOpening.error)}
-            </p>
-          )}
-          <div className="database-searches">
             <AnnotationSearch
               revision={annotationRevision}
               databaseId={databaseId}
               onOpen={onAnnotation}
+              panelId={`${searchId}-notes`}
+              open={searchPanel === 'notes'}
             />
-            <details ref={positionSearchForm} className="position-search">
-              <summary>
-                <ActionIcon name="search" size={16} /> {t('app.findPosition')}{' '}
-                <span>{t('app.positionId')}</span>
-              </summary>
+            <div
+              className="position-search"
+              id={`${searchId}-position`}
+              hidden={searchPanel !== 'position'}
+            >
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -551,14 +615,13 @@ export default function MatchDatabase({
                 <ActionButton
                   icon="search"
                   label={t('app.exactSearch')}
-                  compact
+                  type="submit"
                   disabled={loading || !exact.trim()}
                 />
                 {currentPosition && (
                   <ActionButton
                     icon="view"
                     label={t('app.usePosition')}
-                    compact
                     type="button"
                     onClick={() =>
                       setPositionQuery(currentPosition.position_id)
@@ -569,31 +632,25 @@ export default function MatchDatabase({
               {positionInputError && (
                 <p role="alert">{l('invalidPositionId')}</p>
               )}
-            </details>
+            </div>
           </div>
+          <LibraryFilterChips filters={filters} onRemove={removeFilter} />
+          {!!error && (
+            <p className="error" role="alert">
+              {formatError(error)}
+            </p>
+          )}
+          {!!matchOpening.error && (
+            <p className="error" role="alert">
+              {formatError(matchOpening.error)}
+            </p>
+          )}
           <div className="library-table-toolbar">
             <div className="database-count">
               {loading ? t('app.searching') : `${formatNumber(total)}`}{' '}
               {filters.position_id ? l('occurrences') : t('app.matches')} ·{' '}
               {active ? databaseDisplayName(active, l) : l('allDatabases')}
             </div>
-            {filters.position_id.trim() && (
-              <span className="library-position-filter">
-                <span>
-                  {t('app.positionId')}:{' '}
-                  <code>{filters.position_id.trim()}</code>
-                </span>
-                <ActionButton
-                  icon="clear"
-                  label={l('clearPositionFilter')}
-                  compact
-                  type="button"
-                  onClick={() =>
-                    setFilters((previous) => ({ ...previous, position_id: '' }))
-                  }
-                />
-              </span>
-            )}
             {!showColumn(sort as LibraryColumn) && (
               <span className="library-hidden-sort">
                 {l('sortedBy', {
@@ -625,10 +682,19 @@ export default function MatchDatabase({
               disabled={!columns.custom}
             />
           </div>
+          {filters.position_id && matches.length > 0 && (
+            <p id={selectionHintId} className="library-occurrence-selection">
+              {l('occurrenceSelection')}
+            </p>
+          )}
           {selected.size > 0 && <p className="fineprint">{l('batchLimit')}</p>}
           {selected.size > 0 && (
             <div className="library-batch-bar">
-              <strong>{l('selected', { count: selected.size })}</strong>
+              <strong role="status">
+                {l(selected.size === 1 ? 'selectedMatch' : 'selectedMatches', {
+                  count: formatNumber(selected.size),
+                })}
+              </strong>
               {(['copy', 'move', 'tags', 'export', 'delete'] as const).map(
                 (action) => (
                   <ActionButton
@@ -724,21 +790,9 @@ export default function MatchDatabase({
                           }}
                         />
                       ))}
-                    {columns.activeColumns
-                      .map((id) =>
-                        LIBRARY_COLUMNS.find((column) => column.id === id)!,
-                      )
-                      .map((column) => (
-                        <col
-                          key={column.id}
-                          className={column.className}
-                          style={
-                            columns.widths
-                              ? { width: columns.widths[column.id] }
-                              : undefined
-                          }
-                        />
-                      ))}
+                    {columns.tableColumns.map(({ id, className, width }) => (
+                      <col key={id} className={className} style={{ width }} />
+                    ))}
                   </colgroup>
                   <thead>
                     <OrderedLibraryRow
@@ -802,12 +856,17 @@ export default function MatchDatabase({
                         <input
                           type="checkbox"
                           aria-label={l('selectAll')}
-                          checked={
-                            matches.length > 0 &&
-                            matches
-                              .slice(0, 100)
-                              .every((m) => selected.has(m.id))
+                          aria-describedby={
+                            filters.position_id && matches.length
+                              ? selectionHintId
+                              : undefined
                           }
+                          checked={allOnPageSelected}
+                          ref={(checkbox) => {
+                            if (checkbox)
+                              checkbox.indeterminate =
+                                someOnPageSelected && !allOnPageSelected;
+                          }}
                           disabled={loading || !matches.length}
                           onChange={(e) =>
                             changeSelection(matches, e.target.checked)
@@ -879,9 +938,25 @@ export default function MatchDatabase({
                                   : '—'}
                               </td>
                               <td data-column="occurrence_move">
-                                {m.occurrence
-                                  ? formatNumber(m.occurrence.move_no)
-                                  : '—'}
+                                {m.occurrence ? (
+                                  <button
+                                    type="button"
+                                    className="library-occurrence-link"
+                                    aria-label={l('openOccurrence', {
+                                      game: formatNumber(m.occurrence.game_no),
+                                      move: formatNumber(m.occurrence.move_no),
+                                    })}
+                                    disabled={rowOpeningDisabled(m)}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      openMatchRow(m);
+                                    }}
+                                  >
+                                    {formatNumber(m.occurrence.move_no)}
+                                  </button>
+                                ) : (
+                                  '—'
+                                )}
                               </td>
                             </>
                           )
@@ -890,11 +965,10 @@ export default function MatchDatabase({
                         <td onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
-                            aria-label={l('select', {
-                              name: m.occurrence
-                                ? `${m.display_name} · ${l('occurrenceGame')} ${m.occurrence.game_no} · ${l('occurrenceMove')} ${m.occurrence.move_no}`
-                                : m.display_name,
-                            })}
+                            aria-label={l(
+                              m.occurrence ? 'selectMatch' : 'select',
+                              { name: m.display_name },
+                            )}
                             checked={selected.has(m.id)}
                             onChange={(e) =>
                               changeSelection([m], e.target.checked)
@@ -919,9 +993,13 @@ export default function MatchDatabase({
                         )}
                         {showColumn('black') && (
                           <td>
-                            {showColumn('white')
-                              ? m.black
-                              : matchName(m, 'black')}
+                            {showColumn('white') ? (
+                              <span className="library-player-name">
+                                {m.black}
+                              </span>
+                            ) : (
+                              matchName(m, 'black')
+                            )}
                           </td>
                         )}
                         {showColumn('black_pr') && (
@@ -993,41 +1071,9 @@ export default function MatchDatabase({
                             </span>
                           </td>
                         )}
-                        <td>
+                        <td data-column="actions">
                           <div className="library-row-actions">
-                            {m.play_session_id &&
-                              (m.play_paused ||
-                                m.play_phase !== 'match_over') &&
-                              onOpenPlay && (
-                                <ActionButton
-                                  icon="resume"
-                                  label={l('resumePlay')}
-                                  className="library-row-resume"
-                                  aria-label={`${l('resumePlay')}: ${m.display_name}`}
-                                  disabled={matchResultScope !== matchScope}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    onOpenPlay(m.play_session_id!, true);
-                                  }}
-                                />
-                              )}
-                            {compactActions && (
-                              <ActionButton
-                                icon="open"
-                                label={w('openMatch')}
-                                compact
-                                className="library-row-open"
-                                aria-label={`${w('openMatch')}: ${m.display_name}`}
-                                disabled={
-                                  matchResultScope !== matchScope ||
-                                  matchOpening.openingId === libraryRowKey(m)
-                                }
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  openMatchRow(m);
-                                }}
-                              />
-                            )}
+                            {primaryRowAction(m)}
                             <ActionButton
                               icon="edit"
                               label={l('editMatch')}
@@ -1054,8 +1100,32 @@ export default function MatchDatabase({
                   </tbody>
                 </table>
               </div>
-              {!matches.length && !loading && (
-                <p className="library-empty">{l('noMatches')}</p>
+              {!matches.length && !loading && !searchError && (
+                <div className="library-empty">
+                  <p role="status">{l('noMatches')}</p>
+                  {hasFilters && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        filterToggle.current?.focus();
+                        setFilters(emptyFilters());
+                      }}
+                    >
+                      {l('clearFilters')}
+                    </button>
+                  )}
+                  {databaseId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        filterToggle.current?.focus();
+                        changeDatabase('');
+                      }}
+                    >
+                      {l('searchAllDatabases')}
+                    </button>
+                  )}
+                </div>
               )}
               <SearchPagination
                 page={page}

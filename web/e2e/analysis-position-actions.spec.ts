@@ -649,7 +649,9 @@ test('explicit searches clear prior scope and filters, rerun the position and do
   await cleared;
   await page.getByRole('tab', { name: 'Analysis', exact: true }).click();
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();
-  await expect(page.locator('.library-position-filter')).toHaveCount(0);
+  await expect(
+    page.getByRole('button', { name: 'Clear position filter', exact: true }),
+  ).toHaveCount(0);
   await expect(page.locator('.position-search input')).toHaveValue('');
 });
 
@@ -807,9 +809,14 @@ test('analysis search finds occurrences in different databases and clears every 
   expect(
     [...params.keys()].filter(
       (key) =>
-        !['position_id', 'sort', 'direction', 'limit', 'date_field'].includes(
-          key,
-        ),
+        ![
+          'position_id',
+          'sort',
+          'direction',
+          'limit',
+          'page',
+          'date_field',
+        ].includes(key),
     ),
   ).toEqual([]);
   await expect(
@@ -828,7 +835,10 @@ test('analysis search finds occurrences in different databases and clears every 
           .map((input) => (input as HTMLInputElement).value)
           .filter(Boolean),
       ),
-  ).toEqual([position.position_id]);
+  ).toEqual([]);
+  await expect(page.locator('.position-search input')).toHaveValue(
+    position.position_id,
+  );
   await expect(
     page.locator(`tr[data-match-id="${position.match_uuid}"]`),
   ).toBeVisible();

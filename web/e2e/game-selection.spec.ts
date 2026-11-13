@@ -198,7 +198,7 @@ test('a note result jumps directly to its game without loading earlier games', a
   ).toBe(200);
   await page.getByRole('tab', { name: 'Matchdatenbank', exact: true }).click();
   const search = page.locator('.annotation-search');
-  await search.locator('summary').click();
+  await page.locator('.library-search-toolbar').getByRole('button', { name: 'Notizen', exact: true }).click();
   await search.getByLabel('Text', { exact: true }).fill(marker);
   await search
     .getByRole('button', { name: 'Notizen suchen', exact: true })

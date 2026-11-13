@@ -1,6 +1,80 @@
 import { expect, test } from './test';
 import type { Database } from '../src/library-api';
 
+test('import target can differ from the active library collection', async ({
+  page,
+}) => {
+  const id = crypto.randomUUID();
+  const create = async (name: string): Promise<Database> => {
+    const response = await page.request.post('/api/databases', {
+      data: { name },
+    });
+    expect(response.status()).toBe(201);
+    return response.json();
+  };
+  const source = await create(`Import browsing ${id}`);
+  const target = await create(`Import destination ${id}`);
+  await page.addInitScript((sourceId) => {
+    localStorage.setItem('bgtutor.locale', 'en');
+    localStorage.setItem('bgtutor.database', sourceId);
+  }, source.id);
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Match database', exact: true }).click();
+  const collection = page
+    .locator('.database-collections')
+    .getByRole('button', { name: new RegExp(source.name) });
+  const destination = page.getByRole('combobox', {
+    name: 'Import destination',
+    exact: true,
+  });
+  await expect(destination).toHaveValue(source.id);
+  await expect(
+    destination.getByRole('option', { name: 'Paused Matches', exact: true }),
+  ).toHaveCount(0);
+  await destination.selectOption(target.id);
+  await expect(collection).toHaveAttribute('aria-pressed', 'true');
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: /Import match/ }).click();
+  const importResponses = [1, 2].map((index) =>
+    page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === '/api/imports' &&
+        response.request().method() === 'POST' &&
+        (response
+          .request()
+          .postData()
+          ?.includes(`selected-destination-${index}.sgf`) ??
+          false),
+    ),
+  );
+  await (
+    await chooser
+  ).setFiles(
+    [1, 2].map((index) => ({
+      name: `selected-destination-${index}.sgf`,
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.from(
+        `(;GM[6]PW[Import ${index} ${id}]PB[Opponent]MI[length:7];W[31hefe])`,
+      ),
+    })),
+  );
+  for (const response of await Promise.all(importResponses)) {
+    expect(response.status()).toBe(201);
+    expect(new URL(response.url()).searchParams.get('database_id')).toBe(
+      target.id,
+    );
+  }
+  await expect(
+    page.getByRole('tab', { name: 'Match database', exact: true }),
+  ).toHaveAttribute('aria-selected', 'true');
+  await expect(collection).toHaveAttribute('aria-pressed', 'true');
+  await expect(destination).toHaveValue(target.id);
+  const imported = await page.request.get(
+    `/api/library/matches?database_id=${target.id}`,
+  );
+  expect((await imported.json()).items).toHaveLength(2);
+});
+
 test('system databases keep their names and can be emptied', async ({
   page,
 }) => {
@@ -294,7 +368,10 @@ test('delayed cube note search cannot replace a newer game selection', async ({
     data: { tags: [], comment: marker, expected_version: 0 },
   });
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();
-  await page.locator('.annotation-search summary').click();
+  await page
+    .locator('.library-search-toolbar')
+    .getByRole('button', { name: 'Notes', exact: true })
+    .click();
   await page
     .locator('.annotation-search')
     .getByLabel('Text', { exact: true })

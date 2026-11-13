@@ -52,8 +52,10 @@ async function fixture(page: Page, count = 2, repeatWithinGame = false) {
 }
 async function search(page: Page, id: string) {
   const form = page.locator('.position-search');
-  if (!(await form.evaluate((el) => (el as HTMLDetailsElement).open)))
-    await form.locator('summary').click();
+  if (!(await form.isVisible()))
+    await page
+      .getByRole('button', { name: 'Position ID', exact: true })
+      .click();
   await form.getByRole('textbox').fill(id);
   await form
     .getByRole('button', { name: 'Find exact match', exact: true })
@@ -329,6 +331,15 @@ test('position-filtered matches paginate in the selected database and show an em
     .fill('No such player needle');
   await expect(rows(page)).toHaveCount(0);
   await expect(page.locator('.library-empty')).toBeVisible();
+  const empty = page.locator('.library-empty');
+  await expect(
+    empty.getByRole('button', { name: 'Search all databases' }),
+  ).toBeVisible();
+  await empty.getByRole('button', { name: 'Clear filters' }).click();
+  await expect(page.getByLabel('Search matches', { exact: true })).toHaveValue(
+    '',
+  );
+  await expect(rows(page)).toHaveCount(50);
   await expect(page.locator('.position-results')).toHaveCount(0);
 });
 
@@ -338,7 +349,7 @@ test('a failed exact occurrence lookup is visible with the search form closed an
   const f = await fixture(page);
   await search(page, f.needle);
   await expect(rows(page)).toHaveCount(3);
-  await page.locator('.position-search summary').click();
+  await page.getByRole('button', { name: 'Position ID', exact: true }).click();
   await page.route('**/api/positions/*', (route) =>
     route.fulfill({
       status: 503,
@@ -370,6 +381,15 @@ test('each repeated occurrence has database, game and move and opens its own loc
   const repeated = page.locator(`tr[data-match-id="${f.entries[0].match.id}"]`);
   await expect(repeated).toHaveCount(3);
   await repeated.first().getByRole('checkbox').check();
+  await expect(page.locator('.library-batch-bar')).toContainText(
+    '1 match selected',
+  );
+  await expect(repeated.first().getByRole('checkbox')).toHaveAccessibleName(
+    `Select match ${f.entries[0].metadata.display_name}`,
+  );
+  await expect(
+    page.getByRole('checkbox', { name: 'Select all loaded matches' }),
+  ).toHaveJSProperty('indeterminate', true);
   await expect(repeated.nth(1).getByRole('checkbox')).toBeChecked();
   await expect(repeated.nth(2).getByRole('checkbox')).toBeChecked();
   const secondInGame = repeated
@@ -379,7 +399,9 @@ test('each repeated occurrence has database, game and move and opens its own loc
     .filter({
       has: page.locator('[data-column="occurrence_move"]', { hasText: /^4$/ }),
     });
-  await secondInGame.locator('.match-card').click();
+  await secondInGame
+    .getByRole('button', { name: 'Open position in game 1, move 4' })
+    .click();
   await expect(page.locator('.board-heading')).toContainText('Move 4');
   await expect(page.locator('.game-selector select')).toHaveValue('1');
   await expect(page.locator('.position-code code')).toHaveText(f.needle);

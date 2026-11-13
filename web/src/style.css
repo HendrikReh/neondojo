@@ -359,46 +359,6 @@ main {
   font-size: var(--font-size-control);
   padding: 7px;
 }
-.position-search {
-  border-top: 1px solid var(--ui-border);
-  border-bottom: 1px solid var(--ui-border);
-  font-size: var(--font-size-meta);
-  margin-bottom: 28px;
-  color: var(--ui-muted);
-}
-.position-search summary {
-  list-style: none;
-  cursor: pointer;
-  padding: 11px 0;
-}
-.position-search summary::after {
-  content: '+';
-  float: right;
-  font-size: 15px;
-}
-.position-search[open] summary::after {
-  content: '−';
-}
-.position-search summary span {
-  font-size: var(--font-size-micro);
-  margin-left: 10px;
-  color: var(--ui-muted);
-}
-.position-search form {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 3px 0 15px;
-}
-.position-search input {
-  flex: 1;
-  min-width: 180px;
-  font-family: var(--font-mono);
-  font-size: var(--font-size-control);
-}
-.position-search button {
-  font-size: var(--font-size-control);
-}
 .match-title {
   display: flex;
   align-items: center;
@@ -1222,9 +1182,6 @@ progress::-webkit-progress-value {
   .sidebar-footer {
     font-size: var(--font-size-micro);
   }
-  .position-search summary span {
-    display: none;
-  }
   .tabs {
     gap: 20px;
   }
@@ -1761,10 +1718,6 @@ progress::-webkit-progress-value {
   margin-bottom: 16px;
   padding: 12px;
   font-size: var(--font-size-table);
-}
-.annotation-search summary {
-  cursor: pointer;
-  color: var(--ui-text);
 }
 .annotation-search-form label {
   display: grid;

@@ -40,6 +40,8 @@ describe('library round filter', () => {
       createElement(I18nProvider, {
         children: createElement(LibraryFilters, {
           filters: { ...emptyFilters(), round: 'Final' },
+          panelId: 'filters',
+          open: true,
           onChange: () => {},
           onClear: () => {},
         }),

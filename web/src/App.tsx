@@ -191,7 +191,16 @@ export default function App() {
   const jobs = useJobs(navigation.position?.id, track);
   const settingsLoad = useRef<AbortController | undefined>(undefined);
   const input = useRef<HTMLInputElement>(null);
+  const importDestination = useRef<string | undefined>(undefined);
   const tabs = useRef<Partial<Record<View, HTMLButtonElement | null>>>({});
+  useEffect(() => {
+    const chooser = input.current;
+    const clearDestination = () => {
+      importDestination.current = undefined;
+    };
+    chooser?.addEventListener('cancel', clearDestination);
+    return () => chooser?.removeEventListener('cancel', clearDestination);
+  }, []);
   useEffect(() => {
     if (!configuration) saveTheme(theme);
   }, [theme, !!configuration]);
@@ -363,7 +372,14 @@ export default function App() {
     setView(views[next]);
     tabs.current[views[next]]?.focus();
   }
-  async function upload(files: File[] | FileList | undefined) {
+  function chooseImportFiles(destination?: string) {
+    importDestination.current = destination;
+    input.current?.click();
+  }
+  async function upload(
+    files: File[] | FileList | undefined,
+    destination = databaseId,
+  ) {
     const selected = Array.from(files ?? []);
     if (!selected.length || uploading) return;
     cancelRestoration();
@@ -372,8 +388,8 @@ export default function App() {
     setNotice(undefined);
     setImportResults([]);
     const target =
-      databaseId && acceptsLibraryMatches(databaseId)
-        ? `?database_id=${encodeURIComponent(databaseId)}`
+      destination && acceptsLibraryMatches(destination)
+        ? `?database_id=${encodeURIComponent(destination)}`
         : '';
     const navigationIntent = navigation.intent();
     const results: {
@@ -553,7 +569,7 @@ export default function App() {
           {w('openMatch')}
         </ActionButton>
         <ActionButton
-          onClick={() => input.current?.click()}
+          onClick={() => chooseImportFiles()}
           disabled={uploading}
           icon="import"
           label={uploading ? t('app.importRunning') : t('app.importPlain')}
@@ -644,7 +660,11 @@ export default function App() {
           aria-label={t('app.matchFile')}
           accept=".mat,.sgf,.xg,.bgf,.ogxm"
           multiple
-          onChange={(event) => void upload(event.target.files ?? undefined)}
+          onChange={(event) => {
+            const destination = importDestination.current;
+            importDestination.current = undefined;
+            void upload(event.target.files ?? undefined, destination);
+          }}
         />
       </header>
       {benchmarkActive && (
@@ -846,7 +866,8 @@ export default function App() {
             onOpen={openMatch}
             onPosition={openPosition}
             onAnnotation={openAnnotation}
-            onImport={() => input.current?.click()}
+            uploading={uploading}
+            onImport={chooseImportFiles}
           />
         </div>
         <div

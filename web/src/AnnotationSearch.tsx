@@ -23,10 +23,14 @@ export default function AnnotationSearch({
   revision = 0,
   databaseId,
   onOpen,
+  panelId,
+  open,
 }: {
   revision?: number;
   databaseId?: string;
   onOpen: (hit: AnnotationHit) => void;
+  panelId: string;
+  open: boolean;
 }) {
   const profile = useOptionalConfiguration();
   const { t, formatError } = useAnnotationI18n();
@@ -102,9 +106,7 @@ export default function AnnotationSearch({
   };
 
   return (
-    <details className="annotation-search">
-      <summary>{t('searchTitle')}</summary>
-      <p className="fineprint">{t('searchDescription')}</p>
+    <div className="annotation-search" id={panelId} hidden={!open}>
       <form className="annotation-search-form" onSubmit={submit}>
         <label htmlFor={`${htmlId}-query`}>
           <span>{t('query')}</span>
@@ -240,6 +242,6 @@ export default function AnnotationSearch({
         onPageChange={results.setPage}
         label={t('searchTitle')}
       />
-    </details>
+    </div>
   );
 }

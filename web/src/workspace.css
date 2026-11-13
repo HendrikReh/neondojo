@@ -438,17 +438,6 @@
 .match-database .search-box input {
   padding: 11px;
 }
-.database-searches {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 15px;
-  align-items: start;
-}
-.database-searches .annotation-search,
-.database-searches .position-search {
-  min-width: 0;
-  margin-top: 0;
-}
 .database-count {
   font-size: var(--font-size-table);
   color: var(--ui-muted);
@@ -585,10 +574,6 @@
   }
   .position-inspector .match-analysis-summary {
     grid-template-columns: 1fr 1fr;
-  }
-  .database-searches {
-    grid-template-columns: 1fr;
-    gap: 0;
   }
   .analysis-workspace .moves-list {
     max-height: 500px;

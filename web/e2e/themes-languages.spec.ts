@@ -34,8 +34,9 @@ const currentLocale = async (page: Page) =>
 
 async function upload(page: Page) {
   await page.goto('/');
+  const locale = await currentLocale(page);
   await page
-    .locator('input[type=file]')
+    .getByLabel(catalogs[locale]['app.matchFile'], { exact: true })
     .setInputFiles('../backend/tests/fixtures/tutorial.mat');
   await expect(analysis(page).locator('.board')).toBeVisible();
 }
@@ -224,13 +225,15 @@ test('bar, borne-off checkers and owned cube retain their position data in archi
   const theme = themes.find((t) => t.id === 'bgblitz:cl_green');
   test.skip(!theme, 'optional local Rain artwork');
   await page.goto('/');
-  await page.locator('input[type=file]').setInputFiles({
-    name: 'theme-position.sgf',
-    mimeType: 'application/octet-stream',
-    buffer: Buffer.from(
-      '(;GM[6]PW[Theme White]PB[Theme Black]MI[length:7][ws:2][bs:3]AE[a:y]AW[y][f]AB[y][s]PL[W]CV[4]CO[b];W[61ysfe])',
-    ),
-  });
+  await page
+    .getByLabel(catalogs.de['app.matchFile'], { exact: true })
+    .setInputFiles({
+      name: 'theme-position.sgf',
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.from(
+        '(;GM[6]PW[Theme White]PB[Theme Black]MI[length:7][ws:2][bs:3]AE[a:y]AW[y][f]AB[y][s]PL[W]CV[4]CO[b];W[61ysfe])',
+      ),
+    });
   await expect(analysis(page).locator('.board')).toBeVisible();
   await applyTheme(page, theme!);
   const board = analysis(page).locator('.bgblitz-board');

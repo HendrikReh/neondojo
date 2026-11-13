@@ -6,6 +6,7 @@ import {
   LIBRARY_RESIZABLE_LAYOUT,
   LIBRARY_COLUMNS,
   OCCURRENCE_COLUMNS,
+  type LibraryColumn,
 } from './library-columns';
 import {
   DEFAULT_LIBRARY_COLUMNS,
@@ -16,6 +17,13 @@ import {
   type LibraryDataColumn,
 } from './library-column-preferences';
 import { useResizableColumns } from './useResizableColumns';
+
+const automaticWidths: Partial<Record<LibraryColumn, number>> = {
+  white: 160,
+  black: 160,
+  play_mode: 90,
+  tags: 124,
+};
 
 export function useLibraryColumns(visible: boolean, positionSearch = false) {
   const l = useLibraryText();
@@ -69,11 +77,23 @@ export function useLibraryColumns(visible: boolean, positionSearch = false) {
     setShown(value);
     if (!profile) saveVisibleColumns(reset ? undefined : value);
   };
+  const activeSpecs = activeColumns.map((id) =>
+    LIBRARY_COLUMNS.find((column) => column.id === id)!,
+  );
   return {
     ...resized,
     shown,
     order,
     activeColumns,
+    tableColumns: activeSpecs.map((column) => ({
+      id: column.id,
+      className: column.className,
+      width: resized.widths
+        ? resized.widths[column.id]
+        : column.id === 'white' || column.id === 'black'
+          ? undefined
+          : (automaticWidths[column.id] ?? column.defaultWidth),
+    })),
     move: (id: LibraryDataColumn, delta: -1 | 1) => {
       const from = order.indexOf(id),
         to = from + delta;
@@ -82,17 +102,9 @@ export function useLibraryColumns(visible: boolean, positionSearch = false) {
       [next[from], next[to]] = [next[to], next[from]];
       setOrder(next);
     },
-    minimumWidth: LIBRARY_COLUMNS.filter((column) =>
-      activeColumns.includes(column.id),
-    ).reduce(
-      // Player columns use percentages in the automatic layout, so allow
-      // them and the mode column to contract to their readable minimums.
-      // Explicit saved widths continue to take precedence.
+    minimumWidth: activeSpecs.reduce(
       (sum, column) =>
-        sum +
-        (['white', 'black', 'play_mode'].includes(column.id)
-          ? column.min
-          : column.defaultWidth),
+        sum + (automaticWidths[column.id] ?? column.defaultWidth),
       positionSearch
         ? OCCURRENCE_COLUMNS.reduce(
             (sum, column) => sum + column.defaultWidth,

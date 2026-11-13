@@ -55,13 +55,13 @@ test('real import, search, GNUbg analysis, distribution, themes and mobile layou
   ).toHaveText('12');
   await page.getByRole('button', { name: 'Vorheriger Zug' }).click();
   await page.getByRole('tab', { name: 'Matchdatenbank', exact: true }).click();
-  await page.locator('.position-search summary').click();
+  await page.getByRole('button', { name: 'Positions-ID', exact: true }).click();
   await page
     .getByRole('button', { name: 'Aktuelle Position übernehmen' })
     .click();
   await page.getByRole('button', { name: 'Exakt suchen' }).click();
   await expect(page.locator('.database-table tbody tr').first()).toBeVisible();
-  await expect(page.locator('.library-position-filter')).toBeVisible();
+  await expect(page.locator('.applied-filter-chips').getByRole('button', { name: 'Positionsfilter entfernen' })).toBeVisible();
   await expect(page.locator('.position-results')).toHaveCount(0);
   await page.getByRole('tab', { name: 'Analyse', exact: true }).click();
   await page.getByRole('tab', { name: 'Spielwürfe' }).click();

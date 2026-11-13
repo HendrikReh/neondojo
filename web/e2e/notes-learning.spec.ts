@@ -13,7 +13,7 @@ async function importStudy(
   metadata = 'MI[length:7][ws:0][bs:0]',
 ) {
   await page.goto('/');
-  await page.locator('input[type=file]').setInputFiles({
+  await page.getByLabel('Partiedatei', { exact: true }).setInputFiles({
     name: `study-${suffix}.sgf`,
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(
@@ -71,7 +71,7 @@ test('match and position notes persist, search jumps to the exact move, and conf
   );
   await page.getByRole('tab', { name: 'Matchdatenbank', exact: true }).click();
   const search = page.locator('.annotation-search');
-  await search.locator('summary').click();
+  await page.locator('.library-search-toolbar').getByRole('button', { name: 'Notizen', exact: true }).click();
   await search
     .getByLabel('Text', { exact: true })
     .fill(`position-comment-${suffix}`);
@@ -339,7 +339,7 @@ test('an annotation jump supersedes a delayed game load and switching views pres
 }) => {
   await page.goto('/');
   await page
-    .locator('input[type=file]')
+    .getByLabel('Partiedatei', { exact: true })
     .setInputFiles('../backend/tests/fixtures/WC2014.mat');
   await expect(page.locator('.moves-list button')).toHaveCount(8);
   const id = await page
@@ -362,7 +362,7 @@ test('an annotation jump supersedes a delayed game load and switching views pres
   ).toBe(200);
   await page.getByRole('tab', { name: 'Matchdatenbank', exact: true }).click();
   const search = page.locator('.annotation-search');
-  await search.locator('summary').click();
+  await page.locator('.library-search-toolbar').getByRole('button', { name: 'Notizen', exact: true }).click();
   await search.getByLabel('Text', { exact: true }).fill(marker);
   await search
     .getByRole('button', { name: 'Notizen suchen', exact: true })
