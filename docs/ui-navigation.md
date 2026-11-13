@@ -96,8 +96,12 @@ returns focus to the button on close. Overview also shows the next scheduled
 card when the due list is empty.
 
 In Flashcards & Anki, **Manage decks** opens a list searchable by deck name.
-Create a deck there, or open, rename or delete a deck from the list. When a
-specific deck is selected, its study and export actions appear below the search.
+**Import Anki package** opens a file picker and imports the source decks and
+rendered card faces when the backend has Anki's Python package configured.
+In **Manage decks**, create, open, rename or delete a deck. When a specific deck
+is selected, its study and export actions appear below the search.
+**Send to Anki** transfers the selected native deck to local Anki Desktop
+through AnkiConnect.
 On wide windows, drag the divider between the card list and the preview. The
 Left and Right arrow keys move the focused divider. Double-click it or press
 Enter to restore the default width. The browser remembers the chosen width.

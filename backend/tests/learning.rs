@@ -9,6 +9,22 @@ use uuid::Uuid;
 static EXPORT_TESTS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[sqlx::test(migrations = "./migrations")]
+async fn send_to_anki_validates_the_selected_deck_before_connecting(pool: PgPool) {
+    let app = api::router(api::AppState::new(pool, Engine::new("unused".into())));
+    let path = format!("/api/decks/{}/send-to-anki", Uuid::new_v4());
+    assert_eq!(
+        call(app.clone(), "POST", &path, json!({"locale":"unsupported"}))
+            .await
+            .0,
+        422
+    );
+    assert_eq!(
+        call(app, "POST", &path, json!({"locale":"en"})).await.0,
+        404
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn external_anki_upload_rejects_a_non_package(pool: PgPool) {
     let app = api::router(api::AppState::new(
         pool.clone(),

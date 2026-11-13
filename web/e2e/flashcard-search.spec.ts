@@ -238,6 +238,33 @@ test('Flashcards has an external heading, server search beyond the first page an
   await expect(study.locator('.study-answer')).toHaveCount(0);
 });
 
+test('Send to Anki targets the selected deck and reports the import outcome', async ({
+  page,
+}) => {
+  const { study } = await setup(page);
+  const send = study.getByRole('button', { name: 'Send to Anki', exact: true });
+  await expect(send).toHaveCount(0);
+  await study.getByLabel('Choose deck', { exact: true }).selectOption(deckB);
+  let attempts = 0;
+  await page.route(`**/api/decks/${deckB}/send-to-anki`, async (route) => {
+    expect(route.request().method()).toBe('POST');
+    expect(route.request().postDataJSON()).toEqual({ locale: 'en' });
+    if (++attempts === 1) {
+      await route.fulfill({ status: 503, json: { error: 'Connection refused' } });
+    } else {
+      await route.fulfill({ status: 204 });
+    }
+  });
+  await send.click();
+  await expect(study.getByRole('alert')).toHaveText(
+    'Open Anki Desktop with the AnkiConnect add-on listening on port 8765.',
+  );
+  await send.click();
+  await expect(study.getByText('Anki imported “Mochy studies”.')).toBeVisible();
+  await expect(study.getByRole('alert')).toHaveCount(0);
+  expect(attempts).toBe(2);
+});
+
 test('Move stays visible when the search has no source or the source has no destination', async ({
   page,
 }) => {
@@ -356,6 +383,30 @@ test('filters preserve scope and a delayed old search cannot replace newer resul
     'card-52',
   );
   expect(writes).toEqual([]);
+});
+
+test('starts active practice with the applied filters', async ({ page }) => {
+  const { study } = await setup(page);
+  await study.getByLabel('Search text', { exact: true }).fill('Mochy');
+  await study
+    .getByRole('button', { name: 'Search cards', exact: true })
+    .click();
+  await expect(study.locator('.learning-card-list tbody tr')).toHaveCount(1);
+  await study
+    .getByLabel('Search text', { exact: true })
+    .fill('Unapplied draft');
+  const posted = page.waitForRequest(
+    (request) =>
+      request.method() === 'POST' &&
+      new URL(request.url()).pathname === '/api/study/card-rounds',
+  );
+  await study
+    .getByRole('button', { name: 'Practice results', exact: true })
+    .click();
+  const query = new URL((await posted).url()).searchParams;
+  expect(query.get('q')).toBe('Mochy');
+  expect(query.get('limit')).toBe('10');
+  expect(query.has('after')).toBe(false);
 });
 
 test('the card preview can be resized and keeps its width after reload', async ({

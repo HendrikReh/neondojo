@@ -156,6 +156,18 @@
   text-align: center;
 }
 
+.study-card.study-card-anki {
+  max-width: min(1560px, 100%);
+}
+
+.anki-card-face {
+  display: block;
+  width: 100%;
+  height: clamp(24rem, 65vh, 52rem);
+  border: 1px solid var(--ui-border);
+  background: white;
+}
+
 .learning-preview-divider {
   display: none;
 }
@@ -196,16 +208,4 @@
     iframe {
     pointer-events: none;
   }
-}
-
-.study-card.study-card-anki {
-  max-width: min(1560px, 100%);
-}
-
-.anki-card-face {
-  display: block;
-  width: 100%;
-  height: clamp(24rem, 65vh, 52rem);
-  border: 1px solid var(--ui-border);
-  background: white;
 }

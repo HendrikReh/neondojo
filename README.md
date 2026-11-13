@@ -357,6 +357,8 @@ In **Study → Flashcards & Anki**, choose **Import Anki package** to import a t
 
 For browser imports, install Anki's Python package in a Python 3.11+ environment. Set `BGTUTOR_ANKI_PYTHON` to that environment's Python executable when starting the BG Tutor backend. If the setting is omitted, the backend uses `python3`. The Rust import for structured BG Tutor cards uses its own **Import BG Tutor Anki deck** action.
 
+With Anki Desktop open on the same machine and AnkiConnect listening on `127.0.0.1:8765`, select a native BG Tutor deck and choose **Send to Anki**. The backend transfers the same package produced by **Download Anki deck**, and confirms when AnkiConnect reports a successful import. Repeated transfers use the same note GUIDs. Anki and BG Tutor each keep their own review history. If the add-on requires an API key, set `BGTUTOR_ANKI_CONNECT_KEY` on the BG Tutor backend. [AnkiConnect package import](https://github.com/ankicommunity/anki-desktop-addon-connect#importpackage)
+
 For batch imports, run the local command from the repository root with the same database settings as the running backend.
 
 ```sh

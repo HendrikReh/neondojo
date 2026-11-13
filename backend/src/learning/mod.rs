@@ -1,4 +1,5 @@
 //! Shared cards power native Anki exports and the integrated FSRS trainer.
+mod anki_connect;
 pub mod anki_flashcards;
 mod anki_import;
 mod apkg;
@@ -276,7 +277,7 @@ pub struct ReviewResult {
     pub difficulty: f64,
     pub review_count: i32,
 }
-#[derive(Debug, Deserialize, IntoParams)]
+#[derive(Debug, Deserialize, IntoParams, ToSchema)]
 pub struct ExportQuery {
     pub locale: Option<String>,
 }
@@ -479,6 +480,7 @@ pub fn routes() -> Router<AppState> {
             get(suggestions::preview).post(suggestions::save),
         )
         .route("/api/decks/{id}/export.apkg", get(export_deck))
+        .route("/api/decks/{id}/send-to-anki", post(anki_connect::send))
         .route("/api/decks/{id}/import.apkg", post(anki_import::import))
         .route("/api/decks/{id}/next", get(next_card))
         .route("/api/study/learning-summary", get(learning_summary))
@@ -512,6 +514,7 @@ pub fn routes() -> Router<AppState> {
         suggestions::preview,
         suggestions::save,
         export_deck,
+        anki_connect::send,
         anki_import::import,
         anki_flashcards::face,
         anki_flashcards::media,
@@ -1259,6 +1262,20 @@ async fn export_deck(
     Path(id): Path<Uuid>,
     Query(query): Query<ExportQuery>,
 ) -> ApiResult<impl IntoResponse> {
+    let bytes = build_deck_package(&state, id, query).await?;
+    Ok((
+        [
+            (header::CONTENT_TYPE, "application/zip"),
+            (
+                header::CONTENT_DISPOSITION,
+                "attachment; filename=\"bgtutor.apkg\"",
+            ),
+        ],
+        bytes,
+    ))
+}
+
+async fn build_deck_package(state: &AppState, id: Uuid, query: ExportQuery) -> ApiResult<Vec<u8>> {
     static EXPORTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
     let locale = query.locale.unwrap_or_else(|| "de".into());
     if !["de", "en", "es", "fr", "pl", "it"].contains(&locale.as_str()) {
@@ -1333,23 +1350,13 @@ async fn export_deck(
             .bind(card.id).bind(fingerprint).bind(Utc::now().timestamp()).fetch_one(&mut *tx).await.map_err(anyhow::Error::from)?;
     }
     tx.commit().await.map_err(anyhow::Error::from)?;
-    let bytes = tokio::task::spawn_blocking(move || {
+    Ok(tokio::task::spawn_blocking(move || {
         // Cancellation of the HTTP request must not release the CPU slot before ZIP work ends.
         let _permit = permit;
         apkg::build(id, &name, &prepared)
     })
     .await
-    .map_err(anyhow::Error::from)??;
-    Ok((
-        [
-            (header::CONTENT_TYPE, "application/zip"),
-            (
-                header::CONTENT_DISPOSITION,
-                "attachment; filename=\"bgtutor.apkg\"",
-            ),
-        ],
-        bytes,
-    ))
+    .map_err(anyhow::Error::from)??)
 }
 
 // Share the canonical absolute-color GNU ID decoder with read-only practice.

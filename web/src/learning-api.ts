@@ -69,3 +69,11 @@ export type ScoreQuestion = Schema['ScoreQuestion'];
 export type ScoreAnswer = Schema['ScoreAnswer'];
 export type ScorePractice = Schema['ScorePractice'];
 export type ImportedAnkiDeck = Schema['ImportedAnkiDeck'];
+
+export function sendDeckToAnki(deckId: string, body: Schema['ExportQuery']) {
+  return request<void>(`/decks/${deckId}/send-to-anki`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
