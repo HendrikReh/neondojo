@@ -1,4 +1,5 @@
 import { test, expect, type Page } from './test';
+import { openMatchCalculation } from './analysis-controls';
 async function fixture(
   page: Page,
   locale = 'en',
@@ -54,6 +55,23 @@ for (const [width, locale] of [
     page,
   }) => {
     await page.setViewportSize({ width, height: 1100 });
+    await page.route('**/api/matches/*/analysis/estimate?*', (route) => {
+      const { pathname, searchParams } = new URL(route.request().url());
+      const game = searchParams.get('game_no');
+      return route.fulfill({
+        json: {
+          match_id: pathname.split('/')[3],
+          game_no: game === null ? null : Number(game),
+          engine_id: searchParams.get('engine_id'),
+          engine_version: null,
+          plies: Number(searchParams.get('plies')),
+          position_count: 2,
+          estimated_ms: null,
+          unavailable_reason: 'no_matching_benchmark',
+          benchmark: null,
+        },
+      });
+    });
     await fixture(page, locale);
     const toolbar = page.locator('.board-review-toolbar');
     const bookmark = toolbar.getByRole('button', {
@@ -70,10 +88,18 @@ for (const [width, locale] of [
       'aria-busy',
       'false',
     );
-    // The estimate above the toolbar wraps onto multiple lines on mobile.
-    await expect(
-      page.locator('.analysis-time-estimate small').first(),
-    ).toBeVisible();
+    await openMatchCalculation(page);
+    // Wait for the estimate above the toolbar to finish loading and wrap.
+    const estimate = page.getByRole('status', {
+      name:
+        locale === 'de' ? 'Geschätzte Analysezeit' : 'Analysis time estimate',
+    });
+    await expect(estimate.locator('small')).toBeVisible();
+    await expect(estimate).toContainText(
+      locale === 'de'
+        ? 'Kein abgeschlossener Benchmark'
+        : 'No completed benchmark',
+    );
     await expect(page.locator('.position-code button')).toHaveCount(0);
     // The analysis header may grow as metadata arrives. Read all rectangles
     // in one layout snapshot so a change between reads cannot skew the test.

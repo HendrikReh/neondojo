@@ -1,3 +1,4 @@
+import { openPositionCalculation, openMatchCalculation } from './analysis-controls';
 import { expect, test } from './test';
 import { readFileSync } from 'node:fs';
 test.use({ actionTimeout: 10000 });
@@ -7,6 +8,11 @@ test('compares saved full-match analysis depths side by side', async ({
 }, info) => {
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
   const player = `Comparison ${crypto.randomUUID()}`;
+  const gnuVersion = 'GNU Backgammon 1.08.003';
+  const gnuDetails = `${gnuVersion} 20261108`;
+  const sageVersion = 'Open Sage 2.0.20260907';
+  const sageDetails = (plies: number) =>
+    `${sageVersion}; model ${'a'.repeat(64)}; ${plies}ply cubeful; threads 10; adapter 1`;
   const job = (id: string, engine_id: string, plies: number, loss: number) => ({
     id,
     kind: 'match',
@@ -15,7 +21,10 @@ test('compares saved full-match analysis depths side by side', async ({
     total_games: 1,
     completed_games: 1,
     created_at: '2026-11-12T12:00:00Z',
-    engine_snapshot: { engine_id, engine_version: '1.0' },
+    engine_snapshot: {
+      engine_id,
+      engine_version: engine_id === 'bgsage' ? sageDetails(plies) : gnuDetails,
+    },
     result: {
       total_games: 1,
       completed_games: 1,
@@ -67,6 +76,20 @@ test('compares saved full-match analysis depths side by side', async ({
     table.locator('small').getByText('From full-match analysis'),
   ).toBeVisible();
   await expect(loss.getByRole('cell')).toHaveText(['0.444', '0.555']);
+  const tooltip = page.getByRole('tooltip');
+  await table.getByText(gnuVersion, { exact: true }).hover();
+  await expect(tooltip).toHaveText(gnuDetails);
+  await page.keyboard.press('Escape');
+  const engineVersion = table.getByText(sageVersion, { exact: true });
+  await engineVersion.hover();
+  await expect(tooltip).toHaveText(sageDetails(4));
+  await page.keyboard.press('Escape');
+  await expect(tooltip).toBeHidden();
+  await sage.focus();
+  await page.keyboard.press('Tab');
+  await expect(engineVersion).toBeFocused();
+  await expect(tooltip).toHaveText(sageDetails(4));
+  await openMatchCalculation(page);
   const scope = page.getByLabel('Analysis scope', { exact: true });
   await scope.selectOption('match');
   await expect(
@@ -181,13 +204,16 @@ test('file, book and native candidates preview explicitly and source changes res
   await expect(page.locator('.board-review-selection')).toHaveCount(0);
   await imported.getByRole('button', { name: /^Preview move 1:/ }).click();
   await expect(page.locator('.board-review-selection')).toContainText(
-    'BackgammonDB',
+    'GNU Backgammon',
   );
+  await expect(
+    page.locator('.board-review-selection .engine-label-details'),
+  ).toHaveAttribute('aria-description', /BackgammonDB/);
   await page
     .getByRole('button', { name: 'Reset preview', exact: true })
     .click();
   await expect(page.locator('.board-review-selection')).toHaveCount(0);
-  await page
+  await (await openPositionCalculation(page))
     .getByRole('button', { name: 'Analyze position', exact: true })
     .click();
   const native = page.locator('.analysis-panel');
@@ -257,6 +283,7 @@ test('native match and game metrics open the exact visible decision filters', as
       `(;GM[6]PW[Stats ${crypto.randomUUID()}]PB[Opponent]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])(;GM[6]MI[length:7][ws:1][bs:0];W[31hefe];B[42qusu])`,
     ),
   });
+  await openMatchCalculation(page);
   await page
     .getByLabel('Analysis scope', { exact: true })
     .selectOption('match');
@@ -316,9 +343,13 @@ test('native match and game metrics open the exact visible decision filters', as
       new URL(r.url()).pathname.endsWith('/review-decisions') &&
       new URL(r.url()).searchParams.get('limit') === '100',
   );
-  await page.getByRole('button', { name: /^Next error/ }).click();
-  expect(new URL((await nextError).url()).searchParams.get('game_no')).toBe(
-    '2',
+  await page.getByRole('button', { name: 'Next decision', exact: true }).click();
+  const nextQuery = new URL((await nextError).url()).searchParams;
+  expect(nextQuery.get('game_no')).toBe('2');
+  expect(nextQuery.get('errors_only')).toBe('false');
+  await expect(page.getByLabel('Select game', { exact: true })).toHaveValue('2');
+  await expect(page.getByRole('group', { name: 'Review errors' })).toContainText(
+    'Decision 1 of 1',
   );
   await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
   await stats
@@ -343,6 +374,7 @@ test('native match and game metrics open the exact visible decision filters', as
   await expect(
     page.getByLabel('Filter analysis by player', { exact: true }),
   ).toHaveValue('');
+  await openMatchCalculation(page);
   await page.getByLabel('Analysis scope', { exact: true }).selectOption('game');
   await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
   await expect(stats).toContainText('run native GNUbg analysis');
@@ -362,6 +394,7 @@ test('a delayed next-error response cannot undo manual move navigation', async (
     ),
   });
   await page.getByRole('tab', { name: 'Errors', exact: true }).click();
+  await openMatchCalculation(page);
   await page.getByRole('button', { name: 'Analyze game', exact: true }).click();
   await expect(
     page.getByText('Game analysis completed', { exact: true }),

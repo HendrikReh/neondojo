@@ -54,6 +54,10 @@ test('automatic mode displays an available XG-only reference with its original a
   expect(html).toContain('Original Author');
   expect(html).toContain('before the roll');
   expect(html).toContain('XG Opening Book');
+  expect(html).toContain('>eXtreme Gammon 2.10</span>');
+  expect(html).toContain(
+    'aria-description="eXtreme Gammon 2.10 · Rollout · rollout"',
+  );
   expect(html).not.toContain('class="candidates"');
 });
 test('explicit BackgammonDB mode disables the XG option that was not requested', () => {
@@ -139,9 +143,10 @@ function renderRecords(
 }
 test('an empty checker record keeps provenance and explicitly reports unavailable candidates', () => {
   const html = renderRecords([emptyRecord]);
-  expect(html).toContain('GNUbg 1.08.003');
-  expect(html).toContain('2-ply');
-  expect(html).toContain('evaluation');
+  expect(html).toContain('>GNUbg 1.08.003</span>');
+  expect(html).toContain(
+    'aria-description="GNUbg 1.08.003 · 2-ply · evaluation · SGF"',
+  );
   expect(html).toContain('No candidate values recorded.');
   expect(html).not.toContain('<table');
 });

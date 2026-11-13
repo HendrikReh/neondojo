@@ -1,7 +1,8 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import AnalysisPanel from './AnalysisPanel';
+import { PositionAnalysisDepth } from './AnalysisPanel';
+import { ANALYSIS_PLIES } from './analysis-depth';
 import MatchAnalysisPanel from './MatchAnalysisPanel';
 import { I18nProvider } from './i18n';
 import type { Match } from './api';
@@ -23,11 +24,9 @@ afterEach(() => vi.unstubAllGlobals());
 it('defaults position search to two plies and offers three and four plies', () => {
   const html = renderToStaticMarkup(
     createElement(I18nProvider, {
-      children: createElement(AnalysisPanel, {
-        jobs: {},
-        stats: null,
-        disabled: false,
-        onAnalyze: () => {},
+      children: createElement(PositionAnalysisDepth, {
+        supportedPlies: ANALYSIS_PLIES,
+        onChange: () => {},
       }),
     }),
   );

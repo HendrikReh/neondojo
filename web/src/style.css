@@ -1526,6 +1526,16 @@ progress::-webkit-progress-value {
   font-size: var(--font-size-body);
   padding: 16px 0;
 }
+.review-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding-block: 8px;
+}
+.review-empty p {
+  margin: 0;
+}
 .match-move-overview > button {
   margin-top: 12px;
 }

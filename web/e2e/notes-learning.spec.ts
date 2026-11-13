@@ -1,3 +1,4 @@
+import { openMatchCalculation, openPositionCalculation } from './analysis-controls';
 import { test, expect } from './test';
 
 test.beforeEach(async ({ page }) => {
@@ -189,7 +190,7 @@ test('an analyzed annotated position becomes a shared study card and a downloada
     position.getByText('Notizen gespeichert.', { exact: true }),
   ).toBeVisible();
   await page.getByRole('tab', { name: 'Übersicht', exact: true }).click();
-  await page
+  await (await openPositionCalculation(page))
     .getByRole('button', { name: 'Position analysieren', exact: true })
     .click();
   await expect(page.getByText('Bester', { exact: true })).toBeVisible({
@@ -471,6 +472,7 @@ test('a whole-match deck trains checker, double and response cards with the sele
     ),
   });
   await expect(page.locator('.board')).toBeVisible();
+  await openMatchCalculation(page);
   await page.getByLabel('Analyseumfang', { exact: true }).selectOption('match');
   const panel = page.getByRole('region', {
     name: 'Vollständige Partieanalyse',

@@ -1,3 +1,4 @@
+import { openMatchCalculation } from './analysis-controls';
 import { expect, test, type Page } from './test';
 
 test.use({ actionTimeout: 10000 });
@@ -163,6 +164,7 @@ test('header PR refreshes after full match completion and stays unknown for a si
   await page.reload();
   await expect(field(page, 'pr-white')).toContainText('n/a');
   const metadataPath = `/api/matches/${f.match.id}/metadata`;
+  await openMatchCalculation(page);
   await page
     .getByLabel('Match analysis depth', { exact: true })
     .selectOption('0');
@@ -178,6 +180,7 @@ test('header PR refreshes after full match completion and stays unknown for a si
   expect((await (await gameMetadata).json()).white_pr).toBeNull();
   await expect(field(page, 'pr-white')).toContainText('n/a');
   await expect(field(page, 'pr-black')).toContainText('n/a');
+  await openMatchCalculation(page);
   await page
     .getByLabel('Analysis scope', { exact: true })
     .selectOption('match');

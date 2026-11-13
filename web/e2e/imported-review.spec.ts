@@ -1,5 +1,87 @@
 import { expect, test } from './test';
 
+test('all-games review follows the listed checker and cube errors across games', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.goto('/');
+  await page
+    .getByLabel('Match file', { exact: true })
+    .setInputFiles('../backend/tests/fixtures/WC2014.xg');
+  await page.getByRole('button', { name: 'Analyze game or match …' }).click();
+  await page
+    .getByLabel('Analysis scope', { exact: true })
+    .selectOption('match');
+  await page.getByRole('button', { name: 'Analyze game or match …' }).click();
+  await page
+    .getByLabel('Filter analysis by player', { exact: true })
+    .selectOption('0');
+  const table = page.locator('.match-moves-table');
+  const board = page.getByRole('group', { name: 'Review errors' });
+  const heading = page.locator('.board-heading');
+  const next = board.getByRole('button', { name: 'Next error', exact: true });
+  const previous = board.getByRole('button', {
+    name: 'Previous error',
+    exact: true,
+  });
+  await expect(page.getByLabel('Filter by game', { exact: true })).toHaveValue(
+    '',
+  );
+  const first = table.locator('tbody tr').first();
+  const second = table.locator('tbody tr').nth(1);
+  await expect(first).toContainText('Checker');
+  await expect(second).toContainText('Cube');
+  await expect(heading).toContainText('Game 1');
+  await next.click();
+  await expect(page.getByLabel('Select game', { exact: true })).toHaveValue(
+    '2',
+  );
+  await expect(board).toContainText(/Error 1 of \d+/);
+  await expect(first).toHaveAttribute('aria-current', 'true');
+  await next.click();
+  await expect(page.getByLabel('Select game', { exact: true })).toHaveValue(
+    '3',
+  );
+  await expect(board).toContainText(/Error 2 of \d+/);
+  await expect(second).toHaveAttribute('aria-current', 'true');
+  await previous.click();
+  await expect(page.getByLabel('Select game', { exact: true })).toHaveValue(
+    '2',
+  );
+  await expect(board).toContainText(/Error 1 of \d+/);
+  await page.getByLabel('Filter by game', { exact: true }).selectOption('3');
+  await expect(board).toContainText('Game 3');
+  await next.click();
+  await expect(page.getByLabel('Select game', { exact: true })).toHaveValue(
+    '3',
+  );
+  await expect(board).toContainText('Error 1 of 1');
+
+  await page.getByLabel('Filter by game', { exact: true }).selectOption('');
+  await page
+    .getByLabel('Filter analysis by player', { exact: true })
+    .selectOption('');
+  await page.locator('.match-analysis-filters input[type=checkbox]').uncheck();
+  await table.locator('tbody tr').nth(49).getByRole('button').click();
+  await expect(board).toContainText(/Decision 50 of [\d,]+/);
+  await board
+    .getByRole('button', { name: 'Next decision', exact: true })
+    .click();
+  await expect(board).toContainText(/Decision 51 of [\d,]+/);
+  await expect(table.locator('tbody tr').first()).toHaveAttribute(
+    'aria-current',
+    'true',
+  );
+  await board
+    .getByRole('button', { name: 'Previous decision', exact: true })
+    .click();
+  await expect(board).toContainText(/Decision 50 of [\d,]+/);
+  await expect(table.locator('tbody tr').nth(49)).toHaveAttribute(
+    'aria-current',
+    'true',
+  );
+});
+
 test('imported decisions work in the error list and next-error navigation without a local job', async ({
   page,
 }) => {
@@ -59,6 +141,11 @@ test('imported decisions work in the error list and next-error navigation withou
               id: `cube:${row.id}`,
               kind: 'cube',
               played: 'No double',
+              best: 'Double',
+              review_position: {
+                ...positions[row.checker_no - 1],
+                dice: [0, 0],
+              },
               move_id: moves.find(
                 (move: { position_uuid: string }) =>
                   move.position_uuid === row.position_uuid,
@@ -77,6 +164,7 @@ test('imported decisions work in the error list and next-error navigation withou
   );
   await page.goto('/');
   const next = page.getByRole('button', { name: 'Next error', exact: true });
+  const counter = page.getByRole('group', { name: 'Review errors' });
   await expect(next).toBeEnabled();
   await expect(page.locator('.match-moves-table tbody tr')).toHaveCount(2);
   await expect(
@@ -87,35 +175,45 @@ test('imported decisions work in the error list and next-error navigation withou
   ).toHaveText('0.235');
   await next.click();
   await expect(page.locator('.board-heading')).toContainText('Move 2');
+  await expect(counter).toContainText('Error 1 of 2');
   await next.click();
   await expect(page.locator('.board-heading')).toContainText('Move 4');
+  await expect(counter).toContainText('Error 2 of 2');
   await next.click();
   await expect(page.locator('.board-heading')).toContainText('Move 2');
   await page
     .getByLabel('Filter analysis by decision', { exact: true })
     .selectOption('cube');
-  await next.click();
-  const firstCube = await page
-    .getByRole('dialog')
-    .locator('.move-notes-selector select')
-    .inputValue();
-  await page.keyboard.press('Escape');
-  await next.click();
+  const board = page.locator('.board-panel');
   await expect(
-    page.getByRole('dialog').locator('.move-notes-selector select'),
-  ).not.toHaveValue(firstCube);
-  await page.keyboard.press('Escape');
+    board.getByRole('group', { name: 'Review errors' }),
+  ).toContainText('Game 1 · Both players · Cube');
+  await expect(board.getByRole('button', { name: 'Next error' })).toBeVisible();
+  await next.click();
+  await expect(board.locator('.board-heading')).toContainText('Move 4');
+  await expect(board.locator('[data-dice]')).toHaveAttribute(
+    'data-dice',
+    '0-0',
+  );
+  await expect(board.getByText('No double', { exact: true })).toBeVisible();
+  await next.click();
+  await expect(board.locator('.board-heading')).toContainText('Move 2');
+  await board.getByRole('button', { name: 'Previous error' }).click();
+  await expect(board.locator('.board-heading')).toContainText('Move 4');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await page
     .locator('.match-analysis-filters')
     .getByRole('combobox')
     .first()
     .selectOption('0');
   await expect(page.locator('.match-moves-table tbody tr')).toHaveCount(0);
-  await next.click();
-  await expect(page.locator('.moves-panel')).toContainText(
-    'No analyzed errors',
-  );
-  await expect(page.locator('.board-heading')).toContainText('Move 2');
+  await expect(next).toBeDisabled();
+  await expect(counter).toContainText('No decisions match these filters');
+  await counter
+    .getByRole('button', { name: 'Reset selection filters' })
+    .click();
+  await expect(page.locator('.match-moves-table tbody tr')).toHaveCount(2);
+  await expect(page.locator('.board-heading')).toContainText('Move 4');
 });
 
 test('real XG review opens checker and cube decisions with original source and compact desktop comparisons', async ({
@@ -181,12 +279,22 @@ test('real XG review opens checker and cube decisions with original source and c
   ).toHaveCount(0);
   const comparison = page.locator('.candidate-comparison-table');
   let overviewTableWidth: number | undefined;
+  let previousBoardWidth: number | undefined;
+  const boardWidth = () =>
+    page
+      .locator('.board-panel .board-shell')
+      .evaluate((board) => board.getBoundingClientRect().width);
   for (const viewport of [
     { width: 1800, height: 1169 },
     { width: 2560, height: 1440 },
     { width: 3840, height: 2160 },
   ]) {
     await page.setViewportSize(viewport);
+    if (previousBoardWidth !== undefined) {
+      await expect.poll(boardWidth).toBeGreaterThan(previousBoardWidth + 50);
+      expect(await boardWidth()).toBeLessThan(previousBoardWidth + 140);
+    }
+    previousBoardWidth = await boardWidth();
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,
@@ -223,6 +331,12 @@ test('real XG review opens checker and cube decisions with original source and c
     .selectOption('cube');
   await expect(table.locator('tbody tr').first()).toBeVisible();
   await table.locator('tbody tr').first().getByRole('button').click();
+  await expect(page.locator('.board-panel [data-dice]')).toHaveAttribute(
+    'data-dice',
+    '0-0',
+  );
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Cube-Details', exact: true }).click();
   await expect(
     page.getByRole('dialog').locator('.imported-move-analysis'),
   ).toContainText('eXtreme Gammon');

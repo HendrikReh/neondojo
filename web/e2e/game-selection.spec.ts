@@ -1,3 +1,4 @@
+import { openMatchCalculation } from './analysis-controls';
 import { test, expect, type Page } from './test';
 
 test.beforeEach(async ({ page }) => {
@@ -91,6 +92,7 @@ test('one game owns its move list, board boundaries and native analysis; full ma
   await expect(page.locator('.board-heading')).toContainText('Spiel 2');
   await page.getByRole('tab', { name: 'Fehler', exact: true }).click();
   const analysis = page.locator('.match-analysis');
+  await openMatchCalculation(page);
   await expect(page.getByLabel('Analyseumfang', { exact: true })).toHaveValue(
     'game',
   );
@@ -142,6 +144,7 @@ test('one game owns its move list, board boundaries and native analysis; full ma
     fullPage: true,
   });
   await page.setViewportSize({ width: 1440, height: 1100 });
+  await openMatchCalculation(page);
   await page.getByLabel('Analyseumfang', { exact: true }).selectOption('match');
   await depth.selectOption('0');
   const full = page.waitForResponse(
@@ -276,6 +279,7 @@ test('returning to an analysis filter starts at its first page', async ({
   await completedFullJob(page, match.id);
   await page.getByRole('tab', { name: 'Fehler', exact: true }).click();
   const analysis = page.locator('.match-analysis');
+  await openMatchCalculation(page);
   await page.getByLabel('Analyseumfang', { exact: true }).selectOption('match');
   await expect(
     page
@@ -335,6 +339,7 @@ test('a delayed game catalog never displays a whole-match job as a game job', as
   await page.getByRole('tab', { name: 'Fehler', exact: true }).click();
   const analysis = page.locator('.match-analysis');
   try {
+    await openMatchCalculation(page);
     await expect(
       page.getByRole('button', { name: 'Spiel analysieren', exact: true }),
     ).toBeDisabled();

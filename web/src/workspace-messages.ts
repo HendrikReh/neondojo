@@ -12,7 +12,6 @@ const en = {
   notes: 'Notes',
   cards: 'Study cards',
   nextError: 'Next error',
-  noErrors: 'No analyzed errors in this game.',
   databaseTitle: 'Match database',
   databaseDescription:
     'Find matches and positions, read notes and open a match for analysis.',
@@ -49,7 +48,6 @@ const de: Catalog = {
   notes: 'Notizen',
   cards: 'Lernkarten',
   nextError: 'Nächster Fehler',
-  noErrors: 'Keine analysierten Fehler in diesem Spiel.',
   databaseTitle: 'Matchdatenbank',
   databaseDescription:
     'Matches und Positionen finden, Notizen lesen und ein Match zur Analyse öffnen.',
@@ -84,7 +82,6 @@ const es: Catalog = {
   notes: 'Notas',
   cards: 'Tarjetas',
   nextError: 'Siguiente error',
-  noErrors: 'No hay errores analizados en este juego.',
   databaseTitle: 'Base de partidas',
   databaseDescription:
     'Busca partidas y posiciones, lee notas y abre una partida para analizar.',
@@ -119,7 +116,6 @@ const fr: Catalog = {
   notes: 'Notes',
   cards: 'Cartes',
   nextError: 'Erreur suivante',
-  noErrors: 'Aucune erreur analysée dans cette manche.',
   databaseTitle: 'Base de matchs',
   databaseDescription:
     'Recherchez des matchs et positions, lisez les notes et ouvrez un match à analyser.',
@@ -154,7 +150,6 @@ const pl: Catalog = {
   notes: 'Notatki',
   cards: 'Fiszki',
   nextError: 'Następny błąd',
-  noErrors: 'Brak przeanalizowanych błędów w tej partii.',
   databaseTitle: 'Baza meczów',
   databaseDescription:
     'Znajdź mecze i pozycje, czytaj notatki i otwórz mecz do analizy.',
@@ -189,7 +184,6 @@ const it: Catalog = {
   notes: 'Note',
   cards: 'Schede',
   nextError: 'Errore successivo',
-  noErrors: 'Nessun errore analizzato in questo game.',
   databaseTitle: 'Archivio partite',
   databaseDescription:
     'Trova partite e posizioni, leggi note e apri una partita da analizzare.',

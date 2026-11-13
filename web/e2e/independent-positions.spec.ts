@@ -1,3 +1,4 @@
+import { openPositionCalculation } from './analysis-controls';
 import { expect, test, type Page } from './test';
 
 test.use({ actionTimeout: 10000 });
@@ -215,8 +216,7 @@ test('deleting a source match retains an independent study position, notes, anal
   await expect(
     page.locator('.analysis-heading [data-match-field="id"]'),
   ).toContainText(String(f.metadata.match_no));
-  const positionDepth = page
-    .locator('.analysis-panel')
+  const positionDepth = (await openPositionCalculation(page))
     .getByLabel('Search depth', { exact: true });
   await positionDepth.selectOption('1');
   const accepted = page.waitForResponse(
@@ -224,7 +224,7 @@ test('deleting a source match retains an independent study position, notes, anal
       new URL(r.url()).pathname === '/api/jobs' &&
       r.request().method() === 'POST',
   );
-  await page
+  await (await openPositionCalculation(page))
     .getByRole('button', { name: 'Analyze position', exact: true })
     .click();
   const job = await (await accepted).json();
@@ -303,6 +303,6 @@ test('deleting the containing database keeps saved positions with source context
     f.position.position_id,
   );
   await expect(
-    page.getByRole('button', { name: 'Analyze position', exact: true }),
+    page.getByRole('button', { name: 'Recalculate position …', exact: true }),
   ).toBeEnabled();
 });

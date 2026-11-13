@@ -84,7 +84,7 @@ Open <http://127.0.0.1:5173>. Vite forwards `/api` to `http://127.0.0.1:8787` by
 2. In **Analysis**, use **Select game** or its adjacent arrows to choose a game. The selector shows the game number, starting score, move count, and Crawford status when applicable. The move history stays within the selected game and loads more moves as needed.
 3. Select a move. The board shows the decision position before the recorded play, together with the score and doubling cube. Point numbering and notation follow the player on roll. Pip counts include checkers on the bar.
 4. In **Overview**, choose **Analyze position** to queue a persistent GNUbg job. Choose 0–4 ply, with 2-ply as the default. The result includes up to five candidate moves, cubeful equity, and win probabilities.
-5. Use **Analyze game** to evaluate the selected game, or set **Analysis scope → Entire match** and choose **Analyze entire match**. Use **Analysis engine** next to **Analysis depth** to choose the provider for the job. The control starts with the profile's engine. GNUbg and Open Sage both offer 4-ply for game and match analysis. The selection and time estimate apply to game and match analyses in the current match. The chosen scope determines the jobs, progress, statistics, and errors shown. Games with no checker moves, including cube-only games, can also be selected and analyzed.
+5. Open **Analyze game or match …**. Use **Analyze game** to evaluate the selected game, or set **Analysis scope → Entire match** and choose **Analyze entire match**. Use **Analysis engine** next to **Analysis depth** to choose the provider for the job. The control starts with the profile's engine. GNUbg and Open Sage both offer 4-ply for game and match analysis. The selection and time estimate apply to game and match analyses in the current match. The chosen scope determines the jobs, progress, statistics, and errors shown. Games with no checker moves, including cube-only games, can also be selected and analyzed.
 6. Open **Overview → Dice equity** to evaluate all 21 unordered dice pairs. The matrix represents 36 equally likely ordered rolls, with weight 1 for doubles and 2 for other pairs. The weighted mean gives the expected equity. When a player has no legal play for a roll, GNUbg evaluates the forced pass. **Game rolls** shows the rolls recorded in the selected game.
 
 **Match database → Find a position in the library** searches for an exact GNUbg position ID, which represents the checker arrangement from the perspective of the player on roll. Analysis also uses the GNUbg match ID for context such as the score, cube, and dice. Each occurrence in the library has its own row with the database, game, and move. Opening a row selects that exact occurrence, even when the same position appears more than once in a match. Use **Find similar positions** beside the analysis board to search for related positions.
@@ -95,9 +95,17 @@ The top navigation opens **Playing**, **Analysis**, **Match database**, **Player
 
 The desktop **Overview** places move history on the left and position evaluation beside the board, with errors below. Long lists scroll independently and keep the current move visible. Dedicated tabs include **Statistics**, **Errors**, **Notes**, and **Study cards**. The header shows the players, match ID and length, saved score, date, event, and PR per player. Date and event come from saved metadata and show `n/a` when unavailable. The header also shows the round and location when saved. Match PR updates when a complete native match analysis finishes.
 
-The last completed position result for the selected engine stays visible while a new calculation runs, including after reloading the page.
+The position pane shows existing results with their source and recorded depth.
+Open **Recalculate position …** to choose a search depth and start a local
+analysis. The previous result stays visible during the calculation. **Dice
+equity** calculates on selection at its current depth. Use **Recalculate dice
+equity …** to change that depth and start a new calculation.
 
-For game and match analysis, the command bar shows the latest job status for the selected engine and scope across the analysis tabs. The **Errors** and **Statistics** tabs show the decisions and statistics for that job.
+**Analyze game or match …** opens the scope, engine, depth and time estimate.
+Running jobs tracked in this session stay in the command bar when you change
+tabs, positions or analysis scope. The command bar also shows the latest job
+for the selected game or match scope and engine. The **Errors** and
+**Statistics** tabs use that selection.
 
 ### Moves, errors, and statistics
 
@@ -121,25 +129,36 @@ Equity differences stay within the same source and known equity unit; MWC differ
 use percentage points. Unknown or incompatible values remain unavailable. Engine,
 depth, unit and player perspective stay visible, including differing candidate depths.
 
-The decision list and **Next error** also work without a local analysis job. Review
-pages use saved local game checkpoints from the selected job and imported evaluations
+The decision list and **Previous error** / **Next error** above the board also
+work without a local analysis job. Review pages use saved local game checkpoints from the selected job and imported evaluations
 for games not covered by that job. Each decision identifies its source and depth;
 filters and pagination apply to those reviewed decisions. Imported evaluations do not
-supply native GNUbg PR or imply a complete native match analysis. Source cube decisions
-can open their original board and analysis in the move dialog. Next error cycles
-through the selected game's matching decisions and wraps to the beginning; changing
-selection or filters cancels pending navigation.
+supply native GNUbg PR or imply a complete native match analysis. The board shows
+the filtered scope and the current result's index in the list. Both directions
+cycle through matching results across game boundaries when all games are selected.
+When the error threshold is off, the board navigates all matching decisions.
+An empty list and the board offer the same explanation and action. Changing
+selection or filters cancels pending navigation. Cube errors open on the main board with the played
+action, best action, loss and source. For imported decisions, **Cube details**
+also opens the original evaluation and notes.
 
 `GET /api/matches/{id}/review-decisions` supplies this paginated view. Only
 evaluations with known units and a validated decision context enter imported
 review. GNUbg SGF checker evaluations are supported; SGF cube records without
 unambiguous units and perspective remain visible in their original source view
-but are excluded from the combined error list. Missed-double dialogs use the
-validated position before the roll, rather than the following checker move.
+but are excluded from the combined error list. A missed double opens the
+validated position before the roll. A take or drop shows the outstanding cube
+offer from the original decision context.
 
 ### Preview a move
 
 **Initial**, **Arrows** (German: **Pfeile**), and **Final** show the starting position, the move path, and the resulting position. The default view uses outlined green arrows for the played move and shows legal intermediate points. Select a candidate row from an import, BackgammonDB, or local analysis to preview it. Use Enter or Space on the move name. Up/Down selects the previous or next candidate and keeps it in view. Left shows **Initial**, Right shows **Final**, and other controls keep their normal keyboard behavior. The selected board view persists when changing candidates. **Reset preview** returns to the recorded move.
+
+Use **Played move** and **Best move** above the board to switch the preview
+with one click while keeping **Initial**, **Arrows**, or **Final** selected. The
+loss comes from the same source as the best move. A saved game analysis can
+supply both values before a separate position analysis produces a candidate
+table.
 
 The board identifies the candidate source and rank. **Final** keeps the board orientation and hides the dice. All themes use the same legality checks for bar entry, hits, multi-step moves, doubles, and bear-off. Unrecognized or illegal notation shows the starting position. Analysis, notes, position IDs, and study cards continue to use the pre-move decision. Changing position or source clears the previous candidate preview.
 
@@ -151,8 +170,8 @@ Select **Search this position** to open Match database and run an exact search f
 
 ### Desktop layout
 
-**Overview** pairs a compact board with a wider candidate table and places the
-error list directly below both. Open **Statistics** for native match and game
+**Overview** places the board beside a compact candidate table, with
+the error list directly below both. Open **Statistics** for native match and game
 statistics. Switching tabs keeps the selected game and move.
 
 Drag the divider beside the board to resize it in **Overview**, **Statistics**,
@@ -161,8 +180,9 @@ arrows, with Shift for larger steps. Double-click or Enter restores the default
 for the current view. The profile stores an independent width for **Overview**
 and a shared width for the four detail tabs. Overview limits the board to leave
 room for the error list below. The other tabs can use the full available height.
-Existing saved widths apply to the detail tabs, and Overview starts at its
-compact default until resized.
+Without a saved width, the board grows gradually when the window gets wider
+than 1800 logical pixels. It still fits the available height and leaves room
+for the inspector. Candidate columns size to their contents.
 
 The desktop layout is designed for side-by-side review using a mouse or keyboard. Layout checks use logical viewports of 1800×1169, 2560×1440, and 3840×2160, including under macOS **More Space**. The shared type scale uses 24 px page titles, 14 px section titles, 13 px controls and body text, and 12 px tables. CSS tokens define the type scale, with monospace for position IDs and separate type for the board and logo. [Typography](docs/typography.md)
 

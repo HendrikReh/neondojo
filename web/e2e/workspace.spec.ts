@@ -1,3 +1,4 @@
+import { openPositionCalculation } from './analysis-controls';
 import { expect, test } from './test';
 import { profileBackend } from './profile-backend';
 import { defaultConfiguration } from '../src/configuration-model';
@@ -198,7 +199,7 @@ test('accepted position jobs remain tracked without a duplicate banner after a p
       });
     await route.continue();
   });
-  await page
+  await (await openPositionCalculation(page))
     .getByRole('button', { name: 'Position analysieren', exact: true })
     .click();
   await started;

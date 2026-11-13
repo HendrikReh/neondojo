@@ -1,3 +1,4 @@
+import { openMatchCalculation } from './analysis-controls';
 import { expect, test, type Page } from './test';
 import { profileBackend } from './profile-backend';
 import { defaultConfiguration } from '../src/configuration-model';
@@ -108,6 +109,7 @@ test('starts GNUbg 4-ply for the selected game with an Open Sage profile', async
     }),
   );
   const match = await openMatch(page);
+  await openMatchCalculation(page);
   const engine = page.getByLabel('Analysis engine', { exact: true });
   const depth = page.getByLabel('Match analysis depth', { exact: true });
   await expect(engine).toHaveValue('bgsage');
@@ -168,6 +170,7 @@ test('starts GNUbg 4-ply for the selected game with an Open Sage profile', async
   await expect(page.locator('.match-analysis-progress:visible')).toContainText(
     'Game analysis completed',
   );
+  await openMatchCalculation(page);
   await engine.selectOption('bgsage');
   await expect(page.locator('.match-analysis-progress:visible')).toHaveCount(0);
   await engine.selectOption('gnubg');
@@ -190,6 +193,7 @@ test('shows benchmark basis before any job and follows game, scope and depth', a
     return r.fulfill({ json: result(r.request().url()) });
   });
   await openMatch(page);
+  await openMatchCalculation(page);
   await expect(estimate(page)).toContainText(
     'Estimated analysis time: approx. 40s',
   );
@@ -259,6 +263,7 @@ test('invalidates immediately and ignores late depth responses', async ({
     return r.fulfill({ json: result(r.request().url()) });
   });
   await openMatch(page);
+  await openMatchCalculation(page);
   await expect(estimate(page)).toContainText('approx. 40s');
   await page
     .getByLabel('Match analysis depth', { exact: true })
@@ -304,6 +309,7 @@ for (const reason of [
           }),
     );
     await openMatch(page, 'de');
+    await openMatchCalculation(page);
     await expect(estimate(page)).toContainText('Schätzung nicht verfügbar');
     const explanation = {
       no_matching_benchmark: 'Kein abgeschlossener Benchmark passt',
@@ -333,6 +339,7 @@ test('rechecks confirmed profile revisions at same depth without writes', async 
     });
   });
   await openMatch(page);
+  await openMatchCalculation(page);
   await expect(estimate(page)).toContainText('approx. 40s');
   backend.updateRemote(config);
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
@@ -497,6 +504,7 @@ test('hides pre-start estimate during submission and queued engine work', async 
     route.fulfill({ json: result(route.request().url()) }),
   );
   const match = await openMatch(page);
+  await openMatchCalculation(page);
   await expect(estimate(page)).toContainText('approx. 40s');
   let release!: () => void;
   const gate = new Promise<void>((r) => {
@@ -551,9 +559,11 @@ test('hides pre-start estimate during submission and queued engine work', async 
   await expect(page.locator('.match-analysis-progress')).toContainText(
     'Queued',
   );
+  await openMatchCalculation(page);
   const engine = page.getByLabel('Analysis engine', { exact: true });
   await engine.selectOption('bgsage');
   await expect(page.locator('.match-analysis-progress:visible')).toHaveCount(0);
+  await expect(page.locator('.analysis-running-jobs')).toContainText('GNUbg');
   await engine.selectOption('gnubg');
   await expect(page.locator('.match-analysis-progress:visible')).toContainText(
     'Queued',
@@ -607,6 +617,7 @@ for (const malformed of ['date', 'reason'] as const) {
       return route.fulfill({ json: invalid });
     });
     await openMatch(page);
+    await openMatchCalculation(page);
     await expect(estimate(page)).toContainText('Estimate unavailable');
     await expect(
       page.getByRole('button', { name: 'Analyze game', exact: true }),

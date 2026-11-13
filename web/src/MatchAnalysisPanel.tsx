@@ -4,15 +4,31 @@ import AnalysisTimeEstimate from './AnalysisTimeEstimate';
 import { useProfileValue } from './useProfileValue';
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import ActionButton from './ActionButton';
-import { useCallback, useEffect, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { request, terminal, type Job, type Match, type MatchGame } from './api';
-import { reviewDecisions, type ReviewDecision } from './review-decisions-api';
+import {
+  canOpenReviewDecision,
+  findReviewNeighbor,
+  reviewDecisions,
+  reviewEmptyReason,
+  type ReviewDecision,
+  type ReviewEmptyReason,
+  type ReviewListEntry,
+  type ReviewNavigationOrigin,
+} from './review-decisions-api';
+import { BoardErrorNavigation } from './BoardDecisionReview';
 import SearchPagination from './SearchPagination';
 import { useSearchPages } from './useSearchPages';
 import { useSourceText } from './analysis-source-messages';
 import { useMatchAnalysis, type MatchAnalysisEngine } from './useMatchAnalysis';
-import { useI18n, type TranslationKey } from './i18n';
+import { useI18n } from './i18n';
 import { loadEngines, type EngineInfo } from './settings-api';
 import { useSettingsText } from './settings-messages';
 import MatchStatisticsView from './MatchStatisticsView';
@@ -25,8 +41,12 @@ import {
   type MatchDecisionFilter,
   type StatisticsAction,
 } from './match-statistics-api';
-import { useStatisticsText } from './review-statistics-messages';
+import {
+  severityLabels,
+  useStatisticsText,
+} from './review-statistics-messages';
 import { DEFAULT_ANALYSIS_PLIES } from './analysis-depth';
+import EngineLabel from './EngineLabel';
 
 const defaultFilter: MatchDecisionFilter = {
   player: '',
@@ -34,12 +54,14 @@ const defaultFilter: MatchDecisionFilter = {
   severity: '',
   errors_only: true,
 };
+const reviewPageSize = 50;
 
-const severityKeys: Record<string, TranslationKey> = {
-  none: 'severity.none',
-  doubtful: 'severity.doubtful',
-  bad: 'severity.bad',
-  very_bad: 'severity.very_bad',
+export type BoardReviewTarget = {
+  element: HTMLElement;
+  origin: ReviewNavigationOrigin;
+  intent: number;
+  currentIntent: () => number;
+  busy: boolean;
 };
 
 export default function MatchAnalysisPanel({
@@ -57,9 +79,11 @@ export default function MatchAnalysisPanel({
   analysisInstallationKey,
   onJob,
   onAccepted,
-  onFilterChange,
+  boardReview,
   overview = false,
   selectedPositionId,
+  selectedDecisionId,
+  analysisRevision,
   games,
   onDecision,
 }: {
@@ -68,6 +92,7 @@ export default function MatchAnalysisPanel({
   onDecision?: (decision: ReviewDecision) => void;
   overview?: boolean;
   selectedPositionId?: string;
+  selectedDecisionId?: string;
   gameNo?: number;
   onPosition: (id: string) => void;
   controlsTarget?: HTMLElement | null;
@@ -81,16 +106,18 @@ export default function MatchAnalysisPanel({
   analysisInstallationKey?: string;
   onJob?: (job: Job | undefined) => void;
   onAccepted?: (job: Job) => void;
-  onFilterChange?: (filter: {
-    player: string;
-    kind: string;
-    severity?: string;
-    game_no?: number;
-  }) => void;
+  boardReview?: BoardReviewTarget;
+  analysisRevision?: string;
 }) {
   const profile = useOptionalConfiguration();
   const [engineId, setEngineId] = useState(defaultEngine);
   const [requestedPlies, setPlies] = useState(defaultPlies);
+  const [showSettings, setShowSettings] = useState(false);
+  const settingsId = useId();
+  const settingsButton = useRef<HTMLButtonElement>(null);
+  const scopeSelect = useRef<HTMLSelectElement>(null);
+  const errorsToggle = useRef<HTMLInputElement>(null);
+  const resetButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     setEngineId(defaultEngine);
     setPlies(defaultPlies);
@@ -206,10 +233,6 @@ export default function MatchAnalysisPanel({
       onGame?.(action.gameNo);
     onShowErrors?.();
   }
-  useEffect(
-    () => onFilterChange?.({ player, kind, severity, game_no: filteredGame }),
-    [player, kind, severity, filteredGame, onFilterChange],
-  );
   const statisticsKey = job ? statisticsRevision(job) : '';
   const [statisticsResult, setStatisticsResult] = useState<{
     key: string;
@@ -252,19 +275,216 @@ export default function MatchAnalysisPanel({
     controlsDisabled || !analysisConfigured || (scoped && gameNo === undefined);
   const names = [match.white, match.black];
   const filter = decisionFilterQuery(selected);
+  const scopeGame = scoped ? gameNo : undefined;
+  const showDecisions =
+    (showResults || !!boardReview) && (!scoped || scopeGame !== undefined);
+  const reviewScope = `${match.id}:${job?.id ?? ''}:${filter}`;
+  const reviewRevision = JSON.stringify([statisticsKey, analysisRevision]);
   const loadDecisionPage = useCallback(
     (signal: AbortSignal, page: number) =>
       reviewDecisions(match.id, selected, { jobId: job?.id, page, signal }),
     [match.id, job?.id, filter],
   );
   const decisions = useSearchPages({
-    scope: `${match.id}:${job?.id ?? ''}:${filter}`,
-    enabled: showResults,
-    revision: statisticsKey,
-    pageSize: 50,
+    scope: reviewScope,
+    enabled: showDecisions,
+    revision: reviewRevision,
+    pageSize: reviewPageSize,
     loadPage: loadDecisionPage,
   });
   const { items: rows, loading, error: pageError } = decisions;
+  const reviewIdentity = (intent?: number, cubeId?: string) =>
+    JSON.stringify([reviewScope, reviewRevision, intent, cubeId]);
+  const cubeId =
+    boardReview?.origin.row?.kind === 'cube' ? selectedDecisionId : undefined;
+  const selectionKey = reviewIdentity(boardReview?.intent, cubeId);
+  const latestSelection = useRef(selectionKey);
+  latestSelection.current = selectionKey;
+  const [reviewJump, setReviewJump] = useState<{
+    key: string;
+    entry?: ReviewListEntry;
+    busy?: boolean;
+    error?: unknown;
+  }>();
+  const currentJump = reviewJump?.key === selectionKey ? reviewJump : undefined;
+  const pendingJump = useRef<AbortController | undefined>(undefined);
+  useEffect(() => () => pendingJump.current?.abort(), [selectionKey]);
+
+  const pageOffset = (decisions.page - 1) * reviewPageSize;
+  const isSelected = (row: ReviewDecision) =>
+    selectedDecisionId
+      ? row.id === selectedDecisionId
+      : row.kind === 'checker' && row.position_uuid === selectedPositionId;
+  const selectedIndex = rows.findIndex(isSelected);
+  const lastEntry = currentJump?.entry;
+  const ordinal =
+    selectedIndex >= 0
+      ? pageOffset + selectedIndex + 1
+      : lastEntry && isSelected(lastEntry.row)
+        ? lastEntry.ordinal
+        : undefined;
+
+  function openListedDecision(entry: ReviewListEntry) {
+    if (!onDecision) return;
+    pendingJump.current?.abort();
+    onDecision(entry.row);
+    if (!boardReview) return;
+    const nextIntent = boardReview.currentIntent();
+    setReviewJump({
+      key: reviewIdentity(
+        nextIntent,
+        entry.row.kind === 'cube' ? entry.row.id : undefined,
+      ),
+      entry,
+    });
+    const page = Math.ceil(entry.ordinal / reviewPageSize);
+    if (page !== decisions.page) decisions.setPage(page);
+  }
+
+  async function navigateReview(direction: 'previous' | 'next') {
+    if (
+      !boardReview ||
+      loading ||
+      boardReview.busy ||
+      currentJump?.busy ||
+      pageError ||
+      !decisions.total
+    )
+      return;
+    if (selectedIndex >= 0) {
+      const step = direction === 'next' ? 1 : -1;
+      for (let index = selectedIndex + step; rows[index]; index += step) {
+        if (!canOpenReviewDecision(rows[index])) continue;
+        openListedDecision({
+          row: rows[index],
+          ordinal: pageOffset + index + 1,
+        });
+        return;
+      }
+    }
+    pendingJump.current?.abort();
+    const abort = new AbortController();
+    pendingJump.current = abort;
+    setReviewJump({ key: selectionKey, entry: currentJump?.entry, busy: true });
+    const current = () =>
+      !abort.signal.aborted &&
+      latestSelection.current === selectionKey &&
+      boardReview.currentIntent() === boardReview.intent;
+    try {
+      const entry = await findReviewNeighbor({
+        matchId: match.id,
+        filter: selected,
+        jobId: job?.id,
+        origin: boardReview.origin,
+        direction,
+        signal: abort.signal,
+      });
+      if (!current()) return;
+      if (entry && entry.row.id !== boardReview.origin.row?.id)
+        openListedDecision(entry);
+      else setReviewJump({ key: selectionKey, entry: currentJump?.entry });
+    } catch (error) {
+      if (current())
+        setReviewJump({ key: selectionKey, entry: currentJump?.entry, error });
+    }
+  }
+  const narrowed = !!(player || kind || severity || filteredGame !== scopeGame);
+  const emptyPage =
+    showDecisions && !loading && !pageError && decisions.total === 0
+      ? decisions.result
+      : undefined;
+  const [emptyReview, setEmptyReview] = useState<{
+    key: string;
+    reason?: ReviewEmptyReason;
+    error?: unknown;
+  }>();
+  const emptyKey = emptyPage?.key;
+  const emptyState = emptyReview?.key === emptyKey ? emptyReview : undefined;
+  useEffect(() => {
+    if (!emptyKey) return;
+    const abort = new AbortController();
+    void reviewEmptyReason(
+      match.id,
+      { game_no: scopeGame, errors_only: errorsOnly },
+      { jobId: job?.id, narrowed, signal: abort.signal },
+    ).then(
+      (reason) => {
+        if (!abort.signal.aborted) setEmptyReview({ key: emptyKey, reason });
+      },
+      (error) => {
+        if (!abort.signal.aborted) setEmptyReview({ key: emptyKey, error });
+      },
+    );
+    return () => abort.abort();
+  }, [emptyKey, match.id, job?.id, scopeGame, errorsOnly, narrowed]);
+
+  const calculationLabel = `${t('analysis.configureMatch')} …`;
+  const emptyActions = {
+    missing: {
+      icon: 'analysis',
+      message: text('missing'),
+      label: calculationLabel,
+      run: () => {
+        setShowSettings(true);
+        requestAnimationFrame(() => scopeSelect.current?.focus());
+      },
+    },
+    filtered: {
+      icon: 'clear',
+      message: t('matchAnalysis.noDecisions'),
+      label: text('removeSelectionFilters'),
+      run: () => {
+        setSelection({
+          scope: filterScope,
+          filter: { ...defaultFilter, errors_only: errorsOnly },
+        });
+        if (showResults) resetButton.current?.focus();
+        else {
+          onShowErrors?.();
+          requestAnimationFrame(() => resetButton.current?.focus());
+        }
+      },
+    },
+    clean: {
+      icon: 'view',
+      message: text('clean'),
+      label: text('showAllDecisions'),
+      run: () => {
+        setSelection({
+          scope: filterScope,
+          filter: { ...defaultFilter, errors_only: false },
+        });
+        if (showResults) errorsToggle.current?.focus();
+        else {
+          onShowErrors?.();
+          requestAnimationFrame(() => errorsToggle.current?.focus());
+        }
+      },
+    },
+  } as const;
+  const emptyAction = emptyState?.reason && emptyActions[emptyState.reason];
+  const reviewError = pageError || emptyState?.error;
+  const emptyFeedback = emptyAction ? (
+    <div className="analysis-empty review-empty">
+      <p role="status">{emptyAction.message}</p>
+      <ActionButton
+        type="button"
+        icon={emptyAction.icon}
+        label={emptyAction.label}
+        onClick={emptyAction.run}
+      />
+    </div>
+  ) : reviewError ? (
+    <div className="analysis-empty review-empty">
+      <p className="analysis-error" role="alert">{formatError(reviewError)}</p>
+      <ActionButton
+        type="button"
+        icon="refresh"
+        label={sourceText('retry')}
+        onClick={decisions.retry}
+      />
+    </div>
+  ) : null;
 
   const progress = job && (
     <div className="match-analysis-progress" role="status" aria-live="polite">
@@ -276,7 +496,7 @@ export default function MatchAnalysisPanel({
               ? t(scoped ? 'gameAnalysis.failed' : 'matchAnalysis.failed')
               : job.status === 'queued'
                 ? t('matchAnalysis.queued')
-                : t('matchAnalysis.engineRunning')}
+                : t('analysis.movesRunning')}
         </strong>
         <span>
           {t('matchAnalysis.progressText', {
@@ -313,105 +533,129 @@ export default function MatchAnalysisPanel({
           {t(scoped ? 'gameAnalysis.description' : 'matchAnalysis.description')}
         </p>
       </div>
-      <div className="match-analysis-controls">
-        <label>
-          {t('gameAnalysis.scope')}{' '}
-          <select
-            aria-label={t('gameAnalysis.scope')}
-            value={scope}
-            onChange={(event) =>
-              setScope(event.target.value as 'game' | 'match')
-            }
-          >
-            <option value="game">{t('gameAnalysis.scopeGame')}</option>
-            <option value="match">{t('gameAnalysis.scopeMatch')}</option>
-          </select>
-        </label>
-        <label>
-          {settingsText('analysisEngine')}
-          <select
-            aria-label={settingsText('analysisEngine')}
-            value={engineId}
-            disabled={!configured || submitting}
-            onChange={(event) => {
-              const value = event.target.value;
-              if (value !== 'gnubg' && value !== 'bgsage') return;
-              setEngineId(value);
-              setPlies(plies);
-            }}
-          >
-            {(['gnubg', 'bgsage'] as const).map((id) => {
-              const item = catalog?.engines.find((entry) => entry.id === id);
-              const name = id === 'gnubg' ? 'GNUbg' : 'Open Sage';
-              return (
-                <option key={id} value={id}>
-                  {item?.name ?? name}
-                  {catalog && !item?.available
-                    ? ` — ${settingsText('unavailable')}`
-                    : ''}
-                </option>
-              );
-            })}
-          </select>
-        </label>
-        <label>
-          {t('matchAnalysis.depth')}{' '}
-          <select
-            aria-label={t('matchAnalysis.depthLabel')}
-            value={plies}
-            disabled={analysisDisabled}
-            onChange={(event) => setPlies(Number(event.target.value))}
-          >
-            <option value={0} disabled={!supportedPlies.includes(0)}>
-              {t('matchAnalysis.fast')}
-            </option>
-            <option value={1} disabled={!supportedPlies.includes(1)}>
-              1-Ply
-            </option>
-            <option value={2} disabled={!supportedPlies.includes(2)}>
-              {t('matchAnalysis.thorough')}
-            </option>
-            <option value={3} disabled={!supportedPlies.includes(3)}>
-              3-ply
-            </option>
-            <option value={4} disabled={!supportedPlies.includes(4)}>
-              4-ply
-            </option>
-          </select>
-        </label>
+      {controlsTarget && (
         <ActionButton
+          ref={settingsButton}
+          type="button"
           icon="analysis"
-          label={
-            submitting
-              ? t('matchAnalysis.submitting')
-              : active
-                ? t('matchAnalysis.running')
-                : job
-                  ? t(scoped ? 'gameAnalysis.again' : 'matchAnalysis.again')
-                  : t(scoped ? 'gameAnalysis.start' : 'matchAnalysis.start')
-          }
-          className="primary"
-          onClick={() => void run(plies)}
-          disabled={analysisDisabled}
+          label={calculationLabel}
+          aria-expanded={showSettings}
+          aria-controls={settingsId}
+          onClick={() => setShowSettings((open) => !open)}
         />
-        {!active && !submitting && (
-          <AnalysisTimeEstimate
-            key={match.position_count}
-            matchId={match.id}
-            gameNo={gameNo}
-            scoped={scoped}
-            engineId={engineId}
-            plies={plies}
-            configured={analysisConfigured}
-            installationKey={analysisInstallationKey}
+      )}
+      <div
+        id={settingsId}
+        className="match-analysis-settings"
+        hidden={!!controlsTarget && !showSettings}
+      >
+        <div className="match-analysis-controls">
+          <label>
+            {t('gameAnalysis.scope')}{' '}
+            <select
+              ref={scopeSelect}
+              aria-label={t('gameAnalysis.scope')}
+              value={scope}
+              onChange={(event) =>
+                setScope(event.target.value as 'game' | 'match')
+              }
+            >
+              <option value="game">{t('gameAnalysis.scopeGame')}</option>
+              <option value="match">{t('gameAnalysis.scopeMatch')}</option>
+            </select>
+          </label>
+          <label>
+            {settingsText('analysisEngine')}
+            <select
+              aria-label={settingsText('analysisEngine')}
+              value={engineId}
+              disabled={!configured || submitting}
+              onChange={(event) => {
+                const value = event.target.value;
+                if (value !== 'gnubg' && value !== 'bgsage') return;
+                setEngineId(value);
+                setPlies(plies);
+              }}
+            >
+              {(['gnubg', 'bgsage'] as const).map((id) => {
+                const item = catalog?.engines.find((entry) => entry.id === id);
+                const name = id === 'gnubg' ? 'GNUbg' : 'Open Sage';
+                return (
+                  <option key={id} value={id}>
+                    {item?.name ?? name}
+                    {catalog && !item?.available
+                      ? ` — ${settingsText('unavailable')}`
+                      : ''}
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+          <label>
+            {t('matchAnalysis.depth')}{' '}
+            <select
+              aria-label={t('matchAnalysis.depthLabel')}
+              value={plies}
+              disabled={analysisDisabled}
+              onChange={(event) => setPlies(Number(event.target.value))}
+            >
+              <option value={0} disabled={!supportedPlies.includes(0)}>
+                {t('matchAnalysis.fast')}
+              </option>
+              <option value={1} disabled={!supportedPlies.includes(1)}>
+                1-Ply
+              </option>
+              <option value={2} disabled={!supportedPlies.includes(2)}>
+                {t('matchAnalysis.thorough')}
+              </option>
+              <option value={3} disabled={!supportedPlies.includes(3)}>
+                3-ply
+              </option>
+              <option value={4} disabled={!supportedPlies.includes(4)}>
+                4-ply
+              </option>
+            </select>
+          </label>
+          <ActionButton
+            icon="analysis"
+            label={
+              submitting
+                ? t('matchAnalysis.submitting')
+                : active
+                  ? t('matchAnalysis.running')
+                  : job
+                    ? t(scoped ? 'gameAnalysis.again' : 'matchAnalysis.again')
+                    : t(scoped ? 'gameAnalysis.start' : 'matchAnalysis.start')
+            }
+            className="primary"
+            onClick={() => {
+              if (controlsTarget) {
+                setShowSettings(false);
+                settingsButton.current?.focus();
+              }
+              void run(plies);
+            }}
+            disabled={analysisDisabled}
           />
+          {(!controlsTarget || showSettings) && !active && !submitting && (
+            <AnalysisTimeEstimate
+              key={match.position_count}
+              matchId={match.id}
+              gameNo={gameNo}
+              scoped={scoped}
+              engineId={engineId}
+              plies={plies}
+              configured={analysisConfigured}
+              installationKey={analysisInstallationKey}
+            />
+          )}
+        </div>
+        {!!catalog?.error && (
+          <p className="analysis-error" role="alert">
+            {formatError(catalog.error)}
+          </p>
         )}
       </div>
-      {!!catalog?.error && (
-        <p className="analysis-error" role="alert">
-          {formatError(catalog.error)}
-        </p>
-      )}
     </div>
   );
   return (
@@ -447,6 +691,7 @@ export default function MatchAnalysisPanel({
               <div className="match-analysis-filters">
                 <label>
                   <input
+                    ref={errorsToggle}
                     type="checkbox"
                     checked={errorsOnly}
                     onChange={(event) =>
@@ -497,7 +742,7 @@ export default function MatchAnalysisPanel({
                   }
                 >
                   <option value="">{text('allSeverities')}</option>
-                  {Object.entries(severityKeys).map(([value, key]) => (
+                  {Object.entries(severityLabels).map(([value, key]) => (
                     <option key={value} value={value}>
                       {t(key)}
                     </option>
@@ -528,6 +773,7 @@ export default function MatchAnalysisPanel({
                   ))}
                 </select>
                 <ActionButton
+                  ref={resetButton}
                   icon="clear"
                   label={text('resetFilters')}
                   compact
@@ -541,8 +787,7 @@ export default function MatchAnalysisPanel({
                   }
                 />
               </div>
-              {!!pageError && <p role="alert">{formatError(pageError)}</p>}
-              <div className="match-moves-scroll">
+              <div className="match-moves-scroll" hidden={rows.length === 0}>
                 <table className="match-moves-table">
                   <thead>
                     <tr>
@@ -556,32 +801,34 @@ export default function MatchAnalysisPanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((row) => (
+                    {rows.map((row, index) => (
                       <tr
                         key={row.id}
-                        aria-current={
-                          row.position_uuid &&
-                          row.position_uuid === selectedPositionId
-                            ? 'true'
-                            : undefined
-                        }
+                        aria-current={isSelected(row) ? 'true' : undefined}
                       >
                         <td>
-                          {row.position_uuid || (row.move_id && onDecision) ? (
+                          {(
+                            onDecision
+                              ? canOpenReviewDecision(row)
+                              : !!row.position_uuid
+                          ) ? (
                             <ActionButton
                               icon="open"
                               label={t('matchAnalysis.openPosition', {
                                 game: row.game_no,
-                                move: row.checker_no ?? '—',
+                                move: row.checker_no ?? row.decision_no,
                               })}
                               className="position-link"
                               aria-label={t('matchAnalysis.openPosition', {
                                 game: row.game_no,
-                                move: row.checker_no ?? '—',
+                                move: row.checker_no ?? row.decision_no,
                               })}
                               onClick={() =>
                                 onDecision
-                                  ? onDecision(row)
+                                  ? openListedDecision({
+                                      row,
+                                      ordinal: pageOffset + index + 1,
+                                    })
                                   : row.position_uuid &&
                                     onPosition(row.position_uuid)
                               }
@@ -633,8 +880,8 @@ export default function MatchAnalysisPanel({
                               ? t('matchAnalysis.forced')
                               : row.evaluation_status === 'unavailable'
                                 ? t('matchAnalysis.unavailable')
-                                : severityKeys[row.severity]
-                                  ? t(severityKeys[row.severity])
+                                : severityLabels[row.severity]
+                                  ? t(severityLabels[row.severity])
                                   : row.severity}
                           </span>
                         </td>
@@ -645,8 +892,9 @@ export default function MatchAnalysisPanel({
                             )}
                           </span>
                           <small>
-                            {row.engine} ·{' '}
-                            {row.depth ?? sourceText('unknownDepth')}
+                            <EngineLabel
+                              details={`${row.engine} · ${row.depth ?? sourceText('unknownDepth')}`}
+                            />
                           </small>
                         </td>
                       </tr>
@@ -654,12 +902,10 @@ export default function MatchAnalysisPanel({
                   </tbody>
                 </table>
               </div>
-              {rows.length === 0 && !loading && !pageError && (
-                <p className="analysis-empty">
-                  {t('matchAnalysis.noDecisions')}
-                </p>
+              {emptyFeedback}
+              {(loading || (emptyPage && !emptyState)) && (
+                <p role="status">{t('matchAnalysis.loading')}</p>
               )}
-              {loading && <p role="status">{t('matchAnalysis.loading')}</p>}
               <SearchPagination
                 page={decisions.page}
                 lastPage={decisions.lastPage}
@@ -697,6 +943,26 @@ export default function MatchAnalysisPanel({
           )
         }
       />
+      {boardReview &&
+        createPortal(
+          <BoardErrorNavigation
+            game={filteredGame}
+            player={player ? names[Number(player)] : undefined}
+            kind={kind}
+            severity={severity}
+            errorsOnly={errorsOnly}
+            total={pageError || !showDecisions ? 0 : decisions.total}
+            ordinal={loading ? undefined : ordinal}
+            busy={loading || boardReview.busy || !!currentJump?.busy}
+            onNavigate={(direction) => void navigateReview(direction)}
+          >
+            {emptyFeedback}
+            {!!currentJump?.error && (
+              <small role="alert">{formatError(currentJump.error)}</small>
+            )}
+          </BoardErrorNavigation>,
+          boardReview.element,
+        )}
       {controlsTarget &&
         createPortal(
           <>

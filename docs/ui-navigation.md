@@ -56,17 +56,26 @@ The merge search has its own page controls.
 **Overview** places the position analysis beside the board, with the error list
 below both. Its analysis views are **Candidates**, **Dice equity**, and **Game
 rolls**. Native match and game statistics are available in **Statistics**.
-The analysis command bar uses the profile engine as the initial selection for
-each match. Choose **Analysis engine** to select the provider for game or match
-analysis, then choose a supported **Analysis depth**. GNUbg and Open Sage offer 4-ply. The
-time estimate uses the selected engine, depth, and scope. The status below the
-command bar shows the latest job for the selected engine and scope across all
-analysis tabs. Switch engines to view their respective jobs.
+The position pane shows saved results with their source and depth. **Recalculate
+position …** opens the search depth and the start action in a dialog. **Analyze
+game or match …** reveals the scope, engine, depth and time estimate in the
+command bar. The scope and engine also select the jobs used by **Errors** and
+**Statistics**. The latest job for that selection and other running jobs
+tracked in the session appear above the analysis tabs.
 Open **Compare game analyses** or **Compare match analyses** to see GNUbg and
 Open Sage side by side for the selected game or the whole match. The game comparison also uses the selected game’s saved statistics from completed whole-match analyses. Each engine defaults to a completed 3-ply run when
 available, with other recorded depths and job states in its selector. The table
 shows each player's saved checker and cube decision counts and equity losses.
 GNUbg's native PR is shown in the GNUbg column when available.
+Above the board, **Previous error** and **Next error** follow the list filters
+and show the current result's index and the total. When all games are selected,
+the buttons cycle across game boundaries. Turning off **Inaccuracies only**
+switches the buttons to **Previous decision** and **Next decision**.
+A checker error keeps the move preview controls available.
+A cube error shows the original decision context with its played and best cube
+actions. **Played move** and **Best move** switch the checker preview while
+preserving the selected board view.
+
 Candidate columns size to their contents so notation and evaluation values
 stay close on wide displays.
 Engine labels show the name and the recorded version when available. Hover
@@ -77,13 +86,19 @@ Switching tabs keeps the selected game and move. Selecting a statistics metric
 opens **Errors** with the matching filters. Selecting a metric for a different
 game opens that game.
 
+The board and an empty error list explain whether evaluations are missing, the current
+filters hide all matches, or the evaluated decisions have no inaccuracies.
+The actions open analysis settings, clear the selection filters while keeping
+the current error threshold, or show all decisions in the selected scope.
+
 In every desktop analysis tab, a focusable separator resizes the board. Left/Right
 changes its width, Shift uses larger steps, Home/End select the available limits,
 and Enter or double-click restores the default for the current view. Escape
 cancels a drag. The profile stores separate widths for **Overview** and for the
 four detail tabs as a group. Overview caps the board to leave space for the error
-list below. The other tabs use the available window height for a larger board.
-The displayed limit can change without overwriting either preferred width.
+list below. The other tabs can use the full available height. The default
+board grows gradually on windows wider than 1800 logical pixels. A saved
+manual width takes precedence and is limited by the space in the current window.
 
 ## Study areas
 

@@ -1,3 +1,4 @@
+import { openPositionCalculation } from './analysis-controls';
 import { test, expect } from './test';
 const matchId = '8216b2ea-7fe8-4d57-88c0-111111111111',
   positionId = '8216b2ea-7fe8-4d57-88c0-222222222222',
@@ -170,7 +171,7 @@ for (const source of ['engine', 'file', 'book'] as const)
     await expect(page.locator('.analysis-workspace .board')).toBeVisible();
     await expect(
       page.locator(
-        '.analysis-controls [data-action-icon="analysis"] .action-label',
+        '.position-calculation-action .action-label',
       ),
     ).toBeVisible();
     await expect(
@@ -369,9 +370,11 @@ for (const source of ['engine', 'file', 'book'] as const)
     await expect(board).toHaveAttribute('data-preview-mode', 'before');
     await page.keyboard.press('ArrowRight');
     await expect(board).toHaveAttribute('data-preview-mode', 'after');
-    await page.locator('.analysis-controls select').first().focus();
+    const calculation = await openPositionCalculation(page);
+    await calculation.getByLabel('Search depth', { exact: true }).focus();
     await page.keyboard.press('ArrowLeft');
     await expect(board).toHaveAttribute('data-preview-mode', 'after');
+    await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await page.keyboard.press('ArrowLeft');
     await expect(board).toHaveAttribute('data-preview-mode', 'after');

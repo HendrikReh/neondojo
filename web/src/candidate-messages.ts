@@ -134,3 +134,15 @@ export function useCandidateText() {
   return (key: keyof typeof rows, params: TranslationParams = {}) =>
     interpolate(candidateMessages[locale][key], params);
 }
+
+export function useCandidateLossText() {
+  const { formatNumber } = useI18n();
+  const text = useCandidateText();
+  const digits = { minimumFractionDigits: 3, maximumFractionDigits: 3 };
+  return (loss: number | null, unit?: string) =>
+    loss === null
+      ? '—'
+      : unit === 'mwc'
+        ? text('percentagePoints', { value: formatNumber(loss * 100, digits) })
+        : formatNumber(loss, digits);
+}

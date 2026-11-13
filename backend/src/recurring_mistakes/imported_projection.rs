@@ -52,6 +52,44 @@ pub(crate) fn source_move(
     })
 }
 
+/// Recover the board and actor from the immutable source event. A skipped
+/// double shares the checker event but occurs before its dice were rolled.
+pub(crate) fn review_position(
+    source: &SourceMove,
+    match_id: Uuid,
+    position_uuid: Option<Uuid>,
+    before_roll: bool,
+) -> Option<Position> {
+    use crate::import::ids::{MatchId, hide_dice};
+    let state = MatchId::decode(&source.match_id)?;
+    let response = !before_roll && matches!(action(&source.notation), Some("take" | "drop"));
+    if state.bits(11, 1) != source.player
+        || (state.bits(12, 1) != 0) != response
+        || crate::learning::decode_decision_board(&source.position_id, &source.match_id).ok()?
+            != source.board
+    {
+        return None;
+    }
+    let (dice, match_state) = if before_roll {
+        ([0, 0], hide_dice(&source.match_id)?)
+    } else {
+        (source.dice, source.match_id.clone())
+    };
+    Some(Position {
+        id: position_uuid.unwrap_or(Uuid::nil()),
+        match_uuid: match_id,
+        ordinal: source.checker_ply.unwrap_or(source.move_no),
+        game_no: source.game_no,
+        ply: source.checker_ply.unwrap_or(0),
+        player: source.player,
+        dice: dice.to_vec(),
+        board: source.board.clone(),
+        position_id: source.position_id.clone(),
+        gnubg_match_id: match_state,
+        notation: String::new(),
+    })
+}
+
 pub(crate) struct Projection {
     pub(crate) decision: Decision,
     pub(crate) position: Position,
@@ -68,7 +106,6 @@ pub(crate) fn project(
     position_uuid: Option<Uuid>,
     source_format: &str,
 ) -> Option<Projection> {
-    use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
     if !(matches!(source_format, "xg" | "bgf")
         || source_format == "sgf" && record.kind == "checker")
         || record.game_no != source.game_no
@@ -96,50 +133,18 @@ pub(crate) fn project(
     {
         return None;
     }
-    let mut state = STANDARD_NO_PAD.decode(&source.match_id).ok()?;
-    if state.len() != 9
-        || crate::learning::decode_decision_board(&source.position_id, &source.match_id).ok()?
-            != source.board
-    {
-        return None;
-    }
-    // A response Position ID is oriented to the doubler (bit 6), while bit 11
-    // and source.player identify the responder. Keep that original GNU context.
-    if i32::from((state[1] >> 3) & 1) != source.player {
-        return None;
-    }
-    let response = !virtual_cube && matches!(played_action, Some("take" | "drop"));
-    if response != (state[1] & 0x10 != 0) {
-        return None;
-    }
-    if virtual_cube {
-        for bit in 15..21 {
-            state[bit / 8] &= !(1 << (bit % 8));
-        }
-    }
-    let dice = if virtual_cube { [0, 0] } else { source.dice };
-    let question_match_id = STANDARD_NO_PAD.encode(state);
+    let position = review_position(source, match_id, position_uuid, virtual_cube)?;
     if record
         .gnubg_match_id
         .as_ref()
-        .is_some_and(|id| id != &question_match_id)
-        || record.dice.is_some_and(|value| value != dice)
+        .is_some_and(|id| id != &position.gnubg_match_id)
+        || record
+            .dice
+            .is_some_and(|value| value.as_slice() != position.dice)
     {
         return None;
     }
-    let position = Position {
-        id: position_uuid.unwrap_or(Uuid::nil()),
-        match_uuid: match_id,
-        ordinal: source.checker_ply.unwrap_or(source.move_no),
-        game_no: source.game_no,
-        ply: source.checker_ply.unwrap_or(0),
-        player: source.player,
-        dice: dice.to_vec(),
-        board: source.board.clone(),
-        position_id: source.position_id.clone(),
-        gnubg_match_id: question_match_id,
-        notation: String::new(),
-    };
+    let response = !virtual_cube && matches!(played_action, Some("take" | "drop"));
     let (played, best, played_equity, best_equity, equity_loss, depth, depth_plies) = if checker {
         let mut bests = record.candidates.iter().filter(|c| c.rank == 1);
         let best = bests.next()?;
@@ -238,7 +243,7 @@ pub(crate) fn project(
             severity: MoveSeverity::from_normalized_loss(equity_loss)
                 .as_str()
                 .into(),
-            dice: checker.then_some(dice),
+            dice: checker.then_some(source.dice),
             evaluation_status: "evaluated".into(),
         },
         position,
@@ -396,6 +401,7 @@ mod tests {
         assert!((p.decision.equity_loss - 0.1).abs() < 1e-9);
         assert_eq!(p.decision.severity, "bad");
         assert_eq!(p.decision.played, s.notation);
+        assert_eq!(p.decision.dice, Some(s.dice));
         assert_eq!(p.depth.as_deref(), Some("XGRoller++"));
         assert_eq!(p.depth_plies, None);
         assert_eq!(p.position.notation, "");
@@ -473,6 +479,7 @@ mod tests {
         let p = projection(&r, &s, "xg").unwrap();
         assert_eq!(p.decision.best, "double");
         assert_eq!(p.decision.played, "no double");
+        assert_eq!(p.decision.dice, None);
         assert_eq!(p.position.dice, vec![0, 0]);
         assert_eq!(p.position.gnubg_match_id, r.gnubg_match_id.unwrap());
         assert!((p.decision.equity_loss - 0.2).abs() < 1e-9);

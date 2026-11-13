@@ -1,6 +1,12 @@
+import { openPositionCalculation } from './analysis-controls';
+import { profileBackend } from './profile-backend';
+import { defaultConfiguration } from '../src/configuration-model';
 import { expect, test, type Page } from './test';
 
 async function openPosition(page: Page) {
+  const configuration = structuredClone(defaultConfiguration);
+  configuration.analysis.plies = 0;
+  const profile = await profileBackend(page, { configuration });
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
   await page.goto('/');
   await expect(
@@ -14,7 +20,7 @@ async function openPosition(page: Page) {
     ),
   });
   await expect(page.locator('.analysis-panel')).toBeVisible();
-  await page.getByLabel('Search depth', { exact: true }).selectOption('0');
+  return profile;
 }
 
 test('dice equity calculates on selection and reuses results across tabs, positions and reloads', async ({
@@ -29,7 +35,7 @@ test('dice equity calculates on selection and reuses results across tabs, positi
     )
       submissions.push(request.postDataJSON());
   });
-  await openPosition(page);
+  const profile = await openPosition(page);
   expect(submissions).toHaveLength(0);
   await expect(
     page.getByRole('button', { name: 'Dice distribution', exact: true }),
@@ -111,7 +117,14 @@ test('dice equity calculates on selection and reuses results across tabs, positi
   releaseSecondRestore();
   await expect(page.locator('.dice-grid button')).toHaveCount(36);
   expect(submissions).toHaveLength(2);
-  await page.getByLabel('Search depth', { exact: true }).selectOption('1');
+  const calculation = await openPositionCalculation(page, true);
+  await calculation
+    .getByLabel('Search depth', { exact: true })
+    .selectOption('1');
+  expect(submissions).toHaveLength(2);
+  await calculation
+    .getByRole('button', { name: 'Dice equity', exact: true })
+    .click();
   await expect.poll(() => submissions.length).toBe(3);
   await expect(page.locator('.dice-grid button')).toHaveCount(36, {
     timeout: 45_000,
@@ -120,8 +133,10 @@ test('dice equity calculates on selection and reuses results across tabs, positi
     position_id: submissions[0].position_id,
     plies: 1,
   });
+  const updatedProfile = structuredClone(profile.state.current_configuration);
+  updatedProfile.analysis.plies = 1;
+  profile.updateRemote(updatedProfile);
   await page.reload();
-  await page.getByLabel('Search depth', { exact: true }).selectOption('1');
   await dice.click();
   await expect(page.locator('.dice-grid button')).toHaveCount(36);
   expect(submissions).toHaveLength(3);

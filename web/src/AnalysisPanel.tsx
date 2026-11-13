@@ -1,7 +1,10 @@
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
 import Tooltip from './Tooltip';
+import EngineLabel from './EngineLabel';
 import ActionButton from './ActionButton';
+import LibraryDialog from './LibraryDialog';
+import { useLibraryText } from './library-messages';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import {
   type Analysis,
@@ -16,7 +19,7 @@ import { useI18n } from './i18n';
 import { useAnalysisSources } from './useAnalysisSources';
 import { useSourceText } from './analysis-source-messages';
 import SourceAnalysisView from './SourceAnalysisView';
-import { type PreviewCandidate } from './candidate-preview';
+import type { PreviewCandidate, PreviewComparison } from './candidate-preview';
 import CandidateTable from './CandidateTable';
 import './analysis-sources.css';
 import { DEFAULT_ANALYSIS_PLIES } from './analysis-depth';
@@ -35,6 +38,7 @@ export default function AnalysisPanel({
   sourceRevision = 0,
   onPreview,
   selectedPreview,
+  onComparison,
   position,
   playerName,
   players,
@@ -53,6 +57,7 @@ export default function AnalysisPanel({
   sourceRevision?: number;
   onPreview?: (candidate: PreviewCandidate | null) => void;
   selectedPreview?: PreviewCandidate;
+  onComparison?: (value: PreviewComparison) => void;
   position?: Position;
   playerName?: string;
   players?: Pick<Match, 'white' | 'black'>;
@@ -76,6 +81,7 @@ export default function AnalysisPanel({
   const supportedPlies =
     configurationOptions.engine_profiles[configuredEngine].analysis;
   const l = useSourceText();
+  const library = useLibraryText();
   const sources = useAnalysisSources(positionId, sourceRevision);
   const [sourceChoice, setSourceChoice] = useState<{
     positionId?: string;
@@ -100,6 +106,7 @@ export default function AnalysisPanel({
   useEffect(() => onPreview?.(null), [selectedSource, positionId, onPreview]);
   type Source = 'file' | 'book' | 'engine';
   function selectSource(source: Source) {
+    setRequestedAnalysis(undefined);
     onPreview?.(null);
     setSourceChoice({ positionId, source });
   }
@@ -122,20 +129,82 @@ export default function AnalysisPanel({
     selectSource(options[next]);
     sourceRefs.current[options[next]]?.focus();
   }
-  const [plies, setPlies] = useState(defaultPlies);
-  useEffect(() => setPlies(defaultPlies), [defaultPlies, configuredEngine]);
+  const [dicePlies, setDicePlies] = useState(defaultPlies);
+  const [checkerPlies, setCheckerPlies] = useState(defaultPlies);
+  useEffect(() => {
+    setDicePlies(defaultPlies);
+    setCheckerPlies(defaultPlies);
+  }, [defaultPlies, configuredEngine]);
   const [view, setView] = useState<'analysis' | 'dice' | 'observed'>(
     'analysis',
   );
+  const calculationRef = useRef<HTMLButtonElement>(null);
+  const [calculation, setCalculation] = useState<{
+    positionId: string;
+    engine: string;
+    plies: number;
+    kind: 'analysis' | 'dice';
+  }>();
+  const settings =
+    active &&
+    calculation?.positionId === positionId &&
+    calculation?.engine === configuredEngine
+      ? calculation
+      : undefined;
+  useEffect(() => {
+    setCalculation(undefined);
+  }, [active, positionId, configuredEngine]);
+  const [requestedAnalysis, setRequestedAnalysis] = useState<{
+    positionId: string;
+    engine: string;
+    previousResult?: string;
+    previousJob?: string;
+  }>();
   const [selectedRoll, setSelectedRoll] = useState('1-1');
-  const diceJob = jobs.dice?.plies === plies ? jobs.dice : undefined;
-  const job =
-    Object.values(jobs).find(
-      (j) => j.status === 'queued' || j.status === 'running',
-    ) || (view === 'dice' ? diceJob : jobs.analysis);
-  const pending =
-    !!job && (job.status === 'queued' || job.status === 'running');
+  const diceJob = jobs.dice?.plies === dicePlies ? jobs.dice : undefined;
+  const latestJob = view === 'dice' ? diceJob : jobs.analysis;
+  const pending = Object.values(jobs).some(
+    (job) => job.status === 'queued' || job.status === 'running',
+  );
   const analysis = (completedAnalysis?.result as Analysis | undefined) ?? null;
+  useEffect(() => {
+    if (!requestedAnalysis) return;
+    if (
+      requestedAnalysis.positionId !== positionId ||
+      requestedAnalysis.engine !== configuredEngine
+    ) {
+      setRequestedAnalysis(undefined);
+      return;
+    }
+    if (
+      jobs.analysis?.status === 'failed' &&
+      jobs.analysis.id !== requestedAnalysis.previousJob
+    ) {
+      setRequestedAnalysis(undefined);
+      return;
+    }
+    if (
+      completedAnalysis &&
+      completedAnalysis.id !== requestedAnalysis.previousResult
+    ) {
+      setRequestedAnalysis(undefined);
+      setSourceChoice({ positionId, source: 'engine' });
+    }
+  }, [
+    completedAnalysis,
+    configuredEngine,
+    jobs.analysis,
+    positionId,
+    requestedAnalysis,
+  ]);
+  useEffect(() => {
+    if (view !== 'analysis' || (selectedSource === 'engine' && !analysis)) {
+      onComparison?.({
+        loss: null,
+        useSavedGame: view !== 'analysis' || selectedSource === 'engine',
+      });
+    }
+  }, [view, selectedSource, analysis, onComparison]);
   const distribution =
     diceJob?.status === 'completed' ? (diceJob.result as Distribution) : null;
   const requestedDice = useRef<string | undefined>(undefined);
@@ -151,10 +220,10 @@ export default function AnalysisPanel({
       distribution
     )
       return;
-    const key = JSON.stringify([positionId, configuredEngine, plies]);
+    const key = JSON.stringify([positionId, configuredEngine, dicePlies]);
     if (requestedDice.current === key) return;
     requestedDice.current = key;
-    onAnalyze('dice', plies);
+    onAnalyze('dice', dicePlies);
   }, [
     view,
     active,
@@ -164,7 +233,7 @@ export default function AnalysisPanel({
     pending,
     distribution,
     configuredEngine,
-    plies,
+    dicePlies,
     onAnalyze,
     diceSelection,
   ]);
@@ -176,115 +245,88 @@ export default function AnalysisPanel({
       setDiceSelection((selection) => selection + 1);
     }
   };
-  const analyze = () => {
-    setView('analysis');
-    selectSource('engine');
-    onAnalyze('analysis', plies);
+  const closeCalculation = () => {
+    setCalculation(undefined);
+    requestAnimationFrame(() => calculationRef.current?.focus());
   };
+  const startCalculation = () => {
+    if (!settings || disabled || restoring || pending) return;
+    closeCalculation();
+    if (settings.kind === 'dice') {
+      setDicePlies(settings.plies);
+      requestedDice.current = JSON.stringify([
+        positionId,
+        configuredEngine,
+        settings.plies,
+      ]);
+    } else {
+      setCheckerPlies(settings.plies);
+      setRequestedAnalysis({
+        positionId: settings.positionId,
+        engine: configuredEngine,
+        previousResult: completedAnalysis?.id,
+        previousJob: jobs.analysis?.id,
+      });
+    }
+    onAnalyze(settings.kind, settings.plies);
+  };
+  const calculationTitle = t(
+    view === 'dice' ? 'analysis.recalculateDice' : 'analysis.recalculate',
+  );
   const best = distribution?.rolls.find(
     (r) => r.dice.join('-') === selectedRoll,
   );
   return (
     <section className="analysis-panel">
-      <div className="section-heading">
-        <div>
-          <span className="eyebrow">{t('analysis.eyebrow')}</span>
-          <h2>{t('analysis.title')}</h2>
-        </div>
-        <span className="engine-label source-heading-label">
-          {view === 'observed'
-            ? t('analysis.observed')
-            : view === 'dice'
-              ? (distribution?.engine ?? `${engineName} · ${t('common.local')}`)
-              : selectedSource === 'file' && sources.records[0]
-                ? sources.records[0].engine
-                : selectedSource === 'book'
-                  ? l('book')
-                  : (analysis?.engine ??
-                    `${engineName} · ${t('common.local')}`)}
-        </span>
-      </div>
-      <div className="analysis-controls">
-        <label className="depth-label">
-          {t('analysis.depth')}{' '}
-          <select
-            aria-label={t('analysis.depth')}
-            value={plies}
-            onChange={(e) => setPlies(Number(e.target.value))}
+      <div className="position-analysis-toolbar">
+        <div
+          className="tabs text-navigation text-navigation--compact"
+          role="tablist"
+          aria-label={t('analysis.views')}
+        >
+          <button
+            role="tab"
+            aria-selected={view === 'analysis'}
+            onClick={() => setView('analysis')}
           >
-            <option value={0} disabled={!supportedPlies.includes(0)}>
-              {t('analysis.fast')}
-            </option>
-            <option value={1} disabled={!supportedPlies.includes(1)}>
-              1-ply
-            </option>
-            <option value={2} disabled={!supportedPlies.includes(2)}>
-              {t('analysis.accurate')}
-            </option>
-            <option value={3} disabled={!supportedPlies.includes(3)}>
-              3-ply
-            </option>
-            <option value={4} disabled={!supportedPlies.includes(4)}>
-              4-ply
-            </option>
-          </select>
-        </label>
-        <ActionButton
-          icon="analysis"
-          label={t('analysis.analyze')}
-          className="primary"
-          disabled={disabled || pending}
-          onClick={analyze}
-        />
-      </div>
-      {pending && (
-        <div className="job-progress" role="status">
-          <div>
-            <span>
-              {job.status === 'queued'
-                ? t('analysis.queued')
-                : job.kind === 'dice'
-                  ? t('analysis.diceRunning')
-                  : t('analysis.movesRunning')}
-            </span>
-            <b>{formatPercent(job.progress / 100)}</b>
+            {t('analysis.candidates')}
+          </button>
+          <button
+            role="tab"
+            aria-selected={view === 'dice'}
+            onClick={chooseDice}
+          >
+            {t('analysis.diceEquity')}
+          </button>
+          <button
+            role="tab"
+            aria-selected={view === 'observed'}
+            onClick={() => setView('observed')}
+          >
+            {t(gameNo ? 'analysis.observedGame' : 'analysis.observed')}
+          </button>
+        </div>
+        {view !== 'observed' && (
+          <div className="position-calculation-action">
+            <ActionButton
+              ref={calculationRef}
+              type="button"
+              icon="analysis"
+              label={`${calculationTitle} …`}
+              aria-haspopup="dialog"
+              aria-disabled={disabled || pending || restoring || undefined}
+              onClick={() => {
+                if (positionId && !disabled && !pending && !restoring)
+                  setCalculation({
+                    positionId,
+                    plies: view === 'dice' ? dicePlies : checkerPlies,
+                    engine: configuredEngine,
+                    kind: view === 'dice' ? 'dice' : 'analysis',
+                  });
+              }}
+            />
           </div>
-          <progress
-            aria-label={t('analysis.progress')}
-            max="100"
-            value={job.progress}
-          />
-        </div>
-      )}
-      {job?.status === 'failed' && (
-        <div className="error" role="alert">
-          <strong>{t('analysis.failed')}</strong>{' '}
-          {job.error && t('error.engine', { details: job.error })}{' '}
-          {t('analysis.retryHint')}
-        </div>
-      )}
-      <div
-        className="tabs text-navigation text-navigation--compact"
-        role="tablist"
-        aria-label={t('analysis.views')}
-      >
-        <button
-          role="tab"
-          aria-selected={view === 'analysis'}
-          onClick={() => setView('analysis')}
-        >
-          {t('analysis.candidates')}
-        </button>
-        <button role="tab" aria-selected={view === 'dice'} onClick={chooseDice}>
-          {t('analysis.diceEquity')}
-        </button>
-        <button
-          role="tab"
-          aria-selected={view === 'observed'}
-          onClick={() => setView('observed')}
-        >
-          {t(gameNo ? 'analysis.observedGame' : 'analysis.observed')}
-        </button>
+        )}
       </div>
       {view === 'analysis' && (
         <>
@@ -331,6 +373,7 @@ export default function AnalysisPanel({
               source={selectedSource}
               onPreview={onPreview}
               selectedPreview={selectedPreview}
+              onComparison={onComparison}
               position={position}
               playerName={playerName}
               players={players}
@@ -355,9 +398,10 @@ export default function AnalysisPanel({
               playerName={playerName}
               onPreview={onPreview}
               selectedPreview={selectedPreview}
+              onComparison={onComparison}
             />
           </>
-        ) : (
+        ) : sources.loading || restoring ? null : (
           <div className="panel-empty">
             <span className="empty-symbol">↗</span>
             <h3>{t('analysis.emptyHeading')}</h3>
@@ -368,6 +412,11 @@ export default function AnalysisPanel({
         (distribution ? (
           <div className="distribution">
             <div className="distribution-caption">
+              <span>
+                <EngineLabel
+                  details={`${distribution.engine} · ${distribution.plies}-ply`}
+                />
+              </span>
               <span>{t('analysis.combinations')}</span>
               <strong>Ø {formatEquity(distribution.mean_equity)}</strong>
             </div>
@@ -461,6 +510,86 @@ export default function AnalysisPanel({
             <p>{t('analysis.selectMatch')}</p>
           </div>
         ))}
+      {view !== 'observed' && latestJob?.status === 'failed' && (
+        <p className="error" role="alert">
+          <strong>{t('analysis.failed')}</strong>{' '}
+          {latestJob.error && t('error.engine', { details: latestJob.error })}
+        </p>
+      )}
+      {settings && (
+        <LibraryDialog
+          title={t(
+            settings.kind === 'dice'
+              ? 'analysis.recalculateDice'
+              : 'analysis.recalculate',
+          )}
+          native
+          initialFocus="dialog"
+          onClose={closeCalculation}
+        >
+          <p className="fineprint">{engineName}</p>
+          <div className="analysis-controls">
+            <PositionAnalysisDepth
+              plies={settings.plies}
+              supportedPlies={supportedPlies}
+              onChange={(plies) => setCalculation({ ...settings, plies })}
+            />
+            <ActionButton
+              type="button"
+              icon="analysis"
+              label={t(
+                settings.kind === 'dice'
+                  ? 'analysis.diceEquity'
+                  : 'analysis.analyze',
+              )}
+              className="primary"
+              disabled={disabled || pending || restoring}
+              onClick={startCalculation}
+            />
+            <button type="button" onClick={closeCalculation}>
+              {library('cancel')}
+            </button>
+          </div>
+        </LibraryDialog>
+      )}
     </section>
+  );
+}
+
+export function PositionAnalysisDepth({
+  plies = DEFAULT_ANALYSIS_PLIES,
+  supportedPlies,
+  onChange,
+}: {
+  plies?: number;
+  supportedPlies: readonly number[];
+  onChange: (plies: number) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <label className="depth-label">
+      {t('analysis.depth')}{' '}
+      <select
+        aria-label={t('analysis.depth')}
+        value={plies}
+        onChange={(event) => onChange(Number(event.target.value))}
+      >
+        <option value={0} disabled={!supportedPlies.includes(0)}>
+          {t('analysis.fast')}
+        </option>
+        <option value={1} disabled={!supportedPlies.includes(1)}>
+          1-ply
+        </option>
+        <option value={2} disabled={!supportedPlies.includes(2)}>
+          {t('analysis.accurate')}
+        </option>
+        <option value={3} disabled={!supportedPlies.includes(3)}>
+          3-ply
+        </option>
+        <option value={4} disabled={!supportedPlies.includes(4)}>
+          4-ply
+        </option>
+      </select>
+    </label>
   );
 }

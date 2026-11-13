@@ -7,6 +7,7 @@ import type { Locale } from '../src/i18n-core';
 import { learningMessages } from '../src/learning-messages';
 import { settingsText } from '../src/settings-messages';
 import { workspaceText } from '../src/workspace-messages';
+import { openPositionCalculation } from './analysis-controls';
 
 const themes = JSON.parse(
   readFileSync(
@@ -301,15 +302,17 @@ test('all six languages switch complete views on save and persist with the theme
     );
     await expect(
       analysis(page).getByRole('button', {
-        name: catalogs[locale]['analysis.analyze'],
+        name: `${catalogs[locale]['analysis.recalculate']} …`,
         exact: true,
       }),
     ).toBeVisible();
-    await expect(
-      analysis(page).getByLabel(catalogs[locale]['gameAnalysis.scope'], {
+    const configureMatch = analysis(page)
+      .locator('.workspace-analysis-command')
+      .getByRole('button', {
+        name: `${catalogs[locale]['analysis.configureMatch']} …`,
         exact: true,
-      }),
-    ).toBeVisible();
+      });
+    await expect(configureMatch).toBeVisible();
     await expect(
       analysis(page).getByRole('img', {
         name: new RegExp(
@@ -328,7 +331,9 @@ test('all six languages switch complete views on save and persist with the theme
     await page.setViewportSize({ width: 1440, height: 1100 });
   }
   await applyLanguage(page, 'en');
-  await analysis(page)
+  await (
+    await openPositionCalculation(page)
+  )
     .getByRole('button', { name: catalogs.en['analysis.analyze'], exact: true })
     .click();
   const bestMarker = analysis(page).locator(

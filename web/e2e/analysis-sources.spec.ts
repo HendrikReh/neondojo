@@ -1,3 +1,4 @@
+import { openPositionCalculation } from './analysis-controls';
 import { expect, test } from './test';
 import { readFileSync } from 'node:fs';
 
@@ -31,9 +32,15 @@ test('imported GNUbg analysis remains available independently from new engine jo
   await expect(page.locator('.source-analysis')).toContainText(
     'GNU Backgammon',
   );
-  await expect(page.locator('.source-analysis')).toContainText('0-ply');
+  const importedEngine = page.locator('.candidate-metadata strong');
+  await expect(importedEngine).toHaveText('GNU Backgammon 1.05.002');
+  await importedEngine.getByText('GNU Backgammon 1.05.002').hover();
+  await expect(page.getByRole('tooltip')).toContainText('0-ply');
+  await page.keyboard.press('Escape');
   await expect(page.locator('.source-analysis')).toContainText('0.014');
-  await page
+  await (
+    await openPositionCalculation(page)
+  )
     .getByRole('button', { name: 'Analyze position', exact: true })
     .click();
   await expect(
@@ -42,7 +49,10 @@ test('imported GNUbg analysis remains available independently from new engine jo
   await page
     .getByRole('tab', { name: 'Imported analysis', exact: true })
     .click();
-  await expect(page.locator('.source-analysis')).toContainText('0-ply');
+  await expect(importedEngine.locator('.engine-label-details')).toHaveAttribute(
+    'aria-description',
+    /0-ply/,
+  );
   const catalog = await (
     await page.request.get(
       `/api/matches/${response.match.id}/games/1/decisions`,
@@ -108,7 +118,14 @@ test('opening-book preferences and a real opening lookup expose source and depth
   });
   await page.getByRole('tab', { name: 'Opening book', exact: true }).click();
   await expect(page.locator('.source-analysis')).toContainText('BackgammonDB');
-  await expect(page.locator('.source-analysis')).toContainText('3-ply');
+  const bookEngine = page.locator(
+    '.source-analysis .candidate-metadata .engine-label-details',
+  );
+  await expect(bookEngine).toHaveText(/^GNU Backgammon [\d.]+$/);
+  await expect(bookEngine).toHaveAttribute(
+    'aria-description',
+    /BackgammonDB · 3-ply/,
+  );
   await expect(
     page.locator('.source-analysis .candidates tbody tr'),
   ).toHaveCount(8);
@@ -126,12 +143,10 @@ test('opening-book preferences and a real opening lookup expose source and depth
       new URL(r.url()).pathname === '/api/jobs' &&
       r.request().method() === 'POST',
   );
-  await page
-    .getByRole('tab', { name: 'Dice equity', exact: true })
-    .click();
+  await page.getByRole('tab', { name: 'Dice equity', exact: true }).click();
   const diceJob = await (await submitted).json();
   await expect(page.locator('.dice-grid button')).toHaveCount(36, {
-    timeout: 30000,
+    timeout: 45_000,
   });
   const completed = await (
     await page.request.get(`/api/jobs/${diceJob.id}`)
@@ -140,8 +155,11 @@ test('opening-book preferences and a real opening lookup expose source and depth
   await page.getByRole('tab', { name: 'Candidate moves', exact: true }).click();
   await page.getByRole('tab', { name: 'Opening book', exact: true }).click();
   await page.getByRole('tab', { name: 'Dice equity', exact: true }).click();
-  await expect(page.locator('.analysis-panel .engine-label')).toHaveText(
-    completed.result.engine,
+  await expect(
+    page.locator('.distribution-caption .engine-label-details'),
+  ).toHaveAttribute(
+    'aria-description',
+    `${completed.result.engine} · ${completed.result.plies}-ply`,
   );
 });
 

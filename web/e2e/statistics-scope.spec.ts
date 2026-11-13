@@ -1,3 +1,4 @@
+import { openMatchCalculation } from './analysis-controls';
 import { expect, test } from './test';
 
 test.use({ actionTimeout: 10000 });
@@ -15,6 +16,7 @@ test('single-game statistics pin errors to their source game across views, reset
   });
   await page.getByLabel('Select game', { exact: true }).selectOption('2');
   await expect(page.locator('.board-heading')).toContainText('Game 2');
+  await openMatchCalculation(page);
   await page
     .getByLabel('Match analysis depth', { exact: true })
     .selectOption('0');
