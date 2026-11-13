@@ -19,6 +19,7 @@ pub mod settings;
 
 pub mod databases;
 pub mod move_catalog;
+mod player_directory;
 
 pub mod opening_book;
 

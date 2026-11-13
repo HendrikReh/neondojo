@@ -1140,6 +1140,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/players": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/players/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["detail"];
+        put: operations["update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/players/{id}/aliases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["add_alias"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/players/{id}/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["merge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/position-browser": {
         parameters: {
             query?: never;
@@ -3288,6 +3352,16 @@ export interface components {
             /** Format: int32 */
             to: number;
         };
+        PlayerAlias: {
+            name: string;
+            platform: string;
+        };
+        PlayerAliasWrite: {
+            name: string;
+            platform: string;
+            /** Format: int64 */
+            version: number;
+        };
         PlayerAnalysisSummary: {
             /** Format: int32 */
             bad: number;
@@ -3313,11 +3387,34 @@ export interface components {
             /** Format: int32 */
             very_bad: number;
         };
+        PlayerDetails: components["schemas"]["PlayerProfile"] & {
+            aliases: components["schemas"]["PlayerAlias"][];
+            ratings: components["schemas"]["PlayerRating"][];
+        };
         PlayerErrorBreakdown: {
             checker: components["schemas"]["ErrorSeverityCounts"];
             cube: components["schemas"]["ErrorSeverityCounts"];
             /** Format: int32 */
             player: number;
+        };
+        PlayerMerge: {
+            /** Format: uuid */
+            source_id: string;
+            /** Format: int64 */
+            source_version: number;
+            /** Format: int64 */
+            version: number;
+        };
+        PlayerNameWrite: {
+            first_name: string;
+            last_name: string;
+            /** Format: int64 */
+            version: number;
+        };
+        PlayerPage: {
+            items: components["schemas"]["PlayerProfile"][];
+            /** Format: uuid */
+            next_cursor?: string | null;
         };
         PlayerPerformanceRating: {
             /** Format: int32 */
@@ -3333,6 +3430,26 @@ export interface components {
              * @description Null if the native denominator is zero; lower values indicate less equity lost.
              */
             value?: number | null;
+        };
+        PlayerProfile: {
+            display_name: string;
+            first_name: string;
+            /** Format: int64 */
+            game_count: number;
+            /** Format: uuid */
+            id: string;
+            last_name: string;
+            /** Format: int64 */
+            match_count: number;
+            /** Format: int64 */
+            version: number;
+        };
+        PlayerRating: {
+            /** Format: int64 */
+            match_count: number;
+            profile: string;
+            /** Format: double */
+            value: number;
         };
         Position: {
             board: number[];
@@ -5743,6 +5860,7 @@ export interface operations {
                 database_id: string | null;
                 q: string | null;
                 player: string | null;
+                player_id: string | null;
                 date_from: string | null;
                 date_to: string | null;
                 date_field: string | null;
@@ -7077,6 +7195,196 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                q: string | null;
+                after: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayerPage"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    detail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayerDetails"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlayerNameWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayerDetails"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    add_alias: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlayerAliasWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayerDetails"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    merge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlayerMerge"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayerDetails"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

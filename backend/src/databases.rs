@@ -33,13 +33,13 @@ pub(crate) async fn default_database_id(pool: &PgPool) -> Result<Uuid, sqlx::Err
 const MAX_ACTIONS: usize = 100;
 const MAX_EXPORTS: usize = 50;
 const MAX_EXPORT_BYTES: i64 = 64 * 1024 * 1024;
-fn conflict(message: &str) -> ApiError {
+pub(crate) fn conflict(message: &str) -> ApiError {
     ApiError(StatusCode::CONFLICT, message.into())
 }
-fn query<T>(q: Result<Query<T>, QueryRejection>) -> ApiResult<T> {
+pub(crate) fn query<T>(q: Result<Query<T>, QueryRejection>) -> ApiResult<T> {
     q.map(|q| q.0).map_err(|e| ApiError::invalid(e.body_text()))
 }
-fn json<T>(j: Result<Json<T>, JsonRejection>) -> ApiResult<T> {
+pub(crate) fn json<T>(j: Result<Json<T>, JsonRejection>) -> ApiResult<T> {
     j.map(|j| j.0).map_err(|e| ApiError::invalid(e.body_text()))
 }
 
@@ -137,6 +137,8 @@ pub struct LibraryQuery {
     pub database_id: Option<Uuid>,
     pub q: Option<String>,
     pub player: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub player_id: Option<Uuid>,
     pub date_from: Option<NaiveDate>,
     pub date_to: Option<NaiveDate>,
     pub date_field: Option<String>,
@@ -569,6 +571,10 @@ fn library_filters(
     if let Some(v) = p.q.as_deref().filter(|v| !v.trim().is_empty()) {
         let pattern = literal_pattern(v.trim());
         q.push(" AND m.id IN (SELECT id FROM matches WHERE search_text LIKE ").push_bind(pattern.clone()).push(" OR lower(display_name) LIKE ").push_bind(pattern.clone()).push(" OR lower(tournament) LIKE ").push_bind(pattern.clone()).push(" OR lower(round) LIKE ").push_bind(pattern.clone()).push(" UNION SELECT coalesce(n.match_uuid,np.match_uuid,ng.match_uuid,nm.match_uuid) FROM annotations n LEFT JOIN positions np ON np.id=n.position_uuid LEFT JOIN match_games ng ON ng.id=n.game_uuid LEFT JOIN match_moves nm ON nm.id=n.move_uuid WHERE n.search_text LIKE ").push_bind(pattern).push(")");
+    }
+    if let Some(id) = p.player_id {
+        q.push(" AND EXISTS(SELECT 1 FROM match_players mp JOIN player_aliases a ON a.id=mp.alias_id WHERE mp.match_id=m.id AND a.profile_id=")
+            .push_bind(id).push(")");
     }
     if let Some(v) = p.player.as_deref().filter(|v| !v.trim().is_empty()) {
         let pattern = literal_pattern(v.trim());
@@ -1120,7 +1126,7 @@ async fn action_one(pool: &PgPool, a: &LibraryAction, id: Uuid) -> ApiResult<Act
                 }
             } else {
                 let new_id = Uuid::new_v4();
-                let inserted=sqlx::query_scalar::<_,Uuid>("INSERT INTO matches(id,filename,format,sha256,white,black,match_length,position_count,original,sgf,created_at,database_id,display_name,played_on,tournament,round,place,result_state,white_score,black_score,metadata_version,moves_cataloged,source_metadata_loaded,native_match_context_pending,source_revision,play_mode,play_assisted) SELECT $2,filename,format,sha256,white,black,match_length,position_count,original,sgf,created_at,$3,display_name,played_on,tournament,round,place,result_state,white_score,black_score,metadata_version,moves_cataloged,source_metadata_loaded,native_match_context_pending,source_revision,play_mode,play_assisted FROM matches WHERE id=$1 ON CONFLICT(database_id,sha256) DO NOTHING RETURNING id").bind(id).bind(new_id).bind(target).fetch_optional(&mut *tx).await.map_err(anyhow::Error::from)?;
+                let inserted=sqlx::query_scalar::<_,Uuid>("INSERT INTO matches(id,filename,format,sha256,white,black,match_length,position_count,original,sgf,created_at,database_id,display_name,played_on,tournament,round,place,result_state,white_score,black_score,metadata_version,moves_cataloged,source_metadata_loaded,native_match_context_pending,source_revision,play_mode,play_assisted,player_source_platform) SELECT $2,filename,format,sha256,white,black,match_length,position_count,original,sgf,created_at,$3,display_name,played_on,tournament,round,place,result_state,white_score,black_score,metadata_version,moves_cataloged,source_metadata_loaded,native_match_context_pending,source_revision,play_mode,play_assisted,player_source_platform FROM matches WHERE id=$1 ON CONFLICT(database_id,sha256) DO NOTHING RETURNING id").bind(id).bind(new_id).bind(target).fetch_optional(&mut *tx).await.map_err(anyhow::Error::from)?;
                 if inserted.is_none() {
                     let existing = sqlx::query_scalar(
                         "SELECT id FROM matches WHERE database_id=$1 AND sha256=$2",

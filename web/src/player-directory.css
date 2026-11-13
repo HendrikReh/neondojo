@@ -1,0 +1,60 @@
+.player-directory {
+  display: grid;
+  grid-template-columns: minmax(15rem, 22rem) minmax(0, 1fr);
+  align-items: start;
+  gap: 1.5rem;
+}
+
+.player-list,
+.player-card {
+  min-width: 0;
+}
+
+.player-directory label {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.player-results {
+  list-style: none;
+  padding: 0;
+  max-height: min(64vh, 42rem);
+  overflow: auto;
+}
+
+.player-results button {
+  display: flex;
+  justify-content: space-between;
+  text-align: left;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.player-results button[aria-pressed='true'] {
+  color: var(--ui-accent);
+}
+
+.player-results button span {
+  white-space: nowrap;
+}
+
+.player-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.player-card details {
+  margin-block: 0.75rem;
+}
+
+.player-card summary {
+  cursor: pointer;
+}
+
+.player-match-table {
+  margin-block: 0.5rem;
+  overflow-x: auto;
+}

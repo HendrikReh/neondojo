@@ -18,6 +18,8 @@ import {
 } from 'react';
 import { request, type Match, type Position } from './api';
 import AnalysisWorkspace, { type AnalysisDetail } from './AnalysisWorkspace';
+import PlayerDirectory from './PlayerDirectory';
+import { usePlayerText } from './player-directory-messages';
 import MatchDatabase, { type PositionSearchRequest } from './MatchDatabase';
 import StudyWorkspace from './StudyWorkspace';
 import PositionBrowser from './PositionBrowser';
@@ -55,11 +57,18 @@ import MoveNotesDialog, { type MoveNotesTarget } from './MoveNotesDialog';
 import { useUiAppearance } from './useUiAppearance';
 
 type View =
-  'analysis' | 'database' | 'positions' | 'learning' | 'play' | 'extras';
+  | 'analysis'
+  | 'database'
+  | 'players'
+  | 'positions'
+  | 'learning'
+  | 'play'
+  | 'extras';
 const views: View[] = [
   'play',
   'analysis',
   'database',
+  'players',
   'positions',
   'learning',
   'extras',
@@ -102,6 +111,8 @@ export default function App() {
   const w = useWorkspaceText(),
     learnT = useLearningText();
   const l = useLibraryText();
+  const playerText = usePlayerText();
+  const [playersOpened, setPlayersOpened] = useState(false);
   const positionText = usePositionText();
   const { appearance, applyAppearance } = useUiAppearance();
   const [requestedDeck, setRequestedDeck] = useState<{
@@ -141,6 +152,9 @@ export default function App() {
   }, [databaseId, !!configuration]);
   useEffect(() => () => annotationNavigation.current?.abort(), []);
   const [view, setView] = useState<View>('analysis');
+  useEffect(() => {
+    if (view === 'players') setPlayersOpened(true);
+  }, [view]);
   const [detail, setDetail] = useState<AnalysisDetail>('overview');
   const [localTheme, setTheme] = useState<Theme>(readTheme);
   const theme = configuration?.current?.appearance.board_theme ?? localTheme;
@@ -592,7 +606,9 @@ export default function App() {
                     ? learnT('study')
                     : tab === 'positions'
                       ? positionText('title')
-                      : w(tab)}
+                      : tab === 'players'
+                        ? playerText('title')
+                        : w(tab)}
             </button>
           ))}
         </nav>
@@ -824,6 +840,16 @@ export default function App() {
             onAnnotation={openAnnotation}
             onImport={() => input.current?.click()}
           />
+        </div>
+        <div
+          id="workspace-panel-players"
+          role="tabpanel"
+          aria-labelledby="workspace-tab-players"
+          hidden={view !== 'players'}
+        >
+          {(view === 'players' || playersOpened) && (
+            <PlayerDirectory revision={revision} onOpen={openMatch} />
+          )}
         </div>
         <div
           id="workspace-panel-positions"

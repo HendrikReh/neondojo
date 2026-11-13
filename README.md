@@ -92,7 +92,7 @@ Open <http://127.0.0.1:8787> to use BG Tutor. By default the services listen on 
 
 ## Analysis workspace
 
-The top navigation opens **Playing**, **Analysis**, **Match database**, **Positions**, **Study**, and **Extras**, with **Settings** on the right. Arrow keys and Home/End navigate the main and detail tabs. The app restores the last match, game, and position locally. Switching tabs preserves filters, note drafts, and SSE subscriptions. A submitted job continues to be tracked if you change the selected game or position while the request is pending.
+The top navigation opens **Playing**, **Analysis**, **Match database**, **Player database**, **Positions**, **Study**, and **Extras**, with **Settings** on the right. Arrow keys and Home/End navigate the main and detail tabs. The app restores the last match, game, and position locally. Switching tabs preserves filters, note drafts, and SSE subscriptions. A submitted job continues to be tracked if you change the selected game or position while the request is pending.
 
 The desktop **Overview** places move history on the left and position evaluation beside the board, with errors below. Long lists scroll independently and keep the current move visible. Dedicated tabs include **Statistics**, **Errors**, **Notes**, and **Study cards**. The header shows the players, match ID and length, saved score, date, event, and PR per player. Date and event come from saved metadata and show `n/a` when unavailable. The header also shows the round and location when saved. Match PR updates when a complete native match analysis finishes.
 
@@ -245,6 +245,14 @@ Use the selection controls to **Copy**, **Move**, change **Tags**, **Export** or
 - Exports return the original file or canonical SGF, with a ZIP for multiple matches. Use a PostgreSQL backup to capture the full library, including BG Tutor notes and review history.
 
 The named collections, sortable tables and bulk actions draw on [ChessBase's database organization](https://en.chessbase.com/post/chessbase-18-tips-for-beginners-part-7-organising-databases). The position preview draws on its [database preview window](https://help.chessbase.com/CBase/16/Eng/preview_window_in_the_database.htm).
+
+## Player database
+
+Open **Player database** to find players by display name or imported alias. A profile shows its match and game counts and links to the imported matches. Filter the match list by database. Edit the first and last name to change the profile’s display name.
+
+Galaxy and OpenGammon usernames have separate platform scopes. Add an alias to link future imports, or merge two existing profiles to assign their aliases and matches to one player. The destination profile keeps its first and last name. Match records retain their stored names.
+
+PR is shown by analysis profile. BG Tutor uses complete, compatible match analyses and divides total normalized equity loss by the total number of rated decisions, using the same PR scale as the match database. Each rating shows its match coverage.
 
 ## How matches and positions are stored
 

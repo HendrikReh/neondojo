@@ -1,0 +1,356 @@
+use crate::{
+    api::{ApiError, ApiResult, AppState, ErrorBody},
+    databases::{conflict, json, query},
+    match_analysis::{match_performance_rating, performance_rating_value},
+    search::literal_pattern,
+};
+use axum::{
+    Json, Router,
+    extract::{
+        Path, Query, State,
+        rejection::{JsonRejection, QueryRejection},
+    },
+    routing::get,
+};
+use futures_util::TryStreamExt;
+use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
+use std::collections::BTreeMap;
+use utoipa::{IntoParams, OpenApi, ToSchema};
+use uuid::Uuid;
+
+#[derive(Serialize, ToSchema, sqlx::FromRow)]
+struct PlayerProfile {
+    id: Uuid,
+    display_name: String,
+    first_name: String,
+    last_name: String,
+    version: i64,
+    match_count: i64,
+    game_count: i64,
+}
+
+#[derive(Serialize, ToSchema, sqlx::FromRow)]
+struct PlayerAlias {
+    platform: String,
+    name: String,
+}
+
+#[derive(Serialize, ToSchema)]
+struct PlayerRating {
+    profile: String,
+    value: f64,
+    match_count: i64,
+}
+
+#[derive(Serialize, ToSchema)]
+struct PlayerDetails {
+    #[serde(flatten)]
+    profile: PlayerProfile,
+    aliases: Vec<PlayerAlias>,
+    ratings: Vec<PlayerRating>,
+}
+
+#[derive(Deserialize, ToSchema)]
+struct PlayerNameWrite {
+    first_name: String,
+    last_name: String,
+    version: i64,
+}
+
+#[derive(Deserialize, ToSchema)]
+struct PlayerMerge {
+    source_id: Uuid,
+    source_version: i64,
+    version: i64,
+}
+
+#[derive(Deserialize, ToSchema)]
+struct PlayerAliasWrite {
+    platform: String,
+    name: String,
+    version: i64,
+}
+
+#[derive(Deserialize, IntoParams)]
+struct PlayerQuery {
+    q: Option<String>,
+    after: Option<Uuid>,
+}
+
+#[derive(Serialize, ToSchema)]
+struct PlayerPage {
+    items: Vec<PlayerProfile>,
+    next_cursor: Option<Uuid>,
+}
+
+const DISPLAY_NAME: &str = "coalesce(nullif(concat_ws(' ',nullif(p.first_name,''),nullif(p.last_name,'')),''),p.source_name)";
+const COUNTS: &str = "
+    (SELECT count(DISTINCT mp.match_id) FROM player_aliases a
+     JOIN match_players mp ON mp.alias_id=a.id WHERE a.profile_id=p.id) AS match_count,
+    (SELECT count(*) FROM match_games g WHERE EXISTS (
+        SELECT 1 FROM player_aliases a JOIN match_players mp ON mp.alias_id=a.id
+        WHERE a.profile_id=p.id AND mp.match_id=g.match_uuid
+    )) AS game_count";
+
+pub(crate) fn routes() -> Router<AppState> {
+    Router::new()
+        .route("/api/players", get(list))
+        .route("/api/players/{id}", get(detail).put(update))
+        .route("/api/players/{id}/merge", axum::routing::post(merge))
+        .route("/api/players/{id}/aliases", axum::routing::post(add_alias))
+}
+
+#[utoipa::path(get,path="/api/players",params(PlayerQuery),responses((status=200,body=PlayerPage),(status=422,body=ErrorBody)),tag="Players")]
+async fn list(
+    State(state): State<AppState>,
+    params: Result<Query<PlayerQuery>, QueryRejection>,
+) -> ApiResult<Json<PlayerPage>> {
+    let params = query(params)?;
+    let search = params.q.as_deref().unwrap_or("").trim();
+    if search.chars().count() > 240 {
+        return Err(ApiError::invalid("Player search is too long"));
+    }
+    let mut items = sqlx::query_as::<_, PlayerProfile>(&format!(
+        "WITH page AS MATERIALIZED (
+           SELECT p.*, {DISPLAY_NAME} AS display_name FROM player_profiles p
+           WHERE (EXISTS (SELECT 1 FROM player_aliases a JOIN match_players mp ON mp.alias_id=a.id
+                         WHERE a.profile_id=p.id) OR p.first_name<>'' OR p.last_name<>'')
+             AND ($1='' OR lower({DISPLAY_NAME}) LIKE $2 OR EXISTS (
+                  SELECT 1 FROM player_aliases a WHERE a.profile_id=p.id AND lower(a.name) LIKE $2))
+             AND ($3::uuid IS NULL OR (lower(p.source_name), p.id) >
+                  (SELECT lower(source_name), id FROM player_profiles WHERE id=$3))
+           ORDER BY lower(p.source_name), p.id LIMIT 51
+         )
+         SELECT p.id,p.display_name,p.first_name,p.last_name,p.version,{COUNTS}
+         FROM page p ORDER BY lower(p.source_name), p.id"
+    ))
+    .bind(search)
+    .bind(literal_pattern(search))
+    .bind(params.after)
+    .fetch_all(&state.pool)
+    .await
+    .map_err(anyhow::Error::from)?;
+    let next_cursor = if items.len() > 50 {
+        items.pop();
+        items.last().map(|item| item.id)
+    } else {
+        None
+    };
+    Ok(Json(PlayerPage { items, next_cursor }))
+}
+
+#[utoipa::path(get,path="/api/players/{id}",params(("id"=Uuid,Path)),responses((status=200,body=PlayerDetails),(status=404,body=ErrorBody)),tag="Players")]
+async fn detail(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<PlayerDetails>> {
+    Ok(Json(details(&state.pool, id).await?))
+}
+
+async fn details(pool: &PgPool, id: Uuid) -> ApiResult<PlayerDetails> {
+    let profile = sqlx::query_as(&format!(
+        "SELECT p.id,{DISPLAY_NAME} AS display_name,p.first_name,p.last_name,p.version,{COUNTS}
+         FROM player_profiles p WHERE p.id=$1"
+    ))
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .map_err(anyhow::Error::from)?
+    .ok_or_else(ApiError::missing)?;
+    let aliases = sqlx::query_as(
+        "SELECT platform,name FROM player_aliases WHERE profile_id=$1 ORDER BY platform,name",
+    )
+    .bind(id)
+    .fetch_all(pool)
+    .await
+    .map_err(anyhow::Error::from)?;
+    let ratings = ratings(pool, id).await.map_err(anyhow::Error::from)?;
+    Ok(PlayerDetails {
+        profile,
+        aliases,
+        ratings,
+    })
+}
+
+async fn ratings(pool: &PgPool, id: Uuid) -> Result<Vec<PlayerRating>, sqlx::Error> {
+    let mut rows = sqlx::query_as::<_, (Uuid, i16, serde_json::Value)>(
+        "WITH participants AS (
+           SELECT mp.match_id,mp.side FROM player_aliases a JOIN match_players mp ON mp.alias_id=a.id
+           WHERE a.profile_id=$1
+         ), candidates AS (
+           SELECT j.match_uuid,j.result FROM (SELECT DISTINCT match_id FROM participants) p
+           JOIN matches m ON m.id=p.match_id
+           CROSS JOIN LATERAL (
+             SELECT DISTINCT ON (result #>> '{performance_rating,profile}') j.match_uuid,j.result
+             FROM jobs j WHERE j.match_uuid=m.id AND j.source_revision=m.source_revision
+               AND j.kind='match' AND j.game_no IS NULL AND j.status='completed'
+               AND j.total_games>0 AND j.completed_games=j.total_games
+               AND j.result #>> '{performance_rating,profile}' IS NOT NULL
+             ORDER BY result #>> '{performance_rating,profile}', j.created_at DESC,j.id DESC
+           ) j
+         )
+         SELECT c.match_uuid,p.side,c.result FROM candidates c
+         JOIN participants p ON p.match_id=c.match_uuid ORDER BY c.match_uuid",
+    )
+    .bind(id)
+    .fetch(pool);
+    let mut totals = BTreeMap::<String, (f64, i64, i64, Option<Uuid>)>::new();
+    while let Some((match_id, side, result)) = rows.try_next().await? {
+        if let Some(rating) = match_performance_rating(&result) {
+            let player = &rating.players[side as usize];
+            if player.value.is_some() {
+                let (loss, decisions, count, last_match) =
+                    totals.entry(rating.profile).or_default();
+                *loss += player.normalized_equity_loss;
+                *decisions += i64::from(player.unforced_checker_moves)
+                    + i64::from(player.close_cube_decisions);
+                if *last_match != Some(match_id) {
+                    *count += 1;
+                    *last_match = Some(match_id);
+                }
+            }
+        }
+    }
+    Ok(totals
+        .into_iter()
+        .filter_map(|(profile, (loss, decisions, match_count, _))| {
+            performance_rating_value(loss, decisions).map(|value| PlayerRating {
+                profile,
+                value,
+                match_count,
+            })
+        })
+        .collect())
+}
+
+#[utoipa::path(put,path="/api/players/{id}",params(("id"=Uuid,Path)),request_body=PlayerNameWrite,responses((status=200,body=PlayerDetails),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Players")]
+async fn update(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    body: Result<Json<PlayerNameWrite>, JsonRejection>,
+) -> ApiResult<Json<PlayerDetails>> {
+    let body = json(body)?;
+    let first_name = clean_name(&body.first_name, 120)?;
+    let last_name = clean_name(&body.last_name, 120)?;
+    let changed = sqlx::query(
+        "UPDATE player_profiles SET first_name=$2,last_name=$3,version=version+1 WHERE id=$1 AND version=$4",
+    )
+    .bind(id).bind(first_name).bind(last_name).bind(body.version)
+    .execute(&state.pool).await.map_err(anyhow::Error::from)?.rows_affected();
+    if changed == 0 {
+        let exists: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM player_profiles WHERE id=$1)")
+                .bind(id)
+                .fetch_one(&state.pool)
+                .await
+                .map_err(anyhow::Error::from)?;
+        return Err(if exists { stale() } else { ApiError::missing() });
+    }
+    Ok(Json(details(&state.pool, id).await?))
+}
+
+fn stale() -> ApiError {
+    conflict("Player profile changed; reload before saving")
+}
+
+fn clean_name(value: &str, max: usize) -> ApiResult<&str> {
+    let value = value.trim();
+    if value.chars().count() > max || value.chars().any(char::is_control) {
+        return Err(ApiError::invalid("Invalid player name"));
+    }
+    Ok(value)
+}
+
+#[utoipa::path(post,path="/api/players/{id}/merge",params(("id"=Uuid,Path)),request_body=PlayerMerge,responses((status=200,body=PlayerDetails),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Players")]
+async fn merge(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    body: Result<Json<PlayerMerge>, JsonRejection>,
+) -> ApiResult<Json<PlayerDetails>> {
+    let body = json(body)?;
+    if id == body.source_id {
+        return Err(ApiError::invalid("Choose a different player"));
+    }
+    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
+    let profiles: Vec<(Uuid, i64)> = sqlx::query_as(
+        "SELECT id,version FROM player_profiles WHERE id=ANY($1) ORDER BY id FOR UPDATE",
+    )
+    .bind(&[id, body.source_id][..])
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?;
+    if !profiles.contains(&(id, body.version))
+        || !profiles.contains(&(body.source_id, body.source_version))
+    {
+        return Err(stale());
+    }
+    sqlx::query("UPDATE player_aliases SET profile_id=$1 WHERE profile_id=$2")
+        .bind(id)
+        .bind(body.source_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?;
+    sqlx::query("DELETE FROM player_profiles WHERE id=$1")
+        .bind(body.source_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?;
+    sqlx::query("UPDATE player_profiles SET version=version+1 WHERE id=$1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    Ok(Json(details(&state.pool, id).await?))
+}
+
+#[utoipa::path(post,path="/api/players/{id}/aliases",params(("id"=Uuid,Path)),request_body=PlayerAliasWrite,responses((status=200,body=PlayerDetails),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Players")]
+async fn add_alias(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    body: Result<Json<PlayerAliasWrite>, JsonRejection>,
+) -> ApiResult<Json<PlayerDetails>> {
+    let body = json(body)?;
+    let name = clean_name(&body.name, 1024)?;
+    if name.is_empty()
+        || !["", "backgammongalaxy.com", "opengammon.com"].contains(&body.platform.as_str())
+    {
+        return Err(ApiError::invalid("Invalid player alias"));
+    }
+    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
+    let changed =
+        sqlx::query("UPDATE player_profiles SET version=version+1 WHERE id=$1 AND version=$2")
+            .bind(id)
+            .bind(body.version)
+            .execute(&mut *tx)
+            .await
+            .map_err(anyhow::Error::from)?
+            .rows_affected();
+    if changed == 0 {
+        return Err(stale());
+    }
+    let added = sqlx::query("INSERT INTO player_aliases(platform,name,profile_id) VALUES($1,$2,$3) ON CONFLICT(platform,name) DO NOTHING")
+        .bind(body.platform).bind(name).bind(id).execute(&mut *tx).await.map_err(anyhow::Error::from)?.rows_affected();
+    if added == 0 {
+        return Err(conflict("Alias already belongs to a profile"));
+    }
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    Ok(Json(details(&state.pool, id).await?))
+}
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(list, detail, update, merge, add_alias),
+    components(schemas(
+        PlayerProfile,
+        PlayerDetails,
+        PlayerAlias,
+        PlayerRating,
+        PlayerNameWrite,
+        PlayerAliasWrite,
+        PlayerMerge,
+        PlayerPage
+    ))
+)]
+pub(crate) struct PlayerDoc;
