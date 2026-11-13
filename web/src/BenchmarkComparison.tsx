@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import EngineLabel from './EngineLabel';
 import { useI18n } from './i18n';
 import {
   benchmarkComparisons,
@@ -64,14 +65,18 @@ export default function BenchmarkComparison({
               <div>
                 <dt>{text('recordedEngineVersion')}</dt>
                 <dd>
-                  <code>{run.engine_version}</code>
+                  <code>
+                    <EngineLabel details={run.engine_version} />
+                  </code>
                 </dd>
               </div>
               {rulesVersion && (
                 <div>
                   <dt>{text('rulesVersion')}</dt>
                   <dd>
-                    <code>{rulesVersion}</code>
+                    <code>
+                      <EngineLabel details={rulesVersion} />
+                    </code>
                   </dd>
                 </div>
               )}

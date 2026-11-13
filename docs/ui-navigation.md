@@ -67,6 +67,10 @@ shows each player's saved checker and cube decision counts and equity losses.
 GNUbg's native PR is shown in the GNUbg column when available.
 Candidate columns size to their contents so notation and evaluation values
 stay close on wide displays.
+Engine labels show the name and the recorded version when available. Hover
+over the label or focus it with Tab to see the recorded details, such as search
+depth, evaluation method, build, model, and thread count. The same labels are
+used for local and imported analyses, in Playing, and in Study.
 Switching tabs keeps the selected game and move. Selecting a statistics metric
 opens **Errors** with the matching filters. Selecting a metric for a different
 game opens that game.
@@ -154,8 +158,9 @@ available. Next hides the solution again.
 Escape closes practice and returns focus to its trigger. Leaving the area or
 changing its filters dismisses practice and cancels outstanding requests.
 Completed local analyses take precedence per game; comparable imported XG and
-BGBlitz analyses cover games without one. Practice displays the original source,
-engine and search/rollout depth; unknown depth remains explicitly unknown.
+BGBlitz analyses cover games without one. Practice shows the engine and its
+recorded version. The tooltip identifies the original source and search or
+rollout depth, including when the depth is unknown.
 
 ## Profile in der Navigation
 
@@ -178,8 +183,9 @@ comparison. Active runs remain visible across both measurement types.
 Reference methodology and per-run technical data can be expanded on demand.
 
 Engine duels lists series beside the selected result on wide desktop windows.
-**New series** opens setup with the optional seed under **Advanced**. Series
-continue when leaving the tool.
+**New series** opens setup, with the optional seed under **Advanced**. Series
+continue when leaving the tool. Results show progress, match win rates by
+engine, and the confidence interval when the sample supports it.
 
 Database backup shows the scope of a restore before file selection. BG Tutor
 automatically checks each selected archive and compares its schema with the

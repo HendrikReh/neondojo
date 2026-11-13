@@ -208,7 +208,15 @@ test('Tutor restores a neutral warning and reveals only on request', async ({
   await expect(panel).toContainText('First attempt');
 });
 test('Competition hides pip counts and live feedback', async ({ page }) => {
-  await resume(page, saved('competition'));
+  const state = saved('competition');
+  state.engine.version = 'GNU Backgammon 1.08.003 20261108';
+  await resume(page, state);
+  const engine = page.locator('.play-match-engine .engine-label-details');
+  await expect(engine).toHaveText('GNU Backgammon 1.08.003');
+  await engine.hover();
+  await expect(page.getByRole('tooltip')).toHaveText(
+    'GNU Backgammon 1.08.003 20261108 · 0-ply',
+  );
   await expect(page.getByTestId('play-feedback')).toHaveCount(0);
   await expect(
     page.getByRole('button', { name: 'Hint', exact: true }),

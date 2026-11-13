@@ -6,6 +6,7 @@ import {
   type RefObject,
 } from 'react';
 import ActionButton from './ActionButton';
+import EngineLabel from './EngineLabel';
 import Board from './Board';
 import CheckerPracticeBoard, {
   type CheckerDraft,
@@ -391,7 +392,13 @@ function PracticeQuestion({
             {t('best')} · <strong>{formatDecision(answer.best)}</strong>
             {score && ` · ${formatEquity(score.best_equity)}`}
           </p>
-          <p>{[answer.engine, answer.depth].filter(Boolean).join(' · ')}</p>
+          <p>
+            <EngineLabel
+              details={[answer.engine, answer.depth]
+                .filter(Boolean)
+                .join(' · ')}
+            />
+          </p>
         </div>
       )}
       <div className="play-actions">

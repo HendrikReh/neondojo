@@ -36,9 +36,28 @@ it('keeps candidate provenance and an explicit preview reset', () => {
     source: 'GNUbg 2-ply',
   });
   expect(html).toContain('Candidate 2');
-  expect(html).toContain('GNUbg 2-ply');
+  expect(html).toContain('>GNUbg</span>');
+  expect(html).toContain('aria-description="GNUbg 2-ply"');
   expect(html).toContain('Reset preview');
   expect(html).not.toContain('Played move');
+});
+
+it.each([
+  [
+    'Open Sage 2.0.20260907',
+    `; model ${'a'.repeat(64)}; threads 10; adapter 1 · 2-ply cubeful`,
+  ],
+  ['GNU Backgammon 1.08.003', ' 20261108 · 2-ply cubeful'],
+  ['eXtreme Gammon', ' · XGRoller++'],
+  ['BGBlitz 3.3.0', ' · 2-ply (BGBlitz source)'],
+  ['HedgeHog 1.4', ' · 3-ply · evaluation'],
+  ['Snowie 4.00', ' · Rollout'],
+  ['External engine 1.2', ' 20261108 · 2-ply'],
+])('shows only %s in the board preview label', (version, extra) => {
+  const details = version + extra;
+  const html = render({ rank: 2, notation: '13/10 6/5', source: details });
+  expect(html).toContain(`>${version}</span>`);
+  expect(html).toContain(`aria-description="${details}"`);
 });
 
 it('localizes the arrows label for German board navigation', () => {

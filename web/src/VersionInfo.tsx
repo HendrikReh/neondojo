@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { shortEngineVersion } from './engine-version';
+import EngineLabel from './EngineLabel';
 import { useI18n } from './i18n';
 import { loadAppVersion, loadEngines, type EngineInfo } from './settings-api';
 import { versionInfoMessages } from './version-info-messages';
@@ -11,15 +13,6 @@ const engineNames = {
 
 type EngineId = keyof typeof engineNames;
 const engineIds: EngineId[] = ['gnubg', 'bgsage'];
-
-export function shortEngineVersion(engine: EngineId, details: string | null) {
-  const prefix =
-    engine === 'gnubg' ? /^(?:GNU Backgammon|GNUbg)\s+/i : /^Open Sage\s+/i;
-  return details
-    ?.trim()
-    .replace(prefix, '')
-    .match(/^\d+(?:\.\d+)+(?:[-+][\w.+-]+)?(?=$|[\s;(])/)?.[0];
-}
 
 export default function VersionInfo() {
   const { locale, t } = useI18n();
@@ -119,11 +112,15 @@ export default function VersionInfo() {
             )}
           </dd>
         </div>
-        {engineRows.map(({ name, shortVersion, available }) => (
+        {engineRows.map(({ name, shortVersion, available, details }) => (
           <div key={name}>
             <dt>{name}</dt>
             <dd>
-              {shortVersion && <code>{shortVersion}</code>}
+              {shortVersion && (
+                <code>
+                  <EngineLabel details={details} format={() => shortVersion} />
+                </code>
+              )}
               <span
                 className={
                   available

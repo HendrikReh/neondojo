@@ -1,4 +1,5 @@
 import type { XgPositionResult } from './source-analysis-api';
+import EngineLabel from './EngineLabel';
 import { useI18n } from './i18n';
 import { useSourceText } from './analysis-source-messages';
 export default function XgPositionView({
@@ -21,11 +22,16 @@ export default function XgPositionView({
             <article className="xg-book-evaluation" key={e.record_index}>
               <div className="source-provenance">
                 <strong>
-                  {e.engine} {e.engine_version}
+                  <EngineLabel
+                    details={[
+                      [e.engine, e.engine_version].filter(Boolean).join(' '),
+                      e.depth,
+                      e.method,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  />
                 </strong>
-                <span>
-                  {e.depth} · {e.method}
-                </span>
                 <b>{formatEquity(e.equity)}</b>
                 <small>{l('normalizedEquity')}</small>
               </div>

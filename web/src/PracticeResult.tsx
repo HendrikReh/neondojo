@@ -1,4 +1,5 @@
 import type { components } from './generated-api';
+import EngineLabel from './EngineLabel';
 import { useI18n } from './i18n';
 import { useLearningText } from './learning-messages';
 
@@ -53,16 +54,18 @@ export default function PracticeResult({
       </p>
       {provenance.kind !== 'forced' && (
         <p>
-          {[
-            t(
-              provenance.kind === 'stored'
-                ? 'sourceStored'
-                : 'sourceRecomputed',
-            ),
-            source,
-          ]
-            .filter(Boolean)
-            .join(' · ')}
+          {t(
+            provenance.kind === 'stored' ? 'sourceStored' : 'sourceRecomputed',
+          )}
+          {source && (
+            <>
+              {' · '}
+              <EngineLabel
+                details={provenance.engine ?? source}
+                tooltip={source !== provenance.engine ? source : undefined}
+              />
+            </>
+          )}
         </p>
       )}
     </>

@@ -1,4 +1,5 @@
 import ActionButton from './ActionButton';
+import EngineLabel from './EngineLabel';
 import type { BoardView, MovePreview } from './move-preview';
 import type { PreviewCandidate } from './candidate-preview';
 import { useBoardReviewText } from './board-review-messages';
@@ -64,7 +65,9 @@ export default function BoardReviewControls({
               move: formatDecision(selected.notation),
             })}
           </strong>
-          <small>{selected.source}</small>
+          <small>
+            <EngineLabel details={selected.source} />
+          </small>
         </div>
       )}
       {!preview.ok ? (

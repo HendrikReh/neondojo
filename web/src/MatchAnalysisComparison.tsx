@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import EngineLabel from './EngineLabel';
 import { request, type Job } from './api';
 import { useI18n, type TranslationKey } from './i18n';
 import { nativePerformanceRating } from './match-statistics-api';
@@ -114,7 +115,12 @@ export function MatchAnalysisComparisonResults({
                         ))}
                       </select>
                       <small>
-                        {job.engine_snapshot?.engine_version ?? summary?.engine}
+                        <EngineLabel
+                          details={
+                            job.engine_snapshot?.engine_version ??
+                            summary?.engine
+                          }
+                        />
                       </small>
                       <small>
                         {gameNo !== undefined && job.game_no == null

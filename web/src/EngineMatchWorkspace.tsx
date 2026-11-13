@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import EngineLabel from './EngineLabel';
 import options from '../../shared/configuration-options.json' with { type: 'json' };
 import {
   cancelSeries,
@@ -774,12 +775,26 @@ function SeriesResults({
           {text('seed')} <code>{config.seed}</code> · {series.dice_version}
         </p>
         <p>
-          {text('engineA')} · {profile(config.a)} ·{' '}
-          {engines.a.engine_version ?? '—'}
+          {text('engineA')} ·{' '}
+          <EngineLabel
+            details={engines.a.engine_version ?? profile(config.a)}
+            tooltip={
+              engines.a.engine_version
+                ? `${engines.a.engine_version} · ${formatNumber(config.a.plies)}-ply`
+                : undefined
+            }
+          />
         </p>
         <p>
-          {text('engineB')} · {profile(config.b)} ·{' '}
-          {engines.b.engine_version ?? '—'}
+          {text('engineB')} ·{' '}
+          <EngineLabel
+            details={engines.b.engine_version ?? profile(config.b)}
+            tooltip={
+              engines.b.engine_version
+                ? `${engines.b.engine_version} · ${formatNumber(config.b.plies)}-ply`
+                : undefined
+            }
+          />
         </p>
       </details>
       {matches.length === 0 ? (
