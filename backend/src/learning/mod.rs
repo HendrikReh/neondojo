@@ -3,6 +3,7 @@ pub mod anki_flashcards;
 mod anki_import;
 mod apkg;
 mod content;
+mod exercises;
 mod management;
 mod rounds;
 mod scheduler;
@@ -484,6 +485,7 @@ pub fn routes() -> Router<AppState> {
         .merge(rounds::routes())
         .merge(topics::routes())
         .merge(transfer::routes())
+        .merge(exercises::routes())
         .merge(anki_flashcards::routes())
         .route("/api/cards/{id}/reveal", post(reveal))
         .route("/api/cards/{id}/attempt", post(submit_attempt))
@@ -529,6 +531,10 @@ pub fn routes() -> Router<AppState> {
         topics::delete_topic,
         transfer::start,
         transfer::history,
+        exercises::pips,
+        exercises::score_questions,
+        exercises::score_answer,
+        exercises::preview,
         reveal,
         submit_attempt,
         review
@@ -579,6 +585,11 @@ pub fn routes() -> Router<AppState> {
         topics::CardTopic,
         transfer::TransferRequest,
         transfer::TransferSummary,
+        exercises::PipAnswer,
+        exercises::PipResult,
+        exercises::ScoreQuestion,
+        exercises::ScorePractice,
+        exercises::ScoreAnswer,
         ReviewCounts,
         NextCard,
         LearningSummary,

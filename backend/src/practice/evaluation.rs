@@ -471,6 +471,31 @@ pub(crate) async fn evaluate(
     if let Some(result) = stored_evaluation(position, &solution, &checked) {
         return Ok(result);
     }
+    evaluate_fresh(state, position, checked, None).await
+}
+
+pub(crate) async fn evaluate_with_snapshot(
+    state: &AppState,
+    kind: &str,
+    position: &Position,
+    answer: &PracticeAnswer,
+    snapshot: (i32, crate::settings::EngineSnapshot),
+) -> ApiResult<PracticeEvaluation> {
+    evaluate_fresh(
+        state,
+        position,
+        validate(kind, position, answer)?,
+        Some(snapshot),
+    )
+    .await
+}
+
+async fn evaluate_fresh(
+    state: &AppState,
+    position: &Position,
+    checked: CheckedAnswer,
+    snapshot: Option<(i32, crate::settings::EngineSnapshot)>,
+) -> ApiResult<PracticeEvaluation> {
     let _permit = practice::EVALUATION.try_lock().map_err(|_| {
         ApiError(
             StatusCode::TOO_MANY_REQUESTS,
@@ -480,7 +505,10 @@ pub(crate) async fn evaluate(
     let result = tokio::time::timeout(
         Duration::from_secs(15),
         crate::engine::with_shared_access(async {
-            let (plies, snapshot) = crate::settings::snapshot_for_practice(state).await?;
+            let (plies, snapshot) = match snapshot {
+                Some(snapshot) => snapshot,
+                None => crate::settings::snapshot_for_practice(state).await?,
+            };
             let engine = snapshot.engine()?;
             match checked {
                 CheckedAnswer::Checker { board } => {

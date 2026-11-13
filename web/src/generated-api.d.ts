@@ -228,6 +228,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cards/{id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["preview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cards/{id}/reveal": {
         parameters: {
             query?: never;
@@ -254,6 +270,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["review"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cards/{id}/score-variants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["score_answer"];
+        post: operations["score_questions"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1710,6 +1742,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/study/card-pips": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["pips"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3733,6 +3781,16 @@ export interface components {
             players: components["schemas"]["PlayerPerformanceRating"][];
             profile: string;
         };
+        PipAnswer: {
+            /** Format: uuid */
+            card_id: string;
+            counts: number[];
+        };
+        PipResult: {
+            bar_pips: number[];
+            correct: boolean[];
+            counts: number[];
+        };
         /** @enum {string} */
         PlayAction: "opening_roll" | "start_opening_move" | "roll" | "move" | "pass" | "double" | "take" | "drop" | "resign" | "next_game" | "end_session" | "pause" | "resume";
         PlayActionRequest: {
@@ -4538,6 +4596,21 @@ export interface components {
             updated_at: string;
             /** Format: int64 */
             version: number;
+        };
+        ScoreAnswer: {
+            answer: components["schemas"]["PracticeAnswer"];
+            index: number;
+            /** Format: uuid */
+            practice_id: string;
+        };
+        ScorePractice: {
+            /** Format: uuid */
+            id: string;
+            questions: components["schemas"]["ScoreQuestion"][];
+        };
+        ScoreQuestion: {
+            card: components["schemas"]["CardQuestion"];
+            index: number;
         };
         Series: {
             /** Format: int32 */
@@ -5410,6 +5483,43 @@ export interface operations {
             };
         };
     };
+    preview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardAnswer"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     reveal: {
         parameters: {
             query?: never;
@@ -5491,6 +5601,116 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    score_answer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScoreAnswer"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PracticeEvaluation"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    score_questions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScorePractice"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9913,6 +10133,45 @@ export interface operations {
                 };
             };
             504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    pips: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PipAnswer"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipResult"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

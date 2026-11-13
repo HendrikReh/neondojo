@@ -29,6 +29,7 @@ import CardPracticeRound, { roundPath } from './CardPracticeRound';
 import CardTagEditor from './CardTagEditor';
 import CardTopics from './CardTopics';
 import TransferPractice from './TransferPractice';
+import CardSpecialPractice from './CardSpecialPractice';
 import { usePositionText } from './position-browser-messages';
 import './learning-workspace.css';
 import DeckManagementDialog from './DeckManagementDialog';
@@ -47,6 +48,7 @@ import type {
   Deck,
   NextCard,
   CardPage,
+  CardQuestion,
   RevealedCard,
   ReviewResult,
   Rating,
@@ -429,6 +431,11 @@ export default function LearningWorkspace({
   const [practiceRound, setPracticeRound] = useState<PracticeRound>();
   const [resumeRound, setResumeRound] = useState(storedPracticeRound);
   const [practiceLimit, setPracticeLimit] = useState(10);
+  const [specialPractice, setSpecialPractice] = useState<{
+    mode: 'pips' | 'score' | 'preview';
+    cards: CardQuestion[];
+  }>();
+  const specialPracticeTrigger = useRef<HTMLButtonElement | null>(null);
   const [practiceStarting, setPracticeStarting] = useState(false);
   const [practiceError, setPracticeError] = useState<unknown>();
   const [importingAnki, setImportingAnki] = useState(false);
@@ -1213,6 +1220,20 @@ export default function LearningWorkspace({
                 {practiceT('resume')}
               </ActionButton>
             )}
+            <ActionButton
+              icon="view"
+              label={practiceT('preview')}
+              disabled={cardSearch.loading || !cardSearch.items.length}
+              onClick={(event) => {
+                specialPracticeTrigger.current = event.currentTarget;
+                setSpecialPractice({
+                  mode: 'preview',
+                  cards: cardSearch.items.slice(0, practiceLimit),
+                });
+              }}
+            >
+              {practiceT('preview')}
+            </ActionButton>
           </div>
           {practiceStarting && <p role="status">{t('loading')}</p>}
           {!!practiceError && <p role="alert">{formatError(practiceError)}</p>}
@@ -1248,6 +1269,38 @@ export default function LearningWorkspace({
             actions={
               <>
                 {cardActions}
+                {selectedItem?.position && (
+                  <div className="learning-controls">
+                    <ActionButton
+                      icon="play"
+                      label={practiceT('pips')}
+                      onClick={(event) => {
+                        specialPracticeTrigger.current = event.currentTarget;
+                        setSpecialPractice({
+                          mode: 'pips',
+                          cards: [selectedItem],
+                        });
+                      }}
+                    >
+                      {practiceT('pips')}
+                    </ActionButton>
+                    {selectedItem.kind !== 'checker' && (
+                      <ActionButton
+                        icon="play"
+                        label={practiceT('score')}
+                        onClick={(event) => {
+                          specialPracticeTrigger.current = event.currentTarget;
+                          setSpecialPractice({
+                            mode: 'score',
+                            cards: [selectedItem],
+                          });
+                        }}
+                      >
+                        {practiceT('score')}
+                      </ActionButton>
+                    )}
+                  </div>
+                )}
                 <CardTagEditor
                   key={[...selectedCards].sort().join(',')}
                   cards={selectedItems.map((item) => ({
@@ -1264,6 +1317,14 @@ export default function LearningWorkspace({
             onPageChange={cardSearch.setPage}
           />
         </>
+      )}
+      {specialPractice && visible && (
+        <CardSpecialPractice
+          {...specialPractice}
+          theme={theme}
+          returnFocus={specialPracticeTrigger}
+          onClose={() => setSpecialPractice(undefined)}
+        />
       )}
       {libraryDialog === 'decks' && (
         <DeckLibraryDialog

@@ -115,6 +115,13 @@ fn pip_counts(board: &[i32; 26]) -> (i32, i32) {
     (player, opponent)
 }
 
+pub(crate) fn absolute_pip_counts(board: &[i32; 26]) -> ([i32; 2], [i32; 2]) {
+    let mut relative = *board;
+    relative[0] = -relative[0];
+    let (white, black) = pip_counts(&relative);
+    ([white, black], [25 * relative[25], 25 * relative[0]])
+}
+
 // The branch order and thresholds match the pinned Open Sage implementation.
 // Input is in its player-relative convention, with BOTH bars nonnegative.
 fn classify_game_plan(board: &[i32; 26]) -> GamePlan {

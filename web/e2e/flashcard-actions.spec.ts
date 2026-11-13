@@ -103,6 +103,70 @@ test('search results add, move, remove and delete selected cards', async ({
     .click();
   await expect(scope).toHaveValue('__all__');
   await expect(rows).toHaveCount(2);
+  await study
+    .getByRole('button', { name: 'Practice results', exact: true })
+    .click();
+  const practice = study.getByRole('region', { name: 'Practice results' });
+  await expect(practice.getByText('Card 1 of 2')).toBeVisible();
+  await practice
+    .getByRole('button', { name: 'Show answer', exact: true })
+    .click();
+  const marker = practice.getByRole('checkbox', { name: 'Mark for review' });
+  await marker.click();
+  await expect(marker).toBeChecked();
+  await practice
+    .getByRole('button', { name: 'Back to card search', exact: true })
+    .click();
+  await study
+    .getByRole('button', { name: 'Resume practice', exact: true })
+    .click();
+  await expect(marker).toBeChecked();
+  await practice
+    .getByRole('button', { name: 'Next card', exact: true })
+    .click();
+  await expect(practice.getByText('Card 2 of 2')).toBeVisible();
+  await practice
+    .getByRole('button', { name: 'Show answer', exact: true })
+    .click();
+  await practice
+    .getByRole('button', { name: 'Next card', exact: true })
+    .click();
+  await practice
+    .getByRole('button', {
+      name: 'Retry errors and marked cards (1)',
+      exact: true,
+    })
+    .click();
+  await expect(practice.getByText('Card 1 of 1')).toBeVisible();
+  await expect(
+    practice.getByRole('button', { name: 'Show answer', exact: true }),
+  ).toBeVisible();
+  await practice
+    .getByRole('button', { name: 'Back to card search', exact: true })
+    .click();
+  const afterPractice = await loadDeckCards(source);
+  expect(
+    afterPractice.find((card: { id: string }) => card.id === reviewed.id)
+      .review_count,
+  ).toBe(1);
+  const firstCard = study
+    .getByRole('checkbox', { name: /^Select card \d$/ })
+    .first();
+  await firstCard.check();
+  await study
+    .getByRole('button', { name: 'Pip count practice', exact: true })
+    .click();
+  const pipDialog = dialog('Pip count practice');
+  await pipDialog.getByLabel('White', { exact: true }).fill('0');
+  await pipDialog.getByLabel('Black', { exact: true }).fill('0');
+  await pipDialog
+    .getByRole('button', { name: 'Check pip counts', exact: true })
+    .click();
+  await expect(
+    pipDialog.getByText(/Incorrect.*pips.*from the bar/),
+  ).toHaveCount(2);
+  await pipDialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await firstCard.uncheck();
   await expect(button('Add to deck')).toBeDisabled();
   await expect(button('Remove from this deck')).toHaveCount(0);
   await study.getByRole('checkbox', { name: 'Select this page' }).check();

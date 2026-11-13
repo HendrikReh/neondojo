@@ -768,6 +768,19 @@ async fn match_cards_include_cube_offers_responses_and_recover_original_boards(p
     let cards = page["items"].as_array().unwrap();
     assert!(cards.iter().any(|c| c["kind"] == "checker"));
     assert!(cards.iter().any(|c| c["kind"] == "cube_offer"));
+    let cube = cards
+        .iter()
+        .find(|card| card["kind"] == "cube_response")
+        .unwrap();
+    let score_path = format!("/api/cards/{}/score-variants", cube["id"].as_str().unwrap());
+    let (status, variants) = call(app.clone(), "POST", &score_path, Value::Null).await;
+    assert_eq!(status, 200, "{variants}");
+    assert_eq!(variants["questions"].as_array().unwrap().len(), 3);
+    let (status, evaluation) = call(app.clone(), "PUT", &score_path, json!({
+        "index":0, "practice_id":variants["id"], "answer":{"kind":"cube_response","action":"drop"}
+    })).await;
+    assert_eq!(status, 200, "{evaluation}");
+    assert_eq!(evaluation["provenance"]["kind"], "recomputed");
     assert!(cards.iter().any(|c| c["kind"] == "cube_response"));
     let decisions: Vec<(i32, Value)> = sqlx::query_as(
         "SELECT game_no,data FROM move_analyses WHERE job_id=$1 ORDER BY game_no,decision_no",
