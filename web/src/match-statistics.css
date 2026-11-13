@@ -5,6 +5,40 @@
   margin-top: 0;
   font-size: var(--font-size-panel);
 }
+.statistics-comparison {
+  margin: 0 0 14px;
+  padding: 9px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 7px;
+}
+.statistics-comparison > summary {
+  cursor: pointer;
+  font-weight: var(--font-weight-semibold);
+}
+.statistics-comparison-scroll {
+  overflow-x: auto;
+  max-width: 72rem;
+  margin-top: 8px;
+}
+.match-statistics .statistics-comparison-table th,
+.match-statistics .statistics-comparison-table td {
+  padding-block: 6px;
+}
+.statistics-comparison-table select {
+  width: 100%;
+  margin: 4px 0 0;
+  font-size: var(--font-size-control);
+}
+.statistics-comparison-table th small {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.statistics-comparison-table td {
+  font-variant-numeric: tabular-nums;
+}
+.statistics-comparison-table .statistics-comparison-player th {
+  background: var(--ui-surface);
+}
 .statistics-source,
 .statistics-coverage {
   font-size: var(--font-size-table);

@@ -138,6 +138,31 @@ async fn missing_calibration_is_optional_and_does_not_create_metadata(pool: PgPo
         0
     );
 }
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL and GNUbg"]
+async fn estimates_explicit_gnubg_depth_with_open_sage_as_default(pool: PgPool) {
+    let (app, id) = setup(&pool).await;
+    let basis = seed(&pool, &app, 4, 40.0).await;
+    sqlx::query("UPDATE app_settings SET analysis_engine='bgsage',analysis_plies=2")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let (status, estimate) = call(
+        &app,
+        "GET",
+        &endpoint(id, "plies=4&game_no=1&engine_id=gnubg"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{estimate}");
+    assert_eq!(estimate["engine_id"], "gnubg");
+    assert_eq!(estimate["plies"], 4);
+    assert_eq!(estimate["benchmark"]["id"], basis["id"]);
+    let (_, settings) = call(&app, "GET", "/api/settings", Value::Null).await;
+    assert_eq!(settings["analysis_engine"], "bgsage");
+}
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL and GNUbg"]
 async fn newest_finished_matching_measurement_wins_and_legacy_timeout_is_compatible(pool: PgPool) {
@@ -234,7 +259,8 @@ async fn validates_scope_and_honors_removed_sources(pool: PgPool) {
         "plies=two",
         "game_no=999",
         "game_no=0",
-        "plies=2&engine_id=bgsage",
+        "plies=5&engine_id=bgsage",
+        "plies=2&engine_id=unknown",
     ] {
         assert_eq!(
             call(&app, "GET", &endpoint(id, query), Value::Null).await.0,

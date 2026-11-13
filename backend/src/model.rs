@@ -133,6 +133,16 @@ pub struct Job {
     pub updated_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Serialize, FromRow, ToSchema)]
+pub struct AnalysisComparisonRun {
+    #[serde(flatten)]
+    #[sqlx(flatten)]
+    pub job: Job,
+    /// Selected game's checkpoint from a whole-match analysis.
+    #[sqlx(json(nullable))]
+    pub game_summary: Option<MatchAnalysisSummary>,
+}
+
 #[derive(Debug, Clone, Serialize, FromRow, ToSchema)]
 pub struct JobEvent {
     pub id: i64,

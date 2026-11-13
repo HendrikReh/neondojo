@@ -751,6 +751,7 @@ export default function App() {
             navigation={navigation}
             jobs={jobs}
             theme={theme}
+            defaultEngine={settings?.analysis_engine ?? 'gnubg'}
             defaultPlies={settings?.analysis_plies ?? DEFAULT_ANALYSIS_PLIES}
             analysisInstallationKey={JSON.stringify([
               installedSettings?.version,

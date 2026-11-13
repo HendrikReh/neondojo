@@ -1,16 +1,20 @@
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import { useEffect, useRef, useState } from 'react';
 import { mergeJob, request, terminal, type Job } from './api';
+import type { components } from './generated-api';
 
-/** Jobs and subscriptions belong to one match/game scope, including late responses. */
+export type MatchAnalysisEngine = components['schemas']['MatchAnalysisEngine'];
+
+/** Jobs and subscriptions belong to the selected match, game scope and engine. */
 export function useMatchAnalysis(
   matchId: string,
+  engineId: MatchAnalysisEngine,
   gameNo?: number,
   enabled = true,
   onAccepted?: (job: Job) => void,
 ) {
   const configuration = useOptionalConfiguration();
-  const scope = `${matchId}:${gameNo ?? 'match'}:${configuration?.current?.analysis.engine ?? 'gnubg'}`;
+  const scope = `${matchId}:${gameNo ?? 'match'}:${engineId}`;
   const [stored, setStored] = useState<{ scope: string; job: Job }>();
   const [failure, setFailure] = useState<{ scope: string; error: unknown }>();
   const [pending, setPending] = useState<string>();
@@ -32,7 +36,9 @@ export function useMatchAnalysis(
     let stream: EventSource | undefined;
     let timer: ReturnType<typeof setInterval> | undefined;
     const belongs = (job: Job) =>
-      job.match_uuid === matchId && (job.game_no ?? undefined) === gameNo;
+      job.match_uuid === matchId &&
+      (job.game_no ?? undefined) === gameNo &&
+      (job.engine_snapshot?.engine_id ?? 'gnubg') === engineId;
     function receive(incoming: Job) {
       if (abort.signal.aborted || !belongs(incoming)) return;
       setStored((previous) => ({
@@ -58,12 +64,23 @@ export function useMatchAnalysis(
         if (!abort.signal.aborted) setFailure({ scope, error });
       }
     }
-    void request<Job | null>(
-      `/matches/${matchId}/analysis${gameNo === undefined ? '' : `?game_no=${gameNo}`}`,
-      { signal: abort.signal },
-    )
+    const query = new URLSearchParams({ engine_id: engineId });
+    if (gameNo !== undefined) query.set('game_no', String(gameNo));
+    void request<Job | null>(`/matches/${matchId}/analysis?${query}`, {
+      signal: abort.signal,
+    })
       .then((incoming) => {
-        if (abort.signal.aborted || !incoming || !belongs(incoming)) return;
+        if (abort.signal.aborted) return;
+        if (!incoming) {
+          setStored((previous) =>
+            previous?.scope === scope ? undefined : previous,
+          );
+          setFailure((previous) =>
+            previous?.scope === scope ? undefined : previous,
+          );
+          return;
+        }
+        if (!belongs(incoming)) return;
         receive(incoming);
         if (terminal(incoming)) return;
         stream = new EventSource(`/api/jobs/${incoming.id}/events`);
@@ -90,7 +107,7 @@ export function useMatchAnalysis(
       stream?.close();
       clearInterval(timer);
     };
-  }, [matchId, gameNo, scope, revision, enabled]);
+  }, [matchId, gameNo, engineId, scope, revision, enabled]);
 
   async function run(plies: number) {
     if (!enabled) return;
@@ -103,7 +120,11 @@ export function useMatchAnalysis(
         request<Job>(`/matches/${matchId}/analysis`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ plies, game_no: gameNo }),
+          body: JSON.stringify({
+            engine_id: engineId,
+            plies,
+            game_no: gameNo,
+          } satisfies components['schemas']['MatchAnalysisRequest']),
         });
       const incoming = configuration
         ? await configuration.runWithConfiguration(start)

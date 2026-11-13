@@ -2,6 +2,105 @@ import { expect, test } from './test';
 import { readFileSync } from 'node:fs';
 test.use({ actionTimeout: 10000 });
 
+test('compares saved full-match analysis depths side by side', async ({
+  page,
+}, info) => {
+  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  const player = `Comparison ${crypto.randomUUID()}`;
+  const job = (id: string, engine_id: string, plies: number, loss: number) => ({
+    id,
+    kind: 'match',
+    status: 'completed',
+    plies,
+    total_games: 1,
+    completed_games: 1,
+    created_at: '2026-11-12T12:00:00Z',
+    engine_snapshot: { engine_id, engine_version: '1.0' },
+    result: {
+      total_games: 1,
+      completed_games: 1,
+      plies,
+      players: [0, 1].map((player) => ({
+        player,
+        checker_decisions: 1,
+        cube_decisions: 1,
+        checker_equity_loss: player === 0 ? loss : 0,
+        cube_equity_loss: 0,
+        unavailable: 0,
+      })),
+    },
+  });
+  await page.route(/\/api\/matches\/[^/]+\/analysis\/jobs(?:\?.*)?$/, (route) =>
+    route.fulfill({
+      json: new URL(route.request().url()).searchParams.has('game_no')
+        ? [
+            { ...job('game-gnu-four', 'gnubg', 4, 0.444), game_no: 1 },
+            {
+              ...job('sage-match-four', 'bgsage', 4, 0.999),
+              game_summary: job('sage-game-four', 'bgsage', 4, 0.555).result,
+            },
+          ]
+        : [
+            job('gnu-four', 'gnubg', 4, 0.111),
+            job('gnu-three', 'gnubg', 3, 0.222),
+            job('sage-three', 'bgsage', 3, 0.333),
+          ],
+    }),
+  );
+  await page.goto('/');
+  await page.getByLabel('Match file', { exact: true }).setInputFiles({
+    name: 'comparison.sgf',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.from(
+      `(;GM[6]PW[${player}]PB[Opponent]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])`,
+    ),
+  });
+  await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
+  await page.getByText('Compare game analyses', { exact: true }).click();
+  const gnu = page.getByRole('combobox', { name: 'GNUbg analysis' });
+  const sage = page.getByRole('combobox', { name: 'Open Sage analysis' });
+  const table = page.locator('.statistics-comparison-table');
+  const loss = table.getByRole('row', { name: /^Checker equity loss/ }).first();
+  await expect(gnu).toHaveValue('game-gnu-four');
+  await expect(sage).toHaveValue('sage-match-four');
+  await expect(
+    table.locator('small').getByText('From full-match analysis'),
+  ).toBeVisible();
+  await expect(loss.getByRole('cell')).toHaveText(['0.444', '0.555']);
+  const scope = page.getByLabel('Analysis scope', { exact: true });
+  await scope.selectOption('match');
+  await expect(
+    page.getByText('Compare match analyses', { exact: true }),
+  ).toBeVisible();
+  await expect(gnu).toHaveValue('gnu-three');
+  await expect(sage).toHaveValue('sage-three');
+  await expect(loss.getByRole('cell')).toHaveText(['0.222', '0.333']);
+  await gnu.selectOption('gnu-four');
+  await expect(loss.getByRole('cell')).toHaveText(['0.111', '0.333']);
+
+  for (const [width, height] of [
+    [1800, 1169],
+    [2560, 1440],
+    [3840, 2160],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await expect(gnu).toBeVisible();
+    await expect(sage).toBeVisible();
+    await expect(loss).toBeVisible();
+    const fits = await table.evaluate((element) => {
+      const parent = element.parentElement!;
+      return parent.scrollWidth <= parent.clientWidth;
+    });
+    expect(fits).toBe(true);
+    await table.screenshot({
+      path: info.outputPath(`match-analysis-${width}.png`),
+    });
+  }
+  await scope.selectOption('game');
+  await expect(gnu).toHaveValue('game-gnu-four');
+  await expect(loss.getByRole('cell')).toHaveText(['0.444', '0.555']);
+});
+
 function analyzedGameFile() {
   return {
     name: 'preview-sources.sgf',

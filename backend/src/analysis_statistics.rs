@@ -89,6 +89,13 @@ async fn statistics(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<JobAnalysisStatistics>> {
+    Ok(Json(load_statistics(&state, id).await?))
+}
+
+pub(crate) async fn load_statistics(
+    state: &AppState,
+    id: Uuid,
+) -> ApiResult<JobAnalysisStatistics> {
     // Complete the source visibility check before holding a pool connection.
     let visibility_job = crate::store::get_job(&state.pool, id)
         .await?
@@ -265,12 +272,12 @@ async fn statistics(
             && covers_summary(summary, &all_totals))
         .then(|| typed_errors(&all_totals))
     });
-    Ok(Json(JobAnalysisStatistics {
+    Ok(JobAnalysisStatistics {
         job_id: id,
         summary,
         games,
         error_breakdown,
-    }))
+    })
 }
 
 /// A saved summary is authoritative: incomplete decision storage must never

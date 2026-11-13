@@ -233,6 +233,7 @@ export default function MatchStatisticsView({
   loading = false,
   error,
   progress,
+  comparison,
 }: {
   job?: Job;
   statistics?: JobAnalysisStatistics;
@@ -243,6 +244,7 @@ export default function MatchStatisticsView({
   loading?: boolean;
   error?: unknown;
   progress?: ReactNode;
+  comparison?: ReactNode;
 }) {
   const text = useStatisticsText();
   const { formatNumber, formatError } = useI18n();
@@ -259,6 +261,7 @@ export default function MatchStatisticsView({
       data-job-id={job?.id}
     >
       <h3>{text('title')}</h3>
+      {comparison}
       {!job ? (
         <p className="analysis-empty">{text('noJob')}</p>
       ) : (

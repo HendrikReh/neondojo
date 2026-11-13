@@ -3900,17 +3900,23 @@
             "description": "One-based source game number; omitted means the whole match.",
             "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "format": "int32"
+            }
+          },
+          {
+            "name": "engine_id",
+            "in": "query",
+            "description": "Provider whose status to show; omitted uses the saved analysis engine.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/MatchAnalysisEngine"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "Latest analysis job for this game or whole-match scope, or null if none has been submitted. Includes persisted partial summary during execution.",
+            "description": "Latest analysis job for the selected engine and scope, or null if none has been submitted. Includes persisted partial summary during execution.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4053,6 +4059,7 @@
           {
             "name": "engine_id",
             "in": "path",
+            "description": "Provider for this estimate; omitted uses the saved analysis engine.",
             "required": true,
             "schema": {
               "type": [
@@ -4069,6 +4076,70 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AnalysisTimeEstimate"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/matches/{id}/analysis/jobs": {
+      "get": {
+        "tags": [
+          "Match analysis"
+        ],
+        "operationId": "match_analysis_jobs",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "game_no",
+            "in": "query",
+            "description": "One-based source game number; omitted means the whole match.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current analysis jobs for the selected game or whole match, newest first. For a selected game, includes its checkpoint from completed whole-match analyses. Returns the latest job for each provider, depth, status and source scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AnalysisComparisonRun"
+                  }
                 }
               }
             }
@@ -8421,6 +8492,29 @@
             "format": "int32"
           }
         }
+      },
+      "AnalysisComparisonRun": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Job"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "game_summary": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MatchAnalysisSummary",
+                    "description": "Selected game's checkpoint from a whole-match analysis."
+                  }
+                ]
+              }
+            }
+          }
+        ]
       },
       "AnalysisRemainingTime": {
         "type": "object",
@@ -12801,9 +12895,27 @@
           }
         }
       },
+      "MatchAnalysisEngine": {
+        "type": "string",
+        "enum": [
+          "gnubg",
+          "bgsage"
+        ]
+      },
       "MatchAnalysisRequest": {
         "type": "object",
         "properties": {
+          "engine_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MatchAnalysisEngine",
+                "description": "Provider for this job; omitted uses the saved analysis engine."
+              }
+            ]
+          },
           "game_no": {
             "type": [
               "integer",

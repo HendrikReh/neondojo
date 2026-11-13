@@ -43,6 +43,7 @@ import { displayedBoardPosition } from './displayed-board';
 import { usePositionText } from './position-browser-messages';
 import type { MoveNotesTarget } from './MoveNotesDialog';
 import { useAnalysisBoardResize } from './useAnalysisBoardResize';
+import type { MatchAnalysisEngine } from './useMatchAnalysis';
 
 export type AnalysisDetail =
   'overview' | 'statistics' | 'errors' | 'notes' | 'cards';
@@ -57,6 +58,7 @@ export default function AnalysisWorkspace({
   navigation,
   jobs,
   theme,
+  defaultEngine = 'gnubg',
   defaultPlies,
   analysisInstallationKey,
   sourceRevision,
@@ -83,6 +85,7 @@ export default function AnalysisWorkspace({
   navigation: ReturnType<typeof useGameNavigation>;
   jobs: ReturnType<typeof useJobs>;
   theme: Theme;
+  defaultEngine?: MatchAnalysisEngine;
   defaultPlies: number;
   analysisInstallationKey?: string;
   sourceRevision: number;
@@ -601,6 +604,7 @@ export default function AnalysisWorkspace({
               matchId={match.id}
               gameNo={game?.game_no}
               navigation={navigation}
+              defaultEngine={defaultEngine}
               defaultPlies={defaultPlies}
               configured={configured}
               analysisInstallationKey={analysisInstallationKey}
@@ -659,6 +663,7 @@ export default function AnalysisWorkspace({
 // Keep the subscription mounted regardless of inspector tab or main workspace.
 function MatchResults({
   navigation,
+  defaultEngine,
   defaultPlies,
   analysisInstallationKey,
   configured,
@@ -675,6 +680,7 @@ function MatchResults({
   matchId: string;
   gameNo?: number;
   navigation: ReturnType<typeof useGameNavigation>;
+  defaultEngine: MatchAnalysisEngine;
   defaultPlies: number;
   analysisInstallationKey?: string;
   configured: boolean;
@@ -713,6 +719,7 @@ function MatchResults({
         games={navigation.games}
         onDecision={onDecision}
         gameNo={navigation.game?.game_no}
+        defaultEngine={defaultEngine}
         defaultPlies={defaultPlies}
         configured={configured}
         analysisInstallationKey={analysisInstallationKey}

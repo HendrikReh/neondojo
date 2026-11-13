@@ -110,6 +110,7 @@ pub fn router(state: AppState) -> Router {
             "/api/matches/{id}/analysis",
             get(latest_match_analysis).post(create_match_analysis),
         )
+        .route("/api/matches/{id}/analysis/jobs", get(match_analysis_jobs))
         .route("/api/positions", get(positions))
         .route("/api/positions/{id}", get(get_position))
         .route("/api/jobs", post(create_job))
@@ -581,9 +582,27 @@ async fn create_job(
 }
 
 #[derive(Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+enum MatchAnalysisEngine {
+    Gnubg,
+    Bgsage,
+}
+
+impl MatchAnalysisEngine {
+    fn id(&self) -> &'static str {
+        match self {
+            Self::Gnubg => "gnubg",
+            Self::Bgsage => "bgsage",
+        }
+    }
+}
+
+#[derive(Deserialize, ToSchema)]
 struct MatchAnalysisRequest {
     /// Analyze one source game in its original match context; omitted means the whole match.
     game_no: Option<i32>,
+    /// Provider for this job; omitted uses the saved analysis engine.
+    engine_id: Option<MatchAnalysisEngine>,
     /// Verified checker and cube depth of the selected engine. Omitted uses saved analysis depth.
     #[serde(default)]
     #[schema(minimum = 0, maximum = 4)]
@@ -606,9 +625,11 @@ async fn create_match_analysis(
             "The source match was removed; analyze the saved position instead",
         ));
     }
-    let (settings, snapshot) = crate::settings::snapshot(&state, request.plies)
-        .await
-        .map_err(|e| ApiError::invalid(format!("Engine unavailable: {e:#}")))?;
+    let engine_id = request.engine_id.as_ref().map(MatchAnalysisEngine::id);
+    let (settings, snapshot) =
+        crate::settings::snapshot_for_analysis(&state, request.plies, engine_id)
+            .await
+            .map_err(|e| ApiError::invalid(format!("Engine unavailable: {e:#}")))?;
     let plies = request.plies.unwrap_or(settings.analysis_plies);
     if !crate::configuration::engine_depths(&snapshot.engine_id, "analysis").contains(&plies) {
         return Err(ApiError::invalid(
@@ -637,17 +658,69 @@ async fn create_match_analysis(
     Ok((StatusCode::ACCEPTED, Json(job)))
 }
 
-#[utoipa::path(get, path="/api/matches/{id}/analysis", params(("id"=Uuid, Path), GameScope), responses((status=200, body=Option<Job>,description="Latest analysis job for this game or whole-match scope, or null if none has been submitted. Includes persisted partial summary during execution."),(status=404,body=ErrorBody),(status=422,body=ErrorBody)), tag="Match analysis")]
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+struct MatchAnalysisQuery {
+    /// One-based source game number; omitted means the whole match.
+    game_no: Option<i32>,
+    /// Provider whose status to show; omitted uses the saved analysis engine.
+    engine_id: Option<MatchAnalysisEngine>,
+}
+
+#[utoipa::path(get, path="/api/matches/{id}/analysis", params(("id"=Uuid, Path), MatchAnalysisQuery), responses((status=200, body=Option<Job>,description="Latest analysis job for the selected engine and scope, or null if none has been submitted. Includes persisted partial summary during execution."),(status=404,body=ErrorBody),(status=422,body=ErrorBody)), tag="Match analysis")]
 async fn latest_match_analysis(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    Query(query): Query<GameScope>,
+    query: Result<Query<MatchAnalysisQuery>, axum::extract::rejection::QueryRejection>,
 ) -> ApiResult<Json<Option<Job>>> {
     crate::play::require_review_available(&state.pool, id).await?;
-    validate_game(&state, id, query.game_no).await?;
+    let Query(query) = query.map_err(|error| ApiError::invalid(error.body_text()))?;
+    let game_no = query.game_no;
+    validate_game(&state, id, game_no).await?;
     Ok(Json(
-        store::latest_match_job_scoped(&state.pool, id, query.game_no).await?,
+        store::latest_match_job_scoped(
+            &state.pool,
+            id,
+            game_no,
+            query.engine_id.as_ref().map(MatchAnalysisEngine::id),
+        )
+        .await?,
     ))
+}
+
+#[utoipa::path(get, path="/api/matches/{id}/analysis/jobs", params(("id"=Uuid, Path), ("game_no"=Option<i32>, Query, description="One-based source game number; omitted means the whole match.")), responses((status=200, body=Vec<AnalysisComparisonRun>,description="Current analysis jobs for the selected game or whole match, newest first. For a selected game, includes its checkpoint from completed whole-match analyses. Returns the latest job for each provider, depth, status and source scope."),(status=404,body=ErrorBody),(status=422,body=ErrorBody)), tag="Match analysis")]
+async fn match_analysis_jobs(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    query: Result<Query<GameScope>, axum::extract::rejection::QueryRejection>,
+) -> ApiResult<Json<Vec<AnalysisComparisonRun>>> {
+    crate::play::require_review_available(&state.pool, id).await?;
+    let Query(query) = query.map_err(|error| ApiError::invalid(error.body_text()))?;
+    if query.game_no.is_some() {
+        validate_game(&state, id, query.game_no).await?;
+    } else {
+        store::get_match(&state.pool, id)
+            .await?
+            .ok_or_else(ApiError::missing)?;
+    }
+    let mut runs = store::match_analysis_jobs_for_scope(&state.pool, id, query.game_no).await?;
+    if let Some(game_no) = query.game_no {
+        for run in runs
+            .iter_mut()
+            .filter(|run| run.job.game_no.is_none() && run.game_summary.is_none())
+        {
+            let statistics =
+                crate::analysis_statistics::load_statistics(&state, run.job.id).await?;
+            run.game_summary = statistics
+                .games
+                .into_iter()
+                .find(|game| {
+                    game.game_no == game_no && game.analyzed && game.error_breakdown.is_some()
+                })
+                .and_then(|game| game.summary);
+        }
+    }
+    Ok(Json(runs))
 }
 
 #[derive(Deserialize, IntoParams)]
@@ -827,6 +900,7 @@ async fn events(
         events,
         create_match_analysis,
         latest_match_analysis,
+        match_analysis_jobs,
         move_analyses
     ),
     components(schemas(

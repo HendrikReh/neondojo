@@ -9,9 +9,12 @@ import { createPortal } from 'react-dom';
 import { request, terminal, type Job, type Match, type MatchGame } from './api';
 import { reviewDecisions, type ReviewDecision } from './review-decisions-api';
 import { useSourceText } from './analysis-source-messages';
-import { useMatchAnalysis } from './useMatchAnalysis';
+import { useMatchAnalysis, type MatchAnalysisEngine } from './useMatchAnalysis';
 import { useI18n, type TranslationKey } from './i18n';
+import { loadEngines, type EngineInfo } from './settings-api';
+import { useSettingsText } from './settings-messages';
 import MatchStatisticsView from './MatchStatisticsView';
+import MatchAnalysisComparison from './MatchAnalysisComparison';
 import {
   buildStatisticsFilter,
   decisionFilterQuery,
@@ -46,6 +49,7 @@ export default function MatchAnalysisPanel({
   showStatistics = false,
   onShowErrors,
   onGame,
+  defaultEngine = 'gnubg',
   defaultPlies = DEFAULT_ANALYSIS_PLIES,
   configured = true,
   analysisInstallationKey,
@@ -69,6 +73,7 @@ export default function MatchAnalysisPanel({
   showStatistics?: boolean;
   onShowErrors?: () => void;
   onGame?: (gameNo: number) => void;
+  defaultEngine?: MatchAnalysisEngine;
   defaultPlies?: number;
   configured?: boolean;
   analysisInstallationKey?: string;
@@ -82,10 +87,46 @@ export default function MatchAnalysisPanel({
   }) => void;
 }) {
   const profile = useOptionalConfiguration();
-  const supportedPlies =
-    configurationOptions.engine_profiles[
-      profile?.current?.analysis.engine ?? 'gnubg'
-    ].analysis;
+  const [engineId, setEngineId] = useState(defaultEngine);
+  const [requestedPlies, setPlies] = useState(defaultPlies);
+  useEffect(() => {
+    setEngineId(defaultEngine);
+    setPlies(defaultPlies);
+  }, [defaultEngine, defaultPlies, profile?.confirmed?.active_profile.id]);
+  const [engineCatalog, setEngineCatalog] = useState<{
+    key?: string;
+    engines: EngineInfo[];
+    error?: unknown;
+  }>();
+  useEffect(() => {
+    if (!configured) return;
+    const abort = new AbortController();
+    void loadEngines(abort.signal)
+      .then((engines) => {
+        if (!abort.signal.aborted)
+          setEngineCatalog({ key: analysisInstallationKey, engines });
+      })
+      .catch((error) => {
+        if (!abort.signal.aborted)
+          setEngineCatalog({
+            key: analysisInstallationKey,
+            engines: [],
+            error,
+          });
+      });
+    return () => abort.abort();
+  }, [configured, analysisInstallationKey]);
+  const catalog =
+    engineCatalog?.key === analysisInstallationKey ? engineCatalog : undefined;
+  const engine = catalog?.engines.find((item) => item.id === engineId);
+  const supportedPlies = configurationOptions.engine_profiles[
+    engineId
+  ].analysis.filter((depth) => !engine || engine.plies.includes(depth));
+  const plies = supportedPlies.includes(requestedPlies)
+    ? requestedPlies
+    : supportedPlies.includes(DEFAULT_ANALYSIS_PLIES)
+      ? DEFAULT_ANALYSIS_PLIES
+      : (supportedPlies[0] ?? requestedPlies);
   const {
     t,
     formatNumber,
@@ -95,6 +136,7 @@ export default function MatchAnalysisPanel({
     formatError,
   } = useI18n();
   const text = useStatisticsText();
+  const settingsText = useSettingsText();
   const sourceText = useSourceText();
   const decimal = (value: number) =>
     formatNumber(value, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
@@ -106,14 +148,10 @@ export default function MatchAnalysisPanel({
   const scoped = scope === 'game';
   const { job, error, submitting, run } = useMatchAnalysis(
     match.id,
+    engineId,
     scoped ? gameNo : undefined,
     !scoped || gameNo !== undefined,
     onAccepted,
-  );
-  const [plies, setPlies] = useState(defaultPlies);
-  useEffect(
-    () => setPlies(defaultPlies),
-    [defaultPlies, profile?.current?.analysis.engine],
   );
   useEffect(() => onJob?.(job), [job, onJob]);
   const filterScope = `${match.id}:${scoped ? (gameNo ?? 'none') : 'match'}`;
@@ -213,6 +251,11 @@ export default function MatchAnalysisPanel({
   const [pageError, setPageError] = useState<{ key: string; error: unknown }>();
   const [loaded, setLoaded] = useState<string>();
   const active = job && !terminal(job);
+  const controlsDisabled = !configured || !!active || submitting;
+  const analysisConfigured =
+    configured && !!engine?.available && supportedPlies.includes(plies);
+  const analysisDisabled =
+    controlsDisabled || !analysisConfigured || (scoped && gameNo === undefined);
   const names = [match.white, match.black];
   const filter = decisionFilterQuery(selected);
   // Filters, checkpoints and scope changes each start their own pagination chain.
@@ -315,16 +358,38 @@ export default function MatchAnalysisPanel({
           </select>
         </label>
         <label>
+          {settingsText('analysisEngine')}
+          <select
+            aria-label={settingsText('analysisEngine')}
+            value={engineId}
+            disabled={!configured || submitting}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (value !== 'gnubg' && value !== 'bgsage') return;
+              setEngineId(value);
+              setPlies(plies);
+            }}
+          >
+            {(['gnubg', 'bgsage'] as const).map((id) => {
+              const item = catalog?.engines.find((entry) => entry.id === id);
+              const name = id === 'gnubg' ? 'GNUbg' : 'Open Sage';
+              return (
+                <option key={id} value={id}>
+                  {item?.name ?? name}
+                  {catalog && !item?.available
+                    ? ` — ${settingsText('unavailable')}`
+                    : ''}
+                </option>
+              );
+            })}
+          </select>
+        </label>
+        <label>
           {t('matchAnalysis.depth')}{' '}
           <select
             aria-label={t('matchAnalysis.depthLabel')}
             value={plies}
-            disabled={
-              !configured ||
-              !!active ||
-              submitting ||
-              (scoped && gameNo === undefined)
-            }
+            disabled={analysisDisabled}
             onChange={(event) => setPlies(Number(event.target.value))}
           >
             <option value={0} disabled={!supportedPlies.includes(0)}>
@@ -357,12 +422,7 @@ export default function MatchAnalysisPanel({
           }
           className="primary"
           onClick={() => void run(plies)}
-          disabled={
-            !configured ||
-            !!active ||
-            submitting ||
-            (scoped && gameNo === undefined)
-          }
+          disabled={analysisDisabled}
         />
         {!active && !submitting && (
           <AnalysisTimeEstimate
@@ -370,12 +430,18 @@ export default function MatchAnalysisPanel({
             matchId={match.id}
             gameNo={gameNo}
             scoped={scoped}
+            engineId={engineId}
             plies={plies}
-            configured={configured}
+            configured={analysisConfigured}
             installationKey={analysisInstallationKey}
           />
         )}
       </div>
+      {!!catalog?.error && (
+        <p className="analysis-error" role="alert">
+          {formatError(catalog.error)}
+        </p>
+      )}
     </div>
   );
   return (
@@ -401,7 +467,7 @@ export default function MatchAnalysisPanel({
           )}
           <>
             <p className="review-source-note">{text('reviewSources')}</p>
-            {showResults && !overview && progress}
+            {showResults && !overview && !controlsTarget && progress}
             <details className="match-move-overview" open>
               <summary>
                 {errorsOnly
@@ -651,13 +717,25 @@ export default function MatchAnalysisPanel({
             ? statisticsError.error
             : undefined
         }
-        progress={showStatistics ? progress : undefined}
+        progress={showStatistics && !controlsTarget ? progress : undefined}
+        comparison={
+          match.source_available &&
+          (!scoped || gameNo !== undefined) && (
+            <MatchAnalysisComparison
+              key={match.id}
+              matchId={match.id}
+              gameNo={scoped ? gameNo : undefined}
+              names={names}
+              visible={showStatistics}
+            />
+          )
+        }
       />
       {controlsTarget &&
         createPortal(
           <>
             {heading}
-            {overview && progress}
+            {progress}
             {!!error && (
               <p className="analysis-error" role="alert">
                 {formatError(error)}

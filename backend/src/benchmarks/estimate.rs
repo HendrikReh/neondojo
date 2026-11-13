@@ -24,6 +24,7 @@ pub struct EstimateQuery {
     #[param(minimum = 0, maximum = 4)]
     pub plies: Option<i32>,
     pub game_no: Option<i32>,
+    /// Provider for this estimate; omitted uses the saved analysis engine.
     pub engine_id: Option<String>,
 }
 #[derive(Debug, Serialize, ToSchema)]
@@ -122,7 +123,7 @@ async fn estimate(
     }
     // The existing settings loader initializes missing rows. An estimate must
     // stay read-only, including on a fresh installation.
-    let (engine_id, default_plies, binary, gnubg_threads, open_sage_threads):
+    let (default_engine, default_plies, binary, gnubg_threads, open_sage_threads):
         (String, i32, String, Option<i32>, Option<i32>) = sqlx::query_as(
         "SELECT analysis_engine,analysis_plies,gnubg_path,gnubg_threads,open_sage_threads FROM app_settings WHERE singleton=true",
     )
@@ -130,17 +131,11 @@ async fn estimate(
     .await
     .map_err(anyhow::Error::from)?
     .unwrap_or_else(|| ("gnubg".into(), 2, state.engine.binary().to_owned(), None, None));
+    let engine_id = query.engine_id.unwrap_or(default_engine);
     let plies = query.plies.unwrap_or(default_plies);
     if !crate::configuration::engine_depths(&engine_id, "analysis").contains(&plies) {
-        return Err(ApiError::invalid("plies must be 0..4"));
-    }
-    if query
-        .engine_id
-        .as_ref()
-        .is_some_and(|engine| engine != &engine_id)
-    {
         return Err(ApiError::invalid(
-            "engine_id must match the applied analysis engine",
+            "Depth is not verified for the selected engine",
         ));
     }
     if let Some(game_no) = query.game_no {

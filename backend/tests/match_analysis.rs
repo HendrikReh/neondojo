@@ -23,6 +23,154 @@ async fn call(app: axum::Router, method: &str, uri: &str, body: Value) -> (u16, 
 }
 
 #[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires isolated PostgreSQL"]
+async fn explicit_match_analysis_engine_leaves_the_saved_provider_intact(pool: PgPool) {
+    let sgf = "(;GM[6]FF[4]MI[length:5][ws:0][bs:0];W[31hefe])";
+    let imported = store::import_match(
+        &pool,
+        "engine-override.sgf",
+        "sgf",
+        sgf.as_bytes(),
+        sgf,
+        &import::parse_sgf(sgf).unwrap(),
+    )
+    .await
+    .unwrap();
+    let app = api::router(api::AppState::new(
+        pool.clone(),
+        Engine::new("/no/such/bgtutor-gnubg".into()),
+    ));
+    call(app.clone(), "GET", "/api/settings", Value::Null).await;
+    sqlx::query("UPDATE app_settings SET analysis_engine='bgsage',analysis_plies=2")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let uri = format!("/api/matches/{}/analysis", imported.r#match.id);
+    let (status, job) = call(
+        app.clone(),
+        "POST",
+        &uri,
+        json!({"engine_id":"gnubg","plies":3}),
+    )
+    .await;
+    assert_eq!(status, 202, "{job}");
+    assert_eq!(job["engine_snapshot"]["engine_id"], "gnubg");
+    assert_eq!(job["plies"], 3);
+    let (_, settings) = call(app.clone(), "GET", "/api/settings", Value::Null).await;
+    assert_eq!(settings["analysis_engine"], "bgsage");
+    assert_eq!(settings["analysis_plies"], 2);
+    assert_eq!(
+        call(app, "POST", &uri, json!({"engine_id":"unknown","plies":3}))
+            .await
+            .0,
+        422
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires isolated PostgreSQL"]
+async fn match_analysis_history_includes_both_providers_for_the_current_full_match(pool: PgPool) {
+    let sgf = "(;GM[6]FF[4]MI[length:5][ws:0][bs:0];W[31hefe])";
+    let imported = store::import_match(
+        &pool,
+        "engine-history.sgf",
+        "sgf",
+        sgf.as_bytes(),
+        sgf,
+        &import::parse_sgf(sgf).unwrap(),
+    )
+    .await
+    .unwrap();
+    let match_id = imported.r#match.id;
+    sqlx::query("UPDATE matches SET source_revision=1 WHERE id=$1")
+        .bind(match_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let gnu = store::create_match_job(&pool, match_id, 3, 1)
+        .await
+        .unwrap();
+    let sage = uuid::Uuid::new_v4();
+    let game = store::create_match_job_scoped(&pool, match_id, 3, 1, Some(1))
+        .await
+        .unwrap();
+    let stale = store::create_match_job(&pool, match_id, 2, 1)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE jobs SET source_revision=0 WHERE id=$1")
+        .bind(stale.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,completed_games,engine_snapshot) VALUES($1,$2,'match',3,'completed',1,1,$3)")
+        .bind(sage)
+        .bind(match_id)
+        .bind(json!({"engine_id":"bgsage","gnubg_path":"gnubg"}))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let app = api::router(api::AppState::new(
+        pool.clone(),
+        Engine::new("gnubg".into()),
+    ));
+    let uri = format!("/api/matches/{match_id}/analysis/jobs");
+    let (status, history) = call(app.clone(), "GET", &uri, Value::Null).await;
+    assert_eq!(status, 200, "{history}");
+    let ids: Vec<_> = history
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|job| job["id"].clone())
+        .collect();
+    assert_eq!(ids, [json!(sage), json!(gnu.id)]);
+    assert!(!ids.contains(&json!(game.id)));
+    assert!(!ids.contains(&json!(stale.id)));
+
+    let (status, history) =
+        call(app.clone(), "GET", &format!("{uri}?game_no=1"), Value::Null).await;
+    assert_eq!(status, 200, "{history}");
+    assert_eq!(history.as_array().unwrap().len(), 1);
+    assert_eq!(history[0]["id"], json!(game.id));
+    assert_eq!(
+        call(app.clone(), "GET", &format!("{uri}?game_no=2"), Value::Null)
+            .await
+            .0,
+        422
+    );
+
+    call(app.clone(), "GET", "/api/settings", Value::Null).await;
+    sqlx::query("UPDATE app_settings SET analysis_engine='bgsage', analysis_plies=2")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let latest = format!("/api/matches/{match_id}/analysis");
+    for (query, expected) in [
+        ("", json!(sage)),
+        ("?engine_id=bgsage", json!(sage)),
+        ("?engine_id=gnubg", json!(gnu.id)),
+        ("?engine_id=gnubg&game_no=1", json!(game.id)),
+        ("?engine_id=bgsage&game_no=1", Value::Null),
+    ] {
+        let (status, job) =
+            call(app.clone(), "GET", &format!("{latest}{query}"), Value::Null).await;
+        assert_eq!(status, 200, "{query}: {job}");
+        assert_eq!(job["id"], expected, "{query}");
+    }
+    assert_eq!(
+        call(
+            app,
+            "GET",
+            &format!("{latest}?engine_id=unknown"),
+            Value::Null
+        )
+        .await
+        .0,
+        422,
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL and GNUbg"]
 async fn full_match_analysis_is_persisted_paginated_and_replayable(pool: PgPool) {
     let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()));
@@ -50,6 +198,47 @@ async fn full_match_analysis_is_persisted_paginated_and_replayable(pool: PgPool)
     assert_eq!(done["completed_games"], 2);
     assert_eq!(done["total_games"], 2);
     assert_eq!(done["result"]["analyzed_moves"], 4);
+    let (_, statistics) = call(
+        app.clone(),
+        "GET",
+        &format!("/api/jobs/{}/statistics", job.id),
+        Value::Null,
+    )
+    .await;
+    let (status, comparison) = call(
+        app.clone(),
+        "GET",
+        &format!("{endpoint}/jobs?game_no=2"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{comparison}");
+    assert_eq!(comparison.as_array().unwrap().len(), 1, "{comparison}");
+    assert_eq!(comparison[0]["id"], json!(job.id));
+    assert!(comparison[0]["game_no"].is_null());
+    assert_eq!(
+        comparison[0]["game_summary"],
+        statistics["games"][1]["summary"]
+    );
+    assert_eq!(comparison[0]["game_summary"]["analyzed_moves"], 2);
+    sqlx::query("UPDATE match_analysis_games SET summary=NULL WHERE job_id=$1 AND game_no=2")
+        .bind(job.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (status, legacy) = call(
+        app.clone(),
+        "GET",
+        &format!("{endpoint}/jobs?game_no=2"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{legacy}");
+    assert_eq!(
+        legacy[0]["game_summary"]["players"],
+        comparison[0]["game_summary"]["players"]
+    );
+    assert!(legacy[0]["game_summary"]["performance_rating"].is_null());
     let (_, first) = call(
         app.clone(),
         "GET",

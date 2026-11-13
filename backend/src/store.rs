@@ -468,16 +468,62 @@ pub async fn events(pool: &PgPool, job_id: Uuid, after: i64) -> Result<Vec<JobEv
 }
 
 pub async fn latest_match_job(pool: &PgPool, match_id: Uuid) -> Result<Option<Job>> {
-    latest_match_job_scoped(pool, match_id, None).await
+    latest_match_job_scoped(pool, match_id, None, None).await
 }
 
 pub async fn latest_match_job_scoped(
     pool: &PgPool,
     match_id: Uuid,
     game_no: Option<i32>,
+    engine_id: Option<&str>,
 ) -> Result<Option<Job>> {
-    Ok(sqlx::query_as("SELECT * FROM selected_engine_jobs WHERE source_revision=(SELECT source_revision FROM matches WHERE id=$1) AND match_uuid=$1 AND game_no IS NOT DISTINCT FROM $2 AND kind='match' ORDER BY created_at DESC,id DESC LIMIT 1")
-        .bind(match_id).bind(game_no).fetch_optional(pool).await?)
+    let mut query = QueryBuilder::new(if engine_id.is_some() {
+        "SELECT * FROM jobs"
+    } else {
+        "SELECT * FROM selected_engine_jobs"
+    });
+    query
+        .push(" WHERE source_revision=(SELECT source_revision FROM matches WHERE id=")
+        .push_bind(match_id)
+        .push(") AND match_uuid=")
+        .push_bind(match_id)
+        .push(" AND game_no IS NOT DISTINCT FROM ")
+        .push_bind(game_no)
+        .push(" AND kind='match'");
+    if let Some(engine_id) = engine_id {
+        query
+            .push(" AND coalesce(engine_snapshot->>'engine_id','gnubg')=")
+            .push_bind(engine_id);
+    }
+    query.push(" ORDER BY created_at DESC,id DESC LIMIT 1");
+    Ok(query.build_query_as().fetch_optional(pool).await?)
+}
+
+pub async fn match_analysis_jobs_for_scope(
+    pool: &PgPool,
+    match_id: Uuid,
+    game_no: Option<i32>,
+) -> Result<Vec<AnalysisComparisonRun>> {
+    // The latest run in each state keeps completed results accessible even
+    // during a rerun and bounds the response by provider, depth and status.
+    Ok(sqlx::query_as(
+        "SELECT * FROM (
+            SELECT DISTINCT ON (coalesce(j.engine_snapshot->>'engine_id','gnubg'), j.plies, j.status, (j.game_no IS NULL))
+                j.*, CASE WHEN j.game_no IS NULL THEN c.summary END AS game_summary
+            FROM jobs j JOIN matches m ON m.id=j.match_uuid AND m.source_revision=j.source_revision
+            LEFT JOIN match_analysis_games c ON c.job_id=j.id AND c.game_no=$2 AND j.game_no IS NULL
+            WHERE j.match_uuid=$1 AND j.kind='match'
+              AND NOT m.collection_only
+              AND (coalesce(j.game_no,0)=coalesce($2::integer,0)
+                   OR (c.job_id IS NOT NULL AND j.status='completed' AND j.completed_games=j.total_games))
+            ORDER BY coalesce(j.engine_snapshot->>'engine_id','gnubg'), j.plies, j.status,
+                     (j.game_no IS NULL), (c.summary IS NOT NULL) DESC, j.created_at DESC, j.id DESC
+        ) history ORDER BY created_at DESC, id DESC",
+    )
+    .bind(match_id)
+    .bind(game_no)
+    .fetch_all(pool)
+    .await?)
 }
 
 pub async fn create_match_job(

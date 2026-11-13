@@ -168,7 +168,10 @@ test('full match analysis, errors, board navigation and persisted results', asyn
   await expect(
     progress.getByText('Partieanalyse abgeschlossen', { exact: true }),
   ).toBeVisible({ timeout: 45_000 });
-  await expect(progress.getByRole('progressbar')).toHaveAttribute('value', '100');
+  await expect(progress.getByRole('progressbar')).toHaveAttribute(
+    'value',
+    '100',
+  );
   await expect(progress).toContainText('2 / 2 Spiele');
   await page.getByRole('tab', { name: 'Statistik', exact: true }).click();
   const statistics = page.getByRole('tabpanel', {

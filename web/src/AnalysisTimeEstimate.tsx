@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import { useI18n } from './i18n';
+import type { MatchAnalysisEngine } from './useMatchAnalysis';
 import {
   loadAnalysisTimeEstimate,
   type AnalysisTimeEstimateResult,
@@ -15,6 +16,7 @@ export default function AnalysisTimeEstimate({
   matchId,
   gameNo,
   scoped,
+  engineId,
   plies,
   configured,
   installationKey = '',
@@ -22,6 +24,7 @@ export default function AnalysisTimeEstimate({
   matchId: string;
   gameNo?: number;
   scoped: boolean;
+  engineId: MatchAnalysisEngine;
   plies: number;
   configured: boolean;
   installationKey?: string;
@@ -34,7 +37,6 @@ export default function AnalysisTimeEstimate({
   ) => analysisEstimateText(locale, key, values);
   const current = profile?.current?.analysis;
   const confirmed = profile?.confirmed?.current_configuration.analysis;
-  const engineId = current?.engine ?? 'gnubg';
   // `ready` remains true during the save debounce. Compare the actual engine
   // inputs with the server snapshot, without flushing or writing on a read.
   const pending =
@@ -58,6 +60,7 @@ export default function AnalysisTimeEstimate({
     matchId,
     selectedGame ?? null,
     scoped,
+    engineId,
     plies,
     installationKey,
     current,

@@ -916,6 +916,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matches/{id}/analysis/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["match_analysis_jobs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matches/{id}/annotation": {
         parameters: {
             query?: never;
@@ -1938,6 +1954,9 @@ export interface components {
             engine: string;
             /** Format: int32 */
             plies: number;
+        };
+        AnalysisComparisonRun: components["schemas"]["Job"] & {
+            game_summary?: null | components["schemas"]["MatchAnalysisSummary"];
         };
         AnalysisRemainingTime: {
             /** Format: int32 */
@@ -3200,7 +3219,10 @@ export interface components {
             name: string;
             os: string;
         };
+        /** @enum {string} */
+        MatchAnalysisEngine: "gnubg" | "bgsage";
         MatchAnalysisRequest: {
+            engine_id?: null | components["schemas"]["MatchAnalysisEngine"];
             /**
              * Format: int32
              * @description Analyze one source game in its original match context; omitted means the whole match.
@@ -6958,7 +6980,9 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description One-based source game number; omitted means the whole match. */
-                game_no?: number | null;
+                game_no?: number;
+                /** @description Provider whose status to show; omitted uses the saved analysis engine. */
+                engine_id?: components["schemas"]["MatchAnalysisEngine"];
             };
             header?: never;
             path: {
@@ -6968,7 +6992,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Latest analysis job for this game or whole-match scope, or null if none has been submitted. Includes persisted partial summary during execution. */
+            /** @description Latest analysis job for the selected engine and scope, or null if none has been submitted. Includes persisted partial summary during execution. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7044,6 +7068,7 @@ export interface operations {
                 id: string;
                 plies: number | null;
                 game_no: number | null;
+                /** @description Provider for this estimate; omitted uses the saved analysis engine. */
                 engine_id: string | null;
             };
             cookie?: never;
@@ -7056,6 +7081,47 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AnalysisTimeEstimate"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    match_analysis_jobs: {
+        parameters: {
+            query?: {
+                /** @description One-based source game number; omitted means the whole match. */
+                game_no?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current analysis jobs for the selected game or whole match, newest first. For a selected game, includes its checkpoint from completed whole-match analyses. Returns the latest job for each provider, depth, status and source scope. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisComparisonRun"][];
                 };
             };
             404: {

@@ -80,6 +80,102 @@ async function openMatch(p: Page, locale = 'en') {
   await expect(p.locator('.analysis-workspace .board')).toBeVisible();
   return match;
 }
+test('starts GNUbg 4-ply for the selected game with an Open Sage profile', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  const config = structuredClone(defaultConfiguration);
+  config.analysis.engine = 'bgsage';
+  const profile = await profileBackend(page, { configuration: config });
+  await page.route('**/api/engines', (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: 'gnubg',
+          name: 'GNUbg',
+          available: true,
+          version: null,
+          plies: [0, 1, 2, 3, 4],
+        },
+        {
+          id: 'bgsage',
+          name: 'Open Sage',
+          available: true,
+          version: null,
+          plies: [2, 3],
+        },
+      ],
+    }),
+  );
+  const match = await openMatch(page);
+  const engine = page.getByLabel('Analysis engine', { exact: true });
+  const depth = page.getByLabel('Match analysis depth', { exact: true });
+  await expect(engine).toHaveValue('bgsage');
+  await expect(depth.locator('option[value="4"]')).toBeDisabled();
+  await expect(depth.locator('option[value="1"]')).toBeDisabled();
+  await page.getByLabel('Select game', { exact: true }).selectOption('2');
+  await engine.selectOption('gnubg');
+  const estimateResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      url.pathname === `/api/matches/${match.id}/analysis/estimate` &&
+      url.searchParams.get('game_no') === '2' &&
+      url.searchParams.get('engine_id') === 'gnubg' &&
+      url.searchParams.get('plies') === '4'
+    );
+  });
+  await depth.selectOption('4');
+  expect(await (await estimateResponse).json()).toMatchObject({
+    game_no: 2,
+    engine_id: 'gnubg',
+    plies: 4,
+  });
+  await engine.selectOption('bgsage');
+  await expect(depth).toHaveValue('2');
+  await engine.selectOption('gnubg');
+  await depth.selectOption('4');
+  await page.screenshot({ path: '/tmp/bgtutor-analysis-engine-desktop.png' });
+  const accepted = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname ===
+        `/api/matches/${match.id}/analysis` &&
+      response.request().method() === 'POST',
+  );
+  await page.getByRole('button', { name: 'Analyze game', exact: true }).click();
+  const response = await accepted;
+  expect(response.status()).toBe(202);
+  const job = await response.json();
+  expect(job).toMatchObject({
+    game_no: 2,
+    plies: 4,
+    engine_snapshot: { engine_id: 'gnubg' },
+  });
+  expect(profile.calls.filter(({ method }) => method !== 'GET')).toEqual([]);
+  expect(profile.state.current_configuration.analysis.engine).toBe('bgsage');
+  await expect
+    .poll(
+      async () => {
+        const response = await page.request.get(`/api/jobs/${job.id}`);
+        return (await response.json()).status;
+      },
+      { timeout: 30_000 },
+    )
+    .toBe('completed');
+  await expect(page.locator('.match-analysis-progress:visible')).toContainText(
+    'Game analysis completed',
+  );
+  await page.getByRole('tab', { name: 'Notes', exact: true }).click();
+  await expect(page.locator('.match-analysis-progress:visible')).toContainText(
+    'Game analysis completed',
+  );
+  await engine.selectOption('bgsage');
+  await expect(page.locator('.match-analysis-progress:visible')).toHaveCount(0);
+  await engine.selectOption('gnubg');
+  await expect(page.locator('.match-analysis-progress:visible')).toContainText(
+    'Game analysis completed',
+  );
+});
+
 test('shows benchmark basis before any job and follows game, scope and depth', async ({
   page,
 }) => {
@@ -429,7 +525,13 @@ test('hides pre-start estimate during submission and queued engine work', async 
     return route.fulfill({ json: job });
   });
   await page.route('**/api/matches/*/analysis?*', (route) =>
-    route.fulfill({ json: accepted ? job : null }),
+    route.fulfill({
+      json:
+        accepted &&
+        new URL(route.request().url()).searchParams.get('engine_id') === 'gnubg'
+          ? job
+          : null,
+    }),
   );
   await page.route('**/api/jobs/fixture-queued', (route) =>
     route.fulfill({ json: job }),
@@ -447,6 +549,13 @@ test('hides pre-start estimate during submission and queued engine work', async 
   await expect(estimate(page)).toHaveCount(0);
   release();
   await expect(page.locator('.match-analysis-progress')).toContainText(
+    'Queued',
+  );
+  const engine = page.getByLabel('Analysis engine', { exact: true });
+  await engine.selectOption('bgsage');
+  await expect(page.locator('.match-analysis-progress:visible')).toHaveCount(0);
+  await engine.selectOption('gnubg');
+  await expect(page.locator('.match-analysis-progress:visible')).toContainText(
     'Queued',
   );
   await expect(estimate(page)).toHaveCount(0);

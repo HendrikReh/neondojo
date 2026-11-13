@@ -172,20 +172,17 @@ pub(crate) async fn snapshot(
     state: &AppState,
     requested_plies: Option<i32>,
 ) -> anyhow::Result<(AppSettings, EngineSnapshot)> {
+    snapshot_for_analysis(state, requested_plies, None).await
+}
+
+pub(crate) async fn snapshot_for_analysis(
+    state: &AppState,
+    requested_plies: Option<i32>,
+    requested_engine: Option<&str>,
+) -> anyhow::Result<(AppSettings, EngineSnapshot)> {
     let saved = load_row(state).await?;
-    // Record the installed version even before the first settings save, and
-    // distinguish an executable upgraded in place from an existing active job.
-    // Unavailable initial/fake engines still produce a job whose worker reports
-    // its normal durable failure; reading settings never probes the executable.
-    let snapshot = snapshot_for(
-        state,
-        &saved.settings.analysis_engine,
-        &saved.settings.gnubg_path,
-        saved.settings.gnubg_threads,
-        sage_threads(saved.settings.open_sage_threads, SAGE_ANALYSIS_THREADS),
-        requested_plies.unwrap_or(saved.settings.analysis_plies),
-    )
-    .await?;
+    let plies = requested_plies.unwrap_or(saved.settings.analysis_plies);
+    let snapshot = analysis_snapshot(state, &saved.settings, requested_engine, plies).await?;
     Ok((saved.settings, snapshot))
 }
 
@@ -196,16 +193,29 @@ pub(crate) async fn snapshot_for_practice(
     let plies = settings.analysis_plies.min(2);
     Ok((
         plies,
-        snapshot_for(
-            state,
-            &settings.analysis_engine,
-            &settings.gnubg_path,
-            settings.gnubg_threads,
-            sage_threads(settings.open_sage_threads, SAGE_ANALYSIS_THREADS),
-            plies,
-        )
-        .await?,
+        analysis_snapshot(state, &settings, None, plies).await?,
     ))
+}
+
+async fn analysis_snapshot(
+    state: &AppState,
+    settings: &AppSettings,
+    requested_engine: Option<&str>,
+    plies: i32,
+) -> anyhow::Result<EngineSnapshot> {
+    // Record the installed version even before the first settings save, and
+    // distinguish an executable upgraded in place from an existing active job.
+    // Unavailable initial/fake engines still produce a job whose worker reports
+    // its normal durable failure; reading settings never probes the executable.
+    snapshot_for(
+        state,
+        requested_engine.unwrap_or(&settings.analysis_engine),
+        &settings.gnubg_path,
+        settings.gnubg_threads,
+        sage_threads(settings.open_sage_threads, SAGE_ANALYSIS_THREADS),
+        plies,
+    )
+    .await
 }
 
 pub(crate) async fn snapshot_for(

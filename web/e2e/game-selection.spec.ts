@@ -107,13 +107,19 @@ test('one game owns its move list, board boundaries and native analysis; full ma
     })
     .click();
   const response = await scoped;
-  expect(response.request().postDataJSON()).toEqual({ plies: 0, game_no: 2 });
+  expect(response.request().postDataJSON()).toEqual({
+    engine_id: 'gnubg',
+    plies: 0,
+    game_no: 2,
+  });
   const job = await response.json();
   expect(job.game_no).toBe(2);
   expect(job.total_games).toBe(1);
   await expect(analysis).toHaveAttribute('data-job-id', job.id);
   await expect(
-    analysis.getByText('Spielanalyse abgeschlossen', { exact: true }),
+    page
+      .locator('.workspace-analysis-command')
+      .getByText('Spielanalyse abgeschlossen', { exact: true }),
   ).toBeVisible({ timeout: 30_000 });
   expect(
     (await analysis.locator('tbody .position-link').allTextContents()).every(
@@ -149,13 +155,18 @@ test('one game owns its move list, board boundaries and native analysis; full ma
     })
     .click();
   const fullResponse = await full;
-  expect(fullResponse.request().postDataJSON()).toEqual({ plies: 0 });
+  expect(fullResponse.request().postDataJSON()).toEqual({
+    engine_id: 'gnubg',
+    plies: 0,
+  });
   const fullJob = await fullResponse.json();
   expect(fullJob.game_no).toBeNull();
   expect(fullJob.total_games).toBe(10);
   await expect(analysis).toHaveAttribute('data-job-id', fullJob.id);
   await expect(
-    analysis.getByText('Partieanalyse abgeschlossen', { exact: true }),
+    page
+      .locator('.workspace-analysis-command')
+      .getByText('Partieanalyse abgeschlossen', { exact: true }),
   ).toBeVisible({ timeout: 30_000 });
 });
 
@@ -267,7 +278,9 @@ test('returning to an analysis filter starts at its first page', async ({
   const analysis = page.locator('.match-analysis');
   await page.getByLabel('Analyseumfang', { exact: true }).selectOption('match');
   await expect(
-    analysis.getByText('Partieanalyse abgeschlossen', { exact: true }),
+    page
+      .locator('.workspace-analysis-command')
+      .getByText('Partieanalyse abgeschlossen', { exact: true }),
   ).toBeVisible();
   await analysis.getByLabel('Nur Auffälligkeiten').uncheck();
   await expect(analysis.locator('tbody tr')).toHaveCount(50);
@@ -323,7 +336,9 @@ test('a delayed game catalog never displays a whole-match job as a game job', as
       page.getByRole('button', { name: 'Spiel analysieren', exact: true }),
     ).toBeDisabled();
     await expect(analysis).not.toHaveAttribute('data-job-id', fullJob.id);
-    await expect(analysis.locator('.match-analysis-progress')).toHaveCount(0);
+    await expect(page.locator('.match-analysis-progress:visible')).toHaveCount(
+      0,
+    );
     await expect(analysis.locator('tbody tr')).toHaveCount(0);
     await page
       .getByLabel('Analyseumfang', { exact: true })
@@ -332,7 +347,9 @@ test('a delayed game catalog never displays a whole-match job as a game job', as
     await page
       .getByLabel('Analyseumfang', { exact: true })
       .selectOption('game');
-    await expect(analysis.locator('.match-analysis-progress')).toHaveCount(0);
+    await expect(page.locator('.match-analysis-progress:visible')).toHaveCount(
+      0,
+    );
   } finally {
     release();
   }
