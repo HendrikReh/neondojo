@@ -1,6 +1,7 @@
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
 import Tooltip from './Tooltip';
+import EngineLabel from './EngineLabel';
 import ActionButton from './ActionButton';
 import LibraryDialog from './LibraryDialog';
 import { useLibraryText } from './library-messages';
@@ -18,7 +19,7 @@ import { useI18n } from './i18n';
 import { useAnalysisSources } from './useAnalysisSources';
 import { useSourceText } from './analysis-source-messages';
 import SourceAnalysisView from './SourceAnalysisView';
-import { type PreviewCandidate } from './candidate-preview';
+import type { PreviewCandidate, PreviewComparison } from './candidate-preview';
 import CandidateTable from './CandidateTable';
 import './analysis-sources.css';
 import { DEFAULT_ANALYSIS_PLIES } from './analysis-depth';
@@ -37,6 +38,7 @@ export default function AnalysisPanel({
   sourceRevision = 0,
   onPreview,
   selectedPreview,
+  onComparison,
   position,
   playerName,
   players,
@@ -55,6 +57,7 @@ export default function AnalysisPanel({
   sourceRevision?: number;
   onPreview?: (candidate: PreviewCandidate | null) => void;
   selectedPreview?: PreviewCandidate;
+  onComparison?: (value: PreviewComparison) => void;
   position?: Position;
   playerName?: string;
   players?: Pick<Match, 'white' | 'black'>;
@@ -194,6 +197,14 @@ export default function AnalysisPanel({
     positionId,
     requestedAnalysis,
   ]);
+  useEffect(() => {
+    if (view !== 'analysis' || (selectedSource === 'engine' && !analysis)) {
+      onComparison?.({
+        loss: null,
+        useSavedGame: view !== 'analysis' || selectedSource === 'engine',
+      });
+    }
+  }, [view, selectedSource, analysis, onComparison]);
   const distribution =
     diceJob?.status === 'completed' ? (diceJob.result as Distribution) : null;
   const requestedDice = useRef<string | undefined>(undefined);
@@ -362,6 +373,7 @@ export default function AnalysisPanel({
               source={selectedSource}
               onPreview={onPreview}
               selectedPreview={selectedPreview}
+              onComparison={onComparison}
               position={position}
               playerName={playerName}
               players={players}
@@ -386,6 +398,7 @@ export default function AnalysisPanel({
               playerName={playerName}
               onPreview={onPreview}
               selectedPreview={selectedPreview}
+              onComparison={onComparison}
             />
           </>
         ) : sources.loading || restoring ? null : (
@@ -399,7 +412,11 @@ export default function AnalysisPanel({
         (distribution ? (
           <div className="distribution">
             <div className="distribution-caption">
-              <span className="engine-label">{distribution.engine}</span>
+              <span>
+                <EngineLabel
+                  details={`${distribution.engine} · ${distribution.plies}-ply`}
+                />
+              </span>
               <span>{t('analysis.combinations')}</span>
               <strong>Ø {formatEquity(distribution.mean_equity)}</strong>
             </div>

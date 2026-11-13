@@ -1,13 +1,14 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import EngineLabel from './EngineLabel';
 import { useI18n } from './i18n';
 import { useSourceText } from './analysis-source-messages';
 import { useBoardReviewText } from './board-review-messages';
-import { useCandidateText } from './candidate-messages';
+import { useCandidateLossText, useCandidateText } from './candidate-messages';
 import {
   focusCandidateRow,
   navigateCandidatePreview,
   type PreviewCandidate,
+  type PreviewComparison,
 } from './candidate-preview';
 import {
   candidateLoss,
@@ -28,9 +29,9 @@ export default function CandidateTable({
   played,
   position,
   playerName,
-  method,
   onPreview,
   selectedPreview,
+  onComparison,
 }: {
   candidates: ComparisonCandidate[];
   source: string;
@@ -38,13 +39,14 @@ export default function CandidateTable({
   played?: string;
   position?: CandidatePosition;
   playerName?: string;
-  method?: string;
   onPreview?: (candidate: PreviewCandidate | null) => void;
   selectedPreview?: PreviewCandidate;
+  onComparison?: (value: PreviewComparison) => void;
 }) {
   const { t, formatNumber, formatEquity, formatPercent, formatDecision } =
     useI18n();
   const l = useCandidateText();
+  const lossText = useCandidateLossText();
   const sourceText = useSourceText();
   const review = useBoardReviewText();
   const best = candidates.find((candidate) => candidate.rank === 1);
@@ -71,13 +73,27 @@ export default function CandidateTable({
       ),
     [candidates, played, position],
   );
+  const playedRow = candidates.find((_, index) => playedRows[index]);
+  const loss = playedRow ? candidateLoss(playedRow, best) : null;
+  const bestNotation = best?.notation;
+  const lossUnit = best?.equity_kind === 'mwc' ? 'mwc' : undefined;
+  useEffect(() => {
+    onComparison?.({
+      best: bestNotation
+        ? { notation: bestNotation, rank: 1, source }
+        : undefined,
+      loss,
+      lossUnit,
+    });
+  }, [onComparison, bestNotation, source, loss, lossUnit]);
   const preview = (candidate: ComparisonCandidate) =>
     onPreview?.({ notation: candidate.notation, rank: candidate.rank, source });
   return (
     <div className="candidate-comparison">
       <p className="candidate-metadata">
-        <strong><EngineLabel details={source} /></strong>
-        {method && <span>{method}</span>}
+        <strong>
+          <EngineLabel details={source} />
+        </strong>
         {units.length > 0 && (
           <span>{units.length === 1 ? unit(units[0]) : l('mixedUnits')}</span>
         )}
@@ -230,19 +246,7 @@ export default function CandidateTable({
                       )}
                     </td>
                     <td className="candidate-number" title={l('lossHelp')}>
-                      {loss === null
-                        ? '—'
-                        : candidate.equity_kind === 'mwc'
-                          ? l('percentagePoints', {
-                              value: formatNumber(loss * 100, {
-                                minimumFractionDigits: 3,
-                                maximumFractionDigits: 3,
-                              }),
-                            })
-                          : formatNumber(loss, {
-                              minimumFractionDigits: 3,
-                              maximumFractionDigits: 3,
-                            })}
+                      {lossText(loss, candidate.equity_kind)}
                     </td>
                     {outcomeColumns.map((column) => (
                       <td

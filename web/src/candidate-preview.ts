@@ -7,6 +7,15 @@ export interface PreviewCandidate {
   source: string;
 }
 
+/** Checker comparison and its loss within a single analysis source. */
+export interface PreviewComparison {
+  best?: PreviewCandidate;
+  loss: number | null;
+  lossUnit?: 'mwc';
+  /** The local engine tab can show a saved game result while no hint exists. */
+  useSavedGame?: boolean;
+}
+
 /** Keep arrow-key navigation within the focused candidate list. */
 export function navigateCandidatePreview(
   event: KeyboardEvent<HTMLTableSectionElement>,

@@ -16,16 +16,23 @@ import { useBoardReviewShortcuts } from './useBoardReviewShortcuts';
 import PositionBookmarkButton from './PositionBookmarkButton';
 import { projectMove, type BoardView } from './move-preview';
 import { useBoardReviewText } from './board-review-messages';
-import type { PreviewCandidate } from './candidate-preview';
+import type { PreviewCandidate, PreviewComparison } from './candidate-preview';
 import { useStatisticsText } from './review-statistics-messages';
+import { useSourceText } from './analysis-source-messages';
+import {
+  BoardCheckerComparison,
+  BoardDecisionComparison,
+} from './BoardDecisionReview';
 import AnalysisPanel from './AnalysisPanel';
 import AnalysisRunningJobs from './AnalysisRunningJobs';
-import MatchAnalysisPanel from './MatchAnalysisPanel';
+import MatchAnalysisPanel, {
+  type BoardReviewTarget,
+} from './MatchAnalysisPanel';
 import NotesPanel from './NotesPanel';
 import GameSelector from './GameSelector';
 import { AddCardsPanel } from './LearningPanel';
 import { type Job } from './api';
-import { reviewDecisions, type ReviewDecision } from './review-decisions-api';
+import type { ReviewDecision } from './review-decisions-api';
 import { statisticsRevision } from './match-statistics-api';
 import { useGameNavigation } from './useGameNavigation';
 import { useJobs } from './useJobs';
@@ -114,6 +121,7 @@ export default function AnalysisWorkspace({
 }) {
   const { t, formatNumber, formatDecision, formatError } = useI18n();
   const w = useWorkspaceText();
+  const sourceText = useSourceText();
   const review = useBoardReviewText();
   const statistics = useStatisticsText();
   const headerText = useAnalysisMatchHeaderText();
@@ -132,6 +140,7 @@ export default function AnalysisWorkspace({
   const [commandTarget, setCommandTarget] = useState<HTMLDivElement | null>(
     null,
   );
+  const [boardTarget, setBoardTarget] = useState<HTMLDivElement | null>(null);
   const overview = detail === 'overview';
   const analysisGrid = useRef<HTMLDivElement>(null);
   const boardResize = useAnalysisBoardResize(
@@ -169,17 +178,14 @@ export default function AnalysisWorkspace({
     if (row.top < outer.top) list.scrollTop -= outer.top - row.top;
     else if (bottom > outer.bottom) list.scrollTop += bottom - outer.bottom;
   }, [position?.id, positions.length, detail, game?.result]);
-  const [moveFilter, setMoveFilter] = useState<{
-    player: string;
-    kind: string;
-    severity?: string;
-    game_no?: number;
-  }>({ player: '', kind: '' });
   const [boardView, setBoardView] = useProfileValue<BoardView>(
     (c) => c.appearance.board_view,
     (c, board_view) => ({ ...c, appearance: { ...c.appearance, board_view } }),
     'arrows',
   );
+  const assessment = position
+    ? moveAssessments.assessments[position.id]
+    : undefined;
   const [candidate, setCandidate] = useState<
     PreviewCandidate & { positionId: string }
   >();
@@ -208,47 +214,73 @@ export default function AnalysisWorkspace({
     preview?.ok === true,
   );
 
-  const [nextErrorFailure, setNextErrorFailure] = useState<unknown>();
-  const [noErrors, setNoErrors] = useState(false);
-  const [findingError, setFindingError] = useState(false);
-  const [reviewSelection, setReviewSelection] = useState<{
-    id: string;
+  const [comparison, setComparison] = useState<{
     positionId?: string;
-    scope: string;
+    value: PreviewComparison;
+  }>();
+  const onComparison = useCallback(
+    (value: PreviewComparison) => {
+      setComparison({ positionId: position?.id, value });
+    },
+    [position?.id],
+  );
+  const candidateComparison =
+    comparison?.positionId === position?.id ? comparison?.value : undefined;
+
+  const intent = navigation.intent();
+  const [reviewSelection, setReviewSelection] = useState<{
+    row: ReviewDecision;
+    matchId: string;
+    intent: number;
+    jobRevision?: string;
   }>();
   const [preferredSource, setPreferredSource] = useState<{
     positionId: string;
     source: 'file' | 'engine';
+    intent: number;
     token: number;
   }>();
-  const reviewScope = `${match?.id}:${game?.game_no}:${reviewJob ? statisticsRevision(reviewJob) : ''}:${moveFilter.player}:${moveFilter.kind}:${moveFilter.severity}:${moveFilter.game_no}`;
-  const errorIdentity = `${reviewScope}:${position?.id}:${active}:${notesSuspended}`;
-  const currentErrorIdentity = useRef(errorIdentity);
-  currentErrorIdentity.current = errorIdentity;
+  const jobRevision = reviewJob ? statisticsRevision(reviewJob) : undefined;
+  const reviewRow =
+    reviewSelection?.matchId === match?.id &&
+    reviewSelection?.intent === intent &&
+    reviewSelection?.jobRevision === jobRevision
+      ? reviewSelection.row
+      : undefined;
+  const cube =
+    (overview || detail === 'errors') && reviewRow?.kind === 'cube'
+      ? reviewRow
+      : undefined;
+  const cubeBoard = cube?.review_position;
+  const boardPosition = cubeBoard ?? position;
   function openReviewDecision(row: ReviewDecision) {
-    setReviewSelection({
-      id: row.id,
-      positionId:
-        row.kind === 'cube' && row.move_id
-          ? position?.id
-          : (row.position_uuid ?? position?.id),
-      scope: reviewScope,
-    });
-    if (row.kind === 'cube' && row.move_id) {
-      onMoveNotes({
-        gameNo: row.game_no,
-        moveId: row.move_id,
-        decisionKind: 'cube',
-        reviewPosition: row.review_position ?? undefined,
-        reviewPlayed: row.played,
+    if (!match) return;
+    if (row.kind === 'cube' && row.review_position) {
+      if (!overview && detail !== 'errors') onDetail('errors');
+      setCandidate(undefined);
+      if (row.game_no !== game?.game_no)
+        void navigation.selectGame(row.game_no);
+      setReviewSelection({
+        row,
+        matchId: match.id,
+        intent: navigation.intent(),
+        jobRevision,
       });
-    } else if (row.position_uuid) {
+    } else if (row.kind === 'checker' && row.position_uuid) {
+      onPreview(null);
+      onPosition(row.position_uuid);
       setPreferredSource({
         positionId: row.position_uuid,
         source: row.source === 'imported' ? 'file' : 'engine',
+        intent: navigation.intent(),
         token: Date.now(),
       });
-      onPosition(row.position_uuid);
+      setReviewSelection({
+        row,
+        matchId: match.id,
+        intent: navigation.intent(),
+        jobRevision,
+      });
     }
   }
   const tabRefs = useRef<
@@ -268,73 +300,6 @@ export default function AnalysisWorkspace({
     event.preventDefault();
     onDetail(availableTabs[index]);
     tabRefs.current[availableTabs[index]]?.focus();
-  }
-  const errorRequest = useRef<AbortController | undefined>(undefined);
-  useEffect(() => {
-    setNoErrors(false);
-    setNextErrorFailure(undefined);
-    setFindingError(false);
-    return () => errorRequest.current?.abort();
-  }, [errorIdentity]);
-  async function nextError() {
-    setNextErrorFailure(undefined);
-    setNoErrors(false);
-    if (!sourceAvailable || !match || !game) return;
-    errorRequest.current?.abort();
-    const abort = new AbortController();
-    errorRequest.current = abort;
-    const identity = errorIdentity;
-    const current = () =>
-      !abort.signal.aborted && currentErrorIdentity.current === identity;
-    setFindingError(true);
-    const anchor =
-      reviewSelection?.scope === reviewScope &&
-      reviewSelection.positionId === position?.id
-        ? reviewSelection.id
-        : undefined;
-    try {
-      let after: string | null = null;
-      let first: ReviewDecision | undefined;
-      let passedAnchor = false;
-      do {
-        const page = await reviewDecisions(
-          match.id,
-          {
-            ...moveFilter,
-            errors_only: true,
-            game_no: moveFilter.game_no ?? game.game_no,
-          },
-          { jobId: reviewJob?.id, after, limit: 100, signal: abort.signal },
-        );
-        if (!current()) return;
-        for (const row of page.items) {
-          if (!row.position_uuid && !row.move_id) continue;
-          first ??= row;
-          if (
-            passedAnchor ||
-            (!anchor &&
-              row.checker_no != null &&
-              row.checker_no > (position?.ply ?? 0))
-          ) {
-            openReviewDecision(row);
-            return;
-          }
-          if (
-            anchor
-              ? row.id === anchor
-              : row.position_uuid === position?.id && row.kind === 'checker'
-          )
-            passedAnchor = true;
-        }
-        after = page.next_cursor ?? null;
-      } while (after);
-      if (first) openReviewDecision(first);
-      else setNoErrors(true);
-    } catch (e) {
-      if (current()) setNextErrorFailure(e);
-    } finally {
-      if (current()) setFindingError(false);
-    }
   }
   if (!match)
     return <section className="analysis-workspace">{welcome}</section>;
@@ -364,10 +329,7 @@ export default function AnalysisWorkspace({
         {sourceAvailable && (
           <div className="workspace-analysis-command" ref={setCommandTarget} />
         )}
-        <AnalysisRunningJobs
-          jobs={runningJobs}
-          displayedJobId={reviewJob?.id}
-        />
+        <AnalysisRunningJobs jobs={runningJobs} displayedJobId={matchJob?.id} />
       </div>
       <div
         className="inspector-tabs analysis-detail-navigation text-navigation text-navigation--compact"
@@ -430,129 +392,183 @@ export default function AnalysisWorkspace({
               {formatError(moveAssessments.error)}
             </p>
           )}
-          {sourceAvailable && (
-            <>
-              <ActionButton
-                icon="next"
-                label={w('nextError')}
-                className="next-error"
-                onClick={() => void nextError()}
-                disabled={!game || loading || findingError}
-              />
-              {noErrors && <p role="status">{w('noErrors')}</p>}
-              {!!nextErrorFailure && (
-                <p role="alert">{formatError(nextErrorFailure)}</p>
-              )}
-            </>
-          )}
         </aside>
         <section className="board-panel" id="analysis-board-panel">
-          {position ? (
+          {sourceAvailable && <div ref={setBoardTarget} />}
+          {boardPosition ? (
             <>
               <div className="board-heading">
                 <span>
-                  {t('app.gameMove', {
-                    game: position.game_no,
-                    move: position.ply,
-                  })}
+                  {cube && cube.checker_no == null
+                    ? t('matchAnalysis.cubeMove', {
+                        game: cube.game_no,
+                        decision: cube.decision_no,
+                      })
+                    : t('app.gameMove', {
+                        game: boardPosition.game_no,
+                        move: boardPosition.ply,
+                      })}
                 </span>
                 <strong>
-                  {effectiveView === 'after'
+                  {!cubeBoard && effectiveView === 'after'
                     ? review('after')
                     : t('app.toMove', {
                         player:
-                          position.player === 0 ? match.white : match.black,
+                          boardPosition.player === 0
+                            ? match.white
+                            : match.black,
                       })}
                 </strong>
               </div>
-              <div className="board-review-toolbar">
-                {preview && (
-                  <BoardReviewControls
-                    view={effectiveView}
-                    preview={preview}
-                    selected={selectedPreview}
-                    onView={setBoardView}
-                    onPlayed={() => {
-                      onPreview(null);
-                      currentMove.current?.focus({ preventScroll: true });
-                      currentMove.current?.scrollIntoView({ block: 'nearest' });
-                    }}
+              {cube && cubeBoard ? (
+                <BoardDecisionComparison
+                  played={cube.played}
+                  best={cube.best}
+                  loss={
+                    cube.evaluation_status === 'evaluated'
+                      ? cube.equity_loss
+                      : null
+                  }
+                  source={[cube.engine, cube.depth].filter(Boolean).join(' · ')}
+                  context={sourceText(
+                    /^(take|drop)$/i.test(cube.played)
+                      ? 'cubeResponse'
+                      : 'cubeBeforeRoll',
+                  )}
+                  onReturn={
+                    position ? () => setReviewSelection(undefined) : undefined
+                  }
+                  onDetails={
+                    cube.source === 'imported' && cube.move_id
+                      ? () =>
+                          onMoveNotes({
+                            gameNo: cube.game_no,
+                            moveId: cube.move_id!,
+                            decisionKind: 'cube',
+                            reviewPosition: cubeBoard,
+                            reviewPlayed: cube.played,
+                          })
+                      : undefined
+                  }
+                />
+              ) : position ? (
+                <>
+                  <BoardCheckerComparison
+                    position={position}
+                    assessment={assessment}
+                    candidateComparison={candidateComparison}
+                    reviewRow={
+                      reviewRow?.kind === 'checker' &&
+                      reviewRow.position_uuid === position.id
+                        ? reviewRow
+                        : undefined
+                    }
+                    selectedPreview={selectedPreview}
+                    onPreview={onPreview}
                   />
-                )}
-                <div className="board-position-actions">
-                  <PositionBookmarkButton
-                    positionId={position.id}
-                    revision={bookmarkRevision}
-                    onChanged={onBookmarkChanged}
-                  />
-                  <ActionButton
-                    icon="search"
-                    label={t('app.prepareSearch')}
-                    compact
-                    title={t('app.prepareSearch')}
-                    onClick={onOpenDatabase}
-                  />
-                  <ActionButton
-                    type="button"
-                    icon="similar"
-                    label={positionText('findSimilar')}
-                    compact
-                    onClick={onFindSimilar}
-                  />
-                </div>
-              </div>
+                  <div className="board-review-toolbar">
+                    {preview && (
+                      <BoardReviewControls
+                        view={effectiveView}
+                        preview={preview}
+                        selected={selectedPreview}
+                        onView={setBoardView}
+                        onPlayed={() => {
+                          onPreview(null);
+                          currentMove.current?.focus({ preventScroll: true });
+                          currentMove.current?.scrollIntoView({
+                            block: 'nearest',
+                          });
+                        }}
+                      />
+                    )}
+                    <div className="board-position-actions">
+                      <PositionBookmarkButton
+                        positionId={position.id}
+                        revision={bookmarkRevision}
+                        onChanged={onBookmarkChanged}
+                      />
+                      <ActionButton
+                        icon="search"
+                        label={t('app.prepareSearch')}
+                        compact
+                        title={t('app.prepareSearch')}
+                        onClick={onOpenDatabase}
+                      />
+                      <ActionButton
+                        type="button"
+                        icon="similar"
+                        label={positionText('findSimilar')}
+                        compact
+                        onClick={onFindSimilar}
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : null}
               <Board
-                position={position}
+                position={boardPosition}
                 white={match.white}
                 black={match.black}
                 theme={theme}
-                preview={preview}
-                previewMode={effectiveView}
-                previewLabel={review('showing', {
-                  view: review(effectiveView),
-                  player: position.player === 0 ? match.white : match.black,
-                  move: formatDecision(
-                    selectedPreview?.notation ?? position.notation,
-                  ),
-                })}
+                preview={cubeBoard ? undefined : preview}
+                previewMode={cubeBoard ? 'before' : effectiveView}
+                previewLabel={
+                  cubeBoard
+                    ? undefined
+                    : review('showing', {
+                        view: review(effectiveView),
+                        player:
+                          boardPosition.player === 0
+                            ? match.white
+                            : match.black,
+                        move: formatDecision(
+                          selectedPreview?.notation ?? boardPosition.notation,
+                        ),
+                      })
+                }
               />
               <GamePlanPanel
                 board={
-                  displayedBoardPosition(position, preview, effectiveView).board
+                  displayedBoardPosition(
+                    boardPosition,
+                    cubeBoard ? undefined : preview,
+                    effectiveView,
+                  ).board
                 }
                 white={match.white}
                 black={match.black}
                 active={active}
               />
-              <div className="board-navigation">
-                <ActionButton
-                  icon="back"
-                  label={t('app.previousMove')}
-                  compact
-                  aria-label={t('app.previousMove')}
-                  disabled={index === 0 || loading}
-                  onClick={navigation.previous}
-                />
-                <span>
-                  {t('common.played')}{' '}
-                  <strong>{formatDecision(position.notation)}</strong>
-                  <small>
-                    {formatNumber(index + 1)} /{' '}
-                    {formatNumber(game?.position_count ?? positions.length)}
-                  </small>
-                </span>
-                <ActionButton
-                  icon="next"
-                  label={t('app.nextMove')}
-                  compact
-                  aria-label={t('app.nextMove')}
-                  disabled={loading || index >= positions.length - 1}
-                  onClick={navigation.next}
-                />
-              </div>
+              {position && !cubeBoard && (
+                <div className="board-navigation">
+                  <ActionButton
+                    icon="back"
+                    label={t('app.previousMove')}
+                    compact
+                    disabled={index === 0 || loading}
+                    onClick={navigation.previous}
+                  />
+                  <span>
+                    {t('common.played')}{' '}
+                    <strong>{formatDecision(position.notation)}</strong>
+                    <small>
+                      {formatNumber(index + 1)} /{' '}
+                      {formatNumber(game?.position_count ?? positions.length)}
+                    </small>
+                  </span>
+                  <ActionButton
+                    icon="next"
+                    label={t('app.nextMove')}
+                    compact
+                    disabled={loading || index >= positions.length - 1}
+                    onClick={navigation.next}
+                  />
+                </div>
+              )}
               <div className="position-code">
                 <span>{t('app.positionCode')}</span>
-                <code>{position.position_id}</code>
+                <code>{boardPosition.position_id}</code>
               </div>
             </>
           ) : (
@@ -575,7 +591,7 @@ export default function AnalysisWorkspace({
             className="overview-evaluation"
             role="region"
             aria-label={w('evaluation')}
-            hidden={!overview}
+            hidden={!overview || !!cubeBoard}
           >
             {!!jobs.error && (
               <p className="error" role="alert">
@@ -586,7 +602,7 @@ export default function AnalysisWorkspace({
               jobs={jobs.jobs}
               completedAnalysis={jobs.completedAnalysis}
               restoring={jobs.restoring}
-              active={active && overview}
+              active={active && overview && !cubeBoard}
               stats={sourceAvailable ? stats : null}
               gameNo={game?.game_no}
               defaultPlies={defaultPlies}
@@ -600,10 +616,13 @@ export default function AnalysisWorkspace({
                     : match.black
                   : undefined
               }
-              preferredSource={preferredSource}
+              preferredSource={
+                preferredSource?.intent === intent ? preferredSource : undefined
+              }
               sourceRevision={sourceRevision}
               onPreview={onPreview}
               selectedPreview={selectedPreview}
+              onComparison={onComparison}
               disabled={!position || jobs.submitting || !configured}
               onAnalyze={(kind, plies) => void jobs.run(kind, plies)}
             />
@@ -623,9 +642,25 @@ export default function AnalysisWorkspace({
               onDecision={openReviewDecision}
               onTrackJob={onTrackJob}
               onCurrentJob={setMatchJob}
-              onFilterChange={setMoveFilter}
+              analysisRevision={analysisRevision}
+              boardReview={
+                boardTarget && active && !notesSuspended
+                  ? {
+                      element: boardTarget,
+                      origin: {
+                        game: game?.game_no,
+                        ply: position?.ply,
+                        row: reviewRow,
+                      },
+                      intent,
+                      currentIntent: navigation.intent,
+                      busy: loading,
+                    }
+                  : undefined
+              }
               onShowErrors={() => onDetail('errors')}
-              selectedPositionId={position?.id}
+              selectedDecisionId={reviewRow?.id}
+              selectedPositionId={cubeBoard ? undefined : position?.id}
             />
           )}
           <div
@@ -682,9 +717,11 @@ function MatchResults({
   onDecision,
   onTrackJob,
   onCurrentJob,
-  onFilterChange,
+  boardReview,
+  analysisRevision,
   onShowErrors,
   selectedPositionId,
+  selectedDecisionId,
 }: {
   matchId: string;
   gameNo?: number;
@@ -699,14 +736,11 @@ function MatchResults({
   onDecision: (decision: ReviewDecision) => void;
   onTrackJob: (job: Job | undefined) => void;
   onCurrentJob: (job: Job | undefined) => void;
-  onFilterChange: (filter: {
-    player: string;
-    kind: string;
-    severity?: string;
-    game_no?: number;
-  }) => void;
+  boardReview?: BoardReviewTarget;
+  analysisRevision?: string;
   onShowErrors: () => void;
   selectedPositionId?: string;
+  selectedDecisionId?: string;
 }) {
   const onJob = useCallback(
     (job: Job | undefined) => {
@@ -735,13 +769,15 @@ function MatchResults({
         controlsTarget={target}
         overview={detail === 'overview'}
         selectedPositionId={selectedPositionId}
+        selectedDecisionId={selectedDecisionId}
         showResults={detail === 'overview' || detail === 'errors'}
         showStatistics={detail === 'statistics'}
         onShowErrors={onShowErrors}
         onGame={(number) => void navigation.selectGame(number)}
         onJob={onJob}
         onAccepted={onTrackJob}
-        onFilterChange={onFilterChange}
+        boardReview={boardReview}
+        analysisRevision={analysisRevision}
         onPosition={onPosition}
       />
     </div>

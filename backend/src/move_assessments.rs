@@ -42,6 +42,8 @@ pub struct MoveAssessment {
     pub severity: MoveSeverity,
     /// Actual best-minus-played equity, never a default for missing evaluation.
     pub equity_loss: f64,
+    /// Best legal checker notation from the same evaluation as the loss.
+    pub best_move: Option<String>,
     pub source: AssessmentSource,
     pub engine: String,
     pub depth: Option<String>,
@@ -248,6 +250,10 @@ fn native_assessment(position: &Position, row: NativeRow) -> Option<MoveAssessme
         position_id: position.id,
         severity: MoveSeverity::from_normalized_loss(loss),
         equity_loss: loss,
+        best_move: data["best"]
+            .as_str()
+            .filter(|_| data["evaluation_status"] == "evaluated")
+            .map(str::to_owned),
         source: AssessmentSource::Native,
         engine: row.engine,
         depth: Some(format!("{}-ply cubeful", row.plies)),
@@ -282,6 +288,7 @@ fn hint_assessment(position: &Position, row: HintRow) -> Option<MoveAssessment> 
         position_id: position.id,
         severity: MoveSeverity::from_normalized_loss(loss),
         equity_loss: loss,
+        best_move: None,
         source: AssessmentSource::Native,
         engine: analysis.engine,
         depth: Some(format!("{}-ply cubeful", row.plies)),
@@ -328,6 +335,7 @@ fn imported_assessment(
         position_id: position.id,
         severity: MoveSeverity::from_normalized_loss(loss),
         equity_loss: loss,
+        best_move: None,
         source: AssessmentSource::Imported,
         engine,
         depth: record.depth,

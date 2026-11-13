@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useI18n } from './i18n';
 import XgPositionView from './XgPositionView';
-import { type PreviewCandidate } from './candidate-preview';
+import EngineLabel from './EngineLabel';
+import type { PreviewCandidate, PreviewComparison } from './candidate-preview';
 import CandidateTable from './CandidateTable';
 import type { Match, Position } from './api';
 import { useSourceText } from './analysis-source-messages';
@@ -100,6 +101,7 @@ export default function SourceAnalysisView({
   source,
   onPreview,
   selectedPreview,
+  onComparison,
   position,
   playerName,
   players,
@@ -110,6 +112,7 @@ export default function SourceAnalysisView({
   source: 'file' | 'book';
   onPreview?: (candidate: PreviewCandidate | null) => void;
   selectedPreview?: PreviewCandidate;
+  onComparison?: (value: PreviewComparison) => void;
   position?: Position;
   playerName?: string;
   players?: Pick<Match, 'white' | 'black'>;
@@ -240,10 +243,37 @@ export default function SourceAnalysisView({
         </button>
       </div>
     ) : null;
+  const importedSource = (entry: SourceAnalysis) =>
+    [
+      [entry.engine, entry.engine_version].filter(Boolean).join(' '),
+      entry.depth ?? l('unknownDepth'),
+      entry.method,
+      entry.source_format.toUpperCase(),
+    ]
+      .filter(Boolean)
+      .join(' · ');
+  const bookSource = (plies?: number | null) =>
+    [
+      book?.provenance?.engine ?? 'BackgammonDB',
+      book?.provenance && 'BackgammonDB',
+      plies == null ? l('unknownDepth') : `${plies}-ply`,
+      book?.provenance?.evaluation_kind,
+      book?.provenance?.context,
+    ]
+      .filter(Boolean)
+      .join(' · ');
   const previewSource =
-    source === 'file'
-      ? `${[record?.engine, record?.engine_version].filter(Boolean).join(' ')} · ${record?.depth ?? l('unknownDepth')}`
-      : `${['BackgammonDB', book?.provenance?.engine].filter(Boolean).join(' · ')} · ${book?.checker?.plies == null ? l('unknownDepth') : `${book.checker.plies}-ply`}`;
+    source === 'file' && record
+      ? importedSource(record)
+      : bookSource(book?.checker?.plies);
+  const hasComparison =
+    !(source === 'book' && selectedBook === 'xg') &&
+    !ogxmPlaceholder &&
+    checker &&
+    !!(source === 'file' ? record : book?.checker);
+  useEffect(() => {
+    if (!hasComparison) onComparison?.({ loss: null });
+  }, [hasComparison, onComparison]);
   if (source === 'book' && selectedBook === 'xg')
     return (
       <div className="source-analysis">
@@ -280,12 +310,8 @@ export default function SourceAnalysisView({
           {record && !checker ? (
             <p className="source-provenance">
               <strong>
-                {record.engine} {record.engine_version}
+                <EngineLabel details={importedSource(record)} />
               </strong>
-              <span>{record.depth ?? l('unknownDepth')}</span>
-              <small>
-                {record.method} · {record.source_format.toUpperCase()}
-              </small>
             </p>
           ) : (
             !record && <p>{l('noSource')}</p>
@@ -295,14 +321,9 @@ export default function SourceAnalysisView({
         <>
           {book?.provenance && !checker && (
             <p className="source-provenance">
-              <strong>BackgammonDB · {book.provenance.engine}</strong>
-              <span>
-                {(selectedDecision === 'checker'
-                  ? book.checker?.plies
-                  : book.cube?.plies) ?? '—'}
-                -ply · {book.provenance.evaluation_kind}
-              </span>
-              <small>{book.provenance.context}</small>
+              <strong>
+                <EngineLabel details={bookSource(book.cube?.plies)} />
+              </strong>
             </p>
           )}
           {book?.hit ? (
@@ -338,30 +359,28 @@ export default function SourceAnalysisView({
           {t('matchAnalysis.unavailable')}
         </p>
       )}
-      {!ogxmPlaceholder &&
-        checker &&
-        (source === 'file' ? record : book?.checker) && (
-          <CandidateTable
-            candidates={candidates}
-            source={previewSource}
-            depth={
-              source === 'file'
-                ? record?.depth
-                : book?.checker?.plies == null
-                  ? null
-                  : `${book.checker.plies}-ply`
-            }
-            played={
-              position?.notation ??
-              (source === 'file' ? record?.played : undefined)
-            }
-            position={position}
-            playerName={playerName}
-            method={source === 'file' ? record?.method : undefined}
-            onPreview={onPreview}
-            selectedPreview={selectedPreview}
-          />
-        )}
+      {hasComparison && (
+        <CandidateTable
+          candidates={candidates}
+          source={previewSource}
+          depth={
+            source === 'file'
+              ? record?.depth
+              : book?.checker?.plies == null
+                ? null
+                : `${book.checker.plies}-ply`
+          }
+          played={
+            position?.notation ??
+            (source === 'file' ? record?.played : undefined)
+          }
+          position={position}
+          playerName={playerName}
+          onPreview={onPreview}
+          selectedPreview={selectedPreview}
+          onComparison={onComparison}
+        />
+      )}
       {ogxmSummaryRecord && !ogxmPlaceholder && (
         <OgxmCheckerSummary raw={ogxmSummaryRecord.raw} />
       )}

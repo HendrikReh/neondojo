@@ -18,28 +18,50 @@ use sqlx::FromRow;
 use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
 
+// Native decision numbering includes skipped doubles that share a source
+// checker event. Recover the source ordinal before filtering out any decisions.
 const REVIEW_SQL: &str = r#"
-        WITH rows AS (
-          SELECT 'native:'||a.id::text AS id,a.game_no,a.decision_no,a.kind,a.position_uuid,a.data,
-                 NULL::jsonb AS event,NULL::integer AS checker_ply,true AS native,a.player,a.equity_loss,to_jsonb(p) AS position
+        WITH native_order AS (
+          SELECT a.*,
+            a.decision_no - count(*) FILTER (WHERE a.kind='cube' AND a.data->>'played'='no double')
+              OVER (PARTITION BY a.game_no ORDER BY a.decision_no ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)
+              AS event_no,
+            row_number() OVER (PARTITION BY a.game_no ORDER BY a.decision_no) AS sequence_no
           FROM move_analyses a JOIN match_analysis_games c ON c.job_id=a.job_id AND c.game_no=a.game_no
+          WHERE a.job_id=$2 AND ($3::integer IS NULL OR a.game_no=$3)
+        ), rows AS (
+          SELECT 'native:'||a.id::text AS id,a.game_no,a.decision_no,a.kind,a.position_uuid,a.data,
+                 to_jsonb(e) AS event,coalesce(p.ply,ep.ply) AS checker_ply,true AS native,a.player,a.equity_loss,
+                 to_jsonb(p) AS position,e.move_no AS source_move_no
+          FROM native_order a
           LEFT JOIN positions p ON p.id=a.position_uuid AND p.match_uuid=$1 AND p.game_no=a.game_no
-          WHERE a.job_id=$2
+          LEFT JOIN match_moves e ON a.kind='cube' AND a.sequence_no=a.decision_no
+            AND e.match_uuid=$1 AND e.game_no=a.game_no AND e.move_no=a.event_no
+          LEFT JOIN positions ep ON ep.id=e.position_uuid AND ep.match_uuid=$1 AND ep.game_no=a.game_no
           UNION ALL
           SELECT 'imported:'||a.id::text,a.game_no,a.source_move_no,a.kind,a.position_uuid,a.data,
-                 to_jsonb(e),p.ply,false,e.player,NULL::double precision,NULL::jsonb
+                 to_jsonb(e),p.ply,false,e.player,NULL::double precision,NULL::jsonb,e.move_no
           FROM imported_analyses a
           JOIN match_moves e ON e.match_uuid=a.match_uuid AND e.game_no=a.game_no AND e.move_no=a.source_move_no
           LEFT JOIN positions p ON p.id=e.position_uuid AND p.match_uuid=e.match_uuid AND p.game_no=e.game_no
           WHERE a.match_uuid=$1 AND a.kind IN ('checker','cube')
             AND a.position_uuid IS NOT DISTINCT FROM e.position_uuid
             AND NOT EXISTS(SELECT 1 FROM match_analysis_games c WHERE c.job_id=$2 AND c.game_no=a.game_no)
+        ), slice AS (
+          SELECT * FROM rows
+          WHERE ($3::integer IS NULL OR game_no=$3) AND ($4::integer IS NULL OR player=$4)
+            AND ($5::text IS NULL OR kind=$5)
+            AND ($6::integer IS NULL OR (game_no,decision_no,kind='checker',id)>($6,$7,$8,$9))
+          ORDER BY game_no,decision_no,(kind='checker'),id LIMIT $10
         )
-        SELECT id,game_no,decision_no,kind,position_uuid,data,event,checker_ply,native,player,equity_loss,position FROM rows
-        WHERE ($3::integer IS NULL OR game_no=$3) AND ($4::integer IS NULL OR player=$4)
-          AND ($5::text IS NULL OR kind=$5)
-          AND ($6::integer IS NULL OR (game_no,decision_no,kind,id)>($6,$7,$8,$9))
-        ORDER BY game_no,decision_no,kind,id LIMIT $10
+        SELECT s.*, nxt.ply AS next_checker_no
+        FROM slice s LEFT JOIN LATERAL (
+          SELECT p.ply FROM match_moves e JOIN positions p ON p.id=e.position_uuid
+          WHERE s.kind='cube' AND s.checker_ply IS NULL AND e.match_uuid=$1
+            AND e.game_no=s.game_no AND e.move_no>s.source_move_no AND e.kind='checker'
+          ORDER BY e.move_no LIMIT 1
+        ) nxt ON true
+        ORDER BY s.game_no,s.decision_no,(s.kind='checker'),s.id
     "#;
 
 const SCAN_LIMIT: i64 = 512;
@@ -69,10 +91,12 @@ pub struct ReviewDecision {
     /// Source-qualified identity, independent of pagination.
     pub id: String,
     pub position_uuid: Option<Uuid>,
-    /// Actual source event for cube navigation; virtual no-double links its checker event.
+    /// Source event for cube review; a skipped double links its checker event.
     pub move_id: Option<Uuid>,
-    /// Exact source cube context, including pre-roll dice for a virtual no-double.
+    /// Exact cube context, including the position before the roll for a skipped double.
     pub review_position: Option<crate::model::Position>,
+    /// Next checker move for an explicit cube event; null after the last checker move.
+    pub next_checker_no: Option<i32>,
     pub game_no: i32,
     #[serde(flatten)]
     pub decision: Decision,
@@ -109,6 +133,7 @@ struct Row {
     data: serde_json::Value,
     event: Option<serde_json::Value>,
     checker_ply: Option<i32>,
+    next_checker_no: Option<i32>,
     native: bool,
     player: i32,
     equity_loss: Option<f64>,
@@ -213,6 +238,7 @@ async fn review(
         query.severity,
         query.errors_only,
         checkpoints,
+        "cube-before-checker",
     ))
     .map_err(anyhow::Error::from)?;
     let cursor = if let Some(after) = &query.after {
@@ -245,7 +271,7 @@ async fn review(
             .bind(&query.kind)
             .bind(cursor.as_ref().map(|c| c.game))
             .bind(cursor.as_ref().map(|c| c.decision))
-            .bind(cursor.as_ref().map(|c| &c.kind))
+            .bind(cursor.as_ref().map(|c| c.kind == "checker"))
             .bind(cursor.as_ref().map(|c| &c.id))
             .bind(SCAN_LIMIT + 1)
             .fetch_all(&mut *tx)
@@ -378,10 +404,12 @@ fn project(row: Row, match_id: Uuid, format: &str, job: Option<&Job>) -> Option<
             .and_then(|r| r["engine"].as_str())
             .unwrap_or(saved_engine)
             .to_owned();
+        let context = native_cube_context(row.event, row.checker_ply, match_id, &decision);
+        let (move_id, review_position) = context.unzip();
         (
             decision,
-            None,
-            None,
+            move_id,
+            review_position,
             engine,
             Some(format!("{}-ply", job.plies)),
             Some(job.plies),
@@ -421,6 +449,7 @@ fn project(row: Row, match_id: Uuid, format: &str, job: Option<&Job>) -> Option<
         position_uuid: row.position_uuid,
         move_id,
         review_position,
+        next_checker_no: row.next_checker_no,
         game_no: row.game_no,
         decision,
         source,
@@ -430,6 +459,32 @@ fn project(row: Row, match_id: Uuid, format: &str, job: Option<&Job>) -> Option<
         job_id,
     })
 }
+fn native_cube_context(
+    event: Option<serde_json::Value>,
+    checker_ply: Option<i32>,
+    match_id: Uuid,
+    decision: &Decision,
+) -> Option<(Uuid, crate::model::Position)> {
+    if decision.kind != "cube" {
+        return None;
+    }
+    let event: StoredMove = serde_json::from_value(event?).ok()?;
+    let before_roll = decision.played == "no double";
+    if event.player != decision.player
+        || if before_roll {
+            event.kind != "checker" || checker_ply.is_none() || checker_ply != decision.checker_no
+        } else {
+            event.kind != "cube" || !event.notation.eq_ignore_ascii_case(&decision.played)
+        }
+    {
+        return None;
+    }
+    let source = imported_projection::source_move(&event, checker_ply)?;
+    let position =
+        imported_projection::review_position(&source, match_id, event.position_uuid, before_roll)?;
+    Some((event.id, position))
+}
+
 #[derive(OpenApi)]
 #[openapi(paths(review), components(schemas(ReviewDecision, ReviewDecisionPage)))]
 pub struct ReviewDoc;
@@ -478,7 +533,7 @@ mod tests {
         .bind(Some("checker"))
         .bind(None::<i32>)
         .bind(None::<i32>)
-        .bind(None::<String>)
+        .bind(None::<bool>)
         .bind(None::<String>)
         .bind(SCAN_LIMIT + 1)
         .fetch_one(&pool)

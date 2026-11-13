@@ -250,6 +250,65 @@ async fn native_checkpoints_preserve_values_and_override_imported_game(pool: PgP
 }
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
+async fn native_cube_checkpoints_recover_exact_source_context(pool: PgPool) {
+    let sgf = "(;GM[6]PW[Alice]PB[Bob]MI[length:7];W[31hefe];B[double];W[take];B[42qusu])";
+    let id = store::import_match(
+        &pool,
+        "cube.sgf",
+        "sgf",
+        sgf.as_bytes(),
+        sgf,
+        &import::parse_sgf(sgf).unwrap(),
+    )
+    .await
+    .unwrap()
+    .r#match
+    .id;
+    let job = store::create_match_job(&pool, id, 1, 2).await.unwrap();
+    for (no, checker, player, kind, played, best) in [
+        (1, Some(1), 0, "cube", "no double", "double"),
+        (2, Some(1), 0, "checker", "8/5 6/5", "6/3 6/5"),
+        (3, None, 1, "cube", "double", "no double"),
+        (4, None, 0, "cube", "take", "drop"),
+    ] {
+        let decision = json!({"decision_no":no,"checker_no":checker,"player":player,"kind":kind,"played":played,"best":best,"played_equity":0.0,"best_equity":0.2,"equity_loss":0.2,"severity":"very_bad","dice":null,"evaluation_status":"evaluated"});
+        sqlx::query("INSERT INTO move_analyses(job_id,game_no,decision_no,player,kind,equity_loss,data) VALUES($1,1,$2,$3,$4,0.2,$5)")
+            .bind(job.id).bind(no).bind(player).bind(kind).bind(decision).execute(&pool).await.unwrap();
+    }
+    sqlx::query("INSERT INTO match_analysis_games(job_id,game_no) VALUES($1,1)")
+        .bind(job.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (status, page) = call(
+        &app(&pool),
+        "GET",
+        &format!(
+            "/api/matches/{id}/review-decisions?job_id={}&kind=cube&player=0&errors_only=true",
+            job.id
+        ),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{page}");
+    let rows = page["items"].as_array().unwrap();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0]["played"], "no double");
+    assert_eq!(rows[0]["review_position"]["dice"], json!([0, 0]));
+    assert_eq!(rows[0]["review_position"]["ply"], 1);
+    let (event, match_id): (Uuid, String) = sqlx::query_as(
+        "SELECT id,gnubg_match_id FROM match_moves WHERE match_uuid=$1 AND notation='Take'",
+    )
+    .bind(id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(rows[1]["move_id"], json!(event));
+    assert_eq!(rows[1]["review_position"]["gnubg_match_id"], match_id);
+    assert_eq!(rows[1]["review_position"]["player"], 0);
+}
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
 async fn imported_cube_uses_validated_actor_loss_and_source_event(pool: PgPool) {
     let (id, _) = imported(&pool).await;
     sqlx::query("INSERT INTO imported_analyses(match_uuid,position_uuid,source_ordinal,game_no,source_move_no,kind,data) SELECT match_uuid,position_uuid,2,game_no,source_move_no,'cube',(data - 'gnubg_match_id') || $2 FROM imported_analyses WHERE match_uuid=$1 AND game_no=1")

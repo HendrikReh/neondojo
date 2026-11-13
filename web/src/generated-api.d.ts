@@ -3822,6 +3822,8 @@ export interface components {
             next_cursor?: number | null;
         };
         MoveAssessment: {
+            /** @description Best legal checker notation from the same evaluation as the loss. */
+            best_move?: string | null;
             depth?: string | null;
             /** Format: int32 */
             depth_plies?: number | null;
@@ -4597,9 +4599,14 @@ export interface components {
             job_id?: string | null;
             /**
              * Format: uuid
-             * @description Actual source event for cube navigation; virtual no-double links its checker event.
+             * @description Source event for cube review; a skipped double links its checker event.
              */
             move_id?: string | null;
+            /**
+             * Format: int32
+             * @description Next checker move for an explicit cube event; null after the last checker move.
+             */
+            next_checker_no?: number | null;
             /** Format: uuid */
             position_uuid?: string | null;
             review_position?: null | components["schemas"]["Position"];

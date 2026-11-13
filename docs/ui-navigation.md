@@ -68,6 +68,14 @@ Open Sage side by side for the selected game or the whole match. The game compar
 available, with other recorded depths and job states in its selector. The table
 shows each player's saved checker and cube decision counts and equity losses.
 GNUbg's native PR is shown in the GNUbg column when available.
+Above the board, **Previous error** and **Next error** follow the list filters
+and show the current result's index and the total. When all games are selected,
+the buttons cycle across game boundaries. Turning off **Inaccuracies only**
+switches the buttons to **Previous decision** and **Next decision**.
+A checker error keeps the move preview controls available.
+A cube error shows the original decision context with its played and best cube
+actions. **Played move** and **Best move** switch the checker preview while
+preserving the selected board view.
 Candidate columns size to their contents so notation and evaluation values
 stay close on wide displays.
 Engine labels show the name and the recorded version when available. Hover
@@ -77,6 +85,10 @@ used for local and imported analyses, in Playing, and in Study.
 Switching tabs keeps the selected game and move. Selecting a statistics metric
 opens **Errors** with the matching filters. Selecting a metric for a different
 game opens that game.
+The board and an empty error list explain whether evaluations are missing, the current
+filters hide all matches, or the evaluated decisions have no inaccuracies.
+The actions open analysis settings, clear the selection filters while keeping
+the current error threshold, or show all decisions in the selected scope.
 Switching tabs keeps the selected game and move. Selecting a statistics metric
 opens **Errors** with the matching filters. Selecting a metric for a different
 game opens that game.
@@ -86,8 +98,9 @@ changes its width, Shift uses larger steps, Home/End select the available limits
 and Enter or double-click restores the default for the current view. Escape
 cancels a drag. The profile stores separate widths for **Overview** and for the
 four detail tabs as a group. Overview caps the board to leave space for the error
-list below. The other tabs use the available window height for a larger board.
-The displayed limit can change without overwriting either preferred width.
+list below. The other tabs can use the full available height. The default
+board grows gradually on windows wider than 1800 logical pixels. A saved
+manual width takes precedence and is limited by the space in the current window.
 
 ## Study areas
 

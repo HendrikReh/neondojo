@@ -121,25 +121,36 @@ Equity differences stay within the same source and known equity unit; MWC differ
 use percentage points. Unknown or incompatible values remain unavailable. Engine,
 depth, unit and player perspective stay visible, including differing candidate depths.
 
-The decision list and **Next error** also work without a local analysis job. Review
-pages use saved local game checkpoints from the selected job and imported evaluations
+The decision list and **Previous error** / **Next error** above the board also
+work without a local analysis job. Review pages use saved local game checkpoints from the selected job and imported evaluations
 for games not covered by that job. Each decision identifies its source and depth;
 filters and pagination apply to those reviewed decisions. Imported evaluations do not
-supply native GNUbg PR or imply a complete native match analysis. Source cube decisions
-can open their original board and analysis in the move dialog. Next error cycles
-through the selected game's matching decisions and wraps to the beginning; changing
-selection or filters cancels pending navigation.
+supply native GNUbg PR or imply a complete native match analysis. The board shows
+the filtered scope and the current result's index in the list. Both directions
+cycle through matching results across game boundaries when all games are selected.
+When the error threshold is off, the board navigates all matching decisions.
+An empty list and the board offer the same explanation and action. Changing
+selection or filters cancels pending navigation. Cube errors open on the main board with the played
+action, best action, loss and source. For imported decisions, **Cube details**
+also opens the original evaluation and notes.
 
 `GET /api/matches/{id}/review-decisions` supplies this paginated view. Only
 evaluations with known units and a validated decision context enter imported
 review. GNUbg SGF checker evaluations are supported; SGF cube records without
 unambiguous units and perspective remain visible in their original source view
-but are excluded from the combined error list. Missed-double dialogs use the
-validated position before the roll, rather than the following checker move.
+but are excluded from the combined error list. A missed double opens the
+validated position before the roll. A take or drop shows the outstanding cube
+offer from the original decision context.
 
 ### Preview a move
 
 **Initial**, **Arrows** (German: **Pfeile**), and **Final** show the starting position, the move path, and the resulting position. The default view uses outlined green arrows for the played move and shows legal intermediate points. Select a candidate row from an import, BackgammonDB, or local analysis to preview it. Use Enter or Space on the move name. Up/Down selects the previous or next candidate and keeps it in view. Left shows **Initial**, Right shows **Final**, and other controls keep their normal keyboard behavior. The selected board view persists when changing candidates. **Reset preview** returns to the recorded move.
+
+Use **Played move** and **Best move** above the board to switch the preview
+with one click while keeping **Initial**, **Arrows**, or **Final** selected. The
+loss comes from the same source as the best move. A saved game analysis can
+supply both values before a separate position analysis produces a candidate
+table.
 
 The board identifies the candidate source and rank. **Final** keeps the board orientation and hides the dice. All themes use the same legality checks for bar entry, hits, multi-step moves, doubles, and bear-off. Unrecognized or illegal notation shows the starting position. Analysis, notes, position IDs, and study cards continue to use the pre-move decision. Changing position or source clears the previous candidate preview.
 

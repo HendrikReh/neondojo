@@ -4,14 +4,8 @@ import { useI18n } from './i18n';
 import { useSourceText } from './analysis-source-messages';
 import { clippedTooltipText } from './overflow-title';
 import type { MoveAssessment } from './useMoveAssessments';
+import { severityLabels } from './review-statistics-messages';
 import './move-history.css';
-
-const severityLabels = {
-  none: 'severity.none',
-  doubtful: 'severity.doubtful',
-  bad: 'severity.bad',
-  very_bad: 'severity.very_bad',
-} as const;
 
 export function moveHistoryTooltip(anchor: Element, firstAttempt?: string) {
   return [

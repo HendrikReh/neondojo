@@ -1,5 +1,12 @@
-import { useI18n } from './i18n';
+import { useI18n, type TranslationKey } from './i18n';
 import { interpolate, type Locale, type TranslationParams } from './i18n-core';
+export const severityLabels: Record<string, TranslationKey> = {
+  none: 'severity.none',
+  doubtful: 'severity.doubtful',
+  bad: 'severity.bad',
+  very_bad: 'severity.very_bad',
+};
+
 const rows = {
   reviewSources: [
     'Available evaluations · source and depth per decision',
@@ -34,12 +41,12 @@ const rows = {
     'Statistiche dell’analisi nativa',
   ],
   source: [
-    'Native GNUbg · {engine} · {plies}-ply',
-    'Natives GNUbg · {engine} · {plies}-Ply',
-    'GNUbg nativo · {engine} · {plies}-ply',
-    'GNUbg natif · {engine} · {plies}-ply',
-    'Natywny GNUbg · {engine} · {plies}-ply',
-    'GNUbg nativo · {engine} · {plies}-ply',
+    '{engine} · {plies}-ply',
+    '{engine} · {plies}-Ply',
+    '{engine} · {plies}-ply',
+    '{engine} · {plies}-ply',
+    '{engine} · {plies}-ply',
+    '{engine} · {plies}-ply',
   ],
   coverage: [
     '{completed} of {total} games fully analyzed',
@@ -271,6 +278,38 @@ const rows = {
     'Réinitialiser les filtres',
     'Wyczyść filtry',
     'Azzera filtri',
+  ],
+  missing: [
+    'No evaluated decisions are available for this analysis scope yet.',
+    'Für diesen Analyseumfang liegen noch keine bewerteten Entscheidungen vor.',
+    'Todavía no hay decisiones evaluadas en el ámbito de este análisis.',
+    'Aucune décision évaluée n’est encore disponible dans le périmètre de cette analyse.',
+    'W tym zakresie analizy nie ma jeszcze ocenionych decyzji.',
+    'Non ci sono ancora decisioni valutate nell’ambito di questa analisi.',
+  ],
+  clean: [
+    'No inaccuracies in the evaluated decisions.',
+    'Keine Auffälligkeiten bei den bewerteten Entscheidungen.',
+    'No hay imprecisiones en las decisiones evaluadas.',
+    'Aucune imprécision dans les décisions évaluées.',
+    'W ocenionych decyzjach nie ma niedokładności.',
+    'Nessuna imprecisione nelle decisioni valutate.',
+  ],
+  removeSelectionFilters: [
+    'Reset selection filters',
+    'Auswahlfilter zurücksetzen',
+    'Restablecer filtros de selección',
+    'Réinitialiser les filtres de sélection',
+    'Wyczyść filtry wyboru',
+    'Azzera i filtri di selezione',
+  ],
+  showAllDecisions: [
+    'Show all decisions',
+    'Alle Entscheidungen anzeigen',
+    'Mostrar todas las decisiones',
+    'Afficher toutes les décisions',
+    'Pokaż wszystkie decyzje',
+    'Mostra tutte le decisioni',
   ],
   metricAction: [
     'Show {player}: {metric}',

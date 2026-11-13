@@ -1552,6 +1552,17 @@ progress::-webkit-progress-value {
   font-variant-numeric: tabular-nums;
   font-weight: var(--font-weight-semibold);
 }
+.review-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding-block: 8px;
+}
+.review-empty p {
+  margin: 0;
+}
+
 .severity {
   border-radius: 4px;
   padding: 4px 6px;

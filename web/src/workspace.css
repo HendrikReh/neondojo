@@ -212,10 +212,6 @@
 .analysis-workspace .player-dot {
   flex-shrink: 0;
 }
-.analysis-workspace .moves-panel .next-error {
-  margin-top: 14px;
-  font-size: var(--font-size-meta);
-}
 .analysis-workspace .moves-panel > p {
   font-size: var(--font-size-meta);
   padding: 10px 3px;
