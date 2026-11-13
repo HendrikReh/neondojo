@@ -59,7 +59,16 @@
   max-width: 300px;
 }
 
-.analysis-match-event dd {
+.analysis-match-round,
+.analysis-match-place {
+  flex: 0 1 auto;
+  min-width: 100px;
+  max-width: 180px;
+}
+
+.analysis-match-event dd,
+.analysis-match-round dd,
+.analysis-match-place dd {
   overflow: hidden;
   text-overflow: ellipsis;
 }

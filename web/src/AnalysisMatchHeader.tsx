@@ -2,6 +2,7 @@ import ActionButton from './ActionButton';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { request, type Match } from './api';
 import type { LibraryMatch } from './library-api';
+import { libraryText } from './library-messages';
 import { useI18n } from './i18n';
 import { AppError, type Locale } from './i18n-core';
 import { useAnalysisMatchHeaderText } from './analysis-match-header-messages';
@@ -127,6 +128,8 @@ export function AnalysisMatchHeaderView({
   const details = metadata?.id === match.id ? metadata : undefined;
   const sourceAvailable = hasMatchSource(match) && hasMatchSource(details);
   const players = details ?? match;
+  const round = details?.round?.trim();
+  const place = details?.place?.trim();
   const names = `${players.white} ${t('common.versus')} ${players.black}`;
   const pending = '—';
   const pr = (value: number | null) =>
@@ -206,6 +209,8 @@ export function AnalysisMatchHeaderView({
           details ? details.tournament?.trim() || 'n/a' : pending,
           details?.tournament ?? undefined,
         )}
+        {round && field('round', libraryText(locale, 'round'), round, round)}
+        {place && field('place', libraryText(locale, 'place'), place, place)}
         {field(
           'pr-white',
           h('whitePr'),

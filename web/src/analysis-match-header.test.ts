@@ -175,6 +175,30 @@ it('shows numeric ID, match score, played date, event and zero PR in White/Black
   expect(html).not.toContain('Nov 9');
 });
 
+it('shows localized round and location with their full values in titles', () => {
+  const round = 'Final - Tie Breaker';
+  const place = 'Monte-Carlo';
+  const html = renderHeader({ ...metadata, round, place }, 'de');
+  expect(field(html, 'round')).toContain('<dt>Runde</dt>');
+  expect(field(html, 'round')).toContain(`<dd title="${round}">${round}</dd>`);
+  expect(field(html, 'place')).toContain('<dt>Ort</dt>');
+  expect(field(html, 'place')).toContain(`<dd title="${place}">${place}</dd>`);
+});
+
+it('omits missing or blank fields independently and while metadata loads', () => {
+  const roundOnly = renderHeader({ ...metadata, round: 'Final', place: '  ' });
+  expect(field(roundOnly, 'round')).toContain('Final');
+  expect(field(roundOnly, 'place')).toBe('');
+
+  const placeOnly = renderHeader({ ...metadata, place: 'Monte-Carlo' });
+  expect(field(placeOnly, 'place')).toContain('Monte-Carlo');
+  expect(field(placeOnly, 'round')).toBe('');
+
+  const loading = renderHeader(null);
+  expect(field(loading, 'round')).toBe('');
+  expect(field(loading, 'place')).toBe('');
+});
+
 it('shows n/a for unknown metadata and partial PR without inventing results', () => {
   const html = renderHeader({
     ...metadata,

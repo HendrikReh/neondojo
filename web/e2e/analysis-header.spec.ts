@@ -4,7 +4,15 @@ test.use({ actionTimeout: 10000 });
 const header = (page: Page) => page.locator('.analysis-heading');
 const field = (page: Page, id: string) =>
   header(page).locator(`[data-match-field="${id}"]`);
-async function imported(page: Page, event = 'Autumn Open', initialize = true) {
+async function imported(
+  page: Page,
+  event = 'Autumn Open',
+  initialize = true,
+  context: { round: string | null; place: string | null } = {
+    round: null,
+    place: null,
+  },
+) {
   if (initialize) {
     await page.addInitScript(() =>
       localStorage.setItem('bgtutor.locale', 'en'),
@@ -35,8 +43,7 @@ async function imported(page: Page, event = 'Autumn Open', initialize = true) {
         display_name: `Header study ${suffix}`,
         played_on: '2026-10-25',
         tournament: event,
-        round: null,
-        place: null,
+        ...context,
         result_state: 'completed',
         white_score: 21,
         black_score: 17,
@@ -55,7 +62,10 @@ test('analysis header shows a compact single-line identity and metadata while da
   const event =
     'International Backgammon Championship — Masters division — ' +
     'Autumn '.repeat(17);
-  const f = await imported(page, event);
+  const round = 'Final - Tie Breaker';
+  const place =
+    'Leonardo Royal Hotel Brighton Waterfront, 6 Kings Road, BN1 2GS Brighton';
+  const f = await imported(page, event, true, { round, place });
   await page.reload();
   await expect(field(page, 'id')).toContainText(String(f.metadata.match_no));
   await expect(header(page).getByRole('heading', { level: 1 })).toContainText(
@@ -68,6 +78,12 @@ test('analysis header shows a compact single-line identity and metadata while da
   await expect(field(page, 'result')).toContainText('21–17');
   await expect(field(page, 'date')).toContainText('Oct 25, 2026');
   await expect(field(page, 'event')).toContainText(event.trim());
+  await expect(field(page, 'round').locator('dd')).toHaveText(round);
+  await expect(field(page, 'place').locator('dd')).toHaveText(place);
+  await expect(field(page, 'place').locator('dd')).toHaveAttribute(
+    'title',
+    place,
+  );
   await expect(field(page, 'pr-white')).toContainText('n/a');
   await expect(field(page, 'pr-black')).toContainText('n/a');
   await expect(header(page).locator('a[href*="/source"]')).toHaveCount(0);
@@ -87,10 +103,17 @@ test('analysis header shows a compact single-line identity and metadata while da
       'result',
       'date',
       'event',
+      'round',
+      'place',
       'pr-white',
       'pr-black',
     ]) {
       const box = (await field(page, id).boundingBox())!;
+      expect(box.x + box.width).toBeLessThanOrEqual(width);
+      if (id === 'round' || id === 'place') {
+        const value = (await field(page, id).locator('dd').boundingBox())!;
+        expect(value.width).toBeGreaterThan(24);
+      }
       expect(
         Math.abs(box.y + box.height / 2 - (title.y + title.height / 2)),
       ).toBeLessThan(18);
@@ -123,10 +146,14 @@ test('analysis header shows a compact single-line identity and metadata while da
     .click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Tournament', { exact: true }).fill('Updated event');
+  await dialog.getByLabel('Round', { exact: true }).fill('');
+  await dialog.getByLabel('Location', { exact: true }).fill('Monte-Carlo');
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(dialog).not.toBeVisible();
   await page.getByRole('tab', { name: 'Analysis', exact: true }).click();
   await expect(field(page, 'event')).toContainText('Updated event');
+  await expect(field(page, 'round')).toHaveCount(0);
+  await expect(field(page, 'place')).toContainText('Monte-Carlo');
 });
 
 test('header PR refreshes after full match completion and stays unknown for a single-game job', async ({
