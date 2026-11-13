@@ -1,14 +1,23 @@
 import { expect, type Locator } from '@playwright/test';
 
+export async function showPositionColumns(pane: Locator, ...names: string[]) {
+  const picker = pane.locator('.library-column-picker');
+  await picker.locator('summary').click();
+  for (const name of names)
+    await picker.getByRole('checkbox', { name, exact: true }).check();
+  await picker.locator('summary').click();
+}
+
 /** Keep rows compact while preserving the action icons' 44px click targets. */
 export async function expectCompactPositionRow(row: Locator) {
   const remove = row.locator('.position-remove-saved');
   await expect(remove).toBeVisible();
-  const rowBox = (await row.boundingBox())!;
-  const buttonBox = (await remove.boundingBox())!;
-  const cellBox = (await row
-    .locator('td:has(.position-remove-saved)')
-    .boundingBox())!;
+  // Measure together so scroll anchoring cannot move the row between reads.
+  const { rowBox, buttonBox, cellBox } = await remove.evaluate((button) => ({
+    rowBox: button.closest('tr')!.getBoundingClientRect().toJSON(),
+    buttonBox: button.getBoundingClientRect().toJSON(),
+    cellBox: button.closest('td')!.getBoundingClientRect().toJSON(),
+  }));
 
   expect(buttonBox.width).toBeGreaterThanOrEqual(44);
   expect(buttonBox.height).toBeGreaterThanOrEqual(44);

@@ -52,7 +52,8 @@
   margin-bottom: 22px;
 }
 .position-controls label,
-.position-deck-panel label {
+.position-deck-panel label,
+.position-transfer-dialog label {
   display: grid;
   gap: 5px;
   color: var(--ui-text);
@@ -61,7 +62,9 @@
 .position-controls input,
 .position-controls select,
 .position-deck-panel input,
-.position-deck-panel select {
+.position-deck-panel select,
+.position-transfer-dialog input,
+.position-transfer-dialog select {
   border: 1px solid var(--ui-border);
   border-radius: 7px;
   background: var(--ui-surface);
@@ -131,6 +134,52 @@
 }
 .position-filter-footer label {
   min-width: 190px;
+}
+.position-controls--compact {
+  margin-bottom: 16px;
+}
+.position-controls--compact .position-filter-form {
+  padding: 12px 16px 8px;
+}
+.position-controls--compact .position-search-row {
+  grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr)) auto;
+}
+.position-controls--compact .position-saved-searches {
+  padding: 8px 16px;
+  border-top: 1px solid var(--ui-border);
+  border-bottom: 0;
+}
+.position-filter-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  margin-top: 6px;
+}
+.position-filter-toolbar .position-filter-details {
+  margin: 0;
+}
+.position-filter-toolbar .position-filter-details[open] {
+  grid-column: 1 / -1;
+  grid-row: 1 / span 2;
+}
+.position-filter-toolbar .position-filter-details summary {
+  width: fit-content;
+  padding: 6px 0;
+}
+.position-filter-toolbar .position-filter-grid {
+  margin: 8px 0 4px;
+}
+.position-filter-toolbar > .action-button {
+  grid-area: 1 / 2;
+  min-height: 28px;
+  padding: 3px 6px;
+  border-color: transparent;
+  background: transparent;
+}
+.position-filter-toolbar > .action-button > .action-icon {
+  width: 14px;
+  height: 14px;
 }
 .position-browser-layout {
   display: grid;
@@ -212,6 +261,30 @@
   color: var(--ui-muted);
   line-height: 1.4;
 }
+.position-selection-actions[hidden] {
+  display: none;
+}
+.position-selection-menu {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  max-width: calc(100vw - 16px);
+  visibility: hidden;
+  padding: 6px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  box-shadow: 0 8px 24px var(--ui-shadow);
+}
+.position-selection-menu .action-button {
+  border-color: transparent;
+  background: transparent;
+}
+.position-transfer-readiness p {
+  margin: 0 0 6px;
+  font-size: var(--font-size-body);
+}
 .position-page-select {
   padding: 12px 13px;
   background: var(--ui-surface-alt);
@@ -248,52 +321,14 @@
   font-size: var(--font-size-table);
   line-height: 20px;
 }
-.position-browser .position-table-played {
-  min-width: 1424px;
+.position-browser .saved-position-table {
+  min-width: 0;
 }
 .position-table-scroll {
   max-height: max(320px, calc(100dvh - 420px));
 }
-.position-col-select {
-  width: 32px;
-}
-.position-col-origin {
-  width: 180px;
-}
-.position-col-database {
-  width: 100px;
-}
-.position-col-game,
-.position-col-ply {
-  width: 58px;
-}
-.position-col-player,
-.position-col-opponent {
-  width: 140px;
-}
-.position-col-dice {
-  width: 54px;
-}
-.position-col-score {
-  width: 70px;
-}
-.position-col-cube {
-  width: 64px;
-}
-.position-col-played {
-  width: 128px;
-}
-.position-col-loss {
-  width: 84px;
-}
-.position-col-decks {
-  width: 144px;
-}
 .position-preview-decks {
   overflow-wrap: anywhere;
-}
-.position-col-actions {
-  width: 60px;
 }
 :is(.position-browser, .learning-card-browser) .position-table th {
   position: sticky;
@@ -318,6 +353,31 @@
   font-size: inherit;
   text-align: left;
   background: transparent;
+}
+.saved-position-table .library-sort-heading .action-icon {
+  width: 14px;
+  height: 14px;
+}
+.saved-position-table
+  .library-sort-heading
+  button[aria-pressed='false']
+  .action-icon {
+  visibility: hidden;
+}
+.saved-position-table
+  .library-sort-heading
+  button:is(:hover, :focus-visible)
+  .action-icon {
+  visibility: visible;
+}
+.saved-position-table .library-sort-heading button[aria-pressed='true'] {
+  color: var(--ui-accent);
+}
+.saved-position-table
+  .library-sort-heading
+  button[aria-pressed='true']
+  .action-icon {
+  color: inherit;
 }
 :is(.position-browser, .learning-card-browser) .position-table td {
   padding: 5px 8px;
@@ -414,10 +474,12 @@
   padding: 7px 10px;
 }
 .position-page-select .position-width-reset {
-  margin-left: auto;
   padding: 4px 8px;
   font-size: var(--font-size-control);
   background: transparent;
+}
+.position-page-select .library-column-menu {
+  width: min(360px, calc(100vw - 90px));
 }
 .position-hit-notes {
   overflow-wrap: anywhere;
@@ -490,6 +552,46 @@
 }
 .position-preview .board-shell {
   width: 100%;
+}
+.saved-position-preview-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.saved-position-preview-header > div {
+  min-width: 0;
+}
+.saved-position-preview-header h3 {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  margin: 0;
+}
+.saved-position-preview-header .action-button {
+  flex: 0 1 auto;
+  max-width: 52%;
+}
+.saved-position-preview-header .position-preview-context {
+  margin: 4px 0 0;
+}
+.saved-position-preview .position-preview-players {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 8px 0;
+  overflow-wrap: anywhere;
+}
+.saved-position-preview-details {
+  margin-top: 12px;
+  border-top: 1px solid var(--ui-border);
+  padding-top: 10px;
+  font-size: var(--font-size-body);
+}
+.saved-position-preview-details summary {
+  cursor: pointer;
+  width: fit-content;
 }
 .position-before-label {
   text-align: center;
@@ -623,7 +725,8 @@
   .position-browser h1 {
     font-size: var(--font-size-page);
   }
-  .position-search-row {
+  .position-search-row,
+  .position-controls--compact .position-search-row {
     grid-template-columns: minmax(0, 1fr);
   }
   .position-filter-grid {

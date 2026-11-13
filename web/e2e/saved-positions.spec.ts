@@ -1,4 +1,4 @@
-import { expect, test, type Page } from './test';
+import { expect, test, type Locator, type Page } from './test';
 
 test.use({ actionTimeout: 10000 });
 async function imported(page: Page, games = 1) {
@@ -60,13 +60,25 @@ async function openCollection(page: Page, databaseId: string) {
   return pane;
 }
 
+async function removeSelected(pane: Locator) {
+  const actions = pane.locator('.position-selection-summary');
+  await actions
+    .getByRole('button', { name: 'More selection actions', exact: true })
+    .click();
+  await actions
+    .getByRole('button', { name: 'Remove from collection', exact: true })
+    .click();
+}
+
 test('imports stay out of the collection until the user deliberately saves a position', async ({
   page,
 }) => {
   const f = await imported(page);
   const pane = await openCollection(page, f.database.id);
   await expect(pane.locator('.position-table tbody tr')).toHaveCount(0);
-  await expect(pane.locator('.position-empty')).toContainText('Save position');
+  await expect(pane.locator('.position-empty')).toContainText(
+    'No saved positions match these filters.',
+  );
   await page.getByRole('tab', { name: 'Analysis', exact: true }).click();
   await page
     .getByRole('button', { name: 'Save position', exact: true })
@@ -151,12 +163,7 @@ test('selected removal retains original notes and permits saving the same positi
     rows = pane.locator('.position-table tbody tr');
   await expect(rows).toHaveCount(2);
   await pane.getByLabel('Select this page', { exact: true }).check();
-  await pane
-    .getByRole('button', {
-      name: 'Remove selected from collection',
-      exact: true,
-    })
-    .click();
+  await removeSelected(pane);
   await expect(rows).toHaveCount(0);
   const annotation = await (
     await page.request.get(`/api/positions/${f.positions[0].id}/annotation`)
@@ -174,7 +181,10 @@ test('selected removal retains original notes and permits saving the same positi
     .click();
   await openCollection(page, f.database.id);
   await expect(rows).toHaveCount(1);
-  await expect(rows.first()).toContainText('Keep this explanation');
+  await pane.locator('.saved-position-preview-details summary').click();
+  await expect(pane.locator('.saved-position-preview-details')).toContainText(
+    'Keep this explanation',
+  );
 });
 
 test('partial removal keeps failed rows selected and makes a retry possible', async ({
@@ -199,12 +209,7 @@ test('partial removal keeps failed rows selected and makes a retry possible', as
     rows = pane.locator('.position-table tbody tr');
   await expect(rows).toHaveCount(2);
   await pane.getByLabel('Select this page', { exact: true }).check();
-  await pane
-    .getByRole('button', {
-      name: 'Remove selected from collection',
-      exact: true,
-    })
-    .click();
+  await removeSelected(pane);
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toHaveAttribute(
     'data-position-id',
@@ -215,12 +220,7 @@ test('partial removal keeps failed rows selected and makes a retry possible', as
     'Some positions could not be removed',
   );
   fail = false;
-  await pane
-    .getByRole('button', {
-      name: 'Remove selected from collection',
-      exact: true,
-    })
-    .click();
+  await removeSelected(pane);
   await expect(rows).toHaveCount(0);
   await expect(pane.getByRole('alert')).toHaveCount(0);
 });
@@ -241,7 +241,7 @@ test('failed removal on a later loaded page retains selection for immediate retr
   await pane.getByRole('button', { name: 'Next page', exact: true }).click();
   await expect(
     pane.getByRole('button', { name: 'Page 2', exact: true }),
-  ).toBeVisible();
+  ).toHaveAttribute('aria-current', 'page');
   await pane.getByRole('button', { name: 'Next page', exact: true }).click();
   await expect(rows).toHaveCount(10);
   const failed = await rows.first().getAttribute('data-position-id');
@@ -255,37 +255,25 @@ test('failed removal on a later loaded page retains selection for immediate retr
         })
       : route.continue(),
   );
-  await pane
-    .getByRole('button', {
-      name: 'Remove selected from collection',
-      exact: true,
-    })
-    .click();
+  await removeSelected(pane);
   await expect(pane.getByRole('alert')).toContainText(
     'Some positions could not be removed',
   );
-  await expect(
-    pane.getByText('1 / 200 selected', { exact: true }).first(),
-  ).toBeVisible();
+  await expect(pane.locator('.position-selection-summary strong')).toHaveText(
+    '1 selected',
+  );
   await expect(pane.locator('.position-browser-results')).toHaveAttribute(
     'aria-busy',
     'false',
   );
   // The failed item remains selected while the current page refreshes.
   await expect(pane.getByText('59 positions', { exact: true })).toBeVisible();
-  await expect(
-    pane.getByText('1 / 200 selected', { exact: true }).first(),
-  ).toBeVisible();
+  await expect(pane.locator('.position-selection-summary strong')).toHaveText(
+    '1 selected',
+  );
   fail = false;
-  await pane
-    .getByRole('button', {
-      name: 'Remove selected from collection',
-      exact: true,
-    })
-    .click();
-  await expect(
-    pane.getByText('0 / 200 selected', { exact: true }).first(),
-  ).toBeVisible();
+  await removeSelected(pane);
+  await expect(pane.locator('.position-selection-summary')).toBeHidden();
   await expect(pane.getByRole('alert')).toHaveCount(0);
   expect(
     (await (await page.request.get(`/api/positions/${failed}/bookmark`)).json())

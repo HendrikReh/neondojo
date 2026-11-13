@@ -35,6 +35,7 @@ export type PositionFilterDraft = Record<
 export type PositionBrowserPage = Required<Schema['PositionBrowserPage']>;
 export type PositionTransferStatus = Schema['PositionAddStatus'];
 export type PositionTransferResult = Schema['AddPositionsResult'];
+export type PositionAnalysisReadiness = Schema['PositionAnalysisReadiness'];
 export const positionSelectionLimit = 200;
 export const POSITION_PAGE_SIZE = 25;
 const textFields = [
@@ -59,18 +60,23 @@ const numberFields = [
   'min_loss',
   'max_loss',
 ] as const;
+export const positionFilterKeys = [
+  ...textFields,
+  'game_plan',
+  ...numberFields,
+  'crawford',
+  'analysis_state',
+] as const satisfies readonly (keyof PositionFilterDraft)[];
+export type PositionFilterKey = (typeof positionFilterKeys)[number];
+
 export function emptyPositionFilters(): PositionFilterDraft {
-  return Object.fromEntries(
-    [
-      ...textFields,
-      ...numberFields,
-      'crawford',
-      'analysis_state',
-      'sort',
-      'direction',
-      'game_plan',
-    ].map((key) => [key, key === 'sort' ? 'match' : '']),
-  ) as PositionFilterDraft;
+  return {
+    ...(Object.fromEntries(
+      positionFilterKeys.map((key) => [key, '']),
+    ) as Record<PositionFilterKey, string>),
+    sort: 'match',
+    direction: '',
+  };
 }
 export function positionDefinition(
   draft: PositionFilterDraft,
@@ -189,6 +195,16 @@ export const loadPositionPage = (
 };
 export const loadPositionFilters = (signal: AbortSignal) =>
   request<SavedPositionFilter[]>('/position-filters', { signal });
+export const loadPositionAnalysisReadiness = (
+  ids: readonly string[],
+  signal: AbortSignal,
+) =>
+  request<PositionAnalysisReadiness>('/position-browser/analysis-readiness', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ position_ids: ids }),
+    signal,
+  });
 export const savePositionFilter = (
   name: string,
   definition: PositionFilterDefinition,

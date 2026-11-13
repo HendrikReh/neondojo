@@ -22,13 +22,15 @@ import { useI18n } from './i18n';
 import { useLearningText } from './learning-messages';
 import './deck-management.css';
 
-function DeckDialog({
+export function DeckDialog({
   title,
   children,
   close,
   busy = false,
   wide = false,
   focusCancel = false,
+  className = '',
+  actions,
 }: {
   title: string;
   children: ReactNode;
@@ -36,6 +38,8 @@ function DeckDialog({
   busy?: boolean;
   wide?: boolean;
   focusCancel?: boolean;
+  className?: string;
+  actions?: ReactNode;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
@@ -55,7 +59,7 @@ function DeckDialog({
   return (
     <dialog
       ref={dialog}
-      className={`deck-management-dialog${wide ? ' deck-library-dialog' : ''}`}
+      className={`deck-management-dialog${wide ? ' deck-library-dialog' : ''} ${className}`}
       aria-labelledby={heading}
       onCancel={(event) => {
         event.preventDefault();
@@ -74,6 +78,7 @@ function DeckDialog({
         >
           {t('cancel')}
         </ActionButton>
+        {actions}
       </footer>
     </dialog>
   );

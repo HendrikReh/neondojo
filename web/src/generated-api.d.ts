@@ -1540,6 +1540,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/position-browser/analysis-readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["analysis_readiness"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/position-filters": {
         parameters: {
             query?: never;
@@ -2920,6 +2936,7 @@ export interface components {
             } | null;
             definition: components["schemas"]["PositionFilterDefinition"];
             show_played: boolean;
+            visible_columns?: string[];
         };
         ConfigurationProfile: {
             configuration: components["schemas"]["ProfileConfiguration"];
@@ -4275,6 +4292,14 @@ export interface components {
         };
         /** @enum {string} */
         PositionAddStatus: "added" | "updated" | "duplicate" | "analysis_required" | "not_found";
+        PositionAnalysisReadiness: {
+            /** Format: int64 */
+            analysis_required: number;
+            /** Format: uuid */
+            first_analysis_required?: string | null;
+            /** Format: int64 */
+            unavailable: number;
+        };
         /** @enum {string} */
         PositionAnalysisState: "ready" | "missing";
         PositionBookmark: {
@@ -9661,6 +9686,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PositionBrowserPage"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    analysis_readiness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddPositions"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PositionAnalysisReadiness"];
                 };
             };
             422: {

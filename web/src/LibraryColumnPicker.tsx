@@ -2,9 +2,8 @@ import { useI18n } from './i18n';
 import ActionButton from './ActionButton';
 import { useEffect, useRef } from 'react';
 import { useLibraryText } from './library-messages';
-import type { LibraryDataColumn } from './library-column-preferences';
 
-export default function LibraryColumnPicker({
+export default function LibraryColumnPicker<Column extends string>({
   options,
   shown,
   onToggle,
@@ -12,12 +11,12 @@ export default function LibraryColumnPicker({
   onReset,
   onMove,
 }: {
-  options: readonly { id: LibraryDataColumn; label: string }[];
-  shown: readonly LibraryDataColumn[];
-  onToggle: (id: LibraryDataColumn, checked: boolean) => void;
+  options: readonly { id: Column; label: string }[];
+  shown: readonly Column[];
+  onToggle: (id: Column, checked: boolean) => void;
   onAll: () => void;
   onReset: () => void;
-  onMove?: (id: LibraryDataColumn, delta: -1 | 1) => void;
+  onMove?: (id: Column, delta: -1 | 1) => void;
 }) {
   const { locale } = useI18n();
   const labels = {

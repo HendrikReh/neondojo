@@ -177,6 +177,26 @@
       "expected_paths": []
     },
     {
+      "name": "legacy_position_columns_use_the_compact_default",
+      "changes": [
+        {
+          "path": "positions.visible_columns",
+          "value": ["loss", "score", "dice", "player", "ply", "game", "origin"]
+        }
+      ],
+      "expected_paths": []
+    },
+    {
+      "name": "position_column_visibility_is_independent_of_widths",
+      "changes": [
+        {
+          "path": "positions.visible_columns",
+          "value": ["database", "origin"]
+        }
+      ],
+      "expected_paths": ["positions.visible_columns"]
+    },
+    {
       "name": "column_order_is_meaningful",
       "changes": [
         {

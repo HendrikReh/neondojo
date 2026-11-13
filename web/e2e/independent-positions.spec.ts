@@ -191,7 +191,10 @@ test('deleting a source match retains an independent study position, notes, anal
     rows = pane.locator('.position-table tbody tr');
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toHaveAttribute('data-position-id', f.position.id);
-  await expect(rows.first()).toContainText(f.database.name);
+  await pane.locator('.saved-position-preview-details summary').click();
+  await expect(pane.locator('.saved-position-preview-details')).toContainText(
+    f.database.name,
+  );
   await expect(rows.locator('.position-player')).toHaveText(f.match.white);
   await expect(pane.locator('.position-preview .board')).toBeVisible();
   await expect(pane.locator('.position-source-removed')).toBeVisible();

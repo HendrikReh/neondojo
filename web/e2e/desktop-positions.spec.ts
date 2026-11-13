@@ -1,5 +1,8 @@
 import { expect, test, type Page } from './test';
-import { expectCompactPositionRow } from './position-row-layout';
+import {
+  expectCompactPositionRow,
+  showPositionColumns,
+} from './position-row-layout';
 
 test.use({ actionTimeout: 10000 });
 
@@ -69,8 +72,9 @@ test('compact position rows retain a right-hand board preview at desktop sizes',
   page,
 }) => {
   const { pane, rows, records } = await fixture(page);
+  await showPositionColumns(pane, 'Tags / Comment');
   await expect(
-    pane.getByLabel('Player on roll', { exact: true }),
+    pane.getByRole('textbox', { name: 'Player on roll', exact: true }),
   ).toBeVisible();
   await expect(rows.first().locator('[title]')).toHaveCount(0);
   await expect(
@@ -206,7 +210,10 @@ test('Mochy research includes both colors, excludes opponents, and saves header 
   page,
 }) => {
   const { pane, rows, records } = await fixture(page);
-  await pane.getByLabel('Player on roll', { exact: true }).fill('mochy');
+  await showPositionColumns(pane, 'Opponent');
+  await pane
+    .getByRole('textbox', { name: 'Player on roll', exact: true })
+    .fill('mochy');
   await pane.locator('.position-filter-details summary').click();
   await pane
     .getByLabel('Checker position ID', { exact: true })

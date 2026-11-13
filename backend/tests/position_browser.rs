@@ -850,6 +850,18 @@ async fn native_loss_uses_highest_completed_depth_and_hints_only_mark_ready(pool
     assert_eq!(ready["items"][0]["native_error"]["equity_loss"], 0.09);
     assert_eq!(ready["items"][0]["native_error"]["severity"], "bad");
     assert_eq!(ready["items"][1]["native_error"], Value::Null);
+    let (status, readiness) = call(
+        app.clone(),
+        "POST",
+        "/api/position-browser/analysis-readiness",
+        Some(json!({"position_ids": [positions[0].id, positions[1].id, positions[2].id, positions[2].id, Uuid::new_v4()]})),
+    )
+    .await;
+    assert_eq!(status, 200, "{readiness}");
+    assert_eq!(
+        readiness,
+        json!({"analysis_required":1,"unavailable":1,"first_analysis_required":positions[2].id})
+    );
     assert_eq!(
         search(app.clone(), json!({"min_loss":0.1})).await["items"],
         json!([])

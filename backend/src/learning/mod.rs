@@ -128,6 +128,14 @@ pub struct AddPositions {
     #[schema(min_items = 1, max_items = 200)]
     pub position_ids: Vec<Uuid>,
 }
+impl AddPositions {
+    pub(crate) fn validated_ids(self) -> ApiResult<Vec<Uuid>> {
+        if !(1..=200).contains(&self.position_ids.len()) {
+            return Err(ApiError::invalid("position_ids must contain 1..200 UUIDs"));
+        }
+        Ok(self.position_ids)
+    }
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum PositionAddStatus {
@@ -778,13 +786,11 @@ async fn add_positions(
     LearningJson(body): LearningJson<AddPositions>,
 ) -> ApiResult<Json<AddPositionsResult>> {
     require_deck(&state.pool, id).await?;
-    if !(1..=200).contains(&body.position_ids.len()) {
-        return Err(ApiError::invalid("position_ids must contain 1..200 UUIDs"));
-    }
+    let ids = body.validated_ids()?;
     let mut unique = BTreeMap::new();
-    let mut items = Vec::with_capacity(body.position_ids.len());
-    let mut resolved = Vec::with_capacity(body.position_ids.len());
-    for position_id in body.position_ids {
+    let mut items = Vec::with_capacity(ids.len());
+    let mut resolved = Vec::with_capacity(ids.len());
+    for position_id in ids {
         let request = AddCards {
             game_no: None,
             position_id: Some(position_id),

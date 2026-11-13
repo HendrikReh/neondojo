@@ -567,7 +567,6 @@ test('real renamed decks update position membership and Anki; deleting one share
     .getByRole('button', { name: 'Search positions', exact: true })
     .click();
   await expect(positions.locator('.position-table tbody tr')).toHaveCount(1);
-  await expect(positions.locator('.position-row-decks')).toContainText(renamed);
   await expect(positions.locator('.position-preview-decks')).toContainText(
     renamed,
   );

@@ -3,9 +3,12 @@ import { useEffect, useRef, useState, useId } from 'react';
 import { request } from './api';
 import { useI18n } from './i18n';
 import { AppError } from './i18n-core';
+import { DeckDialog } from './DeckLibraryDialogs';
 import type { Deck } from './learning-api';
 import {
   transferPositions,
+  loadPositionAnalysisReadiness,
+  type PositionAnalysisReadiness,
   type PositionBrowserHit,
   type PositionTransferResult,
 } from './position-browser-api';
@@ -49,6 +52,8 @@ export default function PositionBrowserDecks({
   revision,
   selected,
   hits,
+  transferOpen,
+  onCloseTransfer,
   onChanged,
   onStudy,
   onOpen,
@@ -57,6 +62,8 @@ export default function PositionBrowserDecks({
   revision: number;
   selected: ReadonlySet<string>;
   hits: PositionBrowserHit[];
+  transferOpen: boolean;
+  onCloseTransfer: () => void;
   onChanged: () => void;
   onStudy: (id: string) => void;
   onOpen: (id: string) => void;
@@ -70,7 +77,14 @@ export default function PositionBrowserDecks({
     [name, setName] = useState(''),
     [busy, setBusy] = useState(false),
     [exporting, setExporting] = useState(false),
+    [deckError, setDeckError] = useState<unknown>(),
     [error, setError] = useState<unknown>(),
+    [readiness, setReadiness] = useState<{
+      selection: ReadonlySet<string>;
+      summary?: PositionAnalysisReadiness;
+      error?: unknown;
+    }>(),
+    [readinessAttempt, setReadinessAttempt] = useState(0),
     [result, setResult] = useState<PositionTransferResult>(),
     [resultNames, setResultNames] = useState<Record<string, string>>({});
   const live = useRef(true),
@@ -92,6 +106,7 @@ export default function PositionBrowserDecks({
     void request<Deck[]>('/decks', { signal: abort.signal })
       .then((items) => {
         if (abort.signal.aborted) return;
+        setDeckError(undefined);
         setDecks(items);
         setDeckId((previous) =>
           items.some((deck) => deck.id === previous)
@@ -100,10 +115,33 @@ export default function PositionBrowserDecks({
         );
       })
       .catch((error) => {
-        if (!abort.signal.aborted) setError(error);
+        if (!abort.signal.aborted) setDeckError(error);
       });
     return () => abort.abort();
   }, [revision]);
+  useEffect(() => {
+    if (!transferOpen || !selected.size) {
+      setReadiness(undefined);
+      return;
+    }
+    const abort = new AbortController();
+    setReadiness(undefined);
+    void loadPositionAnalysisReadiness([...selected], abort.signal)
+      .then((summary) => {
+        if (!abort.signal.aborted)
+          setReadiness({ selection: selected, summary });
+      })
+      .catch((error) => {
+        if (!abort.signal.aborted) setReadiness({ selection: selected, error });
+      });
+    return () => abort.abort();
+  }, [transferOpen, selected, readinessAttempt]);
+  const check = readiness?.selection === selected ? readiness : undefined;
+  const summary = check?.summary;
+  const ready = summary
+    ? selected.size - summary.analysis_required - summary.unavailable
+    : 0;
+  const analysisTarget = summary?.first_analysis_required;
   function setWorking(value: boolean) {
     setBusy(value);
     busyChanged.current(value);
@@ -133,7 +171,7 @@ export default function PositionBrowserDecks({
     }
   }
   async function add() {
-    if (!deckId || !selected.size) return;
+    if (!deckId || ready <= 0 || busy || exporting) return;
     const version = ++generation.current,
       id = deckId,
       ids = [...selected];
@@ -158,6 +196,7 @@ export default function PositionBrowserDecks({
           deck.id === id ? { ...deck, card_count: value.total } : deck,
         ),
       );
+      onCloseTransfer();
       changed.current();
     } catch (error) {
       if (live.current && version === generation.current) setError(error);
@@ -207,83 +246,30 @@ export default function PositionBrowserDecks({
   }
   const chosenDeck = decks.find((deck) => deck.id === deckId),
     hasCards = (chosenDeck?.card_count ?? 0) > 0;
-  return (
-    <section className="position-deck-panel" aria-label={p('deck')}>
-      <h2>{p('deck')}</h2>
-      <p>{p('transferHint')}</p>
-      <div className="position-deck-controls">
-        <label>
-          <span>{p('chooseDeck')}</span>
-          <select
-            aria-label={p('chooseDeck')}
-            aria-describedby={deckCountId}
-            value={deckId}
-            disabled={busy || exporting}
-            onChange={(event) => setDeckId(event.target.value)}
-          >
-            {!decks.length && <option value="">—</option>}
-            {decks.map((deck) => (
-              <option key={deck.id} value={deck.id}>
-                {deck.name}
-              </option>
-            ))}
-          </select>
-          <small id={deckCountId}>
-            {p('deckCount', { count: chosenDeck?.card_count ?? 0 })}
-          </small>
-        </label>
-        <ActionButton
-          icon="add"
-          label={p(busy ? 'transfer' : 'addSelected')}
-          compact
-          className="primary"
-          disabled={!deckId || !selected.size || busy || exporting}
-          onClick={() => void add()}
-        />
-        <ActionButton
-          icon="cards"
-          label={p('study')}
-          disabled={!hasCards || busy || exporting}
-          onClick={() => onStudy(deckId)}
-        />
-      </div>
-      <form
-        className="position-create-deck"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void create();
-        }}
+  const deckPicker = (countId: string) => (
+    <label>
+      <span>{p('chooseDeck')}</span>
+      <select
+        aria-label={p('chooseDeck')}
+        aria-describedby={countId}
+        value={deckId}
+        disabled={busy || exporting}
+        onChange={(event) => setDeckId(event.target.value)}
       >
-        <label>
-          <span>{p('deckName')}</span>
-          <input
-            value={name}
-            maxLength={120}
-            disabled={busy}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </label>
-        <ActionButton
-          icon="add"
-          label={p('createDeck')}
-          disabled={!name.trim() || busy}
-        />
-      </form>
-      <div className="position-deck-export">
-        <ActionButton
-          icon="export"
-          label={p(exporting ? 'exporting' : 'exportDeck')}
-          compact
-          disabled={!hasCards || busy || exporting}
-          onClick={() => void download()}
-        />
-        <small>{p('exportHint')}</small>
-      </div>
-      {!!error && (
-        <p role="alert" className="error">
-          {formatError(error)}
-        </p>
-      )}
+        {!decks.length && <option value="">—</option>}
+        {decks.map((deck) => (
+          <option key={deck.id} value={deck.id}>
+            {deck.name}
+          </option>
+        ))}
+      </select>
+      <small id={countId}>
+        {p('deckCount', { count: chosenDeck?.card_count ?? 0 })}
+      </small>
+    </label>
+  );
+  return (
+    <>
       {result && (
         <PositionTransferOutcomes
           result={result}
@@ -291,6 +277,148 @@ export default function PositionBrowserDecks({
           onOpen={onOpen}
         />
       )}
-    </section>
+      <section className="position-deck-panel" aria-label={p('deck')}>
+        <h2>{p('deck')}</h2>
+        <div className="position-deck-controls">
+          {deckPicker(deckCountId)}
+          <ActionButton
+            icon="cards"
+            label={p('study')}
+            disabled={!hasCards || busy || exporting}
+            onClick={() => onStudy(deckId)}
+          />
+        </div>
+        <div className="position-deck-export">
+          <ActionButton
+            icon="export"
+            label={p(exporting ? 'exporting' : 'exportDeck')}
+            compact
+            disabled={!hasCards || busy || exporting}
+            onClick={() => void download()}
+          />
+          <small>{p('exportHint')}</small>
+        </div>
+        {(!!deckError || (!!error && !transferOpen)) && (
+          <p role="alert" className="error">
+            {formatError(deckError ?? error)}
+          </p>
+        )}
+      </section>
+      {transferOpen && selected.size > 0 && (
+        <DeckDialog
+          title={p('addToDeck')}
+          close={() => {
+            setError(undefined);
+            onCloseTransfer();
+          }}
+          busy={busy}
+          className="position-transfer-dialog"
+          actions={
+            ready > 0 ? (
+              <ActionButton
+                icon="add"
+                label={
+                  busy
+                    ? p('transfer')
+                    : p(ready === 1 ? 'addOne' : 'addCount', { count: ready })
+                }
+                type="button"
+                className="primary"
+                disabled={!deckId || busy || exporting}
+                onClick={() => void add()}
+              />
+            ) : (
+              analysisTarget && (
+                <ActionButton
+                  icon="analysis"
+                  label={p('openAnalysis')}
+                  type="button"
+                  className="primary"
+                  onClick={() => {
+                    onCloseTransfer();
+                    onOpen(analysisTarget);
+                  }}
+                />
+              )
+            )
+          }
+        >
+          {check?.error ? (
+            <p role="alert">
+              {formatError(check.error)}{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setReadiness(undefined);
+                  setReadinessAttempt((attempt) => attempt + 1);
+                }}
+              >
+                {p('retrySimilar')}
+              </button>
+            </p>
+          ) : (
+            <div role="status" className="position-transfer-readiness">
+              {summary ? (
+                <>
+                  {ready === 0 && <p>{p('noneReady')}</p>}
+                  {!!summary.analysis_required && (
+                    <p className="position-analysis-needed">
+                      {p('needsLocalAnalysis', {
+                        count: summary.analysis_required,
+                        total: selected.size,
+                      })}
+                    </p>
+                  )}
+                  {!!summary.unavailable && (
+                    <p>
+                      {p('unavailablePositions', {
+                        count: summary.unavailable,
+                      })}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p>{p('checkingAnalysis')}</p>
+              )}
+            </div>
+          )}
+          {ready > 0 && (
+            <>
+              <div className="position-deck-controls">
+                {deckPicker(`${deckCountId}-transfer`)}
+              </div>
+              <form
+                className="position-create-deck"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void create();
+                }}
+              >
+                <label>
+                  <span>{p('deckName')}</span>
+                  <input
+                    value={name}
+                    maxLength={120}
+                    disabled={busy}
+                    onChange={(event) => setName(event.target.value)}
+                  />
+                </label>
+                <ActionButton
+                  type="submit"
+                  icon="add"
+                  label={p('createDeck')}
+                  disabled={!name.trim() || busy}
+                />
+              </form>
+              {(!!deckError || !!error) && (
+                <p role="alert" className="error">
+                  {formatError(deckError ?? error)}
+                </p>
+              )}
+            </>
+          )}
+        </DeckDialog>
+      )}
+    </>
   );
 }

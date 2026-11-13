@@ -278,6 +278,27 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
         &config.positions.column_widths,
         POSITION_COLUMNS,
     )?;
+    let position_columns = POSITION_COLUMNS
+        .iter()
+        .map(|&(id, _)| id)
+        .filter(|id| !matches!(*id, "select" | "actions" | "played_move"));
+    let shown: std::collections::BTreeSet<_> = config
+        .positions
+        .visible_columns
+        .iter()
+        .map(String::as_str)
+        .collect();
+    let canonical: Vec<_> = position_columns
+        .filter(|id| shown.contains(id))
+        .map(str::to_owned)
+        .collect();
+    if canonical.is_empty() || canonical.len() != config.positions.visible_columns.len() {
+        return Err(ConfigurationError::invalid(
+            "positions.visible_columns",
+            "At least one known data column is required, without duplicates",
+        ));
+    }
+    config.positions.visible_columns = canonical;
     let f = &mut config.library.filters;
     f.tag = f
         .tag

@@ -334,6 +334,10 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/position-browser", get(search))
         .route(
+            "/api/position-browser/analysis-readiness",
+            axum::routing::post(analysis_readiness),
+        )
+        .route(
             "/api/position-filters",
             get(list_filters).post(create_filter),
         )
@@ -415,6 +419,48 @@ const READY: &str = "coalesce((SELECT CASE WHEN jsonb_typeof(hint.result->'candi
 // Select provenance before checking whether that decision contains a native
 // solution. An unavailable newest decision must not expose an older error.
 const NATIVE_SOLUTION: &str = "btrim(coalesce(chosen.data->>'best',''))<>'' AND ((chosen.data->>'evaluation_status'='forced' AND chosen.equity_loss=0 AND chosen.data->'equity_loss'='0'::jsonb) OR (chosen.data->>'evaluation_status'='evaluated' AND jsonb_typeof(chosen.data->'played_equity')='number' AND jsonb_typeof(chosen.data->'best_equity')='number'))";
+
+fn push_native_analysis(sql: &mut QueryBuilder<'_, Postgres>) {
+    sql.push(" LEFT JOIN LATERAL (SELECT chosen.job_id,chosen.engine,chosen.plies,chosen.equity_loss FROM (SELECT j.id AS job_id,coalesce(j.result->>'engine','GNU Backgammon') AS engine,j.plies,ma.equity_loss,ma.data FROM move_analyses ma JOIN selected_engine_jobs j ON j.id=ma.job_id WHERE ma.position_uuid=p.id AND j.source_revision=m.source_revision AND ma.kind='checker' AND ma.game_no=p.game_no AND j.kind='match' AND j.match_uuid=p.match_uuid AND (j.game_no IS NULL OR j.game_no=p.game_no) AND j.status='completed' ORDER BY j.plies DESC,j.created_at DESC,j.id DESC,ma.id DESC LIMIT 1) chosen WHERE ")
+        .push(NATIVE_SOLUTION)
+        .push(") native ON true");
+}
+
+const SAVED_VISIBLE: &str = "NOT EXISTS(SELECT 1 FROM play_sessions live WHERE live.library_match_id=m.id AND coalesce(live.state->>'play_mode','competition')='competition' AND live.state->>'phase'<>'match_over' AND NOT (live.state->>'match_length'='0' AND live.state->>'phase'='game_over'))";
+
+#[derive(Serialize, ToSchema, sqlx::FromRow)]
+struct PositionAnalysisReadiness {
+    analysis_required: i64,
+    unavailable: i64,
+    first_analysis_required: Option<Uuid>,
+}
+
+#[utoipa::path(post,path="/api/position-browser/analysis-readiness",request_body=crate::learning::AddPositions,responses((status=200,body=PositionAnalysisReadiness),(status=422,body=ErrorBody)),tag="Positions")]
+async fn analysis_readiness(
+    State(s): State<AppState>,
+    value: Result<Json<crate::learning::AddPositions>, JsonRejection>,
+) -> ApiResult<Json<PositionAnalysisReadiness>> {
+    let mut ids = json(value)?.validated_ids()?;
+    let mut seen = BTreeSet::new();
+    ids.retain(|id| seen.insert(*id));
+    let mut sql = QueryBuilder::<Postgres>::new(
+        "SELECT count(*) FILTER (WHERE NOT ready) AS analysis_required, ",
+    );
+    sql.push_bind(ids.len() as i64)
+        .push(" - count(*) AS unavailable, (array_agg(id ORDER BY ordinal) FILTER (WHERE NOT ready))[1] AS first_analysis_required FROM (SELECT p.id, requested.ordinal, ")
+        .push(READY)
+        .push(" AS ready FROM unnest(")
+        .push_bind(ids)
+        .push("::uuid[]) WITH ORDINALITY AS requested(id, ordinal) JOIN positions p ON p.id=requested.id JOIN saved_positions saved ON saved.position_uuid=p.id JOIN matches m ON m.id=p.match_uuid");
+    push_native_analysis(&mut sql);
+    sql.push(" WHERE ").push(SAVED_VISIBLE).push(") checked");
+    Ok(Json(
+        sql.build_query_as()
+            .fetch_one(&s.pool)
+            .await
+            .map_err(anyhow::Error::from)?,
+    ))
+}
 
 async fn database_exists(pool: &PgPool, id: Option<Uuid>) -> ApiResult<()> {
     if let Some(id) = id {
@@ -515,7 +561,9 @@ async fn search(
     sql.push("SELECT to_jsonb(p) AS position,jsonb_build_object('id',m.id,'source_available',NOT m.collection_only,'filename',m.filename,'format',m.format,'white',m.white,'black',m.black,'match_length',m.match_length,'position_count',m.position_count,'created_at',m.created_at) AS match_info,NOT m.collection_only AS source_available,coalesce(m.source_match_no,m.match_no) AS match_no,coalesce(m.source_database_id,m.database_id) AS database_id,coalesce(m.source_database_name,d.name) AS database_name,coalesce(nullif(m.display_name,''),m.filename) AS display_name,m.tournament,m.round,native.job_id,native.engine,native.plies,native.equity_loss,");
     sql.push(table_sort_expression(filters.sort))
         .push(" AS sort_value,m.id AS sort_match_id,p.ordinal AS sort_ordinal,p.id AS sort_id,");
-    sql.push(READY).push(" AS card_ready,").push(NAME).push(" AS sort_name FROM positions p JOIN saved_positions saved ON saved.position_uuid=p.id JOIN matches m ON m.id=p.match_uuid JOIN databases d ON d.id=m.database_id LEFT JOIN match_games g ON g.match_uuid=p.match_uuid AND g.game_no=p.game_no LEFT JOIN LATERAL (SELECT chosen.job_id,chosen.engine,chosen.plies,chosen.equity_loss FROM (SELECT j.id AS job_id,coalesce(j.result->>'engine','GNU Backgammon') AS engine,j.plies,ma.equity_loss,ma.data FROM move_analyses ma JOIN selected_engine_jobs j ON j.id=ma.job_id WHERE ma.position_uuid=p.id AND j.source_revision=m.source_revision AND ma.kind='checker' AND ma.game_no=p.game_no AND j.kind='match' AND j.match_uuid=p.match_uuid AND (j.game_no IS NULL OR j.game_no=p.game_no) AND j.status='completed' ORDER BY j.plies DESC,j.created_at DESC,j.id DESC,ma.id DESC LIMIT 1) chosen WHERE ").push(NATIVE_SOLUTION).push(") native ON true WHERE NOT EXISTS(SELECT 1 FROM play_sessions live WHERE live.library_match_id=m.id AND coalesce(live.state->>'play_mode','competition')='competition' AND live.state->>'phase'<>'match_over' AND NOT (live.state->>'match_length'='0' AND live.state->>'phase'='game_over'))");
+    sql.push(READY).push(" AS card_ready,").push(NAME).push(" AS sort_name FROM positions p JOIN saved_positions saved ON saved.position_uuid=p.id JOIN matches m ON m.id=p.match_uuid JOIN databases d ON d.id=m.database_id LEFT JOIN match_games g ON g.match_uuid=p.match_uuid AND g.game_no=p.game_no");
+    push_native_analysis(&mut sql);
+    sql.push(" WHERE ").push(SAVED_VISIBLE);
     if let Some(plan) = filters.game_plan {
         sql.push(" AND EXISTS(SELECT 1 FROM position_game_plans plans WHERE plans.position_uuid=p.id AND plans.classifier=")
             .push_bind(crate::game_plan::CLASSIFIER)
@@ -902,7 +950,14 @@ async fn delete_filter(
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(search, list_filters, create_filter, update_filter, delete_filter),
+    paths(
+        search,
+        analysis_readiness,
+        list_filters,
+        create_filter,
+        update_filter,
+        delete_filter
+    ),
     components(schemas(
         PositionFilterDefinition,
         PositionBrowserSort,
@@ -910,6 +965,7 @@ async fn delete_filter(
         PositionAnalysisState,
         PositionBrowserPage,
         PositionBrowserHit,
+        PositionAnalysisReadiness,
         PositionBrowserNote,
         PositionDeckMembership,
         PositionNativeError,
