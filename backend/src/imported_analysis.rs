@@ -56,7 +56,7 @@ fn native_number(value: &Value) -> Option<f64> {
 fn finite(value: &str) -> Option<f64> {
     value.parse::<f64>().ok().filter(|n| n.is_finite())
 }
-fn sgf_notation(value: &str, player: i32) -> String {
+pub(crate) fn sgf_notation(value: &str, player: i32) -> String {
     let point = |c: u8| match c {
         b'y' => "bar".into(),
         b'z' => "off".into(),
@@ -145,7 +145,7 @@ fn rollout_output(tokens: &[&str], section: Option<&str>) -> Vec<Option<f64>> {
         })
         .collect()
 }
-fn probabilities(values: &[Option<f64>]) -> Value {
+pub(crate) fn probabilities(values: &[Option<f64>]) -> Value {
     json!({"win":values.first().copied().flatten(),"win_gammon":values.get(1).copied().flatten(),"win_backgammon":values.get(2).copied().flatten(),"lose_gammon":values.get(3).copied().flatten(),"lose_backgammon":values.get(4).copied().flatten()})
 }
 fn base(m: &SourceMove, kind: &str, engine: &str, version: Option<String>) -> ImportedAnalysisData {
@@ -307,6 +307,16 @@ pub(crate) fn extract(sgf: &str) -> Result<Vec<ImportedAnalysisData>> {
                         kind,
                         crate::import::sgf::decode_retained_analysis(&v)
                             .context("Invalid retained XG analysis")?,
+                    )?);
+                }
+            }
+            for (property, kind) in [("OGA", "checker"), ("OGC", "cube")] {
+                for v in node.get(property).into_iter().flatten() {
+                    result.push(foreign(
+                        m,
+                        kind,
+                        crate::import::sgf::decode_retained_analysis(v)
+                            .context("Invalid retained OGXM analysis")?,
                     )?);
                 }
             }

@@ -207,7 +207,7 @@ pub struct ImportQuery {
 #[derive(ToSchema)]
 #[allow(dead_code)]
 struct UploadForm {
-    /// One MAT, SGF, binary XG, or BGBlitz BGF file, at most 16 MiB including multipart envelope.
+    /// One MAT, SGF, binary XG, BGBlitz BGF, or HedgeHog OGXM file, at most 16 MiB including multipart envelope.
     #[schema(value_type=String, format=Binary)]
     file: String,
 }
@@ -247,9 +247,9 @@ async fn upload(
         .next()
         .unwrap_or("")
         .to_ascii_lowercase();
-    if !["mat", "sgf", "xg", "bgf"].contains(&format.as_str()) {
+    if !["mat", "sgf", "xg", "bgf", "ogxm"].contains(&format.as_str()) {
         return Err(ApiError::invalid(
-            "Supported formats: .mat, .sgf, .xg, .bgf",
+            "Supported formats: .mat, .sgf, .xg, .bgf, .ogxm",
         ));
     }
     let bytes = field
@@ -281,6 +281,13 @@ async fn upload(
                 .await
                 .map_err(anyhow::Error::from)?
                 .map_err(|e| ApiError::invalid(format!("BGF import failed: {e:#}")))?
+        }
+        "ogxm" => {
+            let data = bytes.clone();
+            tokio::task::spawn_blocking(move || import::ogxm_to_sgf(&data))
+                .await
+                .map_err(anyhow::Error::from)?
+                .map_err(|e| ApiError::invalid(format!("OGXM import failed: {e:#}")))?
         }
         "xg" => {
             let data = bytes.clone();

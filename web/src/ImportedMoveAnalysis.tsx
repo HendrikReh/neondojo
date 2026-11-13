@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import { request } from './api';
+import { request, type Match } from './api';
 import type { SourceAnalysis } from './source-analysis-api';
 import SourceAnalysisView from './SourceAnalysisView';
 import { useSourceText } from './analysis-source-messages';
 import { useI18n } from './i18n';
 export default function ImportedMoveAnalysis({
   moveId,
+  players,
   decisionKind,
 }: {
   moveId: string;
+  players: Pick<Match, 'white' | 'black'>;
   decisionKind?: 'checker' | 'cube';
 }) {
   const l = useSourceText(),
@@ -49,7 +51,7 @@ export default function ImportedMoveAnalysis({
   return records.length ? (
     <section className="imported-move-analysis">
       <h3>{l('imported')}</h3>
-      <SourceAnalysisView records={records} source="file" />
+      <SourceAnalysisView records={records} source="file" players={players} />
     </section>
   ) : null;
 }

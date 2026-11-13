@@ -179,3 +179,94 @@ async fn all_four_formats_are_atomic_and_engine_failures_are_persisted(pool: PgP
     assert_ne!(replacement.id, existing.id);
     assert_eq!(replacement.status, "queued");
 }
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn ogxm_import_preserves_the_source_and_rejects_truncation(pool: PgPool) {
+    let app = api::router(AppState::new(pool.clone(), Engine::new("gnubg".into())));
+    let original = include_bytes!("fixtures/hedgehog-cdf.ogxm");
+    let response = app
+        .clone()
+        .oneshot(upload("bad.ogxm", &original[..original.len() - 1]))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 422);
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM matches")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+
+    let response = app
+        .clone()
+        .oneshot(upload("archive.OGXM", original))
+        .await
+        .unwrap();
+    let status = response.status();
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(status, 201, "{}", String::from_utf8_lossy(&body));
+    let result: ImportResponse = serde_json::from_slice(&body).unwrap();
+    let id = result.r#match.id;
+    assert_eq!(result.r#match.format, "ogxm");
+    let stored: Vec<u8> = sqlx::query_scalar("SELECT original FROM matches WHERE id=$1")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(stored, original);
+    let response = app.oneshot(upload("same.ogxm", original)).await.unwrap();
+    assert_eq!(response.status(), 200);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let duplicate: ImportResponse = serde_json::from_slice(&body).unwrap();
+    assert_eq!(duplicate.r#match.id, id);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn ogxm_import_keeps_checker_and_cube_analysis_in_source_units(pool: PgPool) {
+    let app = api::router(AppState::new(pool.clone(), Engine::new("gnubg".into())));
+    let original = include_bytes!("fixtures/hedgehog-analysis.ogxm");
+    let mut corrupt = original.to_vec();
+    let name = corrupt
+        .windows(5)
+        .position(|value| value == b"Alice")
+        .unwrap();
+    corrupt[name] = b'M'; // Leave framing intact so only the checksum detects this edit.
+    let bad = app
+        .clone()
+        .oneshot(upload("corrupt.ogxm", &corrupt))
+        .await
+        .unwrap();
+    assert_eq!(bad.status(), 422);
+    let error = bad.into_body().collect().await.unwrap().to_bytes();
+    assert!(String::from_utf8_lossy(&error).contains("OGXM checksum mismatch"));
+    let ok = app
+        .oneshot(upload("analyzed.ogxm", original))
+        .await
+        .unwrap();
+    let status = ok.status();
+    let body = ok.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(status, 201, "{}", String::from_utf8_lossy(&body));
+    let result: ImportResponse = serde_json::from_slice(&body).unwrap();
+    let records: Vec<serde_json::Value> = sqlx::query_scalar(
+        "SELECT data FROM imported_analyses WHERE match_uuid=$1 ORDER BY source_ordinal",
+    )
+    .bind(result.r#match.id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(records.len(), 3);
+    assert_eq!(records[0]["kind"], "checker");
+    assert_eq!(records[0]["engine"], "HedgeHog");
+    assert_eq!(records[0]["engine_version"], "test-build");
+    assert_eq!(records[0]["depth_plies"], 2);
+    assert_eq!(records[0]["candidates"][0]["notation"], "8/5 6/5");
+    assert_eq!(records[0]["candidates"][0]["equity"], 0.533);
+    assert_eq!(records[0]["candidates"][0]["equity_kind"], "mwc");
+    assert_eq!(records[1]["played"], "Double");
+    assert_eq!(records[2]["played"], "Take");
+    assert_eq!(records[2]["depth_plies"], 1);
+    assert_eq!(records[2]["cube"]["double_take"], 0.45);
+    assert_eq!(records[2]["cube"]["equity_kind"], "mwc");
+    assert_eq!(records[2]["cube"]["equity_player"], 1);
+}

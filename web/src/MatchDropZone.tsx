@@ -76,7 +76,7 @@ export default function MatchDropZone({
             : t('app.dropZoneTitle')}
       </span>
       <span className="match-drop-zone-formats" id={formatsId}>
-        MAT · XG · SGF · BGF
+        MAT · XG · SGF · BGF · OGXM
       </span>
     </div>
   );

@@ -1502,6 +1502,12 @@ pub fn source_metadata(sgf: &str) -> SourceMetadata {
             _ => return out,
         }
     }
+    if prop("AP", 32).as_deref() == Some(crate::import::ogxm::SGF_APPLICATION) {
+        // OGXM §5.4.6 caps the match score at the target, even if the
+        // final game's award was larger than the remaining points.
+        white = white.min(length);
+        black = black.min(length);
+    }
     out.white_score = Some(white);
     out.black_score = Some(black);
     out.result_state = if white >= length || black >= length {

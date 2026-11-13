@@ -1,0 +1,12 @@
+{
+  "ogxm": {"major":2,"minor":0},
+  "checksum":"crc32",
+  "match_length":7,"variant":"backgammon","player_white":"Alice","player_black":"Bob","crawford":true,
+  "analysis_info":{"analysis_id":"ff112233-4455-6677-8899-aabbccddeeff","producer":"ogx","currency":"cubeful_match","model_name":"Test net","engine_build":"test-build","level":{"checker_ply":2,"cube_ply":1}},
+  "games":[{"plies":[
+    {"action_id":2,"color":1,"moves":[{"from":17,"pips":3},{"from":19,"pips":1}],"analysis":{"alternatives":[{"move":[{"from":17,"pips":3},{"from":19,"pips":1}],"equity":0.533,"is_played":true},{"move":[{"from":1,"pips":3},{"from":1,"pips":1}],"equity":0.491}]}},
+    {"action_id":21,"color":0,"analysis":{"correct_action":"no_double","no_double_equity":0.47,"double_take_equity":0.45,"double_pass_equity":0.58}},
+    {"action_id":22,"color":1,"analysis":{"correct_action":"take","no_double_equity":0.47,"double_take_equity":0.45,"double_pass_equity":0.58}},
+    {"action_id":8,"color":0,"moves":[{"from":8,"pips":4},{"from":6,"pips":2}]}
+  ]}]
+}

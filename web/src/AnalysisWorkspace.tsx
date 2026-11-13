@@ -584,6 +584,7 @@ export default function AnalysisWorkspace({
               defaultPlies={defaultPlies}
               positionId={position?.id}
               position={position ?? undefined}
+              players={match}
               playerName={
                 position
                   ? position.player === 0

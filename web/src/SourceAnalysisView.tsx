@@ -3,9 +3,97 @@ import { useI18n } from './i18n';
 import XgPositionView from './XgPositionView';
 import { type PreviewCandidate } from './candidate-preview';
 import CandidateTable from './CandidateTable';
-import type { Position } from './api';
+import type { Match, Position } from './api';
 import { useSourceText } from './analysis-source-messages';
+import { useCandidateText } from './candidate-messages';
 import type { SourceAnalysis, BookLookup } from './source-analysis-api';
+
+// The HedgeHog v1 converter derives this UUID from the first block's
+// all-default header. Archive exports can carry this header and zero-filled
+// checker records even when they have no evaluations.
+const emptyLegacyOgxmAnalysisId = 'b86cd1b0-4d12-80e6-86ba-511a59c022f0';
+
+function isOgxmPlaceholder(record: SourceAnalysis): boolean {
+  const raw: unknown = record.raw;
+  return (
+    record.engine === 'Unknown' &&
+    record.method === 'unknown' &&
+    record.depth === null &&
+    typeof raw === 'object' &&
+    raw !== null &&
+    'analysis_id' in raw &&
+    raw.analysis_id === emptyLegacyOgxmAnalysisId &&
+    'currency' in raw &&
+    raw.currency === null &&
+    'best_equity' in raw &&
+    raw.best_equity === 0 &&
+    'equity_loss' in raw &&
+    raw.equity_loss === 0
+  );
+}
+
+function OgxmCheckerSummary({ raw }: { raw: unknown }) {
+  const l = useSourceText();
+  const candidate = useCandidateText();
+  const { formatNumber } = useI18n();
+  if (typeof raw !== 'object' || raw === null) return null;
+
+  const best = 'best_equity' in raw ? raw.best_equity : null;
+  const loss = 'equity_loss' in raw ? raw.equity_loss : null;
+  const hasBest = typeof best === 'number' && Number.isFinite(best);
+  const hasLoss =
+    typeof loss === 'number' && Number.isFinite(loss) && loss >= 0;
+  if (!hasBest && !hasLoss) return null;
+
+  // The stored analysis retains the OGXM currency enum (§9.10).
+  const currency = 'currency' in raw ? raw.currency : null;
+  const mwc = currency === 2 || currency === 3;
+  const unit = mwc
+    ? 'MWC'
+    : currency === 0
+      ? 'Cubeless'
+      : currency === 1
+        ? 'Cubeful'
+        : candidate('unknownUnit');
+  const precision = {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: mwc ? 4 : 6,
+  };
+
+  return (
+    <table className="candidates ogxm-checker-summary">
+      <caption>
+        {l('ogxmSummary')} · {unit}
+      </caption>
+      <tbody>
+        {hasBest && (
+          <tr>
+            <th scope="row">{l('bestEquity')}</th>
+            <td>
+              {formatNumber(best, {
+                ...precision,
+                style: mwc ? 'percent' : 'decimal',
+              })}
+            </td>
+          </tr>
+        )}
+        {hasLoss && (
+          <tr>
+            <th scope="row">{candidate('loss')}</th>
+            <td>
+              {mwc
+                ? candidate('percentagePoints', {
+                    value: formatNumber(loss * 100, precision),
+                  })
+                : formatNumber(loss, precision)}
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  );
+}
+
 export default function SourceAnalysisView({
   records,
   book,
@@ -14,6 +102,7 @@ export default function SourceAnalysisView({
   selectedPreview,
   position,
   playerName,
+  players,
   preferredKind,
 }: {
   records: SourceAnalysis[];
@@ -23,10 +112,11 @@ export default function SourceAnalysisView({
   selectedPreview?: PreviewCandidate;
   position?: Position;
   playerName?: string;
+  players?: Pick<Match, 'white' | 'black'>;
   preferredKind?: 'checker' | 'cube';
 }) {
   const l = useSourceText(),
-    { formatEquity, formatPercent } = useI18n();
+    { t, formatEquity, formatPercent } = useI18n();
   const [bookChoice, setBookChoice] = useState<'backgammondb' | 'xg'>();
   const [recordId, setRecordId] = useState<string>(),
     [decision, setDecision] = useState<'checker' | 'cube'>('checker');
@@ -64,6 +154,25 @@ export default function SourceAnalysisView({
     rawCube && typeof rawCube === 'object' && !Array.isArray(rawCube)
       ? (rawCube as Record<string, unknown>)
       : null;
+  const cubeAction = source === 'file' ? (record?.played ?? '') : '';
+  const cubeResponse = /^(take|drop|pass)$/i.test(cubeAction);
+  const cubeBeforeRoll = /^(?:no )?double$/i.test(cubeAction);
+  const fromDoubler =
+    cube?.perspective === 'doubler' ||
+    (cubeResponse &&
+      record?.source_format === 'ogxm' &&
+      (record.player === 0 || record.player === 1) &&
+      cube?.equity_player === 1 - record.player);
+  let perspectiveName: string | undefined;
+  if ((cubeResponse || cubeBeforeRoll) && record && players) {
+    const seat = cube?.equity_player;
+    if (seat === 0 || seat === 1) {
+      perspectiveName = seat === 0 ? players.white : players.black;
+    } else if (fromDoubler && (record.player === 0 || record.player === 1)) {
+      const equityPlayer = cubeResponse ? 1 - record.player : record.player;
+      perspectiveName = equityPlayer === 0 ? players.white : players.black;
+    }
+  }
   const cubeKind =
     typeof cube?.equity_kind === 'string' ? cube.equity_kind : 'unknown';
   const unit = (kind: string) =>
@@ -86,6 +195,15 @@ export default function SourceAnalysisView({
     source === 'file'
       ? record?.kind === 'checker'
       : selectedDecision === 'checker';
+  const ogxmSummaryRecord =
+    source === 'file' &&
+    checker &&
+    record?.source_format === 'ogxm' &&
+    candidates.length === 0
+      ? record
+      : null;
+  const ogxmPlaceholder =
+    ogxmSummaryRecord !== null && isOgxmPlaceholder(ogxmSummaryRecord);
   const selectedBook =
     book?.provider === 'xg'
       ? 'xg'
@@ -215,38 +333,49 @@ export default function SourceAnalysisView({
           )}
         </>
       )}
-      {checker && (source === 'file' ? record : book?.checker) && (
-        <CandidateTable
-          candidates={candidates}
-          source={previewSource}
-          depth={
-            source === 'file'
-              ? record?.depth
-              : book?.checker?.plies == null
-                ? null
-                : `${book.checker.plies}-ply`
-          }
-          played={
-            position?.notation ??
-            (source === 'file' ? record?.played : undefined)
-          }
-          position={position}
-          playerName={playerName}
-          method={source === 'file' ? record?.method : undefined}
-          onPreview={onPreview}
-          selectedPreview={selectedPreview}
-        />
+      {ogxmPlaceholder && (
+        <p className="fineprint" role="status">
+          {t('matchAnalysis.unavailable')}
+        </p>
+      )}
+      {!ogxmPlaceholder &&
+        checker &&
+        (source === 'file' ? record : book?.checker) && (
+          <CandidateTable
+            candidates={candidates}
+            source={previewSource}
+            depth={
+              source === 'file'
+                ? record?.depth
+                : book?.checker?.plies == null
+                  ? null
+                  : `${book.checker.plies}-ply`
+            }
+            played={
+              position?.notation ??
+              (source === 'file' ? record?.played : undefined)
+            }
+            position={position}
+            playerName={playerName}
+            method={source === 'file' ? record?.method : undefined}
+            onPreview={onPreview}
+            selectedPreview={selectedPreview}
+          />
+        )}
+      {ogxmSummaryRecord && !ogxmPlaceholder && (
+        <OgxmCheckerSummary raw={ogxmSummaryRecord.raw} />
       )}
       {!checker && cube && (
         <>
           <p className="fineprint">
-            {source === 'file' &&
-            /^(take|drop|pass)$/i.test(record?.played ?? '')
-              ? l('cubeResponse')
-              : l('cubeBeforeRoll')}
+            {cubeResponse ? l('cubeResponse') : l('cubeBeforeRoll')}
           </p>
-          {cube.perspective === 'doubler' && (
-            <p className="fineprint">{l('doublerPerspective')}</p>
+          {(perspectiveName || fromDoubler) && (
+            <p className="fineprint">
+              {perspectiveName
+                ? l('namedCubePerspective', { player: perspectiveName })
+                : l('doublerPerspective')}
+            </p>
           )}
           <p className="fineprint">
             {l('equityUnit')}: {unit(cubeKind)}

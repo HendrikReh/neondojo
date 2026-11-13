@@ -33,17 +33,20 @@ impl MatchContext {
     }
 
     pub(super) fn write_sgf(&self, output: &mut String) {
-        let date = self.played_on.map(|value| value.to_string());
-        for (key, value) in [
-            ("DT", date.as_ref()),
-            ("EV", self.event.as_ref()),
-            ("RO", self.round.as_ref()),
-            ("PC", self.place.as_ref()),
-        ] {
-            if let Some(value) = value {
-                super::sgf::write_property(output, key, std::slice::from_ref(value));
-            }
+        for (key, value) in self.sgf_properties() {
+            super::sgf::write_property(output, key, &[value]);
         }
+    }
+
+    pub(super) fn sgf_properties(&self) -> impl Iterator<Item = (&'static str, String)> {
+        [
+            ("DT", self.played_on.map(|value| value.to_string())),
+            ("EV", self.event.clone()),
+            ("RO", self.round.clone()),
+            ("PC", self.place.clone()),
+        ]
+        .into_iter()
+        .filter_map(|(key, value)| value.map(|value| (key, value)))
     }
 }
 

@@ -57,6 +57,13 @@
   color: var(--ui-muted);
   margin-top: 3px;
 }
+.ogxm-checker-summary caption {
+  text-align: left;
+  color: var(--ui-muted);
+}
+.ogxm-checker-summary th[scope='row'] {
+  text-align: left;
+}
 .source-decision-buttons {
   display: flex;
   gap: 5px;

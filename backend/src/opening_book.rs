@@ -583,7 +583,7 @@ async fn source_beaver_rule(pool: &sqlx::PgPool, position: &Position) -> Result<
     };
     match format.as_str() {
         // These public importers reject the beaver rule, including its RU form.
-        "sgf" | "bgf" => Ok(Some(false)),
+        "sgf" | "bgf" | "ogxm" => Ok(Some(false)),
         "xg" => {
             type Rules = std::collections::HashMap<(Uuid, String), Option<bool>>;
             static RULES: std::sync::OnceLock<std::sync::Mutex<Rules>> = std::sync::OnceLock::new();

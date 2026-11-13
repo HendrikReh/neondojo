@@ -5,9 +5,11 @@
 mod bgf;
 pub(crate) mod ids;
 pub(crate) mod match_context;
+pub(crate) mod ogxm;
 pub(crate) mod sgf;
 mod xg;
 pub use bgf::bgf_to_sgf;
+pub use ogxm::ogxm_to_sgf;
 pub use sgf::parse_sgf;
 pub(crate) use xg::xg_beaver_rule;
 pub use xg::xg_to_sgf;

@@ -124,6 +124,7 @@ const emptyRecord: import('./source-analysis-api').SourceAnalysis = {
 function renderRecords(
   records: (typeof emptyRecord)[],
   preferredKind?: 'checker' | 'cube',
+  players?: { white: string; black: string },
 ) {
   return renderToStaticMarkup(
     createElement(I18nProvider, {
@@ -131,6 +132,7 @@ function renderRecords(
         source: 'file',
         records,
         preferredKind,
+        players,
       }),
     }),
   );
@@ -164,4 +166,157 @@ test('a cube review defaults to the cube record when checker and cube records sh
   expect(html).toContain('Cube decision before this roll');
   expect(html).toContain('+0.150');
   expect(html).not.toContain('No candidate values recorded.');
+});
+
+test('OGXM legacy empty analysis shows not evaluated instead of placeholder zeros', () => {
+  const html = renderRecords([
+    {
+      ...emptyRecord,
+      source_format: 'ogxm',
+      engine: 'Unknown',
+      engine_version: null,
+      depth: null,
+      depth_plies: null,
+      method: 'unknown',
+      raw: {
+        analysis_id: 'b86cd1b0-4d12-80e6-86ba-511a59c022f0',
+        currency: null,
+        best_equity: 0,
+        equity_loss: 0,
+      },
+    },
+  ]);
+  expect(html).toContain('Not evaluated');
+  expect(html).not.toContain('Recorded OGXM values');
+  expect(html).not.toContain('0.000');
+});
+
+test('OGXM without candidates displays the recorded zero values and the unknown unit', () => {
+  const html = renderRecords([
+    {
+      ...emptyRecord,
+      source_format: 'ogxm',
+      raw: { currency: null, best_equity: 0, equity_loss: 0 },
+    },
+  ]);
+  expect(html).toContain('Recorded OGXM values');
+  expect(html).toContain('Unit unknown');
+  expect(html).toMatch(/Best equity<\/th><td>0\.000<\/td>/);
+  expect(html).toMatch(/Loss<\/th><td>0\.000<\/td>/);
+  expect(html).toContain('No candidate values recorded.');
+  expect(html).not.toContain('candidate-comparison-table');
+});
+
+test('OGXM MWC loss is shown in percentage points and missing best equity is omitted', () => {
+  const html = renderRecords([
+    {
+      ...emptyRecord,
+      source_format: 'ogxm',
+      raw: { currency: 3, best_equity: null, equity_loss: 0.012345 },
+    },
+  ]);
+  expect(html).toMatch(/Loss<\/th><td>1\.2345 pp<\/td>/);
+  expect(html).not.toContain('Best equity</th>');
+});
+
+test('OGXM MWC is formatted in percent and missing loss is omitted', () => {
+  const html = renderRecords([
+    {
+      ...emptyRecord,
+      source_format: 'ogxm',
+      raw: { currency: 2, best_equity: 0.61234, equity_loss: null },
+    },
+  ]);
+  expect(html).toMatch(/Best equity<\/th><td>61\.234%<\/td>/);
+  expect(html).not.toContain('Loss</th>');
+});
+
+test('an OGXM record without finite summary values keeps the empty state', () => {
+  const html = renderRecords([
+    {
+      ...emptyRecord,
+      source_format: 'ogxm',
+      raw: { best_equity: null, equity_loss: '0' },
+    },
+  ]);
+  expect(html).not.toContain('Recorded OGXM values');
+  expect(html).toContain('No candidate values recorded.');
+});
+
+test('an imported OGXM take labels the doubler as the perspective of the recorded MWC', () => {
+  const html = renderRecords([
+    {
+      ...emptyRecord,
+      source_format: 'ogxm',
+      kind: 'cube',
+      player: 1,
+      played: 'Take',
+      cube: {
+        equity_kind: 'mwc',
+        equity_player: 0,
+        no_double: 0.481127,
+        double_take: 0.493084,
+        double_pass: 0.5,
+      },
+    },
+  ]);
+  expect(html).toContain('Cube response without dice');
+  expect(html).toContain('Values from the doubler’s perspective');
+  expect(html).toContain('49.308%');
+});
+
+test.each([
+  { actor: 0, equityPlayer: 0, played: 'Double', name: 'Raphaël Ginoulhac' },
+  { actor: 1, equityPlayer: 1, played: 'Double', name: 'Guilaume Gallé' },
+  { actor: 0, equityPlayer: 0, played: 'No double', name: 'Raphaël Ginoulhac' },
+  { actor: 1, equityPlayer: 1, played: 'No double', name: 'Guilaume Gallé' },
+  { actor: 1, equityPlayer: 0, played: 'Take', name: 'Raphaël Ginoulhac' },
+  { actor: 0, equityPlayer: 1, played: 'Take', name: 'Guilaume Gallé' },
+  { actor: 1, equityPlayer: 0, played: 'Drop', name: 'Raphaël Ginoulhac' },
+])(
+  'OGXM $played names $name as the source perspective',
+  ({ actor, equityPlayer, played, name }) => {
+    const html = renderRecords(
+      [
+        {
+          ...emptyRecord,
+          source_format: 'ogxm',
+          kind: 'cube',
+          player: actor,
+          played,
+          cube: {
+            equity_kind: 'mwc',
+            equity_player: equityPlayer,
+            double_take: 0.493084,
+          },
+        },
+      ],
+      'cube',
+      { white: 'Raphaël Ginoulhac', black: 'Guilaume Gallé' },
+    );
+    expect(html).toContain(`Values from ${name}’s perspective`);
+    expect(html).toContain('49.308%');
+  },
+);
+
+test('an imported XG offer uses the offerer when the source specifies the doubler', () => {
+  const html = renderRecords(
+    [
+      {
+        ...emptyRecord,
+        source_format: 'xg',
+        kind: 'cube',
+        player: 1,
+        played: 'Double',
+        cube: {
+          equity_kind: 'cubeful',
+          perspective: 'doubler',
+          double_take: 0.1,
+        },
+      },
+    ],
+    'cube',
+    { white: 'Raphaël Ginoulhac', black: 'Guilaume Gallé' },
+  );
+  expect(html).toContain('Values from Guilaume Gallé’s perspective');
 });

@@ -165,3 +165,34 @@ analysis. Source statistics never supply this app's computed PR. The GNUbg
 SGF evaluation and rollout encodings follow the producer's `sgf.c`
 (`WriteMoveAnalysis`, `WriteDoubleAnalysis`, `WriteRolloutAnalysis`):
 https://sources.debian.org/src/gnubg/1.05.002-2/sgf.c/ .
+
+
+## HedgeHog OGXM
+
+`hedgehog-cdf.ogxm` is the public CdF Super Jackpot match between Raphaël
+Ginoulhac and Guilaume Gallé. It was downloaded from the [HedgeHog
+archive](https://hedgehog-bg.com/archive) on 2026-11-13. The [OGXM
+export](https://hedgehog-bg.com/api/v1/matches/37ae5825-4260-4648-8f9e-967a7f8a5c24/export?format=binary)
+is unchanged. `hedgehog-cdf.gnubg.sgf` is the independently saved replay of
+the companion [MAT export](https://hedgehog-bg.com/api/v1/matches/37ae5825-4260-4648-8f9e-967a7f8a5c24/export?format=mat),
+using GNU Backgammon 1.08.003 and the same commands as the WC2014 fixture.
+
+`hedgehog-cdf-analyzed.ogxm` is the same match downloaded from the [public
+analysis view](https://hedgehog-bg.com/analyze/37ae5825-4260-4648-8f9e-967a7f8a5c24)
+using its OGXM export on 2026-11-13. It contains real HedgeHog checker and cube
+evaluations. Some checker alternatives encode oversized bear-offs with the
+distance to the tray. The importer validates these alternatives against the
+recorded roll and replayed position.
+
+`hedgehog-analysis.ogxm` is synthetic. Its source is
+`hedgehog-analysis.json`; regenerate it with the tagged [HedgeHog reference
+codec](https://gitlab.com/eranlambooij/hedgehog-public/-/tags/ogxm-v2.1.0):
+
+```sh
+ogxm_convert --to-binary < hedgehog-analysis.json > hedgehog-analysis.ogxm
+```
+
+The two files cover real archive replay, position and match IDs, Crawford,
+forced passes, cube offer/response, source MWC and depth, and CRC32 rejection.
+The binary layout and score rules follow the [OGXM v2
+specification](https://gitlab.com/eranlambooij/hedgehog-public/-/raw/main/docs/OGXM_FORMAT_SPEC.md).

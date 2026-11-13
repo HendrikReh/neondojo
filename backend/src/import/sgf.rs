@@ -3,7 +3,7 @@ use anyhow::{Context, Result, bail, ensure};
 use std::collections::BTreeMap;
 
 pub(crate) type Node = BTreeMap<String, Vec<String>>;
-const MAX_SGF_BYTES: usize = 32 * 1024 * 1024;
+pub(crate) const MAX_SGF_BYTES: usize = 32 * 1024 * 1024;
 const MAX_NODES: usize = 100_000;
 
 pub(crate) fn escape_value(value: &str) -> String {
@@ -387,7 +387,7 @@ pub(crate) fn expand_xg_play(
 
 /// Validate and apply one SGF checker play. Coordinates in SGF are absolute;
 /// notation is always from the moving player's perspective.
-fn play(board: &mut [i32; 26], player: i32, value: &str) -> Result<([i32; 2], String)> {
+pub(super) fn play(board: &mut [i32; 26], player: i32, value: &str) -> Result<([i32; 2], String)> {
     let bytes = value.as_bytes();
     ensure!(
         (2..=10).contains(&bytes.len()) && bytes.len().is_multiple_of(2),

@@ -103,6 +103,7 @@ export default function MoveNotesDialog({
             </p>
             <ImportedMoveAnalysis
               moveId={move.id}
+              players={target.match}
               decisionKind={reviewingTarget ? target.decisionKind : undefined}
             />
           </div>

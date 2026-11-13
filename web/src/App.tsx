@@ -641,7 +641,7 @@ export default function App() {
           className="sr-only"
           type="file"
           aria-label={t('app.matchFile')}
-          accept=".mat,.sgf,.xg,.bgf"
+          accept=".mat,.sgf,.xg,.bgf,.ogxm"
           multiple
           onChange={(event) => void upload(event.target.files ?? undefined)}
         />

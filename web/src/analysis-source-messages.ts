@@ -163,6 +163,14 @@ const rows = {
     'Wartości z perspektywy podwajającego',
     'Valori dal punto di vista di chi raddoppia',
   ],
+  namedCubePerspective: [
+    'Values from {player}’s perspective',
+    'Werte aus Sicht von {player}',
+    'Valores desde la perspectiva de {player}',
+    'Valeurs du point de vue de {player}',
+    'Wartości z perspektywy gracza {player}',
+    'Valori dal punto di vista di {player}',
+  ],
   cubeBeforeRoll: [
     'Cube decision before this roll (00)',
     'Cube-Entscheidung vor diesem Wurf (00)',
@@ -202,6 +210,22 @@ const rows = {
     'Unité d’équité',
     'Jednostka equity',
     'Unità equity',
+  ],
+  ogxmSummary: [
+    'Recorded OGXM values',
+    'Aufgezeichnete OGXM-Werte',
+    'Valores OGXM registrados',
+    'Valeurs OGXM enregistrées',
+    'Zapisane wartości OGXM',
+    'Valori OGXM registrati',
+  ],
+  bestEquity: [
+    'Best equity',
+    'Beste Equity',
+    'Mejor equity',
+    'Meilleure équité',
+    'Najlepsza equity',
+    'Migliore equity',
   ],
   depth: [
     'Recorded depth',

@@ -202,7 +202,7 @@ Add up to 200 selected positions to a new or existing study deck. Each position 
 
 ## Imported analysis and opening books
 
-The analysis inspector offers **Imported analysis**, **Opening book**, and **Local engine**. Imported XG, native GNUbg SGF, and available BGBlitz analysis stay in their own records, with the original depth or profile label, method, candidates, cube responses, raw values, equity units, and engine version where known. Missing analysis and unknown engines or units stay unavailable. GNUbg match-winning chances retain their original units. Analysis jobs and independent match copies preserve source results. Older imports can reconstruct analysis once from the stored original file. Source evaluations for recorded double, take, and drop actions also appear in **Cube and move notes**.
+The analysis inspector offers **Imported analysis**, **Opening book**, and **Local engine**. Imported XG, native GNUbg SGF, and available BGBlitz analysis stay in their own records, with the original depth or profile label, method, candidates, cube responses, raw values, equity units, and engine version where known. Missing analysis and unknown engines or units stay unavailable. GNUbg match-winning chances retain their original units. Analysis jobs and independent match copies preserve source results. Older imports can reconstruct analysis once from the stored original file. Source evaluations for recorded double, take, and drop actions also appear in **Cube and move notes**. Imported cube evaluations show whose perspective the values use when the source identifies the player. This includes positions where the player on roll did not double.
 
 Manage books under **Settings → Analysis → Opening books**. Select **Automatic** to compare available books, choose a provider directly, or select **Off**. The book dialog saves the provider and paths with revision checks while keeping the parent settings draft. Book paths are on the backend computer. The analysis inspector shows the selected source, engine, and depth for the current position. Manually requested analysis uses the selected native GNUbg profile. Book results stay separate from native GNUbg results and match PR.
 
@@ -377,8 +377,23 @@ python tools/verify_anki_package.py before.apkg --updated after.apkg
 | `.sgf` | Native UTF-8 parser for standard backgammon, including escapes, multiple games, setup positions, cube actions, scores, Crawford, Jacoby and move reconstruction. Ambiguous variation trees are rejected.                                                                                                   |
 | `.xg`  | Native decoder for XG2 save versions 24–40. It checks the RichGame container and CRC, bounds Zlib decompression and converts to SGF. Supports inactive cube placeholders, open money sessions, compact checker notation and valid in-progress point matches, including an explicitly unfinished last game. |
 | `.bgf` | Native Rust decoder for BGBlitz BGF 1.0 with a JSON header and JSON or Smile payload, optionally Gzip-compressed. It preserves checker moves, forced passes, double/take/drop actions, colors, scores and Crawford or Jacoby rules, then replays the resulting SGF.                                        |
+| `.ogxm` | Native import of HedgeHog OGXM v2 match files, including archive exports. Keeps the played line, scores, match metadata, and available checker and cube evaluations with their original units and provenance. No external codec or engine is needed to import. |
 
 The XG importer rejects XG1, edited starting positions, automatic doubles, beavers, raccoons and other variants. BGF variants, custom starting positions and restricted cube rules are also rejected. XG candidate and cube evaluations, depth labels and rollout references, and supported BGF analysis are stored as source analysis. The original artifact retains full XG rollout streams and comments. BG Tutor does not interpret XG RTF comments. [Import fixtures and format references](backend/tests/fixtures/README.md)
+
+OGXM import supports standard match and money play. It replays the recorded
+moves, validates the final score and checks a supplied CRC32 or SHA-256 digest.
+OGXM v1, `.ogxms` streams, standalone analysis files, variants, custom setups,
+and special actions such as beavers and settlements are unsupported. The
+original file retains annotations, signatures, clock/video data and other
+source data; BG Tutor does not display them or verify signatures. Imported OGXM
+evaluations are visible as source analysis; they do not count as local GNUbg
+analysis or feed recurring-mistake statistics.
+When an OGXM export stores only summary values for a checker move,
+**Imported analysis** shows the recorded best equity and loss when available.
+The view labels the unit as unknown if the source omits it. It displays
+known legacy HedgeHog zero placeholders as **Not evaluated**.
+[HedgeHog format and codec](https://hedgehog-bg.com/community)
 
 An upload takes one file and has a **16 MiB** limit including multipart framing. SHA-256 detects identical files within the target database. The original, canonical SGF and position records are saved in one transaction. Parsers and archives have separate size and record limits. Filenames and file contents are handled as data.
 

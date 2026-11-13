@@ -7,6 +7,7 @@ import {
   type Analysis,
   type Distribution,
   type DiceStats,
+  type Match,
   type Position,
 } from './api';
 import type { Jobs } from './useJobs';
@@ -34,6 +35,7 @@ export default function AnalysisPanel({
   selectedPreview,
   position,
   playerName,
+  players,
   preferredSource,
 }: {
   jobs: Jobs;
@@ -50,6 +52,7 @@ export default function AnalysisPanel({
   selectedPreview?: PreviewCandidate;
   position?: Position;
   playerName?: string;
+  players?: Pick<Match, 'white' | 'black'>;
   preferredSource?: {
     positionId: string;
     source: 'file' | 'engine';
@@ -330,6 +333,7 @@ export default function AnalysisPanel({
               selectedPreview={selectedPreview}
               position={position}
               playerName={playerName}
+              players={players}
             />
           )}
         </>
