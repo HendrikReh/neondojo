@@ -19,6 +19,7 @@ import { useBoardReviewText } from './board-review-messages';
 import type { PreviewCandidate } from './candidate-preview';
 import { useStatisticsText } from './review-statistics-messages';
 import AnalysisPanel from './AnalysisPanel';
+import AnalysisRunningJobs from './AnalysisRunningJobs';
 import MatchAnalysisPanel from './MatchAnalysisPanel';
 import NotesPanel from './NotesPanel';
 import GameSelector from './GameSelector';
@@ -57,6 +58,7 @@ const detailTabs: AnalysisDetail[] = [
 export default function AnalysisWorkspace({
   navigation,
   jobs,
+  runningJobs = [],
   theme,
   defaultEngine = 'gnubg',
   defaultPlies,
@@ -84,6 +86,7 @@ export default function AnalysisWorkspace({
 }: {
   navigation: ReturnType<typeof useGameNavigation>;
   jobs: ReturnType<typeof useJobs>;
+  runningJobs?: Job[];
   theme: Theme;
   defaultEngine?: MatchAnalysisEngine;
   defaultPlies: number;
@@ -361,6 +364,10 @@ export default function AnalysisWorkspace({
         {sourceAvailable && (
           <div className="workspace-analysis-command" ref={setCommandTarget} />
         )}
+        <AnalysisRunningJobs
+          jobs={runningJobs}
+          displayedJobId={reviewJob?.id}
+        />
       </div>
       <div
         className="inspector-tabs analysis-detail-navigation text-navigation text-navigation--compact"

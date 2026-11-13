@@ -1,3 +1,4 @@
+import { openPositionCalculation } from './analysis-controls';
 import { test, expect } from './test';
 
 test.beforeEach(async ({ page }) => {
@@ -24,7 +25,11 @@ test('real import, search, GNUbg analysis, distribution, themes and mobile layou
   await expect(
     page.getByRole('img', { name: /Backgammon-Position/ }),
   ).toBeVisible();
-  await page.getByRole('button', { name: 'Position analysieren' }).click();
+  await (
+    await openPositionCalculation(page)
+  )
+    .getByRole('button', { name: 'Position analysieren' })
+    .click();
   const bestCandidate = page.locator(
     '.analysis-panel .candidates tbody tr[data-candidate-best="true"]',
   );

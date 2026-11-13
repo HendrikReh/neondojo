@@ -53,7 +53,10 @@ The merge search has its own page controls.
 
 **Overview** places the position analysis beside the board, with the error list
 below both. Its analysis views are **Candidates**, **Dice equity**, and **Game
-rolls**. Native match and game statistics are available in **Statistics**.
+rolls**. **Recalculate position …** opens a dialog with the search depth and
+start action. The dice view has its own **Recalculate dice equity …** dialog.
+Running jobs appear above the analysis tabs. Native match and game statistics
+are available in **Statistics**.
 The analysis command bar uses the profile engine as the initial selection for
 each match. Choose **Analysis engine** to select the provider for game or match
 analysis, then choose a supported **Analysis depth**. GNUbg and Open Sage offer 4-ply. The

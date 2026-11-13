@@ -1,3 +1,4 @@
+import { openPositionCalculation } from './analysis-controls';
 import { test, expect } from './test';
 
 test.beforeEach(async ({ page }) => {
@@ -189,7 +190,9 @@ test('an analyzed annotated position becomes a shared study card and a downloada
     position.getByText('Notizen gespeichert.', { exact: true }),
   ).toBeVisible();
   await page.getByRole('tab', { name: 'Übersicht', exact: true }).click();
-  await page
+  await (
+    await openPositionCalculation(page)
+  )
     .getByRole('button', { name: 'Position analysieren', exact: true })
     .click();
   await expect(page.getByText('Bester', { exact: true })).toBeVisible({

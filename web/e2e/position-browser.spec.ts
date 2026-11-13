@@ -1,3 +1,4 @@
+import { openPositionCalculation } from './analysis-controls';
 import { expect, test } from './test';
 import { expectCompactPositionRow } from './position-row-layout';
 import { POSITION_COLUMNS } from '../src/position-table-columns';
@@ -347,7 +348,9 @@ test('found positions flow through real analysis, partial card transfer, Anki ex
   await expect(page.locator('.position-code code')).toHaveText(
     f.positions[0].position_id,
   );
-  await page
+  await (
+    await openPositionCalculation(page)
+  )
     .getByRole('button', { name: 'Analyze position', exact: true })
     .click();
   await expect(

@@ -1,3 +1,4 @@
+import { openPositionCalculation } from './analysis-controls';
 import { expect, test } from './test';
 import { readFileSync } from 'node:fs';
 test.use({ actionTimeout: 10000 });
@@ -187,7 +188,9 @@ test('file, book and native candidates preview explicitly and source changes res
     .getByRole('button', { name: 'Reset preview', exact: true })
     .click();
   await expect(page.locator('.board-review-selection')).toHaveCount(0);
-  await page
+  await (
+    await openPositionCalculation(page)
+  )
     .getByRole('button', { name: 'Analyze position', exact: true })
     .click();
   const native = page.locator('.analysis-panel');

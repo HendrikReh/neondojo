@@ -95,13 +95,6 @@
   font-size: var(--font-size-meta);
   color: var(--ui-danger-text);
 }
-.analysis-panel .source-heading-label {
-  font-size: var(--font-size-label);
-  max-width: 180px;
-  overflow-wrap: anywhere;
-  text-align: right;
-}
-
 .library-native-layer {
   position: fixed;
   inset: 0;

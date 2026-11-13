@@ -142,7 +142,7 @@ for (const theme of ['graphite', 'club', 'paper'])
         color,
       );
       const action = page.getByRole('button', {
-        name: 'Analyze position',
+        name: 'Recalculate position …',
         exact: true,
       });
       await expect(action).not.toHaveCSS(

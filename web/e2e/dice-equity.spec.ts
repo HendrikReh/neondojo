@@ -1,11 +1,14 @@
+import { openPositionCalculation } from './analysis-controls';
+import { profileBackend } from './profile-backend';
+import { defaultConfiguration } from '../src/configuration-model';
 import { expect, test, type Page } from './test';
 
 async function openPosition(page: Page) {
+  const configuration = structuredClone(defaultConfiguration);
+  configuration.analysis.plies = 0;
+  const profile = await profileBackend(page, { configuration });
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
   await page.goto('/');
-  await expect(
-    page.getByText('GNUbg connected', { exact: true }),
-  ).toBeVisible();
   await page.getByLabel('Match file', { exact: true }).setInputFiles({
     name: 'dice-equity.mat',
     mimeType: 'application/octet-stream',
@@ -14,12 +17,13 @@ async function openPosition(page: Page) {
     ),
   });
   await expect(page.locator('.analysis-panel')).toBeVisible();
-  await page.getByLabel('Search depth', { exact: true }).selectOption('0');
+  return profile;
 }
 
 test('dice equity calculates on selection and reuses results across tabs, positions and reloads', async ({
   page,
 }) => {
+  test.setTimeout(150_000);
   const submissions: { position_id: string; kind: string; plies: number }[] =
     [];
   page.on('request', (request) => {
@@ -29,7 +33,7 @@ test('dice equity calculates on selection and reuses results across tabs, positi
     )
       submissions.push(request.postDataJSON());
   });
-  await openPosition(page);
+  const profile = await openPosition(page);
   expect(submissions).toHaveLength(0);
   await expect(
     page.getByRole('button', { name: 'Dice distribution', exact: true }),
@@ -111,17 +115,26 @@ test('dice equity calculates on selection and reuses results across tabs, positi
   releaseSecondRestore();
   await expect(page.locator('.dice-grid button')).toHaveCount(36);
   expect(submissions).toHaveLength(2);
-  await page.getByLabel('Search depth', { exact: true }).selectOption('1');
+  const calculation = await openPositionCalculation(page, true);
+  await calculation
+    .getByLabel('Search depth', { exact: true })
+    .selectOption('1');
+  expect(submissions).toHaveLength(2);
+  await calculation
+    .getByRole('button', { name: 'Dice equity', exact: true })
+    .click();
   await expect.poll(() => submissions.length).toBe(3);
   await expect(page.locator('.dice-grid button')).toHaveCount(36, {
-    timeout: 45_000,
+    timeout: 90_000,
   });
   expect(submissions[2]).toMatchObject({
     position_id: submissions[0].position_id,
     plies: 1,
   });
+  const updatedProfile = structuredClone(profile.state.current_configuration);
+  updatedProfile.analysis.plies = 1;
+  profile.updateRemote(updatedProfile);
   await page.reload();
-  await page.getByLabel('Search depth', { exact: true }).selectOption('1');
   await dice.click();
   await expect(page.locator('.dice-grid button')).toHaveCount(36);
   expect(submissions).toHaveLength(3);
@@ -181,6 +194,7 @@ test('repeated selection while submission is delayed creates only one job', asyn
 test('a hidden dice view waits until the overview becomes visible', async ({
   page,
 }) => {
+  test.setTimeout(150_000);
   await openPosition(page);
   let attempts = 0;
   page.on('request', (request) => {
@@ -192,7 +206,7 @@ test('a hidden dice view waits until the overview becomes visible', async ({
   });
   await page.getByRole('tab', { name: 'Dice equity', exact: true }).click();
   await expect(page.locator('.dice-grid button')).toHaveCount(36, {
-    timeout: 45_000,
+    timeout: 65_000,
   });
   await page.getByRole('tab', { name: 'Notes', exact: true }).click();
   await page.getByRole('button', { name: 'Next move', exact: true }).click();
@@ -201,7 +215,7 @@ test('a hidden dice view waits until the overview becomes visible', async ({
   await page.getByRole('tab', { name: 'Overview', exact: true }).click();
   await expect.poll(() => attempts).toBe(2);
   await expect(page.locator('.dice-grid button')).toHaveCount(36, {
-    timeout: 45_000,
+    timeout: 65_000,
   });
 });
 

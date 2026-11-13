@@ -189,7 +189,11 @@ export default function App() {
   const [restoring, setRestoring] = useState(false);
   const restorationRequest = useRef<AbortController | null>(null);
   const navigation = useGameNavigation();
-  const { track, assessmentRevision } = useBackgroundJobs();
+  const {
+    active: runningAnalysisJobs,
+    track,
+    assessmentRevision,
+  } = useBackgroundJobs();
   const jobs = useJobs(navigation.position?.id, track);
   const settingsLoad = useRef<AbortController | undefined>(undefined);
   const input = useRef<HTMLInputElement>(null);
@@ -754,6 +758,7 @@ export default function App() {
             onBookmarkChanged={bookmarkChanged}
             navigation={navigation}
             jobs={jobs}
+            runningJobs={runningAnalysisJobs}
             theme={theme}
             defaultEngine={settings?.analysis_engine ?? 'gnubg'}
             defaultPlies={settings?.analysis_plies ?? DEFAULT_ANALYSIS_PLIES}

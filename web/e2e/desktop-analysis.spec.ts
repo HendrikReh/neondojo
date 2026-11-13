@@ -1,3 +1,4 @@
+import { openPositionCalculation } from './analysis-controls';
 import { expect, test, type Page } from './test';
 import { test as nativeTest } from '@playwright/test';
 
@@ -32,7 +33,11 @@ async function openAnalyzedMatch(page: Page) {
   await expect(page.locator('.match-analysis-progress')).toContainText(
     'completed',
   );
-  await page.getByRole('button', { name: /Analyze position/ }).click();
+  await (
+    await openPositionCalculation(page)
+  )
+    .getByRole('button', { name: /Analyze position/ })
+    .click();
   await expect(page.locator('.candidates tbody tr').first()).toBeVisible();
   return match;
 }
@@ -341,9 +346,8 @@ for (const viewport of [
       evaluationBounds.x + evaluationBounds.width,
       0,
     );
-    expect(
-      await page.evaluate(() => document.documentElement.scrollWidth),
-    ).toBeLessThanOrEqual(viewport.width);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth))
+      .toBeLessThanOrEqual(viewport.width);
     if (viewport.width > 2000)
       expect(
         (await page.locator('.analysis-workspace').boundingBox())!.width,
@@ -431,7 +435,9 @@ test('a background position analysis refreshes its history row after navigating 
     }
     await route.continue();
   });
-  await page
+  await (
+    await openPositionCalculation(page)
+  )
     .getByRole('button', { name: 'Analyze position', exact: true })
     .click();
   await started;

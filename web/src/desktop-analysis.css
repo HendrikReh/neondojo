@@ -427,36 +427,6 @@
     font-size: var(--font-size-micro);
   }
 
-  .analysis-workspace.analysis-overview .position-inspector .analysis-controls {
-    gap: 6px;
-    margin: 0 0 9px;
-  }
-
-  .analysis-workspace.analysis-overview
-    .position-inspector
-    .analysis-controls
-    .depth-label {
-    gap: 7px;
-    width: auto;
-    flex: 1 1 100%;
-    font-size: var(--font-size-label);
-  }
-
-  .analysis-workspace.analysis-overview .depth-label select {
-    flex: 1;
-    min-width: 0;
-    padding: 5px 7px;
-    font-size: var(--font-size-control);
-  }
-
-  .analysis-workspace.analysis-overview
-    .position-inspector
-    .analysis-controls
-    button {
-    padding: 6px 8px;
-    font-size: var(--font-size-control);
-  }
-
   .analysis-workspace.analysis-overview .position-inspector .tabs {
     justify-content: flex-start;
   }
@@ -646,22 +616,6 @@
     box-shadow:
       inset 0 1px var(--ui-accent),
       inset 0 -1px var(--ui-accent);
-  }
-}
-
-@media (min-width: 1600px) {
-  .analysis-workspace.analysis-overview
-    .position-inspector
-    .analysis-controls
-    .depth-label {
-    flex: 1 1 auto;
-  }
-
-  .analysis-workspace.analysis-overview
-    .position-inspector
-    .analysis-controls
-    button {
-    flex: 0 1 auto;
   }
 }
 

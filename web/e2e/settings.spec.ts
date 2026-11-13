@@ -1,3 +1,4 @@
+import { openPositionCalculation } from './analysis-controls';
 import { test, expect, type Page } from './test';
 import { readFileSync } from 'node:fs';
 
@@ -359,9 +360,11 @@ for (const plies of [3, 4]) {
         `(;GM[6]PW[Depth ${crypto.randomUUID()}]PB[Opponent]MI[length:7]AE[a:y]AW[d][e][f]AB[s][t][u]PL[W];W[31fccb])`,
       ),
     });
-    await expect(page.getByLabel('Search depth', { exact: true })).toHaveValue(
-      '2',
-    );
+    const initialCalculation = await openPositionCalculation(page);
+    await expect(
+      initialCalculation.getByLabel('Search depth', { exact: true }),
+    ).toHaveValue('2');
+    await page.keyboard.press('Escape');
     await expect(
       page.getByLabel('Match analysis depth', { exact: true }),
     ).toHaveValue('2');
@@ -375,18 +378,19 @@ for (const plies of [3, 4]) {
     await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
     await expect(dialog).not.toBeVisible();
     expect(backend.writes.at(-1)?.analysis_plies).toBe(plies);
-    await expect(page.getByLabel('Search depth', { exact: true })).toHaveValue(
-      String(plies),
-    );
     await expect(
       page.getByLabel('Match analysis depth', { exact: true }),
+    ).toHaveValue(String(plies));
+    const positionCalculation = await openPositionCalculation(page);
+    await expect(
+      positionCalculation.getByLabel('Search depth', { exact: true }),
     ).toHaveValue(String(plies));
     const submitted = page.waitForResponse(
       (response) =>
         new URL(response.url()).pathname === '/api/jobs' &&
         response.request().method() === 'POST',
     );
-    await page
+    await positionCalculation
       .getByRole('button', { name: 'Analyze position', exact: true })
       .click();
     const response = await submitted;
@@ -453,8 +457,10 @@ for (const plies of [3, 4]) {
       }
     }
     await page.reload();
-    await expect(page.getByLabel('Search depth', { exact: true })).toHaveValue(
-      String(plies),
-    );
+    await expect(
+      (await openPositionCalculation(page)).getByLabel('Search depth', {
+        exact: true,
+      }),
+    ).toHaveValue(String(plies));
   });
 }

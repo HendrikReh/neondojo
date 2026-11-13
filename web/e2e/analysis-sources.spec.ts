@@ -1,3 +1,4 @@
+import { openPositionCalculation } from './analysis-controls';
 import { expect, test } from './test';
 import { readFileSync } from 'node:fs';
 
@@ -33,9 +34,14 @@ test('imported GNUbg analysis remains available independently from new engine jo
   );
   await expect(page.locator('.source-analysis')).toContainText('0-ply');
   await expect(page.locator('.source-analysis')).toContainText('0.014');
-  await page
+  await (
+    await openPositionCalculation(page)
+  )
     .getByRole('button', { name: 'Analyze position', exact: true })
     .click();
+  await expect(
+    page.getByRole('tab', { name: 'Local engine', exact: true }),
+  ).toHaveAttribute('aria-selected', 'true');
   await expect(
     page.locator('.analysis-panel .candidates tbody tr').first(),
   ).toBeVisible();
