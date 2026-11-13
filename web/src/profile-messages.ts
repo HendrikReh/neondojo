@@ -1,5 +1,5 @@
 import { useI18n } from './i18n';
-import type { Locale } from './i18n-core';
+import { matchEventLabels, type Locale } from './i18n-core';
 
 const rows = {
   profiles: [
@@ -805,12 +805,12 @@ const rows = {
     'ID pozycji',
   ],
   tournament: [
-    'Tournament',
-    'Turnier',
-    'Torneo',
-    'Tournoi',
-    'Torneo',
-    'Turniej',
+    matchEventLabels.en,
+    matchEventLabels.de,
+    matchEventLabels.es,
+    matchEventLabels.fr,
+    matchEventLabels.it,
+    matchEventLabels.pl,
   ],
   round: ['Round', 'Runde', 'Ronda', 'Manche', 'Turno', 'Runda'],
   match_name: [

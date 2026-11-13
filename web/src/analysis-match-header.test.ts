@@ -259,7 +259,7 @@ it('does not present full-match PR for an independently retained position', () =
 
 it.each([
   ['en', 'Length', 'Played', 'Event', 'PR White', 'PR Black', '4.75'],
-  ['de', 'Länge', 'Gespielt', 'Veranstaltung', 'PR Weiß', 'PR Schwarz', '4,75'],
+  ['de', 'Länge', 'Gespielt', 'Event', 'PR Weiß', 'PR Schwarz', '4,75'],
   ['es', 'Longitud', 'Jugado', 'Evento', 'PR Blancas', 'PR Negras', '4,75'],
   ['fr', 'Longueur', 'Joué', 'Événement', 'PR Blancs', 'PR Noirs', '4,75'],
   ['pl', 'Długość', 'Rozegrano', 'Wydarzenie', 'PR Białe', 'PR Czarne', '4,75'],

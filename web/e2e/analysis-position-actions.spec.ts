@@ -775,7 +775,7 @@ test('analysis search finds occurrences in different databases and clears every 
   for (const label of [
     'Player',
     'Match name',
-    'Tournament',
+    'Event',
     'Round',
     'Tag',
     'Comment',

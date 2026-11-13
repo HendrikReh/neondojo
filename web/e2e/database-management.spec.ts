@@ -118,7 +118,7 @@ test('collections, independent copies, filters and metadata work together', asyn
     .click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Name', { exact: true }).fill('Final training match');
-  await dialog.getByLabel('Tournament', { exact: true }).fill('Autumn Open');
+  await dialog.getByLabel('Event', { exact: true }).fill('Autumn Open');
   await dialog.getByLabel('Result', { exact: true }).selectOption('completed');
   await dialog.getByLabel('White · Score', { exact: true }).fill('7');
   await dialog.getByLabel('Black · Score', { exact: true }).fill('2');
@@ -151,7 +151,7 @@ test('collections, independent copies, filters and metadata work together', asyn
   await expect(page.locator('.database-table tbody tr')).toHaveCount(1);
   await page
     .locator('.library-filters')
-    .getByLabel('Tournament', { exact: true })
+    .getByLabel('Event', { exact: true })
     .fill('not-here');
   await expect(page.locator('.database-table tbody tr')).toHaveCount(0);
   await page

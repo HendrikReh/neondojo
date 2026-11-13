@@ -1,5 +1,10 @@
 import { useI18n } from './i18n';
-import { interpolate, type Locale, type TranslationParams } from './i18n-core';
+import {
+  interpolate,
+  matchEventLabels,
+  type Locale,
+  type TranslationParams,
+} from './i18n-core';
 
 const translations = {
   similar: [
@@ -488,12 +493,12 @@ const translations = {
     'Nome partita',
   ],
   tournament: [
-    'Tournament',
-    'Turnier',
-    'Torneo',
-    'Tournoi',
-    'Turniej',
-    'Torneo',
+    matchEventLabels.en,
+    matchEventLabels.de,
+    matchEventLabels.es,
+    matchEventLabels.fr,
+    matchEventLabels.pl,
+    matchEventLabels.it,
   ],
   round: ['Round', 'Runde', 'Ronda', 'Tour', 'Runda', 'Turno'],
   tag: [

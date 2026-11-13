@@ -46,7 +46,7 @@ it('summarizes identity, players, score, analysis, context and notes in one text
     'Positions: 460',
     'Analysis: Completed',
     '2-ply',
-    'Tournament: Autumn Open',
+    'Event: Autumn Open',
     'Round: Final',
     'Location: Berlin',
     'Tags: Study, Cube',

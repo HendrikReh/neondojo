@@ -4,6 +4,14 @@ export type Locale = keyof typeof catalogs;
 export type TranslationParams = Record<string, string | number>;
 export const defaultLocale: Locale = 'en';
 export const localeStorageKey = 'bgtutor.locale';
+export const matchEventLabels = {
+  en: 'Event',
+  de: 'Event',
+  es: 'Evento',
+  fr: 'Événement',
+  pl: 'Wydarzenie',
+  it: 'Evento',
+} satisfies Record<Locale, string>;
 export const languages: ReadonlyArray<{ id: Locale; name: string }> = [
   { id: 'de', name: 'Deutsch' },
   { id: 'en', name: 'English' },

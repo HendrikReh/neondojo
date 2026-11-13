@@ -1,5 +1,10 @@
 import { useI18n } from './i18n';
-import { interpolate, type Locale, type TranslationParams } from './i18n-core';
+import {
+  interpolate,
+  matchEventLabels,
+  type Locale,
+  type TranslationParams,
+} from './i18n-core';
 
 // Each row is complete in English, German, Spanish, French, Polish and Italian.
 const rows = {
@@ -296,12 +301,12 @@ const rows = {
     'Commento',
   ],
   tournament: [
-    'Tournament',
-    'Turnier',
-    'Torneo',
-    'Tournoi',
-    'Turniej',
-    'Torneo',
+    matchEventLabels.en,
+    matchEventLabels.de,
+    matchEventLabels.es,
+    matchEventLabels.fr,
+    matchEventLabels.pl,
+    matchEventLabels.it,
   ],
   round: ['Round', 'Runde', 'Ronda', 'Ronde', 'Runda', 'Turno'],
   place: ['Location', 'Ort', 'Lugar', 'Lieu', 'Miejsce', 'Luogo'],

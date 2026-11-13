@@ -1,4 +1,5 @@
 import { useI18n, type Locale } from './i18n';
+import { matchEventLabels } from './i18n-core';
 
 const entries = {
   id: ['ID', 'ID', 'ID', 'ID', 'ID', 'ID'],
@@ -6,12 +7,12 @@ const entries = {
   result: ['Result', 'Ergebnis', 'Resultado', 'Résultat', 'Wynik', 'Risultato'],
   played: ['Played', 'Gespielt', 'Jugado', 'Joué', 'Rozegrano', 'Giocato'],
   event: [
-    'Event',
-    'Veranstaltung',
-    'Evento',
-    'Événement',
-    'Wydarzenie',
-    'Evento',
+    matchEventLabels.en,
+    matchEventLabels.de,
+    matchEventLabels.es,
+    matchEventLabels.fr,
+    matchEventLabels.pl,
+    matchEventLabels.it,
   ],
   whitePr: [
     'PR White',

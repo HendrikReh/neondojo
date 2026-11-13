@@ -145,7 +145,7 @@ test('analysis header shows a compact single-line identity and metadata while da
     })
     .click();
   const dialog = page.getByRole('dialog');
-  await dialog.getByLabel('Tournament', { exact: true }).fill('Updated event');
+  await dialog.getByLabel('Event', { exact: true }).fill('Updated event');
   await dialog.getByLabel('Round', { exact: true }).fill('');
   await dialog.getByLabel('Location', { exact: true }).fill('Monte-Carlo');
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
