@@ -116,6 +116,21 @@ many reviews each application received.
 Enable **Sync reviews automatically** to run the same exchange in the
 background when the linked Anki profile is open. The deck shows the linked
 profile and the last successful sync. Enable it again after restoring a backup.
+Open **Anki sync** above the card filters to see each linked deck's last
+successful sync, transfers in both directions, and pause or error reasons.
+**Sync now** runs once with the linked profile. **Pause** stops future
+background runs, and **Resume** returns the deck to the next background check.
+Open **History** in a deck row to see the last 100 attempts with their time,
+sent and received reviews, and any error details.
+Use **Failed runs only** for all failures and **Open errors only** for unresolved
+ones. **Retry sync** starts a fresh exchange and adds a history entry. A successful
+retry marks the selected error as **Resolved** and keeps its details available.
+Select the **Open errors** count in a deck row to open its history with
+**Open errors only** already selected.
+**Decks with open errors only** filters the overview. Decks disappear from that
+view when their last error is resolved.
+**Retry all open errors** runs one exchange per affected deck and resolves its
+open errors on success. The overview reports how many decks succeeded or failed.
 On wide windows, drag the divider between the card list and the preview. The
 Left and Right arrow keys move the focused divider. Double-click it or press
 Enter to restore the default width. The browser remembers the chosen width.

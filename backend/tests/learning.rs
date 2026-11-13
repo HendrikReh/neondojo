@@ -10,6 +10,246 @@ static ANKI_CONNECT_TESTS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_ne
 static EXPORT_TESTS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[sqlx::test(migrations = "./migrations")]
+async fn anki_retry_open_errors_requires_open_history_for_this_deck(pool: PgPool) {
+    let deck: Uuid = sqlx::query_scalar(
+        "INSERT INTO decks(id,name) VALUES(gen_random_uuid(),'Linked') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO anki_auto_sync(deck_id,link_id,profile,collection_key)
+                 VALUES($1,gen_random_uuid(),'Profile','key')",
+    )
+    .bind(deck)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let app = api::router(api::AppState::new(pool, Engine::new("unused".into())));
+    let _anki_guard = ANKI_CONNECT_TESTS.lock().await;
+    let (status, _) = call(
+        app,
+        "POST",
+        &format!("/api/decks/{deck}/anki-auto-sync/action"),
+        json!({"action":"retry_open_errors"}),
+    )
+    .await;
+    assert_eq!(status, 409);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn anki_retry_rejects_unknown_or_foreign_history_entries(pool: PgPool) {
+    let deck = Uuid::new_v4();
+    let other = Uuid::new_v4();
+    let foreign_run = Uuid::new_v4();
+    sqlx::query("INSERT INTO decks(id,name) VALUES($1,'Linked'),($2,'Other')")
+        .bind(deck)
+        .bind(other)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO anki_auto_sync(deck_id,link_id,profile,collection_key)
+                 VALUES($1,gen_random_uuid(),'Profile','key')",
+    )
+    .bind(deck)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO anki_sync_history(id,deck_id,profile,received_reviews,sent_reviews,outcome,problem,error_detail)
+                 VALUES($1,$2,'Profile',0,0,'failed','conflict','Profile changed')")
+        .bind(foreign_run).bind(other).execute(&pool).await.unwrap();
+    let app = api::router(api::AppState::new(
+        pool.clone(),
+        Engine::new("unused".into()),
+    ));
+    let path = format!("/api/decks/{deck}/anki-auto-sync/action");
+    let _anki_guard = ANKI_CONNECT_TESTS.lock().await;
+    for id in [foreign_run, Uuid::new_v4()] {
+        let (status, _) = call(
+            app.clone(),
+            "POST",
+            &path,
+            json!({"action":"sync_now","retry_of":id}),
+        )
+        .await;
+        assert_eq!(status, 409);
+    }
+    assert_eq!(
+        call(
+            app,
+            "GET",
+            &format!("/api/decks/{deck}/anki-auto-sync/history"),
+            Value::Null
+        )
+        .await,
+        (200, json!([]))
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn anki_sync_history_is_scoped_and_bounded(pool: PgPool) {
+    let deck = Uuid::new_v4();
+    let other = Uuid::new_v4();
+    sqlx::query("INSERT INTO decks(id,name) VALUES($1,'Linked'),($2,'Other')")
+        .bind(deck)
+        .bind(other)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO anki_auto_sync(deck_id,link_id,profile,collection_key)
+         VALUES($1,$2,'Test profile','test-key')",
+    )
+    .bind(deck)
+    .bind(Uuid::new_v4())
+    .execute(&pool)
+    .await
+    .unwrap();
+    let app = api::router(api::AppState::new(
+        pool.clone(),
+        Engine::new("unused".into()),
+    ));
+    let path = |id| format!("/api/decks/{id}/anki-auto-sync/history");
+    assert_eq!(
+        call(app.clone(), "GET", &path(deck), Value::Null).await,
+        (200, json!([]))
+    );
+    sqlx::query(
+        "INSERT INTO anki_sync_history(deck_id,profile,finished_at,received_reviews,sent_reviews,outcome,problem,error_detail)
+         SELECT $1,'Test profile',now()-make_interval(secs=>i),2,1,'failed','timeout','Connection timed out'
+         FROM generate_series(0,100) i
+         UNION ALL SELECT $2,'Other',now(),0,0,'synced',NULL,NULL",
+    )
+    .bind(deck)
+    .bind(other)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (status, history) = call(app.clone(), "GET", &path(deck), Value::Null).await;
+    assert_eq!(status, 200);
+    let rows = history.as_array().unwrap();
+    assert_eq!(rows.len(), 100);
+    assert!(
+        rows.windows(2)
+            .all(|pair| pair[0]["finished_at"].as_str() > pair[1]["finished_at"].as_str())
+    );
+    assert!(rows.iter().all(|row| row["profile"] == "Test profile"));
+    assert_eq!(rows[0]["received_reviews"], 2);
+    assert_eq!(rows[0]["sent_reviews"], 1);
+    assert_eq!(rows[0]["problem"], "timeout");
+    assert_eq!(rows[0]["error_detail"], "Connection timed out");
+    assert_eq!(call(app, "GET", &path(other), Value::Null).await.0, 404);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn anki_overview_pause_and_resume_keep_the_link_and_counts(pool: PgPool) {
+    let deck = Uuid::new_v4();
+    let link = Uuid::new_v4();
+    sqlx::query("INSERT INTO decks(id,name) VALUES($1,'Linked')")
+        .bind(deck)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO anki_auto_sync(deck_id,link_id,profile,collection_key,received_reviews,sent_reviews)
+         VALUES($1,$2,'Test profile','test-key',2,3)",
+    )
+    .bind(deck).bind(link).execute(&pool).await.unwrap();
+    let app = api::router(api::AppState::new(
+        pool.clone(),
+        Engine::new("unused".into()),
+    ));
+    let path = format!("/api/decks/{deck}/anki-auto-sync/action");
+    for (action, expected) in [("pause", true), ("resume", false)] {
+        assert_eq!(
+            call(app.clone(), "POST", &path, json!({"action":action}))
+                .await
+                .0,
+            204
+        );
+        let (_, overview) =
+            call(app.clone(), "GET", "/api/study/anki-auto-sync", Value::Null).await;
+        assert_eq!(overview[0]["paused"], expected);
+        assert_eq!(overview[0]["received_reviews"], 2);
+        assert_eq!(overview[0]["sent_reviews"], 3);
+        if expected {
+            assert_eq!(overview[0]["status"], "paused");
+        }
+    }
+    assert_eq!(
+        sqlx::query_scalar::<_, Uuid>("SELECT link_id FROM anki_auto_sync WHERE deck_id=$1")
+            .bind(deck)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        link
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn anki_sync_overview_counts_open_errors_per_linked_deck(pool: PgPool) {
+    let linked = Uuid::new_v4();
+    let other = Uuid::new_v4();
+    let unlinked = Uuid::new_v4();
+    sqlx::query("INSERT INTO decks(id,name) VALUES($1,'Linked'),($2,'Other'),($3,'Unlinked')")
+        .bind(linked)
+        .bind(other)
+        .bind(unlinked)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO anki_auto_sync(deck_id,link_id,profile,collection_key)
+         VALUES($1,gen_random_uuid(),'Test profile','test-key'),
+               ($2,gen_random_uuid(),'Test profile','test-key')",
+    )
+    .bind(linked)
+    .bind(other)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO anki_sync_history(deck_id,profile,received_reviews,sent_reviews,outcome,problem,error_detail,resolved_at)
+         VALUES ($1,'Test profile',0,0,'failed','timeout','Open error',NULL),
+                ($1,'Test profile',0,0,'failed','timeout','Resolved error',now()),
+                ($1,'Test profile',0,0,'synced',NULL,NULL,NULL),
+                ($1,'Test profile',0,0,'no_matches',NULL,NULL,NULL),
+                ($2,'Test profile',0,0,'failed','timeout','Unlinked error',NULL)",
+    )
+    .bind(linked)
+    .bind(unlinked)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let app = api::router(api::AppState::new(
+        pool.clone(),
+        Engine::new("unused".into()),
+    ));
+    let (status, body) = call(app.clone(), "GET", "/api/study/anki-auto-sync", Value::Null).await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        body,
+        json!([{
+            "deck_id":linked,"deck_name":"Linked","profile":"Test profile",
+            "last_synced_at":null,"received_reviews":0,"sent_reviews":0,
+            "status":"checking","paused":false,"open_errors":1
+        },{
+            "deck_id":other,"deck_name":"Other","profile":"Test profile",
+            "last_synced_at":null,"received_reviews":0,"sent_reviews":0,
+            "status":"checking","paused":false,"open_errors":0
+        }])
+    );
+    sqlx::query("UPDATE anki_sync_history SET resolved_at=now() WHERE deck_id=$1 AND error_detail='Open error'")
+        .bind(linked)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (_, refreshed) = call(app, "GET", "/api/study/anki-auto-sync", Value::Null).await;
+    assert_eq!(refreshed[0]["open_errors"], 0);
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn anki_auto_sync_is_opt_in_and_can_be_disabled_offline(pool: PgPool) {
     let _anki_guard = ANKI_CONNECT_TESTS.lock().await;
     let app = api::router(api::AppState::new(pool, Engine::new("unused".into())));

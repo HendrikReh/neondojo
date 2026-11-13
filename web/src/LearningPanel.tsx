@@ -2,6 +2,7 @@ import { useProfileValue } from './useProfileValue';
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import ActionButton from './ActionButton';
 import AnkiAutoSync from './AnkiAutoSync';
+import AnkiSyncOverview from './AnkiSyncOverview';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { request, type Job } from './api';
 import { AppError } from './i18n-core';
@@ -465,7 +466,7 @@ export default function LearningWorkspace({
     if (profile?.current) setDraftFilters(profile.current.learning.filters);
   }, [profile?.generation, profile?.ready]);
   const libraryText = useDeckLibraryText();
-  const [libraryDialog, setLibraryDialog] = useState<'decks' | 'duplicates'>();
+  const [libraryDialog, setLibraryDialog] = useState<'decks' | 'duplicates' | 'anki'>();
   const [cardAction, setCardAction] = useState<CardBatchAction>();
   const [cardNotice, setCardNotice] = useState<string>();
   const [cardSelection, setCardSelection] = useState<{
@@ -1166,6 +1167,13 @@ export default function LearningWorkspace({
         )}
         {!studying && !practiceRound && (
           <>
+            <ActionButton
+              icon="refresh"
+              label={practiceT('ankiOverview')}
+              onClick={() => setLibraryDialog('anki')}
+            >
+              {practiceT('ankiOverview')}
+            </ActionButton>
             <input
               ref={externalAnkiInput}
               type="file"
@@ -1480,6 +1488,12 @@ export default function LearningWorkspace({
         <DuplicateCardsDialog
           close={() => setLibraryDialog(undefined)}
           onChanged={onChanged}
+        />
+      )}
+      {libraryDialog === 'anki' && visible && (
+        <AnkiSyncOverview
+          close={() => setLibraryDialog(undefined)}
+          onSynced={() => setHistoryRevision((value) => value + 1)}
         />
       )}
       {cardAction && (

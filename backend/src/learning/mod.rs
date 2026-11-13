@@ -1,6 +1,7 @@
 //! Shared cards power native Anki exports and the integrated FSRS trainer.
 mod anki_auto_sync;
 mod anki_connect;
+pub(crate) use anki_auto_sync::AnkiConnection;
 pub use anki_auto_sync::worker as anki_sync_worker;
 pub mod anki_flashcards;
 mod anki_import;
@@ -501,6 +502,15 @@ pub fn routes() -> Router<AppState> {
             "/api/decks/{id}/anki-auto-sync",
             get(anki_auto_sync::settings).put(anki_auto_sync::set_settings),
         )
+        .route("/api/study/anki-auto-sync", get(anki_auto_sync::overview))
+        .route(
+            "/api/decks/{id}/anki-auto-sync/history",
+            get(anki_auto_sync::history),
+        )
+        .route(
+            "/api/decks/{id}/anki-auto-sync/action",
+            post(anki_auto_sync::act),
+        )
         .route("/api/decks/{id}/import.apkg", post(anki_import::import))
         .route("/api/decks/{id}/next", get(next_card))
         .route("/api/study/learning-summary", get(learning_summary))
@@ -538,6 +548,9 @@ pub fn routes() -> Router<AppState> {
         anki_review_sync::sync,
         anki_auto_sync::settings,
         anki_auto_sync::set_settings,
+        anki_auto_sync::overview,
+        anki_auto_sync::history,
+        anki_auto_sync::act,
         anki_import::import,
         anki_flashcards::face,
         anki_flashcards::media,

@@ -2354,6 +2354,154 @@
         }
       }
     },
+    "/api/decks/{id}/anki-auto-sync/action": {
+      "post": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "act",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decks/{id}/anki-auto-sync/history": {
+      "get": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "history",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AnkiSyncHistoryEntry"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/decks/{id}/card-suggestions": {
       "get": {
         "tags": [
@@ -8548,6 +8696,29 @@
         }
       }
     },
+    "/api/study/anki-auto-sync": {
+      "get": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "overview",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LinkedAnkiDeck"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/study/anki-imports": {
       "post": {
         "tags": [
@@ -10400,6 +10571,64 @@
               "$ref": "#/components/schemas/NativePlayerStatistics"
             },
             "description": "Authoritative native statistics. Absent if the export cannot prove full coverage."
+          }
+        }
+      },
+      "AnkiSyncHistoryEntry": {
+        "type": "object",
+        "required": [
+          "id",
+          "profile",
+          "finished_at",
+          "received_reviews",
+          "sent_reviews",
+          "outcome"
+        ],
+        "properties": {
+          "error_detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "finished_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/SyncOutcome"
+          },
+          "problem": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SyncProblem"
+              }
+            ]
+          },
+          "profile": {
+            "type": "string"
+          },
+          "received_reviews": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "resolved_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "sent_reviews": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -14930,6 +15159,56 @@
           }
         }
       },
+      "LinkedAnkiDeck": {
+        "type": "object",
+        "required": [
+          "deck_id",
+          "deck_name",
+          "profile",
+          "received_reviews",
+          "sent_reviews",
+          "open_errors",
+          "paused",
+          "status"
+        ],
+        "properties": {
+          "deck_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "deck_name": {
+            "type": "string"
+          },
+          "last_synced_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "open_errors": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "profile": {
+            "type": "string"
+          },
+          "received_reviews": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sent_reviews": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OverviewStatus"
+          }
+        }
+      },
       "Machine": {
         "type": "object",
         "required": [
@@ -15877,6 +16156,24 @@
             "format": "int32"
           }
         }
+      },
+      "OverviewStatus": {
+        "type": "string",
+        "enum": [
+          "checking",
+          "paused",
+          "unreachable",
+          "other_profile",
+          "waiting",
+          "synced",
+          "no_matches",
+          "invalid_deck",
+          "conflict",
+          "timeout",
+          "anki_error",
+          "internal_error",
+          "failed"
+        ]
       },
       "PerformanceRatingSummary": {
         "type": "object",
@@ -19383,12 +19680,51 @@
         },
         "additionalProperties": false
       },
+      "SyncAction": {
+        "type": "string",
+        "enum": [
+          "sync_now",
+          "retry_open_errors",
+          "pause",
+          "resume"
+        ]
+      },
+      "SyncActionRequest": {
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/SyncAction"
+          },
+          "retry_of": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
       "SyncOutcome": {
         "type": "string",
         "enum": [
           "synced",
           "no_matches",
           "failed"
+        ]
+      },
+      "SyncProblem": {
+        "type": "string",
+        "enum": [
+          "unreachable",
+          "invalid_deck",
+          "conflict",
+          "timeout",
+          "anki_error",
+          "internal_error"
         ]
       },
       "SyncRequest": {

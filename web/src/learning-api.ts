@@ -88,6 +88,26 @@ export function syncAnkiReviews(deckId: string) {
 }
 
 export type AnkiAutoSyncSettings = Schema['AutoSyncSettings'];
+export type LinkedAnkiDeck = Schema['LinkedAnkiDeck'];
+export type AnkiSyncAction = Schema['SyncActionRequest']['action'];
+
+export function actOnAnkiSync(deckId: string, action: AnkiSyncAction, retryOf?: string) {
+  const body: Schema['SyncActionRequest'] = { action, retry_of: retryOf };
+  return request<void>(`/decks/${deckId}/anki-auto-sync/action`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export function loadAnkiSyncOverview(signal: AbortSignal) {
+  return request<LinkedAnkiDeck[]>('/study/anki-auto-sync', { signal });
+}
+
+export type AnkiSyncHistoryEntry = Schema['AnkiSyncHistoryEntry'];
+export function loadAnkiSyncHistory(deckId: string, signal: AbortSignal) {
+  return request<AnkiSyncHistoryEntry[]>(`/decks/${deckId}/anki-auto-sync/history`, { signal });
+}
 
 export function loadAnkiAutoSync(deckId: string, signal: AbortSignal) {
   return request<AnkiAutoSyncSettings>(`/decks/${deckId}/anki-auto-sync`, { signal });

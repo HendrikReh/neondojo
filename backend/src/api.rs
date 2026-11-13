@@ -33,6 +33,7 @@ pub struct AppState {
     pub shutdown: CancellationToken,
     imports: Arc<Semaphore>,
     pub(crate) backup: Arc<crate::database_backup::Access>,
+    pub(crate) anki_connection: Arc<crate::learning::AnkiConnection>,
 }
 
 impl AppState {
@@ -44,6 +45,7 @@ impl AppState {
             shutdown: CancellationToken::new(),
             imports: Arc::new(Semaphore::new(2)),
             backup: Arc::default(),
+            anki_connection: Arc::default(),
         }
     }
 }
