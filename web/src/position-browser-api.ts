@@ -35,6 +35,7 @@ export type PositionFilterDraft = Record<
 export type PositionBrowserPage = Required<Schema['PositionBrowserPage']>;
 export type PositionTransferStatus = Schema['PositionAddStatus'];
 export type PositionTransferResult = Schema['AddPositionsResult'];
+export type PositionAnalysisReadiness = Schema['PositionAnalysisReadiness'];
 export const positionSelectionLimit = 200;
 export const POSITION_PAGE_SIZE = 25;
 const textFields = [
@@ -194,6 +195,16 @@ export const loadPositionPage = (
 };
 export const loadPositionFilters = (signal: AbortSignal) =>
   request<SavedPositionFilter[]>('/position-filters', { signal });
+export const loadPositionAnalysisReadiness = (
+  ids: readonly string[],
+  signal: AbortSignal,
+) =>
+  request<PositionAnalysisReadiness>('/position-browser/analysis-readiness', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ position_ids: ids }),
+    signal,
+  });
 export const savePositionFilter = (
   name: string,
   definition: PositionFilterDefinition,

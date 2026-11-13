@@ -828,7 +828,7 @@ async fn native(
     .execute(pool)
     .await
     .unwrap();
-    sqlx::query("INSERT INTO move_analyses(job_id,position_uuid,game_no,decision_no,player,kind,equity_loss,data) VALUES($1,$2,$3,1,$4,'checker',$5,$6)").bind(id).bind(position.id).bind(position.game_no).bind(position.player).bind(loss).bind(json!({"best":"8/5 6/5","severity":"bad","evaluation_status":"evaluated","played_equity":0.0,"best_equity":loss,"equity_loss":loss})).execute(pool).await.unwrap();
+    sqlx::query("INSERT INTO move_analyses(job_id,position_uuid,game_no,decision_no,player,kind,equity_loss,data) VALUES($1,$2,$3,1,$4,'checker',$5,$6)").bind(id).bind(position.id).bind(position.game_no).bind(position.player).bind(loss).bind(json!({"decision_no":1,"checker_no":position.ply,"player":position.player,"kind":"checker","played":position.notation,"best":"8/5 6/5","severity":"bad","evaluation_status":"evaluated","played_equity":0.0,"best_equity":loss,"equity_loss":loss})).execute(pool).await.unwrap();
     id
 }
 
@@ -850,6 +850,18 @@ async fn native_loss_uses_highest_completed_depth_and_hints_only_mark_ready(pool
     assert_eq!(ready["items"][0]["native_error"]["equity_loss"], 0.09);
     assert_eq!(ready["items"][0]["native_error"]["severity"], "bad");
     assert_eq!(ready["items"][1]["native_error"], Value::Null);
+    let (status, readiness) = call(
+        app.clone(),
+        "POST",
+        "/api/position-browser/analysis-readiness",
+        Some(json!({"position_ids": [positions[0].id, positions[1].id, positions[2].id, positions[2].id, Uuid::new_v4()]})),
+    )
+    .await;
+    assert_eq!(status, 200, "{readiness}");
+    assert_eq!(
+        readiness,
+        json!({"analysis_required":1,"unavailable":1,"first_analysis_required":positions[2].id})
+    );
     assert_eq!(
         search(app.clone(), json!({"min_loss":0.1})).await["items"],
         json!([])
@@ -1900,4 +1912,46 @@ async fn large_game_plan_backfill_is_bounded_and_requires_retry_before_searching
         .unwrap();
     assert_eq!(count, 4096);
     assert_eq!(call(app, "GET", &path, None).await.0, 200);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn readiness_agrees_with_transfer_after_match_source_revision_changes(pool: PgPool) {
+    let (app, match_id, positions) = setup(&pool).await;
+    let id = positions[0].id;
+    native(&pool, match_id, &positions[0], 2, 0.09, "completed").await;
+    sqlx::query("UPDATE matches SET source_revision=source_revision+1 WHERE id=$1")
+        .bind(match_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (status, readiness) = call(
+        app.clone(),
+        "POST",
+        "/api/position-browser/analysis-readiness",
+        Some(json!({"position_ids":[id]})),
+    )
+    .await;
+    assert_eq!(status, 200, "{readiness}");
+    assert_eq!(readiness["analysis_required"], 1);
+    let (status, deck) = call(
+        app.clone(),
+        "POST",
+        "/api/decks",
+        Some(json!({"name":"Review probe"})),
+    )
+    .await;
+    assert!(status < 300, "{deck}");
+    let (status, transfer) = call(
+        app,
+        "POST",
+        &format!("/api/decks/{}/positions", deck["id"].as_str().unwrap()),
+        Some(json!({"position_ids":[id]})),
+    )
+    .await;
+    assert_eq!(status, 200, "{transfer}");
+    assert_eq!(
+        transfer["items"][0]["status"], "analysis_required",
+        "{transfer}"
+    );
 }

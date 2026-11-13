@@ -144,6 +144,122 @@ async fn from_position(pool: &PgPool, id: Uuid, request: &AddCards) -> ApiResult
     ))
 }
 
+/// Resolve the current native source for each visible saved position in one snapshot.
+pub(crate) async fn saved_position_cards(
+    pool: &PgPool,
+    ids: &[Uuid],
+) -> ApiResult<std::collections::HashMap<Uuid, Option<CardContent>>> {
+    #[derive(FromRow)]
+    struct Row {
+        position: sqlx::types::Json<Position>,
+        white: String,
+        black: String,
+        hint_id: Option<Uuid>,
+        hint: Option<serde_json::Value>,
+        match_job_id: Option<Uuid>,
+        match_plies: Option<i32>,
+        match_data: Option<serde_json::Value>,
+        match_engine: Option<String>,
+    }
+    let rows = sqlx::query_as::<_, Row>(&format!(
+        "SELECT to_jsonb(p) AS position,m.white,m.black,hint.id AS hint_id,hint.result AS hint,
+                native.job_id AS match_job_id,native.plies AS match_plies,
+                native.data AS match_data,native.engine AS match_engine
+         FROM positions p JOIN saved_positions saved ON saved.position_uuid=p.id
+         JOIN matches m ON m.id=p.match_uuid
+         LEFT JOIN LATERAL (
+             SELECT j.id,j.result FROM selected_engine_jobs j
+             WHERE j.position_uuid=p.id AND j.kind='analysis' AND j.status='completed'
+                 AND j.result IS NOT NULL
+             ORDER BY j.plies DESC,j.created_at DESC,j.id DESC LIMIT 1
+         ) hint ON true
+         LEFT JOIN LATERAL (
+             SELECT j.id AS job_id,j.plies,ma.data,
+                 CASE WHEN jsonb_typeof(j.result->'engine')='string'
+                 THEN j.result->>'engine' ELSE 'GNU Backgammon' END AS engine
+             FROM move_analyses ma JOIN selected_engine_jobs j ON j.id=ma.job_id
+             WHERE ma.position_uuid=p.id AND ma.kind='checker' AND ma.game_no=p.game_no
+                 AND j.kind='match' AND j.status='completed' AND j.match_uuid=m.id
+                 AND j.source_revision=m.source_revision AND (j.game_no IS NULL OR j.game_no=p.game_no)
+             ORDER BY j.plies DESC,j.created_at DESC,j.id DESC,ma.id DESC LIMIT 1
+         ) native ON hint.id IS NULL
+         WHERE p.id=ANY($1) AND {}",
+        crate::position_browser::SAVED_VISIBLE,
+    ))
+    .bind(ids)
+    .fetch_all(pool)
+    .await
+    .map_err(anyhow::Error::from)?;
+
+    let mut sources = std::collections::HashMap::with_capacity(rows.len());
+    for row in rows {
+        let position = row.position.0;
+        let id = position.id;
+        let selected = if let (Some(job), Some(value)) = (row.hint_id, row.hint) {
+            let analysis: Analysis = serde_json::from_value(value).map_err(anyhow::Error::from)?;
+            Some((
+                "analysis",
+                job,
+                position.notation.clone(),
+                CardSolution {
+                    engine: analysis.engine,
+                    plies: analysis.plies,
+                    candidates: analysis.candidates,
+                    decision: None,
+                },
+            ))
+        } else if let (Some(job), Some(plies), Some(value), Some(engine)) = (
+            row.match_job_id,
+            row.match_plies,
+            row.match_data,
+            row.match_engine,
+        ) {
+            let decision: Decision = serde_json::from_value(value).map_err(anyhow::Error::from)?;
+            Some((
+                "match",
+                job,
+                decision.played.clone(),
+                CardSolution {
+                    engine,
+                    plies,
+                    candidates: vec![],
+                    decision: Some(decision),
+                },
+            ))
+        } else {
+            None
+        };
+        sources.insert(
+            id,
+            selected.and_then(|(kind, job_id, played, solution)| {
+                if !has_usable_checker_solution(&solution) {
+                    return None;
+                }
+                Some(CardContent {
+                    kind: "checker".into(),
+                    prompt: prompt("checker").into(),
+                    played,
+                    source: CardSource {
+                        kind: kind.into(),
+                        job_id,
+                        match_id: position.match_uuid,
+                        position_id: Some(id),
+                        game_no: position.game_no,
+                        decision_no: solution
+                            .decision
+                            .as_ref()
+                            .map(|decision| decision.decision_no),
+                    },
+                    solution,
+                    position,
+                    players: [row.white, row.black],
+                })
+            }),
+        );
+    }
+    Ok(sources)
+}
+
 #[derive(FromRow)]
 struct DecisionRow {
     position_uuid: Option<Uuid>,

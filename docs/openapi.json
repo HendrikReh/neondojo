@@ -7111,6 +7111,46 @@
         }
       }
     },
+    "/api/position-browser/analysis-readiness": {
+      "post": {
+        "tags": [
+          "Positions"
+        ],
+        "operationId": "analysis_readiness",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddPositions"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PositionAnalysisReadiness"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/position-filters": {
       "get": {
         "tags": [
@@ -17217,6 +17257,30 @@
           "analysis_required",
           "not_found"
         ]
+      },
+      "PositionAnalysisReadiness": {
+        "type": "object",
+        "required": [
+          "analysis_required",
+          "unavailable"
+        ],
+        "properties": {
+          "analysis_required": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "first_analysis_required": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "unavailable": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
       },
       "PositionAnalysisState": {
         "type": "string",

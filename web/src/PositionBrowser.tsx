@@ -4,7 +4,15 @@ import ActionButton from './ActionButton';
 import SearchPagination from './SearchPagination';
 import { SearchResultList } from './SearchResultList';
 import { useSearchPages } from './useSearchPages';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { request } from './api';
 import { removePositionBookmark } from './position-bookmark-api';
 import { useI18n } from './i18n';
@@ -82,6 +90,7 @@ export default function PositionBrowser({
     [preview, setPreview] = useState<{ page: number; id: string }>(),
     [selectedHits, setSelectedHits] = useState<PositionBrowserHit[]>([]),
     [transferBusy, setTransferBusy] = useState(false),
+    [transferOpen, setTransferOpen] = useState(false),
     [removing, setRemoving] = useState(false),
     [removeError, setRemoveError] = useState<unknown>(),
     [databaseError, setDatabaseError] = useState<unknown>(),
@@ -113,6 +122,7 @@ export default function PositionBrowser({
   useEffect(() => {
     setPreview(undefined);
     setSelectedHits([]);
+    setTransferOpen(false);
   }, [scope]);
   const loadPage = useCallback(
     (signal: AbortSignal, page: number) =>
@@ -143,16 +153,55 @@ export default function PositionBrowser({
     () => new Set(selectedHits.map((hit) => hit.position.id)),
     [selectedHits],
   );
+  const selectionMenuId = useId();
+  const selectionMenuButton = useRef<HTMLButtonElement>(null);
+  const selectionMenu = useRef<HTMLDivElement>(null);
+  const [selectionMenuOpen, setSelectionMenuOpen] = useState(false);
+  useLayoutEffect(() => {
+    const menu = selectionMenu.current;
+    const trigger = selectionMenuButton.current;
+    if (!selectionMenuOpen || !menu || !trigger) return;
+    const gap = 4;
+    const edge = 8;
+    const positionMenu = () => {
+      const bounds = trigger.getBoundingClientRect();
+      const below = bounds.bottom + gap;
+      const top =
+        below + menu.offsetHeight <= window.innerHeight - edge
+          ? below
+          : Math.max(edge, bounds.top - menu.offsetHeight - gap);
+      const left = Math.max(
+        edge,
+        Math.min(bounds.left, window.innerWidth - menu.offsetWidth - edge),
+      );
+      menu.style.top = `${top}px`;
+      menu.style.left = `${left}px`;
+      menu.style.visibility = 'visible';
+    };
+    positionMenu();
+    const observer = new ResizeObserver(positionMenu);
+    observer.observe(menu);
+    if (trigger.parentElement) observer.observe(trigger.parentElement);
+    window.addEventListener('resize', positionMenu);
+    window.addEventListener('scroll', positionMenu, true);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', positionMenu);
+      window.removeEventListener('scroll', positionMenu, true);
+      menu.style.removeProperty('visibility');
+    };
+  }, [selectionMenuOpen]);
+  const selectPage = useRef<HTMLInputElement>(null);
   function changeSelection(ids: string[], checked: boolean) {
-    const next = togglePositionSelection(selected, ids, checked);
-    setSelectedHits([
-      ...selectedHits.filter(
-        (hit) =>
-          next.has(hit.position.id) &&
-          !items.some((item) => item.position.id === hit.position.id),
-      ),
-      ...items.filter((hit) => next.has(hit.position.id)),
-    ]);
+    setSelectedHits((previous) => {
+      const byId = new Map(previous.map((hit) => [hit.position.id, hit]));
+      const next = togglePositionSelection(new Set(byId.keys()), ids, checked);
+      for (const hit of items) byId.set(hit.position.id, hit);
+      return [...next].flatMap((id) => {
+        const hit = byId.get(id);
+        return hit ? [hit] : [];
+      });
+    });
   }
   function apply(next: PositionFilterDraft) {
     try {
@@ -230,6 +279,10 @@ export default function PositionBrowser({
     }
   }
   const busy = loading || transferBusy || removing;
+  useEffect(() => {
+    if (!visible || busy || !selected.size)
+      selectionMenu.current?.hidePopover();
+  }, [visible, busy, selected.size]);
   return (
     <section className="position-browser" aria-label={p('title')}>
       <div className="position-browser-heading">
@@ -286,23 +339,70 @@ export default function PositionBrowser({
           />
         }
       >
-        <div className="position-selection-summary">
-          <strong>{p('selected', { count: selected.size })}</strong>
+        <div
+          className="position-selection-summary position-selection-actions"
+          hidden={!selected.size}
+          aria-label={p('selectionLimit')}
+          role="group"
+        >
+          <strong aria-live="polite">
+            {p('selected', { count: selected.size })}
+          </strong>
+          <ActionButton
+            icon="add"
+            label={p('addToDeck')}
+            type="button"
+            className="primary"
+            disabled={busy}
+            onClick={() => setTransferOpen(true)}
+          />
           <ActionButton
             icon="clear"
             label={p('clearSelection')}
-            compact
-            disabled={!selected.size || busy}
-            onClick={() => changeSelection([...selected], false)}
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              changeSelection([...selected], false);
+              selectPage.current?.focus();
+            }}
           />
           <ActionButton
-            icon="delete"
-            label={p(removing ? 'removing' : 'removeSelected')}
+            ref={selectionMenuButton}
+            icon="more"
+            label={p('moreSelectionActions')}
             compact
-            disabled={!selected.size || busy}
-            onClick={() => void removeSaved([...selected])}
+            type="button"
+            popoverTarget={selectionMenuId}
+            disabled={busy}
           />
-          <small>{p('selectionLimit')}</small>
+          <div
+            id={selectionMenuId}
+            ref={selectionMenu}
+            popover="auto"
+            className="position-selection-menu"
+            onToggle={(event) =>
+              setSelectionMenuOpen(event.newState === 'open')
+            }
+            onKeyDown={(event) => {
+              if (event.key !== 'Escape') return;
+              event.preventDefault();
+              event.stopPropagation();
+              selectionMenu.current?.hidePopover();
+              selectionMenuButton.current?.focus();
+            }}
+          >
+            <ActionButton
+              icon="delete"
+              label={p(removing ? 'removing' : 'removeSaved')}
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                selectionMenu.current?.hidePopover();
+                selectionMenuButton.current?.focus();
+                void removeSaved([...selected]);
+              }}
+            />
+          </div>
         </div>
         {loading && <p role="status">{p('loading')}</p>}
         {!items.length && !loading && !error ? (
@@ -321,6 +421,7 @@ export default function PositionBrowser({
             previewId={activePreview?.position.id}
             onPreview={(id) => setPreview({ page: results.page, id })}
             onToggle={changeSelection}
+            selectPageRef={selectPage}
             onOpen={onOpenPosition}
             onRemove={(ids) => void removeSaved(ids)}
             busy={busy}
@@ -350,6 +451,8 @@ export default function PositionBrowser({
           revision={deckRevision}
           selected={selected}
           hits={selectedHits}
+          transferOpen={visible && transferOpen}
+          onCloseTransfer={() => setTransferOpen(false)}
           onChanged={onDeckChanged}
           onStudy={onStudy}
           onOpen={onOpenPosition}

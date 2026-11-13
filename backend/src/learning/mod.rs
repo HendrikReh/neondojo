@@ -16,7 +16,7 @@ mod suggestions;
 mod topics;
 mod transfer;
 use crate::practice::evaluation::{self, PracticeAnswer, PracticeEvaluation, SavedEvaluation};
-pub(crate) use content::saved_checker_move;
+pub(crate) use content::{saved_checker_move, saved_position_cards};
 pub use search::{
     CardBrowseContext, CardBrowseItem, CardDeck, CardKind, CardQuery, CardReviewState,
 };
@@ -127,6 +127,14 @@ pub struct AddPositions {
     /// Saved position UUIDs in selection order. Every occurrence receives an outcome.
     #[schema(min_items = 1, max_items = 200)]
     pub position_ids: Vec<Uuid>,
+}
+impl AddPositions {
+    pub(crate) fn validated_ids(self) -> ApiResult<Vec<Uuid>> {
+        if !(1..=200).contains(&self.position_ids.len()) {
+            return Err(ApiError::invalid("position_ids must contain 1..200 UUIDs"));
+        }
+        Ok(self.position_ids)
+    }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -286,7 +294,7 @@ pub struct ExportQuery {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct CardContent {
+pub(crate) struct CardContent {
     kind: String,
     position: Position,
     players: [String; 2],
@@ -778,49 +786,30 @@ async fn add_positions(
     LearningJson(body): LearningJson<AddPositions>,
 ) -> ApiResult<Json<AddPositionsResult>> {
     require_deck(&state.pool, id).await?;
-    if !(1..=200).contains(&body.position_ids.len()) {
-        return Err(ApiError::invalid("position_ids must contain 1..200 UUIDs"));
-    }
+    let ids = body.validated_ids()?;
+    let sources = saved_position_cards(&state.pool, &ids).await?;
     let mut unique = BTreeMap::new();
-    let mut items = Vec::with_capacity(body.position_ids.len());
-    let mut resolved = Vec::with_capacity(body.position_ids.len());
-    for position_id in body.position_ids {
-        let request = AddCards {
-            game_no: None,
-            position_id: Some(position_id),
-            job_id: None,
-            min_loss: None,
-            player: None,
-            tags: Vec::new(),
-        };
-        // Use the same native-source selection and solutions as single-card imports.
-        // Only expected missing/unanalysed sources become item outcomes; database or
-        // malformed native-result errors must fail the whole request before any writes.
-        let (status, message, source) = match content::from_source(&state.pool, &request).await {
-            Ok(mut contents) => {
-                let content = contents.pop().ok_or_else(|| {
-                    ApiError::from(anyhow::anyhow!("Position source returned no learning card"))
-                })?;
-                if !has_usable_checker_solution(&content.solution) {
-                    (
-                        PositionAddStatus::AnalysisRequired,
-                        Some("Analyze this position again; its selected native analysis has no usable checker solution".into()),
-                        None,
-                    )
-                } else {
-                    let signature = card_signature(&content);
-                    let first = !unique.contains_key(&signature);
-                    unique.entry(signature.clone()).or_insert(content);
-                    (PositionAddStatus::Duplicate, None, Some((signature, first)))
-                }
+    let mut items = Vec::with_capacity(ids.len());
+    let mut resolved = Vec::with_capacity(ids.len());
+    for position_id in ids {
+        let (status, message, source) = match sources.get(&position_id) {
+            Some(Some(content)) => {
+                let signature = card_signature(content);
+                let first = !unique.contains_key(&signature);
+                unique
+                    .entry(signature.clone())
+                    .or_insert_with(|| content.clone());
+                (PositionAddStatus::Duplicate, None, Some((signature, first)))
             }
-            Err(ApiError(StatusCode::NOT_FOUND, message)) => {
-                (PositionAddStatus::NotFound, Some(message), None)
-            }
-            Err(ApiError(StatusCode::UNPROCESSABLE_ENTITY, message)) => {
-                (PositionAddStatus::AnalysisRequired, Some(message), None)
-            }
-            Err(error) => return Err(error),
+            Some(None) => (
+                PositionAddStatus::AnalysisRequired,
+                Some(
+                    "Analyze this position or complete its game or match analysis before adding it"
+                        .into(),
+                ),
+                None,
+            ),
+            None => (PositionAddStatus::NotFound, Some("Not found".into()), None),
         };
         items.push(PositionAddItem {
             position_id,

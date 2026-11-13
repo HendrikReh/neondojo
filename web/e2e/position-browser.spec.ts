@@ -257,6 +257,75 @@ test('paging previews the first result and keeps checkbox selections across page
   );
 });
 
+test('selection actions open a transfer dialog with the missing local analysis count', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  const f = await fixture(page);
+  const pane = await openBrowser(page, f.database.id);
+  const actions = pane.locator('.position-selection-summary');
+  const add = actions.getByRole('button', { name: 'Add to deck', exact: true });
+  await expect(actions).toBeHidden();
+  await pane.getByLabel('Select this page', { exact: true }).check();
+  await expect(actions).toContainText('2 selected');
+  await expect(
+    actions.getByRole('button', { name: 'Remove from collection' }),
+  ).toHaveCount(0);
+  await add.click();
+  const dialog = page.getByRole('dialog', { name: 'Add to deck', exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('Still need local analysis: 2 of 2');
+  await expect(
+    dialog.getByRole('button', { name: 'Open analysis', exact: true }),
+  ).toBeEnabled();
+  await expect(
+    dialog.getByRole('button', { name: 'Add selected positions', exact: true }),
+  ).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('add-to-deck.png') });
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(add).toBeFocused();
+  const more = actions.getByRole('button', { name: 'More selection actions' });
+  await more.press('Enter');
+  const remove = actions.getByRole('button', {
+    name: 'Remove from collection',
+  });
+  await expect(remove).toBeVisible();
+  const buttonBounds = (await more.boundingBox())!;
+  const menuBounds = (await pane
+    .locator('.position-selection-menu')
+    .boundingBox())!;
+  expect(Math.abs(menuBounds.x - buttonBounds.x)).toBeLessThan(2);
+  expect(
+    Math.abs(menuBounds.y - buttonBounds.y - buttonBounds.height - 4),
+  ).toBeLessThan(2);
+  await remove.press('Escape');
+  await expect(remove).toHaveCount(0);
+  await expect(more).toBeFocused();
+  await actions.getByRole('button', { name: 'Clear selection' }).click();
+  await expect(actions).toBeHidden();
+  const selectPage = pane.getByLabel('Select this page', { exact: true });
+  await expect(selectPage).not.toBeChecked();
+  await expect(selectPage).toBeFocused();
+});
+
+test('transfer checks positions in selection order', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  const f = await fixture(page);
+  const pane = await openBrowser(page, f.database.id);
+  const rows = pane.locator('.position-table tbody tr');
+  await expect(rows).toHaveCount(2);
+  const first = await rows.nth(0).getAttribute('data-position-id');
+  const second = await rows.nth(1).getAttribute('data-position-id');
+  await rows.nth(1).getByRole('checkbox').check();
+  await rows.nth(0).getByRole('checkbox').check();
+  const readiness = page.waitForRequest('**/api/position-browser/analysis-readiness');
+  await pane.getByRole('button', { name: 'Add to deck', exact: true }).click();
+  expect((await readiness).postDataJSON()).toEqual({
+    position_ids: [second, first],
+  });
+});
+
 test('deck memberships refresh on later result pages and retain existing column widths', async ({
   page,
 }) => {
@@ -297,6 +366,7 @@ test('deck memberships refresh on later result pages and retain existing column 
     .toBe('completed');
   const pane = await openBrowser(page, f.database.id);
   await expect(pane.locator('.position-table tbody tr')).toHaveCount(25);
+  await showPositionColumns(pane, 'Decks');
   await pane.getByRole('button', { name: 'Next page', exact: true }).click();
   await expect(pane.locator('.position-table tbody tr')).toHaveCount(3);
   const row = pane.locator(`tr[data-position-id="${target.id}"]`);
@@ -311,18 +381,22 @@ test('deck memberships refresh on later result pages and retain existing column 
     );
   const suffix = crypto.randomUUID(),
     names = [`Zulu ${suffix}`, `Alpha ${suffix}`];
+  const dialog = page.getByRole('dialog', { name: 'Add to deck', exact: true });
   for (const name of names) {
-    await pane.getByLabel('New deck name', { exact: true }).fill(name);
     await pane
+      .getByRole('button', { name: 'Add to deck', exact: true })
+      .click();
+    await dialog.getByLabel('New deck name', { exact: true }).fill(name);
+    await dialog
       .getByRole('button', { name: 'Create deck', exact: true })
       .click();
     await expect(
-      pane
+      dialog
         .getByRole('combobox', { name: 'Choose deck', exact: true })
         .locator('option:checked'),
     ).toHaveText(name);
-    await pane
-      .getByRole('button', { name: 'Add selected positions', exact: true })
+    await dialog
+      .getByRole('button', { name: 'Add 1 position', exact: true })
       .click();
     await expect(row.locator('.position-row-decks')).toContainText(name);
     await expect(row.getByRole('checkbox')).toBeChecked();
@@ -337,9 +411,10 @@ test('deck memberships refresh on later result pages and retain existing column 
     .join(', ');
   await expect(row.locator('.position-row-decks')).toHaveText(expected);
   await row.focus();
-  await expect(page.getByRole('tooltip')).toContainText('Decks: Alpha');
-  await pane
-    .getByRole('button', { name: 'Add selected positions', exact: true })
+  await expect(row).toHaveAccessibleDescription(/Decks: Alpha/);
+  await pane.getByRole('button', { name: 'Add to deck', exact: true }).click();
+  await dialog
+    .getByRole('button', { name: 'Add 1 position', exact: true })
     .click();
   await expect(pane.locator('[data-transfer-status="duplicate"]')).toHaveCount(
     1,
@@ -493,28 +568,13 @@ test('found positions flow through real analysis, partial card transfer, Anki ex
   await expect(rows).toHaveCount(2);
   await pane.getByLabel('Select this page', { exact: true }).check();
   const deckName = `Position deck ${crypto.randomUUID()}`;
-  await pane.getByLabel('New deck name', { exact: true }).fill(deckName);
-  await pane.getByRole('button', { name: 'Create deck', exact: true }).click();
-  await expect(
-    pane.getByRole('combobox', { name: 'Choose deck', exact: true }),
-  ).toContainText(deckName);
-  await pane
-    .getByRole('button', { name: 'Add selected positions', exact: true })
-    .click();
-  await expect(
-    pane.locator('[data-transfer-status="analysis_required"]'),
-  ).toHaveCount(2);
-  await expect(
-    pane.getByRole('button', {
-      name: 'Download entire deck as Anki',
-      exact: true,
-    }),
-  ).toBeDisabled();
-  await rows.first().locator('.position-player').click();
-  await pane
-    .locator('.position-preview')
+  const dialog = page.getByRole('dialog', { name: 'Add to deck', exact: true });
+  await pane.getByRole('button', { name: 'Add to deck', exact: true }).click();
+  await expect(dialog).toContainText('Still need local analysis: 2 of 2');
+  await dialog
     .getByRole('button', { name: 'Open analysis', exact: true })
     .click();
+  await expect(dialog).toBeHidden();
   await expect(page.locator('.position-code code')).toHaveText(
     f.positions[0].position_id,
   );
@@ -528,11 +588,23 @@ test('found positions flow through real analysis, partial card transfer, Anki ex
   ).toBeVisible();
   await page.getByRole('tab', { name: 'Positions', exact: true }).click();
   await expect(rows).toHaveCount(2);
-  await expect(rows.first().locator('.position-analysis-needed')).toHaveCount(
-    0,
+  await expect(pane.locator('.position-selection-summary')).toContainText(
+    '2 selected',
   );
-  await pane
-    .getByRole('button', { name: 'Add selected positions', exact: true })
+  await expect(
+    pane.locator('.position-preview .position-analysis-needed'),
+  ).toHaveCount(0);
+  await pane.getByRole('button', { name: 'Add to deck', exact: true }).click();
+  await expect(dialog).toContainText('Still need local analysis: 1 of 2');
+  await dialog.getByLabel('New deck name', { exact: true }).fill(deckName);
+  await dialog
+    .getByRole('button', { name: 'Create deck', exact: true })
+    .click();
+  await expect(
+    dialog.getByRole('combobox', { name: 'Choose deck', exact: true }),
+  ).toContainText(deckName);
+  await dialog
+    .getByRole('button', { name: 'Add 1 position', exact: true })
     .click();
   await expect(pane.locator('[data-transfer-status="added"]')).toHaveCount(1);
   await expect(
