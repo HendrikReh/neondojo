@@ -108,6 +108,13 @@ async fn real_native_analysis_flows_into_answer_hidden_checker_and_cube_practice
                         (answer["equity_loss"].as_f64().unwrap() - opening_loss).abs() < 0.000002,
                         "{answer}"
                     );
+                    let (status, checked) = call(&app, "POST", "/api/study/mistakes/attempt", json!({
+                        "reference":question["reference"], "answer":{"kind":"checker","steps":[{"from":8,"to":7},{"from":8,"to":5}]}
+                    })).await;
+                    assert_eq!(status, 200, "{checked}");
+                    assert_eq!(checked["evaluation"]["provenance"]["kind"], "recomputed");
+                    assert_eq!(checked["evaluation"]["best"], "8/5 6/5");
+                    assert!(checked["evaluation"]["equity_loss"].as_f64().unwrap() > 0.25);
                 }
                 if question["kind"] == "cube_response" {
                     response_seen = true;
@@ -122,6 +129,12 @@ async fn real_native_analysis_flows_into_answer_hidden_checker_and_cube_practice
                     assert_eq!(bytes[0] & 0x0f, 0, "cube exponent stays at pre-offer value");
                     assert_eq!(answer["played"], "drop");
                     assert_eq!(answer["best"], "take");
+                    let (status, checked) = call(&app, "POST", "/api/study/mistakes/attempt", json!({
+                        "reference":question["reference"], "answer":{"kind":"cube_response","action":"take"}
+                    })).await;
+                    assert_eq!(status, 200, "{checked}");
+                    assert_eq!(checked["evaluation"]["verdict"], "best");
+                    assert_eq!(checked["evaluation"]["equity_loss"], 0.0);
                 }
             }
         }

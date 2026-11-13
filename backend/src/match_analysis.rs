@@ -6,7 +6,6 @@ use crate::import::{
 };
 use crate::model::MoveSeverity;
 use anyhow::{Context, Result, ensure};
-use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
@@ -396,6 +395,29 @@ fn moves(nodes: &[Node]) -> Result<Vec<(i32, &str, &Node)>> {
     Ok(moves)
 }
 
+pub(crate) fn normalized_loss(played: f64, best: f64) -> f64 {
+    // GNUbg exports six decimals. Use the same precision for classification
+    // and filter boundaries instead of exposing binary subtraction noise.
+    (((best - played) * 1_000_000.0).round() / 1_000_000.0).max(0.0)
+}
+
+/// Check that a saved native decision contains a consistent pair of equities.
+pub(crate) fn evaluated_equities(d: &Decision) -> Option<(f64, f64)> {
+    let (played, best) = d.played_equity.zip(d.best_equity)?;
+    (d.evaluation_status == "evaluated"
+        && (0..=1).contains(&d.player)
+        && matches!(d.kind.as_str(), "checker" | "cube")
+        && !d.best.trim().is_empty()
+        && !d.played.trim().is_empty()
+        && d.equity_loss.is_finite()
+        && d.equity_loss >= 0.0
+        && played.is_finite()
+        && best.is_finite()
+        && best >= played - 0.000001
+        && (d.equity_loss - (best - played).max(0.0)).abs() <= 0.000001000001)
+        .then_some((played, best))
+}
+
 pub(crate) fn decision(
     player: i32,
     kind: &str,
@@ -403,11 +425,7 @@ pub(crate) fn decision(
     best: &str,
     equities: Option<(f64, f64)>,
 ) -> Decision {
-    // GNUbg exports six decimals; preserve that precision at classification and
-    // database filter boundaries instead of exposing binary subtraction noise.
-    let loss = equities.map_or(0.0, |(played, best)| {
-        (((best - played) * 1_000_000.0).round() / 1_000_000.0).max(0.0)
-    });
+    let loss = equities.map_or(0.0, |(played, best)| normalized_loss(played, best));
     Decision {
         decision_no: 0,
         checker_no: None,
@@ -461,27 +479,11 @@ pub(crate) fn cube_options(
 }
 
 fn cube_decision(block: &str, player: i32, played: &str) -> Result<Decision> {
-    static PATTERN: OnceLock<Regex> = OnceLock::new();
-    let pattern = PATTERN.get_or_init(|| {
-        Regex::new(r"(?m)^\s*\d\. (No double|Double, take|Double, pass)\s+([+-]?[0-9]+\.[0-9]+)")
-            .unwrap()
-    });
-    let mut equities = std::collections::BTreeMap::new();
-    for row in pattern.captures_iter(block) {
-        ensure!(
-            equities
-                .insert(row[1].to_owned(), number(&row[2])?)
-                .is_none(),
-            "Duplicate native cube equity"
-        );
-    }
-    ensure!(
-        equities.len() == 3,
-        "GNUbg returned incomplete cube analysis"
-    );
-    let no_double = equities["No double"];
-    let mut take = equities["Double, take"];
-    let mut pass = equities["Double, pass"];
+    let crate::engine::CubeEquities {
+        no_double,
+        mut take,
+        mut pass,
+    } = crate::engine::parse_cube_equities(block)?;
     // A pass loses one pre-offer cube unit for the responder. Older
     // GNUbg exports use the doubler's perspective, where it is positive.
     if matches!(played, "take" | "drop") && pass > 0.0 {
@@ -505,22 +507,21 @@ fn cube_decision(block: &str, player: i32, played: &str) -> Result<Decision> {
 /// https://sources.debian.org/src/gnubg/1.05.002-2/analysis.c/
 /// https://sources.debian.org/src/gnubg/1.05.002-2/eval.c/
 pub(crate) fn requires_cube_analysis(position: &crate::import::ImportedPosition) -> Result<bool> {
-    if position.board.as_slice() == crate::import::sgf::initial_board() {
+    cube_analysis_available(&position.board, &position.match_id, position.player)
+}
+
+pub(crate) fn cube_analysis_available(board: &[i32], match_id: &str, player: i32) -> Result<bool> {
+    if board == crate::import::sgf::initial_board() {
         return Ok(false);
     }
-    let id = STANDARD_NO_PAD.decode(&position.match_id)?;
-    ensure!(id.len() == 9, "Invalid imported Match ID");
-    let bits = |offset: usize, width: usize| -> i32 {
-        (0..width).fold(0, |value, i| {
-            value | (i32::from((id[(offset + i) / 8] >> ((offset + i) % 8)) & 1) << i)
-        })
-    };
+    let id = crate::import::ids::MatchId::decode(match_id).context("Invalid imported Match ID")?;
+    let bits = |offset, width| id.bits(offset, width);
     let owner = bits(4, 2);
-    if bits(7, 1) != 0 || (owner != 3 && owner != position.player) {
+    if bits(7, 1) != 0 || (owner != 3 && owner != player) {
         return Ok(false);
     }
     let length = bits(21, 15);
-    let score = bits(36 + 15 * position.player as usize, 15);
+    let score = bits(36 + 15 * player as usize, 15);
     let cube = 1 << bits(0, 4);
     Ok(length == 0 || score + cube < length)
 }

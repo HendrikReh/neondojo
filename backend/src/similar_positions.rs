@@ -1,10 +1,10 @@
 //! Rank library checker positions by the number of checker-pips separating their boards.
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
-    import::sgf::apply_checker_turn,
     model::Position,
     move_assessments::after_play,
     play::PlayStep,
+    practice::{EVALUATION, checker_turn},
     store,
 };
 use axum::{
@@ -26,8 +26,6 @@ mod history;
 pub(crate) use history::SimilarPracticeHistoryDoc;
 
 const RESULT_LIMIT: usize = 50;
-// Serialize on-demand practice evaluations without holding a database lock.
-static EVALUATION: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 const REVIEW_BLOCKED: &str = "EXISTS(SELECT 1 FROM play_sessions live
     WHERE live.library_match_id=m.id AND coalesce(live.state->>'play_mode','competition')='competition'
       AND live.state->>'phase'<>'match_over'
@@ -262,7 +260,7 @@ async fn score(
 ) -> ApiResult<Json<CheckerPracticeScore>> {
     let Json(input) = input.map_err(|error| ApiError::invalid(error.body_text()))?;
     let position = practice_position(&state, id).await?;
-    let after = practice_turn(&position, &input.steps)
+    let after = checker_turn(&position, &input.steps)
         .ok_or_else(|| ApiError::invalid("Play a complete legal checker move"))?;
 
     let _evaluation = EVALUATION.lock().await;
@@ -296,46 +294,8 @@ async fn score(
         played: played.notation.clone(),
         best_equity: best.equity,
         played_equity: played.equity,
-        equity_loss: ((best.equity - played.equity) * 1e6).round().max(0.0) / 1e6,
+        equity_loss: crate::match_analysis::normalized_loss(played.equity, best.equity),
     }))
-}
-
-fn practice_turn(position: &Position, steps: &[PlayStep]) -> Option<[i32; 26]> {
-    if steps.len() > 4 || !matches!(position.player, 0 | 1) {
-        return None;
-    }
-    let white = position.player == 0;
-    let (bar, off) = if white { (25, -1) } else { (0, 26) };
-    let relative = |point| {
-        if white {
-            point as usize
-        } else {
-            (25 - point) as usize
-        }
-    };
-    let pairs = steps
-        .iter()
-        .map(|step| {
-            let from = match step.from {
-                from if from == bar => 25,
-                from @ 1..=24 => relative(from),
-                _ => return None,
-            };
-            let to = match step.to {
-                to if to == off => 0,
-                to @ 1..=24 => relative(to),
-                _ => return None,
-            };
-            Some((from, to))
-        })
-        .collect::<Option<Vec<_>>>()?;
-    apply_checker_turn(
-        position.board.as_slice().try_into().ok()?,
-        position.player,
-        position.dice.as_slice().try_into().ok()?,
-        &pairs,
-    )
-    .ok()
 }
 
 async fn checker_answer(state: &AppState, position: &Position) -> ApiResult<CheckerPracticeAnswer> {

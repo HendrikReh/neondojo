@@ -76,3 +76,20 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.study-card .play-actions {
+  margin-top: 12px;
+}
+.cube-practice-choices button[aria-pressed='true'] {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+  background: var(--ui-surface-alt);
+}
+.study-card h3:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 3px;
+}
+.study-attempt-result + .study-solution-source {
+  margin-top: 14px;
+  padding-top: 8px;
+  border-top: 1px solid var(--ui-border);
+}

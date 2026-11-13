@@ -385,7 +385,7 @@ pub(super) async fn analyze_decision(
                 action: "move".into(),
                 move_index: Some(index),
                 notation: candidate.notation,
-                loss: ((best - candidate.equity) * 1e6).round().max(0.0) / 1e6,
+                loss: crate::match_analysis::normalized_loss(candidate.equity, best),
                 equity: Some(candidate.equity),
                 probabilities: Some(candidate.probabilities),
             });
@@ -396,17 +396,11 @@ pub(super) async fn analyze_decision(
         );
         return Ok(alternatives);
     }
-    let pattern = regex::Regex::new(
-        r"(?m)^\s*\d\. (No double|Double, take|Double, pass)\s+([+-]?[0-9]+\.[0-9]+)",
-    )?;
-    let equities: std::collections::BTreeMap<_, f64> = pattern
-        .captures_iter(&output)
-        .map(|row| Ok((row[1].to_owned(), row[2].parse()?)))
-        .collect::<anyhow::Result<_>>()?;
-    ensure!(
-        equities.len() == 3,
-        "GNUbg returned incomplete cube analysis"
-    );
+    let crate::engine::CubeEquities {
+        no_double,
+        take,
+        pass,
+    } = crate::engine::parse_cube_equities(&output)?;
     let native_values: Vec<f64> =
         serde_json::from_slice(&tokio::fs::read(directory.path().join("cube.json")).await?)?;
     ensure!(
@@ -414,8 +408,6 @@ pub(super) async fn analyze_decision(
         "Invalid native cube values"
     );
     let close = native_close_cube(native_values[0], native_values[2]);
-    let take = equities["Double, take"];
-    let pass = equities["Double, pass"];
     let probabilities = output
         .lines()
         .find_map(|line| {
@@ -441,7 +433,7 @@ pub(super) async fn analyze_decision(
     let values = if matches!(session.phase, PlayPhase::DoubleResponse) {
         vec![("take", -take), ("drop", -pass)]
     } else {
-        vec![("roll", equities["No double"]), ("double", take.min(pass))]
+        vec![("roll", no_double), ("double", take.min(pass))]
     };
     let best = values
         .iter()
@@ -458,7 +450,7 @@ pub(super) async fn analyze_decision(
             } else {
                 action.into()
             },
-            loss: ((best - equity) * 1e6).round().max(0.0) / 1e6,
+            loss: crate::match_analysis::normalized_loss(equity, best),
             equity: Some(equity),
             probabilities: Some(probabilities.clone()),
         })

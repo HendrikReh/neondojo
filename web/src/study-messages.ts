@@ -1,4 +1,5 @@
 import { useI18n, type Locale } from './i18n';
+import { interpolate, type TranslationParams } from './i18n-core';
 const en = {
   moneySession: 'Money-game session',
   totalScore: 'Total score',
@@ -236,4 +237,159 @@ const messages: Record<Locale, Record<Key, string>> = {
 export function useStudyText() {
   const { locale } = useI18n();
   return (key: Key) => messages[locale][key];
+}
+
+const overview = {
+  tab: [
+    'Overview',
+    'Übersicht',
+    'Resumen',
+    'Vue d’ensemble',
+    'Przegląd',
+    'Panoramica',
+  ],
+  next: [
+    'Next step',
+    'Nächster Schritt',
+    'Siguiente paso',
+    'Prochaine étape',
+    'Następny krok',
+    'Prossimo passo',
+  ],
+  dueCards: [
+    'Due flashcards',
+    'Fällige Lernkarten',
+    'Tarjetas pendientes',
+    'Cartes à réviser',
+    'Fiszki do powtórki',
+    'Schede da ripassare',
+  ],
+  studyDue: [
+    'Study due cards',
+    'Fällige Karten lernen',
+    'Repasar tarjetas pendientes',
+    'Réviser les cartes dues',
+    'Powtórz zaległe fiszki',
+    'Ripassa le schede in scadenza',
+  ],
+  deck: [
+    'Next deck: {name}',
+    'Nächstes Deck: {name}',
+    'Siguiente mazo: {name}',
+    'Prochain paquet : {name}',
+    'Następna talia: {name}',
+    'Prossimo mazzo: {name}',
+  ],
+  openCards: [
+    'Open Flashcards & Anki',
+    'Lernkarten & Anki öffnen',
+    'Abrir Tarjetas y Anki',
+    'Ouvrir Cartes et Anki',
+    'Otwórz fiszki i Anki',
+    'Apri Schede e Anki',
+  ],
+  openMistakes: [
+    'Open mistake overview',
+    'Fehlerübersicht öffnen',
+    'Abrir el resumen de errores',
+    'Ouvrir le récapitulatif des erreurs',
+    'Otwórz zestawienie błędów',
+    'Apri il riepilogo degli errori',
+  ],
+  nextDue: [
+    'Next card due {date}',
+    'Nächste Karte fällig am {date}',
+    'Próxima tarjeta: {date}',
+    'Prochaine carte le {date}',
+    'Następna fiszka: {date}',
+    'Prossima scheda il {date}',
+  ],
+  emptyCards: [
+    'Add analyzed positions to a deck to start learning.',
+    'Füge einem Deck analysierte Stellungen hinzu, um zu lernen.',
+    'Añade posiciones analizadas a un mazo para empezar.',
+    'Ajoutez des positions analysées à un paquet pour commencer.',
+    'Dodaj przeanalizowane pozycje do talii, aby rozpocząć naukę.',
+    'Aggiungi posizioni analizzate a un mazzo per iniziare.',
+  ],
+  noDue: [
+    'No cards are due now.',
+    'Aktuell sind keine Karten fällig.',
+    'Ahora no hay tarjetas pendientes.',
+    'Aucune carte à réviser pour le moment.',
+    'Obecnie nie ma fiszek do powtórki.',
+    'Al momento non ci sono schede da ripassare.',
+  ],
+  practiceGroup: [
+    'Practice mistake group',
+    'Fehlergruppe üben',
+    'Practicar grupo de errores',
+    'Travailler ce groupe d’erreurs',
+    'Przećwicz grupę błędów',
+    'Esercitati su questo gruppo di errori',
+  ],
+  groupMatches: [
+    'Matches with this mistake: {count}',
+    'Partien mit diesem Fehler: {count}',
+    'Partidas con este error: {count}',
+    'Parties avec cette erreur : {count}',
+    'Mecze z tym błędem: {count}',
+    'Partite con questo errore: {count}',
+  ],
+  groupLoss: [
+    '{loss} equity lost per 100 decisions ({count} evaluated)',
+    '{loss} Equity-Verlust je 100 Entscheidungen ({count} bewertet)',
+    '{loss} de equidad perdida por 100 decisiones ({count} evaluadas)',
+    '{loss} d’équité perdue pour 100 décisions ({count} évaluées)',
+    '{loss} straty equity na 100 decyzji ({count} ocenionych)',
+    '{loss} di equity persa per 100 decisioni ({count} valutate)',
+  ],
+  coverage: [
+    'Analysis coverage: {decisions} decisions in {matches} matches',
+    'Analyseabdeckung: {decisions} Entscheidungen in {matches} Partien',
+    'Cobertura: {decisions} decisiones en {matches} partidas',
+    'Couverture : {decisions} décisions dans {matches} parties',
+    'Zakres analizy: {decisions} decyzji w {matches} meczach',
+    'Copertura: {decisions} decisioni in {matches} partite',
+  ],
+  noRecurring: [
+    'No mistake group spans at least two matches.',
+    'Keine Fehlergruppe kommt in mindestens zwei Partien vor.',
+    'Ningún grupo de errores aparece en al menos dos partidas.',
+    'Aucun groupe d’erreurs n’apparaît dans au moins deux parties.',
+    'Żadna grupa błędów nie występuje w co najmniej dwóch meczach.',
+    'Nessun gruppo di errori compare in almeno due partite.',
+  ],
+  loading: [
+    'Finding the next step…',
+    'Nächster Schritt wird ermittelt …',
+    'Buscando el siguiente paso…',
+    'Recherche de la prochaine étape…',
+    'Wyszukiwanie następnego kroku…',
+    'Ricerca del prossimo passo…',
+  ],
+  unavailable: [
+    'Recommendation unavailable. Retry the failed section below.',
+    'Empfehlung nicht verfügbar. Lade den betroffenen Bereich unten erneut.',
+    'Recomendación no disponible. Reintenta en la sección afectada.',
+    'Recommandation indisponible. Réessayez dans la section concernée.',
+    'Zalecenie niedostępne. Ponów próbę w odpowiedniej sekcji.',
+    'Suggerimento non disponibile. Riprova nella sezione interessata.',
+  ],
+  deckUnavailable: [
+    'This deck is no longer available.',
+    'Dieses Deck ist nicht mehr verfügbar.',
+    'Este mazo ya no está disponible.',
+    'Ce paquet n’est plus disponible.',
+    'Ta talia nie jest już dostępna.',
+    'Questo mazzo non è più disponibile.',
+  ],
+} satisfies Record<string, [string, string, string, string, string, string]>;
+
+const overviewLocales: Locale[] = ['en', 'de', 'es', 'fr', 'pl', 'it'];
+
+export function useStudyOverviewText() {
+  const { locale } = useI18n();
+  return (key: keyof typeof overview, params?: TranslationParams) =>
+    interpolate(overview[key][overviewLocales.indexOf(locale)], params);
 }

@@ -196,6 +196,7 @@ test('Study areas support German labels, unknown PR and arrow/Home/End navigatio
   );
   await page.goto('/');
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
+  const overview = page.getByRole('tab', { name: 'Übersicht', exact: true });
   const cards = page.getByRole('tab', {
     name: 'Lernkarten & Anki',
     exact: true,
@@ -210,8 +211,8 @@ test('Study areas support German labels, unknown PR and arrow/Home/End navigatio
   });
   await expect(archive.locator('tbody tr td').nth(6)).toHaveText('—');
   await page.keyboard.press('Home');
-  await expect(cards).toBeFocused();
-  await expect(page.locator('.learning-workspace')).toBeVisible();
+  await expect(overview).toBeFocused();
+  await expect(page.getByRole('tabpanel', { name: 'Übersicht', exact: true })).toBeVisible();
   await page.keyboard.press('End');
   const practiceHistory = page.getByRole('tab', {
     name: 'Übungsverlauf',
@@ -228,7 +229,7 @@ test('Study areas support German labels, unknown PR and arrow/Home/End navigatio
     exact: true,
   });
   await page.keyboard.press('ArrowRight');
-  await expect(cards).toBeFocused();
+  await expect(overview).toBeFocused();
   await page.keyboard.press('ArrowLeft');
   await expect(practiceHistory).toBeFocused();
   await page.keyboard.press('ArrowLeft');

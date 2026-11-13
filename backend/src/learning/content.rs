@@ -336,11 +336,6 @@ pub(crate) fn decode_board(position_id: &str, match_id: &str) -> anyhow::Result<
     Ok(board)
 }
 
-pub(super) async fn answer(pool: &PgPool, c: &CardContent) -> anyhow::Result<CardAnswer> {
-    let mut connection = pool.acquire().await?;
-    answer_on_connection(&mut connection, c).await
-}
-
 pub(super) async fn answer_on_connection(
     connection: &mut sqlx::PgConnection,
     c: &CardContent,

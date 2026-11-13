@@ -1,5 +1,34 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
 
+pub(crate) struct MatchId([u8; 9]);
+
+impl MatchId {
+    pub(crate) fn decode(id: &str) -> Option<Self> {
+        Some(Self(STANDARD_NO_PAD.decode(id).ok()?.try_into().ok()?))
+    }
+
+    pub(crate) fn bits(&self, offset: usize, width: usize) -> i32 {
+        (0..width).fold(0, |value, i| {
+            value | (i32::from((self.0[(offset + i) / 8] >> ((offset + i) % 8)) & 1) << i)
+        })
+    }
+}
+
+pub(crate) fn hide_dice(id: &str) -> Option<String> {
+    let mut bytes = MatchId::decode(id)?.0;
+    bytes[1] &= 0x7f;
+    bytes[2] &= 0xe0;
+    Some(STANDARD_NO_PAD.encode(bytes))
+}
+
+/// The native mistake browser displays a responder-oriented ID with a visual
+/// offer bit. For evaluation, restore the responder-oriented decision ID.
+pub(crate) fn without_offer_marker(id: &str) -> Option<String> {
+    let mut bytes = MatchId::decode(id)?.0;
+    bytes[1] &= !0x10;
+    Some(STANDARD_NO_PAD.encode(bytes))
+}
+
 /// GNUbg encodes the opponent's checkers first, then the player on roll.
 pub(crate) fn position_id(board: &[i32; 26], player: i32) -> String {
     let mut bytes = [0u8; 10];

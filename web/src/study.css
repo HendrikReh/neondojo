@@ -64,6 +64,51 @@
   border-radius: 10px;
   background: var(--ui-surface);
 }
+.study-overview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  max-width: 1440px;
+}
+@media (max-width: 960px) {
+  .study-overview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.study-overview .study-report-empty {
+  min-width: 0;
+  padding: 20px;
+}
+.study-overview-mistakes {
+  grid-column: 1 / -1;
+}
+.study-overview-mistakes .recurring-filters {
+  align-items: end;
+}
+.study-overview-mistakes .recurring-filters label {
+  max-width: 360px;
+}
+.study-overview-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.study-overview h1,
+.study-overview h2 {
+  margin: 0;
+}
+.study-overview-next > button {
+  margin-top: 8px;
+}
+.study-overview .study-overview-due {
+  color: var(--ui-text);
+  font-size: var(--font-size-page);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  margin: 8px 0;
+}
 .practice-history-chart {
   margin: 0 0 16px;
   padding: clamp(12px, 2vw, 20px);

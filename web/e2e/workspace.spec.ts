@@ -36,7 +36,7 @@ test('analysis-first tabs preserve the selected game, notes and database navigat
   await expect(comment).toHaveValue('Retained workspace draft');
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
   await expect(
-    page.getByRole('region', { name: 'Study', exact: true }),
+    page.getByRole('tabpanel', { name: 'Übersicht', exact: true }),
   ).toBeVisible();
   await analysisTab.click();
   await expect(page.locator('.board-heading')).toContainText('Spiel 2');

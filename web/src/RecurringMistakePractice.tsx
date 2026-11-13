@@ -1,21 +1,35 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import Board from './Board';
+import CheckerPracticeBoard, {
+  type CheckerDraft,
+} from './CheckerPracticeBoard';
+import CubePracticeChoices from './CubePracticeChoices';
+import PracticeResult from './PracticeResult';
 import { matchContext } from './boardMath';
 import ActionButton from './ActionButton';
 import PlayBoardDialog from './PlayBoardDialog';
 import { useI18n } from './i18n';
 import type { Theme } from './themes';
-import { projectMove, type BoardView } from './move-preview';
+import {
+  projectMove,
+  projectPracticeSteps,
+  type BoardView,
+} from './move-preview';
 import { useBoardReviewText } from './board-review-messages';
+import { useLearningText } from './learning-messages';
+import { usePositionText } from './position-browser-messages';
+import type { PracticeAnswer } from './learning-api';
 import { useMistakeText } from './recurring-mistakes-messages';
 import {
   mistakeProvenance,
   mistakeReferenceKey,
 } from './recurring-mistakes-provenance';
 import {
+  checkMistake,
   loadMistakePractice,
   revealMistake,
   type MistakeAnswer,
+  type MistakeAttempt,
   type MistakePracticeRequest,
   type MistakeQuestion,
 } from './recurring-mistakes-api';
@@ -134,46 +148,83 @@ function MistakeQuestion({
 }) {
   const t = useMistakeText(),
     review = useBoardReviewText();
-  const { t: uiT, formatError, formatDecision } = useI18n();
+  const learn = useLearningText();
+  const labels = usePositionText();
+  const { t: uiT, formatError, formatDecision, formatNumber } = useI18n();
   const context = matchContext(item.position.gnubg_match_id);
-  const [answer, setAnswer] = useState<MistakeAnswer>();
-  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<{
+    original: MistakeAnswer;
+    checked?: {
+      answer: PracticeAnswer;
+      evaluation: MistakeAttempt['evaluation'];
+    };
+  }>();
+  const [draft, setDraft] = useState<CheckerDraft>({ steps: [] });
+  const [pending, setPending] = useState<'check' | 'reveal'>();
+  const loading = pending !== undefined;
   const [error, setError] = useState<unknown>();
   const [view, setView] = useState<BoardView>('before');
-  const abort = useRef<AbortController | null>(null),
-    generation = useRef(0);
-  useEffect(
-    () => () => {
-      abort.current?.abort();
-      generation.current++;
-    },
-    [],
-  );
-  async function reveal() {
-    abort.current?.abort();
-    const controller = new AbortController(),
-      version = ++generation.current;
+  const [preview, setPreview] = useState<'best' | 'chosen'>('best');
+  const abort = useRef<AbortController | null>(null);
+  const [failedAction, setFailedAction] = useState<'check' | 'reveal'>();
+  const feedback = useRef<HTMLDivElement>(null);
+  useEffect(() => () => abort.current?.abort(), []);
+  useEffect(() => {
+    if (result) feedback.current?.focus();
+  }, [result]);
+
+  async function answerQuestion(answer?: PracticeAnswer) {
+    if (abort.current) return;
+    const controller = new AbortController();
     abort.current = controller;
-    setLoading(true);
+    const action = answer ? 'check' : 'reveal';
+    setPending(action);
     setError(undefined);
+    setFailedAction(undefined);
     try {
-      const result = await revealMistake(item.reference, controller.signal);
-      if (!controller.signal.aborted && version === generation.current)
-        setAnswer(result);
+      if (answer) {
+        const { original, evaluation } = await checkMistake(
+          { reference: item.reference, answer },
+          controller.signal,
+        );
+        if (!controller.signal.aborted) {
+          setResult({ original, checked: { answer, evaluation } });
+          setView('arrows');
+        }
+      } else {
+        const original = await revealMistake(item.reference, controller.signal);
+        if (!controller.signal.aborted) setResult({ original });
+      }
     } catch (failure) {
-      if (!controller.signal.aborted && version === generation.current)
+      if (!controller.signal.aborted) {
         setError(failure);
+        setFailedAction(action);
+      }
     } finally {
-      if (!controller.signal.aborted && version === generation.current)
-        setLoading(false);
+      abort.current = null;
+      if (!controller.signal.aborted) setPending(undefined);
     }
   }
-  const projection = useMemo(
-    () =>
-      answer && item.kind === 'checker'
-        ? projectMove(item.position, answer.best)
-        : undefined,
-    [answer, item],
+  const original = result?.original;
+  const checked = result?.checked;
+  const bestProjection =
+    original && item.kind === 'checker'
+      ? projectMove(item.position, checked?.evaluation.best ?? original.best)
+      : undefined;
+  const chosenProjection =
+    checked?.answer.kind === 'checker'
+      ? projectPracticeSteps(item.position, checked.answer.steps)
+      : undefined;
+  const projection = preview === 'chosen' ? chosenProjection : bestProjection;
+  const revealButton = (
+    <ActionButton
+      icon="view"
+      label={t('reveal')}
+      disabled={loading}
+      onClick={() => void answerQuestion()}
+    >
+      {t('reveal')}
+    </ActionButton>
   );
   return (
     <div className="recurring-question">
@@ -189,7 +240,33 @@ function MistakeQuestion({
           ? uiT('app.matchLength', { count: context.length })
           : `${uiT('common.moneyGame')} · Jacoby ${context.jacoby ? '✓' : '✗'}`}
       </p>
-      {answer && projection?.ok && (
+      {item.kind === 'cube_response' && (
+        <p>{learn('offeredCube', { value: context.cube * 2 })}</p>
+      )}
+      {result &&
+        chosenProjection?.ok &&
+        bestProjection?.ok &&
+        !chosenProjection.forced && (
+          <div
+            className="board-view-buttons text-navigation text-navigation--compact"
+            role="group"
+            aria-label={review('views')}
+          >
+            {(['chosen', 'best'] as const).map((choice) => (
+              <button
+                key={choice}
+                type="button"
+                aria-pressed={preview === choice}
+                onClick={() => setPreview(choice)}
+              >
+                {choice === 'chosen'
+                  ? labels('practiceYourMove')
+                  : labels('practiceBestPlay')}
+              </button>
+            ))}
+          </div>
+        )}
+      {result && projection?.ok && (
         <div
           className="board-view-buttons text-navigation text-navigation--compact"
           role="group"
@@ -207,51 +284,93 @@ function MistakeQuestion({
           ))}
         </div>
       )}
-      <div className="play-board recurring-practice-board">
-        <Board
-          position={{ ...item.position, notation: '' }}
-          white={item.players[0]}
-          black={item.players[1]}
+      {!result && item.kind === 'checker' ? (
+        <CheckerPracticeBoard
+          position={item.position}
+          players={item.players}
           theme={theme}
-          preview={answer ? projection : undefined}
-          previewMode={answer ? view : 'before'}
-        />
-      </div>
-      {loading && <p role="status">{t('revealing')}</p>}
+          boardClassName="recurring-practice-board"
+          draft={draft}
+          onChange={setDraft}
+          busy={loading}
+          checkLabel={learn('checkMove')}
+          onCheck={(steps) => void answerQuestion({ kind: 'checker', steps })}
+        >
+          {revealButton}
+        </CheckerPracticeBoard>
+      ) : (
+        <div className="play-board recurring-practice-board">
+          <Board
+            position={{ ...item.position, notation: '' }}
+            white={item.players[0]}
+            black={item.players[1]}
+            theme={theme}
+            cubeOfferPending={item.kind === 'cube_response'}
+            preview={projection}
+            previewMode={result ? view : 'before'}
+          />
+        </div>
+      )}
+      {!result && item.kind !== 'checker' && (
+        <CubePracticeChoices
+          kind={item.kind}
+          label={t(item.kind)}
+          busy={loading}
+          onCheck={(answer) => void answerQuestion(answer)}
+        >
+          {revealButton}
+        </CubePracticeChoices>
+      )}
+      {loading && (
+        <p role="status">
+          {pending === 'check' ? learn('checking') : t('revealing')}
+        </p>
+      )}
       {!!error && (
         <div role="alert">
           <p>{formatError(error)}</p>
-          <ActionButton
-            icon="refresh"
-            label={t('retry')}
-            onClick={() => void reveal()}
-          >
-            {t('retry')}
-          </ActionButton>
+          {failedAction === 'reveal' && (
+            <ActionButton
+              icon="refresh"
+              label={t('retry')}
+              onClick={() => void answerQuestion()}
+            >
+              {t('retry')}
+            </ActionButton>
+          )}
         </div>
       )}
-      {answer ? (
-        <dl className="recurring-answer" aria-live="polite">
-          <dt>{t('best')}</dt>
-          <dd>{formatDecision(answer.best)}</dd>
-          <dt>{t('played')}</dt>
-          <dd>{formatDecision(answer.played)}</dd>
-          <dt>{t('loss')}</dt>
-          <dd>{answer.equity_loss.toFixed(3)}</dd>
-          <dt>{t('source')}</dt>
-          <dd>{mistakeProvenance(answer, t)}</dd>
-        </dl>
-      ) : (
-        !error && (
-          <ActionButton
-            icon="view"
-            label={t('reveal')}
-            disabled={loading}
-            onClick={() => void reveal()}
-          >
-            {t('reveal')}
-          </ActionButton>
-        )
+      {original && (
+        <div ref={feedback} tabIndex={-1}>
+          {checked && (
+            <div className="recurring-attempt-result" aria-live="polite">
+              <PracticeResult
+                evaluation={checked.evaluation}
+                storedSource={
+                  original.source === 'native'
+                    ? undefined
+                    : mistakeProvenance(original, t)
+                }
+              />
+            </div>
+          )}
+          {checked && <h4>{t('originalAnalysis')}</h4>}
+          <dl className="recurring-answer" aria-live="polite">
+            <dt>{t('best')}</dt>
+            <dd>{formatDecision(original.best)}</dd>
+            <dt>{t('played')}</dt>
+            <dd>{formatDecision(original.played)}</dd>
+            <dt>{t('loss')}</dt>
+            <dd>
+              {formatNumber(original.equity_loss, {
+                minimumFractionDigits: 3,
+                maximumFractionDigits: 3,
+              })}
+            </dd>
+            <dt>{t('source')}</dt>
+            <dd>{mistakeProvenance(original, t)}</dd>
+          </dl>
+        </div>
       )}
       <ActionButton
         icon="next"

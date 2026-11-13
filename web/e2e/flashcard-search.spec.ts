@@ -123,6 +123,7 @@ async function setup(page: Page) {
   });
   await page.goto('/');
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
+  await page.getByRole('tab', { name: 'Flashcards & Anki', exact: true }).click();
   return {
     study: page.getByRole('region', { name: 'Study', exact: true }),
     queries,

@@ -42,6 +42,12 @@ const group = {
   count: 3,
   match_count: 2,
   total_loss: 0.36,
+  rates: {
+    decision_count: 6,
+    error_rate: 0.5,
+    loss_per_100: 6,
+    small_sample: true,
+  },
 };
 const result = {
   players: ['Alice', 'Bob'],
@@ -87,6 +93,248 @@ async function list(page: Page) {
     }),
   );
 }
+
+test('checks checker moves, cube offers and cube replies in the practice dialog', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  await list(page);
+  const cases = [
+    {
+      item: question(1),
+      submitted: {
+        kind: 'checker',
+        steps: [
+          { from: 24, to: 21 },
+          { from: 24, to: 23 },
+        ],
+      },
+      choice: null,
+      evaluated: { chosen: '24/21 24/23', best: '8/5 6/5' },
+    },
+    {
+      item: {
+        ...question(2),
+        kind: 'cube_offer',
+        position: { ...position, dice: [0, 0] },
+      },
+      submitted: { kind: 'cube_offer', action: 'double' },
+      choice: 'Double',
+      evaluated: { chosen: 'double', best: 'no double' },
+    },
+    {
+      item: {
+        ...question(3),
+        kind: 'cube_response',
+        position: { ...position, dice: [0, 0] },
+      },
+      submitted: { kind: 'cube_response', action: 'take' },
+      choice: 'Take double',
+      evaluated: { chosen: 'take', best: 'drop' },
+    },
+  ];
+  await page.route('**/api/study/mistakes/practice', (r) =>
+    r.fulfill({ json: { items: cases.map((c) => c.item) } }),
+  );
+  let attempts = 0;
+  await page.route('**/api/study/mistakes/attempt', async (r) => {
+    const entry = cases[attempts++];
+    expect(r.request().postDataJSON()).toEqual({
+      reference: entry.item.reference,
+      answer: entry.submitted,
+    });
+    await r.fulfill({
+      json: {
+        original: answer,
+        evaluation: {
+          verdict: 'error',
+          ...entry.evaluated,
+          chosen_equity: 0,
+          best_equity: 0.125,
+          equity_loss: 0.125,
+          provenance: { kind: 'recomputed', engine: 'GNUbg', plies: 2 },
+        },
+      },
+    });
+  });
+  await open(page);
+  await page
+    .getByRole('combobox', { name: 'Player', exact: true })
+    .selectOption('Alice');
+  await page.getByRole('button', { name: 'Practice', exact: true }).click();
+  const dialog = page.getByRole('dialog', {
+    name: 'Practice recurring mistakes',
+    exact: true,
+  });
+  for (const [index, entry] of cases.entries()) {
+    const check = dialog.getByRole('button', {
+      name: entry.choice ? 'Check answer' : 'Check move',
+      exact: true,
+    });
+    await expect(check).toBeDisabled();
+    await expect(dialog.locator('.recurring-attempt-result')).toHaveCount(0);
+    if (entry.choice) {
+      if (entry.item.kind === 'cube_response')
+        await expect(
+          dialog.locator('[data-cube-pending="true"][data-cube="2"]'),
+        ).toBeVisible();
+      await dialog
+        .getByRole('button', { name: entry.choice, exact: true })
+        .click();
+    } else {
+      const point = dialog.getByRole('button', {
+        name: 'Point 24',
+        exact: true,
+      });
+      await point.click();
+      await expect(check).toBeDisabled();
+      await point.click();
+    }
+    await check.click();
+    await expect(dialog.locator('.recurring-attempt-result')).toContainText(
+      '0.125',
+    );
+    await expect(dialog.locator('.recurring-answer')).toContainText(
+      answer.played,
+    );
+    if (!entry.choice) {
+      await dialog
+        .getByRole('button', { name: 'Your move', exact: true })
+        .click();
+      await expect(dialog.locator('.move-arrows > [data-from]')).toHaveCount(2);
+      for (const [width, height] of [
+        [1800, 1169],
+        [2560, 1440],
+        [3840, 2160],
+      ]) {
+        await page.setViewportSize({ width, height });
+        await expect(dialog.locator('.recurring-attempt-result')).toBeVisible();
+        const box = await dialog.boundingBox();
+        expect(box && box.x >= 0 && box.x + box.width <= width).toBe(true);
+        await page.screenshot({
+          path: test
+            .info()
+            .outputPath(`recurring-answer-${width}x${height}.png`),
+        });
+      }
+      await page.setViewportSize({ width: 1800, height: 1169 });
+    }
+    await dialog
+      .getByRole('button', {
+        name: index === 2 ? 'Finish' : 'Next',
+        exact: true,
+      })
+      .click();
+  }
+  expect(attempts).toBe(3);
+  await expect(dialog).toContainText('Practice complete');
+});
+
+test('both cube response groups open a round with correct takes and passes', async ({
+  page,
+}) => {
+  const rounds = [
+    {
+      label: 'Wrong take',
+      kind: 'wrong_take',
+      decisions: [
+        { action: 'take', played: 'take', loss: 0 },
+        { action: 'drop', played: 'take', loss: 0.2 },
+      ],
+    },
+    {
+      label: 'Wrong pass',
+      kind: 'wrong_pass',
+      decisions: [
+        { action: 'take', played: 'drop', loss: 0.15 },
+        { action: 'drop', played: 'drop', loss: 0 },
+      ],
+    },
+  ] as const;
+  await page.route('**/api/study/mistakes?*', (route) =>
+    route.fulfill({
+      json: {
+        ...result,
+        groups: new URL(route.request().url()).searchParams.has('player')
+          ? rounds.map(({ kind }) => ({ ...group, mistake_kind: kind }))
+          : [],
+      },
+    }),
+  );
+  const items = [1, 2].map((n) => ({
+    ...question(n),
+    kind: 'cube_response',
+    position: { ...position, dice: [0, 0] },
+  }));
+  let roundIndex = 0;
+  let answerIndex = 0;
+  await page.route('**/api/study/mistakes/practice', (route) => {
+    expect(route.request().postDataJSON()).toMatchObject({
+      player: 'Alice',
+      game_plan: 'priming',
+      mistake_kind: rounds[roundIndex].kind,
+    });
+    return route.fulfill({ json: { items } });
+  });
+  await page.route('**/api/study/mistakes/attempt', (route) => {
+    const { action, played, loss } = rounds[roundIndex].decisions[answerIndex];
+    expect(route.request().postDataJSON()).toEqual({
+      reference: items[answerIndex].reference,
+      answer: { kind: 'cube_response', action },
+    });
+    const bestEquity = action === 'take' ? -0.75 : -1;
+    return route.fulfill({
+      json: {
+        original: { ...answer, best: action, played, equity_loss: loss },
+        evaluation: {
+          verdict: 'best',
+          chosen: action,
+          best: action,
+          chosen_equity: bestEquity,
+          best_equity: bestEquity,
+          equity_loss: 0,
+          provenance: { kind: 'stored', engine: 'GNUbg', plies: 2 },
+        },
+      },
+    });
+  });
+
+  await open(page);
+  await page.getByRole('combobox', { name: 'Player' }).selectOption('Alice');
+  for (const [index, round] of rounds.entries()) {
+    roundIndex = index;
+    await page
+      .getByRole('row', { name: new RegExp(round.label) })
+      .getByRole('button', { name: 'Practice', exact: true })
+      .click();
+    const dialog = page.getByRole('dialog', {
+      name: 'Practice recurring mistakes',
+    });
+    for (const [index, { action }] of round.decisions.entries()) {
+      answerIndex = index;
+      await expect(dialog.locator('.recurring-answer')).toHaveCount(0);
+      const check = dialog.getByRole('button', { name: 'Check answer' });
+      await expect(check).toBeDisabled();
+      await dialog
+        .getByRole('button', {
+          name: action === 'take' ? 'Take double' : 'Pass double',
+          exact: true,
+        })
+        .click();
+      await check.click();
+      await expect(dialog.locator('.recurring-attempt-result')).toContainText(
+        '0.000',
+      );
+      await dialog
+        .getByRole('button', { name: index === 0 ? 'Next' : 'Finish' })
+        .click();
+    }
+    await expect(dialog).toContainText('Practice complete');
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+  }
+});
+
 test('imported practice keeps original depth, uses imported references and hides the next source answer', async ({
   page,
 }) => {
@@ -220,7 +468,10 @@ test('requires an exact player, filters groups and reveals saved answers only on
   });
   await expect(dialog).toContainText('1 / 2');
   await expect(dialog).toContainText('gnubg');
-  await expect(dialog.getByRole('img')).toBeVisible();
+  await expect(dialog.locator('.recurring-practice-board')).toBeVisible();
+  await expect(
+    dialog.getByRole('button', { name: 'Point 24', exact: true }),
+  ).toBeEnabled();
   await expect(dialog).not.toContainText(answer.best);
   await expect(dialog).not.toContainText(answer.played);
   expect(reveals).toBe(0);

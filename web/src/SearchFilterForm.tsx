@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes, ReactNode } from 'react';
+import type { InputHTMLAttributes, ReactNode, Ref } from 'react';
 import ActionButton from './ActionButton';
 import { usePositionText } from './position-browser-messages';
 import './position-browser.css';
@@ -121,17 +121,20 @@ export function SearchFilterSelect({
   value,
   onChange,
   children,
+  selectRef,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   children: ReactNode;
+  selectRef?: Ref<HTMLSelectElement>;
 }) {
   return (
     <label>
       <span>{label}</span>
       <select
         aria-label={label}
+        ref={selectRef}
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >

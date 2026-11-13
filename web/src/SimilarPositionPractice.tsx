@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -8,26 +7,16 @@ import {
 } from 'react';
 import ActionButton from './ActionButton';
 import Board from './Board';
+import CheckerPracticeBoard, {
+  type CheckerDraft,
+} from './CheckerPracticeBoard';
 import PlayBoardDialog from './PlayBoardDialog';
 import { request } from './api';
 import { useBoardReviewText } from './board-review-messages';
 import { matchContext } from './boardMath';
 import type { components } from './generated-api';
 import { useI18n } from './i18n';
-import {
-  projectMove,
-  type MovePreview,
-  type MovePreviewStep,
-} from './move-preview';
-import { usePlayText } from './play-messages';
-import {
-  applySteps,
-  legalCheckerTurns,
-  matchingMoves,
-  nextPoints,
-  relativePoint,
-  type CheckerStep,
-} from './play-state';
+import { projectMove, projectPracticeSteps } from './move-preview';
 import { usePositionText } from './position-browser-messages';
 import { useMistakeText } from './recurring-mistakes-messages';
 import {
@@ -253,7 +242,6 @@ function PracticeQuestion({
 }) {
   const p = usePositionText();
   const t = useMistakeText();
-  const play = usePlayText();
   const review = useBoardReviewText();
   const {
     t: uiText,
@@ -267,9 +255,7 @@ function PracticeQuestion({
   const [pendingAction, setPendingAction] = useState<'score' | 'reveal'>();
   const loading = pendingAction !== undefined;
   const [error, setError] = useState<unknown>();
-  const [steps, setSteps] = useState<CheckerStep[]>([]);
-  const [chosenDie, setChosenDie] = useState<number>();
-  const [hovered, setHovered] = useState<number | null>(null);
+  const [draft, setDraft] = useState<CheckerDraft>({ steps: [] });
   const revealed = useRef<HTMLDivElement>(null);
   const pending = useRef<AbortController | null>(null);
   useEffect(() => () => pending.current?.abort(), []);
@@ -278,35 +264,6 @@ function PracticeQuestion({
   }, [answer]);
   const { position } = item;
   const context = matchContext(position.gnubg_match_id);
-  const { player } = position;
-  const turns = useMemo(
-    () => legalCheckerTurns(position.board, player, position.dice),
-    [position, player],
-  );
-  const firstDie = chosenDie ?? turns[0]?.dice[0];
-  const dice =
-    firstDie === position.dice[1]
-      ? [...position.dice].reverse()
-      : position.dice;
-  const activeDie = dice[0];
-  const moves = useMemo(
-    () => turns.filter((turn) => turn.dice[0] === activeDie),
-    [turns, activeDie],
-  );
-  const sources = loading ? [] : nextPoints(moves, steps, null);
-  const canSwap =
-    !loading &&
-    !steps.length &&
-    dice[0] !== dice[1] &&
-    turns.some((turn) => turn.dice[0] === dice[1]);
-  const forcedPass = !turns.length;
-  const completedTurn = matchingMoves(moves, steps).find(
-    (turn) => turn.steps.length === steps.length,
-  );
-  const canCheck = forcedPass || !!completedTurn;
-  const board = answer
-    ? position.board
-    : applySteps(position.board, steps, player);
   const score = answer && 'equity_loss' in answer ? answer : undefined;
   const previewLabels = {
     played: p('practiceYourMove'),
@@ -314,22 +271,10 @@ function PracticeQuestion({
   };
   const preview =
     score && previewChoice === 'played'
-      ? projectPracticeSteps(position, steps, completedTurn?.dice ?? [])
-      : answer && projectMove(position, answer.best);
-
-  function moveChecker(from: number) {
-    if (!sources.includes(from)) return;
-    const [to] = nextPoints(moves, steps, from);
-    if (to === undefined) return;
-    setSteps((current) => [...current, { from, to }]);
-    setError(undefined);
-  }
-
-  function swapDice() {
-    if (!canSwap) return;
-    setChosenDie(dice[1]);
-    setHovered(null);
-  }
+      ? projectPracticeSteps(position, draft.steps)
+      : answer
+        ? projectMove(position, answer.best)
+        : undefined;
 
   async function reveal(checkMove: boolean) {
     if (pending.current) return;
@@ -345,7 +290,7 @@ function PracticeQuestion({
           signal: abort.signal,
           ...(checkMove && {
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ steps }),
+            body: JSON.stringify({ steps: draft.steps }),
           }),
         },
       );
@@ -368,67 +313,45 @@ function PracticeQuestion({
           : `${uiText('common.moneyGame')} · Jacoby ${context.jacoby ? '✓' : '✗'}`}
       </p>
       <p>{p('practicePrompt')}</p>
-      <div className={`similar-practice-board${answer ? '' : ' play-board'}`}>
-        <Board
-          position={{
-            ...position,
-            board,
-            dice: answer ? position.dice : dice,
-            notation: '',
-          }}
-          white={item.white}
-          black={item.black}
+      {answer ? (
+        <div className="similar-practice-board">
+          <Board
+            position={{ ...position, notation: '' }}
+            white={item.white}
+            black={item.black}
+            theme={theme}
+            preview={preview}
+            previewMode="arrows"
+            previewLabel={previewLabels[previewChoice]}
+          />
+        </div>
+      ) : (
+        <CheckerPracticeBoard
+          position={position}
+          players={[item.white, item.black]}
           theme={theme}
-          preview={preview}
-          previewMode={answer ? 'arrows' : 'before'}
-          previewLabel={answer ? previewLabels[previewChoice] : undefined}
-          interaction={
-            answer
-              ? undefined
-              : {
-                  enabled: sources,
-                  sources,
-                  destinations:
-                    hovered !== null && sources.includes(hovered)
-                      ? nextPoints(moves, steps, hovered)
-                      : [],
-                  board,
-                  human: player,
-                  onHover: setHovered,
-                  onPoint: moveChecker,
-                  label: (point) =>
-                    point === -1 || point === 26
-                      ? play('off')
-                      : point === 0 || point === 25
-                        ? play('bar')
-                        : `${play('point')} ${relativePoint(point, player)}`,
-                  dice: {
-                    canSwap,
-                    swap: swapDice,
-                    label: `${play('swapDice')} · ${dice.join(', ')}`,
-                    used:
-                      dice[0] === dice[1]
-                        ? [
-                            Math.min(1, steps.length / 2),
-                            Math.max(0, (steps.length - 2) / 2),
-                          ]
-                        : [steps.length >= 1, steps.length >= 2],
-                    active:
-                      loading || canCheck
-                        ? null
-                        : dice[0] === dice[1]
-                          ? steps.length < 2
-                            ? 0
-                            : 1
-                          : steps.length,
-                  },
-                }
-          }
-        />
-      </div>
+          boardClassName="similar-practice-board"
+          draft={draft}
+          onChange={(value) => {
+            setDraft(value);
+            setError(undefined);
+          }}
+          busy={loading}
+          checkLabel={p('practiceCheckMove')}
+          onCheck={() => void reveal(true)}
+        >
+          <ActionButton
+            type="button"
+            icon="view"
+            label={t('reveal')}
+            disabled={loading}
+            onClick={() => void reveal(false)}
+          />
+        </CheckerPracticeBoard>
+      )}
       {loading && <p role="status">{p('loadingPracticeAnswer')}</p>}
       {!!error && <p role="alert">{formatError(error)}</p>}
-      {answer ? (
+      {answer && (
         <div ref={revealed} tabIndex={-1}>
           {score && (
             <>
@@ -470,34 +393,6 @@ function PracticeQuestion({
           </p>
           <p>{[answer.engine, answer.depth].filter(Boolean).join(' · ')}</p>
         </div>
-      ) : (
-        <div className="play-actions">
-          <ActionButton
-            type="button"
-            icon="undo"
-            label={play('undo')}
-            disabled={loading || !steps.length}
-            onClick={() => {
-              setSteps((current) => current.slice(0, -1));
-              setHovered(null);
-              setError(undefined);
-            }}
-          />
-          <ActionButton
-            type="button"
-            icon="confirm"
-            label={forcedPass ? play('pass') : p('practiceCheckMove')}
-            disabled={loading || !canCheck}
-            onClick={() => void reveal(true)}
-          />
-          <ActionButton
-            type="button"
-            icon="view"
-            label={t('reveal')}
-            disabled={loading}
-            onClick={() => void reveal(false)}
-          />
-        </div>
       )}
       <div className="play-actions">
         <ActionButton
@@ -514,26 +409,4 @@ function PracticeQuestion({
       </div>
     </>
   );
-}
-
-function projectPracticeSteps(
-  position: Hit['position'],
-  steps: CheckerStep[],
-  dice: number[],
-): MovePreview {
-  const { player } = position;
-  const opponent = player === 0 ? -1 : 1;
-  let board = position.board;
-  const previewSteps = steps.map((step, index): MovePreviewStep => {
-    const { from, to } = step;
-    const hit = board[to] === opponent;
-    board = applySteps(board, [step], player);
-    return {
-      from: from === 0 || from === 25 ? 'bar' : from,
-      to: to < 0 || to > 25 ? 'off' : to,
-      die: dice[index],
-      hit,
-    };
-  });
-  return { ok: true, board, steps: previewSteps, forced: !steps.length };
 }

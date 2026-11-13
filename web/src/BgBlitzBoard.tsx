@@ -1,5 +1,5 @@
 import type { Position } from './api';
-import { checkerCounts, matchContext } from './boardMath';
+import { checkerCounts } from './boardMath';
 import {
   pointColumns,
   stackGeometry,
@@ -20,6 +20,7 @@ export default function BgBlitzBoard({
   theme,
   label,
   cubeLabel,
+  cube,
   onError,
   previewSteps,
   interaction,
@@ -29,6 +30,7 @@ export default function BgBlitzBoard({
   theme: BgBlitzTheme;
   label: string;
   cubeLabel: string;
+  cube: { value: number; owner: number | null; pending: boolean };
   onError: () => void;
   previewSteps?: MovePreviewStep[];
   interaction?: BoardInteraction;
@@ -36,7 +38,6 @@ export default function BgBlitzBoard({
 }) {
   const { formatNumber } = useI18n();
   const { width, height } = theme.background;
-  const context = matchContext(position.gnubg_match_id);
   const counts = checkerCounts(position.board);
   const moving = animation?.kind === 'checker' ? animation : undefined;
   const board = moving ? underlayBoard(moving) : position.board;
@@ -112,12 +113,11 @@ export default function BgBlitzBoard({
     );
   }
   const numbers = theme.numbers[position.player === 0 ? 'RLD' : 'RLU'];
-  const displayedCube = context.cube * (context.doubled ? 2 : 1);
-  const cubeOwner = context.doubled ? null : context.owner;
+  const { value: displayedCube, owner: cubeOwner, pending: cubePending } = cube;
   const cubeValue = displayedCube === 1 ? 64 : displayedCube;
   const cubeImage =
     theme.cubes[
-      !context.doubled && cubeOwner === null && displayedCube === 1
+      !cubePending && cubeOwner === null && displayedCube === 1
         ? '64_r'
         : String(cubeValue)
     ] || theme.cubes[String(cubeValue)];
@@ -160,7 +160,7 @@ export default function BgBlitzBoard({
       <PlayCube
         label={cubeLabel}
         value={displayedCube}
-        pending={context.doubled}
+        pending={cubePending}
         owner={cubeOwner}
         interaction={interaction?.cube}
         hitArea={{

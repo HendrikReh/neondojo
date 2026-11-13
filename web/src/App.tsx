@@ -517,6 +517,12 @@ export default function App() {
     setRevision((n) => n + 1);
   }, []);
   const deckChanged = useCallback(() => setDeckRevision((n) => n + 1), []);
+  function openStudyDeck(id: string) {
+    cancelRestoration();
+    deckChanged();
+    setRequestedDeck((old) => ({ id, token: (old?.token ?? 0) + 1 }));
+    setView('learning');
+  }
   const bookmarkChanged = useCallback(
     () => setBookmarkRevision((n) => n + 1),
     [],
@@ -871,13 +877,7 @@ export default function App() {
                 openPosition(id);
               }}
               onDeckChanged={deckChanged}
-              onStudy={(id) => {
-                setRequestedDeck((old) => ({
-                  id,
-                  token: (old?.token ?? 0) + 1,
-                }));
-                setView('learning');
-              }}
+              onStudy={openStudyDeck}
             />
           </div>
           {similarTarget && (
@@ -908,6 +908,7 @@ export default function App() {
             theme={theme}
             revision={deckRevision}
             onChanged={deckChanged}
+            onStudyDeck={openStudyDeck}
           />
         </div>
         <div

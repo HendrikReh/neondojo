@@ -1,4 +1,10 @@
 import type { Position } from './api';
+import {
+  applySteps,
+  legalCheckerTurns,
+  matchingMoves,
+  type CheckerStep,
+} from './play-state';
 
 export type BoardView = 'before' | 'arrows' | 'after';
 export interface MovePreviewStep {
@@ -10,6 +16,39 @@ export interface MovePreviewStep {
 export type MovePreview =
   | { ok: true; board: number[]; steps: MovePreviewStep[]; forced: boolean }
   | { ok: false; reason: string };
+
+/** Restore the submitted path from the stored absolute checker steps. */
+export function projectPracticeSteps(
+  position: Pick<Position, 'board' | 'player' | 'dice'>,
+  steps: CheckerStep[],
+): MovePreview {
+  const { player } = position;
+  const turns = legalCheckerTurns(position.board, player, position.dice);
+  const turn = matchingMoves(turns, steps).find(
+    (move) => move.steps.length === steps.length,
+  );
+  if (!turn) {
+    return steps.length === 0 && turns.length === 0
+      ? { ok: true, board: [...position.board], steps: [], forced: true }
+      : {
+          ok: false,
+          reason: 'The submitted steps do not describe a complete legal roll.',
+        };
+  }
+  const opponent = player === 0 ? -1 : 1;
+  let board = position.board;
+  const previewSteps = steps.map(({ from, to }, index): MovePreviewStep => {
+    const hit = board[to] === opponent;
+    board = applySteps(board, [{ from, to }], player);
+    return {
+      from: from === 0 || from === 25 ? 'bar' : from,
+      to: to < 0 || to > 25 ? 'off' : to,
+      die: turn.dice[index],
+      hit,
+    };
+  });
+  return { ok: true, board, steps: previewSteps, forced: false };
+}
 
 interface Run {
   points: number[];

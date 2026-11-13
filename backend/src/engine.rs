@@ -84,6 +84,12 @@ pub struct Analysis {
     pub candidates: Vec<Candidate>,
 }
 
+pub(crate) struct CubeEquities {
+    pub(crate) no_double: f64,
+    pub(crate) take: f64,
+    pub(crate) pass: f64,
+}
+
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct DiceEvaluation {
     pub dice: [i32; 2],
@@ -416,6 +422,64 @@ impl Engine {
             candidates,
         })
     }
+
+    /// Evaluate the cube in the on-roll player's pre-offer context.
+    pub(crate) async fn analyze_cube_choices(
+        &self,
+        position_id: &str,
+        match_id: &str,
+        plies: i32,
+    ) -> Result<(String, i32, CubeEquities)> {
+        let commands = decision_hint_commands(position_id, match_id, plies)? + "hint 10000\n";
+        let directory = tempfile::tempdir()?;
+        let output = self.run(directory.path(), &commands).await?;
+        let engine = output
+            .lines()
+            .find(|line| line.starts_with("GNU Backgammon "))
+            .context("GNUbg did not report its version")?;
+        static DEPTH: OnceLock<Regex> = OnceLock::new();
+        let depth = DEPTH.get_or_init(|| Regex::new(r"(?m)^\s*(\d+)-ply cubeless equity").unwrap());
+        let effective = depth
+            .captures(&output)
+            .context("GNUbg did not report its cube evaluation depth")?[1]
+            .parse::<i32>()?;
+        ensure!(
+            effective == plies,
+            "GNUbg used a different cube evaluation depth"
+        );
+        Ok((engine.to_owned(), effective, parse_cube_equities(&output)?))
+    }
+}
+
+pub(crate) fn parse_cube_equities(output: &str) -> Result<CubeEquities> {
+    static PATTERN: OnceLock<Regex> = OnceLock::new();
+    let pattern = PATTERN.get_or_init(|| {
+        Regex::new(r"(?m)^\s*\d\. (No double|Double, take|Double, pass)\s+([+-]?[0-9]+\.[0-9]+)")
+            .unwrap()
+    });
+    let mut values = [None; 3];
+    for row in pattern.captures_iter(output) {
+        let index = match &row[1] {
+            "No double" => 0,
+            "Double, take" => 1,
+            "Double, pass" => 2,
+            _ => bail!("Unrecognized native cube action"),
+        };
+        let value = row[2].parse::<f64>()?;
+        ensure!(value.is_finite(), "Non-finite native cube equity");
+        ensure!(
+            values[index].replace(value).is_none(),
+            "Duplicate native cube equity"
+        );
+    }
+    let [Some(no_double), Some(take), Some(pass)] = values else {
+        bail!("GNUbg returned incomplete cube analysis");
+    };
+    Ok(CubeEquities {
+        no_double,
+        take,
+        pass,
+    })
 }
 
 pub(crate) fn decision_hint_commands(

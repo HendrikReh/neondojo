@@ -116,6 +116,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cards/{id}/attempt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["submit_attempt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cards/{id}/reveal": {
         parameters: {
             query?: never;
@@ -1492,6 +1508,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/study/learning-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["learning_summary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/study/mistakes": {
         parameters: {
             query?: never;
@@ -1502,6 +1534,22 @@ export interface paths {
         get: operations["list"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/study/mistakes/attempt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["attempt"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1841,6 +1889,11 @@ export interface components {
         };
         /** @enum {string} */
         AssessmentSource: "native" | "imported";
+        AttemptedCard: {
+            evaluation: components["schemas"]["PracticeEvaluation"];
+            revealed: components["schemas"]["RevealedCard"];
+            submitted: components["schemas"]["PracticeAnswer"];
+        };
         BenchmarkEngines: {
             engine: components["schemas"]["EngineSnapshot"];
             rules_version?: string | null;
@@ -2031,6 +2084,13 @@ export interface components {
             played: string;
             solution: components["schemas"]["CardSolution"];
             tags: string[];
+        };
+        CardAttemptRequest: {
+            answer: components["schemas"]["PracticeAnswer"];
+            /** Format: int64 */
+            expected_version: number;
+            /** Format: uuid */
+            request_id: string;
         };
         CardBrowseContext: {
             comment_excerpt: string;
@@ -2343,6 +2403,10 @@ export interface components {
             /** Format: uuid */
             seed?: string | null;
         };
+        /** @enum {string} */
+        CubeOfferAction: "no_double" | "double";
+        /** @enum {string} */
+        CubeResponseAction: "take" | "drop";
         Database: {
             /** Format: date-time */
             created_at: string;
@@ -2837,6 +2901,15 @@ export interface components {
         JobResult: components["schemas"]["Analysis"] | components["schemas"]["Distribution"] | components["schemas"]["MatchAnalysisSummary"];
         /** @enum {string} */
         JobStatus: "queued" | "running" | "completed" | "failed";
+        LearningSummary: {
+            /** Format: int64 */
+            card_count: number;
+            /** Format: int64 */
+            due_count: number;
+            next_deck?: null | components["schemas"]["StudyDeck"];
+            /** Format: date-time */
+            next_due_at?: string | null;
+        };
         LibraryAction: {
             action: string;
             add_tags?: string[];
@@ -2972,11 +3045,20 @@ export interface components {
             plies?: number | null;
             source?: null | components["schemas"]["MistakeSource"];
         };
+        MistakeAttempt: {
+            evaluation: components["schemas"]["PracticeEvaluation"];
+            original: components["schemas"]["MistakeAnswer"];
+        };
+        MistakeAttemptRequest: {
+            answer: components["schemas"]["PracticeAnswer"];
+            reference: components["schemas"]["MistakeReference"];
+        };
         MistakeGroup: {
             count: number;
             game_plan: components["schemas"]["GamePlan"];
             match_count: number;
             mistake_kind: components["schemas"]["MistakeKind"];
+            rates: null | components["schemas"]["MistakeRates"];
             /** Format: double */
             total_loss: number;
         };
@@ -3006,6 +3088,25 @@ export interface components {
             min_loss?: number | null;
             mistake_kind: components["schemas"]["MistakeKind"];
             player: string;
+        };
+        MistakeRates: {
+            /**
+             * @description Evaluable decisions in the same game plan and decision category,
+             *     independent of the error threshold. Cube categories use the best action.
+             */
+            decision_count: number;
+            /**
+             * Format: double
+             * @description Fraction of those decisions that meet the positive loss threshold.
+             */
+            error_rate: number;
+            /**
+             * Format: double
+             * @description Sum of qualifying normalized equity losses per 100 evaluable decisions.
+             */
+            loss_per_100: number;
+            /** @description True when there are fewer than 30 evaluable decisions. */
+            small_sample: boolean;
         };
         MistakeReference: {
             /** Format: int32 */
@@ -3085,6 +3186,7 @@ export interface components {
             unforced_checker_moves: number;
         };
         NextCard: {
+            active_attempt?: null | components["schemas"]["AttemptedCard"];
             card?: null | components["schemas"]["CardQuestion"];
             counts: components["schemas"]["ReviewCounts"];
         };
@@ -3609,6 +3711,41 @@ export interface components {
              */
             next_cursor?: string | null;
         };
+        PracticeAnswer: {
+            /** @enum {string} */
+            kind: "checker";
+            steps: components["schemas"]["PlayStep"][];
+        } | {
+            action: components["schemas"]["CubeOfferAction"];
+            /** @enum {string} */
+            kind: "cube_offer";
+        } | {
+            action: components["schemas"]["CubeResponseAction"];
+            /** @enum {string} */
+            kind: "cube_response";
+        };
+        PracticeEvaluation: {
+            best: string;
+            /** Format: double */
+            best_equity?: number | null;
+            chosen: string;
+            /** Format: double */
+            chosen_equity?: number | null;
+            /** Format: double */
+            equity_loss: number;
+            provenance: components["schemas"]["PracticeProvenance"];
+            verdict: components["schemas"]["PracticeVerdict"];
+        };
+        PracticeProvenance: {
+            engine?: string | null;
+            kind: components["schemas"]["PracticeProvenanceKind"];
+            /** Format: int32 */
+            plies?: number | null;
+        };
+        /** @enum {string} */
+        PracticeProvenanceKind: "stored" | "recomputed" | "forced";
+        /** @enum {string} */
+        PracticeVerdict: "best" | "playable" | "error" | "forced";
         ProfileConfiguration: {
             analysis: components["schemas"]["ConfigurationAnalysis"];
             annotations: components["schemas"]["ConfigurationAnnotations"];
@@ -3906,6 +4043,11 @@ export interface components {
              * @description Checker notes use this canonical position occurrence; cube notes use id.
              */
             position_uuid?: string | null;
+        };
+        StudyDeck: {
+            /** Format: uuid */
+            id: string;
+            name: string;
         };
         StudyReportPage: {
             items: components["schemas"]["StudyReportSummary"][];
@@ -4276,6 +4418,79 @@ export interface operations {
                 };
             };
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    submit_attempt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardAttemptRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttemptedCard"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            504: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8397,6 +8612,25 @@ export interface operations {
             };
         };
     };
+    learning_summary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningSummary"];
+                };
+            };
+        };
+    };
     list: {
         parameters: {
             query?: {
@@ -8420,6 +8654,69 @@ export interface operations {
                 };
             };
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    attempt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MistakeAttemptRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MistakeAttempt"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            504: {
                 headers: {
                     [name: string]: unknown;
                 };

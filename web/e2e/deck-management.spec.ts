@@ -65,6 +65,7 @@ async function setup(page: Page) {
   );
   await page.goto('/');
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
+  await page.getByRole('tab', { name: 'Flashcards & Anki', exact: true }).click();
   const study = page.getByRole('region', { name: 'Study', exact: true });
   await expect(study.getByLabel('Choose deck', { exact: true })).toHaveValue(
     '11111111-1111-4111-8111-111111111111',
@@ -454,6 +455,7 @@ test('real renamed decks update position membership and Anki; deleting one share
   }, decks[0].id);
   await page.goto('/');
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
+  await page.getByRole('tab', { name: 'Flashcards & Anki', exact: true }).click();
   const study = page.getByRole('region', { name: 'Study', exact: true });
   await expect(study.locator('.learning-card-preview')).toHaveAttribute(
     'data-card-id',

@@ -189,6 +189,25 @@ pub(crate) async fn snapshot(
     Ok((saved.settings, snapshot))
 }
 
+pub(crate) async fn snapshot_for_practice(
+    state: &AppState,
+) -> anyhow::Result<(i32, EngineSnapshot)> {
+    let settings = load(state).await?;
+    let plies = settings.analysis_plies.min(2);
+    Ok((
+        plies,
+        snapshot_for(
+            state,
+            &settings.analysis_engine,
+            &settings.gnubg_path,
+            settings.gnubg_threads,
+            sage_threads(settings.open_sage_threads, SAGE_ANALYSIS_THREADS),
+            plies,
+        )
+        .await?,
+    ))
+}
+
 pub(crate) async fn snapshot_for(
     state: &AppState,
     id: &str,

@@ -307,7 +307,14 @@ pub(crate) fn routes() -> Router<AppState> {
         .route("/api/play/sessions/{id}/history", get(history_snapshots))
 }
 pub(crate) async fn require_review_available(pool: &sqlx::PgPool, match_id: Uuid) -> ApiResult<()> {
-    let active:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM play_sessions WHERE library_match_id=$1 AND coalesce(state->>'play_mode','competition')='competition' AND state->>'phase'<>'match_over' AND NOT ((state->>'match_length')::int=0 AND state->>'phase'='game_over'))").bind(match_id).fetch_one(pool).await.map_err(anyhow::Error::from)?;
+    require_review_available_on(pool, match_id).await
+}
+
+pub(crate) async fn require_review_available_on(
+    executor: impl sqlx::PgExecutor<'_>,
+    match_id: Uuid,
+) -> ApiResult<()> {
+    let active:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM play_sessions WHERE library_match_id=$1 AND coalesce(state->>'play_mode','competition')='competition' AND state->>'phase'<>'match_over' AND NOT ((state->>'match_length')::int=0 AND state->>'phase'='game_over'))").bind(match_id).fetch_one(executor).await.map_err(anyhow::Error::from)?;
     if active {
         return Err(ApiError::invalid(
             "Complete the competition match before requesting analysis",

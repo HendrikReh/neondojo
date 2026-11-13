@@ -48,6 +48,7 @@ pub mod recurring_mistakes;
 mod position_game_plans;
 
 mod analysis_timing;
+mod practice;
 mod search;
 mod similar_positions;
 

@@ -70,6 +70,7 @@ test('flashcard browsing previews the selected question without changing learnin
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
   await page.goto('/');
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
+  await page.getByRole('tab', { name: 'Flashcards & Anki', exact: true }).click();
   const study = page.getByRole('region', { name: 'Study', exact: true });
   await study
     .getByLabel('Choose deck', { exact: true })
@@ -218,6 +219,7 @@ test('more cards preserve the preview and a late page cannot survive a deck roun
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
   await page.goto('/');
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
+  await page.getByRole('tab', { name: 'Flashcards & Anki', exact: true }).click();
   const study = page.getByRole('region', { name: 'Study', exact: true });
   const chooser = study.getByLabel('Choose deck', { exact: true });
   const rows = study.locator('.learning-card-list tbody tr'),

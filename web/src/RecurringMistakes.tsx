@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import ActionButton from './ActionButton';
+import MistakeGroupTable from './MistakeGroupTable';
+import MistakePlayerSelect from './MistakePlayerSelect';
 import RecurringMistakePractice from './RecurringMistakePractice';
 import { request } from './api';
 import type { Database } from './library-api';
@@ -124,23 +126,14 @@ export default function RecurringMistakes({
       </div>
       <p className="recurring-help">{t('coverage')}</p>
       <div className="recurring-filters">
-        <label>
-          <span>{t('player')}</span>
-          <select
-            value={player}
-            onChange={(event) => {
-              setPractice(undefined);
-              setPlayer(event.target.value);
-            }}
-          >
-            <option value="">{t('choose')}</option>
-            {players.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <MistakePlayerSelect
+          players={players}
+          value={player}
+          onChange={(name) => {
+            setPractice(undefined);
+            setPlayer(name);
+          }}
+        />
         <label>
           <span>{t('database')}</span>
           <select
@@ -220,42 +213,7 @@ export default function RecurringMistakes({
                   {t(page.analyzed_decisions ? 'empty' : 'noCoverage')}
                 </p>
               ) : (
-                <div className="study-report-table-scroll">
-                  <table className="study-report-table">
-                    <thead>
-                      <tr>
-                        <th>{planText('title')}</th>
-                        <th>{t('kind')}</th>
-                        <th>{t('occurrences')}</th>
-                        <th>{t('matches')}</th>
-                        <th>{t('totalLoss')}</th>
-                        <th>{t('practice')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {page.groups.map((group) => (
-                        <tr key={`${group.game_plan}:${group.mistake_kind}`}>
-                          <td>{planText(group.game_plan)}</td>
-                          <td>{t(group.mistake_kind)}</td>
-                          <td>{group.count}</td>
-                          <td>{group.match_count}</td>
-                          <td>{group.total_loss.toFixed(3)}</td>
-                          <td>
-                            <ActionButton
-                              icon="next"
-                              label={t('practice')}
-                              onClick={(event) =>
-                                start(group, event.currentTarget)
-                              }
-                            >
-                              {t('practice')}
-                            </ActionButton>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <MistakeGroupTable groups={page.groups} onPractice={start} />
               )}
             </>
           )}

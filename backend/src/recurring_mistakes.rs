@@ -2,8 +2,12 @@
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     game_plan::GamePlan,
-    match_analysis::Decision,
+    match_analysis::{Decision, cube_analysis_available},
     model::Position,
+    practice::{
+        cube_context,
+        evaluation::{self, PracticeAnswer, PracticeEvaluation, SavedEvaluation},
+    },
 };
 use axum::{
     Json, Router,
@@ -14,6 +18,7 @@ use axum::{
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
@@ -21,7 +26,10 @@ use uuid::Uuid;
 mod imported;
 pub(crate) mod imported_projection;
 pub(crate) mod source;
-use source::{load, players};
+use source::{SourceDecision, load, players};
+
+const MIN_RANKED_DECISIONS: usize = 30;
+const MAX_PRACTICE_QUESTIONS: usize = 20;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -49,6 +57,21 @@ pub struct MistakeGroup {
     pub count: usize,
     pub match_count: usize,
     pub total_loss: f64,
+    /// Null when the decision type has no defined set of opportunities.
+    #[schema(required = true)]
+    pub rates: Option<MistakeRates>,
+}
+#[derive(Serialize, ToSchema)]
+pub struct MistakeRates {
+    /// Evaluable decisions in the same game plan and decision category,
+    /// independent of the error threshold. Cube categories use the best action.
+    pub decision_count: usize,
+    /// Fraction of those decisions that meet the positive loss threshold.
+    pub error_rate: f64,
+    /// Sum of qualifying normalized equity losses per 100 evaluable decisions.
+    pub loss_per_100: f64,
+    /// True when there are fewer than 30 evaluable decisions.
+    pub small_sample: bool,
 }
 #[derive(Serialize, ToSchema)]
 pub struct Mistakes {
@@ -119,11 +142,25 @@ pub struct MistakeAnswer {
     pub source: Option<MistakeSource>,
 }
 
+#[derive(Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+struct MistakeAttemptRequest {
+    reference: MistakeReference,
+    answer: PracticeAnswer,
+}
+
+#[derive(Serialize, ToSchema)]
+struct MistakeAttempt {
+    evaluation: PracticeEvaluation,
+    original: MistakeAnswer,
+}
+
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/study/mistakes", get(list))
         .route("/api/study/mistakes/practice", post(practice))
         .route("/api/study/mistakes/reveal", post(reveal))
+        .route("/api/study/mistakes/attempt", post(attempt))
 }
 fn validate(player: Option<String>, loss: Option<f64>) -> ApiResult<(Option<String>, f64)> {
     let player = player.map(|p| p.trim().to_owned());
@@ -143,14 +180,88 @@ fn validate(player: Option<String>, loss: Option<f64>) -> ApiResult<(Option<Stri
     }
     Ok((player, loss))
 }
-fn kind(d: &Decision) -> MistakeKind {
+fn opportunity(d: &Decision) -> Option<MistakeKind> {
     match (d.kind.as_str(), d.played.as_str(), d.best.as_str()) {
-        ("checker", _, _) => MistakeKind::Checker,
-        ("cube", "no double", "double") => MistakeKind::MissedDouble,
-        ("cube", "double", "no double") => MistakeKind::PrematureDouble,
-        ("cube", "take", "drop") => MistakeKind::WrongTake,
-        ("cube", "drop", "take") => MistakeKind::WrongPass,
-        _ => MistakeKind::UnclassifiedCube,
+        ("checker", _, _) => Some(MistakeKind::Checker),
+        ("cube", "no double" | "double", "double") => Some(MistakeKind::MissedDouble),
+        ("cube", "no double" | "double", "no double") => Some(MistakeKind::PrematureDouble),
+        ("cube", "take" | "drop", "drop") => Some(MistakeKind::WrongTake),
+        ("cube", "take" | "drop", "take") => Some(MistakeKind::WrongPass),
+        _ => None,
+    }
+}
+
+fn kind(d: &Decision) -> MistakeKind {
+    if d.kind == "checker" || d.played != d.best {
+        opportunity(d).unwrap_or(MistakeKind::UnclassifiedCube)
+    } else {
+        MistakeKind::UnclassifiedCube
+    }
+}
+
+fn correct_cube_opportunity(d: &Decision) -> Option<MistakeKind> {
+    if d.kind == "cube" && d.played == d.best && d.equity_loss == 0.0 {
+        opportunity(d)
+    } else {
+        None
+    }
+}
+
+fn evaluation_position(question: &MistakePracticeQuestion) -> ApiResult<Cow<'_, Position>> {
+    if matches!(question.source, Some(MistakeSource::Native)) && question.kind == "cube_response" {
+        let mut position = question.position.clone();
+        position.gnubg_match_id =
+            crate::import::ids::without_offer_marker(&position.gnubg_match_id)
+                .ok_or_else(|| ApiError::invalid("This question has no valid cube context"))?;
+        Ok(Cow::Owned(position))
+    } else {
+        Ok(Cow::Borrowed(&question.position))
+    }
+}
+
+fn can_practice_correct_cube(row: &SourceDecision) -> bool {
+    match correct_cube_opportunity(&row.decision) {
+        Some(MistakeKind::PrematureDouble) => {
+            let p = &row.question.position;
+            cube_context(p, false).is_ok()
+                && cube_analysis_available(&p.board, &p.gnubg_match_id, p.player).unwrap_or(false)
+        }
+        Some(MistakeKind::WrongTake | MistakeKind::WrongPass) => {
+            evaluation_position(&row.question).is_ok_and(|p| cube_context(&p, true).is_ok())
+        }
+        _ => false,
+    }
+}
+
+#[derive(Default)]
+struct GroupStats {
+    decisions: usize,
+    errors: usize,
+    matches: BTreeSet<Uuid>,
+    loss: f64,
+}
+
+impl GroupStats {
+    fn record_error(&mut self, match_id: Uuid, loss: f64) {
+        self.errors += 1;
+        self.matches.insert(match_id);
+        self.loss += loss;
+    }
+
+    fn group(self, game_plan: GamePlan, mistake_kind: MistakeKind) -> MistakeGroup {
+        MistakeGroup {
+            game_plan,
+            mistake_kind,
+            count: self.errors,
+            match_count: self.matches.len(),
+            total_loss: self.loss,
+            rates: (self.decisions > 0).then(|| MistakeRates {
+                decision_count: self.decisions,
+                error_rate: self.errors as f64 / self.decisions as f64,
+                loss_per_100: self.loss / self.decisions as f64 * 100.0,
+                small_sample: self.decisions < MIN_RANKED_DECISIONS,
+            }),
+        }
     }
 }
 #[utoipa::path(get,path="/api/study/mistakes",params(MistakesQuery),responses((status=200,body=Mistakes),(status=422,body=ErrorBody)),tag="Study")]
@@ -171,46 +282,37 @@ async fn list(
         return Ok(Json(result));
     };
     let rows = load(&s.pool, q.database_id, None, Some(&player)).await?;
+    let player = player.to_lowercase();
     let mut coverage = HashSet::new();
-    let mut groups =
-        BTreeMap::<(String, MistakeKind), (GamePlan, usize, BTreeSet<Uuid>, f64)>::new();
+    let mut groups = BTreeMap::<(&str, MistakeKind), (GamePlan, GroupStats)>::new();
     for row in rows {
-        if row.question.players[row.decision.player as usize]
-            .trim()
-            .to_lowercase()
-            != player.to_lowercase()
-            || q.game_plan.is_some_and(|p| p != row.plan)
-        {
+        if !row.in_scope(&player, q.game_plan) {
             continue;
         }
+        let match_id = row.question.position.match_uuid;
         result.analyzed_decisions += 1;
-        coverage.insert(row.question.position.match_uuid);
-        if !row.matches(&player, q.game_plan, loss) {
-            continue;
+        coverage.insert(match_id);
+        let plan = crate::position_game_plans::label(row.plan);
+        if let Some(mistake_kind) = opportunity(&row.decision) {
+            groups
+                .entry((plan, mistake_kind))
+                .or_insert_with(|| (row.plan, GroupStats::default()))
+                .1
+                .decisions += 1;
         }
-        let label = crate::position_game_plans::label(row.plan).to_owned();
-        let group = groups.entry((label, kind(&row.decision))).or_insert((
-            row.plan,
-            0,
-            BTreeSet::new(),
-            0.0,
-        ));
-        group.1 += 1;
-        group.2.insert(row.question.position.match_uuid);
-        group.3 += row.decision.equity_loss;
+        if row.meets_loss_threshold(loss) {
+            groups
+                .entry((plan, kind(&row.decision)))
+                .or_insert_with(|| (row.plan, GroupStats::default()))
+                .1
+                .record_error(match_id, row.decision.equity_loss);
+        }
     }
     result.analyzed_matches = coverage.len();
     result.groups = groups
         .into_iter()
-        .map(
-            |((_, mistake_kind), (game_plan, count, matches, total_loss))| MistakeGroup {
-                game_plan,
-                mistake_kind,
-                count,
-                match_count: matches.len(),
-                total_loss,
-            },
-        )
+        .filter(|(_, (_, stats))| stats.errors > 0)
+        .map(|((_, mistake_kind), (game_plan, stats))| stats.group(game_plan, mistake_kind))
         .collect();
     result
         .groups
@@ -225,9 +327,36 @@ async fn practice(
     let q = input.map_err(|e| ApiError::invalid(e.body_text()))?.0;
     let (player, loss) = validate(Some(q.player), q.min_loss)?;
     let player = player.unwrap();
-    let mut rows = load(&s.pool, q.database_id, None, Some(&player)).await?;
+    let rows = load(&s.pool, q.database_id, None, Some(&player)).await?;
+    let items = select_practice_questions(
+        rows,
+        &player.to_lowercase(),
+        q.game_plan,
+        q.mistake_kind,
+        loss,
+    );
+    Ok(Json(MistakePractice { items }))
+}
+
+fn select_practice_questions(
+    mut rows: Vec<SourceDecision>,
+    player: &str,
+    game_plan: GamePlan,
+    mistake_kind: MistakeKind,
+    min_loss: f64,
+) -> Vec<MistakePracticeQuestion> {
+    let contrast_opportunity = match mistake_kind {
+        MistakeKind::MissedDouble => Some(MistakeKind::PrematureDouble),
+        MistakeKind::WrongTake => Some(MistakeKind::WrongPass),
+        MistakeKind::WrongPass => Some(MistakeKind::WrongTake),
+        _ => None,
+    };
     rows.retain(|r| {
-        r.matches(&player, Some(q.game_plan), loss) && kind(&r.decision) == q.mistake_kind
+        r.in_scope(player, Some(game_plan))
+            && ((r.meets_loss_threshold(min_loss) && kind(&r.decision) == mistake_kind)
+                || contrast_opportunity.is_some_and(|contrast| {
+                    correct_cube_opportunity(&r.decision) == Some(contrast)
+                }))
     });
     rows.sort_by(|a, b| {
         b.decision
@@ -258,20 +387,34 @@ async fn practice(
                     .cmp(&b.question.reference.decision_no)
             })
     });
+    let mistake_count = rows.partition_point(|r| r.decision.equity_loss > 0.0);
     let mut seen = HashSet::new();
-    let items = rows
-        .into_iter()
-        .filter(|r| {
-            seen.insert((
-                r.question.position.position_id.clone(),
-                r.question.position.gnubg_match_id.clone(),
-                r.question.kind.clone(),
-            ))
-        })
-        .take(20)
+    let mut unique = |q: &MistakePracticeQuestion| {
+        seen.insert((
+            q.position.position_id.clone(),
+            q.position.gnubg_match_id.clone(),
+            q.kind.clone(),
+        ))
+    };
+    let mut items: Vec<_> = rows
+        .drain(..mistake_count)
         .map(|r| r.question)
+        .filter(&mut unique)
+        .take(MAX_PRACTICE_QUESTIONS)
         .collect();
-    Ok(Json(MistakePractice { items }))
+    if contrast_opportunity.is_some() && !items.is_empty() {
+        let contrasts: Vec<_> = rows
+            .into_iter()
+            .filter(can_practice_correct_cube)
+            .map(|r| r.question)
+            .filter(unique)
+            .take(items.len().min(MAX_PRACTICE_QUESTIONS / 2))
+            .collect();
+        items.truncate(MAX_PRACTICE_QUESTIONS - contrasts.len());
+        items.extend(contrasts);
+        items.sort_by_cached_key(|_| Uuid::new_v4());
+    }
+    items
 }
 #[utoipa::path(post,path="/api/study/mistakes/reveal",request_body=MistakeReference,responses((status=200,body=MistakeAnswer),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Study")]
 async fn reveal(
@@ -279,6 +422,43 @@ async fn reveal(
     input: Result<Json<MistakeReference>, JsonRejection>,
 ) -> ApiResult<Json<MistakeAnswer>> {
     let reference = input.map_err(|e| ApiError::invalid(e.body_text()))?.0;
+    Ok(Json(original_answer(load_question(&s, &reference).await?)))
+}
+
+#[utoipa::path(post,path="/api/study/mistakes/attempt",request_body=MistakeAttemptRequest,responses((status=200,body=MistakeAttempt),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=429,body=ErrorBody),(status=503,body=ErrorBody),(status=504,body=ErrorBody)),tag="Study")]
+async fn attempt(
+    State(s): State<AppState>,
+    input: Result<Json<MistakeAttemptRequest>, JsonRejection>,
+) -> ApiResult<Json<MistakeAttempt>> {
+    let Json(input) = input.map_err(|e| ApiError::invalid(e.body_text()))?;
+    let row = load_question(&s, &input.reference).await?;
+    let native = matches!(row.question.source, Some(MistakeSource::Native));
+    let position = evaluation_position(&row.question)?;
+    let evaluation = evaluation::evaluate(
+        &s,
+        &row.question.kind,
+        &position,
+        SavedEvaluation {
+            engine: &row.question.engine,
+            plies: row.question.plies,
+            decision: Some(&row.decision),
+            candidates: &[],
+            native,
+        },
+        &input.answer,
+    )
+    .await?;
+    // An engine run can outlive a change in the winning source or competition state.
+    if evaluation.is_recomputed() {
+        load_question(&s, &input.reference).await?;
+    }
+    Ok(Json(MistakeAttempt {
+        evaluation,
+        original: original_answer(row),
+    }))
+}
+
+async fn load_question(s: &AppState, reference: &MistakeReference) -> ApiResult<SourceDecision> {
     if reference.job_id.is_some() == reference.imported_analysis_id.is_some() {
         return Err(ApiError::invalid(
             "Supply exactly one of job_id or imported_analysis_id",
@@ -304,12 +484,18 @@ async fn reveal(
             .map_err(anyhow::Error::from)?
     };
     let match_id = match_id.ok_or_else(ApiError::missing)?;
-    let row = load(&s.pool, None, Some(match_id), None)
+    load(&s.pool, None, Some(match_id), None)
         .await?
         .into_iter()
-        .find(|r| r.question.reference == reference && r.decision.equity_loss > 0.0)
-        .ok_or_else(ApiError::missing)?;
-    Ok(Json(MistakeAnswer {
+        .find(|r| {
+            &r.question.reference == reference
+                && (r.decision.equity_loss > 0.0 || can_practice_correct_cube(r))
+        })
+        .ok_or_else(ApiError::missing)
+}
+
+fn original_answer(row: SourceDecision) -> MistakeAnswer {
+    MistakeAnswer {
         best: row.decision.best,
         played: row.decision.played,
         equity_loss: row.decision.equity_loss,
@@ -318,21 +504,24 @@ async fn reveal(
         depth: row.question.depth,
         method: row.question.method,
         source: row.question.source,
-    }))
+    }
 }
 #[derive(OpenApi)]
 #[openapi(
-    paths(list, practice, reveal),
+    paths(list, practice, reveal, attempt),
     components(schemas(
         MistakeKind,
         MistakeSource,
         MistakeGroup,
+        MistakeRates,
         Mistakes,
         MistakePracticeRequest,
         MistakeReference,
         MistakePracticeQuestion,
         MistakePractice,
-        MistakeAnswer
+        MistakeAnswer,
+        MistakeAttemptRequest,
+        MistakeAttempt
     ))
 )]
 pub struct RecurringMistakesDoc;

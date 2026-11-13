@@ -29,6 +29,8 @@ export type MistakeQuestion = Omit<
   players: [string, string];
 };
 export type MistakeAnswer = Schema['MistakeAnswer'];
+export type MistakeAttempt = Schema['MistakeAttempt'];
+export type MistakeAttemptRequest = Schema['MistakeAttemptRequest'];
 export type MistakePracticeRequest = Schema['MistakePracticeRequest'];
 export function loadMistakes(filters: MistakeFilters, signal: AbortSignal) {
   const params = new URLSearchParams();
@@ -52,3 +54,7 @@ export const revealMistake = (
   reference: MistakeReference,
   signal: AbortSignal,
 ) => post<MistakeAnswer>('reveal', reference, signal);
+export const checkMistake = (
+  input: MistakeAttemptRequest,
+  signal: AbortSignal,
+) => post<MistakeAttempt>('attempt', input, signal);

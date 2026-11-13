@@ -218,6 +218,7 @@ test('an analyzed annotated position becomes a shared study card and a downloada
     .click();
   await expect(add).toContainText('1 Karten verarbeitet.');
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
+  await page.getByRole('tab', { name: 'Lernkarten & Anki', exact: true }).click();
   const study = page.getByRole('region', {
     name: 'Study',
     exact: true,
@@ -318,6 +319,7 @@ test('an analyzed annotated position becomes a shared study card and a downloada
   ).toBeEnabled();
   await page.reload();
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
+  await page.getByRole('tab', { name: 'Lernkarten & Anki', exact: true }).click();
   await study
     .getByLabel('Deck auswählen', { exact: true })
     .selectOption(deck.id);
@@ -437,7 +439,7 @@ test('an annotation jump supersedes a delayed game load and switching views pres
   await viewStarted;
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
   await expect(
-    page.getByRole('region', { name: 'Study', exact: true }),
+    page.getByRole('tabpanel', { name: 'Übersicht', exact: true }),
   ).toBeVisible();
   releaseView();
   expect(await (await backgroundResponse).finished()).toBeNull();
@@ -488,9 +490,13 @@ test('a whole-match deck trains checker, double and response cards with the sele
   const job = await (await started).json();
   await page.getByRole('tab', { name: 'Fehler', exact: true }).click();
   await expect(panel).toHaveAttribute('data-job-id', job.id);
-  await expect(
-    panel.getByText('Partieanalyse abgeschlossen', { exact: true }),
-  ).toBeVisible({ timeout: 30_000 });
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/jobs/${job.id}`)).json()).status,
+      { timeout: 30_000 },
+    )
+    .toBe('completed');
   await page.getByRole('tab', { name: 'Lernkarten', exact: true }).click();
   const add = page.getByRole('region', {
     name: 'Positionen als Lernkarten',
@@ -537,6 +543,7 @@ test('a whole-match deck trains checker, double and response cards with the sele
   await settings.getByRole('button', { name: 'Anwenden', exact: true }).click();
   await expect(settings).not.toBeVisible();
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
+  await page.getByRole('tab', { name: 'Lernkarten & Anki', exact: true }).click();
   const study = page.getByRole('region', {
     name: 'Study',
     exact: true,

@@ -73,6 +73,7 @@ export default function Board({
   interaction,
   animation,
   showPipCounts = true,
+  cubeOfferPending = false,
 }: {
   position: Position;
   white: string;
@@ -84,6 +85,8 @@ export default function Board({
   interaction?: BoardInteraction;
   animation?: PlaybackFrame | null;
   showPipCounts?: boolean;
+  /** A response exercise may carry an older Match ID without the offer bit. */
+  cubeOfferPending?: boolean;
 }) {
   const { t, formatNumber } = useI18n();
   const review = useBoardReviewText();
@@ -102,8 +105,9 @@ export default function Board({
   const pips = pipCounts(displayedPosition.board);
   const counts = checkerCounts(displayedPosition.board);
   const context = matchContext(position.gnubg_match_id);
-  const displayedCube = context.cube * (context.doubled ? 2 : 1);
-  const cubeOwner = context.doubled ? null : context.owner;
+  const cubePending = context.doubled || cubeOfferPending;
+  const displayedCube = context.cube * (cubePending ? 2 : 1);
+  const cubeOwner = cubePending ? null : context.owner;
   const active = position.player === 0 ? white : black;
   const x = (index: number) => 40 + index * 51 + (index >= 6 ? 28 : 0);
   const cubeLabel = t('board.cube', {
@@ -180,6 +184,11 @@ export default function Board({
           theme={custom}
           label={label}
           cubeLabel={cubeLabel}
+          cube={{
+            value: displayedCube,
+            owner: cubeOwner,
+            pending: cubePending,
+          }}
           onError={() => setFailedTheme(theme)}
           interaction={interaction}
           animation={animation}
@@ -251,7 +260,7 @@ export default function Board({
             label={cubeLabel}
             value={displayedCube}
             owner={cubeOwner}
-            pending={context.doubled}
+            pending={cubePending}
             interaction={interaction?.cube}
             hitArea={{ x: -10, y: -10, width: 44, height: 44 }}
           >

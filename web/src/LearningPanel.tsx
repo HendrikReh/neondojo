@@ -6,7 +6,8 @@ import { request, type Job } from './api';
 import { AppError } from './i18n-core';
 import { useI18n } from './i18n';
 import { useLearningText } from './learning-messages';
-import Board, { type Theme } from './Board';
+import type { Theme } from './themes';
+import StudyCardExercise from './StudyCardExercise';
 import LearningCardBrowser from './LearningCardBrowser';
 import CardSearchControls from './CardSearchControls';
 import { SearchFilterSelect } from './SearchFilterForm';
@@ -17,8 +18,8 @@ import { usePositionText } from './position-browser-messages';
 import './learning-workspace.css';
 import DeckManagementDialog from './DeckManagementDialog';
 import { useDeckManagementText } from './deck-management-messages';
+import { useStudyOverviewText } from './study-messages';
 import type { VersionedDeck } from './deck-management-api';
-import { matchContext } from './boardMath';
 import type {
   Deck,
   NextCard,
@@ -414,6 +415,7 @@ export default function LearningWorkspace({
 }) {
   const profile = useOptionalConfiguration();
   const t = useLearningText();
+  const overviewText = useStudyOverviewText();
   const searchT = useCardSearchText();
   const p = usePositionText();
   const [draftFilters, setDraftFilters] = useState(emptyCardFilters);
@@ -431,14 +433,7 @@ export default function LearningWorkspace({
     mode: 'rename' | 'delete';
     deck: VersionedDeck;
   } | null>(null);
-  const {
-    t: uiT,
-    locale,
-    formatError,
-    formatNumber,
-    formatEquity,
-    formatDecision,
-  } = useI18n();
+  const { t: uiT, locale, formatError } = useI18n();
   const {
     decks,
     error: deckError,
@@ -458,8 +453,10 @@ export default function LearningWorkspace({
     }));
   };
   const [appliedDeckToken, setAppliedDeckToken] = useState<number>();
+  const [missingDeckToken, setMissingDeckToken] = useState<number>();
   const [studying, setStudying] = useState(false);
   function chooseDeck(id: string) {
+    setMissingDeckToken(undefined);
     setDeckId(id);
     setStudying(false);
   }
@@ -473,6 +470,7 @@ export default function LearningWorkspace({
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [attemptBusy, setAttemptBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [reviewResult, setReviewResult] = useState<ReviewResult | null>(null);
   const [queueRevision, setQueueRevision] = useState(0);
@@ -530,20 +528,22 @@ export default function LearningWorkspace({
     if (!requestedDeck || appliedDeckToken === requestedDeck.token || !settled)
       return;
     setAppliedDeckToken(requestedDeck.token);
-    if (!decks.some((deck) => deck.id === requestedDeck.id)) {
-      setStudying(false);
-      return;
-    }
     generation.current++;
-    setDeckId(requestedDeck.id);
-    setStudying(true);
     setRevealed(null);
     setNext(null);
     setReviewResult(null);
     setError(null);
     setBusy(false);
+    setLoading(false);
+    if (!decks.some((deck) => deck.id === requestedDeck.id)) {
+      setMissingDeckToken(requestedDeck.token);
+      setStudying(false);
+      return;
+    }
+    setMissingDeckToken(undefined);
+    setDeckId(requestedDeck.id);
+    setStudying(true);
     setQueueRevision((value) => value + 1);
-    setAppliedDeckToken(requestedDeck.token);
   }, [requestedDeck, appliedDeckToken, settled, decks]);
   useEffect(() => {
     if (deckId) setError(null);
@@ -551,6 +551,10 @@ export default function LearningWorkspace({
   useEffect(() => {
     if (!deckId || !studying) return;
     const owner = session;
+    const entryToken =
+      requestedDeck?.id === deckId && requestedDeck.token === appliedDeckToken
+        ? appliedDeckToken
+        : undefined;
     const abort = new AbortController();
     setLoading(true);
     setNext(null);
@@ -564,8 +568,18 @@ export default function LearningWorkspace({
         }
       })
       .catch((error) => {
-        if (!abort.signal.aborted && current.current.session === owner)
-          setError(error);
+        if (abort.signal.aborted || current.current.session !== owner) return;
+        if (
+          entryToken !== undefined &&
+          error instanceof AppError &&
+          error.params.status === '404'
+        ) {
+          setMissingDeckToken(entryToken);
+          setReviewResult(null);
+          setDeckId(ALL_CARDS);
+          setStudying(false);
+          onChanged();
+        } else setError(error);
       })
       .finally(() => {
         if (!abort.signal.aborted && current.current.session === owner)
@@ -589,33 +603,37 @@ export default function LearningWorkspace({
       );
       if (version === generation.current) setRevealed(answer);
     } catch (error) {
-      if (version === generation.current) setError(error);
+      if (version === generation.current) {
+        if (error instanceof AppError && error.params.status === '409')
+          reloadCard();
+        else setError(error);
+      }
     } finally {
       if (version === generation.current) setBusy(false);
     }
   }
-  async function grade(rating: Rating) {
-    if (!revealed) return;
+  async function grade(answer: RevealedCard, rating: Rating) {
+    if (busy) return;
     const version = ++generation.current;
     setBusy(true);
     setError(null);
     if (
-      postRequest.current?.session !== revealed.session_id ||
+      postRequest.current?.session !== answer.session_id ||
       postRequest.current.rating !== rating
     )
       postRequest.current = {
-        session: revealed.session_id,
+        session: answer.session_id,
         rating,
         id: crypto.randomUUID(),
       };
     try {
       const result = await request<ReviewResult>(
-        `/cards/${revealed.card_id}/review`,
+        `/cards/${answer.card_id}/review`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            session_id: revealed.session_id,
+            session_id: answer.session_id,
             request_id: postRequest.current.id,
             rating,
           }),
@@ -629,7 +647,11 @@ export default function LearningWorkspace({
         onChanged();
       }
     } catch (error) {
-      if (version === generation.current) setError(error);
+      if (version === generation.current) {
+        if (error instanceof AppError && error.params.status === '409')
+          reloadCard();
+        else setError(error);
+      }
     } finally {
       if (version === generation.current) setBusy(false);
     }
@@ -670,21 +692,15 @@ export default function LearningWorkspace({
       if (current.current.session === owner) setExporting(false);
     }
   }
-  function interval(seconds: number) {
-    const days = seconds / 86400;
-    return formatNumber(
-      days >= 1 ? Math.round(days) : Math.max(1, Math.round(seconds / 60)),
-      {
-        style: 'unit',
-        unit: days >= 1 ? 'day' : 'minute',
-        unitDisplay: 'short',
-      },
-    );
+  function reloadCard() {
+    setNext(null);
+    setRevealed(null);
+    setError(null);
+    setQueueRevision((n) => n + 1);
   }
   const activeNext = questionOwner === session ? next : null;
   const card = activeNext?.card;
-  const context = card ? matchContext(card.position.gnubg_match_id) : null;
-  const decision = revealed?.answer.solution.decision;
+  const cardGeneration = generation.current;
   const name = decks.find((deck) => deck.id === deckId)?.name;
   if (requestedDeck && requestedDeck.token !== appliedDeckToken)
     return (
@@ -754,10 +770,14 @@ export default function LearningWorkspace({
           label={t('studyNow')}
           className="primary"
           disabled={
-            !decks.some((deck) => deck.id === deckId) || loading || busy
+            !decks.some((deck) => deck.id === deckId) ||
+            loading ||
+            busy ||
+            attemptBusy
           }
           onClick={() => {
             generation.current++;
+            setNext(null);
             setRevealed(null);
             setStudying(true);
             setQueueRevision((n) => n + 1);
@@ -802,6 +822,10 @@ export default function LearningWorkspace({
         />
       </div>
       {!!workspaceError && <p role="alert">{formatError(workspaceError)}</p>}
+      {missingDeckToken !== undefined &&
+        missingDeckToken === requestedDeck?.token && (
+          <p role="alert">{overviewText('deckUnavailable')}</p>
+        )}
       {reviewResult && (
         <p className="learning-review-result" role="status">
           {t('nextDue', {
@@ -840,131 +864,33 @@ export default function LearningWorkspace({
           )}
           {activeNext && !card && <p role="status">{t('noDue')}</p>}
           {card && (
-            <article className="study-card" data-card-id={card.id}>
-              <span className="eyebrow">
-                {name} · {t('reviewCount', { count: card.review_count })}
-              </span>
-              <h3>
-                {t(
-                  card.kind === 'checker'
-                    ? 'questionChecker'
-                    : card.kind === 'cube_response'
-                      ? 'questionResponse'
-                      : 'questionOffer',
-                )}
-              </h3>
-              {context && (
-                <p className="study-context">
-                  {context.length
-                    ? uiT('app.matchLength', { count: context.length })
-                    : `${uiT('common.moneyGame')} · Jacoby ${context.jacoby ? '✓' : '✗'}`}{' '}
-                  ·{' '}
-                  {uiT('app.toMove', {
-                    player: card.players[card.position.player],
-                  })}
-                </p>
-              )}
-              {card.kind === 'cube_response' && (
-                <p>
-                  {t('offeredCube', {
-                    value: matchContext(card.position.gnubg_match_id).cube * 2,
-                  })}
-                </p>
-              )}
-              <Board
-                position={card.position}
-                white={card.players[0]}
-                black={card.players[1]}
-                theme={theme}
-              />
-              {!revealed ? (
-                <>
-                  <p>{t('answerFirst')}</p>
-                  <ActionButton
-                    icon="solution"
-                    label={t('reveal')}
-                    className="primary"
-                    disabled={busy}
-                    onClick={() => void reveal()}
-                  >
-                    {t('reveal')}
-                  </ActionButton>
-                </>
-              ) : (
-                <section className="study-answer" aria-label={t('solution')}>
-                  <h3>{t('solution')}</h3>
-                  {decision && (
-                    <div className="study-decision">
-                      <strong>
-                        {t('best')}: {formatDecision(decision.best)}
-                      </strong>
-                      <p>
-                        {t('played')}: {formatDecision(decision.played)} ·{' '}
-                        {t('loss')}:{' '}
-                        {formatNumber(decision.equity_loss, {
-                          minimumFractionDigits: 3,
-                          maximumFractionDigits: 3,
-                        })}
-                      </p>
-                    </div>
-                  )}
-                  {!!revealed.answer.solution.candidates.length && (
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>{t('best')}</th>
-                          <th>Equity</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {revealed.answer.solution.candidates.map(
-                          (candidate) => (
-                            <tr key={candidate.rank}>
-                              <td>{formatDecision(candidate.notation)}</td>
-                              <td>{formatEquity(candidate.equity)}</td>
-                            </tr>
-                          ),
-                        )}
-                      </tbody>
-                    </table>
-                  )}
-                  <p>
-                    {t('engine')}: {revealed.answer.solution.engine} ·{' '}
-                    {revealed.answer.solution.plies}-ply
-                  </p>
-                  {revealed.answer.notes && (
-                    <div>
-                      <h4>{t('notes')}</h4>
-                      <p className="plaintext-comment">
-                        {revealed.answer.notes}
-                      </p>
-                    </div>
-                  )}
-                  {!!revealed.answer.tags.length && (
-                    <p>
-                      {t('tags')}: {revealed.answer.tags.join(' · ')}
-                    </p>
-                  )}
-                  <div className="study-ratings">
-                    {(['again', 'hard', 'good', 'easy'] as const).map(
-                      (rating) => (
-                        <ActionButton
-                          icon={rating === 'again' ? 'reset' : 'confirm'}
-                          label={t(rating)}
-                          key={rating}
-                          disabled={busy}
-                          onClick={() => void grade(rating)}
-                        >
-                          {t(rating)}
-                          <small>{interval(revealed.intervals[rating])}</small>
-                        </ActionButton>
-                      ),
-                    )}
-                  </div>
-                  {busy && <p role="status">{t('saving')}</p>}
-                </section>
-              )}
-            </article>
+            <StudyCardExercise
+              key={`${deckId}:${queueRevision}:${card.id}:${card.version}`}
+              card={card}
+              name={name}
+              theme={theme}
+              activeAttempt={activeNext?.active_attempt}
+              revealed={revealed}
+              busy={busy || attemptBusy}
+              visible={visible}
+              onAttempt={(result) => {
+                if (
+                  current.current.session === session &&
+                  cardGeneration === generation.current
+                ) {
+                  setNext((current) =>
+                    current?.card?.id === result.revealed.card_id &&
+                    current.card.version === result.revealed.version
+                      ? { ...current, active_attempt: result }
+                      : current,
+                  );
+                }
+              }}
+              onAttemptBusy={setAttemptBusy}
+              onConflict={reloadCard}
+              onReveal={() => void reveal()}
+              onGrade={(answer, rating) => void grade(answer, rating)}
+            />
           )}
         </>
       ) : (

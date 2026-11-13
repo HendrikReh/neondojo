@@ -124,6 +124,21 @@ async fn imports_are_eligible_private_and_reveal_preserves_metadata(pool: PgPool
     for key in ["engine", "plies", "depth", "method", "source"] {
         assert_eq!(a[key], q[key]);
     }
+    let (status, checked) = call(
+        &router,
+        "POST",
+        "/api/study/mistakes/attempt",
+        json!({
+            "reference":q["reference"],
+            "answer":{"kind":"checker","steps":[{"from":6,"to":3},{"from":6,"to":5}]}
+        }),
+    )
+    .await;
+    assert_eq!(status, 200, "{checked}");
+    assert_eq!(checked["evaluation"]["verdict"], "best");
+    assert_eq!(checked["evaluation"]["provenance"]["kind"], "stored");
+    assert_eq!(checked["evaluation"]["provenance"]["plies"], Value::Null);
+    assert_eq!(checked["original"]["depth"], "XGRoller++");
     for table in ["learning_cards", "decks", "card_reviews", "jobs"] {
         let n: i64 = sqlx::query_scalar(&format!("SELECT count(*) FROM {table}"))
             .fetch_one(&pool)

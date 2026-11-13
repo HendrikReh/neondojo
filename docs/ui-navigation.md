@@ -54,15 +54,40 @@ The displayed limit can change without overwriting either preferred width.
 
 ## Study areas
 
-Study contains Flashcards & Anki, Reports, My recurring mistakes, and Practice
-history. Left/Right wrap between all four tabs; Home and End choose the first and last. Opening a
-deck from another workspace still selects Flashcards & Anki.
+Study opens on Overview, followed by Flashcards & Anki, Reports, My recurring
+mistakes, and Practice history. Left/Right wrap between all five tabs. Home
+selects Overview and End selects Practice history. Opening a deck from another
+workspace still selects Flashcards & Anki.
+
+Overview counts each due card once across its decks and can start the oldest due
+card directly. When no cards are due, it recommends the selected player's
+eligible mistake group with the highest equity loss per 100 decisions, if
+available. Recommendations require at least 30 evaluable decisions and errors
+in at least two matches. The existing practice dialog opens from the
+recommendation or the group table and
+returns focus to the button on close. Overview also shows the next scheduled
+card when the due list is empty.
+
+In Flashcards & Anki, Study now opens the next due card. Checker cards accept a
+complete turn on the board, with undo before submission. Cube cards use separate
+offer and response choices and show the offered cube on response cards. Check
+the answer to see your choice, the best answer and the analysis source, or use
+Show answer for self-assessment. A checked answer reopens at the review step
+after a reload. The four FSRS buttons schedule the next review.
 
 My recurring mistakes requires a player selection and offers database, game-plan
 and minimum-loss filters. Players in the selected database remain selectable
 before their matches are analyzed. The view reports when the current filters
-yield no evaluable decisions. Practice opens a modal from the selected group, with
-the original board and a separate Reveal action. Next hides the solution again.
+yield no evaluable decisions. The table shows the number of evaluable decisions,
+error rate, and equity loss per 100 decisions where the error type has a defined
+denominator. Smaller samples are labeled and remain available for practice.
+Practice opens a modal from the selected group. Missed-double rounds can include
+correct rolls. Wrong-take rounds can include correct takes, and wrong-pass rounds
+can include correct passes. These rounds use saved examples from the selected
+player, database, and game plan and present them in shuffled order.
+Play a checker move on the original board or choose a cube action and check it.
+The evaluation and the original decision are shown together. Reveal is also
+available. Next hides the solution again.
 Escape closes practice and returns focus to its trigger. Leaving the area or
 changing its filters dismisses practice and cancels outstanding requests.
 Completed local analyses take precedence per game; comparable imported XG and

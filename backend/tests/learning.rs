@@ -8,6 +8,258 @@ use uuid::Uuid;
 
 static EXPORT_TESTS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
+#[sqlx::test(migrations = "./migrations")]
+async fn learning_summary_counts_unique_due_cards(pool: PgPool) {
+    let app = api::router(api::AppState::new(
+        pool.clone(),
+        Engine::new("unused".into()),
+    ));
+    let url = "/api/study/learning-summary";
+    let empty = json!({"card_count":0,"due_count":0,"next_due_at":null,"next_deck":null});
+    assert_eq!(
+        call(app.clone(), "GET", url, Value::Null).await,
+        (200, empty)
+    );
+
+    let first_deck = Uuid::from_u128(1);
+    let second_deck = Uuid::from_u128(2);
+    sqlx::query(
+        "INSERT INTO decks(id,name,created_at) VALUES ($2,'Second',now()),($1,'First',now())",
+    )
+    .bind(first_deck)
+    .bind(second_deck)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let card = Uuid::from_u128(3);
+    let tied = Uuid::from_u128(4);
+    let future = Uuid::from_u128(5);
+    let orphan = Uuid::from_u128(6);
+    let parsed = import::parse_sgf("(;GM[6]MI[length:7];W[31hefe])").unwrap();
+    let position = &parsed.positions[0];
+    let payload = json!({
+        "kind": "checker",
+        "position": {
+            "id": card, "match_uuid": Uuid::nil(), "ordinal": 1, "game_no": 1,
+            "ply": 1, "player": position.player, "dice": position.dice, "board": position.board,
+            "position_id": position.position_id, "gnubg_match_id": position.match_id,
+            "notation": position.notation
+        },
+        "players": ["White", "Black"], "prompt": "Answer", "played": position.notation,
+        "source": { "kind": "analysis", "job_id": Uuid::nil(), "match_id": Uuid::nil(), "game_no": 1 },
+        "solution": { "engine": "Fixture", "plies": 0, "candidates": [] }
+    });
+    let future_at: chrono::DateTime<chrono::Utc> = sqlx::query_scalar(
+        "WITH inserted AS (
+            INSERT INTO learning_cards(id,signature,payload,due_at) VALUES
+                ($1,'shared',$5,now()),($2,'tied',$5,now()),
+                ($3,'future','{}',now()+interval '1 hour'),
+                ($4,'orphan','{}',now()-interval '1 day') RETURNING id,due_at
+         ) SELECT due_at FROM inserted WHERE id=$3",
+    )
+    .bind(card)
+    .bind(tied)
+    .bind(future)
+    .bind(orphan)
+    .bind(payload)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO deck_cards(deck_id,card_id) VALUES ($1,$3),($2,$3),($2,$4),($1,$5)")
+        .bind(first_deck)
+        .bind(second_deck)
+        .bind(card)
+        .bind(tied)
+        .bind(future)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (status, summary) = call(app.clone(), "GET", url, Value::Null).await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        summary,
+        json!({"card_count":3,"due_count":2,"next_due_at":future_at,
+        "next_deck":{"id":first_deck,"name":"First"}})
+    );
+    let next = format!(
+        "/api/decks/{}/next",
+        summary["next_deck"]["id"].as_str().unwrap()
+    );
+    let (status, deck_head) = call(app.clone(), "GET", &next, Value::Null).await;
+    assert_eq!(status, 200);
+    assert_eq!(deck_head["card"]["id"], json!(card));
+    assert_eq!(deck_head["card"]["review_count"], 0);
+    sqlx::query("DELETE FROM deck_cards WHERE card_id IN ($1,$2)")
+        .bind(card)
+        .bind(tied)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        call(app, "GET", url, Value::Null).await.1,
+        json!({"card_count":1,"due_count":0,"next_due_at":future_at,"next_deck":null})
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn active_attempts_are_resumable_and_share_the_existing_review_transaction(pool: PgPool) {
+    let app = api::router(api::AppState::new(
+        pool.clone(),
+        Engine::new("unused".into()),
+    ));
+    let (_, deck) = call(app.clone(), "POST", "/api/decks", json!({"name":"Active"})).await;
+    let deck_id = Uuid::parse_str(deck["id"].as_str().unwrap()).unwrap();
+    let sgf = "(;GM[6]MI[length:7];W[31hefe])";
+    let parsed = import::parse_sgf(sgf).unwrap();
+    let game = &parsed.positions[0];
+    let mut position = json!({
+        "id": Uuid::nil(), "match_uuid":Uuid::new_v4(), "ordinal":1, "game_no":1,
+        "ply":1,"player":game.player,"dice":game.dice,"board":game.board,
+        "position_id":game.position_id,"gnubg_match_id":game.match_id,"notation":game.notation
+    });
+    for (kind, input, played, best, loss) in [
+        (
+            "checker",
+            json!({"kind":"checker","steps":[{"from":8,"to":5},{"from":6,"to":5}]}),
+            "8/5 6/5",
+            "8/5 6/5",
+            0.0,
+        ),
+        (
+            "cube_offer",
+            json!({"kind":"cube_offer","action":"double"}),
+            "double",
+            "no double",
+            0.125,
+        ),
+        (
+            "cube_response",
+            json!({"kind":"cube_response","action":"drop"}),
+            "take",
+            "drop",
+            0.0,
+        ),
+    ] {
+        let card = Uuid::new_v4();
+        if kind != "checker" {
+            // This legacy response ID stores the responder in the position
+            // context, with the pre-offer cube and no pending bit.
+            let mut bytes = base64::Engine::decode(
+                &base64::engine::general_purpose::STANDARD_NO_PAD,
+                &game.match_id,
+            )
+            .unwrap();
+            bytes[1] &= 0x7f;
+            bytes[2] &= 0xe0;
+            position["gnubg_match_id"] = json!(base64::Engine::encode(
+                &base64::engine::general_purpose::STANDARD_NO_PAD,
+                bytes
+            ));
+            position["dice"] = json!([0, 0]);
+        }
+        let payload = json!({
+            "kind":kind,"position":position,"players":["White","Black"],"prompt":"Answer",
+            "source":{"kind":"match","job_id":Uuid::new_v4(),"match_id":position["match_uuid"],"position_id":null,"game_no":1,"decision_no":1},
+            "solution":{"engine":"Fixture Engine","plies":2,"candidates":[],"decision":{
+                "decision_no":1,"checker_no":null,"player":0,"kind":if kind=="checker" {"checker"} else {"cube"},
+                "played":played,"best":best,"played_equity":0.0,"best_equity":if kind=="checker" {0.0} else {0.125},
+                "equity_loss":if kind=="checker" {0.0} else {0.125},"severity":"none",
+                "dice":if kind=="checker" {json!(game.dice)} else {Value::Null},"evaluation_status":"evaluated"
+            }},"played":played
+        });
+        sqlx::query("INSERT INTO learning_cards(id,signature,payload) VALUES($1,$2,$3)")
+            .bind(card)
+            .bind(kind)
+            .bind(payload)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO deck_cards(deck_id,card_id) VALUES($1,$2)")
+            .bind(deck_id)
+            .bind(card)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let next = format!("/api/decks/{deck_id}/next");
+        let attempt = format!("/api/cards/{card}/attempt");
+        let reveal = format!("/api/cards/{card}/reveal");
+        let review = format!("/api/cards/{card}/review");
+        let (_, next_before) = call(app.clone(), "GET", &next, Value::Null).await;
+        assert!(next_before["active_attempt"].is_null());
+        assert_eq!(next_before["card"]["position"]["notation"], "");
+        if kind == "checker" {
+            let (illegal, _) = call(
+                app.clone(),
+                "POST",
+                &attempt,
+                json!({"expected_version":0,"request_id":Uuid::new_v4(),"answer":{"kind":"checker","steps":[]}}),
+            ).await;
+            assert_eq!(illegal, 422, "a playable roll cannot be passed");
+            let (unavailable, detail) = call(
+                app.clone(),
+                "POST",
+                &attempt,
+                json!({"expected_version":0,"request_id":Uuid::new_v4(),"answer":{"kind":"checker","steps":[{"from":24,"to":21},{"from":24,"to":23}]}}),
+            ).await;
+            assert_eq!(unavailable, 503, "{detail}");
+            assert!(
+                call(app.clone(), "GET", &next, Value::Null).await.1["active_attempt"].is_null()
+            );
+        }
+        let (_, old_reveal) =
+            call(app.clone(), "POST", &reveal, json!({"expected_version":0})).await;
+        let first = json!({"expected_version":0,"request_id":Uuid::new_v4(),"answer":input});
+        let mut second = first.clone();
+        second["request_id"] = json!(Uuid::new_v4());
+        let (a, b) = tokio::join!(
+            call(app.clone(), "POST", &attempt, first.clone()),
+            call(app.clone(), "POST", &attempt, second.clone())
+        );
+        let (submission, (status, result), rejected) = if a.0 == 200 {
+            (first, a, b)
+        } else {
+            (second, b, a)
+        };
+        assert_eq!(status, 200, "{kind}: {result}");
+        assert_eq!(rejected.0, 409, "{kind}: {rejected:?}");
+        assert_eq!(result["evaluation"]["equity_loss"], loss);
+        let retry = call(app.clone(), "POST", &attempt, submission.clone()).await;
+        assert_eq!(retry, (200, result.clone()));
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM review_sessions WHERE card_id=$1 AND attempt_request_id IS NOT NULL")
+                .bind(card).fetch_one(&pool).await.unwrap(),
+            1
+        );
+        let (_, restored) = call(app.clone(), "GET", &next, Value::Null).await;
+        assert_eq!(restored["active_attempt"], result);
+        let (status, summary) = call(
+            app.clone(),
+            "GET",
+            "/api/study/learning-summary",
+            Value::Null,
+        )
+        .await;
+        assert_eq!(status, 200);
+        assert_eq!(summary["due_count"], 1);
+        assert_eq!(summary["next_deck"]["id"], deck["id"]);
+        assert_eq!(
+            call(app.clone(), "GET", &next, Value::Null).await,
+            (200, restored)
+        );
+        let bypass = json!({"request_id":Uuid::new_v4(),"session_id":old_reveal["session_id"],"rating":"easy"});
+        assert_eq!(call(app.clone(), "POST", &review, bypass).await.0, 409);
+        let rating = json!({"request_id":Uuid::new_v4(),"session_id":result["revealed"]["session_id"],"rating":"good"});
+        let (a, b) = tokio::join!(
+            call(app.clone(), "POST", &review, rating.clone()),
+            call(app.clone(), "POST", &review, rating.clone())
+        );
+        assert_eq!(a.0, 200, "{a:?}");
+        assert_eq!(a, b);
+        assert_eq!(a.1["review_count"], 1);
+        assert_eq!(call(app.clone(), "POST", &attempt, submission).await.0, 409);
+    }
+}
+
 async fn call(app: axum::Router, method: &str, uri: &str, body: Value) -> (u16, Value) {
     let response = app
         .oneshot(
@@ -22,7 +274,14 @@ async fn call(app: axum::Router, method: &str, uri: &str, body: Value) -> (u16, 
         .unwrap();
     let status = response.status().as_u16();
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
-    (status, serde_json::from_slice(&bytes).unwrap())
+    (
+        status,
+        if bytes.is_empty() {
+            Value::Null
+        } else {
+            serde_json::from_slice(&bytes).unwrap()
+        },
+    )
 }
 
 #[sqlx::test(migrations = "./migrations")]

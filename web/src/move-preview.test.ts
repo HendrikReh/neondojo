@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'vitest';
-import { projectMove, type MovePreview } from './move-preview';
+import {
+  projectMove,
+  projectPracticeSteps,
+  type MovePreview,
+} from './move-preview';
 
 const board = (points: Record<number, number>) => {
   const result = Array<number>(26).fill(0);
@@ -18,6 +22,21 @@ const success = (result: MovePreview) => {
   if (!result.ok) throw new Error(result.reason);
   return result;
 };
+
+test('restores the exact submitted path when only the checker steps were saved', () => {
+  const source = position({ 24: 1, 19: -1 }, [6, 5], '', 0);
+  const preview = success(
+    projectPracticeSteps(source, [
+      { from: 24, to: 19 },
+      { from: 19, to: 13 },
+    ]),
+  );
+  expect(preview.steps).toEqual([
+    { from: 24, to: 19, die: 5, hit: true },
+    { from: 19, to: 13, die: 6, hit: false },
+  ]);
+  expect(preview.board[0]).toBe(-1);
+});
 
 describe('projectMove', () => {
   test('projects a complete roll without changing the source position', () => {

@@ -3,6 +3,7 @@ mod apkg;
 mod content;
 mod scheduler;
 mod search;
+use crate::practice::evaluation::{self, PracticeAnswer, PracticeEvaluation, SavedEvaluation};
 pub(crate) use content::saved_checker_move;
 pub use search::{
     CardBrowseContext, CardBrowseItem, CardDeck, CardKind, CardQuery, CardReviewState,
@@ -57,6 +58,20 @@ pub struct Deck {
     pub card_count: i64,
     pub due_count: i64,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Serialize, ToSchema)]
+struct StudyDeck {
+    id: Uuid,
+    name: String,
+}
+
+#[derive(Serialize, ToSchema)]
+struct LearningSummary {
+    card_count: i64,
+    due_count: i64,
+    next_due_at: Option<DateTime<Utc>>,
+    next_deck: Option<StudyDeck>,
 }
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
@@ -179,6 +194,8 @@ pub struct ReviewCounts {
 pub struct NextCard {
     pub card: Option<CardQuestion>,
     pub counts: ReviewCounts,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_attempt: Option<AttemptedCard>,
 }
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct RevealCard {
@@ -199,6 +216,20 @@ pub struct RevealedCard {
     pub answer: CardAnswer,
     pub intervals: RatingIntervals,
     pub session_id: Uuid,
+}
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+struct CardAttemptRequest {
+    expected_version: i64,
+    request_id: Uuid,
+    answer: PracticeAnswer,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct AttemptedCard {
+    revealed: RevealedCard,
+    submitted: PracticeAnswer,
+    evaluation: PracticeEvaluation,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -269,6 +300,12 @@ impl CardRow {
         let mut position = c.position;
         position.id = self.id;
         position.notation.clear();
+        if matches!(c.kind.as_str(), "cube_offer" | "cube_response") {
+            if let Some(id) = crate::import::ids::hide_dice(&position.gnubg_match_id) {
+                position.gnubg_match_id = id;
+            }
+            position.dice = vec![0, 0];
+        }
         Ok(CardQuestion {
             id: self.id,
             version: self.version,
@@ -283,6 +320,96 @@ impl CardRow {
     }
 }
 
+#[derive(FromRow)]
+struct AttemptRow {
+    session_id: Uuid,
+    request_id: Uuid,
+    #[sqlx(json)]
+    submitted: PracticeAnswer,
+    #[sqlx(json)]
+    evaluation: PracticeEvaluation,
+}
+
+#[derive(FromRow)]
+struct DueCardRow {
+    #[sqlx(flatten)]
+    card: CardRow,
+    #[sqlx(json(nullable))]
+    active_attempt: Option<AttemptData>,
+}
+
+#[derive(Deserialize)]
+struct AttemptData {
+    session_id: Uuid,
+    submitted: PracticeAnswer,
+    evaluation: PracticeEvaluation,
+}
+
+impl AttemptRow {
+    fn into_data(self) -> AttemptData {
+        AttemptData {
+            session_id: self.session_id,
+            submitted: self.submitted,
+            evaluation: self.evaluation,
+        }
+    }
+
+    fn confirm_request(&self, request: &CardAttemptRequest) -> ApiResult<()> {
+        if self.request_id != request.request_id
+            || serde_json::to_value(&self.submitted).map_err(anyhow::Error::from)?
+                != serde_json::to_value(&request.answer).map_err(anyhow::Error::from)?
+        {
+            return Err(conflict(
+                "A first attempt already exists for this card version",
+            ));
+        }
+        Ok(())
+    }
+}
+
+async fn active_attempt(
+    executor: impl sqlx::PgExecutor<'_>,
+    card: &CardRow,
+) -> ApiResult<Option<AttemptRow>> {
+    Ok(sqlx::query_as(
+        "SELECT id AS session_id, attempt_request_id AS request_id, attempt_input AS submitted,
+                attempt_result AS evaluation FROM review_sessions
+         WHERE card_id=$1 AND card_version=$2 AND attempt_request_id IS NOT NULL",
+    )
+    .bind(card.id)
+    .bind(card.version)
+    .fetch_optional(executor)
+    .await
+    .map_err(anyhow::Error::from)?)
+}
+
+async fn revealed_card(
+    connection: &mut sqlx::PgConnection,
+    card: &CardRow,
+    session_id: Uuid,
+    now: DateTime<Utc>,
+) -> ApiResult<RevealedCard> {
+    Ok(RevealedCard {
+        card_id: card.id,
+        version: card.version,
+        answer: content::answer_on_connection(connection, &card.content()?).await?,
+        intervals: scheduler::previews(card, now)?,
+        session_id,
+    })
+}
+
+async fn attempted_card(
+    connection: &mut sqlx::PgConnection,
+    card: &CardRow,
+    attempt: AttemptData,
+) -> ApiResult<AttemptedCard> {
+    Ok(AttemptedCard {
+        revealed: revealed_card(connection, card, attempt.session_id, Utc::now()).await?,
+        submitted: attempt.submitted,
+        evaluation: attempt.evaluation,
+    })
+}
+
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/decks", get(decks).post(create_deck))
@@ -292,7 +419,9 @@ pub fn routes() -> Router<AppState> {
         .route("/api/decks/{id}/positions", post(add_positions))
         .route("/api/decks/{id}/export.apkg", get(export_deck))
         .route("/api/decks/{id}/next", get(next_card))
+        .route("/api/study/learning-summary", get(learning_summary))
         .route("/api/cards/{id}/reveal", post(reveal))
+        .route("/api/cards/{id}/attempt", post(submit_attempt))
         .route("/api/cards/{id}/review", post(review))
 }
 
@@ -309,7 +438,9 @@ pub fn routes() -> Router<AppState> {
         add_positions,
         export_deck,
         next_card,
+        learning_summary,
         reveal,
+        submit_attempt,
         review
     ),
     components(schemas(
@@ -334,9 +465,13 @@ pub fn routes() -> Router<AppState> {
         CardReviewState,
         ReviewCounts,
         NextCard,
+        LearningSummary,
+        StudyDeck,
         RevealCard,
         RatingIntervals,
         RevealedCard,
+        CardAttemptRequest,
+        AttemptedCard,
         Rating,
         ReviewCard,
         ReviewResult
@@ -678,6 +813,53 @@ async fn write_cards(
     tx.commit().await.map_err(anyhow::Error::from)?;
     Ok(WrittenCards { cards, total })
 }
+#[utoipa::path(get, path = "/api/study/learning-summary", responses((status = 200, body = LearningSummary)), tag = "Learning")]
+async fn learning_summary(State(state): State<AppState>) -> ApiResult<Json<LearningSummary>> {
+    #[derive(FromRow)]
+    struct SummaryRow {
+        card_count: i64,
+        due_count: i64,
+        next_due_at: Option<DateTime<Utc>>,
+        deck_id: Option<Uuid>,
+        deck_name: Option<String>,
+    }
+
+    let row: SummaryRow = sqlx::query_as(
+        "WITH counts AS (
+             SELECT count(*) AS card_count,
+                    count(*) FILTER (WHERE c.due_at <= now()) AS due_count,
+                    min(c.due_at) FILTER (WHERE c.due_at > now()) AS next_due_at
+             FROM learning_cards c
+             WHERE EXISTS (SELECT 1 FROM deck_cards dc WHERE dc.card_id = c.id)
+         ), oldest AS (
+             SELECT c.id FROM learning_cards c
+             WHERE c.due_at <= now()
+               AND EXISTS (SELECT 1 FROM deck_cards dc WHERE dc.card_id = c.id)
+             ORDER BY c.due_at, c.id LIMIT 1
+         ), next_deck AS (
+             SELECT d.id, d.name FROM oldest
+             JOIN deck_cards dc ON dc.card_id = oldest.id
+             JOIN decks d ON d.id = dc.deck_id
+             ORDER BY d.created_at, d.id LIMIT 1
+         )
+         SELECT counts.*, next_deck.id AS deck_id, next_deck.name AS deck_name
+         FROM counts LEFT JOIN next_deck ON true",
+    )
+    .fetch_one(&state.pool)
+    .await
+    .map_err(anyhow::Error::from)?;
+
+    Ok(Json(LearningSummary {
+        card_count: row.card_count,
+        due_count: row.due_count,
+        next_due_at: row.next_due_at,
+        next_deck: row
+            .deck_id
+            .zip(row.deck_name)
+            .map(|(id, name)| StudyDeck { id, name }),
+    }))
+}
+
 #[utoipa::path(get,path="/api/decks/{id}/next",params(("id"=Uuid,Path)),responses((status=200,body=NextCard),(status=404,body=ErrorBody)),tag="Learning")]
 async fn next_card(
     State(state): State<AppState>,
@@ -685,10 +867,33 @@ async fn next_card(
 ) -> ApiResult<Json<NextCard>> {
     require_deck(&state.pool, id).await?;
     let (total,due,new):(i64,i64,i64)=sqlx::query_as("SELECT count(*),count(*) FILTER(WHERE due_at<=now()),count(*) FILTER(WHERE review_count=0) FROM learning_cards c JOIN deck_cards dc ON dc.card_id=c.id WHERE dc.deck_id=$1").bind(id).fetch_one(&state.pool).await.map_err(anyhow::Error::from)?;
-    let row:Option<CardRow>=sqlx::query_as("SELECT c.* FROM learning_cards c JOIN deck_cards dc ON dc.card_id=c.id WHERE dc.deck_id=$1 AND c.due_at<=now() ORDER BY c.due_at,c.id LIMIT 1").bind(id).fetch_optional(&state.pool).await.map_err(anyhow::Error::from)?;
+    let row: Option<DueCardRow> = sqlx::query_as(
+        "SELECT due.*, (SELECT jsonb_build_object('session_id',s.id,'submitted',s.attempt_input,
+                    'evaluation',s.attempt_result) FROM review_sessions s
+                    WHERE s.card_id=due.id AND s.card_version=due.version
+                      AND s.attempt_request_id IS NOT NULL) AS active_attempt
+         FROM (SELECT c.* FROM learning_cards c JOIN deck_cards dc ON dc.card_id=c.id
+               WHERE dc.deck_id=$1 AND c.due_at<=now() ORDER BY c.due_at,c.id LIMIT 1) due",
+    )
+    .bind(id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(anyhow::Error::from)?;
+    let (card, active_attempt) = if let Some(row) = row {
+        let attempt = if let Some(attempt) = row.active_attempt {
+            let mut connection = state.pool.acquire().await.map_err(anyhow::Error::from)?;
+            Some(attempted_card(&mut connection, &row.card, attempt).await?)
+        } else {
+            None
+        };
+        (Some(row.card.question()?), attempt)
+    } else {
+        (None, None)
+    };
     Ok(Json(NextCard {
-        card: row.as_ref().map(CardRow::question).transpose()?,
+        card,
         counts: ReviewCounts { total, due, new },
+        active_attempt,
     }))
 }
 #[utoipa::path(post,path="/api/cards/{id}/reveal",params(("id"=Uuid,Path)),request_body=RevealCard,responses((status=200,body=RevealedCard),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
@@ -697,9 +902,10 @@ async fn reveal(
     Path(id): Path<Uuid>,
     LearningJson(body): LearningJson<RevealCard>,
 ) -> ApiResult<Json<RevealedCard>> {
-    let row: CardRow = sqlx::query_as("SELECT * FROM learning_cards WHERE id=$1")
+    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
+    let row: CardRow = sqlx::query_as("SELECT * FROM learning_cards WHERE id=$1 FOR UPDATE")
         .bind(id)
-        .fetch_optional(&state.pool)
+        .fetch_optional(&mut *tx)
         .await
         .map_err(anyhow::Error::from)?
         .ok_or_else(ApiError::missing)?;
@@ -707,9 +913,13 @@ async fn reveal(
         return Err(conflict("Card changed; reload it before revealing"));
     }
     let now = Utc::now();
-    let intervals = scheduler::previews(&row, now)?;
-    let answer = content::answer(&state.pool, &row.content()?).await?;
+    if let Some(attempt) = active_attempt(&mut *tx, &row).await? {
+        return Ok(Json(
+            revealed_card(&mut tx, &row, attempt.session_id, now).await?,
+        ));
+    }
     let session_id = Uuid::new_v4();
+    let revealed = revealed_card(&mut tx, &row, session_id, now).await?;
     sqlx::query(
         "INSERT INTO review_sessions(id,card_id,card_version,expires_at) VALUES($1,$2,$3,$4)",
     )
@@ -717,16 +927,101 @@ async fn reveal(
     .bind(id)
     .bind(row.version)
     .bind(now + chrono::Duration::days(1))
-    .execute(&state.pool)
+    .execute(&mut *tx)
     .await
     .map_err(anyhow::Error::from)?;
-    Ok(Json(RevealedCard {
-        card_id: id,
-        version: row.version,
-        answer,
-        intervals,
-        session_id,
-    }))
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    Ok(Json(revealed))
+}
+
+#[utoipa::path(post,path="/api/cards/{id}/attempt",params(("id"=Uuid,Path)),request_body=CardAttemptRequest,responses((status=200,body=AttemptedCard),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody),(status=429,body=ErrorBody),(status=503,body=ErrorBody),(status=504,body=ErrorBody)),tag="Learning")]
+async fn submit_attempt(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    LearningJson(body): LearningJson<CardAttemptRequest>,
+) -> ApiResult<Json<AttemptedCard>> {
+    let row = load_attempt_card(&state.pool, id, body.expected_version, false).await?;
+    if let Some(previous) = active_attempt(&state.pool, &row).await? {
+        // Recheck under the same lock used to finish a review. The card may
+        // have advanced since the preliminary lookup.
+        previous.confirm_request(&body)?;
+        let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
+        let row = load_attempt_card(&mut *tx, id, body.expected_version, true).await?;
+        let result = attempted_card(&mut tx, &row, previous.into_data()).await?;
+        return Ok(Json(result));
+    }
+    let card = row.content()?;
+    crate::play::require_review_available(&state.pool, card.source.match_id).await?;
+    let evaluation = evaluation::evaluate(
+        &state,
+        &card.kind,
+        &card.position,
+        SavedEvaluation {
+            engine: &card.solution.engine,
+            plies: Some(card.solution.plies),
+            decision: card.solution.decision.as_ref(),
+            candidates: &card.solution.candidates,
+            native: true,
+        },
+        &body.answer,
+    )
+    .await?;
+
+    // Evaluation can be slow. Serialize only the short write with reviews
+    // and card updates and verify the snapshot version again at that point.
+    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
+    let row = load_attempt_card(&mut *tx, id, body.expected_version, true).await?;
+    let attempt = if let Some(previous) = active_attempt(&mut *tx, &row).await? {
+        previous.confirm_request(&body)?;
+        previous.into_data()
+    } else {
+        crate::play::require_review_available_on(&mut *tx, card.source.match_id).await?;
+        let session_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO review_sessions(id,card_id,card_version,expires_at,attempt_request_id,attempt_input,attempt_result)
+             VALUES($1,$2,$3,now() + interval '1 day',$4,$5,$6)",
+        )
+        .bind(session_id)
+        .bind(id)
+        .bind(row.version)
+        .bind(body.request_id)
+        .bind(sqlx::types::Json(&body.answer))
+        .bind(sqlx::types::Json(&evaluation))
+        .execute(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?;
+        AttemptData {
+            session_id,
+            submitted: body.answer,
+            evaluation,
+        }
+    };
+    let result = attempted_card(&mut tx, &row, attempt).await?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    Ok(Json(result))
+}
+
+async fn load_attempt_card(
+    executor: impl sqlx::PgExecutor<'_>,
+    id: Uuid,
+    expected_version: i64,
+    lock: bool,
+) -> ApiResult<CardRow> {
+    let sql = if lock {
+        "SELECT * FROM learning_cards WHERE id=$1 FOR UPDATE"
+    } else {
+        "SELECT * FROM learning_cards WHERE id=$1"
+    };
+    let row: CardRow = sqlx::query_as(sql)
+        .bind(id)
+        .fetch_optional(executor)
+        .await
+        .map_err(anyhow::Error::from)?
+        .ok_or_else(ApiError::missing)?;
+    if row.version != expected_version {
+        return Err(conflict("Card changed; reload it before answering"));
+    }
+    Ok(row)
 }
 #[utoipa::path(post,path="/api/cards/{id}/review",params(("id"=Uuid,Path)),request_body=ReviewCard,responses((status=200,body=ReviewResult),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
 async fn review(
@@ -759,20 +1054,24 @@ async fn review(
             serde_json::from_value(result).map_err(anyhow::Error::from)?,
         ));
     }
-    let session: Option<(i64, DateTime<Utc>)> = sqlx::query_as(
-        "SELECT card_version,expires_at FROM review_sessions WHERE id=$1 AND card_id=$2",
+    let session: Option<(i64, DateTime<Utc>, bool)> = sqlx::query_as(
+        "SELECT card_version,expires_at,attempt_request_id IS NOT NULL FROM review_sessions WHERE id=$1 AND card_id=$2",
     )
     .bind(body.session_id)
     .bind(id)
     .fetch_optional(&mut *tx)
     .await
     .map_err(anyhow::Error::from)?;
-    let (version, expires) = session.ok_or_else(|| conflict("Reveal this card before rating"))?;
+    let (version, expires, is_attempt) =
+        session.ok_or_else(|| conflict("Reveal this card before rating"))?;
     let now = Utc::now();
-    if version != row.version || expires < now {
+    if version != row.version || (!is_attempt && expires < now) {
         return Err(conflict(
             "Review session is stale; reload and reveal the card",
         ));
+    }
+    if !is_attempt && active_attempt(&mut *tx, &row).await?.is_some() {
+        return Err(conflict("Rate the saved first attempt for this card"));
     }
     let result = scheduler::rate(&row, body.rating, now)?;
     sqlx::query("UPDATE learning_cards SET stability=$2,difficulty=$3,last_review=$4,due_at=$5,version=$6,review_count=$7,updated_at=$4 WHERE id=$1").bind(id).bind(result.stability).bind(result.difficulty).bind(now).bind(result.due_at).bind(result.version).bind(result.review_count).execute(&mut *tx).await.map_err(anyhow::Error::from)?;

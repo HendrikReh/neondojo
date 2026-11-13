@@ -17,21 +17,7 @@ pub(super) const TOO_BROAD: &str =
     "Too many analyzed decisions or source games; choose a database to narrow this request";
 
 pub(crate) fn evaluated(d: &Decision) -> bool {
-    d.evaluation_status == "evaluated"
-        && (0..=1).contains(&d.player)
-        && matches!(d.kind.as_str(), "checker" | "cube")
-        && !d.best.trim().is_empty()
-        && !d.played.trim().is_empty()
-        && d.equity_loss.is_finite()
-        && d.equity_loss >= 0.0
-        && d.played_equity.is_some_and(f64::is_finite)
-        && d.best_equity.is_some_and(f64::is_finite)
-        && d.best_equity
-            .zip(d.played_equity)
-            .is_some_and(|(best, played)| {
-                best >= played - 0.000001
-                    && (d.equity_loss - (best - played).max(0.0)).abs() <= 0.000001000001
-            })
+    crate::match_analysis::evaluated_equities(d).is_some()
 }
 pub(super) struct SourceDecision {
     pub(super) question: MistakePracticeQuestion,
@@ -39,14 +25,16 @@ pub(super) struct SourceDecision {
     pub(super) plan: GamePlan,
 }
 impl SourceDecision {
-    pub(super) fn matches(&self, player: &str, plan: Option<GamePlan>, loss: f64) -> bool {
+    pub(super) fn in_scope(&self, player: &str, plan: Option<GamePlan>) -> bool {
         self.question.players[self.decision.player as usize]
             .trim()
             .to_lowercase()
-            == player.to_lowercase()
+            == player
             && plan.is_none_or(|p| p == self.plan)
-            && self.decision.equity_loss >= loss
-            && self.decision.equity_loss > 0.0
+    }
+
+    pub(super) fn meets_loss_threshold(&self, loss: f64) -> bool {
+        self.decision.equity_loss >= loss && self.decision.equity_loss > 0.0
     }
 }
 #[derive(FromRow)]

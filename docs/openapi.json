@@ -456,6 +456,107 @@
         }
       }
     },
+    "/api/cards/{id}/attempt": {
+      "post": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "submit_attempt",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardAttemptRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttemptedCard"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/cards/{id}/reveal": {
       "post": {
         "tags": [
@@ -6664,6 +6765,26 @@
         }
       }
     },
+    "/api/study/learning-summary": {
+      "get": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "learning_summary",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/study/mistakes": {
       "get": {
         "tags": [
@@ -6718,6 +6839,86 @@
             }
           },
           "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/study/mistakes/attempt": {
+      "post": {
+        "tags": [
+          "Study"
+        ],
+        "operationId": "attempt",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MistakeAttemptRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MistakeAttempt"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "504": {
             "description": "",
             "content": {
               "application/json": {
@@ -7811,6 +8012,25 @@
           "imported"
         ]
       },
+      "AttemptedCard": {
+        "type": "object",
+        "required": [
+          "revealed",
+          "submitted",
+          "evaluation"
+        ],
+        "properties": {
+          "evaluation": {
+            "$ref": "#/components/schemas/PracticeEvaluation"
+          },
+          "revealed": {
+            "$ref": "#/components/schemas/RevealedCard"
+          },
+          "submitted": {
+            "$ref": "#/components/schemas/PracticeAnswer"
+          }
+        }
+      },
       "BenchmarkEngines": {
         "type": "object",
         "required": [
@@ -8544,6 +8764,28 @@
             }
           }
         }
+      },
+      "CardAttemptRequest": {
+        "type": "object",
+        "required": [
+          "expected_version",
+          "request_id",
+          "answer"
+        ],
+        "properties": {
+          "answer": {
+            "$ref": "#/components/schemas/PracticeAnswer"
+          },
+          "expected_version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
       },
       "CardBrowseContext": {
         "type": "object",
@@ -9687,6 +9929,20 @@
             "format": "uuid"
           }
         }
+      },
+      "CubeOfferAction": {
+        "type": "string",
+        "enum": [
+          "no_double",
+          "double"
+        ]
+      },
+      "CubeResponseAction": {
+        "type": "string",
+        "enum": [
+          "take",
+          "drop"
+        ]
       },
       "Database": {
         "type": "object",
@@ -11279,6 +11535,40 @@
           "failed"
         ]
       },
+      "LearningSummary": {
+        "type": "object",
+        "required": [
+          "card_count",
+          "due_count"
+        ],
+        "properties": {
+          "card_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "due_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "next_deck": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StudyDeck"
+              }
+            ]
+          },
+          "next_due_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
       "LibraryAction": {
         "type": "object",
         "required": [
@@ -11746,6 +12036,37 @@
           }
         }
       },
+      "MistakeAttempt": {
+        "type": "object",
+        "required": [
+          "evaluation",
+          "original"
+        ],
+        "properties": {
+          "evaluation": {
+            "$ref": "#/components/schemas/PracticeEvaluation"
+          },
+          "original": {
+            "$ref": "#/components/schemas/MistakeAnswer"
+          }
+        }
+      },
+      "MistakeAttemptRequest": {
+        "type": "object",
+        "required": [
+          "reference",
+          "answer"
+        ],
+        "properties": {
+          "answer": {
+            "$ref": "#/components/schemas/PracticeAnswer"
+          },
+          "reference": {
+            "$ref": "#/components/schemas/MistakeReference"
+          }
+        },
+        "additionalProperties": false
+      },
       "MistakeGroup": {
         "type": "object",
         "required": [
@@ -11753,7 +12074,8 @@
           "mistake_kind",
           "count",
           "match_count",
-          "total_loss"
+          "total_loss",
+          "rates"
         ],
         "properties": {
           "count": {
@@ -11769,6 +12091,17 @@
           },
           "mistake_kind": {
             "$ref": "#/components/schemas/MistakeKind"
+          },
+          "rates": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MistakeRates",
+                "description": "Null when the decision type has no defined set of opportunities."
+              }
+            ]
           },
           "total_loss": {
             "type": "number",
@@ -11894,6 +12227,36 @@
           }
         },
         "additionalProperties": false
+      },
+      "MistakeRates": {
+        "type": "object",
+        "required": [
+          "decision_count",
+          "error_rate",
+          "loss_per_100",
+          "small_sample"
+        ],
+        "properties": {
+          "decision_count": {
+            "type": "integer",
+            "description": "Evaluable decisions in the same game plan and decision category,\nindependent of the error threshold. Cube categories use the best action.",
+            "minimum": 0
+          },
+          "error_rate": {
+            "type": "number",
+            "format": "double",
+            "description": "Fraction of those decisions that meet the positive loss threshold."
+          },
+          "loss_per_100": {
+            "type": "number",
+            "format": "double",
+            "description": "Sum of qualifying normalized equity losses per 100 evaluable decisions."
+          },
+          "small_sample": {
+            "type": "boolean",
+            "description": "True when there are fewer than 30 evaluable decisions."
+          }
+        }
       },
       "MistakeReference": {
         "type": "object",
@@ -12120,6 +12483,16 @@
           "counts"
         ],
         "properties": {
+          "active_attempt": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AttemptedCard"
+              }
+            ]
+          },
           "card": {
             "oneOf": [
               {
@@ -13940,6 +14313,151 @@
           }
         }
       },
+      "PracticeAnswer": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "steps",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "checker"
+                ]
+              },
+              "steps": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PlayStep"
+                },
+                "maxItems": 4
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "action",
+              "kind"
+            ],
+            "properties": {
+              "action": {
+                "$ref": "#/components/schemas/CubeOfferAction"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "cube_offer"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "action",
+              "kind"
+            ],
+            "properties": {
+              "action": {
+                "$ref": "#/components/schemas/CubeResponseAction"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "cube_response"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "PracticeEvaluation": {
+        "type": "object",
+        "required": [
+          "verdict",
+          "chosen",
+          "best",
+          "equity_loss",
+          "provenance"
+        ],
+        "properties": {
+          "best": {
+            "type": "string"
+          },
+          "best_equity": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "chosen": {
+            "type": "string"
+          },
+          "chosen_equity": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "equity_loss": {
+            "type": "number",
+            "format": "double"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/PracticeProvenance"
+          },
+          "verdict": {
+            "$ref": "#/components/schemas/PracticeVerdict"
+          }
+        }
+      },
+      "PracticeProvenance": {
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "engine": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PracticeProvenanceKind"
+          },
+          "plies": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "PracticeProvenanceKind": {
+        "type": "string",
+        "enum": [
+          "stored",
+          "recomputed",
+          "forced"
+        ]
+      },
+      "PracticeVerdict": {
+        "type": "string",
+        "enum": [
+          "best",
+          "playable",
+          "error",
+          "forced"
+        ]
+      },
       "ProfileConfiguration": {
         "type": "object",
         "required": [
@@ -14868,6 +15386,22 @@
             ],
             "format": "uuid",
             "description": "Checker notes use this canonical position occurrence; cube notes use id."
+          }
+        }
+      },
+      "StudyDeck": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
           }
         }
       },

@@ -50,6 +50,7 @@ vi.mock('react', async (original) => ({
 import LearningWorkspace, { useDecks } from './LearningPanel';
 import ActionButton from './ActionButton';
 import { SearchFilterSelect } from './SearchFilterForm';
+import StudyCardExercise from './StudyCardExercise';
 const decks = [
   { id: 'a', name: 'A', card_count: 1, version: 0 },
   { id: 'b', name: 'B', card_count: 0, version: 0 },
@@ -145,7 +146,7 @@ it('hides the old study card synchronously on an A–B–A deck round trip befor
   await settle();
   view = render();
   expect(
-    elements(view).some((element) => element.props?.className === 'study-card'),
+    elements(view).some((element) => element.type === StudyCardExercise),
   ).toBe(true);
   elements(view)
     .find((element) => element.type === SearchFilterSelect)!
@@ -163,7 +164,7 @@ it('hides the old study card synchronously on an A–B–A deck round trip befor
     .props.onClick();
   view = render();
   expect(
-    elements(view).some((element) => element.props?.className === 'study-card'),
+    elements(view).some((element) => element.type === StudyCardExercise),
   ).toBe(false);
 });
 
@@ -260,7 +261,7 @@ it('waits for the current revision before consuming an external deck missing fro
       .value,
   ).toBe('new-deck');
   expect(
-    elements(view).some((element) => element.props?.className === 'study-card'),
+    elements(view).some((element) => element.type === StudyCardExercise),
   ).toBe(true);
   expect(
     fetch.mock.calls.some(

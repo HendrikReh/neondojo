@@ -1,6 +1,6 @@
 //! The only absolute/GNU-ID to mover-relative Sage context conversion.
+use crate::import::ids::MatchId;
 use anyhow::{Context as _, Result, ensure};
-use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
@@ -21,15 +21,8 @@ pub(super) struct Context {
 
 impl Context {
     pub fn decode(match_id: &str) -> Result<Self> {
-        let bytes = STANDARD_NO_PAD.decode(match_id)?;
-        ensure!(bytes.len() == 9, "Invalid GNUbg Match ID");
-        let bits = |offset: usize, count: usize| -> i32 {
-            (0..count).fold(0, |value, index| {
-                value
-                    | (i32::from((bytes[(offset + index) / 8] >> ((offset + index) % 8)) & 1)
-                        << index)
-            })
-        };
+        let id = MatchId::decode(match_id).context("Invalid GNUbg Match ID")?;
+        let bits = |offset, width| id.bits(offset, width);
         let player = bits(6, 1);
         let owner = bits(4, 2);
         ensure!(owner != 2, "Invalid cube owner");
@@ -129,6 +122,7 @@ pub(super) fn from_sage(board: &[i32; 26], player: i32) -> Result<[i32; 26]> {
 mod tests {
     use super::*;
     use crate::import::ids;
+    use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
 
     #[test]
     fn asymmetric_bars_and_both_players_preserve_absolute_board() {

@@ -1,6 +1,11 @@
 .recurring-mistakes {
   min-width: 0;
 }
+.mistake-small-sample {
+  display: block;
+  color: var(--ui-muted);
+  white-space: nowrap;
+}
 .recurring-help,
 .recurring-source {
   color: var(--ui-muted);
@@ -32,6 +37,12 @@
 .recurring-practice-board {
   width: min(100%, 680px);
   margin: 12px auto;
+}
+.recurring-question .play-actions {
+  margin-top: 8px;
+}
+.recurring-attempt-result {
+  margin: 12px 0;
 }
 .recurring-answer {
   display: grid;

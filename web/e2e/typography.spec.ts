@@ -249,6 +249,7 @@ test('comment editors, modal titles and study questions follow their roles while
   );
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
+  await page.getByRole('tab', { name: 'Flashcards & Anki', exact: true }).click();
   const study = page.getByRole('region', { name: 'Study', exact: true });
   await expect(study.locator('.learning-card-list small').first()).toHaveCSS(
     'font-family',

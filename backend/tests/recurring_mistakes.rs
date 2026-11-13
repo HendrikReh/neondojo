@@ -133,6 +133,125 @@ async fn database_player_choices_include_matches_without_analysis(pool: PgPool) 
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn mistake_rates_count_correct_and_subthreshold_decisions_with_the_same_best_action(
+    pool: PgPool,
+) {
+    let mut sgf = "(;GM[6]PW[Alice]PB[Bob]MI[length:7];W[31hefe])".to_owned();
+    let mut decisions = Vec::new();
+    for (index, (played, best, loss)) in [
+        ("drop", "take", 0.12),
+        ("take", "take", 0.0),
+        ("drop", "take", 0.04),
+        ("take", "drop", 0.2),
+        ("drop", "drop", 0.0),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        sgf.push_str(&format!("(;GM[6]PW[Alice]PB[Bob]MI[length:7][ws:2][bs:3]AE[a:y]AW[e]AB[s]PL[B]CV[2]CO[b];B[double];W[{played}])"));
+        let game = index as i32 + 2;
+        decisions.push((game, decision(1, 1, "double", "double", 0.0)));
+        decisions.push((game, decision(2, 0, played, best, loss)));
+    }
+    let id = store::import_match(
+        &pool,
+        "opportunities.sgf",
+        "sgf",
+        sgf.as_bytes(),
+        &sgf,
+        &import::parse_sgf(&sgf).unwrap(),
+    )
+    .await
+    .unwrap()
+    .r#match
+    .id;
+    job(&pool, id, 0, None, &decisions).await;
+    let router = app(&pool);
+    for (query, errors, rate, loss_per_100) in [
+        ("", 1, 1.0 / 3.0, 4.0),
+        ("&min_loss=0.04", 2, 2.0 / 3.0, 16.0 / 3.0),
+    ] {
+        let (status, data) = call(
+            &router,
+            "GET",
+            &format!("/api/study/mistakes?player=Alice{query}"),
+            Value::Null,
+        )
+        .await;
+        assert_eq!(status, 200, "{data}");
+        assert_eq!(data["analyzed_decisions"], 5);
+        let groups = data["groups"].as_array().unwrap();
+        let wrong_pass = groups
+            .iter()
+            .find(|g| g["mistake_kind"] == "wrong_pass")
+            .unwrap();
+        let wrong_take = groups
+            .iter()
+            .find(|g| g["mistake_kind"] == "wrong_take")
+            .unwrap();
+        assert_eq!(wrong_pass["count"], errors);
+        assert_eq!(wrong_pass["rates"]["decision_count"], 3);
+        assert_eq!(wrong_pass["rates"]["small_sample"], true);
+        assert!((wrong_pass["rates"]["error_rate"].as_f64().unwrap() - rate).abs() < 1e-10);
+        assert!(
+            (wrong_pass["rates"]["loss_per_100"].as_f64().unwrap() - loss_per_100).abs() < 1e-10
+        );
+        assert_eq!(wrong_take["rates"]["decision_count"], 2);
+        assert_eq!(wrong_take["rates"]["error_rate"], 0.5);
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn active_practice_scores_all_three_decisions_without_writing_learning_state(pool: PgPool) {
+    let id = source(&pool).await;
+    let saved = job(&pool, id, 0, Some(1), &game1(0.125)).await;
+    let router = app(&pool);
+    let endpoint = "/api/study/mistakes/attempt";
+    for (number, answer, best, loss) in [
+        (
+            1,
+            json!({"kind":"checker","steps":[{"from":8,"to":5},{"from":6,"to":5}]}),
+            "6/3 6/5",
+            0.125,
+        ),
+        (
+            2,
+            json!({"kind":"cube_offer","action":"double"}),
+            "no double",
+            0.125,
+        ),
+        (
+            3,
+            json!({"kind":"cube_response","action":"drop"}),
+            "drop",
+            0.0,
+        ),
+    ] {
+        let (status, result) = call(
+            &router,
+            "POST",
+            endpoint,
+            json!({
+                "reference":{"job_id":saved,"game_no":1,"decision_no":number}, "answer":answer
+            }),
+        )
+        .await;
+        assert_eq!(status, 200, "{number}: {result}");
+        assert_eq!(result["evaluation"]["best"], best);
+        assert_eq!(result["evaluation"]["equity_loss"], loss);
+        assert_eq!(result["evaluation"]["provenance"]["kind"], "stored");
+        assert_eq!(result["original"]["equity_loss"], 0.125);
+    }
+    let wrong = json!({"reference":{"job_id":saved,"game_no":1,"decision_no":1},"answer":{"kind":"cube_offer","action":"double"}});
+    assert_eq!(call(&router, "POST", endpoint, wrong).await.0, 422);
+    let newer = job(&pool, id, 2, Some(1), &game1(0.25)).await;
+    assert_ne!(saved, newer);
+    let stale = json!({"reference":{"job_id":saved,"game_no":1,"decision_no":2},"answer":{"kind":"cube_offer","action":"double"}});
+    assert_eq!(call(&router, "POST", endpoint, stale).await.0, 404);
+    let writes: i64 = sqlx::query_scalar("SELECT (SELECT count(*) FROM learning_cards) + (SELECT count(*) FROM review_sessions) + (SELECT count(*) FROM card_reviews)").fetch_one(&pool).await.unwrap();
+    assert_eq!(writes, 0);
+}
+#[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
 async fn selects_deepest_per_game_before_filters_and_uses_actual_decision_player(pool: PgPool) {
     let id = source(&pool).await;
@@ -375,6 +494,243 @@ async fn no_double_is_preroll_and_malformed_or_forced_evaluations_are_excluded(p
         .1["groups"],
         json!([])
     );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn missed_double_practice_mixes_correct_rolls_and_keeps_answers_hidden(pool: PgPool) {
+    let sgf = concat!(
+        "(;GM[6]PW[Alice]PB[Bob]MI[length:7];W[31hefe])",
+        "(;GM[6]MI[length:7]AE[a:y]AW[f]AB[s]PL[W];W[31fccb])",
+        "(;GM[6]MI[length:7][ws:1]AE[a:y]AW[f]AB[s]PL[W];W[31fccb])",
+        "(;GM[6]MI[length:7][ws:1]AE[a:y]AW[f]AB[s]PL[W];W[31fccb])",
+        "(;GM[6]MI[length:7][ws:2]AE[a:y]AW[f]AB[s]PL[W]CV[2]CO[b];W[31fccb])",
+        "(;GM[6]MI[length:7][ws:3]AE[a:y]AW[f]AB[s]PL[W];W[31fccb])",
+        "(;GM[6]MI[length:7][ws:4]AE[a:y]AW[f]AB[s]PL[W];W[31fccb])",
+        "(;GM[6]MI[length:7][ws:5]AE[a:y]AW[f]AB[s]PL[W]CV[2]CO[w];W[31fccb])",
+    );
+    let imported = store::import_match(
+        &pool,
+        "mixed-cube.sgf",
+        "sgf",
+        sgf.as_bytes(),
+        sgf,
+        &import::parse_sgf(sgf).unwrap(),
+    )
+    .await
+    .unwrap()
+    .r#match;
+    let saved = job(
+        &pool,
+        imported.id,
+        0,
+        None,
+        &[
+            (2, decision(1, 0, "no double", "double", 0.2)),
+            (3, decision(1, 0, "no double", "no double", 0.0)),
+            (4, decision(1, 0, "no double", "no double", 0.0)),
+            (5, decision(1, 0, "no double", "no double", 0.0)),
+            (6, decision(1, 0, "no double", "double", 0.02)),
+            (7, decision(1, 0, "no double", "double", 0.15)),
+            (8, decision(1, 0, "no double", "no double", 0.0)),
+        ],
+    )
+    .await;
+    let router = app(&pool);
+    let (_, stats) = call(
+        &router,
+        "GET",
+        "/api/study/mistakes?player=Alice",
+        Value::Null,
+    )
+    .await;
+    let group = &stats["groups"][0];
+    assert_eq!(group["mistake_kind"], "missed_double");
+    assert_eq!(group["count"], 2);
+    let mut request = json!({
+        "player": "Alice", "game_plan": group["game_plan"], "mistake_kind": "missed_double"
+    });
+    let (status, round) = call(
+        &router,
+        "POST",
+        "/api/study/mistakes/practice",
+        request.clone(),
+    )
+    .await;
+    assert_eq!(status, 200, "{round}");
+    let items = round["items"].as_array().unwrap();
+    assert_eq!(items.len(), 3, "{round}");
+    let mut games = Vec::new();
+    for item in items {
+        assert_eq!(item["kind"], "cube_offer");
+        assert_eq!(item["position"]["dice"], json!([0, 0]));
+        assert_eq!(item["position"]["notation"], "");
+        for key in ["played", "best", "equity_loss"] {
+            assert!(item.get(key).is_none(), "{item}");
+        }
+        let game = item["reference"]["game_no"].as_i64().unwrap();
+        games.push(game);
+        let (best, loss) = match game {
+            2 => ("double", 0.2),
+            3 => ("no double", 0.0),
+            7 => ("double", 0.15),
+            _ => panic!("unexpected question: {item}"),
+        };
+        let (status, result) = call(
+            &router,
+            "POST",
+            "/api/study/mistakes/attempt",
+            json!({
+                "reference": item["reference"],
+                "answer": {"kind": "cube_offer", "action": "no_double"}
+            }),
+        )
+        .await;
+        assert_eq!(status, 200, "{result}");
+        assert_eq!(result["evaluation"]["best"], best);
+        assert_eq!(result["evaluation"]["equity_loss"], loss);
+        assert_eq!(result["evaluation"]["provenance"]["kind"], "stored");
+        let (status, reveal) = call(
+            &router,
+            "POST",
+            "/api/study/mistakes/reveal",
+            item["reference"].clone(),
+        )
+        .await;
+        assert_eq!(status, 200, "{reveal}");
+        assert_eq!(reveal, result["original"]);
+    }
+    games.sort_unstable();
+    assert_eq!(games, [2, 3, 7]);
+    for game in [5, 8] {
+        let unavailable = json!({"job_id": saved, "game_no": game, "decision_no": 1});
+        assert_eq!(
+            call(&router, "POST", "/api/study/mistakes/reveal", unavailable)
+                .await
+                .0,
+            404
+        );
+    }
+    request["min_loss"] = json!(0.25);
+    let (_, empty) = call(&router, "POST", "/api/study/mistakes/practice", request).await;
+    assert_eq!(empty["items"], json!([]));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn take_and_pass_rounds_mix_both_best_actions_and_score_the_responder(pool: PgPool) {
+    let mut sgf = "(;GM[6]PW[Alice]PB[Bob]MI[length:9];W[31hefe])".to_owned();
+    let mut decisions = Vec::new();
+    for (score, played, best, loss) in [
+        (0, "take", "drop", 0.2),
+        (1, "drop", "take", 0.15),
+        (2, "take", "take", 0.0),
+        (3, "drop", "drop", 0.0),
+        (4, "drop", "take", 0.02),
+    ] {
+        sgf.push_str(&format!(
+            "(;GM[6]MI[length:9][ws:{score}]AE[a:y]AW[e]AB[s]PL[B]CV[2]CO[b];B[double];W[{played}])"
+        ));
+        decisions.push((score + 2, decision(1, 1, "double", "double", 0.0)));
+        let mut response = decision(2, 0, played, best, loss);
+        response["best_equity"] = json!(if best == "drop" { -1.0 } else { -0.75 });
+        response["played_equity"] = json!(response["best_equity"].as_f64().unwrap() - loss);
+        decisions.push((score + 2, response));
+    }
+    let imported = store::import_match(
+        &pool,
+        "mixed-cube-responses.sgf",
+        "sgf",
+        sgf.as_bytes(),
+        &sgf,
+        &import::parse_sgf(&sgf).unwrap(),
+    )
+    .await
+    .unwrap()
+    .r#match;
+    job(&pool, imported.id, 0, None, &decisions).await;
+    let router = app(&pool);
+    let (_, stats) = call(
+        &router,
+        "GET",
+        "/api/study/mistakes?player=Alice",
+        Value::Null,
+    )
+    .await;
+    for (kind, mistake_game, contrast_game, correct, contrast, loss) in [
+        ("wrong_take", 2, 4, "drop", "take", 0.2),
+        ("wrong_pass", 3, 5, "take", "drop", 0.15),
+    ] {
+        let group = stats["groups"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|group| group["mistake_kind"] == kind)
+            .unwrap();
+        assert_eq!(group["count"], 1);
+        let (status, round) = call(
+            &router,
+            "POST",
+            "/api/study/mistakes/practice",
+            json!({"player":"Alice", "game_plan":group["game_plan"], "mistake_kind":kind}),
+        )
+        .await;
+        assert_eq!(status, 200, "{round}");
+        let items = round["items"].as_array().unwrap();
+        let mut games = Vec::new();
+        for item in items {
+            assert_eq!(item["kind"], "cube_response");
+            assert_eq!(item["position"]["player"], 0);
+            assert_eq!(item["position"]["dice"], json!([0, 0]));
+            assert_eq!(item["position"]["notation"], "");
+            for key in ["best", "played", "equity_loss"] {
+                assert!(item.get(key).is_none(), "{item}");
+            }
+            games.push(item["reference"]["game_no"].as_i64().unwrap());
+        }
+        games.sort_unstable();
+        assert_eq!(games, [mistake_game, contrast_game], "{round}");
+
+        for (game, answer, best, cost) in [
+            (mistake_game, correct, correct, 0.0),
+            (mistake_game, contrast, correct, loss),
+            (contrast_game, contrast, contrast, 0.0),
+        ] {
+            let item = items
+                .iter()
+                .find(|item| item["reference"]["game_no"] == game)
+                .unwrap();
+            let (status, checked) = call(
+                &router,
+                "POST",
+                "/api/study/mistakes/attempt",
+                json!({
+                    "reference": item["reference"],
+                    "answer": {"kind": "cube_response", "action": answer}
+                }),
+            )
+            .await;
+            assert_eq!(status, 200, "{checked}");
+            let result = &checked["evaluation"];
+            assert_eq!(result["best"], best);
+            assert_eq!(result["chosen"], answer);
+            assert_eq!(result["equity_loss"], cost);
+            assert_eq!(
+                result["best_equity"],
+                if best == "drop" { -1.0 } else { -0.75 }
+            );
+            assert_eq!(result["provenance"]["kind"], "stored");
+            let (status, revealed) = call(
+                &router,
+                "POST",
+                "/api/study/mistakes/reveal",
+                item["reference"].clone(),
+            )
+            .await;
+            assert_eq!(status, 200, "{revealed}");
+            assert_eq!(revealed, checked["original"]);
+        }
+    }
 }
 
 #[sqlx::test(migrations = "./migrations")]

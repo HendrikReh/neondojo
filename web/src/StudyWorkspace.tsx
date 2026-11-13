@@ -6,25 +6,34 @@ import {
   type KeyboardEvent,
 } from 'react';
 import LearningWorkspace from './LearningPanel';
+import StudyOverview from './StudyOverview';
 import StudyReports from './StudyReports';
 import RecurringMistakes from './RecurringMistakes';
 import SimilarPracticeHistory from './SimilarPracticeHistory';
 import { usePositionText } from './position-browser-messages';
-import { useStudyText } from './study-messages';
+import { useStudyOverviewText, useStudyText } from './study-messages';
 import './study.css';
-type Area = 'cards' | 'reports' | 'mistakes' | 'practice';
-const areas: Area[] = ['cards', 'reports', 'mistakes', 'practice'];
-export default function StudyWorkspace(
-  props: ComponentProps<typeof LearningWorkspace>,
-) {
+type Area = 'overview' | 'cards' | 'reports' | 'mistakes' | 'practice';
+const areas: Area[] = ['overview', 'cards', 'reports', 'mistakes', 'practice'];
+export default function StudyWorkspace({
+  onStudyDeck,
+  ...props
+}: ComponentProps<typeof LearningWorkspace> & {
+  onStudyDeck: (id: string) => void;
+}) {
   const t = useStudyText();
+  const overviewText = useStudyOverviewText();
   const p = usePositionText();
-  const [area, setArea] = useState<Area>('cards');
+  const [area, setArea] = useState<Area>('overview');
   const tabs = useRef<Partial<Record<Area, HTMLButtonElement | null>>>({});
   const token = props.requestedDeck?.token;
   useEffect(() => {
     if (token !== undefined) setArea('cards');
   }, [token]);
+  function openArea(next: Area) {
+    setArea(next);
+    tabs.current[next]?.focus();
+  }
   function navigate(event: KeyboardEvent<HTMLButtonElement>, current: Area) {
     let next: Area;
     if (event.key === 'Home') next = areas[0];
@@ -39,8 +48,7 @@ export default function StudyWorkspace(
         ];
     else return;
     event.preventDefault();
-    setArea(next);
-    tabs.current[next]?.focus();
+    openArea(next);
   }
   const visible = props.visible ?? true;
   return (
@@ -65,10 +73,32 @@ export default function StudyWorkspace(
             onClick={() => setArea(item)}
             onKeyDown={(event) => navigate(event, item)}
           >
-            {item === 'practice' ? p('practiceHistory') : t(item)}
+            {item === 'overview'
+              ? overviewText('tab')
+              : item === 'practice'
+                ? p('practiceHistory')
+                : t(item)}
           </button>
         ))}
       </nav>
+      <div
+        role="tabpanel"
+        id="study-panel-overview"
+        aria-labelledby="study-tab-overview"
+        hidden={area !== 'overview'}
+      >
+        <StudyOverview
+          visible={visible && area === 'overview'}
+          revision={props.revision}
+          theme={props.theme}
+          onOpenCards={() => openArea('cards')}
+          onOpenMistakes={() => openArea('mistakes')}
+          onStudyDeck={(id) => {
+            openArea('cards');
+            onStudyDeck(id);
+          }}
+        />
+      </div>
       <div
         role="tabpanel"
         id="study-panel-cards"
