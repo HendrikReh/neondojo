@@ -7,6 +7,7 @@ import CubePracticeChoices from './CubePracticeChoices';
 import PracticeResult from './PracticeResult';
 import { matchContext } from './boardMath';
 import ActionButton from './ActionButton';
+import EngineLabel from './EngineLabel';
 import PlayBoardDialog from './PlayBoardDialog';
 import { useI18n } from './i18n';
 import type { Theme } from './themes';
@@ -233,7 +234,11 @@ function MistakeQuestion({
         {item.reference.decision_no}
       </p>
       <p className="recurring-source">
-        {t('source')}: {mistakeProvenance(item, t)}
+        {t('source')}:{' '}
+        <EngineLabel
+          details={item.engine}
+          tooltip={mistakeProvenance(item, t)}
+        />
       </p>
       <p className="study-context">
         {context.length
@@ -368,7 +373,12 @@ function MistakeQuestion({
               })}
             </dd>
             <dt>{t('source')}</dt>
-            <dd>{mistakeProvenance(original, t)}</dd>
+            <dd>
+              <EngineLabel
+                details={original.engine}
+                tooltip={mistakeProvenance(original, t)}
+              />
+            </dd>
           </dl>
         </div>
       )}

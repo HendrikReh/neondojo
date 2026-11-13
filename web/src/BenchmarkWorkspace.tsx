@@ -3,6 +3,7 @@ import BenchmarkComparison, {
 } from './BenchmarkComparison';
 import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
 import { useEffect, useRef, useState } from 'react';
+import EngineLabel from './EngineLabel';
 import { ANALYSIS_PLIES } from './analysis-depth';
 import { useI18n } from './i18n';
 import { loadEngines, type EngineInfo } from './settings-api';
@@ -561,7 +562,9 @@ function BenchmarkRunDetails({ run }: { run: BenchmarkRun }) {
             .filter(Boolean)
             .join(' · ')}
         </small>
-        <small>{run.engine_version}</small>
+        <small>
+          <EngineLabel details={run.engine_version} />
+        </small>
         <BenchmarkInitialization milliseconds={run.startup_elapsed_ms} />
         <small>
           <code>{run.engine_path}</code>

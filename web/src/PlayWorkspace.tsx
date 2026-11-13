@@ -1,4 +1,5 @@
 import { useSettingsText } from './settings-messages';
+import EngineLabel from './EngineLabel';
 import Tooltip from './Tooltip';
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import ActionButton from './ActionButton';
@@ -1181,13 +1182,17 @@ export default function PlayWorkspace({
               {modeControl}
             </div>
             <p className="play-engine play-match-engine">
-              {session.engine.version} · {session.engine.plies}-ply
-              {feedbackMode !== 'competition' && (
-                <>
-                  {' '}
-                  · {modeT('analysisDepth')}: {session.analysis_plies ?? 2}-ply
-                </>
-              )}
+              <EngineLabel
+                details={session.engine.version}
+                tooltip={[
+                  session.engine.version,
+                  `${session.engine.plies}-ply`,
+                  feedbackMode !== 'competition' &&
+                    `${modeT('analysisDepth')}: ${session.analysis_plies ?? 2}-ply`,
+                ].filter(Boolean).join(' · ')}
+              />
+              {' · '}
+              {session.bearoff_direction === 'left' ? t('left') : t('right')}
             </p>
           </div>
           <div className="play-layout">

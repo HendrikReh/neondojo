@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import EngineLabel from './EngineLabel';
 import { useI18n } from './i18n';
 import { useSourceText } from './analysis-source-messages';
 import { useBoardReviewText } from './board-review-messages';
@@ -75,7 +76,7 @@ export default function CandidateTable({
   return (
     <div className="candidate-comparison">
       <p className="candidate-metadata">
-        <strong>{source}</strong>
+        <strong><EngineLabel details={source} /></strong>
         {method && <span>{method}</span>}
         {units.length > 0 && (
           <span>{units.length === 1 ? unit(units[0]) : l('mixedUnits')}</span>

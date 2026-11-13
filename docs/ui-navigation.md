@@ -68,6 +68,13 @@ shows each player's saved checker and cube decision counts and equity losses.
 GNUbg's native PR is shown in the GNUbg column when available.
 Candidate columns size to their contents so notation and evaluation values
 stay close on wide displays.
+Engine labels show the name and the recorded version when available. Hover
+over the label or focus it with Tab to see the recorded details, such as search
+depth, evaluation method, build, model, and thread count. The same labels are
+used for local and imported analyses, in Playing, and in Study.
+Switching tabs keeps the selected game and move. Selecting a statistics metric
+opens **Errors** with the matching filters. Selecting a metric for a different
+game opens that game.
 Switching tabs keeps the selected game and move. Selecting a statistics metric
 opens **Errors** with the matching filters. Selecting a metric for a different
 game opens that game.

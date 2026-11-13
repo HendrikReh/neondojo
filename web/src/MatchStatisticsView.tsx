@@ -1,4 +1,5 @@
 import ActionButton from './ActionButton';
+import EngineLabel from './EngineLabel';
 import type { ReactNode } from 'react';
 import type { Job, MatchAnalysisSummary } from './api';
 import { useI18n } from './i18n';
@@ -251,6 +252,10 @@ export default function MatchStatisticsView({
   // Defense in depth for callers: a new scope never displays an old job's payload.
   const current = job && statistics?.job_id === job.id ? statistics : undefined;
   const summary = current?.summary;
+  const engine =
+    summary?.engine ??
+    job?.engine_snapshot?.engine_version ??
+    (job?.engine_snapshot?.engine_id === 'bgsage' ? 'Open Sage' : 'GNU Backgammon');
   return (
     <section
       className="match-statistics"
@@ -268,10 +273,12 @@ export default function MatchStatisticsView({
         <>
           {progress}
           <p className="statistics-source">
-            {text('source', {
-              engine: summary?.engine ?? 'GNU Backgammon',
-              plies: summary?.plies ?? job.plies,
-            })}
+            <EngineLabel
+              details={text('source', {
+                engine,
+                plies: summary?.plies ?? job.plies,
+              })}
+            />
           </p>
           <p className="statistics-coverage">
             {text('coverage', {

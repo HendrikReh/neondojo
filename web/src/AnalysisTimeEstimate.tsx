@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import EngineLabel from './EngineLabel';
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import { useI18n } from './i18n';
 import type { MatchAnalysisEngine } from './useMatchAnalysis';
@@ -138,12 +139,20 @@ export default function AnalysisTimeEstimate({
             })}
           </span>
           <small>
-            {text('basis', {
-              date: new Intl.DateTimeFormat(locale, {
-                dateStyle: 'medium',
-              }).format(new Date(value.benchmark!.finished_at)),
-              engine: value.engine_version ?? value.engine_id,
-            })}
+            <EngineLabel
+              details={
+                value.engine_version ??
+                (value.engine_id === 'bgsage' ? 'Open Sage' : 'GNU Backgammon')
+              }
+              format={(engine) =>
+                text('basis', {
+                  date: new Intl.DateTimeFormat(locale, {
+                    dateStyle: 'medium',
+                  }).format(new Date(value.benchmark!.finished_at)),
+                  engine,
+                })
+              }
+            />
           </small>
           <small>{text('caveat')}</small>
         </>

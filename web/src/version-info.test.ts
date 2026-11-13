@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { shortEngineVersion } from './VersionInfo';
+import { shortEngineVersion } from './engine-version';
 
 test.each([
   ['gnubg', 'GNU Backgammon 1.08.003 20261108', '1.08.003'],

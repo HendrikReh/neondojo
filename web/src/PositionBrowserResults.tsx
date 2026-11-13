@@ -1,5 +1,6 @@
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import ActionButton from './ActionButton';
+import EngineLabel from './EngineLabel';
 import { useMemo } from 'react';
 import {
   SearchResultNotes,
@@ -95,15 +96,15 @@ function NativeError({ hit }: { hit: PositionBrowserHit }) {
           maximumFractionDigits: 3,
         })}
       </strong>
-      <small
-        title={p('provenance', {
-          engine: hit.native_error.engine,
-          plies: hit.native_error.plies,
-          job: hit.native_error.job_id,
-        })}
-      >
-        {hit.native_error.engine} ·{' '}
-        {p('depth', { plies: hit.native_error.plies })}
+      <small>
+        <EngineLabel
+          details={`${hit.native_error.engine} · ${p('depth', { plies: hit.native_error.plies })}`}
+          tooltip={p('provenance', {
+            engine: hit.native_error.engine,
+            plies: hit.native_error.plies,
+            job: hit.native_error.job_id,
+          })}
+        />
       </small>
     </span>
   ) : (
