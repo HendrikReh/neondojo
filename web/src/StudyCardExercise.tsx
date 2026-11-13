@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import ActionButton from './ActionButton';
 import AnkiCardFace from './AnkiCardFace';
 import CardTagEditor from './CardTagEditor';
@@ -13,7 +13,9 @@ import { useI18n } from './i18n';
 import { AppError } from './i18n-core';
 import type {
   AttemptedCard,
+  CardAnswer,
   CardAttemptRequest,
+  PracticeEvaluation,
   CardQuestion,
   PracticeAnswer,
   Rating,
@@ -54,9 +56,111 @@ export default function StudyCardExercise({
   onGrade: (answer: RevealedCard, rating: Rating) => void;
 }) {
   const t = useLearningText();
+  const { formatNumber } = useI18n();
+  const answer = activeAttempt?.revealed ?? revealed;
+  return (
+    <CardExercise
+      card={card}
+      name={name}
+      theme={theme}
+      answer={answer?.answer}
+      evaluation={activeAttempt?.evaluation}
+      submitted={activeAttempt?.submitted}
+      busy={busy}
+      visible={visible}
+      onCheck={async (body, signal) => {
+        const result = await request<AttemptedCard>(
+          `/cards/${card.id}/attempt`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+            signal,
+          },
+        );
+        if (
+          !signal.aborted &&
+          result.revealed.card_id === card.id &&
+          result.revealed.version === card.version
+        )
+          onAttempt(result);
+      }}
+      onAttemptBusy={onAttemptBusy}
+      onConflict={onConflict}
+      onReveal={onReveal}
+    >
+      {answer && (
+        <>
+          <CardTagEditor
+            cards={[{ id: card.id, tags_version: card.tags_version ?? 0 }]}
+          />
+          <div className="study-ratings">
+            {(['again', 'hard', 'good', 'easy'] as const).map((rating) => (
+              <ActionButton
+                icon={rating === 'again' ? 'reset' : 'confirm'}
+                label={t(rating)}
+                key={rating}
+                disabled={busy}
+                onClick={() => onGrade(answer, rating)}
+              >
+                {t(rating)}
+                <small>{interval(answer.intervals[rating])}</small>
+              </ActionButton>
+            ))}
+          </div>
+        </>
+      )}
+    </CardExercise>
+  );
+
+  function interval(seconds: number) {
+    const days = seconds / 86400;
+    return formatNumber(
+      days >= 1 ? Math.round(days) : Math.max(1, Math.round(seconds / 60)),
+      {
+        style: 'unit',
+        unit: days >= 1 ? 'day' : 'minute',
+        unitDisplay: 'short',
+      },
+    );
+  }
+}
+
+export function CardExercise({
+  card,
+  name,
+  theme,
+  answer,
+  evaluation,
+  submitted,
+  busy,
+  visible,
+  onCheck,
+  onAttemptBusy,
+  onConflict,
+  onReveal,
+  children,
+  beforeAnswer,
+}: {
+  card: CardQuestion;
+  name?: string;
+  theme: Theme;
+  answer?: CardAnswer;
+  evaluation?: PracticeEvaluation | null;
+  submitted?: PracticeAnswer | null;
+  busy: boolean;
+  visible: boolean;
+  onCheck: (body: CardAttemptRequest, signal: AbortSignal) => Promise<void>;
+  onAttemptBusy: (busy: boolean) => void;
+  onConflict: () => void;
+  onReveal: () => void;
+  children?: ReactNode;
+  beforeAnswer?: ReactNode;
+}) {
+  const t = useLearningText();
   const review = useBoardReviewText();
   const p = usePositionText();
-  const { t: uiT, formatError, formatNumber } = useI18n();
+  const { t: uiT, formatError } = useI18n();
   const [draft, setDraft] = useState<CheckerDraft>({ steps: [] });
   const [previewChoice, setPreviewChoice] = useState<'chosen' | 'best'>('best');
   const [error, setError] = useState<unknown>();
@@ -64,7 +168,6 @@ export default function StudyCardExercise({
   const lastRequest = useRef<{ answer: string; id: string } | null>(null);
   const questionHeading = useRef<HTMLHeadingElement>(null);
   const answerHeading = useRef<HTMLHeadingElement>(null);
-  const answer = activeAttempt?.revealed ?? revealed;
   const hasAnswer = !!answer;
 
   useEffect(() => {
@@ -85,9 +188,9 @@ export default function StudyCardExercise({
 
   async function check(input: PracticeAnswer) {
     if (pending.current || busy || !visible) return;
-    const submitted = JSON.stringify(input);
-    if (lastRequest.current?.answer !== submitted) {
-      lastRequest.current = { answer: submitted, id: crypto.randomUUID() };
+    const serialized = JSON.stringify(input);
+    if (lastRequest.current?.answer !== serialized) {
+      lastRequest.current = { answer: serialized, id: crypto.randomUUID() };
     }
     const body: CardAttemptRequest = {
       expected_version: card.version,
@@ -99,21 +202,13 @@ export default function StudyCardExercise({
     onAttemptBusy(true);
     setError(undefined);
     try {
-      const result = await request<AttemptedCard>(`/cards/${card.id}/attempt`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-      if (
-        !controller.signal.aborted &&
-        result.revealed.card_id === card.id &&
-        result.revealed.version === card.version
-      )
-        onAttempt(result);
+      await onCheck(body, controller.signal);
     } catch (failure) {
       if (controller.signal.aborted) return;
-      if (failure instanceof AppError && failure.params.status === '409') {
+      if (
+        failure instanceof AppError &&
+        ['404', '409'].includes(String(failure.params.status))
+      ) {
         onConflict();
       } else {
         setError(failure);
@@ -126,43 +221,27 @@ export default function StudyCardExercise({
     }
   }
 
-  const ratings = answer && (
-    <>
-      <CardTagEditor cards={[{ id: card.id, tags_version: card.tags_version ?? 0 }]} />
-    <div className="study-ratings">
-      {(['again', 'hard', 'good', 'easy'] as const).map((rating) => (
-        <ActionButton
-          icon={rating === 'again' ? 'reset' : 'confirm'}
-          label={t(rating)}
-          key={rating}
-          disabled={busy}
-          onClick={() => onGrade(answer, rating)}
-        >
-          {t(rating)}
-          <small>{interval(answer.intervals[rating])}</small>
-        </ActionButton>
-      ))}
-    </div>
-    </>
-  );
   if (!card.position) {
     return (
       <article className="study-card study-card-anki" data-card-id={card.id}>
         <h3 ref={hasAnswer ? answerHeading : questionHeading} tabIndex={-1}>
           {card.prompt}
         </h3>
-        {answer ? (
-          ratings
-        ) : (
-          <ActionButton
-            icon="solution"
-            label={t('reveal')}
-            disabled={busy}
-            onClick={onReveal}
-          >
-            {t('reveal')}
-          </ActionButton>
+        {beforeAnswer}
+        {!answer && (
+          <div className="play-actions">
+            <ActionButton
+              type="button"
+              icon="solution"
+              label={t('reveal')}
+              disabled={busy}
+              onClick={onReveal}
+            >
+              {t('reveal')}
+            </ActionButton>
+          </div>
         )}
+        {children}
         <AnkiCardFace
           id={card.id}
           title={answer ? t('solution') : card.prompt}
@@ -187,17 +266,16 @@ export default function StudyCardExercise({
         ? 'questionResponse'
         : 'questionOffer',
   );
-  const result = activeAttempt?.evaluation;
+  const result = evaluation;
   const chosenPreview =
-    activeAttempt?.submitted.kind === 'checker'
-      ? projectPracticeSteps(position, activeAttempt.submitted.steps)
+    submitted?.kind === 'checker'
+      ? projectPracticeSteps(position, submitted.steps)
       : undefined;
   const bestNotation =
     result?.best ??
-    answer?.answer.solution?.decision?.best ??
-    answer?.answer.solution?.candidates.find(
-      (candidate) => candidate.rank === 1,
-    )?.notation;
+    answer?.solution?.decision?.best ??
+    answer?.solution?.candidates.find((candidate) => candidate.rank === 1)
+      ?.notation;
   const bestPreview =
     checker && bestNotation ? projectMove(position, bestNotation) : undefined;
   const preview = previewChoice === 'chosen' ? chosenPreview : bestPreview;
@@ -222,9 +300,11 @@ export default function StudyCardExercise({
 
   return (
     <article className="study-card" data-card-id={card.id}>
-      <span className="eyebrow">
-        {name} · {t('reviewCount', { count: card.review_count })}
-      </span>
+      {name && (
+        <span className="eyebrow">
+          {name} · {t('reviewCount', { count: card.review_count })}
+        </span>
+      )}
       <h3 ref={questionHeading} tabIndex={-1}>
         {question}
       </h3>
@@ -235,6 +315,7 @@ export default function StudyCardExercise({
         · {uiT('app.toMove', { player: card.players[card.position.player] })}
       </p>
       {cubeResponse && <p>{t('offeredCube', { value: context.cube * 2 })}</p>}
+      {!answer && beforeAnswer}
       {checker && !answer ? (
         <CheckerPracticeBoard
           position={card.position}
@@ -311,37 +392,25 @@ export default function StudyCardExercise({
             answer={answer}
             label={result ? t('cardAnalysis') : t('engine')}
           />
-          {ratings}
+          {children}
           {busy && <p role="status">{t('saving')}</p>}
         </section>
       )}
     </article>
   );
-
-  function interval(seconds: number) {
-    const days = seconds / 86400;
-    return formatNumber(
-      days >= 1 ? Math.round(days) : Math.max(1, Math.round(seconds / 60)),
-      {
-        style: 'unit',
-        unit: days >= 1 ? 'day' : 'minute',
-        unitDisplay: 'short',
-      },
-    );
-  }
 }
 
 function CardSolution({
   answer,
   label,
 }: {
-  answer: RevealedCard;
+  answer: CardAnswer;
   label: string;
 }) {
   const t = useLearningText();
   const { formatDecision, formatNumber, formatEquity } = useI18n();
-  if (!answer.answer.solution) return null;
-  const { decision, candidates, engine, plies } = answer.answer.solution;
+  if (!answer.solution) return null;
+  const { decision, candidates, engine, plies } = answer.solution;
   return (
     <div className="study-solution-source">
       <p>
@@ -379,15 +448,15 @@ function CardSolution({
           </tbody>
         </table>
       )}
-      {answer.answer.notes && (
+      {answer.notes && (
         <div>
           <h4>{t('notes')}</h4>
-          <p className="plaintext-comment">{answer.answer.notes}</p>
+          <p className="plaintext-comment">{answer.notes}</p>
         </div>
       )}
-      {!!answer.answer.tags.length && (
+      {!!answer.tags.length && (
         <p>
-          {t('tags')}: {answer.answer.tags.join(' · ')}
+          {t('tags')}: {answer.tags.join(' · ')}
         </p>
       )}
     </div>

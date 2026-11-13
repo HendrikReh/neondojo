@@ -52,8 +52,16 @@ export function saveCardSuggestions(deckId: string, body: SaveSuggestions) {
   });
 }
 
+export type CardAnswer = Schema['CardAnswer'];
+export type PracticeEvaluation = Schema['PracticeEvaluation'];
+export type PracticeRound = Schema['PracticeRound'];
+export type RoundAnswer = Schema['RoundAnswer'];
+export type RoundAdvance = Schema['RoundAdvance'];
+export type RoundVersion = Schema['RoundVersion'];
 export type CardTopic = Schema['CardTopic'];
 export type CardQuery = Schema['CardQuery'];
 export type CardTags = Schema['CardTags'];
 export type EditCardTags = Schema['EditCardTags'];
+export type TransferRequest = Schema['TransferRequest'];
+export type TransferSummary = Schema['TransferSummary'];
 export type ImportedAnkiDeck = Schema['ImportedAnkiDeck'];

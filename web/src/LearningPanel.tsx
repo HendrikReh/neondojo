@@ -19,13 +19,16 @@ import {
   CARD_SELECTION_LIMIT,
   CARD_PAGE_SIZE,
   cardListPath,
+  cardPracticePath,
   emptyCardFilters,
   isCollectionScope,
 } from './card-search-api';
 import { useCardSearchText } from './card-search-messages';
 import { useCardPracticeText } from './card-practice-messages';
+import CardPracticeRound, { roundPath } from './CardPracticeRound';
 import CardTagEditor from './CardTagEditor';
 import CardTopics from './CardTopics';
+import TransferPractice from './TransferPractice';
 import { usePositionText } from './position-browser-messages';
 import './learning-workspace.css';
 import DeckManagementDialog from './DeckManagementDialog';
@@ -45,11 +48,22 @@ import type {
   NextCard,
   CardPage,
   RevealedCard,
-  AddCardsResult,
-  ImportedAnkiDeck,
   ReviewResult,
   Rating,
+  PracticeRound,
+  AddCardsResult,
+  ImportedAnkiDeck,
 } from './learning-api';
+
+const practiceStorageKey = 'bgtutor.card-practice-round';
+
+function storedPracticeRound() {
+  try {
+    return localStorage.getItem(practiceStorageKey);
+  } catch {
+    return null;
+  }
+}
 
 function savedDeck() {
   try {
@@ -409,13 +423,21 @@ export default function LearningWorkspace({
   const profile = useOptionalConfiguration();
   const t = useLearningText();
   const ankiText = useAnkiImportText();
+  const overviewText = useStudyOverviewText();
+  const searchT = useCardSearchText();
+  const practiceT = useCardPracticeText();
+  const [practiceRound, setPracticeRound] = useState<PracticeRound>();
+  const [resumeRound, setResumeRound] = useState(storedPracticeRound);
+  const [practiceLimit, setPracticeLimit] = useState(10);
+  const [practiceStarting, setPracticeStarting] = useState(false);
+  const [practiceError, setPracticeError] = useState<unknown>();
   const [importingAnki, setImportingAnki] = useState(false);
   const [ankiNotice, setAnkiNotice] = useState<string>();
   const [ankiError, setAnkiError] = useState<unknown>();
   const ankiInput = useRef<HTMLInputElement>(null);
   const externalAnkiInput = useRef<HTMLInputElement>(null);
-  const overviewText = useStudyOverviewText();
-  const searchT = useCardSearchText();
+  const practiceRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => practiceRequest.current?.abort(), []);
   const p = usePositionText();
   const [draftFilters, setDraftFilters] = useState(emptyCardFilters);
   const [searchRun, setSearchRun] = useState(0);
@@ -505,6 +527,55 @@ export default function LearningWorkspace({
   const contentRevision = listRevision.current.value;
   const searchKey = JSON.stringify([deckId, filters, searchRun]);
   const listKey = JSON.stringify([searchKey, contentRevision]);
+  useEffect(() => {
+    if (practiceRequest.current) {
+      practiceRequest.current.abort();
+      practiceRequest.current = null;
+      setPracticeStarting(false);
+    }
+    setPracticeError(undefined);
+  }, [listKey, visible]);
+  function rememberRound(id: string | null) {
+    setResumeRound(id);
+    try {
+      if (id) localStorage.setItem(practiceStorageKey, id);
+      else localStorage.removeItem(practiceStorageKey);
+    } catch {
+      // The current round remains usable in this tab.
+    }
+  }
+  async function openPractice(existing?: string) {
+    if (practiceRequest.current) return;
+    const controller = new AbortController();
+    practiceRequest.current = controller;
+    setPracticeStarting(true);
+    setPracticeError(undefined);
+    try {
+      const round = await request<PracticeRound>(
+        existing
+          ? roundPath(existing)
+          : cardPracticePath(deckId, filters, practiceLimit),
+        { method: existing ? 'GET' : 'POST', signal: controller.signal },
+      );
+      if (controller.signal.aborted) return;
+      rememberRound(round.id);
+      setPracticeRound(round);
+    } catch (failure) {
+      if (controller.signal.aborted) return;
+      if (
+        existing &&
+        failure instanceof AppError &&
+        failure.params.status === '404'
+      )
+        rememberRound(null);
+      setPracticeError(failure);
+    } finally {
+      if (practiceRequest.current === controller) {
+        practiceRequest.current = null;
+        setPracticeStarting(false);
+      }
+    }
+  }
   const selectedItems = cardSelection?.scope === listKey ? [...cardSelection.items.values()] : [];
   const selectedCards = new Set(selectedItems.map((item) => item.id));
   const sourceDeck = decks.find((deck) => deck.id === deckId);
@@ -550,6 +621,7 @@ export default function LearningWorkspace({
     if (!requestedDeck || appliedDeckToken === requestedDeck.token || !settled)
       return;
     setAppliedDeckToken(requestedDeck.token);
+    setPracticeRound(undefined);
     generation.current++;
     setRevealed(null);
     setNext(null);
@@ -971,7 +1043,7 @@ export default function LearningWorkspace({
             {libraryText('duplicates')}
           </ActionButton>
         )}
-        {!studying && (
+        {!studying && !practiceRound && (
           <>
             <input
               ref={externalAnkiInput}
@@ -1013,7 +1085,23 @@ export default function LearningWorkspace({
           })}
         </p>
       )}
-      {studying ? (
+      {practiceRound ? (
+        <CardPracticeRound
+          key={practiceRound.id}
+          round={practiceRound}
+          theme={theme}
+          visible={visible}
+          onChange={setPracticeRound}
+          onClose={() => {
+            if (
+              practiceRound.index >= practiceRound.total &&
+              !practiceRound.summary.retry_count
+            )
+              rememberRound(null);
+            setPracticeRound(undefined);
+          }}
+        />
+      ) : studying ? (
         <>
           <div className="learning-controls">
             <ActionButton
@@ -1094,7 +1182,47 @@ export default function LearningWorkspace({
           >
             {deckSelector}
           </CardSearchControls>
+          <div className="learning-controls">
+            <SearchFilterSelect
+              label={practiceT('size')}
+              value={String(practiceLimit)}
+              onChange={(value) => setPracticeLimit(Number(value))}
+            >
+              <option value="10">{formatNumber(10)}</option>
+              <option value="20">{formatNumber(20)}</option>
+            </SearchFilterSelect>
+            <ActionButton
+              icon="play"
+              label={practiceT('start')}
+              disabled={
+                practiceStarting ||
+                cardSearch.loading ||
+                !cardSearch.items.length
+              }
+              onClick={() => void openPractice()}
+            >
+              {practiceT('start')}
+            </ActionButton>
+            {resumeRound && (
+              <ActionButton
+                icon="open"
+                label={practiceT('resume')}
+                disabled={practiceStarting}
+                onClick={() => void openPractice(resumeRound)}
+              >
+                {practiceT('resume')}
+              </ActionButton>
+            )}
+          </div>
+          {practiceStarting && <p role="status">{t('loading')}</p>}
+          {!!practiceError && <p role="alert">{formatError(practiceError)}</p>}
           {deckPanel}
+          <TransferPractice
+            onStart={(round) => {
+              rememberRound(round.id);
+              setPracticeRound(round);
+            }}
+          />
           <CardTopics
             filters={filters}
             deck={deckId}

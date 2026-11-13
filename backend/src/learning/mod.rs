@@ -4,10 +4,12 @@ mod anki_import;
 mod apkg;
 mod content;
 mod management;
+mod rounds;
 mod scheduler;
 mod search;
 mod suggestions;
 mod topics;
+mod transfer;
 use crate::practice::evaluation::{self, PracticeAnswer, PracticeEvaluation, SavedEvaluation};
 pub(crate) use content::saved_checker_move;
 pub use search::{
@@ -479,7 +481,9 @@ pub fn routes() -> Router<AppState> {
         .route("/api/decks/{id}/import.apkg", post(anki_import::import))
         .route("/api/decks/{id}/next", get(next_card))
         .route("/api/study/learning-summary", get(learning_summary))
+        .merge(rounds::routes())
         .merge(topics::routes())
+        .merge(transfer::routes())
         .merge(anki_flashcards::routes())
         .route("/api/cards/{id}/reveal", post(reveal))
         .route("/api/cards/{id}/attempt", post(submit_attempt))
@@ -512,11 +516,19 @@ pub fn routes() -> Router<AppState> {
         anki_flashcards::upload,
         next_card,
         learning_summary,
+        rounds::start,
+        rounds::read,
+        rounds::answer,
+        rounds::mark,
+        rounds::advance,
+        rounds::retry,
         topics::suggest_tags,
         topics::edit_tags,
         topics::list_topics,
         topics::save_topic,
         topics::delete_topic,
+        transfer::start,
+        transfer::history,
         reveal,
         submit_attempt,
         review
@@ -565,6 +577,8 @@ pub fn routes() -> Router<AppState> {
         topics::CardTags,
         topics::SaveCardTopic,
         topics::CardTopic,
+        transfer::TransferRequest,
+        transfer::TransferSummary,
         ReviewCounts,
         NextCard,
         LearningSummary,
@@ -576,7 +590,13 @@ pub fn routes() -> Router<AppState> {
         AttemptedCard,
         Rating,
         ReviewCard,
-        ReviewResult
+        ReviewResult,
+        rounds::PracticeRound,
+        rounds::RoundResult,
+        rounds::RoundSummary,
+        rounds::RoundAnswer,
+        rounds::RoundAdvance,
+        rounds::RoundVersion
     ))
 )]
 pub struct LearningDoc;
@@ -1087,20 +1107,7 @@ async fn submit_attempt(
     }
     let card = row.content()?;
     crate::play::require_review_available(&state.pool, card.source.match_id).await?;
-    let evaluation = evaluation::evaluate(
-        &state,
-        &card.kind,
-        &card.position,
-        SavedEvaluation {
-            engine: &card.solution.engine,
-            plies: Some(card.solution.plies),
-            decision: card.solution.decision.as_ref(),
-            candidates: &card.solution.candidates,
-            native: true,
-        },
-        &body.answer,
-    )
-    .await?;
+    let evaluation = evaluate_card(&state, &card, &body.answer).await?;
 
     // Evaluation can be slow. Serialize only the short write with reviews
     // and card updates and verify the snapshot version again at that point.
@@ -1134,6 +1141,27 @@ async fn submit_attempt(
     let result = attempted_card(&mut tx, &row, attempt).await?;
     tx.commit().await.map_err(anyhow::Error::from)?;
     Ok(Json(result))
+}
+
+async fn evaluate_card(
+    state: &AppState,
+    card: &CardContent,
+    answer: &PracticeAnswer,
+) -> ApiResult<PracticeEvaluation> {
+    evaluation::evaluate(
+        state,
+        &card.kind,
+        &card.position,
+        SavedEvaluation {
+            engine: &card.solution.engine,
+            plies: Some(card.solution.plies),
+            decision: card.solution.decision.as_ref(),
+            candidates: &card.solution.candidates,
+            native: true,
+        },
+        answer,
+    )
+    .await
 }
 
 async fn load_attempt_card(

@@ -91,6 +91,70 @@ fn game1(loss: f64) -> Vec<(i32, Value)> {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn transfer_balances_unseen_cube_responses_and_records_first_pass(pool: PgPool) {
+    for (index, best) in ["take", "drop"].into_iter().enumerate() {
+        let sgf = format!(
+            "(;GM[6]PW[Alice]PB[Bob]MI[length:7];W[31hefe])(;GM[6]PW[Alice]PB[Bob]MI[length:7][ws:{index}][bs:3]AE[a:y]AW[e]AB[s]PL[B]CV[2]CO[b];B[double];W[{best}])"
+        );
+        let imported = store::import_match(
+            &pool,
+            "transfer.sgf",
+            "sgf",
+            sgf.as_bytes(),
+            &sgf,
+            &import::parse_sgf(&sgf).unwrap(),
+        )
+        .await
+        .unwrap();
+        job(
+            &pool,
+            imported.r#match.id,
+            0,
+            None,
+            &[
+                (2, decision(1, 1, "double", "double", 0.0)),
+                (2, decision(2, 0, best, best, 0.0)),
+            ],
+        )
+        .await;
+    }
+    let router = app(&pool);
+    let path = "/api/study/transfer-rounds";
+    let scope = json!({"player":"Alice", "game_plan":"pure_race", "kind":"cube_response"});
+    let (status, mut round) = call(&router, "POST", path, scope.clone()).await;
+    assert_eq!(status, 201, "{round}");
+    assert_eq!(round["total"], 2);
+    let id = round["id"].as_str().unwrap().to_owned();
+    let mut answers = Vec::new();
+    for _ in 0..2 {
+        assert!(round["result"].is_null());
+        let (_, answered) = call(&router, "POST", &format!("/api/study/card-rounds/{id}/answer"), json!({"version":round["version"], "card_version":0, "request_id":Uuid::new_v4(), "answer":null})).await;
+        answers.push(
+            answered["result"]["answer"]["solution"]["decision"]["best"]
+                .as_str()
+                .unwrap()
+                .to_owned(),
+        );
+        let (status, next) = call(
+            &router,
+            "POST",
+            &format!("/api/study/card-rounds/{id}/advance"),
+            json!({"version":answered["version"],"marked":false}),
+        )
+        .await;
+        assert_eq!(status, 200, "{next}");
+        round = next;
+    }
+    answers.sort();
+    assert_eq!(answers, ["drop", "take"]);
+    assert_eq!(call(&router, "POST", path, scope).await.0, 422);
+    let (_, history) = call(&router, "GET", path, Value::Null).await;
+    assert_eq!(history[0]["revealed"], 2);
+    assert_eq!(history[0]["scored"], 0);
+    assert!(history[0]["mean_loss"].is_null());
+}
+
+#[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
 async fn database_player_choices_include_matches_without_analysis(pool: PgPool) {
     source(&pool).await;

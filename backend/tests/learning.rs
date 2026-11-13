@@ -280,6 +280,206 @@ async fn active_attempts_are_resumable_and_share_the_existing_review_transaction
     }
 }
 
+#[sqlx::test(migrations = "./migrations")]
+async fn filtered_practice_retries_errors_and_marked_cards_without_reviews(pool: PgPool) {
+    let app = api::router(api::AppState::new(
+        pool.clone(),
+        Engine::new("unused".into()),
+    ));
+    let parsed = import::parse_sgf("(;GM[6]MI[length:7];W[31hefe])").unwrap();
+    let game = &parsed.positions[0];
+    let mut context = base64::Engine::decode(
+        &base64::engine::general_purpose::STANDARD_NO_PAD,
+        &game.match_id,
+    )
+    .unwrap();
+    context[1] &= 0x7f;
+    context[2] &= 0xe0;
+    let match_id =
+        base64::Engine::encode(&base64::engine::general_purpose::STANDARD_NO_PAD, context);
+    for (id, player) in [(1, "Ada"), (2, "Ada"), (3, "Other")] {
+        let card = Uuid::from_u128(id);
+        let payload = json!({
+            "kind":"cube_offer", "position":{"id":card,"match_uuid":Uuid::nil(),"ordinal":1,
+                "game_no":1,"ply":1,"player":game.player,"dice":[0,0],"board":game.board,
+                "position_id":game.position_id,"gnubg_match_id":match_id,"notation":"hidden"},
+            "players":[player,"Black"],"prompt":"Answer","played":"double",
+            "source":{"kind":"match","job_id":Uuid::nil(),"match_id":Uuid::nil(),"game_no":1},
+            "solution":{"engine":"Fixture Engine","plies":2,"candidates":[],"decision":{
+                "decision_no":1,"player":0,"kind":"cube","played":"double","best":"no double",
+                "played_equity":0.0,"best_equity":0.125,"equity_loss":0.125,"severity":"none",
+                "evaluation_status":"evaluated"}}
+        });
+        sqlx::query(
+            "INSERT INTO learning_cards(id,signature,payload,due_at) VALUES($1,$2,$3,'2099-01-01')",
+        )
+        .bind(card)
+        .bind(card.to_string())
+        .bind(payload)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    let start = "/api/study/card-rounds?player=Ada&limit=10";
+    let (status, mut round) = call(app.clone(), "POST", start, Value::Null).await;
+    assert_eq!(status, 201, "{round}");
+    let uri = format!("/api/study/card-rounds/{}", round["id"].as_str().unwrap());
+    assert_eq!(round["total"], 2);
+    let mut first = Vec::new();
+    for (action, marked) in [("double", false), ("no_double", true)] {
+        first.push(round["card"]["id"].clone());
+        assert_eq!(round["card"]["position"]["notation"], "");
+        assert!(round["result"].is_null());
+        let body = json!({"version":round["version"],"card_version":round["card"]["version"],"request_id":Uuid::new_v4(),"answer":{"kind":"cube_offer","action":action}});
+        let answered = call(app.clone(), "POST", &format!("{uri}/answer"), body.clone()).await;
+        assert_eq!(answered.0, 200, "{answered:?}");
+        assert_eq!(
+            call(app.clone(), "POST", &format!("{uri}/answer"), body).await,
+            answered
+        );
+        assert_eq!(call(app.clone(), "GET", &uri, Value::Null).await, answered);
+        round = call(
+            app.clone(),
+            "POST",
+            &format!("{uri}/advance"),
+            json!({"version":answered.1["version"],"marked":marked}),
+        )
+        .await
+        .1;
+    }
+    assert_ne!(first[0], first[1]);
+    assert_eq!(round["summary"]["retry_count"], 2);
+    let retried = call(
+        app.clone(),
+        "POST",
+        &format!("{uri}/retry"),
+        json!({"version":round["version"]}),
+    )
+    .await;
+    assert_eq!(retried.0, 200, "{retried:?}");
+    assert_eq!(retried.1["total"], 2);
+    assert_eq!(retried.1["card"]["id"], first[0]);
+    assert_eq!(sqlx::query_scalar::<_,i64>("SELECT count(*) FROM learning_cards WHERE due_at='2099-01-01' AND review_count=0 AND version=0").fetch_one(&pool).await.unwrap(), 3);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM review_sessions")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+    let tag_edit = call(
+        app.clone(),
+        "PUT",
+        "/api/cards/tags",
+        json!({
+            "cards": first.iter().map(|id| json!({"id":id,"tags_version":0})).collect::<Vec<_>>(),
+            "add":["Cube::Take Point", "Technik::Rechnen"], "remove":[]
+        }),
+    )
+    .await;
+    assert_eq!(tag_edit.0, 200, "{tag_edit:?}");
+    let tagged = call(
+        app.clone(),
+        "GET",
+        "/api/cards?topics=cube%2Ctechnik%3A%3Arechnen",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(tagged.0, 200, "{tagged:?}");
+    assert_eq!(tagged.1["total"], 2);
+    assert_eq!(
+        tagged.1["items"][0]["browse"]["card_tags"],
+        json!(["cube::take point", "technik::rechnen"])
+    );
+    let (status, topic) = call(
+        app.clone(),
+        "POST",
+        "/api/study/card-topics",
+        json!({"name":"Cube","filter":{"topics":"cube","kind":"cube_offer"}}),
+    )
+    .await;
+    assert_eq!(status, 201, "{topic}");
+    let (_, topics) = call(app.clone(), "GET", "/api/study/card-topics", Value::Null).await;
+    assert_eq!(topics[0]["filter"]["topics"], "cube");
+    let (status, _) = call(
+        app.clone(),
+        "POST",
+        "/api/study/transfer-rounds",
+        json!({
+            "player":"Ada", "game_plan":"pure_race", "kind":"cube_offer"
+        }),
+    )
+    .await;
+    assert_eq!(
+        status, 422,
+        "An empty comparable pool must not create a round"
+    );
+    let (status, pips) = call(
+        app,
+        "POST",
+        "/api/study/card-pips",
+        json!({"card_id":first[0],"counts":[167,167]}),
+    )
+    .await;
+    assert_eq!(status, 200, "{pips}");
+    assert_eq!(pips["counts"], json!([167, 167]));
+    assert_eq!(pips["correct"], json!([true, true]));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn card_game_plan_filter_is_applied_before_practice_selection(pool: PgPool) {
+    let app = api::router(api::AppState::new(
+        pool.clone(),
+        Engine::new("unused".into()),
+    ));
+    let parsed = import::parse_sgf("(;GM[6]AE[a:y]AW[e][e]AB[s]PL[W];W[31ebed])").unwrap();
+    let p = &parsed.positions[0];
+    let id = Uuid::new_v4();
+    let payload = json!({
+        "kind":"checker", "position":{"id":id,"match_uuid":Uuid::nil(),"ordinal":1,"game_no":1,"ply":1,
+        "player":p.player,"dice":p.dice,"board":p.board,"position_id":p.position_id,"gnubg_match_id":p.match_id,"notation":p.notation},
+        "players":["White","Black"],"prompt":"Answer","played":p.notation,
+        "source":{"kind":"match","job_id":Uuid::nil(),"match_id":Uuid::nil(),"game_no":1},
+        "solution":{"engine":"Fixture","plies":0,"candidates":[]}
+    });
+    sqlx::query("INSERT INTO learning_cards(id,signature,payload) VALUES($1,$2,$3)")
+        .bind(id)
+        .bind(id.to_string())
+        .bind(payload)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (status, result) = call(
+        app.clone(),
+        "GET",
+        "/api/cards?game_plan=pure_race",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{result}");
+    assert_eq!(result["total"], 1);
+    let (status, round) = call(
+        app.clone(),
+        "POST",
+        "/api/study/card-rounds?game_plan=pure_race",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 201, "{round}");
+    assert_eq!(round["card"]["id"], json!(id));
+    assert_eq!(
+        call(
+            app,
+            "POST",
+            "/api/study/card-rounds?game_plan=priming",
+            Value::Null
+        )
+        .await
+        .0,
+        422
+    );
+}
+
 async fn call(app: axum::Router, method: &str, uri: &str, body: Value) -> (u16, Value) {
     let response = app
         .oneshot(

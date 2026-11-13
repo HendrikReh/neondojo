@@ -1716,6 +1716,102 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/study/card-rounds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/study/card-rounds/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["read"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/study/card-rounds/{id}/advance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["advance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/study/card-rounds/{id}/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["answer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/study/card-rounds/{id}/mark": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["mark"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/study/card-rounds/{id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["retry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/study/card-topics": {
         parameters: {
             query?: never;
@@ -1886,6 +1982,22 @@ export interface paths {
         get: operations["list_similar_practice_history"];
         put?: never;
         post: operations["save_similar_practice_summary"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/study/transfer-rounds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["history"];
+        put?: never;
+        post: operations["start"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4165,6 +4277,24 @@ export interface components {
         };
         /** @enum {string} */
         PracticeProvenanceKind: "stored" | "recomputed" | "forced";
+        PracticeRound: {
+            card?: null | components["schemas"]["CardQuestion"];
+            /** Format: uuid */
+            id: string;
+            /** Format: int64 */
+            index: number;
+            marked: boolean;
+            missing: boolean;
+            /** Format: int32 */
+            pass: number;
+            result?: null | components["schemas"]["RoundResult"];
+            summary: components["schemas"]["RoundSummary"];
+            /** Format: int64 */
+            total: number;
+            transfer: boolean;
+            /** Format: int64 */
+            version: number;
+        };
         /** @enum {string} */
         PracticeVerdict: "best" | "playable" | "error" | "forced";
         ProfileConfiguration: {
@@ -4308,6 +4438,45 @@ export interface components {
             review_count: number;
             /** Format: double */
             stability: number;
+            /** Format: int64 */
+            version: number;
+        };
+        RoundAdvance: {
+            diagnosis?: string | null;
+            lesson?: string | null;
+            marked: boolean;
+            /** Format: int64 */
+            version: number;
+        };
+        RoundAnswer: {
+            answer?: null | components["schemas"]["PracticeAnswer"];
+            /** Format: int64 */
+            card_version: number;
+            confidence?: boolean | null;
+            /** Format: uuid */
+            request_id: string;
+            /** Format: int64 */
+            version: number;
+        };
+        RoundResult: {
+            answer: components["schemas"]["CardAnswer"];
+            confidence?: boolean | null;
+            evaluation?: null | components["schemas"]["PracticeEvaluation"];
+            submitted?: null | components["schemas"]["PracticeAnswer"];
+        };
+        RoundSummary: {
+            /** Format: int64 */
+            correct: number;
+            /** Format: int64 */
+            errors: number;
+            /** Format: int64 */
+            retry_count: number;
+            /** Format: int64 */
+            revealed: number;
+            /** Format: int64 */
+            skipped: number;
+        };
+        RoundVersion: {
             /** Format: int64 */
             version: number;
         };
@@ -4546,6 +4715,34 @@ export interface components {
             id: string;
             /** Format: int64 */
             tags_version: number;
+        };
+        TransferRequest: {
+            /** Format: uuid */
+            database_id?: string | null;
+            follow_up?: boolean;
+            game_plan: components["schemas"]["GamePlan"];
+            kind: components["schemas"]["CardKind"];
+            player: string;
+        };
+        TransferSummary: {
+            /** Format: date-time */
+            completed_at: string;
+            /** Format: int64 */
+            correct: number;
+            /** Format: int64 */
+            duration_seconds: number;
+            /** Format: uuid */
+            id: string;
+            lessons: string[];
+            /** Format: double */
+            mean_loss?: number | null;
+            /** Format: int64 */
+            revealed: number;
+            scope: components["schemas"]["TransferRequest"];
+            /** Format: int64 */
+            scored: number;
+            /** Format: int64 */
+            unsure: number;
         };
         UpdateConfiguration: {
             configuration: components["schemas"]["ProfileConfiguration"];
@@ -9725,6 +9922,288 @@ export interface operations {
             };
         };
     };
+    start: {
+        parameters: {
+            query?: {
+                after?: string;
+                /** @description One-based result page. Mutually exclusive with `after`. */
+                page?: number;
+                limit?: number;
+                deck_id?: string;
+                /** @description Include only cards without a deck membership. */
+                without_deck?: boolean;
+                /** @description Literal substring of players, question, IDs, deck names, tags or comments. */
+                q?: string;
+                /** @description Literal substring of the name of the player on roll. */
+                player?: string;
+                tag?: string;
+                /** @description Comma-separated card tags. Each term includes its descendants. */
+                topics?: string;
+                game_plan?: components["schemas"]["GamePlan"];
+                comment?: string;
+                /** @description Exact 14-character GNUbg checker position ID. */
+                position_id?: string;
+                kind?: components["schemas"]["CardKind"];
+                /** @description New and due may overlap. Reviewed means at least one completed review. */
+                status?: components["schemas"]["CardReviewState"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PracticeRound"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    read: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PracticeRound"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    advance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoundAdvance"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PracticeRound"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    answer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoundAnswer"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PracticeRound"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    mark: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoundAdvance"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PracticeRound"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    retry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoundVersion"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PracticeRound"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     list_topics: {
         parameters: {
             query?: never;
@@ -10151,6 +10630,56 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    history: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransferSummary"][];
+                };
+            };
+        };
+    };
+    start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransferRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PracticeRound"];
                 };
             };
             422: {

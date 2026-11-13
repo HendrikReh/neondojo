@@ -7810,6 +7810,498 @@
         }
       }
     },
+    "/api/study/card-rounds": {
+      "post": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "start",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "One-based result page. Mutually exclusive with `after`.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "maximum": 100,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "deck_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "without_deck",
+            "in": "query",
+            "description": "Include only cards without a deck membership.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Literal substring of players, question, IDs, deck names, tags or comments.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "player",
+            "in": "query",
+            "description": "Literal substring of the name of the player on roll.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "topics",
+            "in": "query",
+            "description": "Comma-separated card tags. Each term includes its descendants.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "game_plan",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/GamePlan"
+            }
+          },
+          {
+            "name": "comment",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "position_id",
+            "in": "query",
+            "description": "Exact 14-character GNUbg checker position ID.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/CardKind"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "New and due may overlap. Reviewed means at least one completed review.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/CardReviewState"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PracticeRound"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/study/card-rounds/{id}": {
+      "get": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "read",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PracticeRound"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/study/card-rounds/{id}/advance": {
+      "post": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "advance",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoundAdvance"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PracticeRound"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/study/card-rounds/{id}/answer": {
+      "post": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "answer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoundAnswer"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PracticeRound"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/study/card-rounds/{id}/mark": {
+      "post": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "mark",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoundAdvance"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PracticeRound"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/study/card-rounds/{id}/retry": {
+      "post": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "retry",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoundVersion"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PracticeRound"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/study/card-topics": {
       "get": {
         "tags": [
@@ -8412,6 +8904,67 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/study/transfer-rounds": {
+      "get": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "history",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TransferSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "start",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PracticeRound"
                 }
               }
             }
@@ -16289,6 +16842,74 @@
           "forced"
         ]
       },
+      "PracticeRound": {
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "pass",
+          "index",
+          "total",
+          "missing",
+          "marked",
+          "summary",
+          "transfer"
+        ],
+        "properties": {
+          "card": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CardQuestion"
+              }
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "index": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "marked": {
+            "type": "boolean"
+          },
+          "missing": {
+            "type": "boolean"
+          },
+          "pass": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RoundResult"
+              }
+            ]
+          },
+          "summary": {
+            "$ref": "#/components/schemas/RoundSummary"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "transfer": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "PracticeVerdict": {
         "type": "string",
         "enum": [
@@ -16757,6 +17378,156 @@
             "format": "int64"
           }
         }
+      },
+      "RoundAdvance": {
+        "type": "object",
+        "required": [
+          "version",
+          "marked"
+        ],
+        "properties": {
+          "diagnosis": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lesson": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "marked": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RoundAnswer": {
+        "type": "object",
+        "required": [
+          "version",
+          "card_version",
+          "request_id"
+        ],
+        "properties": {
+          "answer": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PracticeAnswer"
+              }
+            ]
+          },
+          "card_version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "confidence": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RoundResult": {
+        "type": "object",
+        "required": [
+          "answer"
+        ],
+        "properties": {
+          "answer": {
+            "$ref": "#/components/schemas/CardAnswer"
+          },
+          "confidence": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "evaluation": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PracticeEvaluation"
+              }
+            ]
+          },
+          "submitted": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PracticeAnswer"
+              }
+            ]
+          }
+        }
+      },
+      "RoundSummary": {
+        "type": "object",
+        "required": [
+          "errors",
+          "correct",
+          "revealed",
+          "skipped",
+          "retry_count"
+        ],
+        "properties": {
+          "correct": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "errors": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "retry_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "revealed": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "skipped": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "RoundVersion": {
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
       },
       "SageSnapshot": {
         "type": "object",
@@ -17502,6 +18273,96 @@
           }
         },
         "additionalProperties": false
+      },
+      "TransferRequest": {
+        "type": "object",
+        "required": [
+          "player",
+          "game_plan",
+          "kind"
+        ],
+        "properties": {
+          "database_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "follow_up": {
+            "type": "boolean"
+          },
+          "game_plan": {
+            "$ref": "#/components/schemas/GamePlan"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CardKind"
+          },
+          "player": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TransferSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "scope",
+          "completed_at",
+          "scored",
+          "correct",
+          "revealed",
+          "duration_seconds",
+          "unsure",
+          "lessons"
+        ],
+        "properties": {
+          "completed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "correct": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "duration_seconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "lessons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "mean_loss": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "revealed": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/TransferRequest"
+          },
+          "scored": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "unsure": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
       },
       "UpdateConfiguration": {
         "type": "object",
