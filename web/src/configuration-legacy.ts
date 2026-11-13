@@ -11,6 +11,7 @@ import { readTheme, saveTheme } from './ui-preferences';
 import { readUiAppearance, saveUiAppearance } from './ui-appearance';
 import { readPlaySounds, savePlaySounds } from './play-audio';
 import { readVisibleColumns } from './library-column-preferences';
+import { isCollectionScope } from './card-search-api';
 import { LIBRARY_RESIZABLE_LAYOUT as LIBRARY_COLUMN_LAYOUT } from './library-columns';
 import {
   POSITION_COLUMN_LAYOUT,
@@ -49,7 +50,7 @@ export function readLegacyConfiguration(
     const deck = source.getItem('bgtutor.deck');
     if (
       deck &&
-      (deck === '__all__' ||
+      (isCollectionScope(deck) ||
         /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(deck))
     )
       c.learning.deck_id = deck;

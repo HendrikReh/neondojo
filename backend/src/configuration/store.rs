@@ -133,7 +133,7 @@ pub(crate) async fn initialize(
                 .into(),
         });
     }
-    if config.learning.deck_id != "__all__"
+    if !config.learning.is_collection_scope()
         && !exists(&mut tx, "decks", &config.learning.deck_id).await?
     {
         config.learning.deck_id = "__all__".into();

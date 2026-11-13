@@ -70,6 +70,15 @@ recommendation or the group table and
 returns focus to the button on close. Overview also shows the next scheduled
 card when the due list is empty.
 
+In Flashcards & Anki, **Manage decks** opens a list searchable by deck name.
+Create a deck there, or open, rename or delete a deck from the list. When a
+specific deck is selected, its study and export actions appear below the search.
+The results have selection checkboxes and actions above the table. Cards can be added to a deck or deleted
+from the collection after confirmation. Select a deck to move cards or remove
+its memberships, or choose **Without a deck** to find unassigned cards. **Find duplicates**
+shows shared deck memberships and duplicate records, with confirmation before
+removing a membership or deleting a copy.
+
 In Flashcards & Anki, Study now opens the next due card. Checker cards accept a
 complete turn on the board, with undo before submission. Cube cards use separate
 offer and response choices and show the offered cube on response cards. Check

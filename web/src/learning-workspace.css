@@ -14,7 +14,8 @@
   margin-bottom: 22px;
 }
 .learning-deck-panel {
-  margin-bottom: 16px;
+  margin-top: 12px;
+  margin-bottom: 12px;
 }
 .learning-deck-panel h2 {
   overflow-wrap: anywhere;
@@ -35,14 +36,14 @@
 .learning-card-browser .learning-card-list .position-table {
   min-width: 800px;
 }
-.learning-card-list .position-table th:first-child {
+.learning-card-list .position-table th:nth-last-child(6) {
   width: 27%;
 }
-.learning-card-list .position-table th:nth-child(2),
-.learning-card-list .position-table th:nth-child(3) {
+.learning-card-list .position-table th:nth-last-child(5),
+.learning-card-list .position-table th:nth-last-child(4) {
   width: 15%;
 }
-.learning-card-list .position-table th:nth-child(4) {
+.learning-card-list .position-table th:nth-last-child(3) {
   width: 18%;
 }
 .learning-card-list .position-table th:last-child {
@@ -52,12 +53,19 @@
 .learning-card-list .position-table td:last-child {
   text-align: right;
 }
+.learning-card-browser
+  .learning-card-list
+  .position-table
+  .position-preview-link {
+  display: grid;
+  gap: 0;
+  line-height: 14px;
+}
 .learning-card-list .position-preview-link strong {
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .learning-card-list .position-preview-link small {
-  flex: 0 1 auto;
   margin: 0;
 }
 .learning-card-preview h4 {
@@ -92,4 +100,58 @@
   margin-top: 14px;
   padding-top: 8px;
   border-top: 1px solid var(--ui-border);
+}
+
+.card-suggestions {
+  border-top: 1px solid var(--ui-border);
+}
+
+.card-suggestion-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 8px;
+  list-style: none;
+  padding: 0 3px 0 0;
+  margin: 0;
+  max-block-size: min(50vh, 560px);
+  overflow-y: auto;
+}
+
+.card-suggestion-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 112px) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.card-suggestion-board .player-bar {
+  display: none;
+}
+
+.card-suggestion-board .board {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+}
+
+.card-suggestion-detail {
+  display: grid;
+  gap: 3px;
+  font-size: var(--font-size-meta);
+  overflow-wrap: anywhere;
+}
+
+.card-suggestion-detail label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: var(--font-size-label);
+}
+
+.learning-card-list .position-table .learning-card-select-column {
+  width: 36px;
+  text-align: center;
 }

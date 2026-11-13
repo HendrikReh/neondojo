@@ -11,7 +11,8 @@ import {
 } from './profile-messages';
 import { themes } from './themes';
 import { languages } from './i18n-core';
-import { ALL_CARDS } from './card-search-api';
+import { ALL_CARDS, CARDS_WITHOUT_DECK } from './card-search-api';
+import { useCardSearchText } from './card-search-messages';
 import { LIBRARY_COLUMNS } from './library-columns';
 import { useEffect, useState } from 'react';
 import { request } from './api';
@@ -45,6 +46,7 @@ export default function ProfileSummary({
 }) {
   const t = useProfileText(),
     { locale } = useI18n();
+  const searchText = useCardSearchText();
   const [resourceNames, setResourceNames] = useState<Record<string, string>>(
     {},
   );
@@ -120,6 +122,7 @@ export default function ProfileSummary({
       return value.map((v) => label(String(v))).join(', ');
     const s = String(value);
     if (s === ALL_CARDS) return t('allCards');
+    if (s === CARDS_WITHOUT_DECK) return searchText('withoutDeck');
     if (path.endsWith('.locale'))
       return languages.find((l) => l.id === s)?.name ?? s;
     if (path.endsWith('board_theme'))

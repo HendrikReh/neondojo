@@ -1075,3 +1075,113 @@ async fn native_source_bytes_are_counted_once_per_match_and_keep_every_game(pool
         "each game's source score must survive reconstruction"
     );
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn card_suggestions_span_games_and_save_only_selected_decisions(pool: PgPool) {
+    let match_id = source(&pool).await;
+    let history_sgf = SOURCE.replace("Bob", "Carol");
+    let history = store::import_match(
+        &pool,
+        "history.sgf",
+        "sgf",
+        history_sgf.as_bytes(),
+        &history_sgf,
+        &import::parse_sgf(&history_sgf).unwrap(),
+    )
+    .await
+    .unwrap()
+    .r#match
+    .id;
+    job(&pool, history, 1, Some(1), &game1(0.08)).await;
+    let first = job(&pool, match_id, 1, Some(1), &game1(0.12)).await;
+    let second = job(
+        &pool,
+        match_id,
+        1,
+        Some(2),
+        &[
+            (2, decision(1, 1, "double", "no double", 0.25)),
+            (2, decision(2, 0, "drop", "take", 0.35)),
+        ],
+    )
+    .await;
+    let router = app(&pool);
+    let (status, deck) = call(&router, "POST", "/api/decks", json!({"name":"Suggestions"})).await;
+    assert_eq!(status, 201, "{deck}");
+    let url = format!(
+        "/api/decks/{}/card-suggestions",
+        deck["id"].as_str().unwrap()
+    );
+    let preview = format!("{url}?match_id={match_id}&player=0&min_loss=0.10");
+    let (status, result) = call(&router, "GET", &preview, Value::Null).await;
+    assert_eq!(status, 200, "{result}");
+    let items = result["items"].as_array().unwrap();
+    assert_eq!(items.len(), 3);
+    assert!(items.iter().all(|item| item["position"]["player"] == 0));
+    let checker = items
+        .iter()
+        .find(|item| item["reference"]["decision_no"] == 1)
+        .unwrap();
+    assert_eq!(checker["reference"]["job_id"], json!(first));
+    // Historical errors below the chosen threshold do not contribute.
+    assert_eq!(checker["recurring_matches"], 0);
+    let (_, recurring) = call(
+        &router,
+        "GET",
+        &format!("{url}?match_id={match_id}&player=0&min_loss=0.08"),
+        Value::Null,
+    )
+    .await;
+    assert!(
+        recurring["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["recurring_matches"] == 2)
+    );
+    let picked = items
+        .iter()
+        .find(|item| item["reference"]["job_id"] == json!(second))
+        .unwrap();
+    let body = json!({"match_id": match_id, "decisions": [picked["reference"]]});
+    let (status, result) = call(&router, "POST", &url, body.clone()).await;
+    assert_eq!(
+        (status, result),
+        (200, json!({"added":1,"updated":0,"total":1}))
+    );
+    sqlx::query("UPDATE learning_cards SET review_count=4")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (_, updated) = call(&router, "GET", &preview, Value::Null).await;
+    let items = updated["items"].as_array().unwrap();
+    assert_eq!(
+        items.iter().filter(|item| item["in_deck"] == true).count(),
+        1
+    );
+    assert!(
+        items
+            .iter()
+            .any(|item| item["in_deck"] == true && item["card_id"].is_string())
+    );
+    assert_eq!(call(&router, "POST", &url, body.clone()).await.0, 200);
+    assert_eq!(
+        sqlx::query_scalar::<_, i32>("SELECT review_count FROM learning_cards")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        4
+    );
+    job(
+        &pool,
+        match_id,
+        2,
+        Some(2),
+        &[
+            (2, decision(1, 1, "double", "no double", 0.25)),
+            (2, decision(2, 0, "drop", "take", 0.35)),
+        ],
+    )
+    .await;
+    assert_eq!(call(&router, "POST", &url, body).await.0, 409);
+}

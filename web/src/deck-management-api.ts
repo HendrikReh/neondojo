@@ -1,4 +1,5 @@
 import { request } from './api';
+import type { components } from './generated-api';
 import { AppError } from './i18n-core';
 import type { Deck } from './learning-api';
 
@@ -22,4 +23,63 @@ export function isDeckConflict(error: unknown) {
     error instanceof AppError &&
     ['404', '409'].includes(String(error.params.status))
   );
+}
+
+type Schema = components['schemas'];
+export type DuplicateCard = Schema['DuplicateCard'];
+export type DuplicateDeck = Schema['DuplicateDeck'];
+
+function post<T>(path: string, body: unknown) {
+  return request<T>(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export function moveDeckCards(
+  source: VersionedDeck,
+  target: VersionedDeck,
+  cardIds: string[],
+) {
+  return post<Schema['MoveCardsResult']>(`/decks/${source.id}/move-cards`, {
+    source_version: source.version,
+    target_id: target.id,
+    target_version: target.version,
+    card_ids: cardIds,
+  } satisfies Schema['MoveCards']);
+}
+
+export function addDeckCards(deck: VersionedDeck, cardIds: string[]) {
+  return post<Schema['AddDeckCardsResult']>(`/decks/${deck.id}/add-cards`, {
+    expected_version: deck.version,
+    card_ids: cardIds,
+  } satisfies Schema['AddDeckCards']);
+}
+
+export function removeDeckCards(deck: DuplicateDeck, cardIds: string[]) {
+  return post<void>(`/decks/${deck.id}/remove-cards`, {
+    expected_version: deck.version,
+    card_ids: cardIds,
+  } satisfies Schema['RemoveCards']);
+}
+
+export function deleteCards(cards: Schema['DeleteCard'][]) {
+  return post<void>('/cards/delete', { cards } satisfies Schema['DeleteCards']);
+}
+
+export function loadDuplicates(after: string | null, signal: AbortSignal) {
+  const query = after ? `?after=${encodeURIComponent(after)}` : '';
+  return request<Schema['DuplicatePage']>(`/cards/duplicates${query}`, {
+    signal,
+  });
+}
+
+export function resolveDuplicate(keep: DuplicateCard, remove: DuplicateCard) {
+  return post<void>('/cards/duplicates/resolve', {
+    keep_id: keep.card.id,
+    keep_version: keep.card.version,
+    delete_id: remove.card.id,
+    delete_version: remove.card.version,
+  } satisfies Schema['ResolveDuplicate']);
 }

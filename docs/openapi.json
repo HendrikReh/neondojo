@@ -362,6 +362,15 @@
             }
           },
           {
+            "name": "without_deck",
+            "in": "query",
+            "description": "Include only cards without a deck membership.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "name": "q",
             "in": "query",
             "description": "Literal substring of players, question, IDs, deck names, tags or comments.",
@@ -434,6 +443,143 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cards/delete": {
+      "post": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "delete_cards",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteCards"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cards/duplicates": {
+      "get": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "duplicates",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicatePage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cards/duplicates/resolve": {
+      "post": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "resolve_duplicate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveDuplicate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -1325,6 +1471,224 @@
         }
       }
     },
+    "/api/decks/{id}/add-cards": {
+      "post": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "add_deck_cards",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddDeckCards"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddDeckCardsResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decks/{id}/card-suggestions": {
+      "get": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "preview",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "match_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "player",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "min_loss",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardSuggestions"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "save",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveSuggestions"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddCardsResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/decks/{id}/cards": {
       "get": {
         "tags": [
@@ -1368,6 +1732,15 @@
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          {
+            "name": "without_deck",
+            "in": "query",
+            "description": "Include only cards without a deck membership.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
             }
           },
           {
@@ -1601,6 +1974,77 @@
         }
       }
     },
+    "/api/decks/{id}/move-cards": {
+      "post": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "move_cards",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveCards"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoveCardsResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/decks/{id}/next": {
       "get": {
         "tags": [
@@ -1681,6 +2125,70 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decks/{id}/remove-cards": {
+      "post": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "remove_cards",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoveCards"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -7517,6 +8025,46 @@
           }
         }
       },
+      "AddDeckCards": {
+        "type": "object",
+        "required": [
+          "expected_version",
+          "card_ids"
+        ],
+        "properties": {
+          "card_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "maxItems": 200,
+            "minItems": 1
+          },
+          "expected_version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AddDeckCardsResult": {
+        "type": "object",
+        "required": [
+          "added",
+          "already_in_target"
+        ],
+        "properties": {
+          "added": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "already_in_target": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
       "AddPositions": {
         "type": "object",
         "required": [
@@ -9015,6 +9563,80 @@
           }
         }
       },
+      "CardSuggestion": {
+        "type": "object",
+        "required": [
+          "reference",
+          "position",
+          "player_name",
+          "mistake_kind",
+          "game_plan",
+          "equity_loss",
+          "recurring_matches",
+          "card_id",
+          "in_deck"
+        ],
+        "properties": {
+          "card_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "equity_loss": {
+            "type": "number",
+            "format": "double"
+          },
+          "game_plan": {
+            "$ref": "#/components/schemas/GamePlan"
+          },
+          "in_deck": {
+            "type": "boolean"
+          },
+          "mistake_kind": {
+            "$ref": "#/components/schemas/MistakeKind"
+          },
+          "player_name": {
+            "type": "string"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "recurring_matches": {
+            "type": "integer",
+            "description": "Includes the current match when the group occurs in multiple matches.",
+            "minimum": 0
+          },
+          "reference": {
+            "$ref": "#/components/schemas/SuggestionReference"
+          }
+        }
+      },
+      "CardSuggestions": {
+        "type": "object",
+        "required": [
+          "items",
+          "has_analysis",
+          "history_available"
+        ],
+        "properties": {
+          "has_analysis": {
+            "type": "boolean",
+            "description": "False when no completed native analysis is available for any game."
+          },
+          "history_available": {
+            "type": "boolean",
+            "description": "False when the history exceeds the recurring-mistake query bounds."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CardSuggestion"
+            }
+          }
+        }
+      },
       "CheckerPracticeAnswer": {
         "type": "object",
         "required": [
@@ -10346,6 +10968,49 @@
           }
         }
       },
+      "DeleteCard": {
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "deck_ids"
+        ],
+        "properties": {
+          "deck_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeleteCards": {
+        "type": "object",
+        "required": [
+          "cards"
+        ],
+        "properties": {
+          "cards": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeleteCard"
+            },
+            "maxItems": 200,
+            "minItems": 1
+          }
+        },
+        "additionalProperties": false
+      },
       "DeleteConfigurationProfile": {
         "type": "object",
         "required": [
@@ -10469,6 +11134,79 @@
             "items": {
               "$ref": "#/components/schemas/DiceEvaluation"
             }
+          }
+        }
+      },
+      "DuplicateCard": {
+        "type": "object",
+        "required": [
+          "card",
+          "decks",
+          "duplicate_key",
+          "copies"
+        ],
+        "properties": {
+          "card": {
+            "$ref": "#/components/schemas/CardQuestion"
+          },
+          "copies": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "decks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DuplicateDeck"
+            }
+          },
+          "duplicate_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "DuplicateDeck": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "DuplicatePage": {
+        "type": "object",
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DuplicateCard"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -12431,6 +13169,56 @@
           },
           "source": {
             "$ref": "#/components/schemas/AssessmentSource"
+          }
+        }
+      },
+      "MoveCards": {
+        "type": "object",
+        "required": [
+          "source_version",
+          "target_id",
+          "target_version",
+          "card_ids"
+        ],
+        "properties": {
+          "card_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "maxItems": 200,
+            "minItems": 1
+          },
+          "source_version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "target_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "target_version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MoveCardsResult": {
+        "type": "object",
+        "required": [
+          "moved",
+          "already_in_target"
+        ],
+        "properties": {
+          "already_in_target": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "moved": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       },
@@ -14575,6 +15363,29 @@
           "failed"
         ]
       },
+      "RemoveCards": {
+        "type": "object",
+        "required": [
+          "expected_version",
+          "card_ids"
+        ],
+        "properties": {
+          "card_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "maxItems": 200,
+            "minItems": 1
+          },
+          "expected_version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
       "RenameConfigurationProfile": {
         "type": "object",
         "required": [
@@ -14611,6 +15422,34 @@
           },
           "name": {
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ResolveDuplicate": {
+        "type": "object",
+        "required": [
+          "keep_id",
+          "keep_version",
+          "delete_id",
+          "delete_version"
+        ],
+        "properties": {
+          "delete_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "delete_version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "keep_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "keep_version": {
+            "type": "integer",
+            "format": "int64"
           }
         },
         "additionalProperties": false
@@ -14959,6 +15798,28 @@
             "format": "int32",
             "maximum": 50,
             "minimum": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "SaveSuggestions": {
+        "type": "object",
+        "required": [
+          "match_id",
+          "decisions"
+        ],
+        "properties": {
+          "decisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SuggestionReference"
+            },
+            "maxItems": 10,
+            "minItems": 1
+          },
+          "match_id": {
+            "type": "string",
+            "format": "uuid"
           }
         },
         "additionalProperties": false
@@ -15524,6 +16385,29 @@
             "format": "date-time"
           }
         }
+      },
+      "SuggestionReference": {
+        "type": "object",
+        "required": [
+          "job_id",
+          "game_no",
+          "decision_no"
+        ],
+        "properties": {
+          "decision_no": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "game_no": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "job_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
       },
       "UpdateConfiguration": {
         "type": "object",

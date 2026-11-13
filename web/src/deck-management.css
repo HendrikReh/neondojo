@@ -52,3 +52,51 @@
   color: var(--ui-danger-button-text);
   border-color: var(--ui-danger-button);
 }
+
+.deck-library-dialog {
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+}
+
+.deck-library-dialog .create-deck {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.deck-library-list {
+  list-style: none;
+  padding: 0;
+  max-block-size: 55vh;
+  overflow: auto;
+}
+
+.deck-library-list > li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--ui-border);
+  overflow-wrap: anywhere;
+}
+
+.deck-library-list .learning-controls,
+.duplicate-confirmation .learning-controls {
+  margin: 6px 0;
+}
+
+.duplicate-entry {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.duplicate-entry select {
+  display: block;
+  max-inline-size: min(100%, 440px);
+}
+
+.duplicate-confirmation {
+  border: 1px solid var(--ui-border);
+  padding: 10px;
+}

@@ -200,6 +200,11 @@ pub struct ConfigurationLearning {
     pub filters: ConfigurationCardFilters,
     pub generation: ConfigurationGeneration,
 }
+impl ConfigurationLearning {
+    fn is_collection_scope(&self) -> bool {
+        matches!(self.deck_id.as_str(), "__all__" | "__without_deck__")
+    }
+}
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ConfigurationAnnotationFilters {

@@ -74,6 +74,19 @@ test('cube response cards preview the correct question without a checker answer'
   expect(html).toContain('Offered cube: 2');
   expect(html).not.toContain('SECRET PLAYED MOVE');
 });
+test('the list distinguishes cards with the same checker ID at different scores', () => {
+  const html = render([
+    { ...card, position: { ...card.position, gnubg_match_id: 'MACgAQAAAAAA' } },
+    {
+      ...card,
+      id: 'card-two',
+      position: { ...card.position, gnubg_match_id: 'MACgARAAAAAA' },
+    },
+  ]);
+  const list = html.match(/<tbody>(.*?)<\/tbody>/)?.[1];
+  expect(list).toContain('0:0 / 13 · Dice 6–1 · Cube 1</small>');
+  expect(list).toContain('1:0 / 13 · Dice 6–1 · Cube 1</small>');
+});
 test('an empty card list cannot display an old board', () => {
   const html = render([]);
   expect(html).not.toContain('class="board-shell ');

@@ -338,9 +338,13 @@ it.each([1, 2])(
       .find(
         (element) =>
           element.type === ActionButton &&
-          element.props.label === 'Rename deck',
+          element.props.label === 'Manage decks',
       )!
       .props.onClick();
+    view = render();
+    elements(view)
+      .find((element) => element.props?.manage)!
+      .props.manage('rename', decks[0]);
     view = render();
     const readsBefore = fetch.mock.calls.filter(([path]) =>
       String(path).includes('/cards?'),

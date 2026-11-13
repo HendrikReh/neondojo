@@ -340,7 +340,7 @@ test('retries due counts independently and handles a removed recommended deck', 
   const studyNow = page.getByRole('button', { name: 'Study now', exact: true });
   await studyNow.click();
   await nextRequest;
-  await expect(studyNow).toBeDisabled();
+  await expect(studyNow).toHaveCount(0);
   await cards.press('Home');
   await overview.getByRole('button', { name: 'Study due cards' }).click();
   await expect(cards).toHaveAttribute('aria-selected', 'true');

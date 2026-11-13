@@ -203,6 +203,7 @@ pub(super) fn reconstruct(imported: Imported) -> Vec<SourceDecision> {
             };
             output.push(SourceDecision {
                 plan,
+                original_match_state: None,
                 decision: p.decision,
                 question: MistakePracticeQuestion {
                     reference: MistakeReference {

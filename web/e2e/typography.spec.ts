@@ -84,7 +84,7 @@ async function fixture(
   );
   await page.goto('/');
   await expect(page.locator('.analysis-workspace .board')).toBeVisible();
-  return position.id as string;
+  return { positionId: position.id as string, deckName: deck.name as string };
 }
 
 const views = [
@@ -114,7 +114,7 @@ const views = [
     'Study',
     '.learning-heading h1',
     '.learning-card-list',
-    '.create-deck input',
+    '.position-search-row input',
   ],
 ] as const;
 
@@ -204,7 +204,7 @@ for (const theme of ['graphite', 'club', 'paper'])
 test('comment editors, modal titles and study questions follow their roles while code and board fonts remain distinct', async ({
   page,
 }) => {
-  await fixture(page);
+  const { deckName } = await fixture(page);
   const family = await page
     .locator('.app-shell')
     .evaluate((el) => getComputedStyle(el).fontFamily);
@@ -249,17 +249,36 @@ test('comment editors, modal titles and study questions follow their roles while
   );
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
-  await page.getByRole('tab', { name: 'Flashcards & Anki', exact: true }).click();
+  await page
+    .getByRole('tab', { name: 'Flashcards & Anki', exact: true })
+    .click();
   const study = page.getByRole('region', { name: 'Study', exact: true });
-  await expect(study.locator('.learning-card-list small').first()).toHaveCSS(
-    'font-family',
-    /monospace/,
+  await expect(
+    study.locator('.learning-card-list .position-match-name').first(),
+  ).toHaveCSS('font-family', /monospace/);
+  await study
+    .getByRole('button', { name: 'Manage decks', exact: true })
+    .click();
+  const deckLibrary = page.getByRole('dialog', {
+    name: 'Manage decks',
+    exact: true,
+  });
+  await expect(deckLibrary.getByLabel('Deck name')).toHaveCSS(
+    'font-size',
+    '13px',
   );
-  await study.getByRole('button', { name: 'Rename deck', exact: true }).click();
+  await deckLibrary
+    .getByRole('listitem')
+    .filter({ has: page.getByText(deckName, { exact: true }) })
+    .getByRole('button', { name: 'Rename deck', exact: true })
+    .click();
   dialog = page.getByRole('dialog', { name: 'Rename deck', exact: true });
   await expect(dialog.locator('h2')).toHaveCSS('font-size', '20px');
   await expect(dialog.locator('h2')).toHaveCSS('font-weight', '600');
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await deckLibrary
+    .getByRole('button', { name: 'Cancel', exact: true })
+    .click();
   await study.getByRole('button', { name: 'Study now', exact: true }).click();
   await expect(study.locator('.study-card > h3')).toHaveCSS(
     'font-family',
@@ -397,7 +416,7 @@ test('analysis statistics and move errors use the shared table roles', async ({
 test('the shared role scale stays stable across desktop widths and every locale', async ({
   page,
 }, info) => {
-  const positionId = await fixture(page);
+  const { positionId } = await fixture(page);
   async function reloadWithLocale(locale: string) {
     await page.evaluate(async (locale) => {
       const state = await (await fetch('/api/configuration')).json();

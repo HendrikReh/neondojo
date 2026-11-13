@@ -1,6 +1,14 @@
 import { useI18n } from './i18n';
 import { interpolate, type Locale, type TranslationParams } from './i18n-core';
 const rows = {
+  withoutDeck: [
+    'Without a deck',
+    'Ohne Deck',
+    'Sin mazo',
+    'Sans paquet',
+    'Bez talii',
+    'Senza mazzo',
+  ],
   allCards: [
     'All flashcards',
     'Alle Lernkarten',
@@ -113,14 +121,6 @@ const rows = {
     'Les filtres concernent cette liste. L’étude et l’export utilisent le paquet sélectionné.',
     'Filtry dotyczą tej listy. Nauka i eksport używają wybranej talii.',
     'I filtri riguardano questo elenco. Lo studio e l’esportazione usano il mazzo selezionato.',
-  ],
-  chooseScope: [
-    'Choose a deck to study, export or manage it.',
-    'Zum Lernen, Exportieren oder Verwalten ein Deck auswählen.',
-    'Elige un mazo para estudiar, exportar o administrarlo.',
-    'Choisissez un paquet pour étudier, exporter ou le gérer.',
-    'Wybierz talię, aby się uczyć, eksportować lub nią zarządzać.',
-    'Scegli un mazzo per studiare, esportare o gestirlo.',
   ],
 } as const;
 export type CardSearchMessage = keyof typeof rows;

@@ -295,7 +295,9 @@ test('a profile switch retains the active learning card and applies the new deck
   });
   await page.goto('/');
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
-  await page.getByRole('tab', { name: 'Flashcards & Anki', exact: true }).click();
+  await page
+    .getByRole('tab', { name: 'Flashcards & Anki', exact: true })
+    .click();
   const study = page.getByRole('region', { name: 'Study', exact: true });
   await expect(study.getByLabel('Choose deck', { exact: true })).toHaveValue(
     deckA,
@@ -313,7 +315,7 @@ test('a profile switch retains the active learning card and applies the new deck
   expect(nextCalls).toHaveLength(1);
   expect(controller.state.current_configuration.learning.deck_id).toBe(deckB);
   await study
-    .getByRole('button', { name: 'Back to decks', exact: true })
+    .getByRole('button', { name: 'Back to card search', exact: true })
     .click();
   await expect(study.getByLabel('Choose deck', { exact: true })).toHaveValue(
     deckB,

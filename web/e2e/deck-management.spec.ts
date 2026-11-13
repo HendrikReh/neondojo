@@ -1,4 +1,4 @@
-import { expect, test, type Page } from './test';
+import { expect, test, type Locator, type Page } from './test';
 
 test.use({ viewport: { width: 1800, height: 1169 }, actionTimeout: 5000 });
 const initial = () => [
@@ -65,7 +65,9 @@ async function setup(page: Page) {
   );
   await page.goto('/');
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
-  await page.getByRole('tab', { name: 'Flashcards & Anki', exact: true }).click();
+  await page
+    .getByRole('tab', { name: 'Flashcards & Anki', exact: true })
+    .click();
   const study = page.getByRole('region', { name: 'Study', exact: true });
   await expect(study.getByLabel('Choose deck', { exact: true })).toHaveValue(
     '11111111-1111-4111-8111-111111111111',
@@ -73,15 +75,68 @@ async function setup(page: Page) {
   return { state, study };
 }
 
+async function deckAction(
+  page: Page,
+  study: Locator,
+  deckName: string,
+  action: 'Rename deck' | 'Delete deck',
+) {
+  const library = page.getByRole('dialog', {
+    name: 'Manage decks',
+    exact: true,
+  });
+  if (!(await library.isVisible())) {
+    await study
+      .getByRole('button', { name: 'Manage decks', exact: true })
+      .click();
+  }
+  const button = library
+    .getByRole('listitem')
+    .filter({ has: page.getByText(deckName, { exact: true }) })
+    .getByRole('button', { name: action, exact: true });
+  await button.click();
+  return button;
+}
+
+test('creating a deck from the library opens it in card search', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Study', exact: true }).click();
+  await page
+    .getByRole('tab', { name: 'Flashcards & Anki', exact: true })
+    .click();
+  const study = page.getByRole('tabpanel', { name: 'Flashcards & Anki' });
+  await study.getByLabel('Choose deck').selectOption('__all__');
+  await study
+    .getByRole('button', { name: 'Manage decks', exact: true })
+    .click();
+  const library = page.getByRole('dialog', {
+    name: 'Manage decks',
+    exact: true,
+  });
+  const name = `From library ${crypto.randomUUID()}`;
+  await library.getByLabel('Deck name', { exact: true }).fill(name);
+  await library
+    .getByRole('button', { name: 'Create deck', exact: true })
+    .click();
+  await expect(library).toHaveCount(0);
+  await expect(
+    study.getByLabel('Choose deck').locator('option:checked'),
+  ).toContainText(name);
+  await expect(
+    study
+      .locator('.learning-deck-panel')
+      .getByRole('heading', { name, exact: true }),
+  ).toBeVisible();
+});
+
 test('rename and delete require explicit actions; cancellation restores focus and writes nothing', async ({
   page,
 }) => {
   const { state, study } = await setup(page);
-  const rename = study.getByRole('button', {
-    name: 'Rename deck',
-    exact: true,
-  });
-  await rename.click();
+  const rename = await deckAction(page, study, 'Race practice', 'Rename deck');
   let dialog = page.getByRole('dialog', { name: 'Rename deck', exact: true });
   await expect(dialog.getByLabel('Deck name', { exact: true })).toHaveValue(
     'Race practice',
@@ -90,7 +145,7 @@ test('rename and delete require explicit actions; cancellation restores focus an
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   await expect(rename).toBeFocused();
-  await study.getByRole('button', { name: 'Delete deck', exact: true }).click();
+  await deckAction(page, study, 'Race practice', 'Delete deck');
   dialog = page.getByRole('dialog', { name: 'Delete deck', exact: true });
   await expect(dialog).toContainText('Race practice');
   await expect(dialog).toContainText('2 cards');
@@ -109,7 +164,7 @@ test('conflicts retain the rename draft until latest deck details are reviewed a
 }) => {
   const { state, study } = await setup(page);
   state.conflict = true;
-  await study.getByRole('button', { name: 'Rename deck', exact: true }).click();
+  await deckAction(page, study, 'Race practice', 'Rename deck');
   const dialog = page.getByRole('dialog', { name: 'Rename deck', exact: true });
   await dialog.getByLabel('Deck name', { exact: true }).fill('My draft');
   await dialog.getByRole('button', { name: 'Save name', exact: true }).click();
@@ -167,7 +222,7 @@ test('deleting the selected deck clears study and late next-card replies, then p
   );
   await study.getByRole('button', { name: 'Study now', exact: true }).click();
   await waiting;
-  await study.getByRole('button', { name: 'Delete deck', exact: true }).click();
+  await deckAction(page, study, 'Race practice', 'Delete deck');
   const dialog = page.getByRole('dialog', { name: 'Delete deck', exact: true });
   await dialog.getByRole('checkbox').check();
   await dialog
@@ -180,7 +235,7 @@ test('deleting the selected deck clears study and late next-card replies, then p
   release();
   await expect(study.locator('.study-card')).toHaveCount(0);
   await expect(
-    study.getByRole('button', { name: 'Back to decks', exact: true }),
+    study.getByRole('button', { name: 'Back to card search', exact: true }),
   ).toHaveCount(0);
   await expect(study).not.toContainText('999');
   expect(state.writes).toHaveLength(1);
@@ -193,7 +248,7 @@ test('deleting the selected deck clears study and late next-card replies, then p
       ),
     )
     .toBe('22222222-2222-4222-8222-222222222222');
-  await study.getByRole('button', { name: 'Delete deck', exact: true }).click();
+  await deckAction(page, study, 'Cube practice', 'Delete deck');
   const last = page.getByRole('dialog', { name: 'Delete deck', exact: true });
   await last.getByRole('checkbox').check();
   await last.getByRole('button', { name: 'Delete deck', exact: true }).click();
@@ -202,7 +257,7 @@ test('deleting the selected deck clears study and late next-card replies, then p
   );
   await expect(
     study.getByRole('button', { name: 'Study now', exact: true }),
-  ).toBeDisabled();
+  ).toHaveCount(0);
   await expect
     .poll(() =>
       page.evaluate(
@@ -267,7 +322,7 @@ test('rename keeps a later-page preview and a pending study answer, and modal ke
   await study
     .getByRole('button', { name: 'Preview card 51', exact: true })
     .click();
-  await study.getByRole('button', { name: 'Rename deck', exact: true }).click();
+  await deckAction(page, study, 'Race practice', 'Rename deck');
   let dialog = page.getByRole('dialog', { name: 'Rename deck', exact: true });
   const name = dialog.getByLabel('Deck name', { exact: true });
   await expect(name).toBeFocused();
@@ -320,7 +375,7 @@ test('rename keeps a later-page preview and a pending study answer, and modal ke
   await study.getByRole('button', { name: 'Study now', exact: true }).click();
   await study.getByRole('button', { name: 'Show answer', exact: true }).click();
   await waiting;
-  await study.getByRole('button', { name: 'Rename deck', exact: true }).click();
+  await deckAction(page, study, 'Renamed race', 'Rename deck');
   dialog = page.getByRole('dialog', { name: 'Rename deck', exact: true });
   await dialog.getByLabel('Deck name', { exact: true }).fill('Still studying');
   await dialog.getByRole('button', { name: 'Save name', exact: true }).click();
@@ -339,7 +394,7 @@ test('a stale delete requires refreshed counts and a new explicit confirmation',
 }) => {
   const { state, study } = await setup(page);
   state.conflict = true;
-  await study.getByRole('button', { name: 'Delete deck', exact: true }).click();
+  await deckAction(page, study, 'Race practice', 'Delete deck');
   const dialog = page.getByRole('dialog', { name: 'Delete deck', exact: true });
   await dialog.getByRole('checkbox').check();
   await dialog
@@ -455,13 +510,15 @@ test('real renamed decks update position membership and Anki; deleting one share
   }, decks[0].id);
   await page.goto('/');
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
-  await page.getByRole('tab', { name: 'Flashcards & Anki', exact: true }).click();
+  await page
+    .getByRole('tab', { name: 'Flashcards & Anki', exact: true })
+    .click();
   const study = page.getByRole('region', { name: 'Study', exact: true });
   await expect(study.locator('.learning-card-preview')).toHaveAttribute(
     'data-card-id',
     originalCard.id,
   );
-  await study.getByRole('button', { name: 'Rename deck', exact: true }).click();
+  await deckAction(page, study, decks[0].name, 'Rename deck');
   const rename = page.getByRole('dialog', { name: 'Rename deck', exact: true });
   await rename.getByLabel('Deck name', { exact: true }).fill(renamed);
   await rename.getByRole('button', { name: 'Save name', exact: true }).click();
@@ -479,7 +536,9 @@ test('real renamed decks update position membership and Anki; deleting one share
   ]) {
     await page.setViewportSize({ width, height });
     expect(
-      (await study.locator('.learning-controls').boundingBox())!.height,
+      (await study
+        .locator('.learning-deck-panel .learning-controls')
+        .boundingBox())!.height,
     ).toBeLessThanOrEqual(65);
     expect(
       (await study
@@ -527,7 +586,7 @@ test('real renamed decks update position membership and Anki; deleting one share
   await expect(study.getByLabel('Choose deck', { exact: true })).toHaveValue(
     decks[0].id,
   );
-  await study.getByRole('button', { name: 'Delete deck', exact: true }).click();
+  await deckAction(page, study, renamed, 'Delete deck');
   const deletion = page.getByRole('dialog', {
     name: 'Delete deck',
     exact: true,
@@ -563,4 +622,118 @@ test('real renamed decks update position membership and Anki; deleting one share
     decks[1].name,
   );
   await expect(positions.locator('.position-preview .board')).toBeVisible();
+});
+
+test('deck search, card moves and shared membership removal work in Study', async ({
+  page,
+}) => {
+  const suffix = crypto.randomUUID();
+  const imported = await (
+    await page.request.post('/api/imports', {
+      multipart: {
+        file: {
+          name: 'deck-move.sgf',
+          mimeType: 'application/octet-stream',
+          buffer: Buffer.from(
+            `(;GM[6]PW[Move ${suffix}]PB[Opponent]MI[length:31][ws:5][bs:7];W[31hefe])`,
+          ),
+        },
+      },
+    })
+  ).json();
+  const position = (
+    await (
+      await page.request.get(`/api/positions?match_id=${imported.match.id}`)
+    ).json()
+  ).items[0];
+  const job = await (
+    await page.request.post('/api/jobs', {
+      data: { position_id: position.id, kind: 'analysis', plies: 0 },
+    })
+  ).json();
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/jobs/${job.id}`)).json()).status,
+    )
+    .toBe('completed');
+  const [source, target, other] = await Promise.all(
+    ['Source', 'Target', 'Other'].map(async (prefix) => {
+      const response = await page.request.post('/api/decks', {
+        data: { name: `${prefix} ${suffix}` },
+      });
+      await expect(response).toBeOK();
+      return response.json();
+    }),
+  );
+  for (const deck of [source, other]) {
+    const response = await page.request.post(`/api/decks/${deck.id}/cards`, {
+      data: { position_id: position.id },
+    });
+    await expect(response).toBeOK();
+  }
+  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Study', exact: true }).click();
+  await page
+    .getByRole('tab', { name: 'Flashcards & Anki', exact: true })
+    .click();
+  const study = page.getByRole('tabpanel', { name: 'Flashcards & Anki' });
+  await study.getByRole('button', { name: 'Manage decks' }).click();
+  const decks = page.getByRole('dialog', { name: 'Manage decks' });
+  await decks.getByRole('searchbox').fill(source.name.toUpperCase());
+  await expect(decks.getByRole('listitem')).toHaveCount(1);
+  await expect(
+    decks.getByRole('button', { name: 'Rename deck' }),
+  ).toBeVisible();
+  await expect(
+    decks.getByRole('button', { name: 'Delete deck' }),
+  ).toBeVisible();
+  for (const [width, height] of [
+    [1800, 1169],
+    [2560, 1440],
+    [3840, 2160],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await expect(decks.getByRole('searchbox')).toBeInViewport();
+    await page.screenshot({ path: `test-results/deck-library-${width}.png` });
+  }
+  await decks.getByRole('button', { name: 'Open deck' }).click();
+  await study.getByRole('checkbox', { name: 'Select card 1' }).check();
+  await study
+    .getByRole('button', { name: 'Move cards (1)', exact: true })
+    .click();
+  const move = page.getByRole('dialog', { name: 'Move cards (1)' });
+  await move.getByLabel('Target deck').selectOption(target.id);
+  await move
+    .getByRole('button', { name: 'Move cards (1)', exact: true })
+    .click();
+  await expect(
+    study.getByText(`Moved 1 cards to “${target.name}”.`),
+  ).toBeVisible();
+  await expect(
+    study.getByRole('checkbox', { name: 'Select card 1' }),
+  ).toHaveCount(0);
+
+  await study.getByRole('button', { name: 'Find duplicates' }).click();
+  const finder = page.getByRole('dialog', { name: 'Find duplicates' });
+  const remove = `Remove from “${other.name}”`;
+  await finder.getByRole('button', { name: remove, exact: true }).click();
+  await finder
+    .getByRole('group', { name: remove })
+    .getByRole('button', { name: remove })
+    .click();
+  await expect(
+    finder.getByRole('button', { name: remove, exact: true }),
+  ).toHaveCount(0);
+  for (const [deck, count] of [
+    [source, 0],
+    [target, 1],
+    [other, 0],
+  ] as const) {
+    const result = await (
+      await page.request.get(`/api/decks/${deck.id}/cards`)
+    ).json();
+    expect(result.items).toHaveLength(count);
+  }
 });

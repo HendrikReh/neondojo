@@ -1,8 +1,10 @@
 //! Shared cards power native Anki exports and the integrated FSRS trainer.
 mod apkg;
 mod content;
+mod management;
 mod scheduler;
 mod search;
+mod suggestions;
 use crate::practice::evaluation::{self, PracticeAnswer, PracticeEvaluation, SavedEvaluation};
 pub(crate) use content::saved_checker_move;
 pub use search::{
@@ -414,9 +416,28 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/decks", get(decks).post(create_deck))
         .route("/api/cards", get(search::all_cards))
+        .route("/api/cards/delete", post(management::delete_cards))
+        .route("/api/cards/duplicates", get(management::duplicates))
+        .route(
+            "/api/cards/duplicates/resolve",
+            post(management::resolve_duplicate),
+        )
+        .route("/api/decks/{id}/move-cards", post(management::move_cards))
+        .route(
+            "/api/decks/{id}/add-cards",
+            post(management::add_deck_cards),
+        )
+        .route(
+            "/api/decks/{id}/remove-cards",
+            post(management::remove_cards),
+        )
         .route("/api/decks/{id}", put(rename_deck).delete(delete_deck))
         .route("/api/decks/{id}/cards", get(cards).post(add_cards))
         .route("/api/decks/{id}/positions", post(add_positions))
+        .route(
+            "/api/decks/{id}/card-suggestions",
+            get(suggestions::preview).post(suggestions::save),
+        )
         .route("/api/decks/{id}/export.apkg", get(export_deck))
         .route("/api/decks/{id}/next", get(next_card))
         .route("/api/study/learning-summary", get(learning_summary))
@@ -434,8 +455,16 @@ pub fn routes() -> Router<AppState> {
         delete_deck,
         cards,
         search::all_cards,
+        management::duplicates,
+        management::resolve_duplicate,
+        management::move_cards,
+        management::remove_cards,
+        management::add_deck_cards,
+        management::delete_cards,
         add_cards,
         add_positions,
+        suggestions::preview,
+        suggestions::save,
         export_deck,
         next_card,
         learning_summary,
@@ -449,10 +478,25 @@ pub fn routes() -> Router<AppState> {
         RenameDeck,
         AddCards,
         AddCardsResult,
+        management::DuplicateCard,
+        management::DuplicateDeck,
+        management::DuplicatePage,
+        management::MoveCards,
+        management::MoveCardsResult,
+        management::RemoveCards,
+        management::AddDeckCards,
+        management::AddDeckCardsResult,
+        management::DeleteCards,
+        management::DeleteCard,
+        management::ResolveDuplicate,
         AddPositions,
         AddPositionsResult,
         PositionAddItem,
         PositionAddStatus,
+        suggestions::SuggestionReference,
+        suggestions::CardSuggestion,
+        suggestions::CardSuggestions,
+        suggestions::SaveSuggestions,
         CardSource,
         CardSolution,
         CardAnswer,
@@ -614,14 +658,7 @@ async fn add_cards(
     for c in contents {
         unique.insert(card_signature(&c), c);
     }
-    let written = write_cards(&state.pool, id, unique).await?;
-    let added = written.cards.values().filter(|card| card.added).count() as i64;
-    Ok(Json(AddCardsResult {
-        added,
-        // The existing single-source API counts all existing memberships as updated.
-        updated: written.cards.len() as i64 - added,
-        total: written.total,
-    }))
+    Ok(Json(write_match_cards(&state.pool, id, unique).await?))
 }
 
 #[utoipa::path(post,path="/api/decks/{id}/positions",params(("id"=Uuid,Path)),request_body=AddPositions,responses((status=200,body=AddPositionsResult),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
@@ -734,6 +771,20 @@ fn has_usable_checker_solution(solution: &CardSolution) -> bool {
     }
 }
 
+async fn write_match_cards(
+    pool: &PgPool,
+    deck_id: Uuid,
+    contents: BTreeMap<String, CardContent>,
+) -> ApiResult<AddCardsResult> {
+    let written = write_cards(pool, deck_id, contents).await?;
+    let added = written.cards.values().filter(|card| card.added).count() as i64;
+    Ok(AddCardsResult {
+        added,
+        updated: written.cards.len() as i64 - added,
+        total: written.total,
+    })
+}
+
 struct CardWrite {
     id: Uuid,
     added: bool,
@@ -793,16 +844,7 @@ async fn write_cards(
             },
         );
     }
-    let total: i64 = sqlx::query_scalar("SELECT count(*) FROM deck_cards WHERE deck_id=$1")
-        .bind(deck_id)
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?;
-    if total > MAX_CARDS {
-        return Err(ApiError::invalid(
-            "Deck exceeds 1000 cards; use another deck or narrow the filter",
-        ));
-    }
+    let total = check_deck_capacity(&mut tx, deck_id).await?;
     if cards.values().any(|card| card.added) {
         sqlx::query("UPDATE decks SET version=version+1 WHERE id=$1")
             .bind(deck_id)
@@ -813,6 +855,23 @@ async fn write_cards(
     tx.commit().await.map_err(anyhow::Error::from)?;
     Ok(WrittenCards { cards, total })
 }
+async fn check_deck_capacity(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    deck_id: Uuid,
+) -> ApiResult<i64> {
+    let total: i64 = sqlx::query_scalar("SELECT count(*) FROM deck_cards WHERE deck_id=$1")
+        .bind(deck_id)
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(anyhow::Error::from)?;
+    if total > MAX_CARDS {
+        return Err(ApiError::invalid(
+            "Deck exceeds 1000 cards; use another deck or narrow the filter",
+        ));
+    }
+    Ok(total)
+}
+
 #[utoipa::path(get, path = "/api/study/learning-summary", responses((status = 200, body = LearningSummary)), tag = "Learning")]
 async fn learning_summary(State(state): State<AppState>) -> ApiResult<Json<LearningSummary>> {
     #[derive(FromRow)]
@@ -1090,16 +1149,6 @@ async fn export_deck(
     if !["de", "en", "es", "fr", "pl", "it"].contains(&locale.as_str()) {
         return Err(ApiError::invalid("Unsupported export locale"));
     }
-    let name: String = sqlx::query_scalar("SELECT name FROM decks WHERE id=$1")
-        .bind(id)
-        .fetch_optional(&state.pool)
-        .await
-        .map_err(anyhow::Error::from)?
-        .ok_or_else(ApiError::missing)?;
-    let card_ids:Vec<Uuid>=sqlx::query_scalar("SELECT c.id FROM learning_cards c JOIN deck_cards dc ON dc.card_id=c.id WHERE dc.deck_id=$1 ORDER BY c.signature COLLATE \"C\" LIMIT 1001").bind(id).fetch_all(&state.pool).await.map_err(anyhow::Error::from)?;
-    if card_ids.len() > MAX_CARDS as usize {
-        return Err(ApiError::invalid("Export exceeds 1000 cards"));
-    }
     let permit = EXPORTS.try_acquire().map_err(|_| {
         ApiError(
             StatusCode::TOO_MANY_REQUESTS,
@@ -1107,9 +1156,26 @@ async fn export_deck(
         )
     })?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
-    // Acquire every shared-card lock before reading payloads or live annotations. Preparing an
-    // earlier snapshot before waiting here could give stale content a newer Anki modification time.
-    // The explicit C collation matches Rust byte order in add_cards, preventing reverse lock order.
+    // Hold a shared deck lock so concurrent moves or duplicate cleanup cannot
+    // change its membership between reading IDs and locking the export cards.
+    let name: String = sqlx::query_scalar("SELECT name FROM decks WHERE id=$1 FOR SHARE")
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?
+        .ok_or_else(ApiError::missing)?;
+    let card_ids: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT c.id FROM learning_cards c JOIN deck_cards dc ON dc.card_id=c.id
+         WHERE dc.deck_id=$1 ORDER BY c.signature COLLATE \"C\" LIMIT 1001",
+    )
+    .bind(id)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?;
+    if card_ids.len() > MAX_CARDS as usize {
+        return Err(ApiError::invalid("Export exceeds 1000 cards"));
+    }
+    // Read content only after taking all card locks, in the same order as add_cards.
     for card_id in &card_ids {
         sqlx::query("SELECT id FROM learning_cards WHERE id=$1 FOR UPDATE")
             .bind(card_id)

@@ -1,5 +1,10 @@
 import { expect, it } from 'vitest';
-import { ALL_CARDS, cardListPath, emptyCardFilters } from './card-search-api';
+import {
+  ALL_CARDS,
+  CARDS_WITHOUT_DECK,
+  cardListPath,
+  emptyCardFilters,
+} from './card-search-api';
 import { cardSearchText } from './card-search-messages';
 it('encodes literal search characters and carries all filters into subsequent pages', () => {
   const filters = {
@@ -23,17 +28,20 @@ it('encodes literal search characters and carries all filters into subsequent pa
   expect(cardListPath('selected', emptyCardFilters())).toBe(
     '/decks/selected/cards?limit=50',
   );
+  expect(cardListPath(CARDS_WITHOUT_DECK, emptyCardFilters(), 'next')).toBe(
+    '/cards?limit=50&after=next&without_deck=true',
+  );
 });
 it('provides translated card-search labels and localizes result counts in all six languages', () => {
   for (const locale of ['en', 'de', 'es', 'fr', 'pl', 'it'] as const) {
     for (const key of [
       'allCards',
+      'withoutDeck',
       'search',
       'noResults',
       'kind',
       'status',
       'scopeHint',
-      'chooseScope',
     ] as const)
       expect(cardSearchText(locale, key)).not.toBe('');
     expect(cardSearchText(locale, 'found', { count: 1234 })).toContain(

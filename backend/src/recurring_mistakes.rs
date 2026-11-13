@@ -191,7 +191,7 @@ fn opportunity(d: &Decision) -> Option<MistakeKind> {
     }
 }
 
-fn kind(d: &Decision) -> MistakeKind {
+pub(crate) fn kind(d: &Decision) -> MistakeKind {
     if d.kind == "checker" || d.played != d.best {
         opportunity(d).unwrap_or(MistakeKind::UnclassifiedCube)
     } else {

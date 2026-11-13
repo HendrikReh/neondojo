@@ -7,25 +7,26 @@ use crate::{
     model::Position,
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
-use sqlx::{FromRow, PgPool};
+use sqlx::{FromRow, PgPool, Postgres, Transaction};
 use std::collections::{BTreeMap, HashMap};
 use uuid::Uuid;
 pub(super) const MAX_GAMES: usize = 5_000;
 pub(super) const MAX_DECISIONS: usize = 200_000;
 pub(super) const MAX_SOURCE_BYTES: i64 = 64 * 1024 * 1024;
-pub(super) const TOO_BROAD: &str =
+pub(crate) const TOO_BROAD: &str =
     "Too many analyzed decisions or source games; choose a database to narrow this request";
 
 pub(crate) fn evaluated(d: &Decision) -> bool {
     crate::match_analysis::evaluated_equities(d).is_some()
 }
-pub(super) struct SourceDecision {
-    pub(super) question: MistakePracticeQuestion,
-    pub(super) decision: Decision,
-    pub(super) plan: GamePlan,
+pub(crate) struct SourceDecision {
+    pub(crate) question: MistakePracticeQuestion,
+    pub(crate) decision: Decision,
+    pub(crate) plan: GamePlan,
+    pub(crate) original_match_state: Option<String>,
 }
 impl SourceDecision {
-    pub(super) fn in_scope(&self, player: &str, plan: Option<GamePlan>) -> bool {
+    pub(crate) fn in_scope(&self, player: &str, plan: Option<GamePlan>) -> bool {
         self.question.players[self.decision.player as usize]
             .trim()
             .to_lowercase()
@@ -33,7 +34,7 @@ impl SourceDecision {
             && plan.is_none_or(|p| p == self.plan)
     }
 
-    pub(super) fn meets_loss_threshold(&self, loss: f64) -> bool {
+    pub(crate) fn meets_loss_threshold(&self, loss: f64) -> bool {
         self.decision.equity_loss >= loss && self.decision.equity_loss > 0.0
     }
 }
@@ -89,18 +90,14 @@ WITH eligible AS (
 )
 "#;
 
-pub(super) async fn load(
+pub(crate) async fn load(
     pool: &PgPool,
     database: Option<Uuid>,
     match_id: Option<Uuid>,
     player: Option<&str>,
 ) -> ApiResult<Vec<SourceDecision>> {
     super::imported::catalog_legacy(pool, database, match_id, player).await?;
-    let mut tx = pool.begin().await.map_err(anyhow::Error::from)?;
-    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
-        .execute(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?;
+    let mut tx = read_snapshot(pool).await?;
     if let Some(id) = database {
         let exists: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM databases WHERE id=$1 AND NOT collection_only)",
@@ -113,18 +110,7 @@ pub(super) async fn load(
             return Err(ApiError::invalid("Choose an existing database"));
         }
     }
-    // A checkpoint belongs to a game, but the artifact belongs to the match.
-    // Account for and transfer each match's source only once, even when hundreds
-    // of its games have selected checkpoints.
-    let (games,bytes):(i64,i64)=sqlx::query_as(&format!("{CHOSEN} SELECT count(*),(SELECT coalesce(sum(octet_length(m.sgf)),0)::bigint FROM matches m WHERE m.id IN (SELECT match_id FROM chosen)) FROM chosen")).bind(database).bind(match_id).bind(player.map(str::to_lowercase)).fetch_one(&mut *tx).await.map_err(anyhow::Error::from)?;
-    if games > MAX_GAMES as i64 || bytes > MAX_SOURCE_BYTES {
-        return Err(ApiError::invalid(TOO_BROAD));
-    }
-    let games:Vec<Game>=sqlx::query_as(&format!("{CHOSEN} SELECT c.*,CASE WHEN row_number() OVER (PARTITION BY c.match_id ORDER BY c.game_no)=1 THEN m.sgf ELSE '' END AS sgf,m.white,m.black FROM chosen c JOIN matches m ON m.id=c.match_id ORDER BY c.match_id,c.game_no LIMIT {}",MAX_GAMES+1)).bind(database).bind(match_id).bind(player.map(str::to_lowercase)).fetch_all(&mut *tx).await.map_err(anyhow::Error::from)?;
-    let rows:Vec<Row>=sqlx::query_as(&format!("{CHOSEN} SELECT a.job_id,a.game_no,a.decision_no,a.position_uuid,a.player,a.kind,a.equity_loss,a.data FROM chosen c JOIN move_analyses a ON a.job_id=c.job_id AND a.game_no=c.game_no ORDER BY c.match_id,c.game_no,a.decision_no LIMIT {}",MAX_DECISIONS+1)).bind(database).bind(match_id).bind(player.map(str::to_lowercase)).fetch_all(&mut *tx).await.map_err(anyhow::Error::from)?;
-    if rows.len() > MAX_DECISIONS {
-        return Err(ApiError::invalid(TOO_BROAD));
-    }
+    let (games, rows) = native_rows(&mut tx, database, match_id, player).await?;
     let imported =
         super::imported::load(&mut tx, database, match_id, player, games.len(), rows.len()).await?;
     tx.commit().await.map_err(anyhow::Error::from)?;
@@ -136,6 +122,53 @@ pub(super) async fn load(
     .await
     .map_err(anyhow::Error::from)?
 }
+/// Read the same completed native checkpoints without cataloging imported
+/// analysis. The checkpoint count also distinguishes an empty analysis from a
+/// match that has never been analyzed.
+pub(crate) async fn load_native_match(
+    pool: &PgPool,
+    match_id: Uuid,
+) -> ApiResult<(bool, Vec<SourceDecision>)> {
+    let mut tx = read_snapshot(pool).await?;
+    let (games, rows) = native_rows(&mut tx, None, Some(match_id), None).await?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    let has_analysis = !games.is_empty();
+    let decisions = tokio::task::spawn_blocking(move || reconstruct(games, rows))
+        .await
+        .map_err(anyhow::Error::from)??;
+    Ok((has_analysis, decisions))
+}
+
+async fn read_snapshot(pool: &PgPool) -> ApiResult<Transaction<'_, Postgres>> {
+    let mut tx = pool.begin().await.map_err(anyhow::Error::from)?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        .execute(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?;
+    Ok(tx)
+}
+
+async fn native_rows(
+    tx: &mut Transaction<'_, Postgres>,
+    database: Option<Uuid>,
+    match_id: Option<Uuid>,
+    player: Option<&str>,
+) -> ApiResult<(Vec<Game>, Vec<Row>)> {
+    // A checkpoint belongs to a game, but the artifact belongs to the match.
+    // Account for and transfer each match's source only once, even when hundreds
+    // of its games have selected checkpoints.
+    let (games,bytes):(i64,i64)=sqlx::query_as(&format!("{CHOSEN} SELECT count(*),(SELECT coalesce(sum(octet_length(m.sgf)),0)::bigint FROM matches m WHERE m.id IN (SELECT match_id FROM chosen)) FROM chosen")).bind(database).bind(match_id).bind(player.map(str::to_lowercase)).fetch_one(&mut **tx).await.map_err(anyhow::Error::from)?;
+    if games > MAX_GAMES as i64 || bytes > MAX_SOURCE_BYTES {
+        return Err(ApiError::invalid(TOO_BROAD));
+    }
+    let games:Vec<Game>=sqlx::query_as(&format!("{CHOSEN} SELECT c.*,CASE WHEN row_number() OVER (PARTITION BY c.match_id ORDER BY c.game_no)=1 THEN m.sgf ELSE '' END AS sgf,m.white,m.black FROM chosen c JOIN matches m ON m.id=c.match_id ORDER BY c.match_id,c.game_no LIMIT {}",MAX_GAMES+1)).bind(database).bind(match_id).bind(player.map(str::to_lowercase)).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
+    let rows:Vec<Row>=sqlx::query_as(&format!("{CHOSEN} SELECT a.job_id,a.game_no,a.decision_no,a.position_uuid,a.player,a.kind,a.equity_loss,a.data FROM chosen c JOIN move_analyses a ON a.job_id=c.job_id AND a.game_no=c.game_no ORDER BY c.match_id,c.game_no,a.decision_no LIMIT {}",MAX_DECISIONS+1)).bind(database).bind(match_id).bind(player.map(str::to_lowercase)).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
+    if rows.len() > MAX_DECISIONS {
+        return Err(ApiError::invalid(TOO_BROAD));
+    }
+    Ok((games, rows))
+}
+
 pub(super) async fn players(pool: &PgPool, database: Option<Uuid>) -> ApiResult<Vec<String>> {
     if let Some(id) = database {
         let exists: bool = sqlx::query_scalar(
@@ -285,6 +318,7 @@ fn reconstruct(games: Vec<Game>, rows: Vec<Row>) -> ApiResult<Vec<SourceDecision
             let question_match_id = STANDARD_NO_PAD.encode(state);
             game_output.push(SourceDecision {
                 plan,
+                original_match_state: Some(match_state_id.clone()),
                 question: MistakePracticeQuestion {
                     reference: MistakeReference {
                         job_id: Some(game.job_id),

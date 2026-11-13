@@ -18,9 +18,14 @@ import { matchContext } from './boardMath';
 import { useI18n } from './i18n';
 import { useLearningText } from './learning-messages';
 import type { CardQuestion, Deck } from './learning-api';
-import { CARD_PAGE_SIZE, type CardBrowseContext } from './card-search-api';
+import {
+  CARD_PAGE_SIZE,
+  CARD_SELECTION_LIMIT,
+  type CardBrowseContext,
+} from './card-search-api';
 import { useCardSearchText } from './card-search-messages';
 import { usePositionText } from './position-browser-messages';
+import { useDeckLibraryText } from './deck-library-messages';
 
 export default function LearningCardBrowser({
   cards,
@@ -33,6 +38,8 @@ export default function LearningCardBrowser({
   loading = false,
   decks = [],
   children,
+  selection,
+  actions,
 }: {
   cards: readonly (CardQuestion & { browse?: CardBrowseContext })[];
   total?: number;
@@ -44,7 +51,14 @@ export default function LearningCardBrowser({
   onMore: () => Promise<boolean>;
   visible?: boolean;
   children?: ReactNode;
+  selection?: {
+    ids: ReadonlySet<string>;
+    toggle: (ids: string[], checked: boolean) => void;
+    disabled: boolean;
+  };
+  actions?: ReactNode;
 }) {
+  const deckText = useDeckLibraryText();
   const searchT = useCardSearchText(),
     p = usePositionText();
   const deckName = (deck: { id: string; name: string }) =>
@@ -59,6 +73,7 @@ export default function LearningCardBrowser({
     pageIndex,
   );
   const ids = rows.map((card) => card.id);
+  const selectedOnPage = ids.filter((id) => selection?.ids.has(id)).length;
   const selected = cards.find((card) => card.id === selectedId) ?? cards[0];
   const context = selected
     ? matchContext(selected.position.gnubg_match_id)
@@ -71,6 +86,34 @@ export default function LearningCardBrowser({
           ? 'questionResponse'
           : 'questionOffer',
     );
+  const summaries = rows.map((card) => {
+    const { scores, length, jacoby, cube, owner, crawford } = matchContext(
+      card.position.gnubg_match_id,
+    );
+    const dice = card.position.dice;
+    return [
+      length
+        ? `${scores.map((score) => formatNumber(score)).join(':')} / ${formatNumber(length)}`
+        : uiT('common.moneyGame'),
+      !length && jacoby ? 'Jacoby' : '',
+      crawford ? p('crawford') : '',
+      card.kind === 'checker' &&
+      dice.length === 2 &&
+      dice.every((die) => die >= 1 && die <= 6)
+        ? `${p('dice')} ${dice.join('–')}`
+        : '',
+      card.kind === 'cube_response'
+        ? t('offeredCube', { value: cube * 2 })
+        : owner === null
+          ? `${p('cubeShort')} ${formatNumber(cube)}`
+          : uiT('board.cube', {
+              value: cube,
+              owner: card.players[owner],
+            }),
+    ]
+      .filter(Boolean)
+      .join(' · ');
+  });
   const preview = (
     <SearchResultPreview
       className="learning-card-preview"
@@ -128,14 +171,44 @@ export default function LearningCardBrowser({
       }
       preview={preview}
     >
+      {actions}
       {loading && <p role="status">{p('loading')}</p>}
       {rows.length > 0 && (
         <SearchResultTable
           key={page}
+          className={
+            selection ? 'position-table learning-card-selectable' : undefined
+          }
           scrollClassName="learning-card-table-scroll"
         >
           <thead>
             <tr>
+              {selection && (
+                <th scope="col" className="learning-card-select-column">
+                  <input
+                    type="checkbox"
+                    aria-label={p('selectPage')}
+                    checked={selectedOnPage === ids.length}
+                    ref={(input) => {
+                      if (input)
+                        input.indeterminate =
+                          selectedOnPage > 0 && selectedOnPage < ids.length;
+                    }}
+                    disabled={
+                      selection.disabled ||
+                      (selectedOnPage === 0 &&
+                        selection.ids.size >= CARD_SELECTION_LIMIT)
+                    }
+                    onChange={() =>
+                      selection.toggle(
+                        ids,
+                        selectedOnPage < ids.length &&
+                          selection.ids.size < CARD_SELECTION_LIMIT,
+                      )
+                    }
+                  />
+                </th>
+              )}
               <th scope="col">{t('question')}</th>
               <th scope="col">{p('player')}</th>
               <th scope="col">{p('opponent')}</th>
@@ -154,6 +227,7 @@ export default function LearningCardBrowser({
                 data-card-id={card.id}
                 text={[
                   question(card),
+                  summaries[index],
                   card.players.join(' · '),
                   card.position.position_id,
                   card.browse?.decks.map(deckName).join(', '),
@@ -168,6 +242,28 @@ export default function LearningCardBrowser({
                 jumpToEdges
                 onPreview={setSelectedId}
               >
+                {selection && (
+                  <td
+                    className="learning-card-select-column"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      aria-label={deckText('select', {
+                        number: formatNumber(start + index + 1),
+                      })}
+                      checked={selection.ids.has(card.id)}
+                      disabled={
+                        selection.disabled ||
+                        (!selection.ids.has(card.id) &&
+                          selection.ids.size >= CARD_SELECTION_LIMIT)
+                      }
+                      onChange={(event) =>
+                        selection.toggle([card.id], event.target.checked)
+                      }
+                    />
+                  </td>
+                )}
                 <td>
                   <button
                     type="button"
@@ -179,7 +275,7 @@ export default function LearningCardBrowser({
                   >
                     <strong>{question(card)}</strong>
                     <small className="position-match-name">
-                      {card.position.position_id}
+                      {summaries[index]}
                     </small>
                   </button>
                 </td>

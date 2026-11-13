@@ -13,6 +13,126 @@ fn app(pool: &PgPool) -> axum::Router {
     ))
 }
 
+#[sqlx::test(migrations = "./migrations")]
+async fn search_results_manage_card_memberships_and_delete_only_confirmed_cards(pool: PgPool) {
+    let positions = positions(&pool).await;
+    let app = app(&pool);
+    let source = create(&app, "Source").await;
+    let destination = create(&app, "Destination").await;
+    add(&app, &source, &[positions[0].id, positions[1].id]).await;
+    let (_, cards) = call(&app, "GET", "/api/cards?limit=2", Value::Null).await;
+    let cards = cards["items"].as_array().unwrap();
+    assert_eq!(cards.len(), 2);
+    let (selected, other) = (&cards[0], &cards[1]);
+    review(&app, selected).await;
+
+    let (_, deckless) = call(
+        &app,
+        "GET",
+        "/api/cards?without_deck=true&limit=1",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(deckless["total"], 0, "{deckless}");
+    let source_id = source["id"].as_str().unwrap();
+    let target_id = destination["id"].as_str().unwrap();
+    let remove_path = format!("/api/decks/{source_id}/remove-cards");
+    let add_path = format!("/api/decks/{target_id}/add-cards");
+    assert_eq!(
+        call(
+            &app,
+            "POST",
+            &remove_path,
+            json!({"expected_version":1,"card_ids":[selected["id"]]})
+        )
+        .await
+        .0,
+        204
+    );
+    let (status, deckless) = call(
+        &app,
+        "GET",
+        "/api/cards?without_deck=true&limit=1&status=reviewed",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{deckless}");
+    assert_eq!(deckless["total"], 1);
+    let card = &deckless["items"][0];
+    assert_eq!(card["id"], selected["id"]);
+    assert_eq!(card["review_count"], 1);
+
+    let (status, result) = call(
+        &app,
+        "POST",
+        &add_path,
+        json!({"expected_version":0,"card_ids":[card["id"], Uuid::new_v4()]}),
+    )
+    .await;
+    assert_eq!(status, 409, "{result}");
+    assert_eq!(listed(&app, &destination["id"]).await["card_count"], 0);
+    let (status, result) = call(
+        &app,
+        "POST",
+        &add_path,
+        json!({"expected_version":0,"card_ids":[card["id"]]}),
+    )
+    .await;
+    assert_eq!(
+        (status, result),
+        (200, json!({"added":1,"already_in_target":0}))
+    );
+    let (status, result) = call(
+        &app,
+        "POST",
+        &add_path,
+        json!({"expected_version":1,"card_ids":[card["id"]]}),
+    )
+    .await;
+    assert_eq!(
+        (status, result),
+        (200, json!({"added":0,"already_in_target":1}))
+    );
+    assert_eq!(listed(&app, &destination["id"]).await["version"], 1);
+    let delete = "/api/cards/delete";
+    let (status, result) = call(
+        &app,
+        "POST",
+        delete,
+        json!({"cards":[{"id":card["id"],"version":card["version"],"deck_ids":[]}]}),
+    )
+    .await;
+    assert_eq!(status, 409, "{result}");
+    let stale_batch = json!({"cards":[
+        {"id":card["id"],"version":card["version"],"deck_ids":[target_id]},
+        {"id":other["id"],"version":999,"deck_ids":[source_id]}
+    ]});
+    assert_eq!(call(&app, "POST", delete, stale_batch).await.0, 409);
+    assert_eq!(listed(&app, &destination["id"]).await["card_count"], 1);
+    assert_eq!(
+        call(
+            &app,
+            "POST",
+            delete,
+            json!({"cards":[{"id":card["id"],"version":card["version"],"deck_ids":[target_id]}]})
+        )
+        .await
+        .0,
+        204
+    );
+    assert_eq!(listed(&app, &destination["id"]).await["version"], 2);
+    let (_, remaining) = call(&app, "GET", "/api/cards", Value::Null).await;
+    assert_eq!(remaining["total"], 1);
+    assert_eq!(remaining["items"][0], *other);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM card_reviews")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+}
+
 async fn raw(app: &axum::Router, method: &str, path: &str, body: &str) -> (u16, Value) {
     let response = app
         .clone()
@@ -618,4 +738,131 @@ async fn openapi_describes_required_versions_and_mutation_errors(pool: PgPool) {
         .unwrap();
     assert_eq!(expected["in"], "query");
     assert_eq!(expected["required"], true);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn cards_move_and_duplicates_can_be_resolved_without_changing_keeper_progress(pool: PgPool) {
+    let pos = positions(&pool).await;
+    let app = app(&pool);
+    let source = create(&app, "Source").await;
+    let target = create(&app, "Target").await;
+    let source_id = source["id"].as_str().unwrap();
+    let target_id = target["id"].as_str().unwrap();
+    for (deck, indices) in [(source_id, &[0, 1][..]), (target_id, &[0][..])] {
+        for index in indices {
+            let (status, result) = call(
+                &app,
+                "POST",
+                &format!("/api/decks/{deck}/cards"),
+                json!({"position_id":pos[*index].id}),
+            )
+            .await;
+            assert_eq!(status, 200, "{result}");
+        }
+    }
+    let (_, source_cards) = call(
+        &app,
+        "GET",
+        &format!("/api/decks/{source_id}/cards"),
+        Value::Null,
+    )
+    .await;
+    let cards = source_cards["items"].as_array().unwrap();
+    let shared = cards
+        .iter()
+        .find(|c| {
+            c["browse"]["decks"]
+                .as_array()
+                .is_some_and(|d| d.len() == 2)
+        })
+        .unwrap_or_else(|| panic!("{source_cards}"));
+    review(&app, shared).await;
+    let shared_id = shared["id"].as_str().unwrap();
+    let duplicate_path = "/api/cards/duplicates";
+    let (status, duplicates) = call(&app, "GET", duplicate_path, Value::Null).await;
+    assert_eq!(status, 200, "{duplicates}");
+    assert_eq!(duplicates["items"][0]["card"]["id"], shared_id);
+    assert_eq!(duplicates["items"][0]["decks"].as_array().unwrap().len(), 2);
+
+    let move_path = format!("/api/decks/{source_id}/move-cards");
+    let body = json!({
+        "source_version": 2, "target_version": 1, "target_id": target_id,
+        "card_ids": cards.iter().map(|c| &c["id"]).collect::<Vec<_>>()
+    });
+    let (status, moved) = call(&app, "POST", &move_path, body.clone()).await;
+    assert_eq!(
+        (status, moved),
+        (200, json!({"moved":2,"already_in_target":1}))
+    );
+    assert_eq!(call(&app, "POST", &move_path, body).await.0, 409);
+    assert_eq!(listed(&app, &source["id"]).await["card_count"], 0);
+    assert_eq!(listed(&app, &target["id"]).await["card_count"], 2);
+
+    let duplicate_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO learning_cards(id,signature,payload) SELECT $1,'legacy duplicate',payload FROM learning_cards WHERE id=$2")
+        .bind(duplicate_id).bind(Uuid::parse_str(shared_id).unwrap()).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO deck_cards(deck_id,card_id) VALUES($1,$2)")
+        .bind(Uuid::parse_str(source_id).unwrap())
+        .bind(duplicate_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (_, found) = call(&app, "GET", duplicate_path, Value::Null).await;
+    let entries = found["items"].as_array().unwrap();
+    assert_eq!(entries.len(), 2);
+    let keeper = entries
+        .iter()
+        .find(|c| c["card"]["id"] == shared_id)
+        .unwrap();
+    assert_eq!(keeper["copies"], 2);
+    assert_eq!(keeper["card"]["review_count"], 1);
+    let duplicate = entries
+        .iter()
+        .find(|c| c["card"]["id"] == json!(duplicate_id))
+        .unwrap();
+    review(&app, &duplicate["card"]).await;
+    let mut merge = json!({"keep_id":shared_id,"keep_version":keeper["card"]["version"],"delete_id":duplicate_id,"delete_version":0});
+    assert_eq!(
+        call(&app, "POST", "/api/cards/duplicates/resolve", merge.clone())
+            .await
+            .0,
+        409
+    );
+    merge["delete_version"] = json!(1);
+    assert_eq!(
+        call(&app, "POST", "/api/cards/duplicates/resolve", merge)
+            .await
+            .0,
+        204
+    );
+    let removed_reviews: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM card_reviews WHERE card_id=$1")
+            .bind(duplicate_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(removed_reviews, 0);
+    assert_eq!(listed(&app, &source["id"]).await["card_count"], 1);
+    let (status, removed) = call(
+        &app,
+        "POST",
+        &format!("/api/decks/{source_id}/remove-cards"),
+        json!({"expected_version":4,"card_ids":[shared_id]}),
+    )
+    .await;
+    assert_eq!((status, removed), (204, Value::Null));
+    let (_, result) = call(
+        &app,
+        "GET",
+        &format!("/api/decks/{target_id}/cards"),
+        Value::Null,
+    )
+    .await;
+    assert!(
+        result["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c["id"] == shared_id && c["review_count"] == 1)
+    );
 }

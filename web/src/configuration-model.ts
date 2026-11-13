@@ -5,6 +5,7 @@ import {
 } from './library-api';
 import {
   ALL_CARDS,
+  isCollectionScope,
   emptyCardFilters,
   type CardFilters,
 } from './card-search-api';
@@ -414,7 +415,7 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
   )
     invalid('learning.filters');
   c.learning.filters.tag = c.learning.filters.tag.toLowerCase();
-  if (c.learning.deck_id !== ALL_CARDS && !uuid.test(c.learning.deck_id))
+  if (!isCollectionScope(c.learning.deck_id) && !uuid.test(c.learning.deck_id))
     invalid('learning.deck_id');
   exactKeys(
     c.learning.generation,

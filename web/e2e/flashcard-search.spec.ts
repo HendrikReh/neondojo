@@ -3,7 +3,7 @@ import { expect, test, type Page } from './test';
 test.use({ viewport: { width: 1800, height: 1169 }, actionTimeout: 10000 });
 const deckA = '11111111-1111-4111-8111-111111111111';
 const deckB = '22222222-2222-4222-8222-222222222222';
-async function setup(page: Page) {
+async function setup(page: Page, singleDeck = false) {
   const cards = Array.from({ length: 53 }, (_, index) => ({
     id: `card-${index}`,
     version: 1,
@@ -71,7 +71,7 @@ async function setup(page: Page) {
           version: 0,
           created_at: '2026-01-01T00:00:00Z',
         },
-      ],
+      ].filter((deck) => !singleDeck || deck.id === deckB),
     }),
   );
   const respond = async (
@@ -123,7 +123,9 @@ async function setup(page: Page) {
   });
   await page.goto('/');
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
-  await page.getByRole('tab', { name: 'Flashcards & Anki', exact: true }).click();
+  await page
+    .getByRole('tab', { name: 'Flashcards & Anki', exact: true })
+    .click();
   return {
     study: page.getByRole('region', { name: 'Study', exact: true }),
     queries,
@@ -142,14 +144,35 @@ test('Flashcards has an external heading, server search beyond the first page an
   const heading = study.locator('h1');
   await expect(heading).toHaveText('Flashcards');
   await expect(study.locator('.learning-card-list tbody tr')).toHaveCount(50);
-  expect(
-    (await heading.boundingBox())!.y + (await heading.boundingBox())!.height,
-  ).toBeLessThan(
-    (await study.locator('.learning-deck-panel').boundingBox())!.y,
-  );
+  await expect(study.locator('.learning-deck-panel')).toHaveCount(0);
+  for (const name of [
+    'Study now',
+    'Download Anki deck',
+    'Rename deck',
+    'Delete deck',
+    'Create deck',
+  ]) {
+    await expect(study.getByRole('button', { name, exact: true })).toHaveCount(
+      0,
+    );
+  }
+  await study
+    .getByRole('button', { name: 'Manage decks', exact: true })
+    .click();
+  const library = page.getByRole('dialog', {
+    name: 'Manage decks',
+    exact: true,
+  });
   await expect(
-    study.getByRole('button', { name: 'Study now', exact: true }),
-  ).toBeDisabled();
+    library.getByRole('button', { name: 'Create deck', exact: true }),
+  ).toBeVisible();
+  await expect(
+    library.getByRole('button', { name: 'Rename deck', exact: true }),
+  ).toHaveCount(2);
+  await expect(
+    library.getByRole('button', { name: 'Delete deck', exact: true }),
+  ).toHaveCount(2);
+  await library.getByRole('button', { name: 'Cancel', exact: true }).click();
   await study.getByLabel('Search text', { exact: true }).fill('Mochy');
   await study
     .getByRole('button', { name: 'Search cards', exact: true })
@@ -180,6 +203,17 @@ test('Flashcards has an external heading, server search beyond the first page an
   await expect(
     study.getByRole('button', { name: 'Study now', exact: true }),
   ).toBeEnabled();
+  await expect(
+    study.getByRole('button', { name: 'Rename deck', exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    study.getByRole('button', { name: 'Delete deck', exact: true }),
+  ).toHaveCount(0);
+  await study
+    .getByLabel('Choose deck', { exact: true })
+    .selectOption('__without_deck__');
+  await expect(study.locator('.learning-deck-panel')).toHaveCount(0);
+  await study.getByLabel('Choose deck', { exact: true }).selectOption(deckB);
   for (const viewport of [
     { width: 1800, height: 1169 },
     { width: 2560, height: 1440 },
@@ -203,6 +237,22 @@ test('Flashcards has an external heading, server search beyond the first page an
   }
   expect(writes).toEqual([]);
   await expect(study.locator('.study-answer')).toHaveCount(0);
+});
+
+test('Move stays visible when the search has no source or the source has no destination', async ({
+  page,
+}) => {
+  const { study } = await setup(page, true);
+  const move = study.getByRole('button', { name: /^Move cards/ });
+  await expect(move).toBeVisible();
+  await expect(move).toBeDisabled();
+  await expect(
+    study.getByText('Moving cards requires two decks.'),
+  ).toBeVisible();
+  await study.getByLabel('Choose deck', { exact: true }).selectOption(deckB);
+  await study.getByRole('checkbox', { name: 'Select card 1' }).check();
+  await expect(move).toBeVisible();
+  await expect(move).toBeDisabled();
 });
 
 test('flashcard search uses the position search layout and page controls', async ({

@@ -643,6 +643,9 @@ export default function AnalysisWorkspace({
               matchId={match.id}
               gameNo={game?.game_no}
               allowBatch={sourceAvailable}
+              white={match.white}
+              black={match.black}
+              theme={theme}
               revision={deckRevision}
               onChanged={onDeckChanged}
             />

@@ -116,6 +116,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cards/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["delete_cards"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cards/duplicates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["duplicates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cards/duplicates/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resolve_duplicate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cards/{id}/attempt": {
         parameters: {
             query?: never;
@@ -308,6 +356,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/decks/{id}/add-cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["add_deck_cards"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/decks/{id}/card-suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["preview"];
+        put?: never;
+        post: operations["save"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/decks/{id}/cards": {
         parameters: {
             query?: never;
@@ -340,6 +420,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/decks/{id}/move-cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["move_cards"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/decks/{id}/next": {
         parameters: {
             query?: never;
@@ -366,6 +462,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["add_positions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/decks/{id}/remove-cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["remove_cards"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1734,6 +1846,15 @@ export interface components {
             /** Format: int64 */
             updated: number;
         };
+        AddDeckCards: {
+            card_ids: string[];
+            /** Format: int64 */
+            expected_version: number;
+        };
+        AddDeckCardsResult: {
+            added: number;
+            already_in_target: number;
+        };
         AddPositions: {
             /** @description Saved position UUIDs in selection order. Every occurrence receives an outcome. */
             position_ids: string[];
@@ -2157,6 +2278,27 @@ export interface components {
             /** Format: uuid */
             position_id?: string | null;
         };
+        CardSuggestion: {
+            /** Format: uuid */
+            card_id: string | null;
+            /** Format: double */
+            equity_loss: number;
+            game_plan: components["schemas"]["GamePlan"];
+            in_deck: boolean;
+            mistake_kind: components["schemas"]["MistakeKind"];
+            player_name: string;
+            position: components["schemas"]["Position"];
+            /** @description Includes the current match when the group occurs in multiple matches. */
+            recurring_matches: number;
+            reference: components["schemas"]["SuggestionReference"];
+        };
+        CardSuggestions: {
+            /** @description False when no completed native analysis is available for any game. */
+            has_analysis: boolean;
+            /** @description False when the history exceeds the recurring-mistake query bounds. */
+            history_available: boolean;
+            items: components["schemas"]["CardSuggestion"][];
+        };
         CheckerPracticeAnswer: {
             best: string;
             depth?: string | null;
@@ -2554,6 +2696,16 @@ export interface components {
              */
             version: number;
         };
+        DeleteCard: {
+            deck_ids: string[];
+            /** Format: uuid */
+            id: string;
+            /** Format: int64 */
+            version: number;
+        };
+        DeleteCards: {
+            cards: components["schemas"]["DeleteCard"][];
+        };
         DeleteConfigurationProfile: {
             /** Format: int64 */
             expected_profile_revision: number;
@@ -2589,6 +2741,25 @@ export interface components {
             /** Format: int32 */
             plies: number;
             rolls: components["schemas"]["DiceEvaluation"][];
+        };
+        DuplicateCard: {
+            card: components["schemas"]["CardQuestion"];
+            /** Format: int64 */
+            copies: number;
+            decks: components["schemas"]["DuplicateDeck"][];
+            duplicate_key: string | null;
+        };
+        DuplicateDeck: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: int64 */
+            version: number;
+        };
+        DuplicatePage: {
+            items: components["schemas"]["DuplicateCard"][];
+            /** Format: uuid */
+            next_cursor: string | null;
         };
         EngineCheckRequest: {
             path: string;
@@ -3164,6 +3335,19 @@ export interface components {
             position_id: string;
             severity: components["schemas"]["MoveSeverity"];
             source: components["schemas"]["AssessmentSource"];
+        };
+        MoveCards: {
+            card_ids: string[];
+            /** Format: int64 */
+            source_version: number;
+            /** Format: uuid */
+            target_id: string;
+            /** Format: int64 */
+            target_version: number;
+        };
+        MoveCardsResult: {
+            already_in_target: number;
+            moved: number;
         };
         /**
          * @description Native decision severity, using the saved GNUbg normalized loss categories.
@@ -3781,6 +3965,11 @@ export interface components {
         RemainingTimeBasis: "benchmark" | "observed";
         /** @enum {string} */
         RemainingTimeState: "queued" | "waiting" | "estimated" | "reestimating" | "unavailable" | "finishing" | "completed" | "failed";
+        RemoveCards: {
+            card_ids: string[];
+            /** Format: int64 */
+            expected_version: number;
+        };
         RenameConfigurationProfile: {
             /** Format: int64 */
             expected_profile_revision: number;
@@ -3792,6 +3981,16 @@ export interface components {
             /** Format: int64 */
             expected_version: number;
             name: string;
+        };
+        ResolveDuplicate: {
+            /** Format: uuid */
+            delete_id: string;
+            /** Format: int64 */
+            delete_version: number;
+            /** Format: uuid */
+            keep_id: string;
+            /** Format: int64 */
+            keep_version: number;
         };
         RestoreConfiguration: {
             /** Format: int64 */
@@ -3906,6 +4105,11 @@ export interface components {
             losses: number[];
             /** Format: int32 */
             total_positions: number;
+        };
+        SaveSuggestions: {
+            decisions: components["schemas"]["SuggestionReference"][];
+            /** Format: uuid */
+            match_id: string;
         };
         SavedPositionFilter: {
             /** Format: date-time */
@@ -4082,6 +4286,14 @@ export interface components {
             session_scores: number[];
             /** Format: date-time */
             updated_at: string;
+        };
+        SuggestionReference: {
+            /** Format: int32 */
+            decision_no: number;
+            /** Format: int32 */
+            game_no: number;
+            /** Format: uuid */
+            job_id: string;
         };
         UpdateConfiguration: {
             configuration: components["schemas"]["ProfileConfiguration"];
@@ -4383,6 +4595,8 @@ export interface operations {
                 after?: string;
                 limit?: number;
                 deck_id?: string;
+                /** @description Include only cards without a deck membership. */
+                without_deck?: boolean;
                 /** @description Literal substring of players, question, IDs, deck names, tags or comments. */
                 q?: string;
                 /** @description Literal substring of the name of the player on roll. */
@@ -4410,6 +4624,117 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_cards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteCards"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    duplicates: {
+        parameters: {
+            query?: {
+                after?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DuplicatePage"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    resolve_duplicate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveDuplicate"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5072,12 +5397,153 @@ export interface operations {
             };
         };
     };
+    add_deck_cards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddDeckCards"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddDeckCardsResult"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    preview: {
+        parameters: {
+            query: {
+                match_id: string;
+                player?: number;
+                min_loss: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardSuggestions"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    save: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveSuggestions"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddCardsResult"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     cards: {
         parameters: {
             query?: {
                 after?: string;
                 limit?: number;
                 deck_id?: string;
+                /** @description Include only cards without a deck membership. */
+                without_deck?: boolean;
                 /** @description Literal substring of players, question, IDs, deck names, tags or comments. */
                 q?: string;
                 /** @description Literal substring of the name of the player on roll. */
@@ -5213,6 +5679,55 @@ export interface operations {
             };
         };
     };
+    move_cards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveCards"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoveCardsResult"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     next_card: {
         parameters: {
             query?: never;
@@ -5266,6 +5781,53 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    remove_cards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoveCards"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

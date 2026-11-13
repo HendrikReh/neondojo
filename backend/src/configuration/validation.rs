@@ -391,10 +391,11 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
         &f.status,
         &["", "new", "due", "reviewed"],
     )?;
-    if config.learning.deck_id != "__all__" && Uuid::parse_str(&config.learning.deck_id).is_err() {
+    if !config.learning.is_collection_scope() && Uuid::parse_str(&config.learning.deck_id).is_err()
+    {
         return Err(ConfigurationError::invalid(
             "learning.deck_id",
-            "Expected a deck UUID or all cards",
+            "Expected a deck UUID or a collection scope",
         ));
     }
     if !config.learning.generation.min_loss.is_finite() || config.learning.generation.min_loss < 0.0
@@ -572,7 +573,7 @@ pub(crate) async fn resources(
     {
         references.push(("annotations.filters.database_id", id, "databases"));
     }
-    if config.learning.deck_id != "__all__" {
+    if !config.learning.is_collection_scope() {
         references.push(("learning.deck_id", config.learning.deck_id.clone(), "decks"));
     }
     for (path, id, table) in references {

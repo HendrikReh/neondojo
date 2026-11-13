@@ -261,27 +261,15 @@ async fn from_match(pool: &PgPool, id: Uuid, request: &AddCards) -> ApiResult<Ve
                 gnubg_match_id: match_state_id.clone(),
                 notation: String::new(),
             };
-            output.push(CardContent {
-                kind: kind.into(),
-                prompt: prompt(kind).into(),
-                players: [white.clone(), black.clone()],
-                source: CardSource {
-                    kind: "match".into(),
-                    job_id: id,
-                    match_id,
-                    position_id: row.position_uuid,
-                    game_no: row.game_no,
-                    decision_no: Some(d.decision_no),
-                },
-                solution: CardSolution {
-                    engine: engine.clone(),
-                    plies: job.plies,
-                    candidates: vec![],
-                    decision: Some(d.clone()),
-                },
-                played: d.played,
+            output.push(match_card(
+                kind,
                 position,
-            });
+                [white.clone(), black.clone()],
+                id,
+                engine.clone(),
+                job.plies,
+                d,
+            ));
         }
         Ok(output)
     })
@@ -294,6 +282,38 @@ async fn from_match(pool: &PgPool, id: Uuid, request: &AddCards) -> ApiResult<Ve
         result => Ok(result?),
     }
 }
+pub(super) fn match_card(
+    kind: &str,
+    position: Position,
+    players: [String; 2],
+    job_id: Uuid,
+    engine: String,
+    plies: i32,
+    decision: Decision,
+) -> CardContent {
+    CardContent {
+        kind: kind.into(),
+        prompt: prompt(kind).into(),
+        players,
+        source: CardSource {
+            kind: "match".into(),
+            job_id,
+            match_id: position.match_uuid,
+            position_id: (!position.id.is_nil()).then_some(position.id),
+            game_no: position.game_no,
+            decision_no: Some(decision.decision_no),
+        },
+        played: decision.played.clone(),
+        solution: CardSolution {
+            engine,
+            plies,
+            candidates: vec![],
+            decision: Some(decision),
+        },
+        position,
+    }
+}
+
 fn prompt(kind: &str) -> &'static str {
     match kind {
         "cube_offer" => "Would you double or play on?",

@@ -36,6 +36,8 @@ pub struct CardQuery {
     #[param(minimum = 1, maximum = 100)]
     pub limit: Option<i64>,
     pub deck_id: Option<Uuid>,
+    /// Include only cards without a deck membership.
+    pub without_deck: Option<bool>,
     /// Literal substring of players, question, IDs, deck names, tags or comments.
     pub q: Option<String>,
     /// Literal substring of the name of the player on roll.
@@ -141,6 +143,9 @@ fn filters(sql: &mut QueryBuilder<'_, Postgres>, q: &CardQuery, deck: Option<Uui
         sql.push(" AND EXISTS(SELECT 1 FROM deck_cards dc WHERE dc.card_id=c.id AND dc.deck_id=")
             .push_bind(id)
             .push(")");
+    }
+    if q.without_deck == Some(true) {
+        sql.push(" AND NOT EXISTS(SELECT 1 FROM deck_cards dc WHERE dc.card_id=c.id)");
     }
     if let Some(kind) = q.kind {
         sql.push(" AND c.payload->>'kind'=")
