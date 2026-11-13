@@ -12,6 +12,8 @@ import { useBoardReviewText } from './board-review-messages';
 import Tooltip from './Tooltip';
 
 const limits = configurationOptions.analysis_board_width;
+const desktopDefaultWidth = 420;
+const wideDefaultWidth = 600;
 const clamp = (value: number, max: number) =>
   Math.round(Math.max(limits.min, Math.min(max, value)));
 type Drag = {
@@ -50,7 +52,7 @@ export function useAnalysisBoardResize(
     setPreferences((current) => ({ ...current, [field]: width }));
   const [geometry, setGeometry] = useState({
     max: limits.max,
-    defaultWidth: 420,
+    defaultWidth: desktopDefaultWidth,
   });
   const [preview, setPreview] = useState<number>();
   const drag = useRef<Drag | undefined>(undefined);
@@ -91,7 +93,15 @@ export function useAnalysisBoardResize(
         limits.min,
         Math.min(limits.max, Math.floor(available), Math.floor(heightLimit)),
       );
-      const defaultWidth = clamp(Math.min(420, window.innerWidth * 0.24), max);
+      const viewportWidth = window.innerWidth;
+      const standardWidth = Math.min(desktopDefaultWidth, viewportWidth * 0.24);
+      // Grow slowly beyond the reference desktop width, within the existing
+      // limits for window height and space beside the board.
+      const wideGrowth = Math.max(0, viewportWidth - 1800) * 0.105;
+      const defaultWidth = clamp(
+        Math.min(wideDefaultWidth, standardWidth + wideGrowth),
+        max,
+      );
       setGeometry((previous) =>
         previous.max === max && previous.defaultWidth === defaultWidth
           ? previous

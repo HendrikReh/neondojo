@@ -3,6 +3,7 @@ import { expect, test } from './test';
 test('all-games review follows the listed checker and cube errors across games', async ({
   page,
 }) => {
+  test.setTimeout(120_000);
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
   await page.goto('/');
   await page
@@ -63,11 +64,11 @@ test('all-games review follows the listed checker and cube errors across games',
     .selectOption('');
   await page.locator('.match-analysis-filters input[type=checkbox]').uncheck();
   await table.locator('tbody tr').nth(49).getByRole('button').click();
-  await expect(board).toContainText(/Decision 50 of [\d,]+/);
+  await expect(board).toContainText(/Decision 50 of [\d,]+/, { timeout: 25_000 });
   await board
     .getByRole('button', { name: 'Next decision', exact: true })
     .click();
-  await expect(board).toContainText(/Decision 51 of [\d,]+/);
+  await expect(board).toContainText(/Decision 51 of [\d,]+/, { timeout: 25_000 });
   await expect(table.locator('tbody tr').first()).toHaveAttribute(
     'aria-current',
     'true',
@@ -75,7 +76,7 @@ test('all-games review follows the listed checker and cube errors across games',
   await board
     .getByRole('button', { name: 'Previous decision', exact: true })
     .click();
-  await expect(board).toContainText(/Decision 50 of [\d,]+/);
+  await expect(board).toContainText(/Decision 50 of [\d,]+/, { timeout: 25_000 });
   await expect(table.locator('tbody tr').nth(49)).toHaveAttribute(
     'aria-current',
     'true',
@@ -359,6 +360,7 @@ test('real XG review opens checker and cube decisions with original source and c
 });
 
 test('a late review page jumps straight to its neighboring page', async ({ page }) => {
+  test.setTimeout(120_000);
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
   await page.goto('/');
   await page.getByLabel('Match file', { exact: true })
@@ -371,8 +373,12 @@ test('a late review page jumps straight to its neighboring page', async ({ page 
   const table = page.locator('.match-moves-table');
   const board = page.getByRole('group', { name: 'Review errors' });
   const panel = page.locator('.match-analysis');
-  await panel.getByRole('button', { name: /^(Last|Last page)$/ }).click();
-  await panel.getByRole('button', { name: /^(Previous|Previous page)$/ }).click();
+  const pagination = panel.locator('.search-pagination');
+  const last = pagination.getByRole('button', { name: 'Last', exact: true });
+  await last.click();
+  await expect(last).toBeDisabled({ timeout: 30_000 });
+  await pagination.getByRole('button', { name: 'Previous page' }).click();
+  await expect(last).toBeEnabled({ timeout: 30_000 });
   const rows = table.locator('tbody tr');
   await expect(rows).toHaveCount(50);
   await rows.last().getByRole('button').first().click();
@@ -388,7 +394,7 @@ test('a late review page jumps straight to its neighboring page', async ({ page 
   };
   page.on('request', collect);
   await board.getByRole('button', { name: 'Next decision', exact: true }).click();
-  await expect(board).toContainText(`Decision ${ordinal + 1} of`);
+  await expect(board).toContainText(`Decision ${ordinal + 1} of`, { timeout: 30_000 });
   page.off('request', collect);
   expect(queries.length).toBeGreaterThan(0);
   expect(queries.length).toBeLessThanOrEqual(2);

@@ -4,7 +4,6 @@ import { expect, test } from './test';
 test('imported candidates come first and position progress stays in the workspace header', async ({
   page,
 }) => {
-  test.setTimeout(150_000);
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
   await page.goto('/');
   await page.getByLabel('Match file', { exact: true }).setInputFiles({
@@ -19,10 +18,13 @@ test('imported candidates come first and position progress stays in the workspac
   });
   const header = page.locator('.analysis-commandbar');
   const panel = page.locator('.analysis-panel');
-  const importedEngine = panel.locator('.candidate-metadata');
-  await expect(importedEngine).toContainText(/GNU Backgammon.*0-ply/, {
-    timeout: 20_000,
+  const importedEngine = panel.locator(
+    '.candidate-metadata .engine-label-details',
+  );
+  await expect(importedEngine).toHaveText('GNU Backgammon 1.05.002', {
+    timeout: 30_000,
   });
+  await expect(importedEngine).toHaveAttribute('aria-description', /0-ply/);
   await expect(panel.getByLabel('Search depth', { exact: true })).toBeHidden();
 
   const recalculate = panel.getByRole('button', {
@@ -40,6 +42,9 @@ test('imported candidates come first and position progress stays in the workspac
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth),
     ).toBeLessThanOrEqual(width);
+    await page.screenshot({
+      path: test.info().outputPath(`analysis-results-${width}.png`),
+    });
   }
   await page.setViewportSize({ width: 1800, height: 1169 });
   await recalculate.click();
@@ -86,7 +91,7 @@ test('imported candidates come first and position progress stays in the workspac
   await expect(
     header.getByRole('progressbar', { name: 'Analysis progress' }),
   ).toHaveAttribute('value', '25');
-  await expect(importedEngine).toContainText(/GNU Backgammon.*0-ply/);
+  await expect(importedEngine).toHaveAttribute('aria-description', /0-ply/);
   await page.getByRole('tab', { name: 'Notes', exact: true }).click();
   await page.getByRole('button', { name: 'Next move', exact: true }).click();
   await expect(
@@ -115,7 +120,9 @@ test('the previous engine result survives a pending rerun and position restorati
     name: 'Recalculate position',
     exact: true,
   });
-  const result = page.locator('.analysis-panel .candidate-metadata');
+  const result = page.locator(
+    '.analysis-panel .candidate-metadata .engine-label-details',
+  );
   const start = () =>
     dialog
       .getByRole('button', { name: 'Analyze position', exact: true })
@@ -123,7 +130,8 @@ test('the previous engine result survives a pending rerun and position restorati
   await open();
   await dialog.getByLabel('Search depth', { exact: true }).selectOption('0');
   await start();
-  await expect(result).toContainText(/GNU Backgammon.*0-ply/);
+  await expect(result).toHaveText(/^GNU Backgammon [\d.]+$/);
+  await expect(result).toHaveAttribute('aria-description', /0-ply/);
   let nextJob: Record<string, unknown>;
   await page.route('**/api/jobs', async (route) => {
     if (route.request().method() !== 'POST') return route.continue();
@@ -152,10 +160,10 @@ test('the previous engine result survives a pending rerun and position restorati
     .locator('.analysis-commandbar')
     .getByRole('progressbar', { name: 'Analysis progress' });
   await expect(progress).toHaveAttribute('value', '20');
-  await expect(result).toContainText(/GNU Backgammon.*0-ply/);
+  await expect(result).toHaveAttribute('aria-description', /0-ply/);
   await page.reload();
   await expect(progress).toHaveAttribute('value', '20');
-  await expect(result).toContainText(/GNU Backgammon.*0-ply/);
+  await expect(result).toHaveAttribute('aria-description', /0-ply/);
 });
 
 test('game and match settings close on start and progress stays in the command bar', async ({

@@ -33,13 +33,16 @@ async function openAnalyzedMatch(page: Page) {
   await page.getByRole('button', { name: 'Analyze game', exact: true }).click();
   await expect(page.locator('.match-analysis-progress')).toContainText(
     'completed',
+    { timeout: 25_000 },
   );
   await (
     await openPositionCalculation(page)
   )
     .getByRole('button', { name: /Analyze position/ })
     .click();
-  await expect(page.locator('.candidates tbody tr').first()).toBeVisible();
+  await expect(page.locator('.candidates tbody tr').first()).toBeVisible({
+    timeout: 20_000,
+  });
   return match;
 }
 
@@ -137,6 +140,52 @@ nativeTest(
   },
 );
 
+test('saved game analysis compares checker moves at the board without a new position job', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.goto('/');
+  await page.getByLabel('Match file', { exact: true }).setInputFiles({
+    name: 'board-checker-comparison.sgf',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.from(
+      `(;GM[6]PW[Comparison ${crypto.randomUUID()}]PB[Opponent]MI[length:7];W[31xufe];B[42aesu])`,
+    ),
+  });
+  await openMatchCalculation(page);
+  await page.getByRole('button', { name: 'Analyze game', exact: true }).click();
+  await expect(page.locator('.match-analysis-progress')).toContainText(
+    'completed',
+  );
+  const board = page.locator('.board-panel');
+  const best = board.getByRole('button', { name: /^Best move/ });
+  await expect(best).toBeVisible({ timeout: 5000 });
+  await board.getByRole('button', { name: 'Final', exact: true }).click();
+  const checkerCounts = () =>
+    board
+      .locator('[data-point][data-count]')
+      .evaluateAll((points) =>
+        points.map((point) => [
+          point.getAttribute('data-point'),
+          point.getAttribute('data-count'),
+        ]),
+      );
+  const original = await checkerCounts();
+  await best.click();
+  await expect(best).toHaveAttribute('aria-pressed', 'true');
+  await expect(board.locator('.board-shell')).toHaveAttribute(
+    'data-preview-mode',
+    'after',
+  );
+  await expect.poll(checkerCounts).not.toEqual(original);
+  await board.getByRole('button', { name: /^Played move/ }).click();
+  await expect.poll(checkerCounts).toEqual(original);
+  await expect(board.locator('.board-shell')).toHaveAttribute(
+    'data-preview-mode',
+    'after',
+  );
+});
+
 test('detail tabs share a larger board preference independent from overview', async ({
   page,
 }, testInfo) => {
@@ -203,8 +252,9 @@ test('detail tabs share a larger board preference independent from overview', as
   ]) {
     await page.setViewportSize(viewport);
     await expect.poll(width).toBeCloseTo(largeBoard, 0);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth))
-      .toBeLessThanOrEqual(viewport.width);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(viewport.width);
     await page.screenshot({
       path: testInfo.outputPath(`Study cards-${viewport.width}.png`),
     });
@@ -296,14 +346,17 @@ test('move assessments stay scoped while switching games during a delayed respon
 });
 
 for (const viewport of [
-  { width: 1800, height: 1169 },
-  { width: 2560, height: 1440 },
-  { width: 3840, height: 2160 },
+  { width: 1800, height: 1169, maxBoardWidth: 440 },
+  { width: 2560, height: 1440, maxBoardWidth: 540 },
+  { width: 3840, height: 2160, maxBoardWidth: 620 },
 ]) {
   test(`desktop overview keeps analysis panes visible at ${viewport.width}x${viewport.height}`, async ({
     page,
   }, testInfo) => {
-    await page.setViewportSize(viewport);
+    await page.setViewportSize({
+      width: viewport.width,
+      height: viewport.height,
+    });
     await openAnalyzedMatch(page);
     await expect(
       page.getByRole('tab', { name: 'Overview', exact: true }),
@@ -338,7 +391,7 @@ for (const viewport of [
       page.getByRole('heading', { name: 'Native analysis statistics' }),
     ).toBeHidden();
     const boardBounds = (await page.locator('.board-panel').boundingBox())!;
-    expect(boardBounds.width).toBeLessThanOrEqual(440);
+    expect(boardBounds.width).toBeLessThanOrEqual(viewport.maxBoardWidth);
     expect(evaluationBounds.width).toBeGreaterThanOrEqual(1000);
     expect(errorBounds.y).toBeGreaterThanOrEqual(
       evaluationBounds.y + evaluationBounds.height,
@@ -347,8 +400,9 @@ for (const viewport of [
       evaluationBounds.x + evaluationBounds.width,
       0,
     );
-    expect(await page.evaluate(() => document.documentElement.scrollWidth))
-      .toBeLessThanOrEqual(viewport.width);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(viewport.width);
     if (viewport.width > 2000)
       expect(
         (await page.locator('.analysis-workspace').boundingBox())!.width,

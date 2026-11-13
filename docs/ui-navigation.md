@@ -55,14 +55,15 @@ The merge search has its own page controls.
 
 **Overview** places the position analysis beside the board, with the error list
 below both. Its analysis views are **Candidates**, **Dice equity**, and **Game
-rolls**. **Recalculate position …** opens a dialog with the search depth and
-start action. The dice view has its own **Recalculate dice equity …** dialog.
-Running jobs appear above the analysis tabs. Native match and game statistics
-are available in **Statistics**.
-**Analyze game or match …** reveals the scope, engine, depth, and time estimate
-in the command bar. The engine starts with the profile setting. GNUbg and
-Open Sage offer 4-ply. The settings close when you start an analysis. The
-latest status for the selected scope and engine stays visible across analysis tabs.
+rolls**. Native match and game statistics are available in **Statistics**.
+
+The position pane shows saved results with their source and depth. **Recalculate
+position …** opens the search depth and the start action in a dialog. The dice
+view has its own **Recalculate dice equity …** dialog. **Analyze game or match …**
+reveals the scope, engine, depth and time estimate in the command bar. The
+scope and engine select the jobs used by **Errors** and **Statistics**. The
+latest job for that selection and other running jobs tracked in the session
+appear above the analysis tabs.
 Open **Compare game analyses** or **Compare match analyses** to see GNUbg and
 Open Sage side by side for the selected game or the whole match. The game comparison also uses the selected game’s saved statistics from completed whole-match analyses. Each engine defaults to a completed 3-ply run when
 available, with other recorded depths and job states in its selector. The table
@@ -82,9 +83,6 @@ Engine labels show the name and the recorded version when available. Hover
 over the label or focus it with Tab to see the recorded details, such as search
 depth, evaluation method, build, model, and thread count. The same labels are
 used for local and imported analyses, in Playing, and in Study.
-Switching tabs keeps the selected game and move. Selecting a statistics metric
-opens **Errors** with the matching filters. Selecting a metric for a different
-game opens that game.
 The board and an empty error list explain whether evaluations are missing, the current
 filters hide all matches, or the evaluated decisions have no inaccuracies.
 The actions open analysis settings, clear the selection filters while keeping
