@@ -103,6 +103,7 @@ function props(
     },
     jobs: {
       jobs: {},
+      ...{ completedAnalysis: undefined },
       error: null,
       submitting: false,
       restoring: false,

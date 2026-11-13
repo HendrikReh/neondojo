@@ -100,6 +100,7 @@ it('integrates the match header with identity and loading fields while omitting 
     },
     jobs: {
       jobs: {},
+      ...{ completedAnalysis: undefined },
       error: null,
       submitting: false,
       restoring: false,
