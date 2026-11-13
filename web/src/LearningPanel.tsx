@@ -33,6 +33,7 @@ import {
   type CardBatchAction,
 } from './DeckLibraryDialogs';
 import { useDeckLibraryText } from './deck-library-messages';
+import { useAnkiImportText } from './anki-import-messages';
 import { useStudyOverviewText } from './study-messages';
 import type { VersionedDeck } from './deck-management-api';
 import type {
@@ -41,6 +42,8 @@ import type {
   CardPage,
   CardQuestion,
   RevealedCard,
+  AddCardsResult,
+  ImportedAnkiDeck,
   ReviewResult,
   Rating,
 } from './learning-api';
@@ -387,6 +390,12 @@ export default function LearningWorkspace({
 }) {
   const profile = useOptionalConfiguration();
   const t = useLearningText();
+  const ankiText = useAnkiImportText();
+  const [importingAnki, setImportingAnki] = useState(false);
+  const [ankiNotice, setAnkiNotice] = useState<string>();
+  const [ankiError, setAnkiError] = useState<unknown>();
+  const ankiInput = useRef<HTMLInputElement>(null);
+  const externalAnkiInput = useRef<HTMLInputElement>(null);
   const overviewText = useStudyOverviewText();
   const searchT = useCardSearchText();
   const p = usePositionText();
@@ -731,6 +740,49 @@ export default function LearningWorkspace({
       ))}
     </SearchFilterSelect>
   );
+  async function importAnki(file: File, external = false) {
+    if (importingAnki || (!external && isCollectionScope(deckId))) return;
+    setImportingAnki(true);
+    setAnkiNotice(undefined);
+    setAnkiError(undefined);
+    try {
+      const body = new FormData();
+      body.set('file', file);
+      if (external) {
+        const imported = await request<ImportedAnkiDeck[]>(
+          '/study/anki-imports',
+          {
+            method: 'POST',
+            body,
+          },
+        );
+        setAnkiNotice(
+          ankiText('externalAnkiImported', {
+            decks: formatNumber(imported.length),
+            cards: formatNumber(
+              imported.reduce((count, deck) => count + deck.cards, 0),
+            ),
+          }),
+        );
+      } else {
+        const result = await request<AddCardsResult>(
+          `/decks/${deckId}/import.apkg`,
+          { method: 'POST', body },
+        );
+        setAnkiNotice(
+          ankiText('ankiImported', {
+            added: formatNumber(result.added),
+            existing: formatNumber(result.updated),
+          }),
+        );
+      }
+      onChanged();
+    } catch (failure) {
+      setAnkiError(failure);
+    } finally {
+      setImportingAnki(false);
+    }
+  }
   const deckPanel = sourceDeck && !studying && (
     <div className="learning-deck-panel position-deck-panel">
       <h2>{sourceDeck.name}</h2>
@@ -757,6 +809,25 @@ export default function LearningWorkspace({
           onClick={() => void download()}
         >
           {exporting ? t('exporting') : t('export')}
+        </ActionButton>
+        <input
+          ref={ankiInput}
+          type="file"
+          hidden
+          accept=".apkg"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = '';
+            if (file) void importAnki(file);
+          }}
+        />
+        <ActionButton
+          icon="open"
+          label={ankiText('ankiImport')}
+          disabled={importingAnki}
+          onClick={() => ankiInput.current?.click()}
+        >
+          {ankiText('ankiImport')}
         </ActionButton>
       </div>
       <p className="learning-explainer">{searchT('scopeHint')}</p>
@@ -881,7 +952,33 @@ export default function LearningWorkspace({
             {libraryText('duplicates')}
           </ActionButton>
         )}
+        {!studying && (
+          <>
+            <input
+              ref={externalAnkiInput}
+              type="file"
+              hidden
+              accept=".apkg"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                if (file) void importAnki(file, true);
+              }}
+            />
+            <ActionButton
+              icon="open"
+              label={ankiText('externalAnkiImport')}
+              disabled={importingAnki}
+              onClick={() => externalAnkiInput.current?.click()}
+            >
+              {ankiText('externalAnkiImport')}
+            </ActionButton>
+          </>
+        )}
       </div>
+      {importingAnki && <p role="status">{ankiText('ankiImporting')}</p>}
+      {ankiNotice && <p role="status">{ankiNotice}</p>}
+      {!!ankiError && <p role="alert">{formatError(ankiError)}</p>}
       {!!workspaceError && <p role="alert">{formatError(workspaceError)}</p>}
       {missingDeckToken !== undefined &&
         missingDeckToken === requestedDeck?.token && (

@@ -4,6 +4,22 @@
  */
 
 export interface paths {
+    "/api/anki-media/{package}/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["media"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/annotations/search": {
         parameters: {
             query?: never;
@@ -158,6 +174,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["resolve_duplicate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cards/{id}/anki/{side}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["face"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -414,6 +446,22 @@ export interface paths {
         get: operations["export_deck"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/decks/{id}/import.apkg": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["import"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1620,6 +1668,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/study/anki-imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/study/learning-summary": {
         parameters: {
             query?: never;
@@ -1922,6 +1986,10 @@ export interface components {
             /** @description Authoritative native statistics. Absent if the export cannot prove full coverage. */
             statistics?: components["schemas"]["NativePlayerStatistics"][] | null;
         };
+        AnkiUpload: {
+            /** Format: binary */
+            file: string;
+        };
         Annotation: {
             /** @description Plaintext Markdown; never interpreted as trusted HTML. */
             comment: string;
@@ -2203,7 +2271,7 @@ export interface components {
         CardAnswer: {
             notes: string;
             played: string;
-            solution: components["schemas"]["CardSolution"];
+            solution?: null | components["schemas"]["CardSolution"];
             tags: string[];
         };
         CardAttemptRequest: {
@@ -2214,6 +2282,7 @@ export interface components {
             request_id: string;
         };
         CardBrowseContext: {
+            card_tags: string[];
             comment_excerpt: string;
             decks: components["schemas"]["CardDeck"][];
             tags: string[];
@@ -2228,7 +2297,7 @@ export interface components {
             name: string;
         };
         /** @enum {string} */
-        CardKind: "checker" | "cube_offer" | "cube_response";
+        CardKind: "anki" | "checker" | "cube_offer" | "cube_response";
         CardPage: {
             items: components["schemas"]["CardBrowseItem"][];
             /** Format: uuid */
@@ -2244,15 +2313,15 @@ export interface components {
             due_at: string;
             /** Format: uuid */
             id: string;
-            /** @description checker, cube_offer, or cube_response. */
+            /** @description checker, cube_offer, cube_response, or anki. */
             kind: string;
-            /** @description Absolute colors: White, Black. */
+            /** @description Absolute colors: White, Black. Empty for Anki cards. */
             players: string[];
-            position: components["schemas"]["Position"];
+            position?: null | components["schemas"]["Position"];
             prompt: string;
             /** Format: int32 */
             review_count: number;
-            source: components["schemas"]["CardSource"];
+            source?: null | components["schemas"]["CardSource"];
             /** Format: int64 */
             version: number;
         };
@@ -2956,6 +3025,10 @@ export interface components {
             record_count: number;
             source_format: string;
             status: string;
+        };
+        ImportedAnkiDeck: {
+            cards: number;
+            name: string;
         };
         ImportedCandidate: {
             depth?: string | null;
@@ -4388,6 +4461,37 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    media: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                package: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Anki media bytes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": number[];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     search_annotations: {
         parameters: {
             query?: never;
@@ -4743,6 +4847,36 @@ export interface operations {
                 };
             };
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    face: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                side: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5670,6 +5804,47 @@ export interface operations {
                 };
             };
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    import: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["AnkiUpload"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddCardsResult"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9165,6 +9340,69 @@ export interface operations {
                 };
             };
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    upload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["AnkiUpload"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportedAnkiDeck"][];
+                };
+            };
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            504: {
                 headers: {
                     [name: string]: unknown;
                 };

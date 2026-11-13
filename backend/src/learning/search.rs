@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Debug, Clone, Copy, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum CardKind {
+    Anki,
     Checker,
     CubeOffer,
     CubeResponse,
@@ -15,6 +16,7 @@ pub enum CardKind {
 impl CardKind {
     fn as_str(self) -> &'static str {
         match self {
+            Self::Anki => "anki",
             Self::Checker => "checker",
             Self::CubeOffer => "cube_offer",
             Self::CubeResponse => "cube_response",
@@ -59,6 +61,7 @@ pub struct CardDeck {
 pub struct CardBrowseContext {
     pub decks: Vec<CardDeck>,
     pub tags: Vec<String>,
+    pub card_tags: Vec<String>,
     pub comment_excerpt: String,
 }
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -171,7 +174,13 @@ fn filters(sql: &mut QueryBuilder<'_, Postgres>, q: &CardQuery, deck: Option<Uui
     }
     for (value, column) in [(&q.comment, "lower(a.comment)"), (&q.tag, "")] {
         if let Some(value) = value {
-            sql.push(" AND EXISTS(SELECT 1 FROM annotations a WHERE ")
+            sql.push(" AND (");
+            if column.is_empty() {
+                sql.push("c.payload->'anki_tags' @> ")
+                    .push_bind(sqlx::types::Json(vec![value.clone()]))
+                    .push(" OR ");
+            }
+            sql.push("EXISTS(SELECT 1 FROM annotations a WHERE ")
                 .push(NOTE_SCOPE)
                 .push(" AND ");
             if column.is_empty() {
@@ -182,12 +191,12 @@ fn filters(sql: &mut QueryBuilder<'_, Postgres>, q: &CardQuery, deck: Option<Uui
                     .push_bind(literal_pattern(value))
                     .push(" ESCAPE '\\'");
             }
-            sql.push(")");
+            sql.push("))");
         }
     }
     if let Some(text) = &q.q {
         let value = literal_pattern(text);
-        sql.push(" AND (lower(coalesce(c.payload->'players'->>0,'')||' '||coalesce(c.payload->'players'->>1,'')||' '||coalesce(c.payload->>'prompt','')||' '||coalesce(c.payload#>>'{position,position_id}','')||' '||coalesce(c.payload#>>'{position,gnubg_match_id}','')) LIKE ").push_bind(value.clone()).push(" ESCAPE '\\' OR EXISTS(SELECT 1 FROM annotations a WHERE ").push(NOTE_SCOPE).push(" AND a.search_text LIKE ").push_bind(value.clone()).push(" ESCAPE '\\') OR EXISTS(SELECT 1 FROM deck_cards dc JOIN decks d ON d.id=dc.deck_id WHERE dc.card_id=c.id AND lower(d.name) LIKE ").push_bind(value).push(" ESCAPE '\\'))");
+        sql.push(" AND (lower(coalesce(c.payload->'players'->>0,'')||' '||coalesce(c.payload->'players'->>1,'')||' '||coalesce(c.payload->>'prompt','')||' '||coalesce(c.payload#>>'{position,position_id}','')||' '||coalesce(c.payload#>>'{position,gnubg_match_id}','')||' '||coalesce(c.payload->>'anki_tags','')) LIKE ").push_bind(value.clone()).push(" ESCAPE '\\' OR EXISTS(SELECT 1 FROM annotations a WHERE ").push(NOTE_SCOPE).push(" AND a.search_text LIKE ").push_bind(value.clone()).push(" ESCAPE '\\') OR EXISTS(SELECT 1 FROM deck_cards dc JOIN decks d ON d.id=dc.deck_id WHERE dc.card_id=c.id AND lower(d.name) LIKE ").push_bind(value).push(" ESCAPE '\\'))");
     }
 }
 #[utoipa::path(get,path="/api/cards",params(CardQuery),responses((status=200,body=CardPage),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
@@ -303,9 +312,11 @@ pub(super) async fn load(
     let items = rows
         .iter()
         .map(|row| {
+            let mut browse = contexts.remove(&row.id).unwrap_or_default();
+            browse.card_tags = row.anki_tags();
             Ok(CardBrowseItem {
                 card: row.question()?,
-                browse: contexts.remove(&row.id).unwrap_or_default(),
+                browse,
             })
         })
         .collect::<anyhow::Result<_>>()?;

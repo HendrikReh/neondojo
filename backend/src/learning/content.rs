@@ -378,7 +378,7 @@ pub(super) async fn answer_on_connection(
         }
     }
     Ok(CardAnswer {
-        solution: c.solution.clone(),
+        solution: Some(c.solution.clone()),
         notes: notes.join("\n\n"),
         tags: tags.into_iter().collect(),
         played: c.played.clone(),

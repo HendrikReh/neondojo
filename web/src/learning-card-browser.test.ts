@@ -7,7 +7,7 @@ import type { CardQuestion } from './learning-api';
 
 beforeEach(() => vi.stubGlobal('localStorage', { getItem: () => 'en' }));
 afterEach(() => vi.unstubAllGlobals());
-const card: CardQuestion = {
+const card = {
   id: 'card-one',
   version: 1,
   kind: 'checker',
@@ -36,8 +36,8 @@ const card: CardQuestion = {
     game_no: 2,
     decision_no: null,
   },
-};
-function render(cards = [card]) {
+} satisfies CardQuestion;
+function render(cards: CardQuestion[] = [card]) {
   return renderToStaticMarkup(
     createElement(I18nProvider, {
       children: createElement(LearningCardBrowser, {

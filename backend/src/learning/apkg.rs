@@ -29,12 +29,13 @@ pub(super) struct ExportCard {
     tags: String,
     filename: String,
     image: String,
+    structured: String,
     pub modified: i64,
 }
 impl ExportCard {
     pub fn fingerprint(&self) -> String {
         let mut digest = Sha256::new();
-        for part in [&self.fields, &self.tags, &self.image] {
+        for part in [&self.fields, &self.tags, &self.image, &self.structured] {
             digest.update((part.len() as u64).to_be_bytes());
             digest.update(part.as_bytes());
         }
@@ -49,10 +50,7 @@ pub(super) fn prepare(
     cards
         .into_iter()
         .map(|(id, content, answer)| {
-            let signature = format!(
-                "{}:{}:{}",
-                content.position.position_id, content.position.gnubg_match_id, content.kind
-            );
+            let signature = card_signature(&content);
             let digest = Sha256::digest(signature.as_bytes());
             let guid = URL_SAFE_NO_PAD.encode(&digest[..12]);
             let filename = format!("bgtutor-{guid}.svg");
@@ -69,6 +67,18 @@ pub(super) fn prepare(
                 .collect::<Vec<_>>()
                 .join(" ");
             let image = board_svg(&content)?;
+            let mut portable = content;
+            portable.position.id = Uuid::nil();
+            portable.position.match_uuid = Uuid::nil();
+            portable.source = CardSource {
+                kind: "anki".into(),
+                job_id: Uuid::nil(),
+                match_id: Uuid::nil(),
+                position_id: None,
+                game_no: 1,
+                decision_no: None,
+            };
+            let structured = serde_json::to_string(&portable)?;
             Ok(ExportCard {
                 id,
                 signature,
@@ -77,6 +87,7 @@ pub(super) fn prepare(
                 tags,
                 filename,
                 image,
+                structured,
                 modified: Utc::now().timestamp(),
             })
         })
@@ -117,7 +128,7 @@ pub(super) fn build(deck_id: Uuid, name: &str, cards: &[ExportCard]) -> anyhow::
         let nid = numeric_id(card.signature.as_bytes(), b"note");
         let cid = numeric_id(card.signature.as_bytes(), b"card");
         tx.execute(
-            "INSERT INTO notes VALUES(?1,?2,?3,?4,-1,?5,?6,?7,0,0,'')",
+            "INSERT INTO notes VALUES(?1,?2,?3,?4,-1,?5,?6,?7,0,0,?8)",
             params![
                 nid,
                 card.guid,
@@ -125,7 +136,8 @@ pub(super) fn build(deck_id: Uuid, name: &str, cards: &[ExportCard]) -> anyhow::
                 card.modified,
                 format!(" {} ", card.tags),
                 card.fields,
-                card.signature
+                card.signature,
+                card.structured,
             ],
         )?;
         // Exports intentionally contain new Anki cards; local FSRS history remains in PostgreSQL.
@@ -337,12 +349,12 @@ fn question(c: &CardContent, filename: &str, l: &Labels) -> anyhow::Result<Strin
     ))
 }
 fn answer_html(c: &CardContent, a: &CardAnswer, l: &Labels) -> String {
-    let best = a
-        .solution
+    let solution = &c.solution;
+    let best = solution
         .decision
         .as_ref()
         .map(|d| d.best.as_str())
-        .or_else(|| a.solution.candidates.first().map(|c| c.notation.as_str()))
+        .or_else(|| solution.candidates.first().map(|c| c.notation.as_str()))
         .unwrap_or("–");
     let mut out = format!(
         "<p class=\"best\">{}: {}</p><p>{}: {}</p>",
@@ -351,12 +363,12 @@ fn answer_html(c: &CardContent, a: &CardAnswer, l: &Labels) -> String {
         l.played,
         html(&a.played)
     );
-    if let Some(d) = &a.solution.decision {
+    if let Some(d) = &solution.decision {
         let _ = write!(out, "<p>Δ equity: {:.6}</p>", d.equity_loss);
     }
-    if !a.solution.candidates.is_empty() {
+    if !solution.candidates.is_empty() {
         out.push_str("<table><tbody>");
-        for candidate in a.solution.candidates.iter().take(20) {
+        for candidate in solution.candidates.iter().take(20) {
             let _ = write!(
                 out,
                 "<tr><td>{}</td><td>{}</td><td>{:+.6}</td></tr>",
@@ -379,8 +391,8 @@ fn answer_html(c: &CardContent, a: &CardAnswer, l: &Labels) -> String {
         out,
         "<p class=\"context\">{}: {} · {} {} · {} · {}</p>",
         l.engine,
-        html(&a.solution.engine),
-        a.solution.plies,
+        html(&solution.engine),
+        solution.plies,
         l.ply,
         html(&c.source.kind),
         c.source.job_id
@@ -521,7 +533,7 @@ mod tests {
             played: p.notation,
         };
         let answer = CardAnswer {
-            solution: content.solution.clone(),
+            solution: Some(content.solution.clone()),
             notes: String::new(),
             tags: vec![],
             played: content.played.clone(),
@@ -604,13 +616,18 @@ mod tests {
             played: "8/5 6/5".into(),
         };
         let answer = CardAnswer {
-            solution: content.solution.clone(),
+            solution: Some(content.solution.clone()),
             notes: "<img src=x onerror=alert(1)>\n& lesson".into(),
             tags: vec!["test".into()],
             played: content.played.clone(),
         };
         let cards = vec![(id, content.clone(), answer.clone())];
         let bytes = sample_build(deck, "Practice", &cards, "de").unwrap();
+        let imported = crate::learning::anki_import::read_package(&bytes).unwrap();
+        assert_eq!(imported.len(), 1);
+        assert_eq!(card_signature(&imported[0].0), card_signature(&content));
+        assert_eq!(imported[0].0.source.match_id, Uuid::nil());
+        assert_eq!(imported[0].1, BTreeSet::from(["test".into()]));
         let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("collection.anki2");

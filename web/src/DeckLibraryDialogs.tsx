@@ -377,7 +377,11 @@ export function DuplicateCardsDialog({
         : entry.card.kind === 'cube_offer'
           ? 'questionOffer'
           : 'questionResponse';
-    return `${learning(question)} · ${entry.card.players[entry.card.position.player]} · ${learning('reviewCount', { count: entry.card.review_count })} · ${entry.decks.map((d) => d.name).join(', ') || '—'}`;
+    const position = entry.card.position;
+    const detail = position
+      ? `${learning(question)} · ${entry.card.players[position.player]}`
+      : entry.card.prompt;
+    return `${detail} · ${learning('reviewCount', { count: entry.card.review_count })} · ${entry.decks.map((d) => d.name).join(', ') || '—'}`;
   }
   return (
     <DeckDialog title={t('duplicates')} close={close} busy={writing} wide>
@@ -452,7 +456,9 @@ export function DuplicateCardsDialog({
             <li key={card.id}>
               <div className="duplicate-entry">
                 <strong>
-                  {card.position.position_id} / {card.position.gnubg_match_id}
+                  {card.position
+                    ? `${card.position.position_id} / ${card.position.gnubg_match_id}`
+                    : card.prompt}
                 </strong>
                 <span>
                   {label(entry)}

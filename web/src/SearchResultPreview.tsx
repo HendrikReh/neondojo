@@ -1,4 +1,4 @@
-import type { ComponentPropsWithoutRef, ReactNode } from 'react';
+import { Children, type ComponentPropsWithoutRef, type ReactNode } from 'react';
 import type { Position } from './api';
 import Board from './Board';
 import type { Theme } from './themes';
@@ -20,7 +20,7 @@ export function SearchResultPreview({
       aria-label={title}
     >
       <h2>{title}</h2>
-      {children ?? <p>{hint}</p>}
+      {Children.toArray(children).length ? children : <p>{hint}</p>}
     </aside>
   );
 }

@@ -1,3 +1,4 @@
+import AnkiCardFace from './AnkiCardFace';
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import type { Theme } from './themes';
 import SearchPagination, { useSearchResultPage } from './SearchPagination';
@@ -77,18 +78,21 @@ export default function LearningCardBrowser({
   const ids = rows.map((card) => card.id);
   const selectedOnPage = ids.filter((id) => selection?.ids.has(id)).length;
   const selected = cards.find((card) => card.id === selectedId) ?? cards[0];
-  const context = selected
+  const context = selected?.position
     ? matchContext(selected.position.gnubg_match_id)
     : undefined;
   const question = (card: CardQuestion) =>
-    t(
-      card.kind === 'checker'
-        ? 'questionChecker'
-        : card.kind === 'cube_response'
-          ? 'questionResponse'
-          : 'questionOffer',
-    );
+    card.kind === 'anki'
+      ? card.prompt
+      : t(
+          card.kind === 'checker'
+            ? 'questionChecker'
+            : card.kind === 'cube_response'
+              ? 'questionResponse'
+              : 'questionOffer',
+        );
   const summaries = rows.map((card) => {
+    if (!card.position) return searchT('anki');
     const { scores, length, jacoby, cube, owner, crawford } = matchContext(
       card.position.gnubg_match_id,
     );
@@ -124,7 +128,10 @@ export default function LearningCardBrowser({
       hint={t('previewHint')}
       data-card-id={selected?.id}
     >
-      {selected && context && (
+      {visible && selected?.kind === 'anki' && (
+        <AnkiCardFace id={selected.id} title={selected.prompt} />
+      )}
+      {selected?.position && context && (
         <>
           <h4>{question(selected)}</h4>
           <p className="position-preview-context">
@@ -235,7 +242,7 @@ export default function LearningCardBrowser({
                   question(card),
                   summaries[index],
                   card.players.join(' · '),
-                  card.position.position_id,
+                  card.position?.position_id,
                   card.browse?.decks.map(deckName).join(', '),
                   card.browse?.tags.join(', '),
                   card.browse?.comment_excerpt,
@@ -285,10 +292,14 @@ export default function LearningCardBrowser({
                     </small>
                   </button>
                 </td>
-                <SearchResultPlayers
-                  player={card.players[card.position.player]}
-                  opponent={card.players[1 - card.position.player]}
-                />
+                {card.position ? (
+                  <SearchResultPlayers
+                    player={card.players[card.position.player]}
+                    opponent={card.players[1 - card.position.player]}
+                  />
+                ) : (
+                  <SearchResultPlayers player="—" opponent="—" />
+                )}
                 <td>
                   {card.browse?.decks.length
                     ? card.browse.decks.map(deckName).join(', ')
@@ -296,7 +307,10 @@ export default function LearningCardBrowser({
                 </td>
                 <td>
                   <SearchResultNotes
-                    tags={card.browse?.tags}
+                    tags={[
+                      ...(card.browse?.tags ?? []),
+                      ...(card.browse?.card_tags ?? []),
+                    ]}
                     comment={card.browse?.comment_excerpt}
                   />
                 </td>

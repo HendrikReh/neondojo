@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import ActionButton from './ActionButton';
+import AnkiCardFace from './AnkiCardFace';
 import Board from './Board';
 import CheckerPracticeBoard, {
   type CheckerDraft,
@@ -124,6 +125,49 @@ export default function StudyCardExercise({
     }
   }
 
+  const ratings = answer && (
+    <div className="study-ratings">
+      {(['again', 'hard', 'good', 'easy'] as const).map((rating) => (
+        <ActionButton
+          icon={rating === 'again' ? 'reset' : 'confirm'}
+          label={t(rating)}
+          key={rating}
+          disabled={busy}
+          onClick={() => onGrade(answer, rating)}
+        >
+          {t(rating)}
+          <small>{interval(answer.intervals[rating])}</small>
+        </ActionButton>
+      ))}
+    </div>
+  );
+  if (!card.position) {
+    return (
+      <article className="study-card study-card-anki" data-card-id={card.id}>
+        <h3 ref={hasAnswer ? answerHeading : questionHeading} tabIndex={-1}>
+          {card.prompt}
+        </h3>
+        {answer ? (
+          ratings
+        ) : (
+          <ActionButton
+            icon="solution"
+            label={t('reveal')}
+            disabled={busy}
+            onClick={onReveal}
+          >
+            {t('reveal')}
+          </ActionButton>
+        )}
+        <AnkiCardFace
+          id={card.id}
+          title={answer ? t('solution') : card.prompt}
+          side={answer ? 'back' : 'front'}
+        />
+      </article>
+    );
+  }
+
   const checker = card.kind === 'checker';
   const cubeResponse = card.kind === 'cube_response';
   const context = matchContext(card.position.gnubg_match_id);
@@ -146,9 +190,10 @@ export default function StudyCardExercise({
       : undefined;
   const bestNotation =
     result?.best ??
-    answer?.answer.solution.decision?.best ??
-    answer?.answer.solution.candidates.find((candidate) => candidate.rank === 1)
-      ?.notation;
+    answer?.answer.solution?.decision?.best ??
+    answer?.answer.solution?.candidates.find(
+      (candidate) => candidate.rank === 1,
+    )?.notation;
   const bestPreview =
     checker && bestNotation ? projectMove(position, bestNotation) : undefined;
   const preview = previewChoice === 'chosen' ? chosenPreview : bestPreview;
@@ -262,20 +307,7 @@ export default function StudyCardExercise({
             answer={answer}
             label={result ? t('cardAnalysis') : t('engine')}
           />
-          <div className="study-ratings">
-            {(['again', 'hard', 'good', 'easy'] as const).map((rating) => (
-              <ActionButton
-                icon={rating === 'again' ? 'reset' : 'confirm'}
-                label={t(rating)}
-                key={rating}
-                disabled={busy}
-                onClick={() => onGrade(answer, rating)}
-              >
-                {t(rating)}
-                <small>{interval(answer.intervals[rating])}</small>
-              </ActionButton>
-            ))}
-          </div>
+          {ratings}
           {busy && <p role="status">{t('saving')}</p>}
         </section>
       )}
@@ -304,6 +336,7 @@ function CardSolution({
 }) {
   const t = useLearningText();
   const { formatDecision, formatNumber, formatEquity } = useI18n();
+  if (!answer.answer.solution) return null;
   const { decision, candidates, engine, plies } = answer.answer.solution;
   return (
     <div className="study-solution-source">

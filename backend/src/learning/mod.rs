@@ -1,4 +1,6 @@
 //! Shared cards power native Anki exports and the integrated FSRS trainer.
+pub mod anki_flashcards;
+mod anki_import;
 mod apkg;
 mod content;
 mod management;
@@ -28,7 +30,7 @@ use axum::{
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
 
@@ -160,7 +162,7 @@ pub struct CardSolution {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CardAnswer {
-    pub solution: CardSolution,
+    pub solution: Option<CardSolution>,
     pub notes: String,
     pub tags: Vec<String>,
     pub played: String,
@@ -169,13 +171,13 @@ pub struct CardAnswer {
 pub struct CardQuestion {
     pub id: Uuid,
     pub version: i64,
-    /// checker, cube_offer, or cube_response.
+    /// checker, cube_offer, cube_response, or anki.
     pub kind: String,
-    pub position: Position,
-    /// Absolute colors: White, Black.
+    pub position: Option<Position>,
+    /// Absolute colors: White, Black. Empty for Anki cards.
     pub players: [String; 2],
     pub prompt: String,
-    pub source: CardSource,
+    pub source: Option<CardSource>,
     pub due_at: DateTime<Utc>,
     pub review_count: i32,
 }
@@ -297,28 +299,64 @@ impl CardRow {
     fn content(&self) -> anyhow::Result<CardContent> {
         Ok(serde_json::from_value(self.payload.clone())?)
     }
+    fn is_anki(&self) -> bool {
+        self.payload["kind"] == "anki"
+    }
+
+    fn anki_tags(&self) -> Vec<String> {
+        serde_json::from_value(self.payload["anki_tags"].clone()).unwrap_or_default()
+    }
+
     fn question(&self) -> anyhow::Result<CardQuestion> {
-        let c = self.content()?;
-        let mut position = c.position;
-        position.id = self.id;
-        position.notation.clear();
-        if matches!(c.kind.as_str(), "cube_offer" | "cube_response") {
-            if let Some(id) = crate::import::ids::hide_dice(&position.gnubg_match_id) {
-                position.gnubg_match_id = id;
+        let (kind, position, players, prompt, source) = if self.is_anki() {
+            let card: anki_flashcards::AnkiCard = serde_json::from_value(self.payload.clone())?;
+            (
+                "anki".into(),
+                None,
+                [String::new(), String::new()],
+                card.prompt,
+                None,
+            )
+        } else {
+            let c = self.content()?;
+            let mut position = c.position;
+            position.id = self.id;
+            position.notation.clear();
+            if matches!(c.kind.as_str(), "cube_offer" | "cube_response") {
+                if let Some(id) = crate::import::ids::hide_dice(&position.gnubg_match_id) {
+                    position.gnubg_match_id = id;
+                }
+                position.dice = vec![0, 0];
             }
-            position.dice = vec![0, 0];
-        }
+            (c.kind, Some(position), c.players, c.prompt, Some(c.source))
+        };
         Ok(CardQuestion {
             id: self.id,
             version: self.version,
-            kind: c.kind,
+            kind,
             position,
-            players: c.players,
-            prompt: c.prompt,
-            source: c.source,
+            players,
+            prompt,
+            source,
             due_at: self.due_at,
             review_count: self.review_count,
         })
+    }
+
+    async fn answer(&self, connection: &mut sqlx::PgConnection) -> anyhow::Result<CardAnswer> {
+        if self.is_anki() {
+            return Ok(CardAnswer {
+                solution: None,
+                notes: String::new(),
+                tags: self.anki_tags(),
+                played: String::new(),
+            });
+        }
+        let mut answer = content::answer_on_connection(connection, &self.content()?).await?;
+        let mut tags: BTreeSet<_> = answer.tags.into_iter().collect();
+        tags.extend(self.anki_tags());
+        answer.tags = tags.into_iter().collect();
+        Ok(answer)
     }
 }
 
@@ -394,7 +432,7 @@ async fn revealed_card(
     Ok(RevealedCard {
         card_id: card.id,
         version: card.version,
-        answer: content::answer_on_connection(connection, &card.content()?).await?,
+        answer: card.answer(connection).await?,
         intervals: scheduler::previews(card, now)?,
         session_id,
     })
@@ -439,6 +477,8 @@ pub fn routes() -> Router<AppState> {
             get(suggestions::preview).post(suggestions::save),
         )
         .route("/api/decks/{id}/export.apkg", get(export_deck))
+        .route("/api/decks/{id}/import.apkg", post(anki_import::import))
+        .merge(anki_flashcards::routes())
         .route("/api/decks/{id}/next", get(next_card))
         .route("/api/study/learning-summary", get(learning_summary))
         .route("/api/cards/{id}/reveal", post(reveal))
@@ -466,6 +506,10 @@ pub fn routes() -> Router<AppState> {
         suggestions::preview,
         suggestions::save,
         export_deck,
+        anki_import::import,
+        anki_flashcards::face,
+        anki_flashcards::media,
+        anki_flashcards::upload,
         next_card,
         learning_summary,
         reveal,
@@ -477,6 +521,8 @@ pub fn routes() -> Router<AppState> {
         CreateDeck,
         RenameDeck,
         AddCards,
+        anki_import::AnkiUpload,
+        anki_flashcards::ImportedAnkiDeck,
         AddCardsResult,
         management::DuplicateCard,
         management::DuplicateDeck,
@@ -1009,6 +1055,9 @@ async fn submit_attempt(
         let result = attempted_card(&mut tx, &row, previous.into_data()).await?;
         return Ok(Json(result));
     }
+    if row.is_anki() {
+        return Err(ApiError::invalid("Reveal the Anki card before rating"));
+    }
     let card = row.content()?;
     crate::play::require_review_available(&state.pool, card.source.match_id).await?;
     let evaluation = evaluation::evaluate(
@@ -1164,6 +1213,19 @@ async fn export_deck(
         .await
         .map_err(anyhow::Error::from)?
         .ok_or_else(ApiError::missing)?;
+    if sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS (SELECT 1 FROM learning_cards c JOIN deck_cards dc ON dc.card_id=c.id
+                        WHERE dc.deck_id=$1 AND c.payload->>'kind'='anki')",
+    )
+    .bind(id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?
+    {
+        return Err(ApiError::invalid(
+            "Use the original Anki package to export imported Anki cards",
+        ));
+    }
     let card_ids: Vec<Uuid> = sqlx::query_scalar(
         "SELECT c.id FROM learning_cards c JOIN deck_cards dc ON dc.card_id=c.id
          WHERE dc.deck_id=$1 ORDER BY c.signature COLLATE \"C\" LIMIT 1001",
@@ -1191,7 +1253,7 @@ async fn export_deck(
             .await
             .map_err(anyhow::Error::from)?;
         let c = row.content()?;
-        let a = content::answer_on_connection(&mut tx, &c).await?;
+        let a = row.answer(&mut tx).await?;
         cards.push((row.id, c, a));
     }
     let (mut prepared, permit) = tokio::task::spawn_blocking(move || {

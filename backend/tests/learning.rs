@@ -9,6 +9,26 @@ use uuid::Uuid;
 static EXPORT_TESTS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[sqlx::test(migrations = "./migrations")]
+async fn external_anki_upload_rejects_a_non_package(pool: PgPool) {
+    let app = api::router(api::AppState::new(
+        pool.clone(),
+        Engine::new("unused".into()),
+    ));
+    let response = app.oneshot(Request::builder().method("POST").uri("/api/study/anki-imports")
+        .header("content-type", "multipart/form-data; boundary=study-test")
+        .body(Body::from("--study-test\r\nContent-Disposition: form-data; name=\"file\"; filename=\"bad.apkg\"\r\n\r\nNot a package\r\n--study-test--\r\n"))
+        .unwrap()).await.unwrap();
+    assert_eq!(response.status(), 422);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM decks")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn learning_summary_counts_unique_due_cards(pool: PgPool) {
     let app = api::router(api::AppState::new(
         pool.clone(),
@@ -994,4 +1014,59 @@ async fn blocked_export_reads_current_content_after_acquiring_all_card_locks(poo
         from_a.1, newer.1,
         "the same content must retain its existing Anki modification time"
     );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn imported_anki_cards_can_be_revealed_and_rated_without_a_board(pool: PgPool) {
+    let app = api::router(api::AppState::new(
+        pool.clone(),
+        Engine::new("unused".into()),
+    ));
+    let (_, deck) = call(app.clone(), "POST", "/api/decks", json!({"name":"Anki"})).await;
+    let deck = deck["id"].as_str().unwrap();
+    let id = Uuid::new_v4();
+    sqlx::query("INSERT INTO learning_cards(id,signature,payload) VALUES($1,$2,$3)")
+        .bind(id)
+        .bind(format!("anki:{id}"))
+        .bind(json!({"kind":"anki","prompt":"Take Point"}))
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO deck_cards(deck_id,card_id) VALUES($1,$2)")
+        .bind(Uuid::parse_str(deck).unwrap())
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let (status, next) = call(
+        app.clone(),
+        "GET",
+        &format!("/api/decks/{deck}/next"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(next["card"]["kind"], "anki");
+    assert!(next["card"]["position"].is_null());
+    assert_eq!(next["card"]["prompt"], "Take Point");
+
+    let (status, revealed) = call(
+        app.clone(),
+        "POST",
+        &format!("/api/cards/{id}/reveal"),
+        json!({"expected_version":next["card"]["version"]}),
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert!(revealed["answer"]["solution"].is_null());
+    let (status, result) = call(
+        app,
+        "POST",
+        &format!("/api/cards/{id}/review"),
+        json!({"session_id":revealed["session_id"],"request_id":Uuid::new_v4(),"rating":"good"}),
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(result["review_count"], 1);
 }

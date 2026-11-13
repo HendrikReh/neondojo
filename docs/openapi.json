@@ -9,6 +9,59 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/anki-media/{package}/{name}": {
+      "get": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "media",
+        "parameters": [
+          {
+            "name": "package",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Anki media bytes",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "int32",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/annotations/search": {
       "get": {
         "tags": [
@@ -590,6 +643,55 @@
             }
           },
           "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cards/{id}/anki/{side}": {
+      "get": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "face",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "side",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -1962,6 +2064,67 @@
             }
           },
           "429": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decks/{id}/import.apkg": {
+      "post": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "import",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/AnkiUpload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddCardsResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "",
             "content": {
               "application/json": {
@@ -7273,6 +7436,89 @@
         }
       }
     },
+    "/api/study/anki-imports": {
+      "post": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "upload",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/AnkiUpload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ImportedAnkiDeck"
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/study/learning-summary": {
       "get": {
         "tags": [
@@ -8308,6 +8554,18 @@
           }
         }
       },
+      "AnkiUpload": {
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary"
+          }
+        }
+      },
       "Annotation": {
         "type": "object",
         "required": [
@@ -9290,7 +9548,6 @@
       "CardAnswer": {
         "type": "object",
         "required": [
-          "solution",
           "notes",
           "tags",
           "played"
@@ -9303,7 +9560,14 @@
             "type": "string"
           },
           "solution": {
-            "$ref": "#/components/schemas/CardSolution"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CardSolution"
+              }
+            ]
           },
           "tags": {
             "type": "array",
@@ -9340,9 +9604,16 @@
         "required": [
           "decks",
           "tags",
+          "card_tags",
           "comment_excerpt"
         ],
         "properties": {
+          "card_tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "comment_excerpt": {
             "type": "string"
           },
@@ -9398,6 +9669,7 @@
       "CardKind": {
         "type": "string",
         "enum": [
+          "anki",
           "checker",
           "cube_offer",
           "cube_response"
@@ -9436,10 +9708,8 @@
           "id",
           "version",
           "kind",
-          "position",
           "players",
           "prompt",
-          "source",
           "due_at",
           "review_count"
         ],
@@ -9454,17 +9724,24 @@
           },
           "kind": {
             "type": "string",
-            "description": "checker, cube_offer, or cube_response."
+            "description": "checker, cube_offer, cube_response, or anki."
           },
           "players": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "Absolute colors: White, Black."
+            "description": "Absolute colors: White, Black. Empty for Anki cards."
           },
           "position": {
-            "$ref": "#/components/schemas/Position"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Position"
+              }
+            ]
           },
           "prompt": {
             "type": "string"
@@ -9474,7 +9751,14 @@
             "format": "int32"
           },
           "source": {
-            "$ref": "#/components/schemas/CardSource"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CardSource"
+              }
+            ]
           },
           "version": {
             "type": "integer",
@@ -11874,6 +12158,22 @@
             "type": "string"
           },
           "status": {
+            "type": "string"
+          }
+        }
+      },
+      "ImportedAnkiDeck": {
+        "type": "object",
+        "required": [
+          "name",
+          "cards"
+        ],
+        "properties": {
+          "cards": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "name": {
             "type": "string"
           }
         }

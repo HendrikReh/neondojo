@@ -2,7 +2,12 @@ import { request } from './api';
 import type { components } from './generated-api';
 type Schema = components['schemas'];
 export type Deck = Schema['Deck'];
-export type CardQuestion = Required<Schema['CardQuestion']>;
+export type CardQuestion = Omit<
+  Required<Schema['CardQuestion']>,
+  'position' | 'source'
+> &
+  Pick<Schema['CardQuestion'], 'position' | 'source'>;
+
 export type CardPage = Required<Schema['CardPage']>;
 export type NextCard = Required<Schema['NextCard']>;
 export type StudyDeck = Schema['StudyDeck'];
@@ -47,3 +52,5 @@ export function saveCardSuggestions(deckId: string, body: SaveSuggestions) {
     body: JSON.stringify(body),
   });
 }
+
+export type ImportedAnkiDeck = Schema['ImportedAnkiDeck'];

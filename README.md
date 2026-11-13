@@ -340,7 +340,21 @@ The server verifies your move and scores it against the best decision using comp
 
 After checking or revealing the answer, choose **Again**, **Hard**, **Good** or **Easy** to schedule the next review. Rust's `fsrs` library schedules reviews at **90%** target retention. **Again** schedules a review in 60 seconds and the first **Hard** in 10 minutes. Later Hard, Good and Easy intervals use FSRS in whole days. Easy is scheduled at least one day after Good. PostgreSQL stores the card state, rating history and due dates and prevents concurrent or retried requests from applying a review twice.
 
-**Download Anki deck** creates a self-contained `.apkg` in Rust, with a stable note model and GUIDs, SVG diagrams, score, cube, dice, answers, tags and comments. Labels use the selected language. The package has no runtime dependency on BGBlitz artwork or Python. Reimporting updates existing Anki notes. A stored content fingerprint advances Anki's modification time even when comments or the export language change in quick succession. BG Tutor and Anki maintain independent review histories. AnkiConnect, importing external decks and bidirectional sync are future options.
+**Download Anki deck** creates a self-contained `.apkg` in Rust, with a stable note model and GUIDs, SVG diagrams, score, cube, dice, answers, tags and comments. Labels use the selected language. The package has no runtime dependency on BGBlitz artwork or Python. Reimporting updates existing Anki notes. A stored content fingerprint advances Anki's modification time even when comments or the export language change in quick succession. **Import BG Tutor Anki deck** accepts packages carrying the structured BG Tutor decision model and adds them to the selected deck. It reuses matching cards and their review histories. BG Tutor and Anki maintain independent review histories.
+
+In **Study → Flashcards & Anki**, choose **Import Anki package** to import a third-party `.apkg` (up to 128 MiB). The backend imports it into a temporary Anki collection, renders both faces and saves the cards and packaged images in PostgreSQL. Original deck paths appear in the deck picker. Study opens the question and answer in isolated frames and uses BG Tutor's own FSRS schedule. Anki desktop add-ons and links to local applications require Anki. Keep the original package for export.
+
+For browser imports, install Anki's Python package in a Python 3.11+ environment. Set `BGTUTOR_ANKI_PYTHON` to that environment's Python executable when starting the BG Tutor backend. If the setting is omitted, the backend uses `python3`. The Rust import for structured BG Tutor cards uses its own **Import BG Tutor Anki deck** action.
+
+For batch imports, run the local command from the repository root with the same database settings as the running backend.
+
+```sh
+python -m pip install anki
+cargo build -p bgtutor --example import_anki_flashcards
+python tools/import_anki_flashcards.py /path/to/anki --importer target/debug/examples/import_anki_flashcards
+```
+
+The source may be one APKG or a directory, including its subdirectories. Reimporting matches the Anki note GUID and template number so cards keep their BG Tutor review history.
 
 The workflow draws on personal and thematic error decks described by [Dirk Schiemann](https://www.dirk-schiemann.de/the-anki-method.html), [XG2Anki](https://xg2anki.de/) and [AnkiGammon](https://ankigammon.com/). See the [Anki manual](https://docs.ankiweb.net/manual/importing/packaged-decks) and [FSRS-rs](https://docs.rs/fsrs/latest/fsrs/) for package import and scheduling details.
 

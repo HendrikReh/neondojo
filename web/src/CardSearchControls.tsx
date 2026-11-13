@@ -34,11 +34,13 @@ export default function CardSearchControls({
         }
       >
         <option value="">{t('allKinds')}</option>
-        {(['checker', 'cube_offer', 'cube_response'] as const).map((kind) => (
-          <option key={kind} value={kind}>
-            {t(kind)}
-          </option>
-        ))}
+        {(['checker', 'cube_offer', 'cube_response', 'anki'] as const).map(
+          (kind) => (
+            <option key={kind} value={kind}>
+              {t(kind)}
+            </option>
+          ),
+        )}
       </SearchFilterSelect>
       <SearchFilterSelect
         label={t('status')}
