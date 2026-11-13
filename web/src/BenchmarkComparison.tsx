@@ -1,5 +1,10 @@
+import { useId } from 'react';
 import { useI18n } from './i18n';
-import { benchmarkComparisons } from './benchmark-comparison';
+import {
+  benchmarkComparisons,
+  benchmarkThreadCount,
+} from './benchmark-comparison';
+import { useBenchmarkText } from './benchmark-messages';
 import type { BenchmarkRun } from './benchmark-api';
 const labels = {
   en: ['Three comparable runs', 'Median', 'Range', 'Initialization'],
@@ -21,20 +26,67 @@ export default function BenchmarkComparison({
 }) {
   const { locale, formatNumber } = useI18n();
   const t = labels[locale];
+  const text = useBenchmarkText();
   const groups = benchmarkComparisons(runs);
+  const titleId = useId();
   if (!groups.length) return null;
   return (
-    <section className="benchmark-help">
-      <h2>{t[0]}</h2>
-      {groups.map(({ run, median, minimum, maximum }) => (
-        <p key={run.id}>
-          {run.engine_name} · {run.plies}-ply ·{' '}
-          {run.play_reference?.id ?? run.reference?.name}: {t[1]}{' '}
-          {formatNumber(median, { maximumFractionDigits: 2 })} ms · {t[2]}{' '}
-          {formatNumber(minimum, { maximumFractionDigits: 2 })}–
-          {formatNumber(maximum, { maximumFractionDigits: 2 })} ms
-        </p>
-      ))}
+    <section
+      className="benchmark-help benchmark-comparison"
+      aria-labelledby={titleId}
+    >
+      <h2 id={titleId}>{t[0]}</h2>
+      {groups.map(({ run, median, minimum, maximum }) => {
+        const threads = benchmarkThreadCount(run);
+        const workload = run.play_reference?.id ?? run.reference?.name;
+        const protocol = run.play_reference?.protocol_id ?? run.protocol?.id;
+        const rulesVersion =
+          run.engine_id === 'bgsage'
+            ? run.engine_snapshot?.rules_version
+            : null;
+        return (
+          <details key={run.id}>
+            <summary>
+              <strong>
+                {run.engine_name} · {formatNumber(run.plies)}-ply
+              </strong>
+              {threads != null &&
+                ` · ${text('threads', { count: formatNumber(threads) })}`}
+              {' · '}
+              {run.machine.name}
+              {workload && ` · ${workload}`}
+              {' · '}
+              {t[1]} {formatNumber(median, { maximumFractionDigits: 2 })} ms ·{' '}
+              {t[2]} {formatNumber(minimum, { maximumFractionDigits: 2 })}–
+              {formatNumber(maximum, { maximumFractionDigits: 2 })} ms
+            </summary>
+            <dl>
+              <div>
+                <dt>{text('recordedEngineVersion')}</dt>
+                <dd>
+                  <code>{run.engine_version}</code>
+                </dd>
+              </div>
+              {rulesVersion && (
+                <div>
+                  <dt>{text('rulesVersion')}</dt>
+                  <dd>
+                    <code>{rulesVersion}</code>
+                  </dd>
+                </div>
+              )}
+              {protocol && (
+                <div>
+                  <dt>{text('protocol')}</dt>
+                  <dd>
+                    <code>{protocol}</code>
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </details>
+        );
+      })}
     </section>
   );
 }

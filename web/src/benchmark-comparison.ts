@@ -51,3 +51,15 @@ export function benchmarkComparisons(runs: BenchmarkRun[]) {
       };
     });
 }
+
+export function benchmarkThreadCount(run: BenchmarkRun): number | undefined {
+  const engine = run.engine_snapshot?.engine;
+  if (run.engine_id !== 'bgsage') return engine?.gnubg_threads ?? undefined;
+  const legacyCount = /(?:^|;\s*)threads (\d+)(?:;|$)/.exec(
+    run.engine_version,
+  )?.[1];
+  return (
+    engine?.open_sage?.threads ??
+    (legacyCount ? Number(legacyCount) : undefined)
+  );
+}

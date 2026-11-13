@@ -320,6 +320,9 @@ const playEn = {
   playPly: 'Playing depth',
   details: 'Details',
   methodology: 'Reference and methodology',
+  threads: '{count} threads',
+  recordedEngineVersion: 'Engine version',
+  rulesVersion: 'GNUbg rules version',
   description:
     'Measure full-match analysis time and play-turn latency on this backend machine.',
   playLatency: 'Play-turn latency',
@@ -340,6 +343,9 @@ const play: Record<Locale, Record<PlayKey, string>> = {
     playPly: 'Spieltiefe',
     details: 'Details',
     methodology: 'Referenz und Methodik',
+    threads: '{count} Threads',
+    recordedEngineVersion: 'Engine-Version',
+    rulesVersion: 'Version der GNUbg-Regel-Engine',
     description:
       'Matchanalysezeit und Spielzuglatenz auf diesem Backend-Rechner messen.',
     playLatency: 'Spielzuglatenz',
@@ -357,6 +363,9 @@ const play: Record<Locale, Record<PlayKey, string>> = {
     playPly: 'Profundidad de juego',
     details: 'Detalles',
     methodology: 'Referencia y metodología',
+    threads: '{count} hilos',
+    recordedEngineVersion: 'Versión del motor',
+    rulesVersion: 'Versión de las reglas de GNUbg',
     description:
       'Mide el tiempo de análisis de una partida completa y la latencia por jugada en este equipo servidor.',
     playLatency: 'Latencia por jugada',
@@ -374,6 +383,9 @@ const play: Record<Locale, Record<PlayKey, string>> = {
     playPly: 'Profondeur de jeu',
     details: 'Détails',
     methodology: 'Référence et méthode',
+    threads: '{count} threads',
+    recordedEngineVersion: 'Version du moteur',
+    rulesVersion: 'Version des règles GNUbg',
     description:
       'Mesurez le temps d’analyse d’un match complet et la latence par coup sur cet ordinateur serveur.',
     playLatency: 'Latence par coup',
@@ -391,6 +403,9 @@ const play: Record<Locale, Record<PlayKey, string>> = {
     playPly: 'Profondità di gioco',
     details: 'Dettagli',
     methodology: 'Riferimento e metodologia',
+    threads: '{count} thread',
+    recordedEngineVersion: 'Versione del motore',
+    rulesVersion: 'Versione delle regole GNUbg',
     description:
       'Misura il tempo di analisi di un match completo e la latenza per mossa su questo computer server.',
     playLatency: 'Latenza per mossa',
@@ -408,6 +423,9 @@ const play: Record<Locale, Record<PlayKey, string>> = {
     playPly: 'Głębokość gry',
     details: 'Szczegóły',
     methodology: 'Odniesienie i metodologia',
+    threads: '{count} wątki',
+    recordedEngineVersion: 'Wersja silnika',
+    rulesVersion: 'Wersja reguł GNUbg',
     description:
       'Zmierz czas analizy całego meczu i czas odpowiedzi na ruch na tym komputerze serwera.',
     playLatency: 'Czas odpowiedzi na ruch',

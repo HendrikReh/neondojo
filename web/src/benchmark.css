@@ -90,6 +90,27 @@
   max-width: 32rem;
   margin-top: 6px;
 }
+.benchmark-comparison {
+  margin-bottom: 20px;
+}
+.benchmark-comparison details + details {
+  margin-top: 6px;
+}
+.benchmark-comparison summary {
+  cursor: pointer;
+}
+.benchmark-comparison dl {
+  margin: 6px 0 10px 1rem;
+}
+.benchmark-comparison dl > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.benchmark-comparison dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
 .benchmark-active {
   margin: 0 0 32px;
 }

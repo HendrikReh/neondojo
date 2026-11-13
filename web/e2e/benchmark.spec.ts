@@ -537,3 +537,50 @@ test('Extras tabs support keyboard navigation and remember the last selection', 
   await backup.press('Home');
   await expect(benchmark).toBeFocused();
 });
+
+test('comparison identifies stored engine versions and measurement protocols', async ({
+  page,
+}) => {
+  await backend(page);
+  const completedRuns = [
+    { version: 'GNUbg 1.07', protocol: 'gnubg-match-v1', threads: 1 },
+    { version: 'GNUbg 1.08', protocol: 'gnubg-match-v2-unlimited', threads: 2 },
+  ].flatMap(({ version, protocol, threads }) =>
+    [1, 2, 3].map((index) => ({
+      ...run(`${protocol}-${index}`),
+      engine_version: version,
+      protocol: { ...reference.protocol, id: protocol },
+      engine_snapshot: {
+        engine: {
+          engine_id: 'gnubg',
+          gnubg_path: settings.gnubg_path,
+          gnubg_threads: threads,
+        },
+      },
+    })),
+  );
+  await page.route('**/api/benchmarks', (route) =>
+    route.fulfill({ json: { active: false, runs: completedRuns } }),
+  );
+  await open(page);
+  const comparison = page.getByRole('region', {
+    name: 'Three comparable runs',
+  });
+  const groups = comparison.locator('details');
+  await expect(groups).toHaveCount(2);
+  await groups.nth(0).locator('summary').click();
+  await expect(
+    groups.nth(0).getByText('GNUbg 1.07', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    groups.nth(0).getByText('gnubg-match-v1', { exact: true }),
+  ).toBeVisible();
+  await groups.nth(1).locator('summary').click();
+  await expect(
+    groups.nth(1).getByText('GNUbg 1.08', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    groups.nth(1).getByText('gnubg-match-v2-unlimited', { exact: true }),
+  ).toBeVisible();
+  await expect(groups.nth(1).locator('summary')).toContainText('2 threads');
+});
