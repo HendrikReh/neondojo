@@ -9,6 +9,7 @@ import {
   type DiceStats,
   type Match,
   type Position,
+  type Job,
 } from './api';
 import type { Jobs } from './useJobs';
 import { useI18n } from './i18n';
@@ -22,6 +23,7 @@ import { DEFAULT_ANALYSIS_PLIES } from './analysis-depth';
 
 export default function AnalysisPanel({
   jobs,
+  completedAnalysis,
   stats,
   gameNo,
   disabled,
@@ -39,6 +41,7 @@ export default function AnalysisPanel({
   preferredSource,
 }: {
   jobs: Jobs;
+  completedAnalysis?: Job;
   stats: DiceStats | null;
   gameNo?: number;
   disabled: boolean;
@@ -87,7 +90,7 @@ export default function AnalysisPanel({
   const selectedSource =
     sourceChoice && sourceChoice.positionId === positionId
       ? sourceChoice.source
-      : jobs.analysis?.status === 'completed'
+      : completedAnalysis
         ? 'engine'
         : sources.records.length
           ? 'file'
@@ -132,10 +135,7 @@ export default function AnalysisPanel({
     ) || (view === 'dice' ? diceJob : jobs.analysis);
   const pending =
     !!job && (job.status === 'queued' || job.status === 'running');
-  const analysis =
-    jobs.analysis?.status === 'completed'
-      ? (jobs.analysis.result as Analysis)
-      : null;
+  const analysis = (completedAnalysis?.result as Analysis | undefined) ?? null;
   const distribution =
     diceJob?.status === 'completed' ? (diceJob.result as Distribution) : null;
   const requestedDice = useRef<string | undefined>(undefined);

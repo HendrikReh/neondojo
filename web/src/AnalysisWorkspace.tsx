@@ -577,6 +577,7 @@ export default function AnalysisWorkspace({
             )}
             <AnalysisPanel
               jobs={jobs.jobs}
+              completedAnalysis={jobs.completedAnalysis}
               restoring={jobs.restoring}
               active={active && overview}
               stats={sourceAvailable ? stats : null}

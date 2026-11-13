@@ -95,6 +95,8 @@ The top navigation opens **Playing**, **Analysis**, **Match database**, **Player
 
 The desktop **Overview** places move history on the left and position evaluation beside the board, with errors below. Long lists scroll independently and keep the current move visible. Dedicated tabs include **Statistics**, **Errors**, **Notes**, and **Study cards**. The header shows the players, match ID and length, saved score, date, event, and PR per player. Date and event come from saved metadata and show `n/a` when unavailable. The header also shows the round and location when saved. Match PR updates when a complete native match analysis finishes.
 
+The last completed position result for the selected engine stays visible while a new calculation runs, including after reloading the page.
+
 For game and match analysis, the command bar shows the latest job status for the selected engine and scope across the analysis tabs. The **Errors** and **Statistics** tabs show the decisions and statistics for that job.
 
 ### Moves, errors, and statistics

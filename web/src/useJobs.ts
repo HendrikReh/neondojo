@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { request, terminal, mergeJob, type Job } from './api';
 
 export type Jobs = Partial<Record<'analysis' | 'dice', Job>>;
-type Ids = Partial<Record<'analysis' | 'dice', string>>;
+type Ids = Partial<Record<'analysis' | 'dice' | 'analysisResult', string>>;
 const sessionIds = new Map<string, Ids>();
 
 function saved(positionId: string): Ids {
@@ -17,6 +17,15 @@ function saved(positionId: string): Ids {
   }
 }
 
+function remember(scope: string, ids: Ids) {
+  sessionIds.set(scope, ids);
+  try {
+    localStorage.setItem(`bgtutor.jobs.${scope}`, JSON.stringify(ids));
+  } catch {
+    /* Session tracking remains active without storage. */
+  }
+}
+
 export function useJobs(
   positionId: string | undefined,
   onAccepted?: (job: Job) => void,
@@ -24,8 +33,13 @@ export function useJobs(
   const configuration = useOptionalConfiguration();
   const engineId = configuration?.current?.analysis.engine ?? 'gnubg';
   const storageKey =
-    engineId === 'gnubg' ? positionId : `${positionId}.${engineId}`;
+    positionId &&
+    (engineId === 'gnubg' ? positionId : `${positionId}.${engineId}`);
   const [jobs, setJobs] = useState<Jobs>({});
+  const [savedAnalysis, setSavedAnalysis] = useState<{
+    scope: string;
+    job: Job;
+  }>();
   const [revision, setRevision] = useState(0);
   const restoreKey = JSON.stringify([storageKey, revision]);
   const [restoredKey, setRestoredKey] = useState<string>();
@@ -38,12 +52,16 @@ export function useJobs(
     setJobs({});
     setError(null);
     setSubmitting(false);
-    if (!positionId) return;
+    if (!positionId || !storageKey) return;
     const abort = new AbortController();
     const streams: EventSource[] = [];
     const timers: ReturnType<typeof setInterval>[] = [];
     const restorations: Promise<void>[] = [];
-    for (const [kind, id] of Object.entries(saved(storageKey!))) {
+    const scope = storageKey;
+    const ids = saved(scope);
+    for (const kind of ['analysis', 'dice', 'analysisResult'] as const) {
+      const id = ids[kind];
+      if (!id || (kind === 'analysisResult' && id === ids.analysis)) continue;
       let stream: EventSource | undefined;
       let timer: ReturnType<typeof setInterval> | undefined;
       const refresh = async () => {
@@ -54,13 +72,26 @@ export function useJobs(
           if (
             abort.signal.aborted ||
             job.position_uuid !== positionId ||
-            (job.engine_snapshot?.engine_id ?? 'gnubg') !== engineId
+            (job.engine_snapshot?.engine_id ?? 'gnubg') !== engineId ||
+            job.kind !== (kind === 'analysisResult' ? 'analysis' : kind)
           )
             return;
-          setJobs((previous) => ({
-            ...previous,
-            [kind]: mergeJob(previous[kind as keyof Jobs], job),
-          }));
+          if (kind === 'analysisResult' && job.status !== 'completed') return;
+          if (job.kind === 'analysis' && job.status === 'completed') {
+            const latest = saved(scope);
+            if (kind === 'analysis' && latest.analysis === job.id) {
+              if (latest.analysisResult !== job.id)
+                remember(scope, { ...latest, analysisResult: job.id });
+              setSavedAnalysis({ scope, job });
+            } else if (latest.analysisResult === job.id) {
+              setSavedAnalysis({ scope, job });
+            }
+          }
+          if (kind !== 'analysisResult')
+            setJobs((previous) => ({
+              ...previous,
+              [kind]: mergeJob(previous[kind], job),
+            }));
           if (terminal(job)) {
             stream?.close();
             if (timer) clearInterval(timer);
@@ -105,7 +136,7 @@ export function useJobs(
   }, [positionId, storageKey, engineId, restoreKey]);
 
   async function run(kind: 'analysis' | 'dice', plies: number) {
-    if (!positionId) return;
+    if (!positionId || !storageKey) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -119,13 +150,10 @@ export function useJobs(
         ? await configuration.runWithConfiguration(start)
         : await start();
       onAccepted?.(job);
-      const ids = { ...saved(storageKey!), [kind]: job.id };
-      sessionIds.set(storageKey!, ids);
-      try {
-        localStorage.setItem(`bgtutor.jobs.${storageKey}`, JSON.stringify(ids));
-      } catch {
-        /* Session tracking remains active without storage. */
-      }
+      const ids = { ...saved(storageKey), [kind]: job.id };
+      if (kind === 'analysis' && job.status === 'completed')
+        ids.analysisResult = job.id;
+      remember(storageKey, ids);
       if (currentPosition.current === storageKey)
         setJobs((previous) => ({ ...previous, [kind]: job }));
       if (currentPosition.current === storageKey) setRevision((r) => r + 1);
@@ -152,6 +180,12 @@ export function useJobs(
   }, [jobs, positionId, engineId]);
   return {
     jobs: currentJobs,
+    completedAnalysis:
+      currentJobs.analysis?.status === 'completed'
+        ? currentJobs.analysis
+        : savedAnalysis?.scope === storageKey
+          ? savedAnalysis?.job
+          : undefined,
     run,
     submitting,
     error,
