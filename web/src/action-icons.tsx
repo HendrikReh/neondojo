@@ -123,7 +123,7 @@ export default function ActionIcon({
   return (
     <Icon
       size={20}
-      strokeWidth={2}
+      strokeWidth={1.5}
       aria-hidden="true"
       focusable="false"
       {...props}

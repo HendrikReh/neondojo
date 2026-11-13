@@ -1,6 +1,6 @@
 # Einheitliche Aktions-Icons
 
-Empfehlung: [Lucide Outline](https://lucide.dev/icons/). Die Bibliothek bietet ein einheitliches SVG-Set; Referenzraster 24 × 24, Strichstärke 2. Quelle: [Lucide Guide](https://lucide.dev/guide/). Die appweite Einführung ist umgesetzt: kompakte Routineaktionen mit Icon und Tooltip, wichtige Spielaktionen und primäre Formularaktionen mit Icon und Text. Tooltips erscheinen bei Hover und Tastaturfokus.
+BG Tutor verwendet [Lucide Outline](https://lucide.dev/icons/) mit einer Strichstärke von 1,5 im 24 × 24 SVG-Raster. Die Strichstärke skaliert mit der angezeigten Icon-Größe. Kompakte Routineaktionen verwenden ein Icon mit Tooltip, wichtige Spielaktionen und primäre Formularaktionen ein Icon mit Text. Tooltips erscheinen bei Hover und Tastaturfokus.
 
 | Benutzeraktion | Lucide-Icon | Bedeutung |
 | --- | --- | --- |
@@ -21,4 +21,4 @@ Empfehlung: [Lucide Outline](https://lucide.dev/icons/). Die Bibliothek bietet e
 | Schließen / Abbrechen | [x](https://lucide.dev/icons/x) | Aktuelle Ansicht schließen |
 | Bestätigen | [check](https://lucide.dev/icons/check) | Auswahl oder Änderung bestätigen |
 
-Darstellungsregeln: einheitlich 20–24 px, 2 px Linienbreite, abgerundete Linienenden, Farbe vom Buttontext übernehmen. Auf primären Aktionen Icon und Text gemeinsam zeigen; reine Icon-Buttons nur für gut bekannte, platzkritische Aktionen mit verständlichem zugänglichem Namen und Tooltip. Klickflächen mindestens 44 × 44 px. Rot für destruktive Aktionen, Akzentfarbe für die aktuell mögliche Hauptaktion, deaktivierte Aktionen weiterhin erkennbar. Keine Mischung mit Emoji- oder gefüllten Symbolen.
+Darstellungsregeln: Lucide-Symbole über `ActionIcon` einbinden, in Buttons standardmäßig mit 20 px. Abgerundete Linienenden und die Textfarbe des umgebenden Elements übernehmen. Auf primären Aktionen Icon und Text gemeinsam zeigen; reine Icon-Buttons nur für gut bekannte, platzkritische Aktionen mit verständlichem zugänglichem Namen und Tooltip. Klickflächen mindestens 44 × 44 px. Rot für destruktive Aktionen, Akzentfarbe für die aktuell mögliche Hauptaktion, deaktivierte Aktionen weiterhin erkennbar. Keine Mischung mit Emoji- oder gefüllten Symbolen.

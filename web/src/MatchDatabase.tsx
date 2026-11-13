@@ -3,7 +3,7 @@ import { useOptionalConfiguration } from './ConfigurationProvider';
 import { Children, type HTMLAttributes, type ReactNode } from 'react';
 import { useProfileValue } from './useProfileValue';
 import ActionButton, { ActionLink } from './ActionButton';
-import { Search } from 'lucide-react';
+import ActionIcon from './action-icons';
 import {
   useCallback,
   useEffect,
@@ -483,7 +483,7 @@ export default function MatchDatabase({
         <div className="library-main">
           <div className="library-search-toolbar">
             <label className="search-box">
-              <Search size={16} aria-hidden="true" />
+              <ActionIcon name="search" size={16} />
               <input
                 aria-label={t('app.searchMatches')}
                 placeholder={t('app.searchPlaceholder')}
@@ -528,7 +528,7 @@ export default function MatchDatabase({
             />
             <details ref={positionSearchForm} className="position-search">
               <summary>
-                <Search size={16} aria-hidden="true" /> {t('app.findPosition')}{' '}
+                <ActionIcon name="search" size={16} /> {t('app.findPosition')}{' '}
                 <span>{t('app.positionId')}</span>
               </summary>
               <form
