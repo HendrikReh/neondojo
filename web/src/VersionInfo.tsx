@@ -1,28 +1,52 @@
 import { useEffect, useState } from 'react';
 import { useI18n } from './i18n';
 import { loadAppVersion, loadEngines, type EngineInfo } from './settings-api';
+import { versionInfoMessages } from './version-info-messages';
 import './version-info.css';
 
-function CommitId({ revision }: { revision: string }) {
-  return <code title={revision}>{revision.slice(0, 7)}</code>;
+const engineNames = {
+  gnubg: 'GNU Backgammon',
+  bgsage: 'Open Sage',
+} as const;
+
+type EngineId = keyof typeof engineNames;
+const engineIds: EngineId[] = ['gnubg', 'bgsage'];
+
+export function shortEngineVersion(engine: EngineId, details: string | null) {
+  const prefix =
+    engine === 'gnubg' ? /^(?:GNU Backgammon|GNUbg)\s+/i : /^Open Sage\s+/i;
+  return details
+    ?.trim()
+    .replace(prefix, '')
+    .match(/^\d+(?:\.\d+)+(?:[-+][\w.+-]+)?(?=$|[\s;(])/)?.[0];
 }
 
 export default function VersionInfo() {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
+  const messages = versionInfoMessages[locale];
   const [appVersion, setAppVersion] = useState<string | null>();
   const [engines, setEngines] = useState<EngineInfo[] | null>();
-  const [attempt, setAttempt] = useState(0);
+  const [versionAttempt, setVersionAttempt] = useState(0);
+  const [enginesAttempt, setEnginesAttempt] = useState(0);
+  const [copyResult, setCopyResult] = useState<
+    'copying' | 'copied' | 'copyError'
+  >();
 
   useEffect(() => {
     const abort = new AbortController();
     void loadAppVersion(abort.signal).then(
       (version) => {
-        if (!abort.signal.aborted) setAppVersion(version);
+        if (!abort.signal.aborted) setAppVersion(version.trim());
       },
       () => {
         if (!abort.signal.aborted) setAppVersion(null);
       },
     );
+    return () => abort.abort();
+  }, [versionAttempt]);
+
+  useEffect(() => {
+    const abort = new AbortController();
     void loadEngines(abort.signal).then(
       (catalog) => {
         if (!abort.signal.aborted) setEngines(catalog);
@@ -32,72 +56,153 @@ export default function VersionInfo() {
       },
     );
     return () => abort.abort();
-  }, [attempt]);
+  }, [enginesAttempt]);
 
-  function engineVersion(engine: EngineInfo | undefined) {
-    if (engines === undefined) return undefined;
-    return engine?.available ? engine.version : null;
+  const loading = appVersion === undefined || engines === undefined;
+  const unavailable = t('versions.unavailable');
+  const engineRows = engineIds.map((id) => {
+    const engine = engines?.find((entry) => entry.id === id);
+    const available = engine?.available === true;
+    const version = available ? engine.version : null;
+    const details = version?.trim() ? version : null;
+    return {
+      name: engineNames[id],
+      available,
+      details,
+      shortVersion: shortEngineVersion(id, details),
+      fork: available && id === 'bgsage' ? engine.fork : null,
+    };
+  });
+  const fork = engineRows.find((row) => row.fork)?.fork;
+  const forkDetails = fork && {
+    ...fork,
+    url: `https://github.com/${fork.repository}/commit/${fork.revision}`,
+  };
+  const technicalDetails = [
+    { name: messages.appCommit, value: appVersion },
+    ...engineRows.map((row) => ({ name: row.name, value: row.details })),
+  ].filter(({ value }) => Boolean(value));
+
+  async function copyVersionInfo() {
+    if (copyResult === 'copying') return;
+    const lines = [
+      `${messages.appCommit}: ${appVersion || unavailable}`,
+      ...engineRows.map(
+        ({ name, available, details }) =>
+          `${name}: ${details ?? (available ? messages.available : unavailable)}`,
+      ),
+    ];
+    if (forkDetails)
+      lines.push(`${t('versions.openSageFork')}: ${forkDetails.url}`);
+    setCopyResult('copying');
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'));
+      setCopyResult('copied');
+    } catch {
+      setCopyResult('copyError');
+    }
   }
-
-  const gnubg = engines?.find((entry) => entry.id === 'gnubg');
-  const sage = engines?.find((entry) => entry.id === 'bgsage');
-  const rows = [
-    ['BG Tutor', appVersion],
-    ['GNU Backgammon', engineVersion(gnubg)],
-    ['Open Sage', engineVersion(sage), sage?.available ? sage.fork : null],
-  ] as const;
 
   return (
     <section className="version-info" aria-labelledby="version-info-title">
       <h1 id="version-info-title">{t('versions.title')}</h1>
-      <dl aria-live="polite">
-        {rows.map(([name, version, fork]) => (
+      <dl className="version-info-summary" aria-live="polite">
+        <div>
+          <dt>BG Tutor</dt>
+          <dd>
+            {appVersion ? (
+              <code title={appVersion}>{appVersion.slice(0, 7)}</code>
+            ) : (
+              <span className="version-info-status">
+                {appVersion === undefined ? t('versions.loading') : unavailable}
+              </span>
+            )}
+          </dd>
+        </div>
+        {engineRows.map(({ name, shortVersion, available }) => (
           <div key={name}>
             <dt>{name}</dt>
             <dd>
-              {fork && (
-                <strong className="version-info-fork">
-                  {t('versions.openSageFork')} ·{' '}
-                  <a
-                    href={`https://github.com/${fork.repository}/commit/${fork.revision}`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {fork.repository} <CommitId revision={fork.revision} />
-                  </a>
-                </strong>
-              )}
-              {version ? (
-                name === 'BG Tutor' ? (
-                  <CommitId revision={version} />
-                ) : (
-                  <code>{version}</code>
-                )
-              ) : (
-                t(
-                  version === undefined
-                    ? 'versions.loading'
-                    : 'versions.unavailable',
-                )
-              )}
+              {shortVersion && <code>{shortVersion}</code>}
+              <span
+                className={
+                  available
+                    ? 'version-info-status version-info-status--available'
+                    : 'version-info-status'
+                }
+              >
+                {engines === undefined
+                  ? t('versions.loading')
+                  : available
+                    ? messages.available
+                    : unavailable}
+              </span>
             </dd>
           </div>
         ))}
       </dl>
+      {(technicalDetails.length > 0 || forkDetails) && (
+        <details className="version-info-details">
+          <summary>{messages.details}</summary>
+          <dl>
+            {technicalDetails.map(({ name, value }) => (
+              <div key={name}>
+                <dt>{name}</dt>
+                <dd>
+                  <code>{value}</code>
+                </dd>
+              </div>
+            ))}
+            {forkDetails && (
+              <div>
+                <dt>{t('versions.openSageFork')}</dt>
+                <dd>
+                  <a href={forkDetails.url} target="_blank" rel="noreferrer">
+                    {forkDetails.repository} <code>{forkDetails.revision}</code>
+                  </a>
+                </dd>
+              </div>
+            )}
+          </dl>
+        </details>
+      )}
+      <div className="version-info-actions">
+        <button
+          type="button"
+          disabled={loading}
+          aria-disabled={copyResult === 'copying' || undefined}
+          onClick={() => void copyVersionInfo()}
+        >
+          {messages.copy}
+        </button>
+        <p
+          role="status"
+          className={
+            copyResult === 'copyError' ? 'version-info-copy-error' : undefined
+          }
+        >
+          {copyResult && copyResult !== 'copying' ? messages[copyResult] : ''}
+        </p>
+      </div>
       {(appVersion === null || engines === null) && (
-        <>
+        <div className="error">
           <p role="alert">{t('versions.error')}</p>
           <button
             type="button"
             onClick={() => {
-              if (appVersion === null) setAppVersion(undefined);
-              if (engines === null) setEngines(undefined);
-              setAttempt((current) => current + 1);
+              if (appVersion === null) {
+                setAppVersion(undefined);
+                setVersionAttempt((current) => current + 1);
+              }
+              if (engines === null) {
+                setEngines(undefined);
+                setEnginesAttempt((current) => current + 1);
+              }
             }}
           >
             {t('versions.retry')}
           </button>
-        </>
+        </div>
       )}
     </section>
   );

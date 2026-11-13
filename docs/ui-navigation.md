@@ -181,6 +181,10 @@ compatible archive enables **Review database replacement**.
 After **Replace database**, the backend checks the archive again and validates
 the rows during the restore transaction. Reload BG Tutor after success.
 
+Versions shows the build and both engines. **Technical details** gives access
+to the full commit, the engine version output, and the source commit for
+recognized Open Sage forks. **Copy version information** copies the report.
+
 ## Dice equity
 
 Selecting **Dice equity** in the position evaluation automatically requests the

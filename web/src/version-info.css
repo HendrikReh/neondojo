@@ -8,17 +8,28 @@
   font-weight: var(--font-weight-semibold);
 }
 
-.version-info dl {
-  margin: 12px 0;
+.version-info-summary {
+  margin: 16px 0 12px;
   font-size: var(--font-size-body);
 }
 
-.version-info dl > div {
+.version-info-summary > div,
+.version-info-details dl > div {
   display: grid;
   grid-template-columns: minmax(0, 11rem) minmax(0, 1fr);
   gap: 16px;
+}
+
+.version-info-summary > div {
   padding: 10px 0;
   border-bottom: 1px solid var(--ui-border);
+}
+
+.version-info-summary dd {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: baseline;
 }
 
 .version-info dt {
@@ -30,13 +41,60 @@
   overflow-wrap: anywhere;
 }
 
-.version-info-fork {
-  display: block;
-  margin-bottom: 4px;
-  font-weight: var(--font-weight-semibold);
+.version-info-status {
+  grid-column: 2;
+  color: var(--ui-muted);
 }
 
-.version-info-fork a {
+.version-info-status--available {
+  color: var(--ui-success-text);
+}
+
+.version-info-details > summary {
+  width: fit-content;
+  cursor: pointer;
+  font-weight: var(--font-weight-medium);
+}
+
+.version-info-details dl {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+}
+
+.version-info-details a {
   text-decoration: underline;
   text-underline-offset: 0.15em;
+}
+
+.version-info-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.version-info-actions button {
+  padding: 5px 10px;
+}
+
+.version-info-actions p {
+  color: var(--ui-muted);
+}
+
+.version-info-actions .version-info-copy-error {
+  color: var(--ui-danger-text);
+}
+
+.version-info > .error {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.version-info > .error button {
+  margin-left: 0;
 }
