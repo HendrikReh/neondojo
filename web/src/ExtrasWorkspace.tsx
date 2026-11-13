@@ -1,11 +1,42 @@
+import { useRef, type KeyboardEvent } from 'react';
 import BenchmarkWorkspace from './BenchmarkWorkspace';
 import { useBenchmarkText } from './benchmark-messages';
+import DatabaseBackupWorkspace from './DatabaseBackupWorkspace';
+import { databaseBackupMessages } from './database-backup-messages';
 import EngineMatchWorkspace from './EngineMatchWorkspace';
 import { engineMatchText } from './engine-match-messages';
 import { useI18n } from './i18n';
 import VersionInfo from './VersionInfo';
 
-export type ExtrasTool = 'benchmark' | 'matches' | 'versions';
+const tools = ['benchmark', 'matches', 'backup', 'versions'] as const;
+export type ExtrasTool = (typeof tools)[number];
+const storageKey = 'bgtutor.extrasTool';
+
+export function readExtrasTool(): ExtrasTool {
+  try {
+    const stored = localStorage.getItem(storageKey);
+    return tools.find((tool) => tool === stored) ?? 'benchmark';
+  } catch {
+    return 'benchmark';
+  }
+}
+
+export function saveExtrasTool(tool: ExtrasTool) {
+  try {
+    localStorage.setItem(storageKey, tool);
+  } catch {
+    // Extras navigation also works without persistent storage.
+  }
+}
+
+const versionTabs = {
+  en: 'Versions',
+  de: 'Versionen',
+  es: 'Versiones',
+  fr: 'Versions',
+  it: 'Versioni',
+  pl: 'Wersje',
+};
 
 export default function ExtrasWorkspace({
   visible,
@@ -21,47 +52,83 @@ export default function ExtrasWorkspace({
   setTool: (tool: ExtrasTool) => void;
 }) {
   const benchmark = useBenchmarkText();
-  const { locale, t } = useI18n();
+  const { locale } = useI18n();
+  const tabs = useRef<Partial<Record<ExtrasTool, HTMLButtonElement | null>>>(
+    {},
+  );
+  const labels = {
+    benchmark: benchmark('benchmark'),
+    matches: engineMatchText(locale, 'title'),
+    backup: databaseBackupMessages[locale].title,
+    versions: versionTabs[locale],
+  };
+  const panels = {
+    benchmark: (
+      <BenchmarkWorkspace
+        visible={visible && tool === 'benchmark'}
+        defaultPlies={defaultPlies}
+        playPlies={playPlies}
+      />
+    ),
+    matches: <EngineMatchWorkspace visible={visible && tool === 'matches'} />,
+    backup: <DatabaseBackupWorkspace />,
+    versions: visible && tool === 'versions' && <VersionInfo />,
+  };
+
+  function navigate(
+    event: KeyboardEvent<HTMLButtonElement>,
+    current: ExtrasTool,
+  ) {
+    const index = tools.indexOf(current);
+    let next: number;
+    if (event.key === 'ArrowRight') next = (index + 1) % tools.length;
+    else if (event.key === 'ArrowLeft')
+      next = (index + tools.length - 1) % tools.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = tools.length - 1;
+    else return;
+    event.preventDefault();
+    setTool(tools[next]);
+    tabs.current[tools[next]]?.focus();
+  }
 
   return (
     <>
       <nav
-        className="text-navigation benchmark-navigation"
+        className="text-navigation extras-navigation"
+        role="tablist"
         aria-label={benchmark('navigation')}
       >
-        <button
-          type="button"
-          aria-current={tool === 'benchmark' ? 'page' : undefined}
-          onClick={() => setTool('benchmark')}
-        >
-          {benchmark('benchmark')}
-        </button>
-        <button
-          type="button"
-          aria-current={tool === 'matches' ? 'page' : undefined}
-          onClick={() => setTool('matches')}
-        >
-          {engineMatchText(locale, 'title')}
-        </button>
-        <button
-          type="button"
-          aria-current={tool === 'versions' ? 'page' : undefined}
-          onClick={() => setTool('versions')}
-        >
-          {t('versions.title')}
-        </button>
+        {tools.map((item) => (
+          <button
+            key={item}
+            type="button"
+            role="tab"
+            id={`extras-tab-${item}`}
+            aria-controls={`extras-panel-${item}`}
+            aria-selected={tool === item}
+            tabIndex={tool === item ? 0 : -1}
+            ref={(element) => {
+              tabs.current[item] = element;
+            }}
+            onClick={() => setTool(item)}
+            onKeyDown={(event) => navigate(event, item)}
+          >
+            {labels[item]}
+          </button>
+        ))}
       </nav>
-      <div hidden={tool !== 'benchmark'}>
-        <BenchmarkWorkspace
-          visible={visible && tool === 'benchmark'}
-          defaultPlies={defaultPlies}
-          playPlies={playPlies}
-        />
-      </div>
-      <div hidden={tool !== 'matches'}>
-        <EngineMatchWorkspace visible={visible && tool === 'matches'} />
-      </div>
-      {visible && tool === 'versions' && <VersionInfo />}
+      {tools.map((item) => (
+        <div
+          key={item}
+          role="tabpanel"
+          id={`extras-panel-${item}`}
+          aria-labelledby={`extras-tab-${item}`}
+          hidden={tool !== item}
+        >
+          {panels[item]}
+        </div>
+      ))}
     </>
   );
 }

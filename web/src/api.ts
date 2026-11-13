@@ -23,6 +23,25 @@ export async function request<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
+  const response = await requestResponse(path, options);
+  if (response.status === 204) return undefined as T;
+  const data = parseResponse(await response.text());
+  if (data === undefined) throw new AppError('error.invalidResponse');
+  return data as T;
+}
+
+function parseResponse(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+export async function requestResponse(
+  path: string,
+  options: RequestInit = {},
+): Promise<Response> {
   let response: Response;
   try {
     response = await fetch(`/api${path}`, options);
@@ -34,27 +53,19 @@ export async function request<T>(
       error instanceof Error ? error.message : String(error),
     );
   }
+  if (response.ok) return response;
+
   const text = await response.text();
-  let data: unknown;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    data = undefined;
-  }
-  if (!response.ok) {
-    const error =
-      data && typeof data === 'object' && 'error' in data
-        ? String(data.error)
-        : text;
-    throw new AppError(
-      'error.request',
-      { status: String(response.status) },
-      error,
-    );
-  }
-  if (response.status === 204) return undefined as T;
-  if (data === undefined) throw new AppError('error.invalidResponse');
-  return data as T;
+  const data = parseResponse(text);
+  const error =
+    data && typeof data === 'object' && 'error' in data
+      ? String(data.error)
+      : text;
+  throw new AppError(
+    'error.request',
+    { status: String(response.status) },
+    error,
+  );
 }
 
 export const terminal = (job: Job) =>
@@ -74,3 +85,20 @@ export function mergeJob(previous: Job | undefined, incoming: Job): Job {
 }
 export const equity = (value: number) =>
   `${value >= 0 ? '+' : ''}${value.toFixed(3)}`;
+
+export async function downloadResponse(
+  response: Response,
+  fallbackName: string,
+) {
+  const blob = await response.blob();
+  const header = response.headers.get('Content-Disposition') ?? '';
+  const filename = /filename="([^"]+)"/.exec(header)?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

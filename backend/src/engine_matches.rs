@@ -4,6 +4,7 @@ mod runner;
 #[cfg(test)]
 mod tests;
 
+pub(crate) use runner::ENGINE_DUELS_DATABASE_ID;
 pub use runner::worker;
 
 use crate::{

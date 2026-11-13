@@ -12,13 +12,18 @@ use sqlx::PgPool;
 use std::time::Duration;
 use uuid::Uuid;
 
-const ENGINE_DUELS_DATABASE_ID: Uuid = Uuid::from_u128(5);
+pub(crate) const ENGINE_DUELS_DATABASE_ID: Uuid = Uuid::from_u128(5);
 
 pub async fn worker(state: AppState) {
     loop {
         tokio::select! {
             _ = state.shutdown.cancelled() => break,
-            result = run_one(&state.pool) => match result {
+            result = async {
+                let Ok(_access) = state.backup.requests.try_read() else {
+                    return Ok(false);
+                };
+                run_one(&state.pool).await
+            } => match result {
                 Ok(true) => continue,
                 Ok(false) => {}
                 Err(error) => tracing::error!(%error, "Engine match worker error"),

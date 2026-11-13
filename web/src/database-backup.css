@@ -1,0 +1,102 @@
+.database-backup {
+  max-width: 48rem;
+}
+
+.database-backup > h1 {
+  margin: 0 0 16px;
+  font-size: var(--font-size-page);
+  font-weight: var(--font-weight-semibold);
+}
+
+.database-backup-panel {
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-surface);
+}
+
+.database-backup-panel h2 {
+  margin: 0;
+  font-size: var(--font-size-panel);
+  font-weight: var(--font-weight-semibold);
+}
+
+.database-backup-help {
+  color: var(--ui-muted);
+}
+
+.database-backup-export {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px 24px;
+}
+
+.database-backup-export > div {
+  flex: 1 1 20rem;
+}
+
+.database-backup-export p {
+  margin: 4px 0 0;
+}
+
+.database-backup-warning {
+  margin: 10px 0;
+  padding: 8px 12px;
+  border-inline-start: 3px solid var(--ui-warning-text);
+  border-radius: 4px;
+  background: var(--ui-warning-bg);
+  color: var(--ui-warning-text);
+}
+
+.database-backup-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.database-backup-review {
+  margin-top: 12px;
+}
+
+.database-backup-source {
+  margin: 0;
+}
+
+.database-backup-source dt {
+  color: var(--ui-muted);
+  font-size: var(--font-size-label);
+}
+
+.database-backup-source dd {
+  margin: 2px 0 0;
+}
+
+.database-backup-filename {
+  overflow-wrap: anywhere;
+  font-weight: var(--font-weight-medium);
+}
+
+.database-backup-status:not(:empty) {
+  margin-top: 10px;
+}
+
+.library-dialog:has(> .database-backup-dialog) {
+  max-width: 560px;
+}
+
+.database-backup-dialog .database-backup-status:not(:empty) {
+  margin: 0 0 12px;
+}
+
+.database-backup-panel > .error,
+.database-backup-dialog .error {
+  margin: 10px 0 0;
+}
+
+.database-backup-dialog .library-dialog-actions {
+  margin-top: 14px;
+}

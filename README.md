@@ -245,7 +245,7 @@ Use the selection controls to **Copy**, **Move**, change **Tags**, **Export** or
 - Copies get independent match, position, game and move IDs, with copied tags, comments and the latest completed analysis for each scope. Review history and active jobs belong to their original records.
 - Moves preserve IDs. BG Tutor detects duplicates within a database by original-file hash. If the destination already contains that file, it retains both the existing destination record and the source match, including their notes.
 - Deletion requires confirmation and skips matches with queued or running analyses. Saved positions and flashcards can still be used after their source is deleted.
-- Exports return the original file or canonical SGF, with a ZIP for multiple matches. Use a PostgreSQL backup to capture the full library, including BG Tutor notes and review history.
+- Exports return the original file or canonical SGF, with a ZIP for multiple matches. Use [Database backup](#database-backup) to capture the full library, including BG Tutor notes and review history.
 
 The named collections, sortable tables and bulk actions draw on [ChessBase's database organization](https://en.chessbase.com/post/chessbase-18-tips-for-beginners-part-7-organising-databases). The position preview draws on its [database preview window](https://help.chessbase.com/CBase/16/Eng/preview_window_in_the_database.htm).
 
@@ -338,6 +338,8 @@ Each row shows the score and match length (or money game), dice when relevant an
 ### Review cards and export to Anki
 
 **Practice results** starts a shuffled round of up to 10 or 20 cards from the applied card filters, including across decks and result pages. Play the move or choose a cube action. After the answer, use **Mark for review** for positions you want to see again. When the round ends, **Retry errors and marked cards** opens a second pass through those cards. Revealed and removed cards are counted separately. Return to the list and use **Resume practice** to reopen the latest round. These extra rounds use the same decision evaluation and leave the FSRS schedule and review history untouched.
+
+During an upgrade, tags from existing Anki imports are carried into the shared card tag field.
 
 **Card tags** can be entered when adding an analyzed position, edited on selected search results, or edited after revealing a flashcard. Use `::` for subtopics, such as `cube::take-point`. The comma-separated **Topic tags** filter requires every term and matches descendants by segment. **Saved topics** stores the applied filters and deck scope, including the game plan and decision type. Reopening the topic searches the current collection.
 
@@ -522,7 +524,7 @@ For a recognized Open Sage fork, the view shows **Open Sage fork**, the reposito
 
 ## Engine benchmark
 
-Use **Extras → Benchmark** to measure analysis speed for one or more depths. GNUbg supports 0–4 ply; Open Sage supports verified 1/2-ply. Benchmark engine and depth choices are independent of playing and analysis defaults. The selected depths run in selection order in the background and continue when you leave the view. **Cancel run** also stops the active engine process. Other BG Tutor engine work waits while a benchmark is in progress, and a notice appears across workspaces. Other programs on the machine can still affect the measurement.
+Use **Extras → Benchmark** to measure analysis speed for one or more depths. GNUbg supports 0–4 ply; Open Sage supports 1–4 ply after a capability probe. Benchmark engine and depth choices are independent of playing and analysis defaults. The selected depths run in selection order in the background and continue when you leave the view. **Cancel run** also stops the active engine process. Other BG Tutor engine work waits while a benchmark is in progress, and a notice appears across workspaces. Other programs on the machine can still affect the measurement.
 
 The fixed **WC2014 v1** reference is the 11-point match between Akiko Yazawa and Douglas Mayfield, with ten games and 460 checker moves. The app bundles an immutable copy of the unanalysed GNUbg SGF fixture, with a reference ID, version, and SHA-256 checksum. See the [fixture documentation](backend/tests/fixtures/README.md) for provenance and reproduction. Existing evaluations are cleared before analysis.
 
@@ -700,6 +702,8 @@ curl 'http://127.0.0.1:8787/api/matches?q=Tutor'
 | Method     | Path                                                                         | Purpose                                                                                                                                                                                                                    |
 | ---------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | GET        | `/api/health`, `/api/engines`                                                | PostgreSQL and GNUbg health, or available engines, versions and depths.                                                                                                                                                    |
+| GET        | `/api/database-backup` | Export a compressed BG Tutor backup as a file. |
+| POST       | `/api/database-backup?replace=true` | Restore a BG Tutor backup with media type `application/vnd.bgtutor.backup`. |
 | GET / PUT  | `/api/settings`                                                              | Persistent engine and player settings with revision checks.                                                                                                                                                                |
 | POST       | `/api/engines/gnubg/check`                                                   | Check the installation using `{ "path": "..." }`.                                                                                                                                                                          |
 | GET / PUT  | `/api/opening-book`                                                          | Provider, local BGDB and XG paths, availability and version checks.                                                                                                                                                        |
@@ -744,6 +748,29 @@ Match analysis checkpoints decisions, partial statistics and SSE progress for ea
 Native evaluation uses GNUbg's `analyse game` output at six decimal places and includes the played move even when it falls outside the top five candidates. BG Tutor clears existing analysis annotations before the calculation, normalizes inherited match data and setups, and verifies board and match context for each checker and cube action. Mixed SGF collections can include empty or cube-only games. Missing or incomplete native exports fail the job. Each native export is capped at 64 MiB.
 
 A forced pass has zero loss and no alternative equity (`evaluation_status=forced`). Normalized loss thresholds are 0.04 for `doubtful`, 0.08 for `bad` and 0.16 for `very_bad`. The `performance_rating` field includes the counts of relevant decisions and weighted native GNUbg PR. Cube equities use the deciding player's perspective and the cube value before the offer as their unit. Cube-only decisions have stable source action IDs and are accessible from **Cube and move notes** with their pre-action board.
+
+## Database backup
+
+On the source installation, open **Extras → Database backup → Export backup**.
+The downloaded `.bgtutor-backup` file contains the PostgreSQL application data,
+including all match databases, original match files, notes, completed analyses,
+saved positions, player profiles, preferences and learning history.
+
+On the destination, run BG Tutor with the same database migration history.
+Open **Extras → Database backup**, choose a file, and select **Review database replacement** to see what the operation will replace.
+**Replace database** overwrites the application data on the destination. Export
+its current database first if you need to keep that data. After confirmation,
+the backend checks the archive and schema and commits the replacement in one transaction. If restore
+fails, the previous data stays in place. Wait for the success message and reload
+BG Tutor. Finish any work running on the destination before restoring.
+
+The destination keeps its local engine installations, thread overrides, and
+opening-book paths. In-flight or queued jobs from the backup are marked as
+interrupted. Saved playing checkpoints still require compatible local engine
+versions or models. Install external engines and opening books on the destination
+through their normal setup. The archive holds unencrypted data. It supports up to
+16 GiB compressed and 64 GiB uncompressed. Large restores need temporary disk
+space for both forms of the archive.
 
 ## Verification
 

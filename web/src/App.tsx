@@ -2,7 +2,10 @@ import { useOptionalConfiguration } from './ConfigurationProvider';
 import ProfileSelector from './ProfileSelector';
 import { settingsFromConfiguration } from './configuration-settings';
 import { loadBenchmarkStatus } from './benchmark-api';
-import ExtrasWorkspace, { type ExtrasTool } from './ExtrasWorkspace';
+import ExtrasWorkspace, {
+  readExtrasTool,
+  saveExtrasTool,
+} from './ExtrasWorkspace';
 import { useBenchmarkText } from './benchmark-messages';
 import ActionButton from './ActionButton';
 import PlayWorkspace from './PlayWorkspace';
@@ -81,7 +84,8 @@ export default function App() {
   const playText = usePlayText();
   const benchmarkT = useBenchmarkText();
   const [benchmarkActive, setBenchmarkActive] = useState(false);
-  const [extrasTool, setExtrasTool] = useState<ExtrasTool>('benchmark');
+  const [extrasTool, setExtrasTool] = useState(readExtrasTool);
+  useEffect(() => saveExtrasTool(extrasTool), [extrasTool]);
   useEffect(() => {
     const abort = new AbortController();
     let timer: ReturnType<typeof setTimeout>;

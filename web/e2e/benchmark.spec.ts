@@ -421,3 +421,28 @@ test('failed starts show backend diagnostics and narrow view keeps actions reach
     fullPage: true,
   });
 });
+
+test('Extras tabs support keyboard navigation and remember the last selection', async ({
+  page,
+}) => {
+  await page.goto('/');
+  const extras = page.getByRole('tab', { name: 'Extras', exact: true });
+  await extras.click();
+  const tools = page.getByRole('tablist', { name: 'Extra tools', exact: true });
+  const benchmark = tools.getByRole('tab', { name: 'Benchmark', exact: true });
+  const versions = tools.getByRole('tab', { name: 'Versions', exact: true });
+  const backup = tools.getByRole('tab', {
+    name: 'Database backup',
+    exact: true,
+  });
+  await benchmark.focus();
+  await benchmark.press('End');
+  await expect(versions).toBeFocused();
+  await versions.press('ArrowLeft');
+  await expect(backup).toHaveAttribute('aria-selected', 'true');
+  await page.reload();
+  await extras.click();
+  await expect(backup).toHaveAttribute('aria-selected', 'true');
+  await backup.press('Home');
+  await expect(benchmark).toBeFocused();
+});

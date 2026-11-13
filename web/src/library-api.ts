@@ -1,6 +1,10 @@
 import { numberedSearchParams } from './cursor-search';
-import { request, type Position } from './api';
-import { AppError } from './i18n-core';
+import {
+  downloadResponse,
+  request,
+  requestResponse,
+  type Position,
+} from './api';
 import type { components } from './generated-api';
 import type { PlayMode } from './play-mode-messages';
 type Schema = components['schemas'];
@@ -147,40 +151,17 @@ export type ActionItem = Schema['ActionItem'];
 export type ActionResponse = Schema['ActionResponse'];
 export type BatchAction = 'copy' | 'move' | 'delete' | 'tags';
 export async function exportMatches(ids: string[], format: 'original' | 'sgf') {
-  const response = await fetch('/api/library/export', {
+  const response = await requestResponse('/library/export', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ match_ids: ids, format }),
   });
-  if (!response.ok) {
-    const text = await response.text();
-    let detail = text;
-    try {
-      detail = JSON.parse(text).error ?? text;
-    } catch {
-      /* Plain HTTP errors. */
-    }
-    throw new AppError(
-      'error.request',
-      { status: String(response.status) },
-      detail,
-    );
-  }
-  const blob = await response.blob();
-  const header = response.headers.get('Content-Disposition') ?? '';
-  const filename =
-    /filename="([^"]+)"/.exec(header)?.[1] ??
-    (ids.length > 1
+  await downloadResponse(
+    response,
+    ids.length > 1
       ? 'matches.zip'
-      : `match.${format === 'original' ? 'sgf' : format}`);
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+      : `match.${format === 'original' ? 'sgf' : format}`,
+  );
 }
 export function readDatabase() {
   try {

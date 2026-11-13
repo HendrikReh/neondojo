@@ -118,6 +118,7 @@ offer and response choices and show the offered cube on response cards. Check
 the answer to see your choice, the best answer and the analysis source, or use
 Show answer for self-assessment. A checked answer reopens at the review step
 after a reload. The four FSRS buttons schedule the next review.
+
 **Practice results** starts a shuffled round from the applied card filters.
 After an answer, **Mark for review** adds that card to the optional second
 pass alongside incorrect answers. **Resume practice** reopens the latest
@@ -128,7 +129,6 @@ round. Practice rounds leave FSRS reviews and due dates untouched.
 transfer panel for baseline and follow-up sessions. Select one card for pip
 count practice, or a cube card for score variants. The timed preview uses
 the current search and has separate question and answer durations.
-
 
 My recurring mistakes requires a player selection and offers database, game-plan
 and minimum-loss filters. Players in the selected database remain selectable
@@ -159,14 +159,14 @@ Normale Einstellungsänderungen werden mit „Anwenden“ übernommen. Die Profi
 
 ## Extras
 
-Extras contains **Benchmark** for analysis speed and turn latency,
-**Engine vs. engine** for playing point matches, and **Version information**
-for the running backend and configured engines. The BG Tutor row shows the first
-seven characters of the build's Git commit ID, with the full ID on hover. The
-Open Sage row identifies recognized fork builds by repository and short commit,
-linked to the full commit on GitHub. The benchmark link in
-Settings always opens **Benchmark**. Engine-match series keep running
-when the user switches tools or leaves Extras.
+**Extras** contains **Benchmark**, **Engine duels**, **Database backup**,
+and **Versions**. Use Left/Right or Home/End to switch tabs. BG Tutor remembers
+the selected tool. The backup tool exports a database archive and restores it
+on an installation with the same schema after confirmation.
+
+Engine duels lists series beside the selected result on wide desktop windows.
+**New series** opens setup with the optional seed under **Advanced**. Series
+continue when leaving the tool.
 
 ## Dice equity
 

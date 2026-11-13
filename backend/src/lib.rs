@@ -17,6 +17,7 @@ pub mod configuration;
 pub mod profiles;
 pub mod settings;
 
+mod database_backup;
 pub mod databases;
 pub mod move_catalog;
 mod player_directory;

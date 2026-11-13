@@ -15,7 +15,12 @@ pub async fn worker(state: AppState, stop: CancellationToken) {
     loop {
         tokio::select! {
             _ = stop.cancelled() => break,
-            result = run_one(&state) => {
+            result = async {
+                let Ok(_access) = state.backup.requests.try_read() else {
+                    return Ok(false);
+                };
+                run_one(&state).await
+            } => {
                 match result {
                     Ok(true) => continue,
                     Ok(false) => {},

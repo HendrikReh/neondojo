@@ -6,8 +6,9 @@ use crate::{
 };
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, Multipart, Path, Query, State},
+    extract::{DefaultBodyLimit, Multipart, Path, Query, Request, State},
     http::{HeaderMap, StatusCode, header},
+    middleware::{self, Next},
     response::{
         IntoResponse, Response,
         sse::{Event, KeepAlive, Sse},
@@ -31,6 +32,7 @@ pub struct AppState {
     pub wake: Arc<Notify>,
     pub shutdown: CancellationToken,
     imports: Arc<Semaphore>,
+    pub(crate) backup: Arc<crate::database_backup::Access>,
 }
 
 impl AppState {
@@ -41,6 +43,7 @@ impl AppState {
             wake: Arc::new(Notify::new()),
             shutdown: CancellationToken::new(),
             imports: Arc::new(Semaphore::new(2)),
+            backup: Arc::default(),
         }
     }
 }
@@ -120,6 +123,11 @@ pub fn router(state: AppState) -> Router {
         .route("/api/jobs/{id}/moves", get(move_analyses))
         .route("/api/openapi.json", get(openapi))
         .fallback(|| async { ApiError::missing() })
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            database_access,
+        ))
+        .merge(crate::database_backup::routes())
         .layer(DefaultBodyLimit::max(16 * 1024 * 1024))
         .layer(
             CorsLayer::new()
@@ -142,6 +150,20 @@ pub fn router(state: AppState) -> Router {
         )
         .layer(TraceLayer::new_for_http())
         .with_state(state)
+}
+
+async fn database_access(
+    State(state): State<AppState>,
+    request: Request,
+    next: Next,
+) -> ApiResult<Response> {
+    let _access = state.backup.requests.try_read().map_err(|_| {
+        ApiError(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Database restoration is in progress".into(),
+        )
+    })?;
+    Ok(next.run(request).await)
 }
 
 #[derive(Serialize, ToSchema)]
@@ -960,6 +982,7 @@ impl OpenApi for ApiDoc {
         doc.merge(crate::opening_book::OpeningBookDoc::openapi());
         doc.merge(crate::imported_analysis::ImportedAnalysisDoc::openapi());
         doc.merge(crate::databases::DatabaseDoc::openapi());
+        doc.merge(crate::database_backup::BackupDoc::openapi());
         doc.merge(crate::player_directory::PlayerDoc::openapi());
         doc.merge(crate::move_catalog::MoveCatalogDoc::openapi());
         doc.merge(crate::annotations::AnnotationDoc::openapi());

@@ -1,0 +1,285 @@
+use axum::{
+    body::{Body, Bytes, to_bytes},
+    http::{Request, StatusCode, header},
+};
+use bgtutor::{
+    api::{AppState, router},
+    engine::Engine,
+};
+use sqlx::PgPool;
+use tower::ServiceExt;
+
+const BACKUP: &str = "/api/database-backup";
+const MEDIA_TYPE: &str = "application/vnd.bgtutor.backup";
+
+fn restore(file: impl Into<Body>, confirm: bool) -> Request<Body> {
+    Request::post(format!("{BACKUP}?replace={confirm}"))
+        .header(header::CONTENT_TYPE, MEDIA_TYPE)
+        .body(file.into())
+        .unwrap()
+}
+
+async fn insert_match(pool: &PgPool, name: &str) -> (uuid::Uuid, i64) {
+    sqlx::query_as(
+        "INSERT INTO matches (id,filename,format,sha256,white,black,match_length,position_count,original,sgf,source_metadata_loaded)
+         VALUES(gen_random_uuid(),$1,'sgf',$1,'Héndrik','Opponent',7,0,$2,'(;GM[6])',true)
+         RETURNING id,match_no",
+    )
+    .bind(name)
+    .bind(&[0_u8, 1, 255][..])
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn restores_data_and_keeps_target_installation_settings(pool: PgPool) {
+    let app = router(AppState::new(pool.clone(), Engine::new("gnubg".into())));
+    let (source_id, source_number) = insert_match(&pool, "source-ä.sgf").await;
+    sqlx::query("INSERT INTO annotations(id,match_uuid,tags,comment,version) VALUES(gen_random_uuid(),$1,ARRAY['täg'],'A note with a tab' || chr(9) || 'and a newline' || chr(10),1)")
+        .bind(source_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO app_settings(singleton,player_name,gnubg_path) VALUES(true,'Portable name','/source/GNUbg')")
+        .execute(&pool).await.unwrap();
+    let previous_default: uuid::Uuid =
+        sqlx::query_scalar("SELECT id FROM databases WHERE is_default")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let pending: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO jobs(id,match_uuid,kind,plies,status,lease_token,lease_until)
+         VALUES(gen_random_uuid(),$1,'match',2,'running',gen_random_uuid(),now()+interval '1 hour')
+         RETURNING id",
+    )
+    .bind(source_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let deck_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO decks(id,name) VALUES(gen_random_uuid(),'Portable deck') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query("SELECT nextval(pg_get_serial_sequence('matches', 'match_no'))")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let exported = app
+        .clone()
+        .oneshot(Request::get(BACKUP).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(exported.status(), StatusCode::OK);
+    assert!(
+        exported.headers()[header::CONTENT_DISPOSITION]
+            .to_str()
+            .unwrap()
+            .contains(".bgtutor-backup")
+    );
+    let archive = to_bytes(exported.into_body(), 16 * 1024 * 1024)
+        .await
+        .unwrap();
+    assert!(archive.starts_with(b"PK"));
+
+    sqlx::query("DELETE FROM matches")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("ALTER TABLE databases DISABLE TRIGGER databases_protect_system")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE databases SET id=gen_random_uuid() WHERE is_default")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("ALTER TABLE databases ENABLE TRIGGER databases_protect_system")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let target_default: uuid::Uuid =
+        sqlx::query_scalar("SELECT id FROM databases WHERE is_default")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_ne!(target_default, previous_default);
+    sqlx::query(&format!(
+        "ALTER TABLE matches ALTER COLUMN database_id SET DEFAULT '{target_default}'::uuid"
+    ))
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("DELETE FROM decks")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (target_id, _) = insert_match(&pool, "target-only.sgf").await;
+    sqlx::query("UPDATE app_settings SET gnubg_path='/target/GNUbg',player_name='Target name'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let incompatible = rewrite_entry(
+        &archive,
+        "manifest.json",
+        br#"{"format":1,"schema":"another-schema","sequences":[]}"#,
+    );
+    for (file, confirm, expected) in [
+        (archive.clone(), false, StatusCode::UNPROCESSABLE_ENTITY),
+        (
+            Bytes::from(incompatible),
+            true,
+            StatusCode::UNPROCESSABLE_ENTITY,
+        ),
+        (
+            Bytes::from_static(b"invalid backup"),
+            true,
+            StatusCode::UNPROCESSABLE_ENTITY,
+        ),
+    ] {
+        assert_eq!(
+            app.clone()
+                .oneshot(restore(file, confirm))
+                .await
+                .unwrap()
+                .status(),
+            expected
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, uuid::Uuid>("SELECT id FROM matches")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            target_id
+        );
+    }
+
+    assert_eq!(
+        app.oneshot(restore(archive, true)).await.unwrap().status(),
+        StatusCode::NO_CONTENT
+    );
+    let restored: (uuid::Uuid, i64, Vec<u8>, String, String) = sqlx::query_as(
+        "SELECT m.id,m.match_no,m.original,a.comment,p.source_name FROM matches m
+         JOIN annotations a ON a.match_uuid=m.id JOIN match_players mp ON mp.match_id=m.id AND mp.side=0
+         JOIN player_aliases pa ON pa.id=mp.alias_id JOIN player_profiles p ON p.id=pa.profile_id"
+    ).fetch_one(&pool).await.unwrap();
+    assert_eq!(
+        restored,
+        (
+            source_id,
+            source_number,
+            vec![0, 1, 255],
+            "A note with a tab\tand a newline\n".into(),
+            "Héndrik".into()
+        )
+    );
+    assert_eq!(
+        sqlx::query_as::<_, (String, String)>("SELECT player_name,gnubg_path FROM app_settings")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        ("Portable name".into(), "/target/GNUbg".into())
+    );
+    assert!(
+        !sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT FROM matches WHERE id=$1)")
+            .bind(target_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, uuid::Uuid>("SELECT id FROM decks WHERE name='Portable deck'")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        deck_id,
+    );
+    let (status, has_lease, latest_event): (String, bool, String) = sqlx::query_as(
+        "SELECT j.status,j.lease_token IS NOT NULL,e.event FROM jobs j
+         JOIN job_events e ON e.job_id=j.id WHERE j.id=$1 ORDER BY e.id DESC LIMIT 1",
+    )
+    .bind(pending)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        (status.as_str(), has_lease, latest_event.as_str()),
+        ("failed", false, "failed")
+    );
+    let (next_id, next_number) = insert_match(&pool, "next.sgf").await;
+    assert_eq!(next_number, source_number + 2);
+    assert_eq!(
+        sqlx::query_scalar::<_, uuid::Uuid>("SELECT database_id FROM matches WHERE id=$1")
+            .bind(next_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        previous_default,
+    );
+}
+
+fn rewrite_entry(archive: &Bytes, changed_entry: &str, replacement: &[u8]) -> Vec<u8> {
+    use std::io::{Cursor, Write};
+
+    let mut source = zip::ZipArchive::new(Cursor::new(archive)).unwrap();
+    let mut output = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    for index in 0..source.len() {
+        let mut entry = source.by_index(index).unwrap();
+        let changed = entry.name() == changed_entry;
+        output
+            .start_file(entry.name(), zip::write::SimpleFileOptions::default())
+            .unwrap();
+        if changed {
+            output.write_all(replacement).unwrap();
+        } else {
+            std::io::copy(&mut entry, &mut output).unwrap();
+        }
+    }
+    output.finish().unwrap().into_inner()
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn invalid_rows_roll_back_the_target_after_the_restore_starts(pool: PgPool) {
+    let app = router(AppState::new(pool.clone(), Engine::new("gnubg".into())));
+    insert_match(&pool, "source.sgf").await;
+    let response = app
+        .clone()
+        .oneshot(Request::get(BACKUP).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let archive = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    sqlx::query("DELETE FROM matches")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (id, number) = insert_match(&pool, "keep.sgf").await;
+    let invalid = rewrite_entry(
+        &archive,
+        "tables/engine_match_results.copy",
+        b"invalid uuid\n",
+    );
+    let response = app.oneshot(restore(invalid, true)).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        sqlx::query_as::<_, (uuid::Uuid, i64)>("SELECT id,match_no FROM matches")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        (id, number),
+    );
+    let (next_id, next_number) = insert_match(&pool, "next.sgf").await;
+    assert_eq!(next_number, number + 1);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM match_players WHERE match_id=$1")
+            .bind(next_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        2
+    );
+}
