@@ -18,6 +18,10 @@ import {
 import { useBenchmarkText } from './benchmark-messages';
 import './benchmark.css';
 
+function preferredDepth(depths: readonly number[]) {
+  return depths.includes(2) ? 2 : depths[0];
+}
+
 export default function BenchmarkWorkspace({
   visible,
   defaultPlies,
@@ -29,20 +33,20 @@ export default function BenchmarkWorkspace({
 }) {
   const t = useBenchmarkText();
   const { locale, formatNumber, formatError } = useI18n();
+  const [mode, setMode] = useState<'analysis' | 'play'>('analysis');
   const [reference, setReference] = useState<BenchmarkReference>();
   const [engines, setEngines] = useState<EngineInfo[]>([]);
   const [engineId, setEngineId] = useState('gnubg');
-  const [playDepth, setPlayDepth] = useState(playPlies ?? 2);
-  const playDepthEdited = useRef(false);
-  useEffect(() => {
-    if (!playDepthEdited.current && playPlies !== undefined)
-      setPlayDepth(playPlies);
-  }, [playPlies]);
-  const [plies, setPlies] = useState([defaultPlies]);
-  const edited = useRef(false);
+  const [playDepthsByEngine, setPlayDepthsByEngine] = useState<
+    Record<string, number>
+  >({});
+  const [analysisDepthsByEngine, setAnalysisDepthsByEngine] = useState<
+    Record<string, number[]>
+  >({});
   const [runs, setRuns] = useState<BenchmarkRun[]>([]);
   const [loading, setLoading] = useState(true);
-  const [configurationError, setConfigurationError] = useState<unknown>();
+  const [referenceError, setReferenceError] = useState<unknown>();
+  const [engineError, setEngineError] = useState<unknown>();
   const [historyError, setHistoryError] = useState<unknown>();
   const [actionError, setActionError] = useState<unknown>();
   const [starting, setStarting] = useState<'analysis' | 'play'>();
@@ -52,18 +56,16 @@ export default function BenchmarkWorkspace({
   const [queueActive, setQueueActive] = useState(false);
   const previousActive = useRef(false);
   useEffect(() => {
-    if (!edited.current) setPlies([defaultPlies]);
-  }, [defaultPlies]);
-  useEffect(() => {
     if (!visible) return;
     const abort = new AbortController();
-    setConfigurationError(undefined);
+    setReferenceError(undefined);
+    setEngineError(undefined);
     void loadBenchmarkReference(abort.signal)
       .then((nextReference) => {
         if (!abort.signal.aborted) setReference(nextReference);
       })
       .catch((error) => {
-        if (!abort.signal.aborted) setConfigurationError(error);
+        if (!abort.signal.aborted) setReferenceError(error);
       });
     void loadEngines(abort.signal)
       .then((catalog) => {
@@ -76,7 +78,7 @@ export default function BenchmarkWorkspace({
         );
       })
       .catch((error) => {
-        if (!abort.signal.aborted) setConfigurationError(error);
+        if (!abort.signal.aborted) setEngineError(error);
       });
     return () => abort.abort();
   }, [visible, configurationRevision]);
@@ -110,18 +112,47 @@ export default function BenchmarkWorkspace({
     };
   }, [visible, revision]);
   const engine = engines.find((e) => e.id === engineId && e.available);
-  const selected = plies
-    .filter((ply) => engine?.plies.includes(ply))
+  const requestedAnalysisDepths = analysisDepthsByEngine[engineId] ?? [
+    defaultPlies,
+  ];
+  const availableAnalysisDepths = engine?.plies ?? [];
+  const compatiblePlies = requestedAnalysisDepths
+    .filter((ply) => availableAnalysisDepths.includes(ply))
     .sort((a, b) => a - b);
+  const analysisFallback =
+    requestedAnalysisDepths.length > 0 && compatiblePlies.length === 0
+      ? preferredDepth(availableAnalysisDepths)
+      : undefined;
+  const selected = analysisFallback === undefined
+    ? compatiblePlies
+    : [analysisFallback];
+  const play = mode === 'play';
+  const modeRuns = runs.filter((run) => Boolean(run.play_reference) === play);
+  const supportedPlayDepths = (
+    engineId === 'bgsage'
+      ? configurationOptions.engine_profiles.bgsage.play
+      : configurationOptions.engine_profiles.gnubg.play
+  ).filter((ply) => engine?.plies.includes(ply));
+  const requestedPlayDepth = playDepthsByEngine[engineId] ?? playPlies ?? 2;
+  const playDepthSupported = supportedPlayDepths.includes(requestedPlayDepth);
+  const playFallback = playDepthSupported
+    ? undefined
+    : preferredDepth(supportedPlayDepths);
+  const selectedPlayDepth = playDepthSupported
+    ? requestedPlayDepth
+    : playFallback;
   const active = runs.filter(
     (run) => run.status === 'running' || run.status === 'queued',
   );
   const canStart =
-    !starting && !queueActive && !loading && configurationError === undefined;
+    !starting && !queueActive && !loading && engineError === undefined;
   const canStartAnalysis =
-    canStart && !!reference && !!engine && selected.length > 0;
-  const canStartPlay =
-    canStart && !!engine && engine.plies.includes(playDepth) && playDepth <= 2;
+    canStart &&
+    referenceError === undefined &&
+    !!reference &&
+    !!engine &&
+    selected.length > 0;
+  const canStartPlay = canStart && selectedPlayDepth !== undefined;
   async function start(kind: 'analysis' | 'play') {
     if (kind === 'analysis' ? !canStartAnalysis : !canStartPlay) return;
     setStarting(kind);
@@ -129,7 +160,7 @@ export default function BenchmarkWorkspace({
     try {
       const created =
         kind === 'play'
-          ? [await startPlayBenchmark(engineId, playDepth)]
+          ? [await startPlayBenchmark(engineId, selectedPlayDepth)]
           : await startBenchmarks(engineId, selected);
       setRuns((current) => [...created, ...current]);
       setQueueActive(true);
@@ -166,10 +197,10 @@ export default function BenchmarkWorkspace({
           total: formatNumber(run.play_reference.total_turns),
         })
       : t('progress', {
-          completed: run.completed_games,
-          total: run.reference?.total_games ?? 0,
-          moves: run.analyzed_moves,
-          totalMoves: run.reference?.total_moves ?? 0,
+          completed: formatNumber(run.completed_games),
+          total: formatNumber(run.reference?.total_games ?? 0),
+          moves: formatNumber(run.analyzed_moves),
+          totalMoves: formatNumber(run.reference?.total_moves ?? 0),
         });
   const statusLabel = (status: string) => {
     switch (status) {
@@ -183,7 +214,11 @@ export default function BenchmarkWorkspace({
         return status;
     }
   };
-  const error = configurationError ?? historyError ?? actionError;
+  const error =
+    actionError ??
+    engineError ??
+    historyError ??
+    (play ? undefined : referenceError);
   return (
     <div className="benchmark-workspace">
       <header className="benchmark-heading">
@@ -205,40 +240,94 @@ export default function BenchmarkWorkspace({
           </button>
         </div>
       )}
-      <div className="benchmark-setup">
-        <section className="benchmark-reference" aria-label={t('reference')}>
-          <h2>{t('reference')}</h2>
-          {reference ? (
-            <>
-              <h3>{reference.name}</h3>
-              <p>
-                {t('referenceFacts', {
-                  points: reference.match_length,
-                  games: reference.total_games,
-                  moves: reference.total_moves,
-                })}
-              </p>
-              <p>
-                {t('referenceVersion', { version: reference.version })} ·{' '}
-                {reference.id}
-              </p>
-              <p>
-                {t('protocol')}: {reference.protocol.id} ·{' '}
-                {reference.protocol.game_timeout_seconds == null
-                  ? t('noTimeout')
-                  : t('timeout', {
-                      seconds: reference.protocol.game_timeout_seconds,
-                    })}
-              </p>
-              <details>
-                <summary>SHA-256</summary>
-                <code>{reference.sha256}</code>
-              </details>
-            </>
-          ) : (
-            <p>{t('loading')}</p>
+      <div className="benchmark-engine-row">
+        <label className="benchmark-engine">
+          {t('engine')}
+          <select
+            aria-label={t('engine')}
+            value={engineId}
+            disabled={Boolean(starting)}
+            onChange={(event) => setEngineId(event.target.value)}
+          >
+            {engines.map((e) => (
+              <option key={e.id} value={e.id} disabled={!e.available}>
+                {e.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {!engine && engines.length > 0 && <p role="status">{t('noEngine')}</p>}
+      </div>
+      <div
+        className="text-navigation benchmark-modes"
+        role="group"
+        aria-label={t('mode')}
+      >
+        <button
+          type="button"
+          aria-pressed={!play}
+          onClick={() => setMode('analysis')}
+        >
+          {t('matchAnalysis')}
+        </button>
+        <button
+          type="button"
+          aria-pressed={play}
+          onClick={() => setMode('play')}
+        >
+          {t('playLatency')}
+        </button>
+      </div>
+      {play ? (
+        <form
+          className="benchmark-configuration"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void start('play');
+          }}
+        >
+          <div className="benchmark-controls">
+            <label>
+              {t('playPly')}
+              <select
+                value={selectedPlayDepth ?? ''}
+                disabled={Boolean(starting)}
+                onChange={(event) => {
+                  const value = Number(event.target.value);
+                  setPlayDepthsByEngine((current) => ({
+                    ...current,
+                    [engineId]: value,
+                  }));
+                }}
+              >
+                {[0, 1, 2].map((ply) => (
+                  <option
+                    key={ply}
+                    value={ply}
+                    disabled={!supportedPlayDepths.includes(ply)}
+                  >
+                    {formatNumber(ply)}-ply
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="submit" disabled={!canStartPlay}>
+              {t(starting === 'play' ? 'starting' : 'startPlay')}
+            </button>
+          </div>
+          {playFallback !== undefined && (
+            <p className="benchmark-help" role="status">
+              {t('depthFallback', { ply: formatNumber(playFallback) })}
+            </p>
           )}
-        </section>
+          <p className="benchmark-help">{t('playTiming')}</p>
+          {playPlies !== undefined && (
+            <p className="benchmark-help">
+              {t('playDepth', { ply: formatNumber(playPlies) })}
+            </p>
+          )}
+        </form>
+      ) : (
         <form
           className="benchmark-configuration"
           onSubmit={(event) => {
@@ -246,108 +335,45 @@ export default function BenchmarkWorkspace({
             void start('analysis');
           }}
         >
-          <label>
-            {t('engine')}
-            <select
-              aria-label={t('engine')}
-              value={engineId}
-              onChange={(event) => {
-                setEngineId(event.target.value);
-                if (event.target.value === 'bgsage') {
-                  setPlies([2]);
-                  playDepthEdited.current = true;
-                  setPlayDepth(2);
-                }
-              }}
-            >
-              {engines.map((e) => (
-                <option key={e.id} value={e.id} disabled={!e.available}>
-                  {e.name}
-                  {e.version ? ` · ${e.version}` : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-          {!engine && engines.length > 0 && <p>{t('noEngine')}</p>}
-          <fieldset>
-            <legend>{t('plies')}</legend>
-            <div className="benchmark-plies">
-              {ANALYSIS_PLIES.map((ply) => (
-                <label key={ply}>
-                  <input
-                    type="checkbox"
-                    checked={selected.includes(ply)}
-                    disabled={!engine?.plies.includes(ply) || Boolean(starting)}
-                    onChange={(event) => {
-                      edited.current = true;
-                      setPlies((current) =>
-                        event.target.checked
-                          ? [...current, ply]
-                          : current.filter((value) => value !== ply),
-                      );
-                    }}
-                  />
-                  {ply}-ply
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          <button type="submit" disabled={!canStartAnalysis}>
-            {t(starting === 'analysis' ? 'starting' : 'start')}
-          </button>
-          <p className="benchmark-help">{t('serial')}</p>
-        </form>
-      </div>
-      <p className="benchmark-help benchmark-timing">{t('timing')}</p>
-      <section
-        className="benchmark-play"
-        aria-labelledby="benchmark-play-title"
-      >
-        <div>
-          <h2 id="benchmark-play-title">{t('playLatency')}</h2>
-          <p className="benchmark-help">{t('playTiming')}</p>
-          {playPlies !== undefined && (
-            <p className="benchmark-help">
-              {t('playDepth', { ply: formatNumber(playDepth) })}
+          <div className="benchmark-controls">
+            <fieldset>
+              <legend>{t('plies')}</legend>
+              <div className="benchmark-plies">
+                {ANALYSIS_PLIES.map((ply) => (
+                  <label key={ply}>
+                    <input
+                      type="checkbox"
+                      checked={selected.includes(ply)}
+                      disabled={
+                        !engine?.plies.includes(ply) || Boolean(starting)
+                      }
+                      onChange={(event) => {
+                        const checked = event.target.checked;
+                        setAnalysisDepthsByEngine((current) => ({
+                          ...current,
+                          [engineId]: checked
+                            ? [...selected, ply]
+                            : selected.filter((value) => value !== ply),
+                        }));
+                      }}
+                    />
+                    {formatNumber(ply)}-ply
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <button type="submit" disabled={!canStartAnalysis}>
+              {t(starting === 'analysis' ? 'starting' : 'start')}
+            </button>
+          </div>
+          {analysisFallback !== undefined && (
+            <p className="benchmark-help" role="status">
+              {t('depthFallback', { ply: formatNumber(analysisFallback) })}
             </p>
           )}
-        </div>
-        <label>
-          {t('plies')}
-          <select
-            aria-label={t('playLatency')}
-            value={playDepth}
-            onChange={(e) => {
-              playDepthEdited.current = true;
-              setPlayDepth(Number(e.target.value));
-            }}
-          >
-            {[0, 1, 2].map((ply) => (
-              <option
-                key={ply}
-                value={ply}
-                disabled={
-                  !(
-                    engineId === 'bgsage'
-                      ? configurationOptions.engine_profiles.bgsage.play
-                      : configurationOptions.engine_profiles.gnubg.play
-                  ).includes(ply)
-                }
-              >
-                {ply}-ply
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="button"
-          disabled={!canStartPlay}
-          onClick={() => void start('play')}
-        >
-          {t(starting === 'play' ? 'starting' : 'startPlay')}
-        </button>
-      </section>
-      <BenchmarkComparison runs={runs} />
+          <p className="benchmark-help">{t('serial')}</p>
+        </form>
+      )}
       {queueActive && (
         <p className="benchmark-help" role="status">
           {t('engineBusy')}
@@ -360,8 +386,8 @@ export default function BenchmarkWorkspace({
             <article key={run.id}>
               <div>
                 <strong>
-                  {run.play_reference && `${t('playLatency')} · `}
-                  {run.engine_name} · {run.plies}-ply ·{' '}
+                  {t(run.play_reference ? 'playLatency' : 'matchAnalysis')} ·{' '}
+                  {run.engine_name} · {formatNumber(run.plies)}-ply ·{' '}
                   {statusLabel(run.status)}
                 </strong>
                 <p>{progress(run)}</p>
@@ -393,103 +419,94 @@ export default function BenchmarkWorkspace({
           ))}
         </section>
       )}
+      {!play && (
+        <section className="benchmark-reference" aria-label={t('reference')}>
+          {reference ? (
+            <>
+              <p>
+                <strong>{reference.name}</strong>
+                {' · '}
+                {t('referenceFacts', {
+                  points: formatNumber(reference.match_length),
+                  games: formatNumber(reference.total_games),
+                  moves: formatNumber(reference.total_moves),
+                })}
+              </p>
+              <details>
+                <summary>{t('methodology')}</summary>
+                <p>
+                  {t('referenceVersion', {
+                    version: formatNumber(reference.version),
+                  })}{' '}
+                  · {reference.id}
+                </p>
+                {engineId === 'gnubg' && (
+                  <p>
+                    {t('protocol')}: {reference.protocol.id} ·{' '}
+                    {reference.protocol.game_timeout_seconds == null
+                      ? t('noTimeout')
+                      : t('timeout', {
+                          seconds: formatNumber(
+                            reference.protocol.game_timeout_seconds,
+                          ),
+                        })}
+                  </p>
+                )}
+                <p>
+                  SHA-256 <code>{reference.sha256}</code>
+                </p>
+                <p>{t('timing')}</p>
+              </details>
+            </>
+          ) : referenceError === undefined ? (
+            <p role="status">{t('loading')}</p>
+          ) : null}
+        </section>
+      )}
+      <BenchmarkComparison runs={modeRuns} />
       <section className="benchmark-history">
         <h2>{t('history')}</h2>
         {loading ? (
           <p role="status">{t('loading')}</p>
-        ) : runs.length === 0 ? (
+        ) : modeRuns.length === 0 ? (
           <p>{t('empty')}</p>
         ) : (
           <div className="benchmark-table-scroll">
             <table>
               <thead>
                 <tr>
-                  {(
-                    [
-                      'date',
-                      'machine',
-                      'engineVersion',
-                      'depth',
-                      'reference',
-                      'total',
-                      'average',
-                      'playAverage',
-                      'status',
-                    ] as const
-                  ).map((key) => (
-                    <th key={key} scope="col">
-                      {t(key)}
-                    </th>
-                  ))}
+                  <th scope="col">{t('date')}</th>
+                  <th scope="col">{t('engineColumn')}</th>
+                  <th scope="col">{t('depth')}</th>
+                  {!play && <th scope="col">{t('total')}</th>}
+                  <th scope="col">{t(play ? 'playAverage' : 'average')}</th>
+                  <th scope="col">{t('status')}</th>
+                  <th scope="col">{t('details')}</th>
                 </tr>
               </thead>
               <tbody>
-                {runs.map((run) => (
+                {modeRuns.map((run) => (
                   <tr key={run.id}>
                     <td>
                       <time dateTime={run.created_at}>
                         {date(run.created_at)}
                       </time>
                     </td>
-                    <td>
-                      <strong>{run.machine.name}</strong>
-                      <small>
-                        {run.machine.os} · {run.machine.architecture}
-                      </small>
-                      <small>
-                        {run.machine.cpu_model ?? '—'} ·{' '}
-                        {run.machine.logical_cpus == null
-                          ? '—'
-                          : t('cpus', { count: run.machine.logical_cpus })}{' '}
-                        ·{' '}
-                        {run.machine.memory_bytes == null
-                          ? '—'
-                          : `${formatNumber(run.machine.memory_bytes / 2 ** 30, { maximumFractionDigits: 1 })} GiB`}
-                      </small>
-                    </td>
-                    <td>
-                      {run.engine_name}
-                      <small>{run.engine_version}</small>
-                      <BenchmarkInitialization
-                        milliseconds={run.startup_elapsed_ms}
-                      />
-                      <small className="benchmark-path">
-                        {run.engine_path}
-                      </small>
-                    </td>
-                    <td>{run.plies}-ply</td>
-                    <td>
-                      {run.play_reference ? (
-                        <>
-                          {t('playLatency')}
-                          <small>{run.play_reference.id}</small>
-                          <small>{run.play_reference.protocol_id}</small>
-                        </>
-                      ) : (
-                        run.reference && (
-                          <>
-                            {run.reference.name}
-                            <small>
-                              {t('referenceVersion', {
-                                version: run.reference.version,
-                              })}{' '}
-                              · {run.protocol?.id}
-                            </small>
-                          </>
-                        )
-                      )}
-                    </td>
-                    <td data-benchmark-time>
+                    <td>{run.engine_name}</td>
+                    <td>{formatNumber(run.plies)}-ply</td>
+                    {!play && (
+                      <td data-benchmark-time>
+                        {time(run, run.total_elapsed_ms)}
+                      </td>
+                    )}
+                    <td
+                      className={play ? 'benchmark-latency' : undefined}
+                      data-benchmark-time
+                    >
                       {time(
                         run,
-                        run.play_reference ? null : run.total_elapsed_ms,
+                        play ? run.average_turn_ms : run.average_move_ms,
                       )}
-                    </td>
-                    <td data-benchmark-time>
-                      {time(run, run.average_move_ms)}
-                    </td>
-                    <td className="benchmark-latency">
-                      {time(run, run.average_turn_ms)}
                     </td>
                     <td>
                       <span
@@ -504,6 +521,9 @@ export default function BenchmarkWorkspace({
                         </small>
                       )}
                     </td>
+                    <td>
+                      <BenchmarkRunDetails run={run} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -512,5 +532,62 @@ export default function BenchmarkWorkspace({
         )}
       </section>
     </div>
+  );
+}
+
+function BenchmarkRunDetails({ run }: { run: BenchmarkRun }) {
+  const t = useBenchmarkText();
+  const { formatNumber } = useI18n();
+  const reference = run.play_reference ?? run.reference;
+
+  return (
+    <details className="benchmark-row-details">
+      <summary>{t('details')}</summary>
+      <div>
+        <strong>{run.machine.name}</strong>
+        <small>
+          {run.machine.os} · {run.machine.architecture}
+        </small>
+        <small>
+          {[
+            run.machine.cpu_model,
+            run.machine.logical_cpus == null
+              ? undefined
+              : t('cpus', { count: formatNumber(run.machine.logical_cpus) }),
+            run.machine.memory_bytes == null
+              ? undefined
+              : `${formatNumber(run.machine.memory_bytes / 2 ** 30, { maximumFractionDigits: 1 })} GiB`,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </small>
+        <small>{run.engine_version}</small>
+        <BenchmarkInitialization milliseconds={run.startup_elapsed_ms} />
+        <small>
+          <code>{run.engine_path}</code>
+        </small>
+        {reference && (
+          <>
+            {run.reference && (
+              <small>
+                {run.reference.name} ·{' '}
+                {t('referenceVersion', {
+                  version: formatNumber(run.reference.version),
+                })}
+              </small>
+            )}
+            <small>
+              <code>{reference.id}</code>
+            </small>
+            <small>
+              <code>{run.play_reference?.protocol_id ?? run.protocol?.id}</code>
+            </small>
+            <small>
+              SHA-256 <code>{reference.sha256}</code>
+            </small>
+          </>
+        )}
+      </div>
+    </details>
   );
 }

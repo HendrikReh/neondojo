@@ -14,6 +14,9 @@ test('native play-turn latency uses the saved playing depth and persists', async
   const settings = await (await page.request.get('/api/settings')).json();
   await page.goto('/');
   await page.getByRole('tab', { name: 'Extras', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Play-turn latency', exact: true })
+    .click();
   const started = page.waitForResponse((response) =>
     response.url().endsWith('/api/benchmarks/play'),
   );
@@ -35,10 +38,10 @@ test('native play-turn latency uses the saved playing depth and persists', async
   expect(run.average_move_ms).toBeNull();
   await page.reload();
   await page.getByRole('tab', { name: 'Extras', exact: true }).click();
-  const row = page
-    .getByRole('row')
-    .filter({ hasText: queued.play_reference.id })
-    .first();
+  await page
+    .getByRole('button', { name: 'Play-turn latency', exact: true })
+    .click();
+  const row = page.getByRole('row').filter({ hasText: 'Completed' }).first();
   await expect(row).toContainText('Completed');
   await expect(row.locator('.benchmark-latency')).toHaveText(/\d.* ms/);
 });

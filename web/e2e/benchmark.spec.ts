@@ -46,7 +46,7 @@ const run = (id: string, status = 'completed', plies = 0) => ({
   analyzed_moves: status === 'completed' ? 460 : 130,
   error: status === 'failed' ? 'Engine version changed' : null,
 });
-async function backend(page: Page) {
+async function backend(page: Page, savedSettings = settings) {
   page.on('pageerror', (error) => {
     throw error;
   });
@@ -81,7 +81,7 @@ async function backend(page: Page) {
   await page.route('**/api/settings', (route) => {
     if (route.request().method() !== 'GET')
       writes.push(route.request().postDataJSON());
-    return route.fulfill({ json: settings });
+    return route.fulfill({ json: savedSettings });
   });
   await page.route('**/api/engines', (route) =>
     route.fulfill({
@@ -150,16 +150,38 @@ async function open(page: Page) {
 test('play-turn latency starts independently and has its own history metric', async ({
   page,
 }, testInfo) => {
-  const api = await backend(page);
+  const api = await backend(page, { ...settings, analysis_plies: 0, play_plies: 0 });
   await page.setViewportSize({ width: 1800, height: 1169 });
+  await page.route('**/api/engines', (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: 'gnubg',
+          name: 'GNU Backgammon',
+          available: true,
+          version: 'GNUbg 1.08',
+          plies: [0, 1, 2, 3, 4],
+        },
+        {
+          id: 'bgsage',
+          name: 'Open Sage',
+          available: true,
+          version: 'Open Sage 2.0',
+          plies: [1, 2, 3, 4],
+        },
+      ],
+    }),
+  );
   let playStarts = 0;
   const playRun = {
     ...run('play-completed', 'completed', settings.play_plies),
+    engine_id: 'bgsage',
+    engine_name: 'Open Sage',
     reference: null,
     protocol: null,
     play_reference: {
       id: 'wc2014-checker-turns-v1',
-      protocol_id: 'gnubg-checker-turn-v1',
+      protocol_id: 'bgsage-checker-turn-v3-1ply-2threads-gnubg-rules',
       sha256: 'abc',
       total_turns: 11,
     },
@@ -173,7 +195,7 @@ test('play-turn latency starts independently and has its own history metric', as
   await page.route('**/api/benchmarks/play', (route) => {
     expect(route.request().method()).toBe('POST');
     expect(route.request().postDataJSON()).toEqual({
-      engine_id: 'gnubg',
+      engine_id: 'bgsage',
       plies: 1,
     });
     playStarts++;
@@ -190,15 +212,80 @@ test('play-turn latency starts independently and has its own history metric', as
       : route.fallback(),
   );
   await open(page);
-  await page.getByRole('checkbox', { name: '2-ply', exact: true }).uncheck();
+  const engine = page.getByLabel('Benchmark engine');
+  const depth = (ply: number) =>
+    page.getByRole('checkbox', { name: `${ply}-ply`, exact: true });
+  const playingDepth = page.getByLabel('Playing depth');
+  const playMode = page.getByRole('button', {
+    name: 'Play-turn latency',
+    exact: true,
+  });
+  await expect(depth(0)).toBeChecked();
+  await depth(1).check();
+  await depth(1).uncheck();
+  await playMode.click();
+  await playingDepth.selectOption('0');
+  await page.getByRole('button', { name: 'Match analysis', exact: true }).click();
+
+  await engine.selectOption('bgsage');
+  await expect(depth(0)).toBeDisabled();
+  await expect(depth(2)).toBeChecked();
+  await expect(
+    page.getByText('2-ply selected because the requested depth is unavailable.'),
+  ).toBeVisible();
+  await depth(3).check();
+  await engine.selectOption('gnubg');
+  await expect(depth(0)).toBeChecked();
+  await expect(depth(2)).not.toBeChecked();
+  await expect(depth(3)).not.toBeChecked();
+  await playMode.click();
+  await expect(playingDepth).toHaveValue('0');
+  await engine.selectOption('bgsage');
+  await expect(playingDepth).toHaveValue('2');
+  await expect(
+    page.getByText('2-ply selected because the requested depth is unavailable.'),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      'Measures reference checker turns with the selected engine',
+      { exact: false },
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('columnheader', { name: 'Ø analysis time / move' }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText('11 points · 10 games · 460 checker moves'),
+  ).toBeHidden();
+  await playingDepth.selectOption('1');
+  await engine.selectOption('gnubg');
+  await expect(playingDepth).toHaveValue('0');
+  await engine.selectOption('bgsage');
+  await expect(playingDepth).toHaveValue('1');
   await page.getByRole('button', { name: 'Measure play-turn latency' }).click();
-  const row = page
-    .getByRole('row')
-    .filter({ hasText: 'wc2014-checker-turns-v1' });
+  const row = page.getByRole('row').filter({ hasText: '42 ms' });
+  await expect(row).toContainText('Open Sage');
   await expect(row).toContainText('1-ply');
   await expect(row).toContainText('11 / 11 checker turns');
   await expect(row).toContainText('42 ms');
-  await expect(row.locator('[data-benchmark-time]')).toHaveText(['—', '—']);
+  await expect(page.locator('.benchmark-history tbody tr')).toHaveCount(1);
+  await row.getByText('Details', { exact: true }).click();
+  await expect(
+    row.getByText('wc2014-checker-turns-v1', { exact: true }),
+  ).toBeVisible();
+  await row.getByText('Details', { exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Match analysis', exact: true })
+    .click();
+  await expect(
+    page.getByRole('checkbox', { name: '2-ply', exact: true }),
+  ).toBeChecked();
+  await expect(
+    page.getByRole('columnheader', { name: 'Ø play-turn latency' }),
+  ).toHaveCount(0);
+  await page
+    .getByRole('button', { name: 'Play-turn latency', exact: true })
+    .click();
   expect(playStarts).toBe(1);
   expect(api.starts).toHaveLength(0);
   for (const [width, height] of [
@@ -234,11 +321,15 @@ test('Extras shows reference, saved history and only the saved default ply', asy
   await expect(page.locator('.benchmark-reference')).toContainText(
     '11 points · 10 games · 460 checker moves',
   );
-  await expect(page.locator('.benchmark-reference')).toContainText(
-    'No time limit',
-  );
+  await page.locator('.benchmark-reference summary').click();
+  await expect(page.getByText('No time limit', { exact: false })).toBeVisible();
+  await page.locator('.benchmark-reference summary').click();
   const rows = page.locator('.benchmark-history tbody tr');
   await expect(rows).toHaveCount(2);
+  await expect(
+    rows.first().getByText('Backend Mac', { exact: true }),
+  ).toBeHidden();
+  await rows.first().getByText('Details', { exact: true }).click();
   for (const text of [
     'Backend Mac',
     'Apple M4',

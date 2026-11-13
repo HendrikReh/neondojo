@@ -167,7 +167,13 @@ Normale Einstellungsänderungen werden mit „Anwenden“ übernommen. Die Profi
 
 **Extras** contains **Benchmark**, **Engine duels**, **Database backup**,
 and **Versions**. Use Left/Right or Home/End to switch tabs. BG Tutor remembers
-the selected tool.
+the selected tool. The link in Settings opens **Benchmark**.
+
+Benchmark uses one engine selector for **Match analysis** and **Play-turn
+latency**. Each engine keeps its own depth selections while the app is open.
+The selected measurement type determines the setup, result columns and
+comparison. Active runs remain visible across both measurement types.
+Reference methodology and per-run technical data can be expanded on demand.
 
 Engine duels lists series beside the selected result on wide desktop windows.
 **New series** opens setup with the optional seed under **Advanced**. Series
