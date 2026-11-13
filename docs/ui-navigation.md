@@ -96,8 +96,10 @@ returns focus to the button on close. Overview also shows the next scheduled
 card when the due list is empty.
 
 In Flashcards & Anki, **Manage decks** opens a list searchable by deck name.
-**Import Anki package** opens a file picker and imports the source decks and
-rendered card faces when the backend has Anki's Python package configured.
+**Import Anki package** accepts several `.apkg` files at once and imports their
+source decks and rendered card faces when the backend has Anki's Python package
+configured. The import shows progress and lists failed files by name. To add
+multiple BG Tutor packages to the selected deck, use **Import BG Tutor Anki deck**.
 In **Manage decks**, create, open, rename or delete a deck. When a specific deck
 is selected, its study and export actions appear below the search.
 **Send to Anki** transfers the selected native deck to local Anki Desktop

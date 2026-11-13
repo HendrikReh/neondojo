@@ -30,6 +30,10 @@
   color: var(--ui-muted);
   margin-top: 8px;
 }
+.learning-anki-error {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
 .learning-anki-auto-sync {
   display: flex;
   flex-wrap: wrap;

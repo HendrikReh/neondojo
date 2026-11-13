@@ -438,12 +438,16 @@ export default function LearningWorkspace({
   const specialPracticeTrigger = useRef<HTMLButtonElement | null>(null);
   const [practiceStarting, setPracticeStarting] = useState(false);
   const [practiceError, setPracticeError] = useState<unknown>();
-  const [importingAnki, setImportingAnki] = useState(false);
+  const [ankiImportProgress, setAnkiImportProgress] = useState<{
+    file: string;
+    current: number;
+    total: number;
+  }>();
   const [ankiNotice, setAnkiNotice] = useState<string>();
   const [ankiError, setAnkiError] = useState<string>();
   const [sendingAnki, setSendingAnki] = useState(false);
   const [syncingAnki, setSyncingAnki] = useState(false);
-  const ankiBusy = importingAnki || sendingAnki || syncingAnki;
+  const ankiBusy = !!ankiImportProgress || sendingAnki || syncingAnki;
   const ankiInput = useRef<HTMLInputElement>(null);
   const externalAnkiInput = useRef<HTMLInputElement>(null);
   const practiceRequest = useRef<AbortController | null>(null);
@@ -587,42 +591,80 @@ export default function LearningWorkspace({
       }
     }
   }
-  async function importAnki(file: File, external = false) {
-    if (ankiBusy || (!external && isCollectionScope(deckId))) return;
-    setImportingAnki(true);
+  async function importAnki(files: File[], external = false) {
+    if (!files.length || ankiBusy || (!external && isCollectionScope(deckId)))
+      return;
     setAnkiNotice(undefined);
     setAnkiError(undefined);
+
+    const path = external ? '/study/anki-imports' : `/decks/${deckId}/import.apkg`;
+    const failures: string[] = [];
+    const importedDecks = new Set<string>();
+    let cards = 0;
+    let added = 0;
+    let existing = 0;
+
     try {
-      const body = new FormData();
-      body.set('file', file);
-      if (external) {
-        const imported = await request<ImportedAnkiDeck[]>('/study/anki-imports', {
-          method: 'POST',
-          body,
+      for (const [index, file] of files.entries()) {
+        setAnkiImportProgress({
+          file: file.name,
+          current: index + 1,
+          total: files.length,
         });
-        setAnkiNotice(
-          practiceT('externalAnkiImported', {
-            decks: formatNumber(imported.length),
-            cards: formatNumber(imported.reduce((count, deck) => count + deck.cards, 0)),
-          }),
-        );
-      } else {
-        const result = await request<AddCardsResult>(
-          `/decks/${deckId}/import.apkg`,
-          { method: 'POST', body },
-        );
-        setAnkiNotice(
-          practiceT('ankiImported', {
-            added: formatNumber(result.added),
-            existing: formatNumber(result.updated),
+        try {
+          const body = new FormData();
+          body.set('file', file);
+          const options = { method: 'POST', body };
+          if (external) {
+            const imported = await request<ImportedAnkiDeck[]>(path, options);
+            for (const deck of imported) {
+              importedDecks.add(deck.name);
+              cards += deck.cards;
+            }
+          } else {
+            const result = await request<AddCardsResult>(path, options);
+            added += result.added;
+            existing += result.updated;
+          }
+        } catch (failure) {
+          failures.push(
+            practiceT('ankiImportFailed', {
+              file: file.name,
+              error: formatError(failure),
+            }),
+          );
+        }
+      }
+
+      const successful = files.length - failures.length;
+      const summary = [];
+      if (files.length > 1) {
+        summary.push(
+          practiceT('ankiPackagesImported', {
+            count: formatNumber(successful),
+            total: formatNumber(files.length),
           }),
         );
       }
-      onChanged();
-    } catch (failure) {
-      setAnkiError(formatError(failure));
+      if (successful) {
+        summary.push(
+          external
+            ? practiceT('externalAnkiImported', {
+                decks: formatNumber(importedDecks.size),
+                cards: formatNumber(cards),
+              })
+            : practiceT('ankiImported', {
+                added: formatNumber(added),
+                existing: formatNumber(existing),
+              }),
+        );
+        cardSearch.invalidateResults();
+        onChanged();
+      }
+      if (summary.length) setAnkiNotice(summary.join(' · '));
+      if (failures.length) setAnkiError(failures.join('\n'));
     } finally {
-      setImportingAnki(false);
+      setAnkiImportProgress(undefined);
     }
   }
   async function sendToAnki(deck: Deck) {
@@ -975,10 +1017,11 @@ export default function LearningWorkspace({
           type="file"
           hidden
           accept=".apkg"
+          multiple
           onChange={(event) => {
-            const file = event.target.files?.[0];
+            const files = Array.from(event.target.files ?? []);
             event.target.value = '';
-            if (file) void importAnki(file);
+            void importAnki(files);
           }}
         />
         <ActionButton
@@ -1128,10 +1171,11 @@ export default function LearningWorkspace({
               type="file"
               hidden
               accept=".apkg"
+              multiple
               onChange={(event) => {
-                const file = event.target.files?.[0];
+                const files = Array.from(event.target.files ?? []);
                 event.target.value = '';
-                if (file) void importAnki(file, true);
+                void importAnki(files, true);
               }}
             />
             <ActionButton
@@ -1145,11 +1189,21 @@ export default function LearningWorkspace({
           </>
         )}
       </div>
-      {importingAnki && <p role="status">{practiceT('ankiImporting')}</p>}
+      {ankiImportProgress && (
+        <p role="status">
+          {practiceT('ankiImporting', {
+            file: ankiImportProgress.file,
+            current: formatNumber(ankiImportProgress.current),
+            total: formatNumber(ankiImportProgress.total),
+          })}
+        </p>
+      )}
       {sendingAnki && <p role="status">{practiceT('sendingAnki')}</p>}
       {syncingAnki && <p role="status">{practiceT('syncingAnkiReviews')}</p>}
       {ankiNotice && <p role="status">{ankiNotice}</p>}
-      {ankiError && <p role="alert">{ankiError}</p>}
+      {ankiError && (
+        <p className="learning-anki-error" role="alert">{ankiError}</p>
+      )}
       {!!workspaceError && <p role="alert">{formatError(workspaceError)}</p>}
       {missingDeckToken !== undefined &&
         missingDeckToken === requestedDeck?.token && (

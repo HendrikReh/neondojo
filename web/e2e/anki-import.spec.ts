@@ -1,19 +1,22 @@
 import { execFile } from 'node:child_process';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { promisify } from 'node:util';
 import { expect, test } from './test';
 
 const run = promisify(execFile);
 
-test('imports an external Anki package and keeps reviews on reimport', async ({
+test('imports a batch of Anki packages and keeps reviews on reimport', async ({
   page,
 }, info) => {
   const python = process.env.BGTUTOR_ANKI_PYTHON;
   test.skip(!python, 'Set BGTUTOR_ANKI_PYTHON to an interpreter with Anki');
   if (!python) return;
   const fixture = info.outputPath('external.apkg');
+  const invalid = info.outputPath('broken.apkg');
+  const second = info.outputPath('second.apkg');
   await mkdir(dirname(fixture), { recursive: true });
+  await writeFile(invalid, 'Invalid Anki package');
   await run(python, [
     '-I',
     '-c',
@@ -26,22 +29,24 @@ from anki.collection import Collection, ExportAnkiPackageOptions
 from anki.lang import set_lang
 
 set_lang('en')
-with TemporaryDirectory() as temporary:
-    collection = Collection(str(Path(temporary) / 'collection.anki2'))
-    try:
-        deck = collection.decks.id('External study::Cube')
-        note = collection.new_note(collection.models.by_name('Basic'))
-        pixel = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==')
-        image = collection.media.write_data('diagram.png', pixel)
-        note['Front'] = f'External practice question<img src="{image}">'
-        note['Back'] = 'External practice answer'
-        note.tags = ['Cube::Reference']
-        collection.add_note(note, deck)
-        collection.export_anki_package(out_path=sys.argv[1], options=ExportAnkiPackageOptions(legacy=False, with_media=True), limit=None)
-    finally:
-        collection.close()
+for package_path, name in zip(sys.argv[1:], ['External study::Cube', 'External study::Checker']):
+    with TemporaryDirectory() as temporary:
+        collection = Collection(str(Path(temporary) / 'collection.anki2'))
+        try:
+            deck = collection.decks.id(name)
+            note = collection.new_note(collection.models.by_name('Basic'))
+            pixel = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==')
+            image = collection.media.write_data('diagram.png', pixel)
+            note['Front'] = f'External practice question<img src="{image}">'
+            note['Back'] = 'External practice answer'
+            note.tags = ['Cube::Reference']
+            collection.add_note(note, deck)
+            collection.export_anki_package(out_path=package_path, options=ExportAnkiPackageOptions(legacy=False, with_media=True), limit=None)
+        finally:
+            collection.close()
 `,
     fixture,
+    second,
   ]);
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
   await page.goto('/');
@@ -54,22 +59,29 @@ with TemporaryDirectory() as temporary:
     name: 'Import Anki package',
     exact: true,
   });
-  async function upload() {
+  async function upload(files: string | string[], summary: string) {
     const chooser = page.waitForEvent('filechooser');
     await open.click();
-    await (await chooser).setFiles(fixture);
+    await (await chooser).setFiles(files);
     await expect(
-      study
-        .getByRole('status')
-        .filter({ hasText: 'Cards imported 1 · Decks 1' }),
+      study.getByRole('status').filter({ hasText: summary }),
     ).toBeVisible();
   }
-  await upload();
+  await upload([fixture, invalid, second], 'Packages imported 2 of 3');
+  await expect(study.getByRole('alert')).toContainText('broken.apkg');
   const decks = await (await page.request.get('/api/decks')).json();
   const deck = decks.find(
     (item: { name: string }) => item.name === 'External study::Cube',
   );
   expect(deck).toBeTruthy();
+  expect(decks).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        name: 'External study::Checker',
+        card_count: 1,
+      }),
+    ]),
+  );
   const cardsUrl = `/api/decks/${deck.id}/cards`;
   const {
     items: [card],
@@ -105,7 +117,8 @@ with TemporaryDirectory() as temporary:
   await study
     .getByRole('button', { name: 'Back to card search', exact: true })
     .click();
-  await upload();
+  await upload(fixture, 'Cards imported 1 · Decks 1');
+  await expect(study.getByRole('alert')).toHaveCount(0);
   const { items } = await (await page.request.get(cardsUrl)).json();
   expect(items).toHaveLength(1);
   expect(items[0]).toMatchObject({ id: card.id, review_count: 1 });
