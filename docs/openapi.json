@@ -3711,6 +3711,19 @@
             }
           },
           {
+            "name": "page",
+            "in": "path",
+            "description": "One-based result page. Mutually exclusive with `after`.",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
             "name": "limit",
             "in": "path",
             "required": true,
@@ -5720,6 +5733,32 @@
                 "null"
               ],
               "format": "uuid"
+            }
+          },
+          {
+            "name": "exclude_id",
+            "in": "path",
+            "description": "Exclude the destination profile when choosing a profile to merge.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "page",
+            "in": "path",
+            "description": "One-based result page. Mutually exclusive with `after`.",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
             }
           }
         ],
@@ -11036,6 +11075,17 @@
             ],
             "format": "date"
           },
+          "player_sides": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "description": "Sides belonging to the requested player profile, when filtered by player_id.\n0 is White and 1 is Black. Both may belong to the same profile."
+          },
           "position_count": {
             "type": "integer",
             "format": "int32"
@@ -12696,6 +12746,14 @@
               "string",
               "null"
             ]
+          },
+          "total": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Total matching rows when `page` is supplied."
           }
         }
       },
@@ -14716,7 +14774,7 @@
           "items": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/PlayerProfile"
+              "$ref": "#/components/schemas/PlayerSearchHit"
             }
           },
           "next_cursor": {
@@ -14725,6 +14783,14 @@
               "null"
             ],
             "format": "uuid"
+          },
+          "total": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Total matching players when `page` is supplied."
           }
         }
       },
@@ -14822,6 +14888,29 @@
             "format": "double"
           }
         }
+      },
+      "PlayerSearchHit": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PlayerProfile"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "matching_alias": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PlayerAlias",
+                    "description": "Alias responsible for the hit when the visible name does not match."
+                  }
+                ]
+              }
+            }
+          }
+        ]
       },
       "Position": {
         "type": "object",

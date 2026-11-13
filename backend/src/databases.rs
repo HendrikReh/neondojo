@@ -88,6 +88,11 @@ pub struct DatabaseMatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[sqlx(skip)]
     pub occurrence: Option<LibraryOccurrence>,
+    /// Sides belonging to the requested player profile, when filtered by player_id.
+    /// 0 is White and 1 is Black. Both may belong to the same profile.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[sqlx(skip)]
+    pub player_sides: Option<Vec<i16>>,
     pub id: Uuid,
     /// False for independent saved-position context whose source match was deleted.
     pub source_available: bool,
@@ -131,6 +136,9 @@ pub struct DatabaseMatch {
 pub struct LibraryPage {
     pub items: Vec<DatabaseMatch>,
     pub next_cursor: Option<String>,
+    /// Total matching rows when `page` is supplied.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total: Option<i64>,
 }
 #[derive(Default, Clone, Serialize, Deserialize, IntoParams)]
 pub struct LibraryQuery {
@@ -164,6 +172,9 @@ pub struct LibraryQuery {
     /// equal values use ascending UUID order for stable pagination.
     pub direction: Option<String>,
     pub after: Option<String>,
+    /// One-based result page. Mutually exclusive with `after`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page: Option<i64>,
     pub limit: Option<i64>,
 }
 #[derive(Serialize, Deserialize)]
@@ -560,6 +571,8 @@ fn like(q: &mut QueryBuilder<'_, Postgres>, expr: &str, value: &Option<String>) 
             .push_bind(literal_pattern(v.trim()));
     }
 }
+const PLAYER_MATCH_FROM: &str = "FROM match_players mp JOIN player_aliases a ON a.id=mp.alias_id WHERE mp.match_id=m.id AND a.profile_id=";
+
 fn library_filters(
     q: &mut QueryBuilder<'_, Postgres>,
     p: &LibraryQuery,
@@ -573,8 +586,10 @@ fn library_filters(
         q.push(" AND m.id IN (SELECT id FROM matches WHERE search_text LIKE ").push_bind(pattern.clone()).push(" OR lower(display_name) LIKE ").push_bind(pattern.clone()).push(" OR lower(tournament) LIKE ").push_bind(pattern.clone()).push(" OR lower(round) LIKE ").push_bind(pattern.clone()).push(" UNION SELECT coalesce(n.match_uuid,np.match_uuid,ng.match_uuid,nm.match_uuid) FROM annotations n LEFT JOIN positions np ON np.id=n.position_uuid LEFT JOIN match_games ng ON ng.id=n.game_uuid LEFT JOIN match_moves nm ON nm.id=n.move_uuid WHERE n.search_text LIKE ").push_bind(pattern).push(")");
     }
     if let Some(id) = p.player_id {
-        q.push(" AND EXISTS(SELECT 1 FROM match_players mp JOIN player_aliases a ON a.id=mp.alias_id WHERE mp.match_id=m.id AND a.profile_id=")
-            .push_bind(id).push(")");
+        q.push(" AND EXISTS(SELECT 1 ")
+            .push(PLAYER_MATCH_FROM)
+            .push_bind(id)
+            .push(")");
     }
     if let Some(v) = p.player.as_deref().filter(|v| !v.trim().is_empty()) {
         let pattern = literal_pattern(v.trim());
@@ -738,6 +753,7 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
         return Err(ApiError::invalid("limit must be between 1 and 200"));
     }
     let after = p.after.take();
+    let offset = crate::search::page_offset(p.page.take(), after.is_some(), limit)?;
     p.limit = None;
     let scope = format!(
         "{:x}",
@@ -829,8 +845,26 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
             return Err(ApiError::invalid("Cursor contains an invalid sort value"));
         }
     }
-    let mut q = QueryBuilder::<Postgres>::new(format!(
-        "SELECT {MATCH_COLUMNS}{occurrence_columns},({expr})::text AS cursor_key {MATCH_FROM}{occurrence_join} WHERE NOT m.collection_only"
+    let mut q = QueryBuilder::<Postgres>::new("");
+    if offset.is_some() {
+        q.push("WITH totals AS (SELECT count(*) AS total FROM matches m");
+        if occurrences {
+            q.push(" LEFT JOIN play_sessions ps ON ps.library_match_id=m.id")
+                .push(occurrence_join);
+        }
+        q.push(" WHERE NOT m.collection_only");
+        library_filters(&mut q, &p, &date_field)?;
+        q.push("), page AS (");
+    }
+    q.push(format!("SELECT {MATCH_COLUMNS}{occurrence_columns}"));
+    if let Some(id) = p.player_id {
+        q.push(",ARRAY(SELECT mp.side ")
+            .push(PLAYER_MATCH_FROM)
+            .push_bind(id)
+            .push(" ORDER BY mp.side) AS player_sides");
+    }
+    q.push(format!(
+        ",({expr})::text AS cursor_key,({expr}) AS page_sort {MATCH_FROM}{occurrence_join} WHERE NOT m.collection_only"
     ));
     library_filters(&mut q, &p, &date_field)?;
     if let Some(c) = cursor {
@@ -870,17 +904,36 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
         q.push(",hit.ordinal ASC,hit.id ASC");
     }
     q.push(" LIMIT ").push_bind(limit + 1);
-    let rows = q
+    if let Some(offset) = offset {
+        q.push(" OFFSET ").push_bind(offset)
+            .push(") SELECT page.*,totals.total FROM totals LEFT JOIN page ON true ORDER BY page_sort ")
+            .push(if direction == "asc" { "ASC NULLS LAST" } else { "DESC NULLS LAST" })
+            .push(",id ASC");
+        if occurrences {
+            q.push(",occurrence_ordinal ASC,occurrence_id ASC");
+        }
+    }
+    let mut rows = q
         .build()
         .fetch_all(pool)
         .await
         .map_err(anyhow::Error::from)?;
+    let total = if offset.is_some() {
+        let total = rows[0].get::<i64, _>("total");
+        rows.retain(|row| row.get::<Option<Uuid>, _>("id").is_some());
+        Some(total)
+    } else {
+        None
+    };
     let more = rows.len() > limit as usize;
     let mut items = Vec::new();
     let mut last = None;
     for row in rows.iter().take(limit as usize) {
         let mut m = <DatabaseMatch as sqlx::FromRow<sqlx::postgres::PgRow>>::from_row(row)
             .map_err(anyhow::Error::from)?;
+        if p.player_id.is_some() {
+            m.player_sides = Some(row.try_get("player_sides").map_err(anyhow::Error::from)?);
+        }
         let occurrence = if occurrences {
             let id = row.try_get("occurrence_id").map_err(anyhow::Error::from)?;
             m.occurrence = Some(LibraryOccurrence {
@@ -924,7 +977,11 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
     } else {
         None
     };
-    Ok(LibraryPage { items, next_cursor })
+    Ok(LibraryPage {
+        items,
+        next_cursor,
+        total,
+    })
 }
 async fn database_match(pool: &PgPool, id: Uuid) -> ApiResult<DatabaseMatch> {
     sqlx::query_as(&format!(

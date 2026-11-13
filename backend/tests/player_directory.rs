@@ -52,6 +52,30 @@ async fn source_aliases_stay_separate_until_assigned_and_apply_to_future_imports
     )
     .await;
     assert_eq!(updated["display_name"], "Anna Beispiel");
+    let renamed = call(
+        &app,
+        "GET",
+        "/api/players?q=example&page=1",
+        Value::Null,
+        200,
+    )
+    .await;
+    assert_eq!(renamed["items"][0]["id"], id);
+    assert_eq!(renamed["items"][0]["matching_alias"]["name"], "example");
+    assert_eq!(
+        renamed["items"][0]["matching_alias"]["platform"],
+        updated["aliases"][0]["platform"]
+    );
+    let other_profiles = call(
+        &app,
+        "GET",
+        &format!("/api/players?q=example&page=1&exclude_id={id}"),
+        Value::Null,
+        200,
+    )
+    .await;
+    assert_eq!(other_profiles["total"], 1);
+    assert_ne!(other_profiles["items"][0]["id"], id);
     call(
         &app,
         "PUT",
@@ -88,6 +112,55 @@ async fn source_aliases_stay_separate_until_assigned_and_apply_to_future_imports
     .await;
     assert_eq!(matches["items"].as_array().unwrap().len(), 2);
     assert!(matches["next_cursor"].is_string());
+    let matches = call(
+        &app,
+        "GET",
+        &format!("/api/library/matches?player_id={id}&page=1"),
+        Value::Null,
+        200,
+    )
+    .await;
+    for row in matches["items"].as_array().unwrap() {
+        let expected = if row["white"] == "example" { 0 } else { 1 };
+        assert_eq!(row["player_sides"], json!([expected]));
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn numbered_player_pages_preserve_search_order_and_total(pool: PgPool) {
+    sqlx::query(
+        "INSERT INTO player_profiles(source_name,first_name)
+         SELECT 'Player ' || to_char(52-n,'FM00'),
+                'Search group ' || to_char(least(n,50),'FM00')
+         FROM generate_series(1,51) n",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let app = api::router(AppState::new(pool, Engine::new("unused".into())));
+    let path = "/api/players?q=Search%20group";
+    let first = call(&app, "GET", &format!("{path}&page=1"), Value::Null, 200).await;
+    assert_eq!(first["total"], 51);
+    assert_eq!(first["items"].as_array().unwrap().len(), 50);
+    assert_eq!(first["items"][0]["display_name"], "Search group 01");
+    assert_eq!(first["items"][49]["display_name"], "Search group 50");
+    let cursor = first["next_cursor"].as_str().unwrap();
+    let second = call(&app, "GET", &format!("{path}&page=2"), Value::Null, 200).await;
+    let continued = call(
+        &app,
+        "GET",
+        &format!("{path}&after={cursor}"),
+        Value::Null,
+        200,
+    )
+    .await;
+    assert_eq!(second["total"], 51);
+    assert_eq!(second["items"], continued["items"]);
+    assert_eq!(second["items"].as_array().unwrap().len(), 1);
+    let beyond = call(&app, "GET", &format!("{path}&page=3"), Value::Null, 200).await;
+    assert_eq!(beyond["total"], 51);
+    assert_eq!(beyond["items"], json!([]));
 }
 
 #[sqlx::test(migrations = "./migrations")]

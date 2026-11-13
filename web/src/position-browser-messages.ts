@@ -782,6 +782,8 @@ const translations = {
     'Zapisana pozycja przed ruchem',
     'Posizione salvata prima della mossa',
   ],
+  firstPage: ['First', 'Anfang', 'Inicio', 'Début', 'Początek', 'Inizio'],
+  lastPage: ['Last', 'Ende', 'Fin', 'Fin', 'Koniec', 'Fine'],
   previousPage: [
     'Previous page',
     'Vorherige Seite',

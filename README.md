@@ -248,11 +248,11 @@ The named collections, sortable tables and bulk actions draw on [ChessBase's dat
 
 ## Player database
 
-Open **Player database** to find players by display name or imported alias. A profile shows its match and game counts and links to the imported matches. Filter the match list by database. Edit the first and last name to change the profile’s display name.
+Open **Player database** to find players by display name or imported alias. The result table sorts by the current display name and shows match and game counts. When an alias accounts for a hit, its name and source appear under the player name. Select a row to see the profile and its matches alongside the results. The match list shows the opponent, match format, and event or round when available. Filter by database above the table and change pages below it. Both tables scroll independently.
 
-Galaxy and OpenGammon usernames have separate platform scopes. Add an alias to link future imports, or merge two existing profiles to assign their aliases and matches to one player. The destination profile keeps its first and last name. Match records retain their stored names.
+Choose **Edit profile** to change the display name or add an alias for future imports. Galaxy and OpenGammon usernames have separate platform scopes. **Merge player profiles** shows the retained and absorbed profiles side by side with their aliases and match counts. Confirm to assign the absorbed profile’s aliases and matches to the retained profile. The absorbed profile disappears from the player list. Match records retain their stored names.
 
-PR is shown by analysis profile. BG Tutor uses complete, compatible match analyses and divides total normalized equity loss by the total number of rated decisions, using the same PR scale as the match database. Each rating shows its match coverage.
+PR is shown by analysis profile. BG Tutor uses complete, compatible match analyses and divides total normalized equity loss by the total number of rated decisions, using the same PR scale as the match database. Each value shows how many of the player’s total matches contributed to it, with the analysis profile beneath the value.
 
 ## How matches and positions are stored
 

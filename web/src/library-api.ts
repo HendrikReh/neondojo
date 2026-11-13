@@ -21,10 +21,14 @@ export type LibraryMatch = Required<
     | 'play_mode'
     | 'play_assisted'
     | 'occurrence'
+    | 'player_sides'
     | 'study_report_id'
   >
 > &
-  Pick<Schema['DatabaseMatch'], 'play_session_id' | 'play_phase'> & {
+  Pick<
+    Schema['DatabaseMatch'],
+    'play_session_id' | 'play_phase' | 'player_sides'
+  > & {
     play_paused?: Schema['DatabaseMatch']['play_paused'];
     play_mode?: PlayMode | null;
     play_assisted?: boolean;

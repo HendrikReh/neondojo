@@ -35,6 +35,15 @@ focus states in all six light/dark theme variants, actual spacing between labels
 and the established desktop viewports. Related workflow tests cover settings,
 notes, sources, board views and header navigation.
 
+## Player database
+
+The player database uses the Positions layout with a result table on the left
+and the selected profile on the right. Click a row or use the arrow keys to
+change the profile. The match list begins below the profile header. Its
+database filter and page controls sit outside the scrollable table. Edit and
+merge actions open dialogs and return focus to their trigger when closed.
+The merge search has its own page controls.
+
 ## Match analysis
 
 **Overview** places the position analysis beside the board, with the error list

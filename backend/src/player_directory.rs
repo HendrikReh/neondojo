@@ -30,10 +30,21 @@ struct PlayerProfile {
     game_count: i64,
 }
 
-#[derive(Serialize, ToSchema, sqlx::FromRow)]
+#[derive(Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 struct PlayerAlias {
     platform: String,
     name: String,
+}
+
+#[derive(Serialize, ToSchema, sqlx::FromRow)]
+struct PlayerSearchHit {
+    #[serde(flatten)]
+    #[sqlx(flatten)]
+    profile: PlayerProfile,
+    /// Alias responsible for the hit when the visible name does not match.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[sqlx(json(nullable))]
+    matching_alias: Option<PlayerAlias>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -76,15 +87,24 @@ struct PlayerAliasWrite {
 struct PlayerQuery {
     q: Option<String>,
     after: Option<Uuid>,
+    /// Exclude the destination profile when choosing a profile to merge.
+    exclude_id: Option<Uuid>,
+    /// One-based result page. Mutually exclusive with `after`.
+    page: Option<i64>,
 }
 
 #[derive(Serialize, ToSchema)]
 struct PlayerPage {
-    items: Vec<PlayerProfile>,
+    items: Vec<PlayerSearchHit>,
     next_cursor: Option<Uuid>,
+    /// Total matching players when `page` is supplied.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    total: Option<i64>,
 }
 
 const DISPLAY_NAME: &str = "coalesce(nullif(concat_ws(' ',nullif(p.first_name,''),nullif(p.last_name,'')),''),p.source_name)";
+const MATCHING_ALIAS: &str =
+    "FROM player_aliases a WHERE a.profile_id=p.id AND lower(a.name) LIKE $2";
 const COUNTS: &str = "
     (SELECT count(DISTINCT mp.match_id) FROM player_aliases a
      JOIN match_players mp ON mp.alias_id=a.id WHERE a.profile_id=p.id) AS match_count,
@@ -111,33 +131,70 @@ async fn list(
     if search.chars().count() > 240 {
         return Err(ApiError::invalid("Player search is too long"));
     }
-    let mut items = sqlx::query_as::<_, PlayerProfile>(&format!(
-        "WITH page AS MATERIALIZED (
-           SELECT p.*, {DISPLAY_NAME} AS display_name FROM player_profiles p
-           WHERE (EXISTS (SELECT 1 FROM player_aliases a JOIN match_players mp ON mp.alias_id=a.id
-                         WHERE a.profile_id=p.id) OR p.first_name<>'' OR p.last_name<>'')
-             AND ($1='' OR lower({DISPLAY_NAME}) LIKE $2 OR EXISTS (
-                  SELECT 1 FROM player_aliases a WHERE a.profile_id=p.id AND lower(a.name) LIKE $2))
-             AND ($3::uuid IS NULL OR (lower(p.source_name), p.id) >
-                  (SELECT lower(source_name), id FROM player_profiles WHERE id=$3))
-           ORDER BY lower(p.source_name), p.id LIMIT 51
-         )
-         SELECT p.id,p.display_name,p.first_name,p.last_name,p.version,{COUNTS}
-         FROM page p ORDER BY lower(p.source_name), p.id"
-    ))
-    .bind(search)
-    .bind(literal_pattern(search))
-    .bind(params.after)
-    .fetch_all(&state.pool)
-    .await
-    .map_err(anyhow::Error::from)?;
-    let next_cursor = if items.len() > 50 {
-        items.pop();
-        items.last().map(|item| item.id)
+    let offset = crate::search::page_offset(params.page, params.after.is_some(), 50)?;
+    let filters = format!(
+        "(EXISTS (SELECT 1 FROM player_aliases a JOIN match_players mp ON mp.alias_id=a.id
+                 WHERE a.profile_id=p.id) OR p.first_name<>'' OR p.last_name<>'')
+         AND ($3::uuid IS NULL OR p.id<>$3)
+         AND ($1='' OR lower({DISPLAY_NAME}) LIKE $2 OR EXISTS (SELECT 1 {MATCHING_ALIAS}))"
+    );
+    let pattern = literal_pattern(search);
+    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
+    let total = if offset.is_some() {
+        sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+            .execute(&mut *tx)
+            .await
+            .map_err(anyhow::Error::from)?;
+        Some(
+            sqlx::query_scalar(&format!(
+                "SELECT count(*) FROM player_profiles p WHERE {filters}"
+            ))
+            .bind(search)
+            .bind(&pattern)
+            .bind(params.exclude_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(anyhow::Error::from)?,
+        )
     } else {
         None
     };
-    Ok(Json(PlayerPage { items, next_cursor }))
+    let mut items = sqlx::query_as::<_, PlayerSearchHit>(&format!(
+        "WITH page AS MATERIALIZED (
+           SELECT p.id,p.first_name,p.last_name,p.version,{DISPLAY_NAME} AS display_name
+           FROM player_profiles p
+           WHERE {filters}
+             AND ($4::uuid IS NULL OR (lower({DISPLAY_NAME}), p.id) >
+                  (SELECT lower({DISPLAY_NAME}), p.id FROM player_profiles p WHERE p.id=$4))
+           ORDER BY lower({DISPLAY_NAME}), p.id LIMIT 51 OFFSET $5
+         )
+         SELECT p.id,p.display_name,p.first_name,p.last_name,p.version,{COUNTS},
+           CASE WHEN $1<>'' AND lower(p.display_name) NOT LIKE $2 THEN (
+             SELECT jsonb_build_object('name',a.name,'platform',a.platform)
+             {MATCHING_ALIAS} ORDER BY a.name,a.platform LIMIT 1
+           ) END AS matching_alias
+         FROM page p ORDER BY lower(p.display_name), p.id"
+    ))
+    .bind(search)
+    .bind(pattern)
+    .bind(params.exclude_id)
+    .bind(params.after)
+    .bind(offset.unwrap_or(0))
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    let next_cursor = if items.len() > 50 {
+        items.pop();
+        items.last().map(|item| item.profile.id)
+    } else {
+        None
+    };
+    Ok(Json(PlayerPage {
+        items,
+        next_cursor,
+        total,
+    }))
 }
 
 #[utoipa::path(get,path="/api/players/{id}",params(("id"=Uuid,Path)),responses((status=200,body=PlayerDetails),(status=404,body=ErrorBody)),tag="Players")]
@@ -344,6 +401,7 @@ async fn add_alias(
     paths(list, detail, update, merge, add_alias),
     components(schemas(
         PlayerProfile,
+        PlayerSearchHit,
         PlayerDetails,
         PlayerAlias,
         PlayerRating,

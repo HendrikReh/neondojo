@@ -2671,6 +2671,11 @@ export interface components {
             play_session_id?: string | null;
             /** Format: date */
             played_on?: string | null;
+            /**
+             * @description Sides belonging to the requested player profile, when filtered by player_id.
+             *     0 is White and 1 is Black. Both may belong to the same profile.
+             */
+            player_sides?: number[] | null;
             /** Format: int32 */
             position_count: number;
             pr_method?: string | null;
@@ -3177,6 +3182,11 @@ export interface components {
         LibraryPage: {
             items: components["schemas"]["DatabaseMatch"][];
             next_cursor?: string | null;
+            /**
+             * Format: int64
+             * @description Total matching rows when `page` is supplied.
+             */
+            total?: number | null;
         };
         Machine: {
             architecture: string;
@@ -3771,9 +3781,14 @@ export interface components {
             version: number;
         };
         PlayerPage: {
-            items: components["schemas"]["PlayerProfile"][];
+            items: components["schemas"]["PlayerSearchHit"][];
             /** Format: uuid */
             next_cursor?: string | null;
+            /**
+             * Format: int64
+             * @description Total matching players when `page` is supplied.
+             */
+            total?: number | null;
         };
         PlayerPerformanceRating: {
             /** Format: int32 */
@@ -3809,6 +3824,9 @@ export interface components {
             profile: string;
             /** Format: double */
             value: number;
+        };
+        PlayerSearchHit: components["schemas"]["PlayerProfile"] & {
+            matching_alias?: null | components["schemas"]["PlayerAlias"];
         };
         Position: {
             board: number[];
@@ -6842,6 +6860,8 @@ export interface operations {
                  */
                 direction: string | null;
                 after: string | null;
+                /** @description One-based result page. Mutually exclusive with `after`. */
+                page: number | null;
                 limit: number | null;
             };
             cookie?: never;
@@ -8163,6 +8183,10 @@ export interface operations {
             path: {
                 q: string | null;
                 after: string | null;
+                /** @description Exclude the destination profile when choosing a profile to merge. */
+                exclude_id: string | null;
+                /** @description One-based result page. Mutually exclusive with `after`. */
+                page: number | null;
             };
             cookie?: never;
         };
