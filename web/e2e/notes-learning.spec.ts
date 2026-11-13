@@ -1,4 +1,4 @@
-import { openPositionCalculation } from './analysis-controls';
+import { openMatchCalculation, openPositionCalculation } from './analysis-controls';
 import { test, expect } from './test';
 
 test.beforeEach(async ({ page }) => {
@@ -474,6 +474,7 @@ test('a whole-match deck trains checker, double and response cards with the sele
     ),
   });
   await expect(page.locator('.board')).toBeVisible();
+  await openMatchCalculation(page);
   await page.getByLabel('Analyseumfang', { exact: true }).selectOption('match');
   const panel = page.getByRole('region', {
     name: 'Vollständige Partieanalyse',

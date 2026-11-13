@@ -1,4 +1,4 @@
-import { openPositionCalculation } from './analysis-controls';
+import { openMatchCalculation, openPositionCalculation } from './analysis-controls';
 import { expect, test, type Page } from './test';
 import { test as nativeTest } from '@playwright/test';
 
@@ -29,6 +29,7 @@ async function importDesktopMatch(page: Page) {
 
 async function openAnalyzedMatch(page: Page) {
   const match = await importDesktopMatch(page);
+  await openMatchCalculation(page);
   await page.getByRole('button', { name: 'Analyze game', exact: true }).click();
   await expect(page.locator('.match-analysis-progress')).toContainText(
     'completed',

@@ -1,3 +1,4 @@
+import { openMatchCalculation } from './analysis-controls';
 import { test, expect } from '@playwright/test';
 test.skip(
   !process.env.BGTUTOR_SAGE_PYTHON,
@@ -130,6 +131,7 @@ test('completes Open Sage 4-ply for one game and the entire match', async ({
     ),
   });
   const { match } = await (await imported).json();
+  await openMatchCalculation(page);
   const engine = page.getByLabel('Analysis engine', { exact: true });
   const depth = page.getByLabel('Match analysis depth', { exact: true });
   await engine.selectOption('bgsage');
@@ -139,6 +141,7 @@ test('completes Open Sage 4-ply for one game and the entire match', async ({
     ['game', 1, 'Analyze game', 1],
     ['match', null, 'Analyze entire match', 2],
   ] as const) {
+    await openMatchCalculation(page);
     if (scope === 'match')
       await page
         .getByLabel('Analysis scope', { exact: true })

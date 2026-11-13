@@ -1,3 +1,4 @@
+import { openMatchCalculation } from './analysis-controls';
 import { test, expect, type Page } from './test';
 async function fixture(
   page: Page,
@@ -71,6 +72,7 @@ for (const [width, locale] of [
       'false',
     );
     // The estimate above the toolbar wraps onto multiple lines on mobile.
+    await openMatchCalculation(page);
     await expect(
       page.locator('.analysis-time-estimate small').first(),
     ).toBeVisible();

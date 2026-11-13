@@ -1,3 +1,4 @@
+import { openMatchCalculation } from './analysis-controls';
 import { expect, test } from '@playwright/test';
 import type { AnalysisTimeEstimateResult } from '../src/analysis-time-estimate-api';
 import { formatAnalysisDuration } from '../src/analysis-time-estimate-messages';
@@ -112,6 +113,7 @@ test('uses native benchmarks at every depth for both analysis scopes without sta
     );
   }, matchId);
   await page.goto('/');
+  await openMatchCalculation(page);
   const depth = page.getByLabel('Match analysis depth', { exact: true });
   await expect(depth).toBeEnabled();
 
@@ -121,6 +123,7 @@ test('uses native benchmarks at every depth for both analysis scopes without sta
     [1, 2],
     [null, 3],
   ] as const) {
+    await openMatchCalculation(page);
     await scope.selectOption(gameNo === null ? 'match' : 'game');
     const initialDepth = Number(await depth.inputValue());
     expect(depths).toContain(initialDepth);

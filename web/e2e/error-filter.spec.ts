@@ -1,3 +1,4 @@
+import { openMatchCalculation } from './analysis-controls';
 import { expect, test } from './test';
 
 test('error lists exclude good zero-loss decisions after reset and label explicit decision drilldowns', async ({
@@ -14,6 +15,7 @@ test('error lists exclude good zero-loss decisions after reset and label explici
       `(;GM[6]PW[Errors ${crypto.randomUUID()}]PB[Opponent]MI[length:7][ws:0][bs:0];W[31xufe];B[42qusu])(;GM[6]MI[length:7][ws:1][bs:0];W[31hefe];B[42qusu])`,
     ),
   });
+  await openMatchCalculation(page);
   await page
     .getByLabel('Analysis scope', { exact: true })
     .selectOption('match');

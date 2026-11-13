@@ -1,3 +1,4 @@
+import { openMatchCalculation } from './analysis-controls';
 import { expect, test, type Page } from './test';
 
 test.use({ viewport: { width: 1800, height: 1169 }, actionTimeout: 10000 });
@@ -300,6 +301,7 @@ test('analysis statistics and move errors use the shared table roles', async ({
   page,
 }) => {
   await fixture(page);
+  await openMatchCalculation(page);
   await page
     .getByLabel('Analysis scope', { exact: true })
     .selectOption('match');

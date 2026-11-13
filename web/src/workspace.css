@@ -149,6 +149,10 @@
 .workspace-analysis-command .match-analysis-heading {
   display: block;
 }
+.workspace-analysis-command .match-analysis-settings {
+  margin-top: 8px;
+}
+
 .workspace-analysis-command .match-analysis-controls {
   gap: 12px;
   align-items: flex-end;

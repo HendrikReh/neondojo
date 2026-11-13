@@ -1,4 +1,4 @@
-import { openPositionCalculation } from './analysis-controls';
+import { openMatchCalculation, openPositionCalculation } from './analysis-controls';
 import { expect, test } from './test';
 import { profileBackend } from './profile-backend';
 import { defaultConfiguration } from '../src/configuration-model';
@@ -85,6 +85,7 @@ test('a delayed initial settings response cannot replace a newer saved profile',
     .getByLabel('Partiedatei')
     .setInputFiles('../backend/tests/fixtures/tutorial.mat');
   await expect(page.locator('.board')).toBeVisible();
+  await openMatchCalculation(page);
   await expect(
     page.locator('.workspace-analysis-command button.primary'),
   ).toBeDisabled();
@@ -158,6 +159,7 @@ test('an analysis submission error appears once in the errors view', async ({
       : route.continue(),
   );
   await page.getByRole('tab', { name: 'Fehler', exact: true }).click();
+  await openMatchCalculation(page);
   await page
     .locator('.workspace-analysis-command')
     .getByRole('button', { name: /^Spiel (erneut )?analysieren$/ })
@@ -257,6 +259,7 @@ test('accepted game jobs remain tracked when the game changes during submission'
       });
     await route.continue();
   });
+  await openMatchCalculation(page);
   await page
     .locator('.workspace-analysis-command')
     .getByRole('button', { name: /^Spiel (erneut )?analysieren$/ })
@@ -284,6 +287,7 @@ test('next position error respects the player filter', async ({ page }) => {
   });
   await expect(page.locator('.board')).toBeVisible();
   await page.getByRole('tab', { name: 'Fehler', exact: true }).click();
+  await openMatchCalculation(page);
   await page
     .locator('.workspace-analysis-command')
     .getByRole('button', { name: /^Spiel (erneut )?analysieren$/ })

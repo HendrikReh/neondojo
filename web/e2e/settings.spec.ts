@@ -1,4 +1,7 @@
-import { openPositionCalculation } from './analysis-controls';
+import {
+  openMatchCalculation,
+  openPositionCalculation,
+} from './analysis-controls';
 import { test, expect, type Page } from './test';
 import { readFileSync } from 'node:fs';
 
@@ -365,6 +368,7 @@ for (const plies of [3, 4]) {
       initialCalculation.getByLabel('Search depth', { exact: true }),
     ).toHaveValue('2');
     await page.keyboard.press('Escape');
+    await openMatchCalculation(page);
     await expect(
       page.getByLabel('Match analysis depth', { exact: true }),
     ).toHaveValue('2');
@@ -378,6 +382,7 @@ for (const plies of [3, 4]) {
     await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
     await expect(dialog).not.toBeVisible();
     expect(backend.writes.at(-1)?.analysis_plies).toBe(plies);
+    await openMatchCalculation(page);
     await expect(
       page.getByLabel('Match analysis depth', { exact: true }),
     ).toHaveValue(String(plies));
@@ -409,10 +414,12 @@ for (const plies of [3, 4]) {
     ).toBeVisible();
     if (plies === 4) {
       for (const scope of ['dice', 'game', 'match']) {
-        if (scope !== 'dice')
+        if (scope !== 'dice') {
+          await openMatchCalculation(page);
           await page
             .getByLabel('Analysis scope', { exact: true })
             .selectOption(scope);
+        }
         const submitted = page.waitForResponse(
           (response) =>
             response.request().method() === 'POST' &&

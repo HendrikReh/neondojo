@@ -157,3 +157,62 @@ test('the previous engine result survives a pending rerun and position restorati
   await expect(progress).toHaveAttribute('value', '20');
   await expect(result).toContainText(/GNU Backgammon.*0-ply/);
 });
+
+test('game and match settings close on start and progress stays in the command bar', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.goto('/');
+  await page.getByLabel('Match file', { exact: true }).setInputFiles({
+    name: 'match-controls.sgf',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.from(
+      `(;GM[6]PW[Controls ${crypto.randomUUID()}]PB[Opponent]MI[length:7];W[31hefe];B[42qusu])`,
+    ),
+  });
+  const header = page.locator('.analysis-commandbar');
+  const settings = header.getByRole('button', {
+    name: 'Analyze game or match …',
+    exact: true,
+  });
+  const scope = header.getByLabel('Analysis scope', { exact: true });
+  const engine = header.getByLabel('Analysis engine', { exact: true });
+  const depth = header.getByLabel('Match analysis depth', { exact: true });
+  await expect(settings).toHaveAttribute('aria-expanded', 'false');
+  await expect(scope).toBeHidden();
+
+  for (const [width, height] of [
+    [1800, 1169],
+    [2560, 1440],
+    [3840, 2160],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await expect(settings).toBeInViewport();
+    await settings.click();
+    await expect(scope).toBeInViewport();
+    await expect(engine).toBeInViewport();
+    await expect(depth).toBeInViewport();
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(width);
+    await settings.click();
+  }
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  const progress = header.locator('.match-analysis-progress');
+  for (const [value, label, completed] of [
+    ['game', 'Analyze game', 'Game analysis completed'],
+    ['match', 'Analyze entire match', 'Match analysis complete'],
+  ]) {
+    await settings.click();
+    await scope.selectOption(value);
+    await depth.selectOption('0');
+    await header.getByRole('button', { name: label, exact: true }).click();
+    await expect(settings).toBeFocused();
+    await expect(settings).toHaveAttribute('aria-expanded', 'false');
+    await expect(scope).toBeHidden();
+    await expect(progress).toContainText(completed, { timeout: 25_000 });
+  }
+  await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
+  await expect(progress).toBeVisible();
+});

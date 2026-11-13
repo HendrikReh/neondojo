@@ -1,4 +1,15 @@
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
+
+export async function openMatchCalculation(page: Page) {
+  const trigger = page
+    .locator('.workspace-analysis-command')
+    .getByRole('button', {
+      name: /^(Analyze game or match|Spiel oder Match analysieren) …$/,
+    });
+  await expect(trigger).toBeVisible();
+  if ((await trigger.getAttribute('aria-expanded')) === 'false')
+    await trigger.click();
+}
 
 export async function openPositionCalculation(page: Page, dice = false) {
   const labels = dice

@@ -57,12 +57,10 @@ rolls**. **Recalculate position …** opens a dialog with the search depth and
 start action. The dice view has its own **Recalculate dice equity …** dialog.
 Running jobs appear above the analysis tabs. Native match and game statistics
 are available in **Statistics**.
-The analysis command bar uses the profile engine as the initial selection for
-each match. Choose **Analysis engine** to select the provider for game or match
-analysis, then choose a supported **Analysis depth**. GNUbg and Open Sage offer 4-ply. The
-time estimate uses the selected engine, depth, and scope. The status below the
-command bar shows the latest job for the selected engine and scope across all
-analysis tabs. Switch engines to view their respective jobs.
+**Analyze game or match …** reveals the scope, engine, depth, and time estimate
+in the command bar. The engine starts with the profile setting. GNUbg and
+Open Sage offer 4-ply. The settings close when you start an analysis. The
+latest status for the selected scope and engine stays visible across analysis tabs.
 Open **Compare game analyses** or **Compare match analyses** to see GNUbg and
 Open Sage side by side for the selected game or the whole match. The game comparison also uses the selected game’s saved statistics from completed whole-match analyses. Each engine defaults to a completed 3-ply run when
 available, with other recorded depths and job states in its selector. The table

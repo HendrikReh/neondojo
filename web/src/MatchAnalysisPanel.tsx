@@ -4,7 +4,7 @@ import AnalysisTimeEstimate from './AnalysisTimeEstimate';
 import { useProfileValue } from './useProfileValue';
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import ActionButton from './ActionButton';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { request, terminal, type Job, type Match, type MatchGame } from './api';
 import { reviewDecisions, type ReviewDecision } from './review-decisions-api';
@@ -91,6 +91,9 @@ export default function MatchAnalysisPanel({
   const profile = useOptionalConfiguration();
   const [engineId, setEngineId] = useState(defaultEngine);
   const [requestedPlies, setPlies] = useState(defaultPlies);
+  const [showSettings, setShowSettings] = useState(false);
+  const settingsId = useId();
+  const settingsButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     setEngineId(defaultEngine);
     setPlies(defaultPlies);
@@ -300,6 +303,7 @@ export default function MatchAnalysisPanel({
     </div>
   );
 
+  const calculationLabel = `${t('analysis.configureMatch')} …`;
   const heading = (
     <div className="match-analysis-heading">
       <div>
@@ -313,105 +317,128 @@ export default function MatchAnalysisPanel({
           {t(scoped ? 'gameAnalysis.description' : 'matchAnalysis.description')}
         </p>
       </div>
-      <div className="match-analysis-controls">
-        <label>
-          {t('gameAnalysis.scope')}{' '}
-          <select
-            aria-label={t('gameAnalysis.scope')}
-            value={scope}
-            onChange={(event) =>
-              setScope(event.target.value as 'game' | 'match')
-            }
-          >
-            <option value="game">{t('gameAnalysis.scopeGame')}</option>
-            <option value="match">{t('gameAnalysis.scopeMatch')}</option>
-          </select>
-        </label>
-        <label>
-          {settingsText('analysisEngine')}
-          <select
-            aria-label={settingsText('analysisEngine')}
-            value={engineId}
-            disabled={!configured || submitting}
-            onChange={(event) => {
-              const value = event.target.value;
-              if (value !== 'gnubg' && value !== 'bgsage') return;
-              setEngineId(value);
-              setPlies(plies);
-            }}
-          >
-            {(['gnubg', 'bgsage'] as const).map((id) => {
-              const item = catalog?.engines.find((entry) => entry.id === id);
-              const name = id === 'gnubg' ? 'GNUbg' : 'Open Sage';
-              return (
-                <option key={id} value={id}>
-                  {item?.name ?? name}
-                  {catalog && !item?.available
-                    ? ` — ${settingsText('unavailable')}`
-                    : ''}
-                </option>
-              );
-            })}
-          </select>
-        </label>
-        <label>
-          {t('matchAnalysis.depth')}{' '}
-          <select
-            aria-label={t('matchAnalysis.depthLabel')}
-            value={plies}
-            disabled={analysisDisabled}
-            onChange={(event) => setPlies(Number(event.target.value))}
-          >
-            <option value={0} disabled={!supportedPlies.includes(0)}>
-              {t('matchAnalysis.fast')}
-            </option>
-            <option value={1} disabled={!supportedPlies.includes(1)}>
-              1-Ply
-            </option>
-            <option value={2} disabled={!supportedPlies.includes(2)}>
-              {t('matchAnalysis.thorough')}
-            </option>
-            <option value={3} disabled={!supportedPlies.includes(3)}>
-              3-ply
-            </option>
-            <option value={4} disabled={!supportedPlies.includes(4)}>
-              4-ply
-            </option>
-          </select>
-        </label>
+      {controlsTarget && (
         <ActionButton
+          ref={settingsButton}
+          type="button"
           icon="analysis"
-          label={
-            submitting
-              ? t('matchAnalysis.submitting')
-              : active
-                ? t('matchAnalysis.running')
-                : job
-                  ? t(scoped ? 'gameAnalysis.again' : 'matchAnalysis.again')
-                  : t(scoped ? 'gameAnalysis.start' : 'matchAnalysis.start')
-          }
-          className="primary"
-          onClick={() => void run(plies)}
-          disabled={analysisDisabled}
+          label={calculationLabel}
+          aria-expanded={showSettings}
+          aria-controls={settingsId}
+          onClick={() => setShowSettings((open) => !open)}
         />
-        {!active && !submitting && (
-          <AnalysisTimeEstimate
-            key={match.position_count}
-            matchId={match.id}
-            gameNo={gameNo}
-            scoped={scoped}
-            engineId={engineId}
-            plies={plies}
-            configured={analysisConfigured}
-            installationKey={analysisInstallationKey}
+      )}
+      <div
+        id={settingsId}
+        className="match-analysis-settings"
+        hidden={!!controlsTarget && !showSettings}
+      >
+        <div className="match-analysis-controls">
+          <label>
+            {t('gameAnalysis.scope')}{' '}
+            <select
+              aria-label={t('gameAnalysis.scope')}
+              value={scope}
+              onChange={(event) =>
+                setScope(event.target.value as 'game' | 'match')
+              }
+            >
+              <option value="game">{t('gameAnalysis.scopeGame')}</option>
+              <option value="match">{t('gameAnalysis.scopeMatch')}</option>
+            </select>
+          </label>
+          <label>
+            {settingsText('analysisEngine')}
+            <select
+              aria-label={settingsText('analysisEngine')}
+              value={engineId}
+              disabled={!configured || submitting}
+              onChange={(event) => {
+                const value = event.target.value;
+                if (value !== 'gnubg' && value !== 'bgsage') return;
+                setEngineId(value);
+                setPlies(plies);
+              }}
+            >
+              {(['gnubg', 'bgsage'] as const).map((id) => {
+                const item = catalog?.engines.find((entry) => entry.id === id);
+                const name = id === 'gnubg' ? 'GNUbg' : 'Open Sage';
+                return (
+                  <option key={id} value={id}>
+                    {item?.name ?? name}
+                    {catalog && !item?.available
+                      ? ` — ${settingsText('unavailable')}`
+                      : ''}
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+          <label>
+            {t('matchAnalysis.depth')}{' '}
+            <select
+              aria-label={t('matchAnalysis.depthLabel')}
+              value={plies}
+              disabled={analysisDisabled}
+              onChange={(event) => setPlies(Number(event.target.value))}
+            >
+              <option value={0} disabled={!supportedPlies.includes(0)}>
+                {t('matchAnalysis.fast')}
+              </option>
+              <option value={1} disabled={!supportedPlies.includes(1)}>
+                1-Ply
+              </option>
+              <option value={2} disabled={!supportedPlies.includes(2)}>
+                {t('matchAnalysis.thorough')}
+              </option>
+              <option value={3} disabled={!supportedPlies.includes(3)}>
+                3-ply
+              </option>
+              <option value={4} disabled={!supportedPlies.includes(4)}>
+                4-ply
+              </option>
+            </select>
+          </label>
+          <ActionButton
+            icon="analysis"
+            label={
+              submitting
+                ? t('matchAnalysis.submitting')
+                : active
+                  ? t('matchAnalysis.running')
+                  : job
+                    ? t(scoped ? 'gameAnalysis.again' : 'matchAnalysis.again')
+                    : t(scoped ? 'gameAnalysis.start' : 'matchAnalysis.start')
+            }
+            className="primary"
+            onClick={() => {
+              if (controlsTarget) {
+                setShowSettings(false);
+                settingsButton.current?.focus();
+              }
+              void run(plies);
+            }}
+            disabled={analysisDisabled}
           />
+          {(!controlsTarget || showSettings) && !active && !submitting && (
+            <AnalysisTimeEstimate
+              key={match.position_count}
+              matchId={match.id}
+              gameNo={gameNo}
+              scoped={scoped}
+              engineId={engineId}
+              plies={plies}
+              configured={analysisConfigured}
+              installationKey={analysisInstallationKey}
+            />
+          )}
+        </div>
+        {!!catalog?.error && (
+          <p className="analysis-error" role="alert">
+            {formatError(catalog.error)}
+          </p>
         )}
       </div>
-      {!!catalog?.error && (
-        <p className="analysis-error" role="alert">
-          {formatError(catalog.error)}
-        </p>
-      )}
     </div>
   );
   return (

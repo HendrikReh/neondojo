@@ -1,4 +1,4 @@
-import { openPositionCalculation } from './analysis-controls';
+import { openMatchCalculation, openPositionCalculation } from './analysis-controls';
 import { test, expect } from './test';
 
 test.beforeEach(async ({ page }) => {
@@ -146,6 +146,7 @@ test('full match analysis, errors, board navigation and persisted results', asyn
       '7 point match\n\n Game 1\n Match Review Demo : 0             Opponent Review : 0\n 1) 31: 24/21 6/5                  42: 8/4 6/4\n\n Game 2\n Match Review Demo : 1             Opponent Review : 0\n 1) 31: 8/5 6/5                    42: 8/4 6/4\n',
     ),
   });
+  await openMatchCalculation(page);
   await page.getByLabel('Analyseumfang', { exact: true }).selectOption('match');
   await page.getByRole('tab', { name: 'Fehler', exact: true }).click();
   const panel = page.getByRole('region', {
@@ -208,6 +209,7 @@ test('full match analysis, errors, board navigation and persisted results', asyn
     .filter({ hasText: 'Match Review Demo' })
     .first()
     .click();
+  await openMatchCalculation(page);
   await page.getByLabel('Analyseumfang', { exact: true }).selectOption('match');
   await page.getByRole('tab', { name: 'Fehler', exact: true }).click();
   await expect(
@@ -239,6 +241,7 @@ test('the latest clicked analysis row wins during a delayed game load', async ({
   await page
     .getByLabel('Partiedatei')
     .setInputFiles('../backend/tests/fixtures/WC2014.mat');
+  await openMatchCalculation(page);
   await page.getByLabel('Analyseumfang', { exact: true }).selectOption('match');
   await page
     .getByLabel('Partie-Analysetiefe', { exact: true })

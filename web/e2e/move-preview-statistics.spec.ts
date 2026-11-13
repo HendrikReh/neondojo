@@ -1,4 +1,4 @@
-import { openPositionCalculation } from './analysis-controls';
+import { openMatchCalculation, openPositionCalculation } from './analysis-controls';
 import { expect, test } from './test';
 import { readFileSync } from 'node:fs';
 test.use({ actionTimeout: 10000 });
@@ -68,6 +68,7 @@ test('compares saved full-match analysis depths side by side', async ({
     table.locator('small').getByText('From full-match analysis'),
   ).toBeVisible();
   await expect(loss.getByRole('cell')).toHaveText(['0.444', '0.555']);
+  await openMatchCalculation(page);
   const scope = page.getByLabel('Analysis scope', { exact: true });
   await scope.selectOption('match');
   await expect(
@@ -260,6 +261,7 @@ test('native match and game metrics open the exact visible decision filters', as
       `(;GM[6]PW[Stats ${crypto.randomUUID()}]PB[Opponent]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])(;GM[6]MI[length:7][ws:1][bs:0];W[31hefe];B[42qusu])`,
     ),
   });
+  await openMatchCalculation(page);
   await page
     .getByLabel('Analysis scope', { exact: true })
     .selectOption('match');
@@ -346,6 +348,7 @@ test('native match and game metrics open the exact visible decision filters', as
   await expect(
     page.getByLabel('Filter analysis by player', { exact: true }),
   ).toHaveValue('');
+  await openMatchCalculation(page);
   await page.getByLabel('Analysis scope', { exact: true }).selectOption('game');
   await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
   await expect(stats).toContainText('run native GNUbg analysis');
@@ -365,6 +368,7 @@ test('a delayed next-error response cannot undo manual move navigation', async (
     ),
   });
   await page.getByRole('tab', { name: 'Errors', exact: true }).click();
+  await openMatchCalculation(page);
   await page.getByRole('button', { name: 'Analyze game', exact: true }).click();
   await expect(
     page.getByText('Game analysis completed', { exact: true }),
