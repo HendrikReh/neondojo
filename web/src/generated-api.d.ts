@@ -372,6 +372,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/database-backup/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["check_database_backup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/databases": {
         parameters: {
             query?: never;
@@ -2387,6 +2403,22 @@ export interface components {
             /** Format: date-time */
             last_synced_at?: string | null;
             profile?: string | null;
+        };
+        BackupCheck: {
+            contents?: null | components["schemas"]["BackupContents"];
+            status: components["schemas"]["BackupCompatibility"];
+        };
+        /** @enum {string} */
+        BackupCompatibility: "compatible" | "incompatible_schema";
+        BackupContents: {
+            /** Format: date-time */
+            created_at?: string | null;
+            /** Format: int64 */
+            learning_cards: number;
+            /** Format: int64 */
+            matches: number;
+            /** Format: int64 */
+            saved_positions: number;
         };
         BenchmarkEngines: {
             engine: components["schemas"]["EngineSnapshot"];
@@ -6043,6 +6075,77 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    check_database_backup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/vnd.bgtutor.backup": string;
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupCheck"];
+                };
             };
             408: {
                 headers: {

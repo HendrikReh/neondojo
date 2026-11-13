@@ -167,12 +167,19 @@ Normale Einstellungsänderungen werden mit „Anwenden“ übernommen. Die Profi
 
 **Extras** contains **Benchmark**, **Engine duels**, **Database backup**,
 and **Versions**. Use Left/Right or Home/End to switch tabs. BG Tutor remembers
-the selected tool. The backup tool exports a database archive and restores it
-on an installation with the same schema after confirmation.
+the selected tool.
 
 Engine duels lists series beside the selected result on wide desktop windows.
 **New series** opens setup with the optional seed under **Advanced**. Series
 continue when leaving the tool.
+
+Database backup shows the scope of a restore before file selection. BG Tutor
+automatically checks each selected archive and compares its schema with the
+destination. The preview shows the creation time and counts for matches, saved
+positions, and flashcards. Older archives can lack a creation time. Only a
+compatible archive enables **Review database replacement**.
+After **Replace database**, the backend checks the archive again and validates
+the rows during the restore transaction. Reload BG Tutor after success.
 
 ## Dice equity
 

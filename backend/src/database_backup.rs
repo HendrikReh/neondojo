@@ -5,17 +5,22 @@ mod restore;
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
 use anyhow::{Context, Result};
 use axum::{
-    Router,
+    Json, Router,
     body::Body,
     extract::{Query, State},
     http::{HeaderMap, StatusCode, header},
     response::IntoResponse,
-    routing::get,
+    routing::{get, post},
 };
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::PgConnection;
-use tokio::sync::{RwLock, Semaphore};
+use std::sync::Arc;
+use tokio::{
+    fs::File,
+    sync::{OwnedSemaphorePermit, RwLock, Semaphore},
+};
 use utoipa::{
     IntoParams, OpenApi, PartialSchema, ToSchema,
     openapi::{KnownFormat, Object, RefOr, Schema, SchemaFormat, Type},
@@ -78,14 +83,14 @@ const TABLES: &[&str] = &[
 
 pub(crate) struct Access {
     pub(crate) requests: RwLock<()>,
-    transfer: std::sync::Arc<Semaphore>,
+    transfer: Arc<Semaphore>,
 }
 
 impl Default for Access {
     fn default() -> Self {
         Self {
             requests: RwLock::new(()),
-            transfer: std::sync::Arc::new(Semaphore::new(1)),
+            transfer: Arc::new(Semaphore::new(1)),
         }
     }
 }
@@ -96,6 +101,8 @@ struct Manifest {
     format: u32,
     schema: String,
     sequences: Vec<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    created_at: Option<DateTime<Utc>>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -183,7 +190,9 @@ fn busy() -> ApiError {
 }
 
 pub(crate) fn routes() -> Router<AppState> {
-    Router::new().route("/api/database-backup", get(export).post(import))
+    Router::new()
+        .route("/api/database-backup", get(export).post(import))
+        .route("/api/database-backup/check", post(check))
 }
 
 // The archive is the raw request/response body.
@@ -209,10 +218,11 @@ async fn export(State(state): State<AppState>) -> ApiResult<impl IntoResponse> {
         .clone()
         .try_acquire_owned()
         .map_err(|_| busy())?;
-    let (file, length) = archive::export(&state.pool).await?;
+    let created_at = Utc::now();
+    let (file, length) = archive::export(&state.pool, created_at).await?;
     let filename = format!(
         "bgtutor-{}.bgtutor-backup",
-        chrono::Utc::now().format("%Y-%m-%d-%H%M%S")
+        created_at.format("%Y-%m-%d-%H%M%S")
     );
     let content = tokio_util::io::ReaderStream::with_capacity(file, 128 * 1024);
     let content =
@@ -233,6 +243,106 @@ async fn export(State(state): State<AppState>) -> ApiResult<impl IntoResponse> {
         ],
         Body::from_stream(content),
     ))
+}
+
+fn schema_mismatch() -> ApiError {
+    ApiError::invalid("Backup schema differs from this BG Tutor installation")
+}
+
+fn validate_sequences(manifest: &Manifest, count: usize) -> ApiResult<()> {
+    if manifest.sequences.len() != count
+        || manifest
+            .sequences
+            .iter()
+            .any(|&value| !(1..i64::MAX).contains(&value))
+    {
+        return Err(ApiError::invalid(
+            "Backup contains data that cannot be restored",
+        ));
+    }
+    Ok(())
+}
+
+async fn receive_backup(
+    state: &AppState,
+    headers: &HeaderMap,
+    body: Body,
+) -> ApiResult<(File, Arc<OwnedSemaphorePermit>)> {
+    if headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        != Some(MEDIA_TYPE)
+    {
+        return Err(ApiError(
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "Select a BG Tutor backup file".into(),
+        ));
+    }
+    let permit = state
+        .backup
+        .transfer
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| busy())?;
+    let file = archive::receive(headers, body).await?;
+    Ok((file, Arc::new(permit)))
+}
+
+#[derive(Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+enum BackupCompatibility {
+    Compatible,
+    IncompatibleSchema,
+}
+
+#[derive(Serialize, ToSchema)]
+struct BackupCheck {
+    status: BackupCompatibility,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    contents: Option<BackupContents>,
+}
+
+#[derive(Serialize, ToSchema)]
+struct BackupContents {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    created_at: Option<DateTime<Utc>>,
+    matches: u64,
+    saved_positions: u64,
+    learning_cards: u64,
+}
+
+#[utoipa::path(post, path="/api/database-backup/check", operation_id="check_database_backup",
+    request_body(content=inline(BackupFile), content_type="application/vnd.bgtutor.backup"),
+    responses((status=200, body=BackupCheck), (status=408, body=ErrorBody), (status=409, body=ErrorBody),
+              (status=413, body=ErrorBody), (status=415, body=ErrorBody),
+              (status=422, body=ErrorBody), (status=500, body=ErrorBody)),
+    tag="Database backup"
+)]
+async fn check(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: Body,
+) -> ApiResult<Json<BackupCheck>> {
+    let (file, permit) = receive_backup(&state, &headers, body).await?;
+    let mut connection = state
+        .pool
+        .acquire()
+        .await
+        .context("Accessing backup schema")?;
+    let fingerprint = schema(&mut connection).await?;
+    let sequence_count = sequences(&mut connection).await?.len();
+    drop(connection);
+    let checked = archive::check(file, fingerprint, permit).await?;
+    let status = if checked.compatible {
+        validate_sequences(&checked.manifest, sequence_count)?;
+        BackupCompatibility::Compatible
+    } else {
+        BackupCompatibility::IncompatibleSchema
+    };
+    Ok(Json(BackupCheck {
+        status,
+        contents: checked.contents,
+    }))
 }
 
 #[derive(Deserialize, IntoParams)]
@@ -259,18 +369,7 @@ async fn import(
             "Replacing the target database must be confirmed",
         ));
     }
-    if headers
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        != Some(MEDIA_TYPE)
-    {
-        return Err(ApiError(
-            StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            "Select a BG Tutor backup file".into(),
-        ));
-    }
-    let _permit = state.backup.transfer.try_acquire().map_err(|_| busy())?;
-    let file = archive::receive(&headers, body).await?;
+    let (file, permit) = receive_backup(&state, &headers, body).await?;
     let mut connection = state
         .pool
         .acquire()
@@ -278,7 +377,7 @@ async fn import(
         .context("Accessing backup schema")?;
     let fingerprint = schema(&mut connection).await?;
     drop(connection);
-    let input = archive::prepare(file, fingerprint).await?;
+    let input = archive::prepare(file, fingerprint, permit.clone()).await?;
 
     // Drain requests already using the destination and reject new ones until
     // the transaction finishes. The table locks also cover other DB clients.
@@ -298,7 +397,7 @@ async fn import(
 }
 
 #[derive(OpenApi)]
-#[openapi(paths(export, import))]
+#[openapi(paths(export, check, import))]
 pub(crate) struct BackupDoc;
 
 #[cfg(test)]

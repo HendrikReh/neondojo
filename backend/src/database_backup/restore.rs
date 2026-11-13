@@ -1,4 +1,7 @@
-use super::{TABLES, archive::Prepared, columns, relation, schema, sequences, transfer_settings};
+use super::{
+    TABLES, archive::Prepared, columns, relation, schema, schema_mismatch, sequences,
+    transfer_settings, validate_sequences,
+};
 use crate::api::{ApiError, ApiResult, AppState};
 use anyhow::{Context, Result};
 use axum::http::StatusCode;
@@ -185,16 +188,10 @@ pub(super) async fn replace(state: &AppState, mut input: Prepared) -> ApiResult<
         .context("Opening restore transaction")?;
     transfer_settings(&mut tx).await?;
     if schema(&mut tx).await? != input.manifest.schema {
-        return Err(ApiError::invalid(
-            "Backup schema differs from this BG Tutor installation",
-        ));
+        return Err(schema_mismatch());
     }
     let sequences = sequences(&mut tx).await?;
-    if input.manifest.sequences.len() != sequences.len()
-        || input.manifest.sequences.iter().any(|value| *value < 1)
-    {
-        return Err(rejected());
-    }
+    validate_sequences(&input.manifest, sequences.len())?;
 
     sqlx::query("SET LOCAL lock_timeout TO '3s'")
         .execute(&mut *tx)

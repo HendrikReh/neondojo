@@ -70,6 +70,21 @@ test('exports a backup and restores it only after confirmation', async ({
   await expect(
     restore.getByText(download.suggestedFilename(), { exact: true }),
   ).toBeVisible();
+  await expect(restore.getByRole('status')).toContainText(
+    'The backup archive is valid and compatible with this database schema.',
+  );
+  const contents = restore.getByRole('region', { name: 'Backup contents' });
+  await expect(contents.getByText('Created', { exact: true })).toBeVisible();
+  await expect(contents.locator('time')).toHaveAttribute(
+    'datetime',
+    /^\d{4}-\d{2}-\d{2}T/,
+  );
+  await expect(contents.getByRole('definition')).toHaveText([
+    /.+/,
+    '0',
+    '0',
+    '0',
+  ]);
   await review.click();
   const dialog = page.getByRole('dialog', { name: 'Restore backup' });
   await expect(
@@ -79,7 +94,7 @@ test('exports a backup and restores it only after confirmation', async ({
     dialog.getByText(download.suggestedFilename(), { exact: true }),
   ).toBeVisible();
   await expect(dialog).toContainText(
-    'checks the backup file and its database schema after you confirm',
+    'BG Tutor checks the archive and database constraints again during restore.',
   );
   await page.screenshot({
     path: testInfo.outputPath('database-backup-confirm.png'),
@@ -98,19 +113,17 @@ test('exports a backup and restores it only after confirmation', async ({
     mimeType: 'application/vnd.bgtutor.backup',
     buffer: Buffer.from('Invalid backup'),
   });
-  await review.click();
-  await dialog.getByRole('button', { name: 'Replace database' }).click();
+  await expect(restore.getByRole('alert')).toContainText(
+    'Invalid BG Tutor backup archive',
+  );
+  await expect(review).toBeDisabled();
+  await expect(dialog).toBeHidden();
   const restoreError = dialog.getByRole('alert');
-  await expect(restoreError).toContainText('Invalid BG Tutor backup archive');
-  await expect(restoreError).toBeFocused();
   expect(await (await request.get('/api/databases')).json()).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ name: 'Target fixture' }),
     ]),
   );
-  await page.keyboard.press('Escape');
-  await expect(review).toBeFocused();
-
   await pickBackup(archive);
   await review.click();
   const replace = dialog.getByRole('button', { name: 'Replace database' });
@@ -148,4 +161,63 @@ test('exports a backup and restores it only after confirmation', async ({
     page.getByRole('tab', { name: 'Extras', exact: true }),
   ).toBeVisible();
   await expect(dialog).toBeHidden();
+});
+
+test('only the latest selected archive can enable review', async ({ page }) => {
+  let finishFirst!: () => void;
+  const first = new Promise<void>((resolve) => {
+    finishFirst = resolve;
+  });
+  await page.route('**/api/database-backup/check', async (route) => {
+    if (route.request().postData() === 'first') {
+      await first;
+      await route
+        .fulfill({
+          json: {
+            status: 'compatible',
+            contents: { matches: 99, saved_positions: 99, learning_cards: 99 },
+          },
+        })
+        .catch(() => {});
+    } else {
+      await route.fulfill({
+        json: {
+          status: 'incompatible_schema',
+          contents: { matches: 1234, saved_positions: 2, learning_cards: 3 },
+        },
+      });
+    }
+  });
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Extras', exact: true }).click();
+  await page.getByRole('tab', { name: 'Database backup', exact: true }).click();
+  const restore = page.getByRole('region', { name: 'Restore backup' });
+  const input = restore.locator('input[type=file]');
+  const review = restore.getByRole('button', {
+    name: 'Review database replacement',
+  });
+  const file = (name: string) => ({
+    name: `${name}.bgtutor-backup`,
+    mimeType: 'application/vnd.bgtutor.backup',
+    buffer: Buffer.from(name),
+  });
+  const firstStarted = page.waitForRequest('**/api/database-backup/check');
+  await input.setInputFiles(file('first'));
+  await firstStarted;
+  await expect(restore.getByRole('status')).toContainText(
+    'Checking backup archive',
+  );
+  await expect(review).toBeDisabled();
+  await input.setInputFiles(file('second'));
+  await expect(restore.getByRole('alert')).toContainText(
+    'different database schema',
+  );
+  finishFirst();
+  await expect(restore.getByText('second.bgtutor-backup')).toBeVisible();
+  await expect(
+    restore
+      .getByRole('region', { name: 'Backup contents' })
+      .getByRole('definition'),
+  ).toHaveText(['Unavailable in this archive', '1,234', '2', '3']);
+  await expect(review).toBeDisabled();
 });

@@ -1624,6 +1624,97 @@
         }
       }
     },
+    "/api/database-backup/check": {
+      "post": {
+        "tags": [
+          "Database backup"
+        ],
+        "operationId": "check_database_backup",
+        "requestBody": {
+          "content": {
+            "application/vnd.bgtutor.backup": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupCheck"
+                }
+              }
+            }
+          },
+          "408": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/databases": {
       "get": {
         "tags": [
@@ -10595,6 +10686,66 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "BackupCheck": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "contents": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BackupContents"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/BackupCompatibility"
+          }
+        }
+      },
+      "BackupCompatibility": {
+        "type": "string",
+        "enum": [
+          "compatible",
+          "incompatible_schema"
+        ]
+      },
+      "BackupContents": {
+        "type": "object",
+        "required": [
+          "matches",
+          "saved_positions",
+          "learning_cards"
+        ],
+        "properties": {
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "learning_cards": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "matches": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "saved_positions": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
           }
         }
       },

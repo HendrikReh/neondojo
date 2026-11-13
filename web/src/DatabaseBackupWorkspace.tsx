@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import ActionButton from './ActionButton';
 import LibraryDialog from './LibraryDialog';
-import { downloadResponse, requestResponse } from './api';
+import { downloadResponse, request, requestResponse } from './api';
 import { databaseBackupMessages } from './database-backup-messages';
 import type { paths } from './generated-api';
 import { useI18n } from './i18n';
+import { AppError } from './i18n-core';
 import './database-backup.css';
 
 const path = '/database-backup';
+const checkPath = '/database-backup/check';
+type CheckResponse =
+  paths['/api/database-backup/check']['post']['responses'][200]['content']['application/json'];
 type Restore = paths['/api/database-backup']['post'];
 const mediaType: keyof Restore['requestBody']['content'] =
   'application/vnd.bgtutor.backup';
@@ -15,10 +19,23 @@ const mediaType: keyof Restore['requestBody']['content'] =
 type TransferState =
   { phase: 'idle' | 'pending' | 'done' } | { phase: 'error'; error: unknown };
 
+type BackupContents = NonNullable<CheckResponse['contents']>;
+
+type BackupCheck = { file: File } & (
+  | { phase: 'pending' }
+  | { phase: CheckResponse['status']; contents?: BackupContents }
+  | { phase: 'error'; error: unknown }
+);
+
 export default function DatabaseBackupWorkspace() {
   const { locale, formatError } = useI18n();
   const t = databaseBackupMessages[locale];
-  const [file, setFile] = useState<File>();
+  const [check, setCheck] = useState<BackupCheck>();
+  const file = check?.file;
+  const contents = check && 'contents' in check ? check.contents : undefined;
+  const compatible = check?.phase === 'compatible';
+  const checking = check?.phase === 'pending';
+  const activeCheck = useRef<AbortController>(null);
   const [exportState, setExportState] = useState<TransferState>({
     phase: 'idle',
   });
@@ -31,6 +48,8 @@ export default function DatabaseBackupWorkspace() {
   const restoring = restoreState?.phase === 'pending';
   const restored = restoreState?.phase === 'done';
   const busy = exporting || restoring;
+
+  useEffect(() => () => activeCheck.current?.abort(), []);
 
   useEffect(() => {
     if (restoreState?.phase === 'error') restoreError.current?.focus();
@@ -53,8 +72,48 @@ export default function DatabaseBackupWorkspace() {
     }
   }
 
+  async function checkBackup(file: File) {
+    activeCheck.current?.abort();
+    const controller = new AbortController();
+    activeCheck.current = controller;
+    setCheck({ file, phase: 'pending' });
+    try {
+      const result = await request<CheckResponse | null>(checkPath, {
+        method: 'POST',
+        headers: { 'Content-Type': mediaType },
+        body: file,
+        signal: controller.signal,
+      });
+      const status = result?.status;
+      if (status !== 'compatible' && status !== 'incompatible_schema') {
+        throw new AppError('error.invalidResponse');
+      }
+      const contents = result?.contents ?? undefined;
+      if (
+        (status === 'compatible' && !contents) ||
+        (contents &&
+          (![
+            contents.matches,
+            contents.saved_positions,
+            contents.learning_cards,
+          ].every((value) => Number.isSafeInteger(value) && value >= 0) ||
+            (contents.created_at != null &&
+              (typeof contents.created_at !== 'string' ||
+                !Number.isFinite(Date.parse(contents.created_at))))))
+      ) {
+        throw new AppError('error.invalidResponse');
+      }
+      if (!controller.signal.aborted)
+        setCheck({ file, phase: status, contents });
+    } catch (error) {
+      if (!controller.signal.aborted) setCheck({ file, phase: 'error', error });
+    } finally {
+      if (activeCheck.current === controller) activeCheck.current = null;
+    }
+  }
+
   async function restoreBackup() {
-    if (!file) return;
+    if (!file || !compatible) return;
     setRestoreState({ phase: 'pending' });
     const query: Restore['parameters']['query'] = { replace: true };
     try {
@@ -88,7 +147,7 @@ export default function DatabaseBackupWorkspace() {
             type="button"
             icon="export"
             label={t.exportTitle}
-            disabled={busy}
+            disabled={busy || checking}
             onClick={() => void exportBackup()}
           />
         </div>
@@ -123,7 +182,7 @@ export default function DatabaseBackupWorkspace() {
             onChange={(event) => {
               const selected = event.currentTarget.files?.[0];
               event.currentTarget.value = '';
-              if (selected) setFile(selected);
+              if (selected) void checkBackup(selected);
             }}
           />
           <ActionButton
@@ -144,14 +203,46 @@ export default function DatabaseBackupWorkspace() {
             {file?.name ?? t.noFile}
           </span>
         </div>
+        <div
+          id="database-backup-check-status"
+          className="database-backup-status"
+          role="status"
+        >
+          {checking && t.checking}
+          {compatible && (
+            <span className="database-backup-compatible">{t.compatible}</span>
+          )}
+        </div>
+        {check?.phase === 'incompatible_schema' && (
+          <p className="error" role="alert">
+            {t.incompatible}
+          </p>
+        )}
+        {contents && <BackupContentsSummary contents={contents} />}
+        {check?.phase === 'error' && (
+          <>
+            <p className="error" role="alert">
+              {t.checkFailure} {formatError(check.error)}
+            </p>
+            <div className="database-backup-review">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void checkBackup(check.file)}
+              >
+                {t.checkRetry}
+              </button>
+            </div>
+          </>
+        )}
         <div className="database-backup-review">
           <ActionButton
             type="button"
             icon="import"
             ref={restoreTrigger}
             label={t.review}
-            aria-describedby="database-backup-selected-file"
-            disabled={!file || busy}
+            aria-describedby="database-backup-selected-file database-backup-check-status"
+            disabled={!compatible || busy}
             onClick={() => setRestoreState({ phase: 'idle' })}
           />
         </div>
@@ -195,7 +286,7 @@ export default function DatabaseBackupWorkspace() {
                   className="database-backup-help"
                   id="database-backup-validation"
                 >
-                  {t.validation}
+                  {t.compatible} {t.validation}
                 </p>
                 {restoreState.phase === 'error' && (
                   <p
@@ -221,7 +312,7 @@ export default function DatabaseBackupWorkspace() {
                     icon="import"
                     label={t.replace}
                     aria-describedby="database-backup-confirm-warning database-backup-validation"
-                    disabled={restoring}
+                    disabled={!compatible || restoring}
                     onClick={() => void restoreBackup()}
                   />
                 </div>
@@ -230,6 +321,44 @@ export default function DatabaseBackupWorkspace() {
           </div>
         </LibraryDialog>
       )}
+    </section>
+  );
+}
+
+function BackupContentsSummary({ contents }: { contents: BackupContents }) {
+  const { locale, formatNumber } = useI18n();
+  const t = databaseBackupMessages[locale];
+  return (
+    <section className="database-backup-contents" aria-label={t.contents}>
+      <dl>
+        <div>
+          <dt>{t.createdAt}</dt>
+          <dd>
+            {contents.created_at ? (
+              <time dateTime={contents.created_at}>
+                {new Intl.DateTimeFormat(locale, {
+                  dateStyle: 'medium',
+                  timeStyle: 'short',
+                }).format(new Date(contents.created_at))}
+              </time>
+            ) : (
+              t.missingDate
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt>{t.matches}</dt>
+          <dd>{formatNumber(contents.matches)}</dd>
+        </div>
+        <div>
+          <dt>{t.savedPositions}</dt>
+          <dd>{formatNumber(contents.saved_positions)}</dd>
+        </div>
+        <div>
+          <dt>{t.learningCards}</dt>
+          <dd>{formatNumber(contents.learning_cards)}</dd>
+        </div>
+      </dl>
     </section>
   );
 }

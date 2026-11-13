@@ -707,6 +707,7 @@ curl 'http://127.0.0.1:8787/api/matches?q=Tutor'
 | ---------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | GET        | `/api/health`, `/api/engines`                                                | PostgreSQL and GNUbg health, or available engines, versions and depths.                                                                                                                                                    |
 | GET        | `/api/database-backup` | Export a compressed BG Tutor backup as a file. |
+| POST       | `/api/database-backup/check` | Check a raw backup archive and report schema compatibility and archive contents. |
 | POST       | `/api/database-backup?replace=true` | Restore a BG Tutor backup with media type `application/vnd.bgtutor.backup`. |
 | GET / PUT  | `/api/settings`                                                              | Persistent engine and player settings with revision checks.                                                                                                                                                                |
 | POST       | `/api/engines/gnubg/check`                                                   | Check the installation using `{ "path": "..." }`.                                                                                                                                                                          |
@@ -762,13 +763,21 @@ The downloaded `.bgtutor-backup` file contains the PostgreSQL application data,
 including all match databases, original match files, notes, completed analyses,
 saved positions, player profiles, preferences and learning history.
 
-On the destination, run BG Tutor with the same database migration history.
-Open **Extras → Database backup**, choose a file, and select **Review database replacement** to see what the operation will replace.
+On the destination, open **Extras → Database backup** and choose a file. BG Tutor
+checks the archive and compares its migration fingerprint with the destination
+database. The preview shows when the archive was created and how many library
+matches, saved positions, and flashcards it contains. Older archives retain
+their counts and may have no recorded creation time. A successful check
+enables **Review database replacement**. The check uses a temporary upload and
+leaves the destination data intact. Damaged archives and incompatible schemas
+prevent confirmation.
+
 **Replace database** overwrites the application data on the destination. Export
 its current database first if you need to keep that data. After confirmation,
-the backend checks the archive and schema and commits the replacement in one transaction. If restore
-fails, the previous data stays in place. Wait for the success message and reload
-BG Tutor. Finish any work running on the destination before restoring.
+the backend checks the archive and schema again. PostgreSQL validates the data
+as the replacement is applied in one transaction. If restore fails, the
+previous data stays in place. Wait for the success message and reload BG Tutor.
+Finish any work running on the destination before restoring.
 
 The destination keeps its local engine installations, thread overrides, and
 opening-book paths. In-flight or queued jobs from the backup are marked as

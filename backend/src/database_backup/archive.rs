@@ -1,6 +1,6 @@
 use super::{
-    MAX_ARCHIVE_BYTES, MAX_DATA_BYTES, Manifest, TABLES, columns, relation, schema, sequences,
-    transfer_settings,
+    BackupContents, MAX_ARCHIVE_BYTES, MAX_DATA_BYTES, Manifest, TABLES, columns, relation, schema,
+    sequences, transfer_settings,
 };
 use crate::api::{ApiError, ApiResult};
 use anyhow::{Context, Result, ensure};
@@ -8,20 +8,30 @@ use axum::{
     body::{Body, Bytes},
     http::{HeaderMap, StatusCode, header},
 };
+use chrono::{DateTime, Utc};
 use futures_util::StreamExt;
 use sqlx::{Acquire, PgPool};
-use std::io::{Read, Seek, Write};
+use std::{
+    io::{self, Read, Seek, Write},
+    sync::Arc,
+};
 use tokio::{
     fs::File,
     io::AsyncWriteExt,
-    sync::mpsc::{self, Sender},
+    sync::{
+        OwnedSemaphorePermit,
+        mpsc::{self, Sender},
+    },
     time::{Duration, timeout},
 };
+use tokio_util::sync::CancellationToken;
 use zip::{CompressionMethod, ZipArchive, ZipWriter, write::SimpleFileOptions};
 
 const MANIFEST: &str = "manifest.json";
 const MAX_MANIFEST_BYTES: u64 = 8192;
-const FORMAT: u32 = 1;
+const LEGACY_FORMAT: u32 = 1;
+const FORMAT: u32 = 2;
+const SUMMARY_TABLES: [&str; 3] = ["matches", "saved_positions", "learning_cards"];
 
 enum ExportEntry {
     Table(&'static str),
@@ -69,7 +79,11 @@ fn zip_archive(mut incoming: mpsc::Receiver<ExportEntry>) -> Result<std::fs::Fil
     anyhow::bail!("Backup export was interrupted")
 }
 
-async fn stream_snapshot(pool: &PgPool, outgoing: Sender<ExportEntry>) -> Result<()> {
+async fn stream_snapshot(
+    pool: &PgPool,
+    created_at: DateTime<Utc>,
+    outgoing: Sender<ExportEntry>,
+) -> Result<()> {
     let mut connection = pool.acquire().await?;
     // Cancel an unfinished COPY by closing this connection instead of returning
     // it to the pool with pending COPY protocol messages.
@@ -113,15 +127,16 @@ async fn stream_snapshot(pool: &PgPool, outgoing: Sender<ExportEntry>) -> Result
             format: FORMAT,
             schema,
             sequences: next_values,
+            created_at: Some(created_at),
         }))
         .await?;
     Ok(())
 }
 
-pub(super) async fn export(pool: &PgPool) -> Result<(File, u64)> {
+pub(super) async fn export(pool: &PgPool, created_at: DateTime<Utc>) -> Result<(File, u64)> {
     let (sender, receiver) = mpsc::channel(16);
     let writer = tokio::task::spawn_blocking(move || zip_archive(receiver));
-    let snapshot = stream_snapshot(pool, sender).await;
+    let snapshot = stream_snapshot(pool, created_at, sender).await;
     let result = writer.await?;
     // Surface a ZIP or disk error if the writer stopped receiving.
     let file = File::from_std(match snapshot {
@@ -182,9 +197,90 @@ pub(super) async fn receive(headers: &HeaderMap, body: Body) -> ApiResult<File> 
     Ok(file)
 }
 
-pub(super) async fn prepare(file: File, fingerprint: String) -> ApiResult<Prepared> {
+pub(super) struct Checked {
+    pub manifest: Manifest,
+    pub compatible: bool,
+    pub contents: Option<BackupContents>,
+}
+
+// Format 1 table exports use catalog column order. The 12th COPY field
+// is database_id, introduced by migration 0009. Collection-only hosts
+// carry saved positions and do not appear in the match library.
+struct MatchCounter {
+    column: usize,
+    prefix: usize,
+    matches: u64,
+    collection: String,
+}
+
+impl MatchCounter {
+    fn new() -> Self {
+        Self {
+            column: 0,
+            prefix: 0,
+            matches: 0,
+            collection: crate::position_retention::COLLECTION_DATABASE_ID.to_string(),
+        }
+    }
+
+    fn count(&mut self, chunk: &[u8]) {
+        const DATABASE_ID: usize = 11;
+        for part in chunk.split_inclusive(|&b| b == b'\n') {
+            let complete = part.ends_with(b"\n");
+            if self.column <= DATABASE_ID {
+                for value in part.split_inclusive(|&b| b == b'\t') {
+                    if self.column == DATABASE_ID {
+                        let separator = value.ends_with(b"\t");
+                        let field = if separator {
+                            &value[..value.len() - 1]
+                        } else {
+                            value
+                        };
+                        let collection = self.collection.as_bytes();
+                        self.prefix = match collection.get(self.prefix..) {
+                            Some(rest) if rest.starts_with(field) => self.prefix + field.len(),
+                            _ => collection.len() + 1,
+                        };
+                        if separator {
+                            self.column += 1;
+                            break;
+                        }
+                    } else if value.ends_with(b"\t") {
+                        self.column += 1;
+                    }
+                }
+            }
+            if complete {
+                if self.prefix != self.collection.len() || self.column <= DATABASE_ID {
+                    self.matches += 1;
+                }
+                self.column = 0;
+                self.prefix = 0;
+            }
+        }
+    }
+}
+
+struct Scanned<W> {
+    checked: Checked,
+    lengths: Vec<u64>,
+    output: W,
+}
+
+// A compatible archive is decoded to EOF to check every table. For a
+// different schema, only the entries needed for the summary are inspected.
+async fn scan<W: Write + Send + 'static>(
+    file: File,
+    fingerprint: String,
+    destination: impl FnOnce() -> io::Result<W> + Send + 'static,
+    permit: Arc<OwnedSemaphorePermit>,
+    summarize: bool,
+) -> ApiResult<Scanned<W>> {
+    let cancel = CancellationToken::new();
+    let _cancel_on_drop = cancel.clone().drop_guard();
     let file = file.into_std().await;
     tokio::task::spawn_blocking(move || {
+        let _permit = permit;
         let mut archive = ZipArchive::new(file)
             .map_err(|_| ApiError::invalid("Invalid BG Tutor backup archive"))?;
         let manifest = (|| -> Result<Manifest> {
@@ -195,46 +291,83 @@ pub(super) async fn prepare(file: File, fingerprint: String) -> ApiResult<Prepar
                 .take(MAX_MANIFEST_BYTES + 1)
                 .read_to_end(&mut bytes)?;
             ensure!(bytes.len() as u64 <= MAX_MANIFEST_BYTES);
-            Ok(serde_json::from_slice(&bytes)?)
+            let manifest: Manifest = serde_json::from_slice(&bytes)?;
+            ensure!(
+                manifest.schema.len() == 64
+                    && manifest.schema.bytes().all(|b| b.is_ascii_hexdigit())
+            );
+            ensure!(manifest.format != FORMAT || manifest.created_at.is_some());
+            Ok(manifest)
         })()
         .map_err(|_| ApiError::invalid("Invalid BG Tutor backup manifest"))?;
-        if manifest.format != FORMAT || manifest.schema != fingerprint {
-            return Err(ApiError::invalid(
-                "Backup schema differs from this BG Tutor installation",
-            ));
+        if !matches!(manifest.format, LEGACY_FORMAT | FORMAT) {
+            return Err(ApiError::invalid("Unsupported BG Tutor backup format"));
         }
-        if archive.len() != TABLES.len() + 1 {
+        let compatible = manifest.schema == fingerprint;
+        if compatible && archive.len() != TABLES.len() + 1 {
             return Err(ApiError::invalid(
                 "Backup has a missing or unexpected entry",
             ));
         }
 
-        let mut staging = tempfile::tempfile().context("Creating temporary restore file")?;
-        let mut lengths = Vec::with_capacity(TABLES.len());
+        if !compatible && !summarize {
+            return Err(super::schema_mismatch());
+        }
+        let tables: &[&str] = if compatible {
+            TABLES
+        } else if SUMMARY_TABLES
+            .iter()
+            .all(|table| archive.index_for_name(&entry(table)).is_some())
+        {
+            &SUMMARY_TABLES
+        } else {
+            &[]
+        };
+        let mut counts = [0; SUMMARY_TABLES.len()];
+        let mut matches = MatchCounter::new();
+        let mut output = destination().context("Creating backup scan destination")?;
+        let mut lengths = Vec::with_capacity(tables.len());
         let mut total = 0;
         let mut buffer = vec![0; 128 * 1024];
-        for table in TABLES {
+        for &table in tables {
             let mut entry = archive
                 .by_name(&entry(table))
                 .map_err(|_| ApiError::invalid("Backup table is missing"))?;
             if entry.is_dir() || entry.size() > MAX_DATA_BYTES - total {
                 return Err(ApiError::invalid("Invalid or oversized backup table"));
             }
+            let count = if summarize {
+                SUMMARY_TABLES.iter().position(|&name| name == table)
+            } else {
+                None
+            };
             let mut read = 0;
             loop {
-                let count = entry
+                if cancel.is_cancelled() {
+                    return Err(ApiError::invalid("Backup scan was interrupted"));
+                }
+                let size = entry
                     .read(&mut buffer)
                     .map_err(|_| ApiError::invalid("Backup table is damaged"))?;
-                if count == 0 {
+                if size == 0 {
                     break;
                 }
-                read += count as u64;
+                read += size as u64;
                 if read > entry.size() {
                     return Err(ApiError::invalid("Invalid backup table length"));
                 }
-                staging
-                    .write_all(&buffer[..count])
-                    .context("Staging backup table")?;
+                let bytes = &buffer[..size];
+                match count {
+                    Some(0) => matches.count(bytes),
+                    Some(index) => {
+                        // PostgreSQL text COPY escapes field newlines as \n.
+                        counts[index] += bytes.iter().filter(|&&byte| byte == b'\n').count() as u64;
+                    }
+                    None => {}
+                }
+                output
+                    .write_all(bytes)
+                    .context("Writing decoded backup table")?;
             }
             if read != entry.size() {
                 return Err(ApiError::invalid("Incomplete backup table"));
@@ -242,13 +375,53 @@ pub(super) async fn prepare(file: File, fingerprint: String) -> ApiResult<Prepar
             lengths.push(read);
             total += read;
         }
-        staging.rewind().context("Rewinding restore file")?;
-        Ok(Prepared {
-            file: File::from_std(staging),
-            manifest,
+        let [_, saved_positions, learning_cards] = counts;
+        Ok(Scanned {
+            checked: Checked {
+                contents: (summarize && !tables.is_empty()).then_some(BackupContents {
+                    created_at: manifest.created_at,
+                    matches: matches.matches,
+                    saved_positions,
+                    learning_cards,
+                }),
+                manifest,
+                compatible,
+            },
             lengths,
+            output,
         })
     })
     .await
-    .context("Preparing backup archive")?
+    .context("Scanning backup archive")?
+}
+
+pub(super) async fn check(
+    file: File,
+    fingerprint: String,
+    permit: Arc<OwnedSemaphorePermit>,
+) -> ApiResult<Checked> {
+    Ok(scan(file, fingerprint, || Ok(io::sink()), permit, true)
+        .await?
+        .checked)
+}
+
+pub(super) async fn prepare(
+    file: File,
+    fingerprint: String,
+    permit: Arc<OwnedSemaphorePermit>,
+) -> ApiResult<Prepared> {
+    let Scanned {
+        checked,
+        lengths,
+        output,
+    } = scan(file, fingerprint, tempfile::tempfile, permit, false).await?;
+    let mut file = File::from_std(output);
+    tokio::io::AsyncSeekExt::rewind(&mut file)
+        .await
+        .context("Rewinding restore file")?;
+    Ok(Prepared {
+        file,
+        manifest: checked.manifest,
+        lengths,
+    })
 }
