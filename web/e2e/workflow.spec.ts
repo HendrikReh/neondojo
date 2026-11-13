@@ -147,6 +147,9 @@ test('full match analysis, errors, board navigation and persisted results', asyn
     name: 'Vollständige Partieanalyse',
     exact: true,
   });
+  const progress = page
+    .getByRole('tabpanel', { name: 'Analyse', exact: true })
+    .locator('.match-analysis-progress');
   await expect(panel).toBeVisible();
   const analysisResponse = page.waitForResponse(
     (response) =>
@@ -163,10 +166,10 @@ test('full match analysis, errors, board navigation and persisted results', asyn
   const created = await submitted.json();
   await expect(panel).toHaveAttribute('data-job-id', created.id);
   await expect(
-    panel.getByText('Partieanalyse abgeschlossen', { exact: true }),
+    progress.getByText('Partieanalyse abgeschlossen', { exact: true }),
   ).toBeVisible({ timeout: 45_000 });
-  await expect(panel.getByRole('progressbar')).toHaveAttribute('value', '100');
-  await expect(panel).toContainText('2 / 2 Spiele');
+  await expect(progress.getByRole('progressbar')).toHaveAttribute('value', '100');
+  await expect(progress).toContainText('2 / 2 Spiele');
   await page.getByRole('tab', { name: 'Statistik', exact: true }).click();
   const statistics = page.getByRole('tabpanel', {
     name: 'Statistik',
@@ -200,7 +203,7 @@ test('full match analysis, errors, board navigation and persisted results', asyn
   await page.getByLabel('Analyseumfang', { exact: true }).selectOption('match');
   await page.getByRole('tab', { name: 'Fehler', exact: true }).click();
   await expect(
-    panel.getByText('Partieanalyse abgeschlossen', { exact: true }),
+    progress.getByText('Partieanalyse abgeschlossen', { exact: true }),
   ).toBeVisible();
   await expect(panel.locator('tbody tr').first()).toBeVisible();
   await panel.scrollIntoViewIfNeeded();
@@ -237,6 +240,9 @@ test('the latest clicked analysis row wins during a delayed game load', async ({
     name: 'Vollständige Partieanalyse',
     exact: true,
   });
+  const progress = page
+    .getByRole('tabpanel', { name: 'Analyse', exact: true })
+    .locator('.match-analysis-progress');
   const analysisResponse = page.waitForResponse(
     (response) =>
       response.request().method() === 'POST' &&
@@ -252,7 +258,7 @@ test('the latest clicked analysis row wins during a delayed game load', async ({
   const created = await submitted.json();
   await expect(panel).toHaveAttribute('data-job-id', created.id);
   await expect(
-    panel.getByText('Partieanalyse abgeschlossen', { exact: true }),
+    progress.getByText('Partieanalyse abgeschlossen', { exact: true }),
   ).toBeVisible({ timeout: 45_000 });
   await panel.getByLabel('Nur Auffälligkeiten').uncheck();
   await panel
