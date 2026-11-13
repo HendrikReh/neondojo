@@ -468,6 +468,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/decks/{id}/anki-auto-sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["settings"];
+        put: operations["set_settings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/decks/{id}/card-suggestions": {
         parameters: {
             query?: never;
@@ -2363,6 +2379,14 @@ export interface components {
             evaluation: components["schemas"]["PracticeEvaluation"];
             revealed: components["schemas"]["RevealedCard"];
             submitted: components["schemas"]["PracticeAnswer"];
+        };
+        AutoSyncSettings: {
+            last_outcome?: null | components["schemas"]["SyncOutcome"];
+            /** Format: date-time */
+            last_received_at?: string | null;
+            /** Format: date-time */
+            last_synced_at?: string | null;
+            profile?: string | null;
         };
         BenchmarkEngines: {
             engine: components["schemas"]["EngineSnapshot"];
@@ -4719,6 +4743,9 @@ export interface components {
             /** Format: int32 */
             wins_b: number;
         };
+        SetAutoSync: {
+            enabled: boolean;
+        };
         SimilarHit: {
             black: string;
             /**
@@ -4834,6 +4861,8 @@ export interface components {
             /** Format: uuid */
             job_id: string;
         };
+        /** @enum {string} */
+        SyncOutcome: "synced" | "no_matches" | "failed";
         SyncRequest: Record<string, never>;
         SyncResult: {
             matched_cards: number;
@@ -6408,6 +6437,116 @@ export interface operations {
                 };
             };
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutoSyncSettings"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetAutoSync"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutoSyncSettings"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            504: {
                 headers: {
                     [name: string]: unknown;
                 };

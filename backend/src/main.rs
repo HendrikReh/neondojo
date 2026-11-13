@@ -47,6 +47,7 @@ async fn main() -> anyhow::Result<()> {
     let stop = state.shutdown.clone();
     let worker = tokio::spawn(jobs::worker(state.clone(), stop.clone()));
     let match_worker = tokio::spawn(bgtutor::engine_matches::worker(state.clone()));
+    let anki_worker = tokio::spawn(bgtutor::learning::anki_sync_worker(state.clone()));
     let mut app = api::router(state);
     if let Ok(dir) = std::env::var("BGTUTOR_WEB_DIR") {
         app = app.fallback_service(tower_http::services::ServeDir::new(&dir).not_found_service(
@@ -77,5 +78,6 @@ async fn main() -> anyhow::Result<()> {
     stop.cancel();
     worker.await?;
     match_worker.await?;
+    anki_worker.await?;
     Ok(())
 }

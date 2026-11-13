@@ -30,6 +30,27 @@
   color: var(--ui-muted);
   margin-top: 8px;
 }
+.learning-anki-auto-sync {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 10px;
+  font-size: var(--font-size-meta);
+}
+.learning-deck-panel .learning-anki-auto-sync label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.learning-deck-panel .learning-anki-auto-sync input {
+  width: auto;
+  padding: 0;
+  margin: 0;
+}
+.learning-anki-auto-sync span:not([role="alert"]) {
+  color: var(--ui-muted);
+}
 .learning-card-table-scroll.position-table-scroll {
   border-radius: 9px;
 }

@@ -105,6 +105,9 @@ through AnkiConnect.
 **Sync Anki reviews** exchanges missing reviews for the selected native deck
 with the active Anki profile. The result shows how many cards matched and how
 many reviews each application received.
+Enable **Sync reviews automatically** to run the same exchange in the
+background when the linked Anki profile is open. The deck shows the linked
+profile and the last successful sync. Enable it again after restoring a backup.
 On wide windows, drag the divider between the card list and the preview. The
 Left and Right arrow keys move the focused divider. Double-click it or press
 Enter to restore the default width. The browser remembers the chosen width.

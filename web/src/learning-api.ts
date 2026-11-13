@@ -86,3 +86,17 @@ export function syncAnkiReviews(deckId: string) {
     body: JSON.stringify(body),
   });
 }
+
+export type AnkiAutoSyncSettings = Schema['AutoSyncSettings'];
+
+export function loadAnkiAutoSync(deckId: string, signal: AbortSignal) {
+  return request<AnkiAutoSyncSettings>(`/decks/${deckId}/anki-auto-sync`, { signal });
+}
+
+export function setAnkiAutoSync(deckId: string, body: Schema['SetAutoSync']) {
+  return request<AnkiAutoSyncSettings>(`/decks/${deckId}/anki-auto-sync`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}

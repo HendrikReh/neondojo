@@ -135,6 +135,10 @@ async fn preserve_host_settings(connection: &mut PgConnection, binary: &str) -> 
 }
 
 async fn retire_source_work(connection: &mut PgConnection) -> Result<()> {
+    // A restored deck requires a new opt-in for the active Anki collection.
+    sqlx::query("DELETE FROM public.anki_auto_sync")
+        .execute(&mut *connection)
+        .await?;
     sqlx::query("DELETE FROM public.score_practice_profiles")
         .execute(&mut *connection)
         .await?;

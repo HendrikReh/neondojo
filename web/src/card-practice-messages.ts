@@ -450,6 +450,41 @@ const rows = {
     '„{deck}” · Profil Anki {profile} · Odebrano {received} powtórek · Wysłano {sent} · Dopasowano {matched} kart · Bez dopasowania {unmatched}',
     '«{deck}» · Profilo Anki {profile} · {received} ripassi ricevuti · {sent} inviati · {matched} schede abbinate · {unmatched} senza corrispondenza',
   ],
+  ankiAutoSync: [
+    'Sync reviews automatically', 'Lernhistorie automatisch abgleichen',
+    'Sincronizar repasos automáticamente', 'Synchroniser les révisions automatiquement',
+    'Synchronizuj powtórki automatycznie', 'Sincronizza i ripassi automaticamente',
+  ],
+  ankiAutoProfile: [
+    'Anki profile {profile}', 'Anki-Profil {profile}', 'Perfil de Anki {profile}',
+    'Profil Anki {profile}', 'Profil Anki {profile}', 'Profilo Anki {profile}',
+  ],
+  ankiAutoWaiting: [
+    'Waiting for the first sync', 'Wartet auf den ersten Abgleich',
+    'En espera de la primera sincronización', 'En attente de la première synchronisation',
+    'Oczekiwanie na pierwszą synchronizację', 'In attesa della prima sincronizzazione',
+  ],
+  ankiAutoLastSync: [
+    'Last sync {date}', 'Letzter Abgleich {date}', 'Última sincronización {date}',
+    'Dernière synchronisation {date}', 'Ostatnia synchronizacja {date}', 'Ultima sincronizzazione {date}',
+  ],
+  ankiAutoFailed: [
+    'Last sync failed. BG Tutor will retry.', 'Letzter Abgleich fehlgeschlagen. BG Tutor versucht es erneut.',
+    'Falló la última sincronización. BG Tutor volverá a intentarlo.',
+    'La dernière synchronisation a échoué. BG Tutor réessaiera.',
+    'Ostatnia synchronizacja nie powiodła się. BG Tutor spróbuje ponownie.',
+    'L’ultima sincronizzazione non è riuscita. BG Tutor riproverà.',
+  ],
+  ankiAutoNoMatches: [
+    'Send this deck to the linked Anki profile.', 'Sende dieses Deck an das verknüpfte Anki-Profil.',
+    'Envía este mazo al perfil de Anki vinculado.', 'Envoyez ce paquet au profil Anki associé.',
+    'Wyślij tę talię do połączonego profilu Anki.', 'Invia questo mazzo al profilo Anki collegato.',
+  ],
+  ankiAutoLinkFirst: [
+    'Send this deck to the open Anki profile first.', 'Sende dieses Deck zuerst an das geöffnete Anki-Profil.',
+    'Envía primero este mazo al perfil de Anki abierto.', 'Envoyez d’abord ce paquet au profil Anki ouvert.',
+    'Najpierw wyślij tę talię do otwartego profilu Anki.', 'Invia prima questo mazzo al profilo Anki aperto.',
+  ],
 } as const;
 
 const languages: readonly Locale[] = ['en', 'de', 'es', 'fr', 'pl', 'it'];

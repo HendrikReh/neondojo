@@ -113,6 +113,11 @@ async function setup(page: Page, singleDeck = false) {
       .catch(() => {});
   };
   await page.route(/\/api\/(?:cards|decks\/[^/]+\/cards)(?:\?.*)?$/, respond);
+  await page.route('**/api/decks/*/anki-auto-sync', (route) =>
+    route.fulfill({
+      json: { profile: null, last_synced_at: null, last_received_at: null, last_outcome: null },
+    }),
+  );
   page.on('request', (req) => {
     if (
       !['GET', 'HEAD'].includes(req.method()) &&
@@ -289,6 +294,34 @@ test('Sync Anki reviews reports both directions for the selected deck', async ({
   await expect(study.getByText(/Anki profile Test profile/)).toContainText(
     '2 reviews received · 1 sent · 1 cards matched · 0 unmatched',
   );
+});
+
+test('Automatic Anki sync is enabled and disabled for the selected deck', async ({ page }) => {
+  const { study } = await setup(page);
+  let linked = false;
+  await page.route(`**/api/decks/${deckB}/anki-auto-sync`, async (route) => {
+    if (route.request().method() === 'PUT') {
+      linked = route.request().postDataJSON().enabled;
+    }
+    await route.fulfill({ json: {
+      profile: linked ? 'Test profile' : null,
+      last_synced_at: null,
+      last_received_at: null,
+      last_outcome: null,
+    } });
+  });
+  const toggle = study.getByRole('checkbox', { name: 'Sync reviews automatically' });
+  await expect(toggle).toHaveCount(0);
+  await study.getByLabel('Choose deck', { exact: true }).selectOption(deckB);
+  await expect(toggle).toBeEnabled();
+  await expect(toggle).not.toBeChecked();
+  await toggle.click();
+  await expect(toggle).toBeChecked();
+  await expect(study.getByText(/Anki profile Test profile/)).toBeVisible();
+  await toggle.click();
+  await expect(toggle).not.toBeChecked();
+  await expect(study.getByText(/Anki profile Test profile/)).toHaveCount(0);
+  expect(linked).toBe(false);
 });
 
 test('Move stays visible when the search has no source or the source has no destination', async ({

@@ -13,21 +13,37 @@ const MAX_REVIEWS: usize = 100_000;
 #[derive(Serialize, ToSchema)]
 pub(super) struct SyncResult {
     profile: String,
-    matched_cards: usize,
+    pub(super) matched_cards: usize,
     unmatched_cards: usize,
     received_reviews: usize,
     sent_reviews: usize,
 }
 
 #[derive(Deserialize)]
-struct Collection {
-    profile: String,
+pub(super) struct Collection {
+    pub(super) profile: String,
     session: String,
 }
 
 impl Collection {
-    async fn open(client: &Client) -> ApiResult<Self> {
+    pub(super) async fn open(client: &Client) -> ApiResult<Self> {
         client.rpc("collection.get", json!({})).await
+    }
+
+    pub(super) async fn collection_key(&self, client: &Client) -> ApiResult<String> {
+        use sha2::{Digest, Sha256};
+        #[derive(Deserialize)]
+        struct MediaDirectory {
+            path: String,
+        }
+        let directory: MediaDirectory = client
+            .rpc("media.getDirectory", json!({"session":self.session}))
+            .await?;
+        let mut hash = Sha256::new();
+        hash.update(self.profile.as_bytes());
+        hash.update([0]);
+        hash.update(directory.path.as_bytes());
+        Ok(format!("{:x}", hash.finalize()))
     }
 }
 
@@ -170,22 +186,38 @@ pub(super) async fn sync(
     let client = Client::local();
     let collection = Collection::open(&client).await?;
     Ok(Json(
-        sync_deck(&state.pool, id, &client, &collection, &cards).await?,
+        sync_deck(&state.pool, id, &client, &collection, &cards, None).await?,
     ))
 }
 
-async fn sync_deck(
+pub(super) async fn sync_deck(
     pool: &PgPool,
     id: Uuid,
     client: &Client,
     collection: &Collection,
     cards: &HashMap<String, Uuid>,
+    auto_link: Option<Uuid>,
 ) -> ApiResult<SyncResult> {
     let matched = collection.matches(client, cards).await?;
     let remote = read_reviews(client, &collection.session, &matched).await?;
-    let (received, outgoing) = reconcile(pool, id, &matched, &remote).await?;
+    let (received, outgoing) = reconcile(pool, id, &matched, &remote, auto_link).await?;
     let sent = outgoing.len();
     for batch in outgoing.chunks(PAGE_SIZE) {
+        if let Some(link) = auto_link {
+            let enabled: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM anki_auto_sync WHERE deck_id=$1 AND link_id=$2)",
+            )
+            .bind(id)
+            .bind(link)
+            .fetch_one(pool)
+            .await
+            .map_err(anyhow::Error::from)?;
+            if !enabled {
+                return Err(conflict(
+                    "The automatic Anki link changed during synchronization",
+                ));
+            }
+        }
         write_reviews(client, &collection.session, batch).await?;
     }
     Ok(SyncResult {
@@ -198,7 +230,7 @@ async fn sync_deck(
 }
 
 impl Collection {
-    async fn matches(
+    pub(super) async fn matches(
         &self,
         client: &Client,
         cards: &HashMap<String, Uuid>,
@@ -211,7 +243,7 @@ impl Collection {
 #[serde(deny_unknown_fields)]
 pub(super) struct SyncRequest {}
 
-async fn deck_cards(pool: &PgPool, id: Uuid) -> ApiResult<HashMap<String, Uuid>> {
+pub(super) async fn deck_cards(pool: &PgPool, id: Uuid) -> ApiResult<HashMap<String, Uuid>> {
     let mut tx = pool.begin().await.map_err(anyhow::Error::from)?;
     lock_deck(&mut tx, id).await?;
     let rows: Vec<CardRow> = sqlx::query_as(
@@ -362,10 +394,26 @@ async fn reconcile(
     deck_id: Uuid,
     matched: &HashMap<Uuid, String>,
     remote: &HashMap<i64, RemoteReview>,
+    auto_link: Option<Uuid>,
 ) -> ApiResult<(usize, Vec<OutgoingReview>)> {
     let ids = matched.keys().copied().collect::<Vec<_>>();
     let mut tx = pool.begin().await.map_err(anyhow::Error::from)?;
     lock_deck(&mut tx, deck_id).await?;
+    if let Some(link) = auto_link {
+        let exists: Option<Uuid> = sqlx::query_scalar(
+            "SELECT link_id FROM anki_auto_sync WHERE deck_id=$1 AND link_id=$2 FOR UPDATE",
+        )
+        .bind(deck_id)
+        .bind(link)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?;
+        if exists.is_none() {
+            return Err(conflict(
+                "The automatic Anki link changed during synchronization",
+            ));
+        }
+    }
     let locked: Vec<Uuid> = sqlx::query_scalar(
         "SELECT c.id FROM learning_cards c JOIN deck_cards dc ON dc.card_id=c.id
          WHERE dc.deck_id=$1 AND c.id=ANY($2) ORDER BY c.signature COLLATE \"C\" FOR UPDATE OF c",
@@ -486,6 +534,13 @@ async fn reconcile(
         }
     }
     let received = save_incoming(&mut tx, &incoming).await?;
+    if received > 0 && auto_link.is_some() {
+        sqlx::query("UPDATE anki_auto_sync SET last_received_at=now() WHERE deck_id=$1")
+            .bind(deck_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(anyhow::Error::from)?;
+    }
     tx.commit().await.map_err(anyhow::Error::from)?;
     Ok((received, outgoing))
 }
@@ -690,7 +745,7 @@ mod tests {
             (occupied - 1, review(occupied - 1, Kind::Manual, 0)),
             (occupied - 2, review(occupied - 2, Kind::Filtered, 0)),
         ]);
-        let (received, outgoing) = reconcile(&pool, deck, &matched, &remote)
+        let (received, outgoing) = reconcile(&pool, deck, &matched, &remote, None)
             .await
             .map_err(|e| (e.0, e.1))
             .unwrap();
@@ -700,7 +755,7 @@ mod tests {
         assert_eq!(outgoing[0].rating, Rating::Good);
 
         // A retry after a lost response reuses the original reservation.
-        let (received, retry) = reconcile(&pool, deck, &matched, &remote)
+        let (received, retry) = reconcile(&pool, deck, &matched, &remote, None)
             .await
             .map_err(|e| (e.0, e.1))
             .unwrap();
@@ -710,7 +765,7 @@ mod tests {
         let row: RemoteReview =
             serde_json::from_value(serde_json::to_value(&retry[0]).unwrap()).unwrap();
         remote.insert(row.id.parse().unwrap(), row);
-        let (received, outgoing) = reconcile(&pool, deck, &matched, &remote)
+        let (received, outgoing) = reconcile(&pool, deck, &matched, &remote, None)
             .await
             .map_err(|e| (e.0, e.1))
             .unwrap();

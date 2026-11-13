@@ -1,6 +1,7 @@
 import { useProfileValue } from './useProfileValue';
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import ActionButton from './ActionButton';
+import AnkiAutoSync from './AnkiAutoSync';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { request, type Job } from './api';
 import { AppError } from './i18n-core';
@@ -989,6 +990,15 @@ export default function LearningWorkspace({
           {practiceT('ankiImport')}
         </ActionButton>
       </div>
+      {visible && (
+        <AnkiAutoSync
+          key={sourceDeck.id}
+          deckId={sourceDeck.id}
+          empty={!sourceDeck.card_count}
+          busy={ankiBusy}
+          onReceived={() => setHistoryRevision((value) => value + 1)}
+        />
+      )}
       <p className="learning-explainer">{searchT('scopeHint')}</p>
     </div>
   );

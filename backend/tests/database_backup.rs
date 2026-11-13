@@ -366,3 +366,67 @@ async fn restores_anki_review_history(pool: PgPool) {
     .unwrap();
     assert_eq!(restored, (1, 1, 100, "hard".into(), 200, "good".into()));
 }
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn restored_deck_requires_new_opt_in_for_automatic_anki_sync(pool: PgPool) {
+    let app = router(AppState::new(pool.clone(), Engine::new("gnubg".into())));
+    let deck: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO decks(id,name) VALUES(gen_random_uuid(),'Linked deck') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO anki_auto_sync(deck_id,link_id,profile,collection_key)
+         VALUES($1,gen_random_uuid(),'Source profile','source-collection')",
+    )
+    .bind(deck)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let response = app
+        .clone()
+        .oneshot(Request::get(BACKUP).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let archive = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    let settings_path = format!("/api/decks/{deck}/anki-auto-sync");
+    let settings_request = || Request::get(&settings_path).body(Body::empty()).unwrap();
+    sqlx::query("UPDATE anki_auto_sync SET profile='Destination profile' WHERE deck_id=$1")
+        .bind(deck)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let response = app.clone().oneshot(settings_request()).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), 1024).await.unwrap();
+    let settings: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(settings["profile"], "Destination profile");
+
+    let response = app.clone().oneshot(restore(archive, true)).await.unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    let response = app.oneshot(settings_request()).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), 1024).await.unwrap();
+    let settings: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(
+        settings,
+        serde_json::json!({
+            "profile":null,
+            "last_synced_at":null,
+            "last_received_at":null,
+            "last_outcome":null
+        })
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM anki_auto_sync")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0,
+    );
+}

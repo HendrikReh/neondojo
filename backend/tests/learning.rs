@@ -10,6 +10,34 @@ static ANKI_CONNECT_TESTS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_ne
 static EXPORT_TESTS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[sqlx::test(migrations = "./migrations")]
+async fn anki_auto_sync_is_opt_in_and_can_be_disabled_offline(pool: PgPool) {
+    let _anki_guard = ANKI_CONNECT_TESTS.lock().await;
+    let app = api::router(api::AppState::new(pool, Engine::new("unused".into())));
+    let (_, deck) = call(
+        app.clone(),
+        "POST",
+        "/api/decks",
+        json!({"name":"Optional sync"}),
+    )
+    .await;
+    let path = format!("/api/decks/{}/anki-auto-sync", deck["id"].as_str().unwrap());
+    let (status, settings) = call(app.clone(), "GET", &path, Value::Null).await;
+    assert_eq!(status, 200);
+    assert_eq!(settings["profile"], Value::Null);
+    assert_eq!(
+        call(app.clone(), "PUT", &path, json!({"enabled":false}))
+            .await
+            .0,
+        200
+    );
+    assert_eq!(
+        call(app, "PUT", &path, json!({"enabled":true})).await.0,
+        422,
+        "An empty deck cannot be linked"
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn anki_review_sync_rejects_missing_decks_without_contacting_anki(pool: PgPool) {
     let _anki_guard = ANKI_CONNECT_TESTS.lock().await;
     let app = api::router(api::AppState::new(pool, Engine::new("unused".into())));
