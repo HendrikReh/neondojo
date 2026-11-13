@@ -59,18 +59,23 @@ const numberFields = [
   'min_loss',
   'max_loss',
 ] as const;
+export const positionFilterKeys = [
+  ...textFields,
+  'game_plan',
+  ...numberFields,
+  'crawford',
+  'analysis_state',
+] as const satisfies readonly (keyof PositionFilterDraft)[];
+export type PositionFilterKey = (typeof positionFilterKeys)[number];
+
 export function emptyPositionFilters(): PositionFilterDraft {
-  return Object.fromEntries(
-    [
-      ...textFields,
-      ...numberFields,
-      'crawford',
-      'analysis_state',
-      'sort',
-      'direction',
-      'game_plan',
-    ].map((key) => [key, key === 'sort' ? 'match' : '']),
-  ) as PositionFilterDraft;
+  return {
+    ...(Object.fromEntries(
+      positionFilterKeys.map((key) => [key, '']),
+    ) as Record<PositionFilterKey, string>),
+    sort: 'match',
+    direction: '',
+  };
 }
 export function positionDefinition(
   draft: PositionFilterDraft,

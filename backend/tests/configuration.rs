@@ -275,6 +275,46 @@ async fn occurrence_sort_choices_are_persisted_in_configuration(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
+async fn position_column_choices_persist_without_changing_widths(pool: PgPool) {
+    let (app, state) = profile_support::initialized(&pool, false).await;
+    let mut config = state["current_configuration"].clone();
+    config["positions"]["visible_columns"] = json!(["decks", "origin"]);
+    config["positions"]["column_widths"] = json!({"decks": 222});
+    let (code, updated) = call(
+        app.clone(),
+        "PUT",
+        "/api/configuration",
+        json!({"expected_revision": state["revision"], "configuration": config}),
+    )
+    .await;
+    assert_eq!(code, 200, "{updated}");
+    assert_eq!(
+        updated["current_configuration"]["positions"]["visible_columns"],
+        json!(["origin", "decks"])
+    );
+    let mut config = updated["current_configuration"].clone();
+    config["positions"]["visible_columns"] = json!(["origin"]);
+    let (code, result) = call(
+        app.clone(),
+        "PUT",
+        "/api/configuration",
+        json!({"expected_revision": updated["revision"], "configuration": config}),
+    )
+    .await;
+    assert_eq!(code, 200, "{result}");
+    let (_, loaded) = call(app, "GET", "/api/configuration", Value::Null).await;
+    assert_eq!(
+        loaded["current_configuration"]["positions"]["visible_columns"],
+        json!(["origin"])
+    );
+    assert_eq!(
+        loaded["current_configuration"]["positions"]["column_widths"],
+        json!({"decks": 222})
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
 async fn unchanged_missing_references_do_not_block_unrelated_configuration_updates(pool: PgPool) {
     let (app, state) = profile_support::initialized(&pool, false).await;
     let deck = uuid::Uuid::new_v4();

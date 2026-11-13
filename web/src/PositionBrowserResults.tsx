@@ -1,10 +1,10 @@
 import { useOptionalConfiguration } from './ConfigurationProvider';
+import { useProfileValue } from './useProfileValue';
 import ActionButton from './ActionButton';
 import EngineLabel from './EngineLabel';
-import { useMemo } from 'react';
+import { useMemo, type Ref } from 'react';
 import {
   SearchResultNotes,
-  SearchResultPlayers,
   SearchResultRow,
   SearchResultTable,
   SearchResultTags,
@@ -15,12 +15,16 @@ import {
   SearchResultPreview,
 } from './SearchResultPreview';
 import LibrarySortHeading from './LibrarySortHeading';
+import LibraryColumnPicker from './LibraryColumnPicker';
 import { useResizableColumns } from './useResizableColumns';
 import { useLibraryText } from './library-messages';
 import {
   POSITION_COLUMNS,
   POSITION_COLUMN_LAYOUT,
+  DEFAULT_POSITION_COLUMNS,
+  POSITION_DATA_COLUMNS,
   type PositionColumn,
+  type PositionDataColumn,
 } from './position-table-columns';
 import {
   positionPlayer,
@@ -41,6 +45,7 @@ import {
 import type { Theme } from './themes';
 import { useAnalysisMatchHeaderText } from './analysis-match-header-messages';
 export interface PositionResultsProps {
+  selectPageRef?: Ref<HTMLInputElement>;
   items: readonly PositionBrowserHit[];
   selected: ReadonlySet<string>;
   previewId?: string;
@@ -112,6 +117,7 @@ function NativeError({ hit }: { hit: PositionBrowserHit }) {
   );
 }
 export function PositionBrowserResults({
+  selectPageRef,
   items,
   selected,
   previewId,
@@ -132,16 +138,27 @@ export function PositionBrowserResults({
   const p = usePositionText(),
     l = useLibraryText(),
     { formatNumber, formatDecision, locale } = useI18n();
+  const [shown, setShown] = useProfileValue<PositionDataColumn[]>(
+    (c) => c.positions.visible_columns,
+    (c, visible_columns) => ({
+      ...c,
+      positions: { ...c.positions, visible_columns },
+    }),
+    () => [...DEFAULT_POSITION_COLUMNS],
+  );
   const activeColumns = useMemo(
     () =>
       POSITION_COLUMNS.filter(
-        (column) => showPlayed || column.id !== 'played_move',
-      ).map((column) => column.id),
-    [showPlayed],
+        ({ id }) =>
+          id === 'select' ||
+          id === 'actions' ||
+          (id === 'played_move' ? showPlayed : shown.includes(id)),
+      ),
+    [showPlayed, shown],
   );
   const columns = useResizableColumns(POSITION_COLUMN_LAYOUT, {
     visible,
-    activeColumns,
+    activeColumns: activeColumns.map(({ id }) => id),
     ...(profile?.current
       ? {
           widths: profile.current.positions.column_widths,
@@ -164,28 +181,63 @@ export function PositionBrowserResults({
   }, [items, locale, showPlayed]);
   const ids = items.map((hit) => hit.position.id),
     all = ids.length > 0 && ids.every((id) => selected.has(id));
-  const heading = (
-    column: PositionColumn,
-    fields: { key: PositionSort; label: string; name?: string }[],
-  ) => (
-    <LibrarySortHeading<PositionSort>
-      fields={fields}
-      sort={sort}
-      direction={direction}
-      onSort={(value) => onSort?.(value)}
-      disabled={sortDisabled || !onSort}
-      column={column}
-      resizeHandle={columns.handle(
-        column,
-        fields.map((field) => field.name ?? field.label).join(' / '),
-      )}
-    />
+  const fieldsByColumn: Record<
+    Exclude<PositionColumn, 'select' | 'actions'>,
+    readonly { key: PositionSort; label: string; name?: string }[]
+  > = {
+    origin: [
+      { key: 'match_id', label: 'ID', name: p('matchId') },
+      { key: 'match', label: l('match') },
+    ],
+    database: [{ key: 'database', label: p('database') }],
+    game: [{ key: 'game', label: p('gameNumber') }],
+    ply: [{ key: 'ply', label: p('moveNumber') }],
+    player: [{ key: 'player', label: p('player') }],
+    opponent: [{ key: 'opponent', label: p('opponent') }],
+    dice: [{ key: 'dice', label: p('dice') }],
+    score: [{ key: 'score', label: p('score') }],
+    cube: [{ key: 'cube', label: p('cubeShort'), name: p('cube') }],
+    played_move: [{ key: 'played_move', label: p('playedMove') }],
+    loss: [{ key: 'loss', label: p('equityLoss'), name: p('nativeError') }],
+    decks: [{ key: 'decks', label: p('decks') }],
+    notes: [
+      { key: 'tags', label: l('tags') },
+      { key: 'comment', label: l('comment') },
+    ],
+  };
+  const heading = (column: keyof typeof fieldsByColumn) => {
+    const fields = fieldsByColumn[column];
+    return (
+      <LibrarySortHeading<PositionSort>
+        key={column}
+        fields={fields}
+        sort={sort}
+        direction={direction}
+        onSort={(value) => onSort?.(value)}
+        disabled={sortDisabled || !onSort}
+        column={column}
+        resizeHandle={columns.handle(
+          column,
+          fields.map((field) => field.name ?? field.label).join(' / '),
+        )}
+      />
+    );
+  };
+  const sortColumn = Object.values(fieldsByColumn)
+    .flat()
+    .find((field) => field.key === sort);
+  const sortVisible = activeColumns.some(
+    ({ id }) =>
+      id !== 'select' &&
+      id !== 'actions' &&
+      fieldsByColumn[id].some((field) => field.key === sort),
   );
   return (
     <div className="position-browser-results" aria-busy={busy}>
       <div className="position-page-select">
         <label>
           <input
+            ref={selectPageRef}
             type="checkbox"
             checked={all}
             disabled={!ids.length || busy || (!all && selected.size >= 200)}
@@ -201,6 +253,34 @@ export function PositionBrowserResults({
           />
           {p('showPlayed')}
         </label>
+        {!sortVisible && sortColumn && (
+          <span className="library-hidden-sort">
+            {l('sortedBy', {
+              column: sortColumn.name ?? sortColumn.label,
+              direction: l(direction === 'asc' ? 'ascending' : 'descending'),
+            })}
+          </span>
+        )}
+        <LibraryColumnPicker
+          options={POSITION_DATA_COLUMNS.map((id) => ({
+            id,
+            label:
+              id === 'origin'
+                ? l('match')
+                : fieldsByColumn[id].map((field) => field.label).join(' / '),
+          }))}
+          shown={shown}
+          onToggle={(id, checked) =>
+            setShown((current) => {
+              const next = POSITION_DATA_COLUMNS.filter((column) =>
+                column === id ? checked : current.includes(column),
+              );
+              return next.length ? next : current;
+            })
+          }
+          onAll={() => setShown([...POSITION_DATA_COLUMNS])}
+          onReset={() => setShown([...DEFAULT_POSITION_COLUMNS])}
+        />
         <ActionButton
           icon="reset"
           label={l('resetColumnWidths')}
@@ -213,21 +293,24 @@ export function PositionBrowserResults({
       </div>
       <SearchResultTable
         ref={columns.tableRef}
-        className={`position-table${showPlayed ? ' position-table-played' : ''}${columns.dragging ? ' resizing-table' : ''}`}
-        style={columns.tableStyle}
+        className={`position-table saved-position-table${columns.dragging ? ' resizing-table' : ''}`}
+        style={
+          columns.tableStyle ?? {
+            minWidth: activeColumns.reduce(
+              (width, column) => width + column.defaultWidth,
+              0,
+            ),
+          }
+        }
       >
         <colgroup>
-          {POSITION_COLUMNS.filter((column) =>
-            activeColumns.includes(column.id),
-          ).map((column) => (
+          {activeColumns.map((column) => (
             <col
               key={column.id}
               className={column.className}
-              style={
-                columns.widths
-                  ? { width: columns.widths[column.id] }
-                  : undefined
-              }
+              style={{
+                width: columns.widths?.[column.id] ?? column.defaultWidth,
+              }}
             />
           ))}
         </colgroup>
@@ -239,32 +322,9 @@ export function PositionBrowserResults({
               </span>
               {columns.handle('select', l('selection'))}
             </th>
-            {heading('origin', [
-              { key: 'match_id', label: 'ID', name: p('matchId') },
-              { key: 'match', label: l('name') },
-            ])}
-            {heading('database', [{ key: 'database', label: p('database') }])}
-            {heading('game', [{ key: 'game', label: p('gameNumber') }])}
-            {heading('ply', [{ key: 'ply', label: p('moveNumber') }])}
-            {heading('player', [{ key: 'player', label: p('player') }])}
-            {heading('opponent', [{ key: 'opponent', label: p('opponent') }])}
-            {heading('dice', [{ key: 'dice', label: p('dice') }])}
-            {heading('score', [{ key: 'score', label: p('score') }])}
-            {heading('cube', [
-              { key: 'cube', label: p('cubeShort'), name: p('cube') },
-            ])}
-            {showPlayed &&
-              heading('played_move', [
-                { key: 'played_move', label: p('playedMove') },
-              ])}
-            {heading('loss', [
-              { key: 'loss', label: p('lossShort'), name: p('nativeError') },
-            ])}
-            {heading('decks', [{ key: 'decks', label: p('decks') }])}
-            {heading('notes', [
-              { key: 'tags', label: l('tags') },
-              { key: 'comment', label: l('comment') },
-            ])}
+            {activeColumns.map(
+              ({ id }) => id !== 'select' && id !== 'actions' && heading(id),
+            )}
             <th scope="col" data-column="actions">
               <span className="visually-hidden">{l('actions')}</span>
               {columns.handle('actions', l('actions'))}
@@ -302,77 +362,99 @@ export function PositionBrowserResults({
                   }
                 />
               </td>
-              <td>
-                <button
-                  className="position-preview-link"
-                  aria-pressed={previewId === hit.position.id}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onPreview(hit.position.id);
-                  }}
-                >
-                  <strong className="position-match-number">
-                    #{formatNumber(hit.match_no)}
-                  </strong>
-                  <span className="position-match-name">
-                    {hit.display_name}
-                  </span>
-                </button>
-              </td>
-              <td>{hit.database_name}</td>
-              <td>{formatNumber(hit.position.game_no)}</td>
-              <td>{formatNumber(hit.position.ply)}</td>
-              <SearchResultPlayers
-                player={positionPlayer(hit)}
-                opponent={positionOpponent(hit)}
-              />
-              <td>
-                {hit.position.dice.map((die) => formatNumber(die)).join('–')}
-              </td>
-              <td>
-                {hit.white_score == null || hit.black_score == null
-                  ? 'n/a'
-                  : `${formatNumber(hit.white_score)}–${formatNumber(hit.black_score)}`}
-              </td>
-              <td>
-                {hit.cube_value == null ? 'n/a' : formatNumber(hit.cube_value)}
-              </td>
+              {shown.includes('origin') && (
+                <td>
+                  <button
+                    className="position-preview-link"
+                    aria-pressed={previewId === hit.position.id}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onPreview(hit.position.id);
+                    }}
+                  >
+                    <strong className="position-match-number">
+                      #{formatNumber(hit.match_no)}
+                    </strong>
+                    <span className="position-match-name">
+                      {hit.display_name}
+                    </span>
+                  </button>
+                </td>
+              )}
+              {shown.includes('database') && <td>{hit.database_name}</td>}
+              {shown.includes('game') && (
+                <td>{formatNumber(hit.position.game_no)}</td>
+              )}
+              {shown.includes('ply') && (
+                <td>{formatNumber(hit.position.ply)}</td>
+              )}
+              {shown.includes('player') && (
+                <td className="position-player">{positionPlayer(hit)}</td>
+              )}
+              {shown.includes('opponent') && (
+                <td className="position-opponent">{positionOpponent(hit)}</td>
+              )}
+              {shown.includes('dice') && (
+                <td>
+                  {hit.position.dice.map((die) => formatNumber(die)).join('–')}
+                </td>
+              )}
+              {shown.includes('score') && (
+                <td>
+                  {hit.white_score == null || hit.black_score == null
+                    ? 'n/a'
+                    : `${formatNumber(hit.white_score)}–${formatNumber(hit.black_score)}`}
+                </td>
+              )}
+              {shown.includes('cube') && (
+                <td>
+                  {hit.cube_value == null
+                    ? 'n/a'
+                    : formatNumber(hit.cube_value)}
+                </td>
+              )}
               {showPlayed && (
                 <td className="position-played-move">
                   {formatDecision(hit.position.notation)}
                 </td>
               )}
-              <td className="position-loss">
-                {hit.native_error ? (
-                  <span
-                    className={`position-loss-badge severity-${hit.native_error.severity}`}
-                  >
-                    {formatNumber(hit.native_error.equity_loss, {
-                      minimumFractionDigits: 3,
-                      maximumFractionDigits: 3,
-                    })}
-                  </span>
-                ) : (
-                  'n/a'
-                )}
-              </td>
-              <td className="position-row-decks">
-                {hit.decks.length
-                  ? hit.decks.map((deck) => deck.name).join(', ')
-                  : '—'}
-              </td>
-              <td>
-                <SearchResultNotes
-                  tags={hit.tags}
-                  comment={hit.notes
-                    .filter((note) => note.comment_excerpt)
-                    .map(
-                      (note) =>
-                        `${p(scopeKeys[note.scope])}: ${note.comment_excerpt}`,
-                    )
-                    .join(' · ')}
-                />
-              </td>
+              {shown.includes('loss') && (
+                <td className="position-loss">
+                  {hit.native_error ? (
+                    <span
+                      className={`position-loss-badge severity-${hit.native_error.severity}`}
+                    >
+                      {formatNumber(hit.native_error.equity_loss, {
+                        minimumFractionDigits: 3,
+                        maximumFractionDigits: 3,
+                      })}
+                    </span>
+                  ) : (
+                    'n/a'
+                  )}
+                </td>
+              )}
+              {shown.includes('decks') && (
+                <td className="position-row-decks">
+                  {hit.decks.length
+                    ? hit.decks.map((deck) => deck.name).join(', ')
+                    : '—'}
+                </td>
+              )}
+              {shown.includes('notes') && (
+                <td>
+                  <SearchResultNotes
+                    tags={hit.tags}
+                    comment={hit.notes
+                      .filter((note) => note.comment_excerpt)
+                      .map(
+                        (note) =>
+                          `${p(scopeKeys[note.scope])}: ${note.comment_excerpt}`,
+                      )
+                      .join(' · ')}
+                  />
+                </td>
+              )}
               <td>
                 <div className="position-row-actions">
                   {onRemove && (
@@ -415,19 +497,28 @@ export function PositionBrowserPreview({
     { formatNumber, formatDecision } = useI18n(),
     headerText = useAnalysisMatchHeaderText();
   return (
-    <SearchResultPreview title={p('preview')} hint={p('previewHint')}>
+    <SearchResultPreview
+      className="saved-position-preview"
+      title={p('preview')}
+      hint={p('previewHint')}
+    >
       {hit && (
         <>
-          <h3>{hit.display_name}</h3>
-          <p className="position-preview-context">
-            {hit.database_name} · {p('game', { number: hit.position.game_no })}{' '}
-            · {p('ply', { number: hit.position.ply })}
-          </p>
-          {'source_available' in hit && hit.source_available === false && (
-            <p className="position-source-removed">
-              {headerText('retainedPosition')}
-            </p>
-          )}
+          <div className="saved-position-preview-header">
+            <div>
+              <h3>{hit.display_name}</h3>
+              <p className="position-preview-context">
+                {p('game', { number: hit.position.game_no })} ·{' '}
+                {p('ply', { number: hit.position.ply })}
+              </p>
+            </div>
+            <ActionButton
+              icon="analysis"
+              label={p('openAnalysis')}
+              className="primary"
+              onClick={() => onOpen(hit.position.id)}
+            />
+          </div>
           <SearchPreviewBoard
             position={hit.position}
             white={hit.match_info.white}
@@ -437,52 +528,58 @@ export function PositionBrowserPreview({
             visible={visible}
           />
           <p className="position-before-label">{p('beforeMove')}</p>
+          {hit.source_available === false && (
+            <p className="position-source-removed">
+              {headerText('retainedPosition')}
+            </p>
+          )}
           {showPlayed && (
             <p className="position-preview-played">
               <strong>{p('playedMove')}:</strong>{' '}
               {formatDecision(hit.position.notation)}
             </p>
           )}
-          <SearchPreviewDetails
-            positionId={hit.position.position_id}
-            decks={hit.decks.map((deck) => deck.name).join(', ')}
-          >
-            <div>
-              <dt>{p('matchPoints')}</dt>
-              <dd>{formatNumber(hit.match_info.match_length)}</dd>
-            </div>
-            {hit.crawford != null && (
+          <details className="saved-position-preview-details">
+            <summary>{p('previewDetails')}</summary>
+            <SearchPreviewDetails
+              positionId={hit.position.position_id}
+              decks={hit.decks.map((deck) => deck.name).join(', ')}
+            >
               <div>
-                <dt>{p('crawford')}</dt>
-                <dd>{p(hit.crawford ? 'yes' : 'no')}</dd>
+                <dt>{p('database')}</dt>
+                <dd>{hit.database_name}</dd>
               </div>
-            )}
-            {hit.tournament && (
               <div>
-                <dt>{p('tournament')}</dt>
-                <dd>{hit.tournament}</dd>
+                <dt>{p('matchPoints')}</dt>
+                <dd>{formatNumber(hit.match_info.match_length)}</dd>
               </div>
-            )}
-            {hit.round && (
-              <div>
-                <dt>{p('round')}</dt>
-                <dd>{hit.round}</dd>
-              </div>
-            )}
-          </SearchPreviewDetails>
-          <HitNotes hit={hit} />
-          <p>
-            {p('nativeError')}: <NativeError hit={hit} />
-          </p>
+              {hit.crawford != null && (
+                <div>
+                  <dt>{p('crawford')}</dt>
+                  <dd>{p(hit.crawford ? 'yes' : 'no')}</dd>
+                </div>
+              )}
+              {hit.tournament && (
+                <div>
+                  <dt>{p('tournament')}</dt>
+                  <dd>{hit.tournament}</dd>
+                </div>
+              )}
+              {hit.round && (
+                <div>
+                  <dt>{p('round')}</dt>
+                  <dd>{hit.round}</dd>
+                </div>
+              )}
+            </SearchPreviewDetails>
+            <HitNotes hit={hit} />
+            <p>
+              {p('nativeError')}: <NativeError hit={hit} />
+            </p>
+          </details>
           {!hit.card_ready && (
             <p className="position-analysis-needed">{p('needed')}</p>
           )}
-          <ActionButton
-            icon="analysis"
-            label={p('openAnalysis')}
-            className="primary"
-            onClick={() => onOpen(hit.position.id)}
-          />
         </>
       )}
     </SearchResultPreview>

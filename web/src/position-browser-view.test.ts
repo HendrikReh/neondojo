@@ -58,7 +58,7 @@ const hit: PositionBrowserHit = {
 function render(child: ReturnType<typeof createElement>) {
   return renderToStaticMarkup(createElement(I18nProvider, { children: child }));
 }
-test('results expose contextual selection, real origin and actionable missing analysis', () => {
+test('compact results expose contextual selection and keep hidden fields in the row summary', () => {
   const html = render(
     createElement(PositionBrowserResults, {
       items: [hit],
@@ -76,11 +76,11 @@ test('results expose contextual selection, real origin and actionable missing an
   expect(html).not.toMatch(/<button\b[^>]*aria-label="Open analysis"[^>]*>/);
   expect(html).not.toContain('SECRET SOLUTION');
   expect(html).toContain('data-column="player"');
-  expect(html).toContain('data-column="opponent"');
+  expect(html).not.toContain('data-column="opponent"');
   expect(html).toContain('class="position-player">Ada');
-  expect(html).toContain('class="position-opponent">Grace');
+  expect(html).toContain('Opponent: Grace');
   expect(html).toContain('data-sort="player"');
-  expect(html).toContain('data-sort="opponent"');
+  expect(html).not.toContain('data-sort="opponent"');
   expect(html).toContain('data-sort="match_id"');
 });
 
@@ -119,9 +119,7 @@ test('position results and preview list existing decks without exposing an answe
       busy: false,
     }),
   );
-  expect(html).toContain('data-column="decks"');
-  expect(html).toContain('data-sort="decks"');
-  expect(html).toContain('Contact &amp; timing, Race study');
+  expect(html).not.toContain('data-column="decks"');
   expect(html).toContain('Decks: Contact &amp; timing, Race study');
   const preview = render(
     createElement(PositionBrowserPreview, {
@@ -157,7 +155,7 @@ test('a black-on-roll record names the actual player and opponent correctly', ()
     }),
   );
   expect(html).toContain('class="position-player">Grace');
-  expect(html).toContain('class="position-opponent">Ada');
+  expect(html).toContain('Opponent: Ada');
   expect(html).toContain('Player on roll: Grace');
 });
 

@@ -2920,6 +2920,7 @@ export interface components {
             } | null;
             definition: components["schemas"]["PositionFilterDefinition"];
             show_played: boolean;
+            visible_columns?: string[];
         };
         ConfigurationProfile: {
             configuration: components["schemas"]["ProfileConfiguration"];

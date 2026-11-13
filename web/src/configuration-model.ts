@@ -15,7 +15,12 @@ import {
   type LibraryDataColumn,
 } from './library-column-preferences';
 import { LIBRARY_WIDTH_COLUMNS } from './library-columns';
-import { POSITION_COLUMNS } from './position-table-columns';
+import {
+  DEFAULT_POSITION_COLUMNS,
+  POSITION_COLUMNS,
+  POSITION_DATA_COLUMNS,
+  type PositionDataColumn,
+} from './position-table-columns';
 import {
   positionDefinition,
   positionDraft,
@@ -72,6 +77,7 @@ export interface ProfileConfiguration {
     definition: PositionFilterDefinition;
     show_played: boolean;
     column_widths: Record<string, number> | null;
+    visible_columns: PositionDataColumn[];
   };
   learning: {
     deck_id: string;
@@ -128,6 +134,7 @@ export const defaultConfiguration: ProfileConfiguration = {
     definition: { schema_version: 1, sort: 'match' },
     show_played: false,
     column_widths: null,
+    visible_columns: [...DEFAULT_POSITION_COLUMNS],
   },
   learning: {
     deck_id: ALL_CARDS,
@@ -208,7 +215,11 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
     (k) => k !== 'schema_version',
   )) {
     const optional: readonly string[] =
-      key === 'appearance' ? boardWidthFields : [];
+      key === 'appearance'
+        ? boardWidthFields
+        : key === 'positions'
+          ? ['visible_columns']
+          : [];
     exactKeys(
       value[key],
       Object.keys(
@@ -365,6 +376,19 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
   );
   if (typeof c.positions.show_played !== 'boolean')
     invalid('positions.show_played');
+  const positionColumns = Object.hasOwn(c.positions, 'visible_columns')
+    ? c.positions.visible_columns
+    : DEFAULT_POSITION_COLUMNS;
+  if (
+    !Array.isArray(positionColumns) ||
+    !positionColumns.length ||
+    new Set(positionColumns).size !== positionColumns.length ||
+    positionColumns.some((id) => !POSITION_DATA_COLUMNS.includes(id))
+  )
+    invalid('positions.visible_columns');
+  c.positions.visible_columns = POSITION_DATA_COLUMNS.filter((id) =>
+    positionColumns.includes(id),
+  );
   const positionFields = [
     'database_id',
     'q',

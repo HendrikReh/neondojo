@@ -3,14 +3,14 @@ import ActionButton from './ActionButton';
 import { usePositionText } from './position-browser-messages';
 import './position-browser.css';
 
-const textFields = {
+export const searchTextFields = {
   q: { label: 'q', maxLength: 200 },
   player: { label: 'player', maxLength: 240 },
   tag: { label: 'tag', maxLength: 64 },
   comment: { label: 'comment', maxLength: 200 },
   position_id: { label: 'checkerId', maxLength: 14 },
 } as const;
-type TextFilter = keyof typeof textFields;
+type TextFilter = keyof typeof searchTextFields;
 
 export default function SearchFilterForm<T extends Record<TextFilter, string>>({
   filters,
@@ -24,6 +24,7 @@ export default function SearchFilterForm<T extends Record<TextFilter, string>>({
   scope,
   beforeTextFilters,
   footer,
+  compactToolbar,
   children,
 }: {
   filters: T;
@@ -37,11 +38,12 @@ export default function SearchFilterForm<T extends Record<TextFilter, string>>({
   scope: ReactNode;
   beforeTextFilters?: ReactNode;
   footer?: ReactNode;
+  compactToolbar?: { appliedFilters: ReactNode; reset: boolean };
   children: ReactNode;
 }) {
   const t = usePositionText();
   const textField = (key: TextFilter) => {
-    const { label, maxLength } = textFields[key];
+    const { label, maxLength } = searchTextFields[key];
     return (
       <SearchFilterInput
         label={t(label)}
@@ -52,9 +54,25 @@ export default function SearchFilterForm<T extends Record<TextFilter, string>>({
     );
   };
 
+  const clear = (
+    <ActionButton
+      icon="clear"
+      label={t('clear')}
+      compact={!compactToolbar}
+      type="button"
+      onClick={onClear}
+    />
+  );
+
   return (
-    <div className="position-controls">
-      {savedSearches}
+    <div
+      className={
+        compactToolbar
+          ? 'position-controls position-controls--compact'
+          : 'position-controls'
+      }
+    >
+      {!compactToolbar && savedSearches}
       <form
         className="position-filter-form"
         onSubmit={(event) => {
@@ -69,33 +87,36 @@ export default function SearchFilterForm<T extends Record<TextFilter, string>>({
           <ActionButton
             icon="search"
             label={searchLabel}
-            compact
+            compact={!compactToolbar}
             className="primary"
             type="submit"
             disabled={searchDisabled}
           />
         </div>
-        <details className="position-filter-details">
-          <summary>{t('filters')}</summary>
-          <div className="position-filter-grid">
-            {beforeTextFilters}
-            {textField('tag')}
-            {textField('comment')}
-            {textField('position_id')}
-            {children}
-          </div>
-        </details>
-        <div className="position-filter-footer">
-          {footer}
-          <ActionButton
-            icon="clear"
-            label={t('clear')}
-            compact
-            type="button"
-            onClick={onClear}
-          />
+        <div className={compactToolbar ? 'position-filter-toolbar' : undefined}>
+          <details className="position-filter-details">
+            <summary>{t('filters')}</summary>
+            <div className="position-filter-grid">
+              {beforeTextFilters}
+              {textField('tag')}
+              {textField('comment')}
+              {textField('position_id')}
+              {children}
+              {compactToolbar && footer}
+            </div>
+          </details>
+          {compactToolbar?.reset && clear}
         </div>
+        {compactToolbar ? (
+          compactToolbar.appliedFilters
+        ) : (
+          <div className="position-filter-footer">
+            {footer}
+            {clear}
+          </div>
+        )}
       </form>
+      {compactToolbar && savedSearches}
     </div>
   );
 }

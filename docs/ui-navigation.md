@@ -41,6 +41,8 @@ Result lists with multiple pages use the same underlined navigation. The
 numbered buttons show up to five nearby pages. **First** and **Last** jump
 directly to the ends of the current result set. A new filter or sort starts at
 page 1. Match, saved position and flashcard selections can span pages.
+In Positions, moving to another page previews its first result as soon as the
+page loads. Checkbox selections carry across pages.
 
 The player database uses the Positions layout with a result table on the left
 and the selected profile on the right. Click a row or use the arrow keys to

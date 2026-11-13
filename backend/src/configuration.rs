@@ -165,6 +165,12 @@ pub struct ConfigurationPositions {
     pub definition: crate::position_browser::PositionFilterDefinition,
     pub show_played: bool,
     pub column_widths: Option<BTreeMap<String, i32>>,
+    #[serde(default = "default_position_columns")]
+    pub visible_columns: Vec<String>,
+}
+fn default_position_columns() -> Vec<String> {
+    serde_json::from_value(OPTIONS["default_position_columns"].clone())
+        .expect("valid embedded position column defaults")
 }
 fn serialize_position_definition<S: serde::Serializer>(
     definition: &crate::position_browser::PositionFilterDefinition,

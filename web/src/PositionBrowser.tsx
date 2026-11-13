@@ -4,7 +4,7 @@ import ActionButton from './ActionButton';
 import SearchPagination from './SearchPagination';
 import { SearchResultList } from './SearchResultList';
 import { useSearchPages } from './useSearchPages';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { request } from './api';
 import { removePositionBookmark } from './position-bookmark-api';
 import { useI18n } from './i18n';
@@ -26,11 +26,13 @@ import {
   POSITION_PAGE_SIZE,
   positionDefinition,
   positionDraft,
+  positionFilterKeys,
   togglePositionSelection,
   type PositionBrowserHit,
   type PositionSort,
   type PositionFilterDefinition,
   type PositionFilterDraft,
+  type PositionFilterKey,
   type SavedPositionFilter,
 } from './position-browser-api';
 import { usePositionText } from './position-browser-messages';
@@ -77,7 +79,7 @@ export default function PositionBrowser({
     }
   }, [profile?.generation, profile?.ready]);
   const [databases, setDatabases] = useState<Database[]>([]),
-    [preview, setPreview] = useState<PositionBrowserHit>(),
+    [preview, setPreview] = useState<{ page: number; id: string }>(),
     [selectedHits, setSelectedHits] = useState<PositionBrowserHit[]>([]),
     [transferBusy, setTransferBusy] = useState(false),
     [removing, setRemoving] = useState(false),
@@ -131,12 +133,16 @@ export default function PositionBrowser({
     loadPage,
   });
   const { items, loading, error } = results;
-  const activePreview = preview
-    ? (items.find((item) => item.position.id === preview.position.id) ??
-      preview)
-    : items[0];
+  // The previous results stay visible while the next page loads.
+  const previewOnPage = preview?.page === results.page ? preview : undefined;
+  if (preview && !previewOnPage) setPreview(undefined);
+  const activePreview =
+    items.find((item) => item.position.id === previewOnPage?.id) ?? items[0];
 
-  const selected = new Set(selectedHits.map((hit) => hit.position.id));
+  const selected = useMemo(
+    () => new Set(selectedHits.map((hit) => hit.position.id)),
+    [selectedHits],
+  );
   function changeSelection(ids: string[], checked: boolean) {
     const next = togglePositionSelection(selected, ids, checked);
     setSelectedHits([
@@ -162,6 +168,22 @@ export default function PositionBrowser({
     const next = positionDraft(saved.definition);
     setDraft(next);
     apply(next);
+  }
+  const appliedFilters = positionDraft(definition);
+  const activeFilterKeys = positionFilterKeys.filter(
+    (key) => appliedFilters[key] !== '',
+  );
+  const hasFilters = activeFilterKeys.length > 0;
+  function clearFilters() {
+    const next = emptyPositionFilters();
+    setDraft(next);
+    apply(next);
+  }
+  function removeFilter(key: PositionFilterKey) {
+    const cleared =
+      key === 'die1' || key === 'die2' ? { die1: '', die2: '' } : { [key]: '' };
+    setDraft((current) => ({ ...current, ...cleared }));
+    apply({ ...appliedFilters, ...cleared });
   }
   function sortResults(sort: PositionSort) {
     if (transferBusy || removing) return;
@@ -197,7 +219,7 @@ export default function PositionBrowser({
           previous.filter((hit) => !removed.has(hit.position.id)),
         );
         setPreview((previous) =>
-          previous && removed.has(previous.position.id) ? undefined : previous,
+          previous && removed.has(previous.id) ? undefined : previous,
         );
         onBookmarkChanged();
         setRefresh((value) => value + 1);
@@ -218,14 +240,13 @@ export default function PositionBrowser({
       </div>
       <PositionBrowserControls
         filters={draft}
+        applied={appliedFilters}
+        activeKeys={activeFilterKeys}
         databases={databases}
         onChange={setDraft}
         onSearch={() => apply(draft)}
-        onClear={() => {
-          const next = emptyPositionFilters();
-          setDraft(next);
-          apply(next);
-        }}
+        onClear={clearFilters}
+        onRemoveFilter={removeFilter}
         onLoad={loadSaved}
         busy={busy}
         revision={revision}
@@ -285,15 +306,20 @@ export default function PositionBrowser({
         </div>
         {loading && <p role="status">{p('loading')}</p>}
         {!items.length && !loading && !error ? (
-          <p className="position-empty">{p('empty')}</p>
+          <div className="position-empty" role="status">
+            <p>{p(hasFilters ? 'noFilterResults' : 'empty')}</p>
+            {hasFilters && (
+              <button type="button" onClick={clearFilters}>
+                {p('showAllSaved')}
+              </button>
+            )}
+          </div>
         ) : (
           <PositionBrowserResults
             items={items}
             selected={selected}
             previewId={activePreview?.position.id}
-            onPreview={(id) =>
-              setPreview(items.find((hit) => hit.position.id === id))
-            }
+            onPreview={(id) => setPreview({ page: results.page, id })}
             onToggle={changeSelection}
             onOpen={onOpenPosition}
             onRemove={(ids) => void removeSaved(ids)}

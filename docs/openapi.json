@@ -12631,6 +12631,12 @@
           },
           "show_played": {
             "type": "boolean"
+          },
+          "visible_columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": false
