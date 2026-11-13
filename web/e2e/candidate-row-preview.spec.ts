@@ -377,7 +377,7 @@ for (const source of ['engine', 'file', 'book'] as const)
     await expect(board).toHaveAttribute('data-preview-mode', 'after');
     await page
       .getByRole('dialog', { name: 'Settings', exact: true })
-      .getByRole('button', { name: 'Cancel', exact: true })
+      .getByRole('button', { name: 'Close', exact: true })
       .click();
     expect(await page.locator('.position-code code').allTextContents()).toEqual(
       positionCodes,

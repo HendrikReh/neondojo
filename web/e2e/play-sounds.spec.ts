@@ -270,7 +270,11 @@ test('sound setting cancels, saves, survives reload and applies to ongoing games
   await open();
   await expect(dialog.getByLabel('Game sounds', { exact: true })).toBeChecked();
   await dialog.getByLabel('Game sounds', { exact: true }).uncheck();
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: 'Unapplied settings' })
+    .getByRole('button', { name: 'Discard draft', exact: true })
+    .click();
   await open();
   await expect(dialog.getByLabel('Game sounds', { exact: true })).toBeChecked();
   await dialog.getByLabel('Game sounds', { exact: true }).uncheck();

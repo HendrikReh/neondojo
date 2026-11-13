@@ -13,14 +13,21 @@ const installationFields = [
   'open_sage_threads',
 ] as const;
 
+export function changedInstallationFields(
+  initial: AppSettings,
+  draft: AppSettings,
+) {
+  return installationFields.filter(
+    (field) => (initial[field] ?? null) !== (draft[field] ?? null),
+  );
+}
+
 export async function saveInstallationSettings(
   initial: AppSettings,
   draft: AppSettings,
   signal?: AbortSignal,
 ) {
-  const changed = installationFields.filter(
-    (field) => (initial[field] ?? null) !== (draft[field] ?? null),
-  );
+  const changed = changedInstallationFields(initial, draft);
   if (!changed.length) return;
   const latest = await loadSettings(signal);
   const edits = changed.filter(

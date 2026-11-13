@@ -59,7 +59,10 @@ test('settings drafts follow a profile activated inside the settings dialog', as
   await expect(
     settings.getByLabel('Default analysis profile', { exact: true }),
   ).toHaveValue('4');
-  await settings.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(
+    settings.getByRole('button', { name: 'Apply', exact: true }),
+  ).toBeHidden();
+  await settings.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(settings).not.toBeVisible();
   await expect(
     page.getByRole('button', { name: /Profile: Deep analysis/ }),
@@ -80,7 +83,7 @@ test('opening book conflicts preserve the draft and offer explicit recovery', as
     .getByRole('button', { name: 'Analysis', exact: true })
     .click();
   await page
-    .getByRole('button', { name: 'Opening books', exact: true })
+    .getByRole('button', { name: 'Manage opening books', exact: true })
     .click();
   const book = page.getByRole('dialog', { name: 'Opening books', exact: true });
   await book

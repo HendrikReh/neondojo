@@ -175,7 +175,7 @@ test('header keyboard navigation and history navigation retain selection, focus 
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page
     .getByRole('dialog', { name: 'Settings', exact: true })
-    .getByRole('button', { name: 'Cancel', exact: true })
+    .getByRole('button', { name: 'Close', exact: true })
     .click();
   await expect(
     page.getByRole('button', { name: 'Settings', exact: true }),

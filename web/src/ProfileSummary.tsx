@@ -1,6 +1,5 @@
 import { useI18n } from './i18n';
 import {
-  configurationDifferences,
   normalizeConfiguration,
   type ProfileConfiguration,
 } from './configuration-model';
@@ -14,7 +13,7 @@ import { languages } from './i18n-core';
 import { ALL_CARDS, CARDS_WITHOUT_DECK } from './card-search-api';
 import { useCardSearchText } from './card-search-messages';
 import { LIBRARY_COLUMNS } from './library-columns';
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { request } from './api';
 import ActionButton from './ActionButton';
 import { profileChangeRows } from './profile-changes';
@@ -46,6 +45,7 @@ export default function ProfileSummary({
 }) {
   const t = useProfileText(),
     { locale } = useI18n();
+  const differencesHeading = useId();
   const searchText = useCardSearchText();
   const [resourceNames, setResourceNames] = useState<Record<string, string>>(
     {},
@@ -120,7 +120,17 @@ export default function ProfileSummary({
     }
     if (Array.isArray(value))
       return value.map((v) => label(String(v))).join(', ');
+    if (typeof value === 'object')
+      return Object.entries(value)
+        .map(
+          ([key, entry]) => `${label(key)}: ${format(entry, `${path}.${key}`)}`,
+        )
+        .join(' · ');
     const s = String(value);
+    if (path.endsWith('.engine')) {
+      if (s === 'gnubg') return 'GNUbg';
+      if (s === 'bgsage') return 'Open Sage';
+    }
     if (s === ALL_CARDS) return t('allCards');
     if (s === CARDS_WITHOUT_DECK) return searchText('withoutDeck');
     if (path.endsWith('.locale'))
@@ -147,38 +157,22 @@ export default function ProfileSummary({
     const key = profileFieldKey(s);
     return enumFields.includes(path.split('.').at(-1)!) && key ? t(key) : s;
   };
-  const rows = configurationSummaryRows(configuration);
+  const rows = differencesOnly ? [] : configurationSummaryRows(configuration);
   const groups = [...new Set(rows.map((row) => row.path.split('.')[0]))];
   const differences = compareTo
-    ? (differencesOnly ? profileChangeRows : configurationDifferences)(
-        configuration,
-        compareTo,
-      )
+    ? profileChangeRows(configuration, compareTo)
     : [];
   return (
     <div
       className={`profile-summary${differencesOnly ? ' profile-summary--differences' : ''}`}
     >
-      {!differencesOnly && <h3>{t('summary')}</h3>}
-      {!differencesOnly &&
-        groups.map((group) => (
-          <details key={group}>
-            <summary>{t(group as ProfileMessageKey)}</summary>
-            <dl>
-              {rows
-                .filter((r) => r.path.startsWith(`${group}.`))
-                .map((row) => (
-                  <div key={row.path}>
-                    <dt>{label(row.path)}</dt>
-                    <dd>{format(row.value, row.path)}</dd>
-                  </div>
-                ))}
-            </dl>
-          </details>
-        ))}
       {compareTo && (
-        <section>
-          {!differencesOnly && <h3>{t('differences')}</h3>}
+        <section
+          aria-labelledby={differencesOnly ? undefined : differencesHeading}
+        >
+          {!differencesOnly && (
+            <h3 id={differencesHeading}>{t('differences')}</h3>
+          )}
           {differences.length ? (
             <div className="profile-differences">
               <table>
@@ -223,6 +217,26 @@ export default function ProfileSummary({
             <p>{t('noDifferences')}</p>
           )}
         </section>
+      )}
+      {!differencesOnly && (
+        <details className="profile-saved-configuration">
+          <summary>{t('summary')}</summary>
+          {groups.map((group) => (
+            <details key={group}>
+              <summary>{t(group as ProfileMessageKey)}</summary>
+              <dl>
+                {rows
+                  .filter((r) => r.path.startsWith(`${group}.`))
+                  .map((row) => (
+                    <div key={row.path}>
+                      <dt>{label(row.path)}</dt>
+                      <dd>{format(row.value, row.path)}</dd>
+                    </div>
+                  ))}
+              </dl>
+            </details>
+          ))}
+        </details>
       )}
     </div>
   );

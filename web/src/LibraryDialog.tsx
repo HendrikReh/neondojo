@@ -9,13 +9,15 @@ export default function LibraryDialog({
   children,
   native = false,
   initialFocus = 'first-control',
+  lockScroll = true,
 }: {
   title: string;
   onClose: () => void;
   busy?: boolean;
   children: ReactNode;
   native?: boolean;
-  initialFocus?: 'first-control' | 'dialog';
+  initialFocus?: 'first-control' | 'first-field' | 'dialog';
+  lockScroll?: boolean;
 }) {
   const id = useId(),
     box = useRef<HTMLDivElement>(null),
@@ -34,10 +36,13 @@ export default function LibraryDialog({
           'button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href],[tabindex="0"]',
         ) ?? [],
       ).filter((el) => el.getClientRects().length > 0);
-    (initialFocus === 'dialog'
-      ? box.current
-      : (controls()[0] ?? box.current)
-    )?.focus();
+    const initial =
+      initialFocus === 'first-field'
+        ? controls().find((control) => control.matches('input,select,textarea'))
+        : initialFocus === 'first-control'
+          ? controls()[0]
+          : undefined;
+    (initial ?? box.current)?.focus();
     function key(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -70,14 +75,14 @@ export default function LibraryDialog({
     }
     document.addEventListener('keydown', key, true);
     const overflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    if (lockScroll) document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', key, true);
-      document.body.style.overflow = overflow;
+      if (lockScroll) document.body.style.overflow = overflow;
       if (native) nativeLayer.current?.close();
       if (previous?.isConnected) previous.focus();
     };
-  }, [native, initialFocus]);
+  }, [native, initialFocus, lockScroll]);
   const content = (
     <div
       className="library-modal-overlay"

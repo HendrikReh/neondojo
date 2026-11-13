@@ -215,7 +215,7 @@ test('comment editors, modal titles and study questions follow their roles while
     .click();
   await page
     .locator('.settings-dialog')
-    .getByRole('button', { name: 'Opening books', exact: true })
+    .getByRole('button', { name: 'Manage opening books', exact: true })
     .click();
   await expect(page.locator('.library-dialog h2')).toHaveCSS(
     'font-size',
@@ -247,7 +247,7 @@ test('comment editors, modal titles and study questions follow their roles while
     'font-size',
     '14px',
   );
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
   await page
     .getByRole('tab', { name: 'Flashcards & Anki', exact: true })

@@ -48,8 +48,6 @@ const en = {
   status: 'Status',
   cpus: '{count} logical CPUs',
   open: 'Open benchmark',
-  draftHelp:
-    'Opening the benchmark closes Settings and discards unsaved changes.',
 };
 type Key = keyof typeof en;
 const de: Record<Key, string> = {
@@ -100,8 +98,6 @@ const de: Record<Key, string> = {
   status: 'Status',
   cpus: '{count} logische CPUs',
   open: 'Benchmark öffnen',
-  draftHelp:
-    'Beim Öffnen des Benchmarks werden die Einstellungen geschlossen und ungespeicherte Änderungen verworfen.',
 };
 const base: Record<Locale, Record<Key, string>> = {
   en,
@@ -155,8 +151,6 @@ const base: Record<Locale, Record<Key, string>> = {
     status: 'Estado',
     cpus: '{count} CPU lógicas',
     open: 'Abrir benchmark',
-    draftHelp:
-      'Al abrir el benchmark se cierran los ajustes y se descartan los cambios sin guardar.',
   },
   fr: {
     globalBusy:
@@ -207,8 +201,6 @@ const base: Record<Locale, Record<Key, string>> = {
     status: 'État',
     cpus: '{count} processeurs logiques',
     open: 'Ouvrir le benchmark',
-    draftHelp:
-      'Ouvrir le benchmark ferme les paramètres et abandonne les modifications non enregistrées.',
   },
   it: {
     globalBusy:
@@ -259,8 +251,6 @@ const base: Record<Locale, Record<Key, string>> = {
     status: 'Stato',
     cpus: '{count} CPU logiche',
     open: 'Apri benchmark',
-    draftHelp:
-      'Aprendo il benchmark si chiudono le impostazioni e si perdono le modifiche non salvate.',
   },
   pl: {
     globalBusy:
@@ -309,8 +299,6 @@ const base: Record<Locale, Record<Key, string>> = {
     status: 'Stan',
     cpus: '{count} procesorów logicznych',
     open: 'Otwórz benchmark',
-    draftHelp:
-      'Otwarcie benchmarku zamknie ustawienia i odrzuci niezapisane zmiany.',
   },
 };
 const playEn = {

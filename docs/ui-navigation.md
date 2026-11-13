@@ -162,19 +162,48 @@ BGBlitz analyses cover games without one. Practice shows the engine and its
 recorded version. The tooltip identifies the original source and search or
 rollout depth, including when the depth is unknown.
 
+## Settings
+
+On desktop, **Appearance** and **Board** put the selection on the left and
+the preview on the right. The board gallery scrolls independently of the
+preview. The chosen board has a strong outline and a **✓ Selected** label on
+its thumbnail. Both previews update as you select options and apply to the
+rest of the app when you choose **Apply**.
+
+Analysis shows the engine and default depth side by side and lists the
+configured opening-book source. Expand **Engines on this computer** for paths,
+installation checks, and thread limits. The collapsed section shows the
+availability of GNUbg and Open Sage.
+
+Closing **Opening books** returns to **Analysis** in Settings and restores focus
+to **Manage opening books**.
+
+**Playing** puts the engine and strength for new matches side by side.
+The next group contains the default play mode, Tutor warning threshold, and
+automatic training analysis. Game sounds and bear-off direction are grouped
+below them.
+
+Closing Settings or opening Profiles, Opening books, or Benchmark with an
+unapplied draft asks whether to apply it, discard it, or keep editing. Escape
+in the confirmation returns to the draft. **Apply** appears for a changed draft
+and names the affected save destinations. **Verify and save** stores the
+Open Sage Python path on the BG Tutor computer.
+
 ## Profile in der Navigation
 
 Die globale Kopfzeile enthält die Profilauswahl mit aktivem Namen, Änderungsmarkierung und Sicherungsstatus. „Profile verwalten“ öffnet direkt die Kategorie „Profile“ im Einstellungsdialog.
 
-Die Profilkategorie bietet Anlegen aus der aktuellen Konfiguration, Aktivieren, ausdrücklich bestätigtes Überschreiben und Löschen sowie Umbenennen, Zusammenfassung und Unterschiede. Ein nicht angewendeter Einstellungsentwurf wird vor dem Wechsel in diese Kategorie ausdrücklich angewendet oder verworfen; die Aktion kann auch abgebrochen werden.
+Die Profilkategorie zeigt oben das aktive Profil und die Zahl der Abweichungen vom Profilstand. Die Profilauswahl bestimmt den Vergleich mit der aktuellen Konfiguration. Die vollständige gespeicherte Konfiguration lässt sich darunter aufklappen. Die Zeitstempel in der Profilliste folgen der App-Sprache.
+
+„Im Profil speichern“ zeigt das gewählte Zielprofil. „Als neues Profil speichern“ steht daneben. „Profilaktionen“ enthält „Umbenennen“ und „Löschen“. Mit „Profilstand wiederherstellen“ werden nach Bestätigung die gespeicherten Werte des aktiven Profils übernommen. Im Vergleich behalten die Spalten ihre Breite, und lange Werte brechen in ihrer Zelle um.
 
 Normale Einstellungsänderungen werden mit „Anwenden“ übernommen. Die Profilsicherung bleibt eine eigene Aktion. Suchansichten übernehmen beim Profilwechsel die gespeicherten Kriterien, während Notizentwürfe, laufende Aufträge und bereits aktive Lernkarten ihren Arbeitsstand behalten.
 
 ## Extras
 
-**Extras** contains **Benchmark**, **Engine duels**, **Database backup**,
-and **Versions**. Use Left/Right or Home/End to switch tabs. BG Tutor remembers
-the selected tool. The link in Settings opens **Benchmark**.
+**Extras** contains **Benchmark**, **Engine duels**, **Database backup**, and
+**Versions**. Use Left/Right or Home/End to switch tabs. BG Tutor remembers the
+last chosen tab on this browser. The link in Settings opens **Benchmark**.
 
 Benchmark uses one engine selector for **Match analysis** and **Play-turn
 latency**. Each engine keeps its own depth selections while the app is open.

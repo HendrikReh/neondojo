@@ -172,7 +172,7 @@ for (const theme of ['graphite', 'club', 'paper'])
         settings.locator('.settings-theme-choice').first(),
       ).toHaveCSS('border-top-width', '1px');
       await settings
-        .getByRole('button', { name: 'Cancel', exact: true })
+        .getByRole('button', { name: 'Close', exact: true })
         .click();
       await page
         .getByRole('tab', { name: 'Match database', exact: true })

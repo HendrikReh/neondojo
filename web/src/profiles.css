@@ -49,12 +49,34 @@
 .profile-settings {
   min-width: 0;
 }
+.profile-overview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-surface-alt);
+}
+.profile-overview h3,
+.profile-summary h3 {
+  font-size: var(--font-size-panel);
+  font-weight: var(--font-weight-semibold);
+}
+.profile-overview-name {
+  display: block;
+  margin: 4px 0;
+  font-size: var(--font-size-subject);
+  overflow-wrap: anywhere;
+}
 .profile-list {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  margin-bottom: 1rem;
-  max-height: 14rem;
+  max-height: 10rem;
   overflow: auto;
 }
 .profile-list > button {
@@ -62,13 +84,14 @@
   overflow-wrap: anywhere;
 }
 .profile-list [aria-pressed='true'] {
-  outline: 2px solid currentColor;
-  outline-offset: -2px;
+  border-color: var(--ui-accent);
+  background: var(--ui-selected);
 }
-.profile-list small {
+.profile-list time {
   display: block;
-  font-size: 0.75rem;
-  opacity: 0.7;
+  margin-top: 3px;
+  font-size: var(--font-size-meta);
+  color: var(--ui-muted);
 }
 .profile-name-label {
   display: flex;
@@ -84,9 +107,54 @@
 .profile-actions button {
   white-space: normal;
 }
+.profile-settings-actions {
+  margin: 12px 0 5px;
+}
+.profile-save-target {
+  overflow-wrap: anywhere;
+}
 .profile-help {
-  font-size: 0.85rem;
-  opacity: 0.8;
+  font-size: var(--font-size-meta);
+  color: var(--ui-muted);
+}
+.profile-settings-menu {
+  position: fixed;
+  inset: auto;
+  top: anchor(bottom);
+  right: anchor(right);
+  position-try-fallbacks: flip-block, flip-inline;
+  margin: 4px 0 0;
+  max-width: min(16rem, 90vw);
+  padding: 6px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  box-shadow: 0 8px 24px var(--ui-shadow);
+}
+.profile-settings-menu:popover-open {
+  display: grid;
+  gap: 4px;
+}
+.profile-settings-menu .action-button {
+  justify-content: flex-start;
+  border-color: transparent;
+  background: transparent;
+}
+.profile-settings-menu .profile-help {
+  margin: 4px 8px;
+}
+.profile-settings .profile-summary {
+  margin-top: 16px;
+}
+.profile-summary .profile-saved-configuration {
+  margin-top: 12px;
+}
+.profile-saved-configuration > details:first-of-type {
+  margin-top: 8px;
+}
+.profile-saved-configuration > details {
+  margin-left: 14px;
 }
 .profile-summary details {
   border-top: 1px solid var(--ui-border, #ccc);
@@ -122,12 +190,6 @@
 .library-dialog:has(.profile-summary--differences) .section-heading > button {
   flex-shrink: 0;
 }
-.profile-summary--differences table {
-  table-layout: fixed;
-}
-.profile-summary--differences thead th:first-child {
-  width: 45%;
-}
 .profile-current-value {
   display: flex;
   flex-direction: column;
@@ -148,7 +210,11 @@
 }
 .profile-differences table {
   width: 100%;
+  table-layout: fixed;
   font-size: 0.85rem;
+}
+.profile-differences thead th:first-child {
+  width: 40%;
 }
 .profile-differences th,
 .profile-differences td {

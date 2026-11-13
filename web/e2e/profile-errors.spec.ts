@@ -42,20 +42,32 @@ test('rejects duplicate names at the name field and allows a corrected name', as
   await page
     .getByRole('menuitem', { name: 'Manage profiles', exact: true })
     .click();
+  const actions = page.getByRole('button', {
+    name: 'Profile actions',
+    exact: true,
+  });
+  await actions.click();
   await expect(
     page.getByRole('button', { name: 'Delete', exact: true }),
   ).toBeDisabled();
-  await page.getByLabel('Profile name', { exact: true }).fill(' standard ');
+  await page.keyboard.press('Escape');
   await page
     .getByRole('button', { name: 'Save as new profile', exact: true })
     .click();
-  await expect(
-    page.getByLabel('Profile name', { exact: true }),
-  ).toHaveAttribute('aria-invalid', 'true');
-  await page.getByLabel('Profile name', { exact: true }).fill('Corrected');
-  await page
-    .getByRole('button', { name: 'Save as new profile', exact: true })
-    .click();
+  const create = page.getByRole('dialog', {
+    name: 'Save as new profile',
+    exact: true,
+  });
+  const name = create.getByLabel('Profile name', { exact: true });
+  const save = create.getByRole('button', {
+    name: 'Save as new profile',
+    exact: true,
+  });
+  await name.fill(' standard ');
+  await save.click();
+  await expect(name).toHaveAttribute('aria-invalid', 'true');
+  await name.fill('Corrected');
+  await save.click();
   await expect(
     page.getByRole('button', { name: /Profile: Corrected/ }),
   ).toBeVisible();
@@ -78,7 +90,11 @@ test('preserves local configuration on a stale revision and confirms reloading s
   await expect(
     page.getByRole('textbox', { name: 'Player name', exact: true }),
   ).toHaveValue('Local draft');
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: 'Unapplied settings' })
+    .getByRole('button', { name: 'Discard draft', exact: true })
+    .click();
   await page.getByRole('button', { name: /Profile: Standard/ }).click();
   await page
     .getByRole('menuitem', { name: 'Manage profiles', exact: true })

@@ -19,6 +19,7 @@ test('independent native engines, immutable sessions and desktop settings', asyn
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
   await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
+  await dialog.getByText('Engines on this computer', { exact: true }).click();
   await expect(dialog.getByLabel('Python path', { exact: true })).toHaveValue(
     process.env.BGTUTOR_SAGE_PYTHON!,
   );

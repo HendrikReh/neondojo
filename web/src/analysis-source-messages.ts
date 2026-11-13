@@ -397,3 +397,25 @@ export function useSourceText() {
   return (key: Key, params?: TranslationParams) =>
     sourceText(locale, key, params);
 }
+
+export const openingBookProviders = [
+  'automatic',
+  'backgammondb',
+  'xg',
+  'off',
+] as const;
+
+export function openingBookProviderLabel(
+  locale: Locale,
+  provider: (typeof openingBookProviders)[number],
+) {
+  switch (provider) {
+    case 'backgammondb':
+      return 'BackgammonDB';
+    case 'xg':
+      return 'eXtreme Gammon (XG)';
+    case 'automatic':
+    case 'off':
+      return sourceText(locale, provider);
+  }
+}

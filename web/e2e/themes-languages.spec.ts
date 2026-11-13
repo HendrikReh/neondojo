@@ -70,12 +70,20 @@ async function applyTheme(page: Page, theme: (typeof themes)[number]) {
   await dialog
     .getByRole('button', { name: settingsText(locale, 'board'), exact: true })
     .click();
-  await dialog.getByRole('button', { name: theme.name, exact: true }).click();
+  const choice = dialog.getByRole('button', { name: theme.name, exact: true });
+  const alreadySelected =
+    (await choice.getAttribute('aria-pressed')) === 'true';
+  await choice.click();
   await expect(
     dialog.locator('.settings-preview .bgblitz-board'),
   ).toHaveAttribute('data-theme', theme.id);
   await assertArtwork(dialog.locator('.settings-preview .bgblitz-board'));
-  await saveDialog(dialog, locale);
+  if (alreadySelected) {
+    await dialog
+      .getByRole('button', { name: settingsText(locale, 'done'), exact: true })
+      .click();
+    await expect(dialog).toBeHidden();
+  } else await saveDialog(dialog, locale);
 }
 
 async function applyLanguage(page: Page, next: Locale) {
@@ -192,7 +200,7 @@ test('every local ZIP theme uses its original assets and survives reload on desk
     dialog.getByRole('button', { name: selected.name, exact: true }),
   ).toHaveAttribute('aria-pressed', 'true');
   await dialog
-    .getByRole('button', { name: settingsText(locale, 'cancel'), exact: true })
+    .getByRole('button', { name: settingsText(locale, 'done'), exact: true })
     .click();
   await expect(dialog).not.toBeVisible();
   await reopenTutor(page);
@@ -335,7 +343,7 @@ test('all six languages switch complete views on save and persist with the theme
     dialog.getByLabel(settingsText(locale, 'language'), { exact: true }),
   ).toHaveValue('fr');
   await dialog
-    .getByRole('button', { name: settingsText(locale, 'cancel'), exact: true })
+    .getByRole('button', { name: settingsText(locale, 'done'), exact: true })
     .click();
   await expect(dialog).not.toBeVisible();
   await reopenTutor(page);

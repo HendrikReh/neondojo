@@ -401,6 +401,10 @@ test('Settings benchmark link leaves drafts unapplied and opens the same view', 
   await dialog
     .getByRole('button', { name: 'Open benchmark', exact: true })
     .click();
+  await page
+    .getByRole('dialog', { name: 'Unapplied settings' })
+    .getByRole('button', { name: 'Discard draft', exact: true })
+    .click();
   await expect(dialog).not.toBeVisible();
   await expect(
     page.getByRole('tab', { name: 'Extras', exact: true }),
