@@ -51,7 +51,7 @@ async function mandatory(page: Page, title: string) {
   return dialog;
 }
 for (const width of [1440, 390])
-  test(`Next roll and Coach acknowledgment are mandatory at ${width}`, async ({
+  test(`Rolling in the toolbar still requires Coach acknowledgment at ${width}`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 1100 });
@@ -81,19 +81,22 @@ for (const width of [1440, 390])
       return r.fulfill({ json: saved });
     });
     await reload(page);
-    const next = await mandatory(page, 'Next roll');
+    const next = page.getByTestId('play-board-toolbar');
+    await expect(page.getByRole('alertdialog')).toHaveCount(0);
     await page.screenshot({
       path: `/tmp/bgtutor-next-roll-${width}.png`,
       fullPage: true,
     });
     await next.getByRole('button', { name: 'Roll dice', exact: true }).click();
-    const coach = await mandatory(page, 'Coach');
-    await expect(coach.getByTestId('play-feedback')).toBeVisible();
+    const coach = page
+      .getByTestId('play-board-toolbar')
+      .getByTestId('play-feedback');
+    await expect(coach).toBeVisible();
     await page.screenshot({
       path: `/tmp/bgtutor-coach-modal-${width}.png`,
       fullPage: true,
     });
-    await expect(page.getByRole('alertdialog')).toHaveCount(1);
+    await expect(page.getByRole('alertdialog')).toHaveCount(0);
     await coach.getByRole('button', { name: 'Continue', exact: true }).click();
     await expect(page.getByRole('alertdialog')).toHaveCount(0);
     await expect(page.locator('[data-play-point="13"]')).toHaveAttribute(
@@ -284,30 +287,30 @@ test('pending Tutor dialog keeps live mode and threshold saving accessible', asy
     .getByLabel('Change play mode', { exact: true })
     .selectOption('coach');
   await expect(
-    page.getByRole('alertdialog', { name: 'Coach', exact: true }),
+    page.getByTestId('play-board-toolbar').getByTestId('play-feedback'),
   ).toBeVisible();
   expect(writes).toEqual([
     { version: 7, play_mode: 'tutor', tutor_threshold: 0.08 },
     { version: 8, play_mode: 'coach' },
   ]);
-  await expect(page.getByRole('alertdialog')).toHaveCount(1);
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
 });
 
-test('Next roll failure and reload stay inside the modal', async ({ page }) => {
+test('Roll failure and reload stay beside the board', async ({ page }) => {
   const { saved } = await historyFixture(page);
   Object.assign(saved, { phase: 'roll', can_double: true });
   await page.route(`**/api/play/sessions/${id}/actions`, (r) =>
     r.fulfill({ status: 503, json: { error: 'Native roll failure' } }),
   );
   await reload(page);
-  const dialog = await mandatory(page, 'Next roll');
-  await dialog.getByRole('button', { name: 'Roll dice', exact: true }).click();
-  await expect(dialog.getByRole('alert')).toContainText('Native roll failure');
-  await dialog
+  const toolbar = page.getByTestId('play-board-toolbar');
+  await toolbar.getByRole('button', { name: 'Roll dice', exact: true }).click();
+  await expect(toolbar.getByRole('alert')).toContainText('Native roll failure');
+  await toolbar
     .getByRole('button', { name: 'Reload saved state', exact: true })
     .click();
-  await expect(dialog.getByRole('alert')).toHaveCount(0);
+  await expect(toolbar.getByRole('alert')).toHaveCount(0);
   await expect(
-    dialog.getByRole('button', { name: 'Roll dice', exact: true }),
+    toolbar.getByRole('button', { name: 'Roll dice', exact: true }),
   ).toBeEnabled();
 });

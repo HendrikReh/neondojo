@@ -49,7 +49,6 @@ for (const config of [
     expect(saved.status(), await saved.text()).toBe(200);
     await page.reload();
     await page.getByRole('tab', { name: 'Playing', exact: true }).click();
-    await page.getByRole('button', { name: 'New match', exact: true }).click();
     await page.getByLabel('Your checkers').selectOption(String(config.human));
     await page
       .getByRole('tabpanel', { name: 'Playing', exact: true })

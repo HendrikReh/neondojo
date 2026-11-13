@@ -133,34 +133,31 @@ for (const config of [
     const cube = page.locator('.play-board [data-cube]');
     try {
       await expect(dice).toHaveCount(2);
-      const dialog = page.getByRole('alertdialog', {
-        name: 'Next roll',
-        exact: true,
-      });
-      await expect(dialog).toBeVisible();
-      expect(await dialog.evaluate((el) => el.matches(':modal'))).toBe(true);
+      const toolbar = page.getByTestId('play-board-toolbar');
+      await expect(toolbar).toBeVisible();
+      await expect(page.getByRole('alertdialog')).toHaveCount(0);
       await expect(cube).toHaveAttribute(
         'aria-disabled',
         String(!config.canDouble),
       );
-      await expect(dialog.locator('[data-play-action="double"]')).toHaveCount(
+      await expect(toolbar.locator('[data-play-action="double"]')).toHaveCount(
         1,
       );
       if (config.canDouble)
         await expect(
-          dialog.getByRole('button', { name: 'Double', exact: true }),
+          toolbar.getByRole('button', { name: 'Double', exact: true }),
         ).toBeEnabled();
       else {
-        const double = dialog.getByRole('button', {
+        const double = toolbar.getByRole('button', {
           name: 'Double',
           exact: true,
         });
         await expect(double).toBeDisabled();
-        await expect(dialog.locator('.play-double-unavailable')).toBeVisible();
+        await expect(toolbar.locator('.play-double-unavailable')).toBeVisible();
         await double.dispatchEvent('click');
         expect(writes).toEqual([]);
       }
-      const target = dialog.locator(`[data-play-action="${config.action}"]`);
+      const target = toolbar.locator(`[data-play-action="${config.action}"]`);
       if (config.keyboard) {
         await target.focus();
         await page.keyboard.press(config.action === 'roll' ? 'Enter' : ' ');
@@ -228,15 +225,12 @@ for (const reason of [
     saved.position.gnubg_match_id = bytes.toString('base64');
     await page.reload();
     await page.locator('#workspace-tab-play').click();
-    const dialog = page.getByRole('alertdialog', {
-      name: 'Next roll',
-      exact: true,
-    });
-    const double = dialog.getByRole('button', { name: 'Double', exact: true });
+    const toolbar = page.getByTestId('play-board-toolbar');
+    const double = toolbar.getByRole('button', { name: 'Double', exact: true });
     await expect(double).toBeVisible();
     await expect(double).toBeDisabled();
     await expect(double).toHaveAccessibleDescription(reason.text);
-    await expect(dialog.locator('.play-double-unavailable')).toHaveText(
+    await expect(toolbar.locator('.play-double-unavailable')).toHaveText(
       reason.text,
     );
     expect(writes).toEqual([]);

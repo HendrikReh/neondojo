@@ -132,7 +132,12 @@ for (const mode of ['competition', 'training', 'coach', 'tutor'] as const) {
     );
     await panel
       .getByRole('button', {
-        name: mode === 'tutor' ? 'Play anyway' : 'Continue',
+        name:
+          mode === 'tutor'
+            ? 'Play anyway'
+            : mode === 'coach'
+              ? 'Play move'
+              : 'Continue',
         exact: true,
       })
       .click();
@@ -185,13 +190,11 @@ test('native Competition startup and live modes preserve the running position', 
     page.getByRole('tab', { name: 'Playing', exact: true }),
   ).toHaveAttribute('aria-selected', 'true');
   await page.locator('.play-dialog-preferences > summary').click();
-  await expect(
-    page.getByTestId('active-play-mode').filter({ visible: true }),
-  ).toContainText('Competition');
   const selector = page.getByRole('combobox', {
     name: 'Change play mode',
     exact: true,
   });
+  await expect(selector).toHaveValue('competition');
   for (const mode of ['coach', 'tutor', 'training', 'competition'] as const) {
     const changed = page.waitForResponse((r) =>
       r.url().endsWith(`/play/sessions/${state.id}/mode`),
@@ -204,6 +207,12 @@ test('native Competition startup and live modes preserve the running position', 
     expect(next.history).toEqual(state.history);
     expect(next.phase).toEqual(state.phase);
     await expect(selector).toHaveValue(mode);
+    await expect(
+      page.getByRole('spinbutton', {
+        name: 'Tutor warning threshold',
+        exact: true,
+      }),
+    ).toHaveCount(mode === 'tutor' ? 1 : 0);
   }
   await page.reload();
   // Restoring the selected live library match already opens Playing. Its

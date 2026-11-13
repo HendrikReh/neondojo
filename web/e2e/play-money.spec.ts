@@ -143,7 +143,7 @@ for (const [width, height, locale] of [
       play: german ? 'Spielen' : 'Playing',
       result: german ? 'Spiel beendet' : 'Game finished',
       next: german ? 'Nächstes Spiel' : 'Next game',
-      end: german ? 'Sitzung beenden' : 'End session',
+      end: german ? 'Match pausieren' : 'Pause match',
       paused: german ? 'Match pausiert' : 'Match paused',
       resume: german ? 'Match fortsetzen' : 'Resume match',
       review: german ? 'Lernauswertung' : 'Learning review',

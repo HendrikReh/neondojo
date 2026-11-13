@@ -2,7 +2,11 @@ import ActionButton from './ActionButton';
 import { useState, type FormEvent } from 'react';
 import { request } from './api';
 import LibraryDialog from './LibraryDialog';
-import { useLibraryText, type LibraryMessageKey } from './library-messages';
+import {
+  databaseDisplayName,
+  useLibraryText,
+  type LibraryMessageKey,
+} from './library-messages';
 import {
   acceptsLibraryMatches,
   exportMatches,
@@ -165,7 +169,7 @@ export default function LibraryDialogs({
             <input
               required
               maxLength={state.kind === 'database' ? 120 : 240}
-              value={name}
+              value={db?.is_system ? databaseDisplayName(db, l) : name}
               readOnly={db?.is_system}
               onChange={(e) => setName(e.target.value)}
               disabled={busy}

@@ -21,7 +21,11 @@ import AnnotationSearch, { type AnnotationHit } from './AnnotationSearch';
 import { useI18n } from './i18n';
 import { usePlayModeText } from './play-mode-messages';
 import { useWorkspaceText } from './workspace-messages';
-import { useLibraryText, type LibraryMessageKey } from './library-messages';
+import {
+  databaseDisplayName,
+  useLibraryText,
+  type LibraryMessageKey,
+} from './library-messages';
 import {
   acceptsLibraryMatches,
   emptyFilters,
@@ -571,7 +575,7 @@ export default function MatchDatabase({
             <div className="database-count">
               {loading ? t('app.searching') : `${formatNumber(total)}`}{' '}
               {filters.position_id ? l('occurrences') : t('app.matches')} ·{' '}
-              {active?.name ?? l('allDatabases')}
+              {active ? databaseDisplayName(active, l) : l('allDatabases')}
             </div>
             {filters.position_id.trim() && (
               <span className="library-position-filter">

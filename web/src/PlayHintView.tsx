@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { DecisionDetails, DecisionFeedbackHeading } from './PlayFeedback';
 import PlayMovePreview, {
   type PlayMovePreviewContext,
@@ -7,15 +8,16 @@ import { usePlayModeText } from './play-mode-messages';
 
 export default function PlayHintView({
   session,
+  children,
   ...preview
-}: { session: PlaySession } & PlayMovePreviewContext) {
+}: { session: PlaySession; children?: ReactNode } & PlayMovePreviewContext) {
   const t = usePlayModeText();
   return (
     <PlayMovePreview session={session} {...preview}>
       {(onPreview, selectedPreview) => (
         <section
           className="play-feedback"
-          data-testid="play-feedback"
+          data-testid={children ? undefined : 'play-feedback'}
           aria-label={t('feedback')}
         >
           <DecisionFeedbackHeading session={session} />
@@ -27,6 +29,7 @@ export default function PlayHintView({
               selectedPreview={selectedPreview}
             />
           )}
+          {children}
         </section>
       )}
     </PlayMovePreview>

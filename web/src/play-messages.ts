@@ -15,7 +15,7 @@ const en = {
   dragDialog: 'Drag the title to move this dialog',
   nextRoll: 'Next roll',
   backToBoard: 'Back to board',
-  endSession: 'End session',
+  pauseMatch: 'Pause match',
   matchPaused: 'Match paused',
   pauseDraftHelp: 'Unconfirmed checker steps will be discarded.',
   sessionEnded: 'Session ended',
@@ -25,6 +25,7 @@ const en = {
   cubeOffered: 'Offered cube',
   returnToGame: 'Return to game',
   reviewing: 'Reviewing move',
+  yourTurn: 'Your turn',
   loadingHistory: 'Loading move history…',
   historyError: 'The move history could not be loaded.',
   rolling: 'Rolling the dice…',
@@ -85,7 +86,7 @@ const en = {
   bot: 'Bot',
   select:
     'Hover over a checker to see its destination for the first available die. Click its point to move one checker there.',
-  ready: 'Your turn is complete. Click either die to confirm it.',
+  ready: 'Confirm your turn with the button or by clicking either die.',
   retry: 'Reload saved state',
   export: 'Download SGF',
   engine: 'Engine',
@@ -125,9 +126,9 @@ const de: Record<Key, string> = {
   dragDialog: 'Zum Verschieben an der Titelleiste ziehen',
   nextRoll: 'Nächster Wurf',
   backToBoard: 'Zurück zum Brett',
-  endSession: 'Sitzung beenden',
+  pauseMatch: 'Match pausieren',
   matchPaused: 'Match pausiert',
-  pauseDraftHelp: 'Unbestätigte Steinschritte werden verworfen.',
+  pauseDraftHelp: 'Unbestätigte Zugschritte werden beim Pausieren verworfen.',
   sessionEnded: 'Sitzung beendet',
   cubeDecision: 'Cube-Entscheidung',
   cubeDecisionRequired:
@@ -136,6 +137,7 @@ const de: Record<Key, string> = {
   cubeOffered: 'Angebotener Cube',
   returnToGame: 'Zurück zum Spiel',
   reviewing: 'Zugvorschau',
+  yourTurn: 'Du bist am Zug',
   loadingHistory: 'Zugverlauf wird geladen…',
   historyError: 'Der Zugverlauf konnte nicht geladen werden.',
   rolling: 'Die Würfel rollen…',
@@ -197,7 +199,7 @@ const de: Record<Key, string> = {
   select:
     'Bewege den Mauszeiger auf einen Stein, um sein Ziel für den ersten verfügbaren Würfel zu sehen. Klicke auf seinen Punkt, um einen Stein dorthin zu ziehen.',
   ready:
-    'Dein Zug ist vollständig. Klicke auf einen der Würfel, um ihn zu bestätigen.',
+    'Bestätige deinen Zug mit der Schaltfläche oder per Klick auf einen Würfel.',
   retry: 'Gespeicherten Stand laden',
   export: 'SGF herunterladen',
   engine: 'Engine',
@@ -451,7 +453,7 @@ Object.assign(extra.es, {
   select:
     'Pasa el cursor sobre una ficha para ver su destino con el primer dado disponible. Haz clic en su punto para mover una ficha.',
   ready:
-    'Tu jugada está completa. Haz clic en cualquiera de los dados para confirmarla.',
+    'Confirma tu jugada con el botón o haciendo clic en cualquiera de los dados.',
   retry: 'Cargar estado guardado',
   export: 'Descargar SGF',
   engine: 'Motor',
@@ -477,7 +479,7 @@ Object.assign(extra.fr, {
   pass: 'Aucun coup légal — passer',
   select:
     'Survolez un pion pour voir sa destination avec le premier dé disponible. Cliquez sur son point pour déplacer un pion.',
-  ready: 'Votre coup est complet. Cliquez sur un des dés pour le confirmer.',
+  ready: 'Confirmez votre coup avec le bouton ou en cliquant sur l’un des dés.',
   retry: 'Recharger la position enregistrée',
   export: 'Télécharger le SGF',
   engine: 'Moteur',
@@ -504,7 +506,7 @@ Object.assign(extra.it, {
   pass: 'Nessuna mossa legale — passa',
   select:
     'Passa sopra una pedina per vedere la destinazione del primo dado disponibile. Clicca sul suo punto per muovere una pedina.',
-  ready: 'La tua mossa è completa. Clicca su uno dei dadi per confermarla.',
+  ready: 'Conferma la mossa con il pulsante o cliccando su uno dei dadi.',
   retry: 'Carica lo stato salvato',
   export: 'Scarica SGF',
   engine: 'Motore',
@@ -530,7 +532,7 @@ Object.assign(extra.pl, {
   pass: 'Brak legalnego ruchu — pasuj',
   select:
     'Najedź na pionek, aby zobaczyć cel dla pierwszej dostępnej kości. Kliknij jego pole, aby przesunąć jeden pionek.',
-  ready: 'Ruch jest kompletny. Kliknij dowolną kość, aby go zatwierdzić.',
+  ready: 'Zatwierdź ruch przyciskiem lub kliknij dowolną kość.',
   retry: 'Wczytaj zapisany stan',
   export: 'Pobierz SGF',
   engine: 'Silnik',
@@ -649,47 +651,51 @@ Object.assign(extra.pl, {
 Object.assign(extra.es, {
   returnToGame: 'Volver al juego',
   reviewing: 'Vista previa de la jugada',
+  yourTurn: 'Tu turno',
   loadingHistory: 'Cargando historial de jugadas…',
   historyError: 'No se pudo cargar el historial.',
 });
 Object.assign(extra.fr, {
   returnToGame: 'Revenir au jeu',
   reviewing: 'Aperçu du coup',
+  yourTurn: 'À vous de jouer',
   loadingHistory: 'Chargement des coups…',
   historyError: 'Impossible de charger les coups.',
 });
 Object.assign(extra.pl, {
   returnToGame: 'Wróć do gry',
   reviewing: 'Podgląd ruchu',
+  yourTurn: 'Twój ruch',
   loadingHistory: 'Wczytywanie historii ruchów…',
   historyError: 'Nie udało się wczytać historii.',
 });
 Object.assign(extra.it, {
   returnToGame: 'Torna alla partita',
   reviewing: 'Anteprima mossa',
+  yourTurn: 'Tocca a te',
   loadingHistory: 'Caricamento delle mosse…',
   historyError: 'Impossibile caricare le mosse.',
 });
 Object.assign(extra.es, {
-  endSession: 'Finalizar sesión',
+  pauseMatch: 'Pausar partida',
   matchPaused: 'Partida en pausa',
   pauseDraftHelp: 'Se descartarán los movimientos de fichas sin confirmar.',
   sessionEnded: 'Sesión finalizada',
 });
 Object.assign(extra.fr, {
-  endSession: 'Terminer la session',
+  pauseMatch: 'Mettre le match en pause',
   matchPaused: 'Match en pause',
   pauseDraftHelp: 'Les déplacements de pions non confirmés seront annulés.',
   sessionEnded: 'Session terminée',
 });
 Object.assign(extra.it, {
-  endSession: 'Termina sessione',
+  pauseMatch: 'Metti in pausa la partita',
   matchPaused: 'Match in pausa',
   pauseDraftHelp: 'I movimenti delle pedine non confermati verranno annullati.',
   sessionEnded: 'Sessione terminata',
 });
 Object.assign(extra.pl, {
-  endSession: 'Zakończ sesję',
+  pauseMatch: 'Wstrzymaj mecz',
   matchPaused: 'Mecz wstrzymany',
   pauseDraftHelp: 'Niepotwierdzone ruchy pionków zostaną odrzucone.',
   sessionEnded: 'Sesja zakończona',

@@ -3,13 +3,11 @@ import {
   historyFixture,
   historySessionId as id,
 } from './play-history-review-helpers';
-async function resume(page: Page, kind: 'cube' | 'coach' | 'roll') {
+async function resume(page: Page, kind: 'cube' | 'coach') {
   const { saved, writes } = await historyFixture(page);
   Object.assign(saved, {
-    phase:
-      kind === 'cube' ? 'double_response' : kind === 'roll' ? 'roll' : 'move',
+    phase: kind === 'cube' ? 'double_response' : 'move',
     play_mode: kind === 'coach' ? 'coach' : 'competition',
-    can_double: kind === 'roll',
   });
   if (kind === 'coach')
     Object.assign(saved, {
@@ -34,13 +32,13 @@ async function resume(page: Page, kind: 'cube' | 'coach' | 'roll') {
     });
   await page.reload();
   await page.locator('#workspace-tab-play').click();
-  const dialog = page.getByRole('alertdialog', {
-    name:
-      kind === 'cube'
-        ? 'Cube decision'
-        : kind === 'coach'
-          ? 'Coach'
-          : 'Next roll',
+  if (kind === 'coach')
+    await page
+      .getByTestId('play-board-toolbar')
+      .getByRole('button', { name: 'Details', exact: true })
+      .click();
+  const dialog = page.getByRole(kind === 'cube' ? 'alertdialog' : 'dialog', {
+    name: kind === 'cube' ? 'Cube decision' : 'Details',
     exact: true,
   });
   await expect(dialog).toBeVisible();
@@ -61,7 +59,7 @@ async function drag(page: Page, dialog: Locator, dx: number, dy: number) {
   await page.mouse.up();
   await expect(dialog).not.toHaveAttribute('data-dragging', 'true');
 }
-for (const kind of ['cube', 'coach', 'roll'] as const)
+for (const kind of ['cube', 'coach'] as const)
   test(`${kind} dialog can be moved by its title without a game action`, async ({
     page,
   }) => {
@@ -72,7 +70,7 @@ for (const kind of ['cube', 'coach', 'roll'] as const)
     expect(after.x - before.x).toBeCloseTo(-250, 0);
     expect(after.y - before.y).toBeCloseTo(100, 0);
     expect(await dialog.evaluate((el) => el.matches(':modal'))).toBe(true);
-    await page.keyboard.press('Escape');
+    if (kind === 'cube') await page.keyboard.press('Escape');
     await expect(dialog).toBeVisible();
     for (let i = 0; i < 8; i++) {
       await page.keyboard.press('Tab');
@@ -120,7 +118,7 @@ test('moved dialog stays reachable after content changes and viewport resize', a
 test('a moved dialog keeps its location when preferences expand', async ({
   page,
 }) => {
-  const { dialog } = await resume(page, 'roll');
+  const { dialog } = await resume(page, 'cube');
   await drag(page, dialog, -240, 0);
   const before = (await dialog.boundingBox())!;
   await dialog.locator('summary').click();

@@ -13,7 +13,6 @@ export type Database = Schema['Database'];
 export const BOT_DATABASE_ID = '00000000-0000-0000-0000-000000000003';
 export const PAUSED_MATCHES_DATABASE_ID =
   '00000000-0000-0000-0000-000000000004';
-export const PAUSED_MATCHES_DATABASE_NAME = 'Paused Matches';
 export const acceptsLibraryMatches = (id: string) =>
   id !== PAUSED_MATCHES_DATABASE_ID;
 export type LibraryMatch = Required<

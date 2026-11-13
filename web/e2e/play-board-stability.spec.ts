@@ -93,30 +93,43 @@ for (const { width, human, locale } of [
       window.scrollBy(0, el.getBoundingClientRect().top - 80);
     });
     const baseline = await board.boundingBox();
-    const scrollY = await page.evaluate(() => window.scrollY);
+    const layout = () =>
+      page.evaluate(() => ({
+        scrollY: window.scrollY,
+        boardRowHeight: document
+          .querySelector('.play-live-board')!
+          .getBoundingClientRect().height,
+        pageHeight: document.documentElement.scrollHeight,
+      }));
+    const initial = await layout();
     const stable = async () => {
       const box = await board.boundingBox();
-      expect(box!.y).toBeCloseTo(baseline!.y, 0);
+      const current = await layout();
+      expect(box!.y, JSON.stringify({ initial, current })).toBeCloseTo(
+        baseline!.y,
+        0,
+      );
       expect(box!.height).toBeCloseTo(baseline!.height, 0);
-      expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(scrollY, 0);
+      expect(current.scrollY).toBeCloseTo(initial.scrollY, 0);
     };
     try {
       await point(13).click();
       await point(6).click();
       await page.locator('[data-dice-action="confirm"]').first().click();
-      await expect(page.locator('.play-thinking')).toBeVisible();
+      await expect(page.locator('.play-match-status')).toHaveText(
+        locale === 'de' ? 'Der Bot denkt nach…' : 'The bot is thinking…',
+      );
       await stable();
       release();
-      const coach = page.getByRole('alertdialog', {
-        name: 'Coach',
-        exact: true,
-      });
+      const coach = page
+        .getByTestId('play-board-toolbar')
+        .getByTestId('play-feedback');
       await expect(coach).toBeVisible();
-      expect(await coach.evaluate((el) => el.matches(':modal'))).toBe(true);
+      await expect(page.getByRole('alertdialog')).toHaveCount(0);
       await stable();
       await coach
         .getByRole('button', {
-          name: locale === 'de' ? 'Weiter' : 'Continue',
+          name: locale === 'de' ? 'Zug spielen' : 'Play move',
           exact: true,
         })
         .click();
@@ -125,11 +138,9 @@ for (const { width, human, locale } of [
         'dice',
       );
       await stable();
-      const next = page.getByRole('alertdialog', {
-        name: locale === 'de' ? 'Nächster Wurf' : 'Next roll',
-        exact: true,
-      });
+      const next = page.getByTestId('play-board-toolbar');
       await expect(next).toBeVisible();
+      await expect(page.getByRole('alertdialog')).toHaveCount(0);
       await stable();
       await next
         .getByRole('button', {

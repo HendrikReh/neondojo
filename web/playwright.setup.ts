@@ -2,6 +2,7 @@ import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { mkdtemp, rm } from 'node:fs/promises';
+import { createServer as createHttpServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -101,9 +102,19 @@ export default async function setup() {
   let created = false;
   let backend: ChildProcess | undefined;
   let frontend: ViteDevServer | undefined;
+  let listener: Server | undefined;
   const cleanup = async () => {
     try {
-      await frontend?.close();
+      try {
+        await frontend?.close();
+      } finally {
+        if (listener?.listening) {
+          const closed = once(listener, 'close');
+          listener.close();
+          listener.closeAllConnections();
+          await closed;
+        }
+      }
     } finally {
       try {
         if (backend) await stopBackend(backend);
@@ -149,21 +160,28 @@ export default async function setup() {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const backendUrl = await listeningUrl(backend);
+    const http = createHttpServer();
+    listener = http;
     frontend = await createServer({
       root: web,
       cacheDir: join(temporary, 'vite'),
       server: {
-        host: '127.0.0.1',
-        port: 41900,
-        strictPort: false,
-        hmr: false,
+        middlewareMode: true,
+        // Vite injects its dev client in middleware mode. Serve its WebSocket
+        // on the same loopback listener as the browser tests.
+        hmr: { server: http },
         watch: null,
         proxy: { '/api': backendUrl },
       },
     });
-    await frontend.listen();
-    const url = frontend.resolvedUrls?.local[0];
-    if (!url) throw new Error('Vite did not publish a local test URL.');
+    listener.on('request', frontend.middlewares);
+    const listening = once(listener, 'listening');
+    listener.listen(0, '127.0.0.1');
+    await listening;
+    const address = listener.address();
+    if (!address || typeof address === 'string')
+      throw new Error('Vite did not publish a local test URL.');
+    const url = `http://127.0.0.1:${address.port}/`;
 
     // Verify the proxy reaches this database before allowing any test writes.
     const probe = randomUUID();

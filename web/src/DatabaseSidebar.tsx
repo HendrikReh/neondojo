@@ -1,7 +1,7 @@
 import Tooltip from './Tooltip';
 import ActionButton from './ActionButton';
 import ActionIcon from './action-icons';
-import { useLibraryText } from './library-messages';
+import { databaseDisplayName, useLibraryText } from './library-messages';
 import {
   BOT_DATABASE_ID,
   PAUSED_MATCHES_DATABASE_ID,
@@ -78,7 +78,7 @@ export default function DatabaseSidebar({
                   name={db.is_system ? 'system-database' : 'database'}
                   className="database-collection-icon"
                 />
-                <span>{db.name}</span>
+                <span>{databaseDisplayName(db, l)}</span>
               </span>
               <small>{db.match_count}</small>
             </Tooltip>

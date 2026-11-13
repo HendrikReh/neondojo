@@ -100,6 +100,11 @@ for (const config of [
     const die = page.locator(`[data-play-die-index="${config.die}"]`),
       point = (n: number) =>
         page.locator(`[data-play-point="${absolute(n)}"] .play-point`);
+    const confirm = page.getByTestId('play-board-toolbar').getByRole('button', {
+      name: 'Confirm turn',
+      exact: true,
+    });
+    await expect(confirm).toHaveCount(0);
     await die.click();
     await expect(die).toHaveCSS('outline-style', 'none');
     await expect(die).toHaveCSS('filter', 'none');
@@ -119,9 +124,8 @@ for (const config of [
     await expect(page.locator('.play-selected-steps')).toHaveText('13/10');
     await point(10).click();
     await expect(die).toHaveAttribute('data-dice-action', 'confirm');
-    await expect(
-      page.locator('button').filter({ hasText: /^Confirm turn$/ }),
-    ).toHaveCount(0);
+    await expect(confirm).toBeEnabled();
+    await expect(confirm).toHaveAccessibleDescription('13/10 10/8');
     expect(writes).toEqual([]);
     await page.getByRole('button', { name: 'Undo step', exact: true }).click();
     await expect(page.locator('.play-workspace')).toHaveAttribute(
@@ -129,13 +133,15 @@ for (const config of [
       'false',
     );
     await expect(die).toHaveAttribute('data-dice-action', 'none');
+    await expect(confirm).toHaveCount(0);
     await point(10).click();
     await expect(die).toHaveAttribute('data-dice-action', 'confirm');
-    if (config.key) {
+    if (config.human === 0 && config.direction === 'right') {
+      await confirm.press('Enter');
+    } else if (config.key) {
       await page.keyboard.press('Tab');
       await die.focus();
-      await expect(die).toHaveCSS('outline-style', 'none');
-      await expect(die).toHaveCSS('filter', 'none');
+      await expect(die).toHaveCSS('outline-style', 'solid');
       await die.press(config.key);
       await die.press(config.key);
     } else await die.dblclick();

@@ -1,4 +1,5 @@
 import { useI18n } from './i18n';
+import { PAUSED_MATCHES_DATABASE_ID, type Database } from './library-api';
 import {
   interpolate,
   matchEventLabels,
@@ -31,6 +32,14 @@ const rows = {
     'Base de données système',
     'Systemowa baza danych',
     'Database di sistema',
+  ],
+  pausedMatches: [
+    'Paused Matches',
+    'Pausierte Matches',
+    'Partidas pausadas',
+    'Matchs en pause',
+    'Wstrzymane mecze',
+    'Partite in pausa',
   ],
   pausedMatchesDescription: [
     'Resume paused matches from where you left off.',
@@ -779,5 +788,13 @@ export function useLibraryText() {
   const { locale } = useI18n();
   return (key: Key, params?: TranslationParams) =>
     libraryText(locale, key, params);
+}
+export function databaseDisplayName(
+  database: Pick<Database, 'id' | 'name'>,
+  t: ReturnType<typeof useLibraryText>,
+) {
+  return database.id === PAUSED_MATCHES_DATABASE_ID
+    ? t('pausedMatches')
+    : database.name;
 }
 export type LibraryMessageKey = Key;

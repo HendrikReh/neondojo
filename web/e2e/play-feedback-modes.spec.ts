@@ -84,6 +84,7 @@ async function resume(
       .getByRole('button', { name: 'Back to board', exact: true })
       .click();
   else if (
+    state.play_mode !== 'coach' &&
     state.pending_decision &&
     (state.pending_decision as { action?: string }).action
   )
@@ -377,7 +378,7 @@ test('Training displays complete equities and probabilities', async ({
     fullPage: true,
   });
 });
-test('Continue sends the saved decision identity and plays only after acknowledgment', async ({
+test('Play move sends the saved decision identity and plays only after acknowledgment', async ({
   page,
 }) => {
   const state = saved('coach', {
@@ -413,7 +414,7 @@ test('Continue sends the saved decision identity and plays only after acknowledg
   expect(submitted).toBe(false);
   await page
     .getByTestId('play-feedback')
-    .getByRole('button', { name: 'Continue', exact: true })
+    .getByRole('button', { name: 'Play move', exact: true })
     .click();
   await expect(page.getByTestId('play-feedback')).toHaveCount(0);
   expect(submitted).toBe(true);
@@ -513,6 +514,12 @@ test('a running match exposes its active mode and persists mode changes on reloa
 }) => {
   const state = saved('competition');
   await resume(page, state);
+  const heading = page.locator('.play-match-heading');
+  await expect(heading).toContainText('Game 1');
+  await expect(heading.getByRole('status')).toHaveText('Your turn');
+  await expect(
+    page.getByLabel('Tutor warning threshold', { exact: true }),
+  ).toHaveCount(0);
   await page.route(`**/api/play/sessions/${id}/mode`, async (route) => {
     expect(route.request().postDataJSON()).toEqual({
       version: 1,
@@ -525,19 +532,21 @@ test('a running match exposes its active mode and persists mode changes on reloa
     });
     await route.fulfill({ json: state });
   });
-  await expect(page.getByTestId('active-play-mode')).toContainText(
-    'Competition',
-  );
-  await page
-    .getByLabel('Change play mode', { exact: true })
-    .selectOption('coach');
-  await expect(page.getByTestId('active-play-mode')).toContainText('Coach');
+  const mode = heading.getByRole('combobox', {
+    name: 'Change play mode',
+    exact: true,
+  });
+  await expect(mode).toHaveValue('competition');
+  await mode.selectOption('coach');
+  await expect(mode).toHaveValue('coach');
   await page.reload();
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();
   await expect(
     page.getByLabel('Change play mode', { exact: true }),
   ).toHaveValue('coach');
-  await expect(page.getByTestId('active-play-mode')).toContainText('Coach');
+  await expect(
+    page.getByLabel('Tutor warning threshold', { exact: true }),
+  ).toHaveCount(0);
 });
 test('switching pending feedback to Competition keeps a neutral explicit confirmation', async ({
   page,
@@ -620,7 +629,9 @@ test('mode switching preserves partial checker steps', async ({ page }) => {
   await page
     .getByLabel('Change play mode', { exact: true })
     .selectOption('coach');
-  await expect(page.getByTestId('active-play-mode')).toContainText('Coach');
+  await expect(
+    page.getByLabel('Change play mode', { exact: true }),
+  ).toHaveValue('coach');
   await expect(page.locator('[data-play-point="6"]')).toHaveAttribute(
     'data-enabled',
     'true',
@@ -763,9 +774,9 @@ test('entering Competition synchronously discards cached linked analysis', async
   await page
     .getByLabel('Change play mode', { exact: true })
     .selectOption('competition');
-  await expect(page.getByTestId('active-play-mode')).toContainText(
-    'Competition',
-  );
+  await expect(
+    page.getByLabel('Change play mode', { exact: true }),
+  ).toHaveValue('competition');
   await page.getByRole('tab', { name: 'Analysis', exact: true }).click();
   await expect(page.locator('.analysis-workspace .board')).toHaveCount(0);
 });

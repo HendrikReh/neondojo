@@ -123,7 +123,6 @@ async function create(
   expect(response.status()).toBe(200);
   await page.goto('/');
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();
-  await page.getByRole('button', { name: 'New match', exact: true }).click();
   await page.getByLabel('Your checkers').selectOption(String(human));
   await page
     .getByRole('tabpanel', { name: 'Playing', exact: true })

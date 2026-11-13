@@ -58,6 +58,8 @@ for (const human of [0, 1])
       'false',
     );
     await expect(page.locator('[data-animated-checker]')).toHaveCount(0);
+    const board = page.locator('.play-live-board > .board-shell > .board');
+    const liveBoard = await board.boundingBox();
     const rows = page.locator('.play-history .move-history-row');
     await expect(rows).toHaveCount(2);
     await rows.first().click();
@@ -70,6 +72,7 @@ for (const human of [0, 1])
       page.locator('.play-history-review [role="status"]'),
     ).toHaveCount(0);
     await expect(page.locator('.board-shell .move-arrows')).toBeVisible();
+    expect(await board.boundingBox()).toEqual(liveBoard);
     await expect(
       page.locator('[data-play-point][data-enabled="true"]'),
     ).toHaveCount(0);
@@ -109,6 +112,7 @@ for (const human of [0, 1])
       .getByRole('button', { name: 'Return to game', exact: true })
       .click();
     await expect(page.locator('.play-history-review')).toHaveCount(0);
+    expect(await board.boundingBox()).toEqual(liveBoard);
     await expect(page.locator('.play-selected-steps')).toHaveText('13/10');
     await point(6).click();
     await expect(page.locator('[data-dice-action="confirm"]')).toHaveCount(2);

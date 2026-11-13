@@ -13,7 +13,7 @@ import {
   navigateCandidatePreview,
 } from './candidate-preview';
 
-export function DecisionFeedbackHeading({ session }: { session: PlaySession }) {
+export function useDecisionChoice(session: PlaySession) {
   const t = usePlayModeText();
   const { formatDecision } = useI18n();
   const decision = session.pending_decision;
@@ -24,23 +24,44 @@ export function DecisionFeedbackHeading({ session }: { session: PlaySession }) {
   const notation = decision?.action
     ? decision.notation
     : decision?.original_notation;
-  const choice =
-    action === 'roll'
-      ? t('notDoubled')
-      : action === 'double'
-        ? t('doubled')
-        : action
-          ? formatDecision(
-              notation ||
-                (index != null ? session.legal_moves[index]?.notation : null) ||
-                action,
-            )
-          : '';
+  return action === 'roll'
+    ? t('notDoubled')
+    : action === 'double'
+      ? t('doubled')
+      : action
+        ? formatDecision(
+            notation ||
+              (index != null ? session.legal_moves[index]?.notation : null) ||
+              action,
+          )
+        : '';
+}
+
+export function DecisionFeedbackHeading({ session }: { session: PlaySession }) {
+  const t = usePlayModeText();
+  const choice = useDecisionChoice(session);
   return (
     <h3>
       {t('feedback')}
       {choice && `: ${choice}`}
     </h3>
+  );
+}
+
+const equityPrecision = { minimumFractionDigits: 3, maximumFractionDigits: 3 };
+
+export function DecisionEvaluation({ decision }: { decision: PlayDecision }) {
+  const t = usePlayModeText();
+  const { formatNumber } = useI18n();
+  if (decision.loss == null) return null;
+  return (
+    <p
+      className="play-feedback-result"
+      data-severity={decision.severity ?? 'none'}
+    >
+      <strong>{t(playSeverity(decision.severity))}</strong> · {t('loss')}:{' '}
+      {formatNumber(decision.loss, equityPrecision)}
+    </p>
   );
 }
 
@@ -61,8 +82,7 @@ export function DecisionDetails({
     alternative.action === 'move' ? [index] : [],
   );
   const { formatNumber, formatDecision } = useI18n();
-  const number = (value: number) =>
-    formatNumber(value, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  const number = (value: number) => formatNumber(value, equityPrecision);
   const full = session.play_mode !== 'coach';
   const choice = (
     action: string | null | undefined,
@@ -73,15 +93,7 @@ export function DecisionDetails({
       : formatDecision(action === 'roll' ? 'no double' : (action ?? ''));
   return (
     <>
-      {decision.loss != null && (
-        <p
-          className="play-feedback-result"
-          data-severity={decision.severity ?? 'none'}
-        >
-          <strong>{t(playSeverity(decision.severity))}</strong> · {t('loss')}:{' '}
-          {number(decision.loss)}
-        </p>
-      )}
+      <DecisionEvaluation decision={decision} />
       {decision.original_action && (
         <p>
           {t('first')}:{' '}
@@ -227,6 +239,35 @@ export default function PlayFeedback({
   }, [decision?.id, decision?.action, busy]);
   const quiet = session.play_mode === 'competition';
   if (!decision || (quiet && !decision.action)) return null;
+  const tutorWarning = session.play_mode === 'tutor' && decision.warning;
+  const actions = (
+    <div className="play-actions">
+      {!quiet && decision.action && (
+        <ActionButton
+          disabled={busy}
+          onClick={onRetry}
+          icon="reset"
+          label={t('retry')}
+        />
+      )}
+      {!quiet && (!decision.revealed || tutorWarning) && (
+        <ActionButton
+          disabled={busy || decision.revealed}
+          onClick={onReveal}
+          icon="solution"
+          label={t('solution')}
+        />
+      )}
+      {decision.action && (
+        <ActionButton
+          disabled={busy}
+          onClick={onContinue}
+          icon="confirm"
+          label={t(!quiet && decision.warning ? 'anyway' : 'continue')}
+        />
+      )}
+    </div>
+  );
   const renderPanel = (
     onPreview?: (index: number) => void,
     selectedPreview?: number | null,
@@ -244,50 +285,19 @@ export default function PlayFeedback({
       ) : (
         <DecisionFeedbackHeading session={session} />
       )}
-      {quiet ? null : decision.warning && !decision.revealed ? (
+      {!quiet && decision.warning && !decision.revealed && (
         <p role="status">{t('warning')}</p>
-      ) : decision.revealed ? (
+      )}
+      {tutorWarning && actions}
+      {!quiet && decision.revealed && (
         <DecisionDetails
           decision={decision}
           session={session}
           onPreview={onPreview}
           selectedPreview={selectedPreview}
         />
-      ) : null}
-      <div className="play-actions">
-        {!quiet && !decision.revealed && (
-          <ActionButton
-            disabled={busy}
-            onClick={onReveal}
-            icon="solution"
-            label={t('solution')}
-          >
-            {t('solution')}
-          </ActionButton>
-        )}
-        {decision.action && (
-          <>
-            {!quiet && (
-              <ActionButton
-                disabled={busy}
-                onClick={onRetry}
-                icon="reset"
-                label={t('retry')}
-              >
-                {t('retry')}
-              </ActionButton>
-            )}
-            <ActionButton
-              disabled={busy}
-              onClick={onContinue}
-              icon="confirm"
-              label={t(!quiet && decision.warning ? 'anyway' : 'continue')}
-            >
-              {t(!quiet && decision.warning ? 'anyway' : 'continue')}
-            </ActionButton>
-          </>
-        )}
-      </div>
+      )}
+      {!tutorWarning && actions}
       {!quiet && decision.original_action && <small>{t('originalHelp')}</small>}
     </section>
   );

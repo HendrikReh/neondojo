@@ -132,7 +132,7 @@ test('a declined offer keeps the selected level, error and unconfirmed turn unti
   expect(writes).toEqual([{ version: 7, action: 'resign', resign_level: 1 }]);
 });
 
-test('resign is also reachable in the mandatory Next roll dialog and cancellation restores Roll and Double', async ({
+test('cancelling resignation restores Roll and Double in the toolbar', async ({
   page,
 }) => {
   const { saved, writes } = await historyFixture(page);
@@ -144,10 +144,7 @@ test('resign is also reachable in the mandatory Next roll dialog and cancellatio
   });
   await page.reload();
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();
-  const roll = page.getByRole('alertdialog', {
-    name: 'Next roll',
-    exact: true,
-  });
+  const roll = page.getByTestId('play-board-toolbar');
   await roll.getByRole('button', { name: 'Resign', exact: true }).click();
   const dialog = page.getByRole('dialog', {
     name: 'Resign this game',
@@ -163,6 +160,9 @@ test('resign is also reachable in the mandatory Next roll dialog and cancellatio
   await expect(
     roll.getByRole('button', { name: 'Double', exact: true }),
   ).toBeEnabled();
+  await expect(
+    roll.getByRole('button', { name: 'Resign', exact: true }),
+  ).toBeFocused();
   expect(writes).toEqual([]);
 });
 

@@ -69,6 +69,29 @@ const row = (sessionId: string | null = id, phase: string | null = 'move') => ({
   play_session_id: sessionId,
   play_phase: phase,
 });
+test('German Playing setup has one New match heading and a localized paused collection', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
+  await page.goto('/');
+  const play = page.getByRole('tabpanel', { name: 'Spielen', exact: true });
+  await page.getByRole('tab', { name: 'Spielen', exact: true }).click();
+  await expect(
+    play.getByRole('heading', { name: 'Neues Match', exact: true }),
+  ).toHaveCount(1);
+  await expect(
+    play.getByRole('button', { name: 'Neues Match', exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    play.getByRole('button', { name: 'Match starten', exact: true }),
+  ).toBeVisible();
+  await play
+    .getByRole('button', { name: 'Pausierte Matches', exact: true })
+    .click();
+  await expect(
+    page.locator('.database-collections button[aria-pressed="true"]'),
+  ).toContainText('Pausierte Matches');
+});
 test('bot matches resume from Match Database and Playing has no Saved Matches list', async ({
   page,
 }) => {
@@ -404,18 +427,19 @@ test('a paused match resumes from Paused Matches at its saved decision', async (
   );
   await page.reload();
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();
-  const decision = page.getByRole('alertdialog', {
-    name: 'Next roll',
-    exact: true,
-  });
-  await decision
-    .getByRole('button', { name: 'End session', exact: true })
+  const toolbar = page.getByTestId('play-board-toolbar');
+  await expect(
+    toolbar.getByRole('button', { name: 'Roll dice' }),
+  ).toBeVisible();
+  await page
+    .locator('.play-header')
+    .getByRole('button', { name: 'Pause match', exact: true })
     .click();
   await expect(page.getByText('Match paused', { exact: true })).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'Resume match', exact: true }),
   ).toBeFocused();
-  await expect(decision).toHaveCount(0);
+  await expect(toolbar).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('paused-playing.png') });
   await page
     .getByRole('button', { name: 'Paused Matches', exact: true })
@@ -445,9 +469,9 @@ test('a paused match resumes from Paused Matches at its saved decision', async (
       exact: true,
     })
     .click();
-  await expect(decision).toBeVisible();
+  await expect(toolbar).toBeVisible();
   await expect(
-    decision.getByRole('button', { name: 'Roll dice', exact: true }),
+    toolbar.getByRole('button', { name: 'Roll dice', exact: true }),
   ).toBeEnabled();
   expect(actions).toEqual(['pause', 'resume']);
 });
@@ -473,7 +497,25 @@ test('pausing from the checker board keeps the confirmed turn checkpoint', async
   const undo = page.getByRole('button', { name: 'Undo step', exact: true });
   await point(13).click();
   await expect(undo).toBeEnabled();
-  await page.getByRole('button', { name: 'End session', exact: true }).click();
+  const pause = page.getByRole('button', { name: 'Pause match', exact: true });
+  const warning = page.getByRole('dialog', {
+    name: 'Pause match',
+    exact: true,
+  });
+  await pause.click();
+  await expect(warning).toContainText(
+    'Unconfirmed checker steps will be discarded.',
+  );
+  expect(actions).toEqual([]);
+  await warning.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(warning).toHaveCount(0);
+  await expect(pause).toBeFocused();
+  await expect(page.locator('.play-selected-steps')).toHaveText('13/10');
+  expect(actions).toEqual([]);
+  await pause.click();
+  await warning
+    .getByRole('button', { name: 'Pause match', exact: true })
+    .click();
   await expect(page.getByText('Match paused', { exact: true })).toBeVisible();
   await expect(undo).toHaveCount(0);
   await page.getByRole('button', { name: 'Resume match', exact: true }).click();

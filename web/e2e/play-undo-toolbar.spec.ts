@@ -7,7 +7,7 @@ for (const config of [
   { width: 1440, human: 0 },
   { width: 390, human: 1 },
 ])
-  test(`Undo is prominent beside the board and reverses steps ${config.width}/${config.human}`, async ({
+  test(`Undo stays beside the board and reverses steps ${config.width}/${config.human}`, async ({
     page,
   }) => {
     await page.setViewportSize({ width: config.width, height: 844 });
@@ -41,8 +41,16 @@ for (const config of [
     await expect(undo).toBeDisabled();
     await expect(page.locator('.play-selected-steps')).toHaveCount(0);
     await point(13).click();
+    await expect(undo).toBeEnabled();
+    const undoOffset = async () =>
+      (await undo.boundingBox())!.y - (await toolbar.boundingBox())!.y;
+    const undoBeforeConfirm = await undoOffset();
     await point(6).click();
     await expect(undo).toBeEnabled();
+    await expect(
+      toolbar.getByRole('button', { name: 'Confirm turn', exact: true }),
+    ).toBeEnabled();
+    expect(await undoOffset()).toBeCloseTo(undoBeforeConfirm, 0);
     await undo.click();
     await expect(undo).toBeEnabled();
     await expect(page.locator('.play-selected-steps')).toHaveText('13/10');
@@ -75,7 +83,7 @@ test('Undo remains reachable while scrolling a large board and hides in history 
   await expect(page.getByTestId('play-board-toolbar')).toHaveCount(0);
   expect(writes).toEqual([]);
 });
-test('Undo cannot change the position behind a pending coaching dialog', async ({
+test('Undo cannot change the position while Coach feedback is pending', async ({
   page,
 }) => {
   const { saved, writes } = await historyFixture(page);
@@ -102,10 +110,11 @@ test('Undo cannot change the position behind a pending coaching dialog', async (
   });
   await page.reload();
   await page.locator('#workspace-tab-play').click();
+  const toolbar = page.getByTestId('play-board-toolbar');
+  await expect(toolbar.getByTestId('play-feedback')).toBeVisible();
   await expect(
-    page.getByRole('alertdialog', { name: 'Coach', exact: true }),
-  ).toBeVisible();
-  await expect(page.getByTestId('play-board-toolbar')).toHaveCount(0);
+    toolbar.getByRole('button', { name: 'Undo step', exact: true }),
+  ).toHaveCount(0);
   expect(writes).toEqual([]);
 });
 

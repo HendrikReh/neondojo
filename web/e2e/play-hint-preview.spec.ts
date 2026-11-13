@@ -132,9 +132,7 @@ for (const human of [0, 1])
     expect(feedbackWrites).toEqual([{ version: 7, operation: 'hint' }]);
   });
 for (const phase of ['roll', 'double_response'])
-  test(`closing cube Hint restores required ${phase} dialog`, async ({
-    page,
-  }) => {
+  test(`closing cube Hint restores the ${phase} controls`, async ({ page }) => {
     const { writes } = await fixture(page, 0, phase);
     await page.getByRole('button', { name: 'Hint', exact: true }).click();
     const modal = page.getByRole('dialog', { name: 'Hint', exact: true });
@@ -144,11 +142,17 @@ for (const phase of ['roll', 'double_response'])
     await expect(page.locator('dialog[open]')).toHaveCount(1);
     await page.keyboard.press('Escape');
     await expect(modal).toHaveCount(0);
-    const underlying = page.getByRole('alertdialog', {
-      name: phase === 'roll' ? 'Next roll' : 'Cube decision',
-      exact: true,
-    });
+    const underlying =
+      phase === 'roll'
+        ? page.getByTestId('play-board-toolbar')
+        : page.getByRole('alertdialog', { name: 'Cube decision', exact: true });
     await expect(underlying).toBeVisible();
+    if (phase === 'roll') {
+      await expect(page.getByRole('alertdialog')).toHaveCount(0);
+      await expect(
+        underlying.getByRole('button', { name: 'Hint', exact: true }),
+      ).toBeFocused();
+    }
     await page.keyboard.press('Escape');
     await expect(underlying).toBeVisible();
     expect(writes).toEqual([]);
