@@ -332,6 +332,12 @@ export default function MatchAnalysisPanel({
         id={settingsId}
         className="match-analysis-settings"
         hidden={!!controlsTarget && !showSettings}
+        onKeyDown={(event) => {
+          if (!controlsTarget || event.key !== 'Escape') return;
+          event.preventDefault();
+          setShowSettings(false);
+          settingsButton.current?.focus();
+        }}
       >
         <div className="match-analysis-controls">
           <label>
