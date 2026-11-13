@@ -1,6 +1,7 @@
 //! Native BGBlitz BGF 1.0 transport and played-match conversion.
-use super::sgf::escape_value;
+use super::{match_context::MatchContext, sgf::escape_value};
 use anyhow::{Context, Result, bail, ensure};
+use chrono::NaiveDate;
 use flate2::bufread::GzDecoder;
 use serde::Deserialize;
 use std::io::Read;
@@ -31,6 +32,36 @@ struct MatchData {
     use_beaver: bool,
     cube_limit: i32,
     games: Vec<Game>,
+    #[serde(default)]
+    date: serde_json::Value,
+    #[serde(default)]
+    event: serde_json::Value,
+    #[serde(default)]
+    round: serde_json::Value,
+    #[serde(default)]
+    location: serde_json::Value,
+}
+
+impl MatchData {
+    fn match_context(&self) -> MatchContext {
+        let date = self
+            .date
+            .as_str()
+            .map(str::trim)
+            .filter(|value| value.len() == 10)
+            .and_then(|value| {
+                ["%Y.%m.%d", "%Y-%m-%d"].into_iter().find_map(|format| {
+                    let date = NaiveDate::parse_from_str(value, format).ok()?;
+                    (date.format(format).to_string() == value).then_some(date)
+                })
+            });
+        MatchContext::new(
+            date,
+            self.event.as_str(),
+            self.round.as_str(),
+            self.location.as_str(),
+        )
+    }
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -150,9 +181,7 @@ fn empty_coordinates(record: &Move) -> Result<()> {
     Ok(())
 }
 
-/// Decode native BGF 1.0. Keep producer analysis as a separate SGF extension;
-/// the played line is still validated by independent legal replay.
-pub fn bgf_to_sgf(input: &[u8]) -> Result<String> {
+fn decode(input: &[u8]) -> Result<MatchData> {
     ensure!(input.len() <= MAX_FILE, "BGF file exceeds 16 MiB limit");
     let header_end = input
         .iter()
@@ -167,11 +196,22 @@ pub fn bgf_to_sgf(input: &[u8]) -> Result<String> {
         "Unsupported BGF format/version"
     );
     let bytes = payload(&header, &input[header_end + 1..], MAX_DECODED)?;
-    let data: MatchData = if header.use_smile {
-        serde_smile::from_slice(&bytes).context("BGF: invalid Smile payload")?
+    if header.use_smile {
+        serde_smile::from_slice(&bytes).context("BGF: invalid Smile payload")
     } else {
-        serde_json::from_slice(&bytes).context("BGF: invalid JSON payload")?
-    };
+        serde_json::from_slice(&bytes).context("BGF: invalid JSON payload")
+    }
+}
+
+pub(super) fn read_match_context(input: &[u8]) -> Result<MatchContext> {
+    Ok(decode(input)?.match_context())
+}
+
+/// Decode native BGF 1.0. Keep producer analysis as a separate SGF extension;
+/// the played line is still validated by independent legal replay.
+pub fn bgf_to_sgf(input: &[u8]) -> Result<String> {
+    let data = decode(input)?;
+    let context = data.match_context();
     ensure!(
         data.game_mode == 0,
         "Only standard backgammon BGF matches are supported"
@@ -250,6 +290,9 @@ pub fn bgf_to_sgf(input: &[u8]) -> Result<String> {
             rules.push("Jacoby");
         }
         out.push_str(&format!("(;FF[4]GM[6]CA[UTF-8]AP[BGTutor:BGF1]PW[{}]PB[{}]MI[length:{}][game:{game_index}][ws:{}][bs:{}]",escape_value(names[0]),escape_value(names[1]),data.matchlen,scores[0],scores[1]));
+        if game_index == 0 {
+            context.write_sgf(&mut out);
+        }
         if !rules.is_empty() {
             out.push_str(&format!("RU[{}]", rules.join(":")));
         }
@@ -471,6 +514,37 @@ mod tests {
         output.push(b'\n');
         output.extend(payload);
         output
+    }
+
+    #[test]
+    fn reads_match_context_from_json_and_compressed_smile() {
+        let mut value = fixture();
+        value["date"] = json!("2015.11.24");
+        value["event"] = json!("Super Jackpot 2015");
+        value["round"] = json!("Final ]");
+        value["location"] = json!("São Paulo");
+        for (smile, gzip) in [(false, false), (true, true)] {
+            let sgf = bgf_to_sgf(&package(&value, smile, gzip)).unwrap();
+            let metadata = crate::databases::source_metadata(&sgf);
+            assert_eq!(
+                metadata.played_on,
+                chrono::NaiveDate::from_ymd_opt(2015, 11, 24)
+            );
+            assert_eq!(metadata.tournament.as_deref(), Some("Super Jackpot 2015"));
+            assert_eq!(metadata.round.as_deref(), Some("Final ]"));
+            assert_eq!(metadata.place.as_deref(), Some("São Paulo"));
+        }
+
+        value["date"] = json!("2015.02.29");
+        value["event"] = json!(" ");
+        value["round"] = json!(42);
+        value["location"] = json!(null);
+        let sgf = bgf_to_sgf(&package(&value, true, true)).unwrap();
+        let metadata = crate::databases::source_metadata(&sgf);
+        assert!(metadata.played_on.is_none());
+        assert!(metadata.tournament.is_none());
+        assert!(metadata.round.is_none());
+        assert!(metadata.place.is_none());
     }
 
     #[test]

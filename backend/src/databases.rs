@@ -957,7 +957,7 @@ async fn update_metadata(
     {
         return Err(ApiError::invalid("Invalid match metadata"));
     }
-    let affected=sqlx::query("UPDATE matches SET display_name=$2,played_on=$3,tournament=$4,round=$5,place=$6,result_state=$7,white_score=$8,black_score=$9,metadata_version=metadata_version+1,source_metadata_loaded=true WHERE id=$1 AND metadata_version=$10 AND NOT collection_only").bind(id).bind(w.display_name.trim()).bind(w.played_on).bind(w.tournament).bind(w.round).bind(w.place).bind(w.result_state).bind(w.white_score).bind(w.black_score).bind(w.version).execute(&s.pool).await.map_err(anyhow::Error::from)?.rows_affected();
+    let affected=sqlx::query("UPDATE matches SET display_name=$2,played_on=$3,tournament=$4,round=$5,place=$6,result_state=$7,white_score=$8,black_score=$9,metadata_version=metadata_version+1,source_metadata_loaded=true,native_match_context_pending=false WHERE id=$1 AND metadata_version=$10 AND NOT collection_only").bind(id).bind(w.display_name.trim()).bind(w.played_on).bind(w.tournament).bind(w.round).bind(w.place).bind(w.result_state).bind(w.white_score).bind(w.black_score).bind(w.version).execute(&s.pool).await.map_err(anyhow::Error::from)?.rows_affected();
     if affected == 0 {
         let exists: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM matches WHERE id=$1 AND NOT collection_only)",
@@ -1120,7 +1120,7 @@ async fn action_one(pool: &PgPool, a: &LibraryAction, id: Uuid) -> ApiResult<Act
                 }
             } else {
                 let new_id = Uuid::new_v4();
-                let inserted=sqlx::query_scalar::<_,Uuid>("INSERT INTO matches(id,filename,format,sha256,white,black,match_length,position_count,original,sgf,created_at,database_id,display_name,played_on,tournament,round,place,result_state,white_score,black_score,metadata_version,moves_cataloged,source_metadata_loaded,source_revision,play_mode,play_assisted) SELECT $2,filename,format,sha256,white,black,match_length,position_count,original,sgf,created_at,$3,display_name,played_on,tournament,round,place,result_state,white_score,black_score,metadata_version,moves_cataloged,source_metadata_loaded,source_revision,play_mode,play_assisted FROM matches WHERE id=$1 ON CONFLICT(database_id,sha256) DO NOTHING RETURNING id").bind(id).bind(new_id).bind(target).fetch_optional(&mut *tx).await.map_err(anyhow::Error::from)?;
+                let inserted=sqlx::query_scalar::<_,Uuid>("INSERT INTO matches(id,filename,format,sha256,white,black,match_length,position_count,original,sgf,created_at,database_id,display_name,played_on,tournament,round,place,result_state,white_score,black_score,metadata_version,moves_cataloged,source_metadata_loaded,native_match_context_pending,source_revision,play_mode,play_assisted) SELECT $2,filename,format,sha256,white,black,match_length,position_count,original,sgf,created_at,$3,display_name,played_on,tournament,round,place,result_state,white_score,black_score,metadata_version,moves_cataloged,source_metadata_loaded,native_match_context_pending,source_revision,play_mode,play_assisted FROM matches WHERE id=$1 ON CONFLICT(database_id,sha256) DO NOTHING RETURNING id").bind(id).bind(new_id).bind(target).fetch_optional(&mut *tx).await.map_err(anyhow::Error::from)?;
                 if inserted.is_none() {
                     let existing = sqlx::query_scalar(
                         "SELECT id FROM matches WHERE database_id=$1 AND sha256=$2",
@@ -1452,42 +1452,98 @@ pub fn source_metadata(sgf: &str) -> SourceMetadata {
 /// Bounded startup backfill; repeat until it returns zero. Manual metadata is preserved.
 pub async fn backfill_source_metadata(pool: &PgPool) -> anyhow::Result<usize> {
     let mut tx = pool.begin().await?;
-    let ids:Vec<Uuid>=sqlx::query_scalar("SELECT id FROM matches WHERE NOT source_metadata_loaded ORDER BY id LIMIT 100 FOR UPDATE SKIP LOCKED").fetch_all(&mut *tx).await?;
+    let ids: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM matches WHERE NOT source_metadata_loaded OR native_match_context_pending
+         ORDER BY id LIMIT 100 FOR UPDATE SKIP LOCKED",
+    )
+    .fetch_all(&mut *tx)
+    .await?;
+
     for id in &ids {
-        // Fetch sources one at a time: a batch must not retain 100 large SGFs.
-        let (sgf, format, original, version): (String, String, Vec<u8>, i64) =
-            sqlx::query_as("SELECT sgf,format,original,metadata_version FROM matches WHERE id=$1")
-                .bind(id)
-                .fetch_one(&mut *tx)
-                .await?;
-        let m = tokio::task::spawn_blocking(move || {
-            let mut metadata = source_metadata(&sgf);
-            if version == 0 {
-                // Earlier native converters dropped final-game outcomes. Recover
-                // metadata from immutable original bytes without rewriting SGF,
-                // position IDs, annotations, imported analysis, or move catalogs.
-                let canonical = match format.as_str() {
-                    "xg" => crate::import::xg_to_sgf(&original),
-                    "bgf" => crate::import::bgf_to_sgf(&original),
-                    _ => return metadata,
-                };
-                if let Ok(canonical) = canonical {
-                    let result = source_metadata(&canonical);
-                    metadata.result_state = result.result_state;
-                    metadata.white_score = result.white_score;
-                    metadata.black_score = result.black_score;
-                }
-            }
-            metadata
-        })
-        .await?;
-        sqlx::query("UPDATE matches SET played_on=$2,tournament=$3,round=$4,place=$5,result_state=$6,white_score=$7,black_score=$8,source_metadata_loaded=true WHERE id=$1 AND metadata_version=0").bind(id).bind(m.played_on).bind(m.tournament).bind(m.round).bind(m.place).bind(m.result_state).bind(m.white_score).bind(m.black_score).execute(&mut *tx).await?;
-        sqlx::query("UPDATE matches SET source_metadata_loaded=true WHERE id=$1")
+        // Fetch sources one at a time: a batch must not retain 100 large originals.
+        let (sgf, format, original, version, source_loaded, context_pending):
+            (String, String, Vec<u8>, i64, bool, bool) = sqlx::query_as(
+                "SELECT CASE WHEN NOT source_metadata_loaded AND metadata_version=0 THEN sgf ELSE '' END,
+                        format, CASE WHEN metadata_version=0 AND format IN ('xg','bgf')
+                                     THEN original ELSE ''::bytea END,
+                        metadata_version, source_metadata_loaded, native_match_context_pending
+                 FROM matches WHERE id=$1",
+            )
             .bind(id)
+            .fetch_one(&mut *tx)
+            .await?;
+
+        if version == 0 {
+            let match_id = *id;
+            let (legacy, context) = tokio::task::spawn_blocking(move || {
+                let legacy = (!source_loaded).then(|| {
+                    let mut metadata = source_metadata(&sgf);
+                    // Recover outcomes missing from older canonical SGF.
+                    let canonical = match format.as_str() {
+                        "xg" => crate::import::xg_to_sgf(&original).ok(),
+                        "bgf" => crate::import::bgf_to_sgf(&original).ok(),
+                        _ => None,
+                    };
+                    if let Some(canonical) = canonical {
+                        let source = source_metadata(&canonical);
+                        metadata.result_state = source.result_state;
+                        metadata.white_score = source.white_score;
+                        metadata.black_score = source.black_score;
+                    }
+                    metadata
+                });
+                let mut context = if context_pending {
+                    crate::import::match_context::from_original(&format, &original)
+                        .unwrap_or_else(|error| {
+                            tracing::warn!(%match_id, %format, %error, "Could not recover match context from original");
+                            Default::default()
+                        })
+                } else {
+                    Default::default()
+                };
+                if let Some(metadata) = &legacy {
+                    context.played_on = context.played_on.or(metadata.played_on);
+                    context.event = context.event.or_else(|| metadata.tournament.clone());
+                    context.round = context.round.or_else(|| metadata.round.clone());
+                    context.place = context.place.or_else(|| metadata.place.clone());
+                }
+                (legacy, context)
+            })
+            .await?;
+
+            sqlx::query(
+                "UPDATE matches
+                 SET played_on=COALESCE(played_on,$2),tournament=COALESCE(tournament,$3),
+                     round=COALESCE(round,$4),place=COALESCE(place,$5),
+                     result_state=COALESCE($6,result_state),
+                     white_score=CASE WHEN $6 IS NULL THEN white_score ELSE $7 END,
+                     black_score=CASE WHEN $6 IS NULL THEN black_score ELSE $8 END,
+                     metadata_version=metadata_version+CASE WHEN $9 AND (
+                         (played_on IS NULL AND $2 IS NOT NULL)
+                         OR (tournament IS NULL AND $3 IS NOT NULL)
+                         OR (round IS NULL AND $4 IS NOT NULL)
+                         OR (place IS NULL AND $5 IS NOT NULL)) THEN 1 ELSE 0 END,
+                     source_metadata_loaded=true,native_match_context_pending=false
+                 WHERE id=$1",
+            )
+            .bind(id)
+            .bind(context.played_on)
+            .bind(context.event)
+            .bind(context.round)
+            .bind(context.place)
+            .bind(legacy.as_ref().map(|m| m.result_state.as_str()))
+            .bind(legacy.as_ref().and_then(|m| m.white_score))
+            .bind(legacy.as_ref().and_then(|m| m.black_score))
+            .bind(context_pending)
             .execute(&mut *tx)
             .await?;
+        } else {
+            sqlx::query("UPDATE matches SET source_metadata_loaded=true,native_match_context_pending=false WHERE id=$1")
+                .bind(id)
+                .execute(&mut *tx)
+                .await?;
+        }
     }
-    let n = ids.len();
     tx.commit().await?;
-    Ok(n)
+    Ok(ids.len())
 }

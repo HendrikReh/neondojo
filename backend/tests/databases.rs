@@ -1129,6 +1129,147 @@ async fn source_metadata_backfill_recovers_original_results_and_preserves_manual
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
+async fn native_context_backfill_fills_gaps_and_preserves_manual_saves(pool: PgPool) {
+    let bytes = include_bytes!("fixtures/WC2014.xg");
+    let canonical = bgtutor::import::xg_to_sgf(bytes).unwrap();
+    let legacy = regex::Regex::new(r"(?:DT|EV|RO|PC)\[[^\]]*\]")
+        .unwrap()
+        .replace_all(&canonical, "");
+    let mut ids = Vec::new();
+    for (version, source) in [
+        (0, bytes.as_slice()),
+        (1, bytes.as_slice()),
+        (0, b"damaged"),
+    ] {
+        let id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO matches(id,filename,format,sha256,white,black,match_length,position_count,
+             original,sgf,tournament,result_state,white_score,black_score,metadata_version,
+             source_metadata_loaded)
+             VALUES($1,'source.xg','xg',$2,'White','Black',11,460,$3,$4,'Saved event',
+             'ongoing',9,9,$5,true)",
+        )
+        .bind(id)
+        .bind(id.to_string())
+        .bind(source)
+        .bind(legacy.as_ref())
+        .bind(version)
+        .execute(&pool)
+        .await
+        .unwrap();
+        ids.push(id);
+    }
+
+    // Reapply the migration to a library that already contains imports.
+    sqlx::query("ALTER TABLE matches DROP COLUMN native_match_context_pending")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::raw_sql(include_str!("../migrations/0050_native_match_context.sql"))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        bgtutor::databases::backfill_source_metadata(&pool)
+            .await
+            .unwrap(),
+        2
+    );
+    assert_eq!(
+        bgtutor::databases::backfill_source_metadata(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+    for (index, id) in ids.into_iter().enumerate() {
+        let match_row: Value = sqlx::query_scalar("SELECT to_jsonb(m) FROM matches m WHERE id=$1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(match_row["sgf"], legacy.as_ref());
+        assert_eq!(match_row["tournament"], "Saved event");
+        assert_eq!(match_row["result_state"], "ongoing");
+        assert_eq!(match_row["white_score"], 9);
+        assert_eq!(match_row["black_score"], 9);
+        assert_eq!(match_row["native_match_context_pending"], false);
+        if index == 0 {
+            assert_eq!(match_row["played_on"], "2014-08-10");
+            assert_eq!(match_row["round"], "Final - Tie Breaker");
+            assert_eq!(match_row["place"], "Monte-Carlo");
+            assert_eq!(match_row["metadata_version"], 1);
+        } else {
+            for field in ["played_on", "round", "place"] {
+                assert!(match_row[field].is_null());
+            }
+            assert_eq!(match_row["metadata_version"], i64::from(index == 1));
+        }
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn bgf_import_and_backfill_agree_on_match_context(pool: PgPool) {
+    let (header, payload) = include_str!("fixtures/tutorial.bgf")
+        .split_once('\n')
+        .unwrap();
+    let mut payload: Value = serde_json::from_str(payload).unwrap();
+    payload["date"] = json!("2015.11.24");
+    payload["event"] = json!("Super Jackpot 2015");
+    payload["round"] = json!("Final");
+    payload["location"] = json!("Berlin");
+    let source = format!("{header}\n{payload}");
+    let mut upload = b"--bg\r\nContent-Disposition: form-data; name=\"file\"; filename=\"match.bgf\"\r\nContent-Type: application/octet-stream\r\n\r\n".to_vec();
+    upload.extend_from_slice(source.as_bytes());
+    upload.extend_from_slice(b"\r\n--bg--\r\n");
+    let response = api::router(AppState::new(pool.clone(), Engine::new("unused".into())))
+        .oneshot(
+            Request::post("/api/imports")
+                .header("content-type", "multipart/form-data; boundary=bg")
+                .body(Body::from(upload))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(status, 201, "{}", String::from_utf8_lossy(&body));
+    let imported: Value = serde_json::from_slice(&body).unwrap();
+    let id = Uuid::parse_str(imported["match"]["id"].as_str().unwrap()).unwrap();
+    let path = format!("/api/matches/{id}/metadata");
+    let (status, initial) = request(&pool, "GET", &path, None).await;
+    assert_eq!(status, 200, "{initial}");
+
+    sqlx::query(
+        "UPDATE matches SET played_on=NULL,tournament=NULL,round=NULL,place=NULL,
+                            native_match_context_pending=true WHERE id=$1",
+    )
+    .bind(id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        bgtutor::databases::backfill_source_metadata(&pool)
+            .await
+            .unwrap(),
+        1
+    );
+    let (status, recovered) = request(&pool, "GET", &path, None).await;
+    assert_eq!(status, 200, "{recovered}");
+    for (key, value) in [
+        ("played_on", "2015-11-24"),
+        ("tournament", "Super Jackpot 2015"),
+        ("round", "Final"),
+        ("place", "Berlin"),
+    ] {
+        assert_eq!(initial[key], value);
+        assert_eq!(recovered[key], value);
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
 async fn new_native_import_stores_final_result_in_the_library(pool: PgPool) {
     let bytes = include_bytes!("fixtures/WC2014.xg");
     let sgf = bgtutor::import::xg_to_sgf(bytes).unwrap();
@@ -1139,6 +1280,10 @@ async fn new_native_import_stores_final_result_in_the_library(pool: PgPool) {
     let (status, page) = request(&pool, "GET", "/api/library/matches", None).await;
     assert_eq!(status, 200);
     assert_eq!(page["items"][0]["id"], result.r#match.id.to_string());
+    assert_eq!(page["items"][0]["played_on"], "2014-08-10");
+    assert_eq!(page["items"][0]["tournament"], "World Championship 2014");
+    assert_eq!(page["items"][0]["round"], "Final - Tie Breaker");
+    assert_eq!(page["items"][0]["place"], "Monte-Carlo");
     assert_eq!(page["items"][0]["white_score"], 11);
     assert_eq!(page["items"][0]["black_score"], 9);
     assert_eq!(page["items"][0]["result_state"], "completed");

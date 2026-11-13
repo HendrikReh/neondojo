@@ -4,6 +4,7 @@
 
 mod bgf;
 pub(crate) mod ids;
+pub(crate) mod match_context;
 pub(crate) mod sgf;
 mod xg;
 pub use bgf::bgf_to_sgf;

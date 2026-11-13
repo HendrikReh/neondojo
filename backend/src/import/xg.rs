@@ -1,7 +1,8 @@
 //! Decoder for the public XG2 RichGame/ZLIBArchive container and TSaveRec.
 //! Format references and fixture provenance live in tests/fixtures/README.md.
-use super::sgf::escape_value;
+use super::{match_context::MatchContext, sgf::escape_value};
 use anyhow::{Context, Result, bail, ensure};
+use chrono::{Days, NaiveDate};
 use flate2::read::ZlibDecoder;
 use std::io::Read;
 
@@ -178,17 +179,22 @@ pub(crate) fn xg_beaver_rule(input: &[u8]) -> Result<bool> {
     ensure!(header[8] == 0, "XG: match header must be the first record");
     bool_at(header, 102)
 }
-fn name(record: &[u8], unicode_at: usize, ansi_at: usize) -> Result<String> {
+fn header_text(
+    record: &[u8],
+    unicode_at: usize,
+    ansi_at: usize,
+    ansi_limit: usize,
+) -> Result<String> {
     let words: Vec<u16> = record[unicode_at..unicode_at + 258]
         .chunks_exact(2)
         .map(|b| u16::from_le_bytes([b[0], b[1]]))
         .take_while(|n| *n != 0)
         .collect();
     if !words.is_empty() {
-        return String::from_utf16(&words).context("XG: invalid Unicode player name");
+        return String::from_utf16(&words).context("XG: invalid Unicode header text");
     }
     let count = usize::from(record[ansi_at]);
-    ensure!(count <= 40, "XG: invalid short player name length");
+    ensure!(count <= ansi_limit, "XG: invalid short header text length");
     // The ANSI fallback is byte-preserving Latin-1. Current XG2 normally uses
     // the UTF-16 fields, including for names outside the western code page.
     Ok(record[ansi_at + 1..ansi_at + 1 + count]
@@ -196,6 +202,38 @@ fn name(record: &[u8], unicode_at: usize, ansi_at: usize) -> Result<String> {
         .map(|b| char::from(*b))
         .collect())
 }
+pub(super) fn read_match_context(input: &[u8]) -> Result<MatchContext> {
+    let records = main_records(input)?;
+    let header = records
+        .get(..RECORD_BYTES)
+        .context("XG: truncated match header")?;
+    ensure!(header[8] == 0, "XG: match header must be the first record");
+    ensure!(
+        u32_at(header, 556)? == 0x494c4d44,
+        "XG: invalid match magic"
+    );
+    ensure!(
+        (24..=40).contains(&i32_at(header, 552)?),
+        "Unsupported XG save version"
+    );
+    Ok(match_context(header))
+}
+
+fn match_context(header: &[u8]) -> MatchContext {
+    // The integral part of Delphi TDateTime counts calendar days since
+    // 1899-12-30. Zero is the unset date and the fraction is local time.
+    let date = f64_at(header, 128)
+        .ok()
+        .filter(|days| (1.0..2_958_466.0).contains(days))
+        .and_then(|days| {
+            NaiveDate::from_ymd_opt(1899, 12, 30)?.checked_add_days(Days::new(days as u64))
+        });
+    let event = header_text(header, 622, 136, 128).ok();
+    let round = header_text(header, 1654, 417, 128).ok();
+    let place = header_text(header, 1396, 283, 128).ok();
+    MatchContext::new(date, event.as_deref(), round.as_deref(), place.as_deref())
+}
+
 fn color(active: i32) -> Result<char> {
     match active {
         1 => Ok('W'),
@@ -351,7 +389,11 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
     );
     let crawford_rule = bool_at(header, 100)?;
     let jacoby = bool_at(header, 101)?;
-    let players = [name(header, 880, 9)?, name(header, 1138, 50)?];
+    let players = [
+        header_text(header, 880, 9, 40)?,
+        header_text(header, 1138, 50, 40)?,
+    ];
+    let context = match_context(header);
     let mut out = String::new();
     let mut in_game = false;
     let mut game_in_progress = false;
@@ -403,6 +445,9 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
                     rules.push("Jacoby");
                 }
                 out.push_str(&format!("(;FF[4]GM[6]CA[UTF-8]AP[BGTutor:XG2]PW[{}]PB[{}]MI[length:{length}][game:{game_count}][ws:{white_score}][bs:{black_score}]",escape_value(&players[0]),escape_value(&players[1])));
+                if game_count == 0 {
+                    context.write_sgf(&mut out);
+                }
                 if !rules.is_empty() {
                     out.push_str(&format!("RU[{}]", rules.join(":")));
                 }
@@ -643,6 +688,22 @@ mod tests {
             "cube analysis must survive too"
         );
     }
+    #[test]
+    fn reads_match_context_from_the_published_world_championship_file() {
+        let sgf = xg_to_sgf(include_bytes!("../../tests/fixtures/WC2014.xg")).unwrap();
+        let metadata = crate::databases::source_metadata(&sgf);
+        assert_eq!(
+            metadata.played_on,
+            chrono::NaiveDate::from_ymd_opt(2014, 8, 10)
+        );
+        assert_eq!(
+            metadata.tournament.as_deref(),
+            Some("World Championship 2014")
+        );
+        assert_eq!(metadata.round.as_deref(), Some("Final - Tie Breaker"));
+        assert_eq!(metadata.place.as_deref(), Some("Monte-Carlo"));
+    }
+
     #[test]
     fn completed_match_preserves_final_footer_score_in_sgf() {
         let sgf = xg_to_sgf(include_bytes!("../../tests/fixtures/WC2014.xg")).unwrap();
