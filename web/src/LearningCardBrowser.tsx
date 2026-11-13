@@ -1,7 +1,8 @@
 import AnkiCardFace from './AnkiCardFace';
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import type { Theme } from './themes';
-import SearchPagination, { useSearchResultPage } from './SearchPagination';
+import SearchPagination from './SearchPagination';
+import { lastSearchPage } from './useSearchPages';
 import {
   SearchResultList,
   SearchResultNotes,
@@ -32,9 +33,8 @@ import { useCardPreviewResize } from './useCardPreviewResize';
 export default function LearningCardBrowser({
   cards,
   theme,
-  hasMore,
-  moreLoading,
-  onMore,
+  page = 1,
+  onPageChange,
   visible = true,
   total,
   loading = false,
@@ -48,9 +48,8 @@ export default function LearningCardBrowser({
   loading?: boolean;
   decks?: readonly Pick<Deck, 'id' | 'name'>[];
   theme: Theme;
-  hasMore: boolean;
-  moreLoading: boolean;
-  onMore: () => Promise<boolean>;
+  page?: number;
+  onPageChange: (page: number) => void;
   visible?: boolean;
   children?: ReactNode;
   selection?: {
@@ -68,16 +67,14 @@ export default function LearningCardBrowser({
     decks.find((item) => item.id === deck.id)?.name ?? deck.name;
   const t = useLearningText(),
     { t: uiT, formatNumber } = useI18n();
-  const [selectedId, setSelectedId] = useState<string>();
-  const [pageIndex, setPageIndex] = useState(0);
-  const { page, lastPage, start, rows } = useSearchResultPage(
-    cards,
-    CARD_PAGE_SIZE,
-    pageIndex,
-  );
-  const ids = rows.map((card) => card.id);
+  const [previewCard, setPreviewCard] = useState<(typeof cards)[number]>();
+  const start = (page - 1) * CARD_PAGE_SIZE;
+  const ids = cards.map((card) => card.id);
   const selectedOnPage = ids.filter((id) => selection?.ids.has(id)).length;
-  const selected = cards.find((card) => card.id === selectedId) ?? cards[0];
+  const selected =
+    cards.find((card) => card.id === previewCard?.id) ??
+    (cards.length ? previewCard : undefined) ??
+    cards[0];
   const context = selected?.position
     ? matchContext(selected.position.gnubg_match_id)
     : undefined;
@@ -91,7 +88,7 @@ export default function LearningCardBrowser({
               ? 'questionResponse'
               : 'questionOffer',
         );
-  const summaries = rows.map((card) => {
+  const summaries = cards.map((card) => {
     if (!card.position) return searchT('anki');
     const { scores, length, jacoby, cube, owner, crawford } = matchContext(
       card.position.gnubg_match_id,
@@ -128,7 +125,7 @@ export default function LearningCardBrowser({
       hint={t('previewHint')}
       data-card-id={selected?.id}
     >
-      {visible && selected?.kind === 'anki' && (
+      {visible !== false && selected && selected.kind === 'anki' && (
         <AnkiCardFace id={selected.id} title={selected.prompt} />
       )}
       {selected?.position && context && (
@@ -176,7 +173,7 @@ export default function LearningCardBrowser({
       style={{ '--card-preview-width': `${resize.width}px` } as CSSProperties}
       divider={resize.divider}
       listClassName="learning-card-list"
-      busy={loading || moreLoading}
+      busy={loading}
       count={
         <span role="status">
           {searchT('found', { count: total ?? cards.length })}
@@ -186,7 +183,7 @@ export default function LearningCardBrowser({
     >
       {actions}
       {loading && <p role="status">{p('loading')}</p>}
-      {rows.length > 0 && (
+      {cards.length > 0 && (
         <SearchResultTable
           key={page}
           className={
@@ -231,7 +228,7 @@ export default function LearningCardBrowser({
             </tr>
           </thead>
           <tbody>
-            {rows.map((card, index) => (
+            {cards.map((card, index) => (
               <SearchResultRow
                 key={card.id}
                 ids={ids}
@@ -253,7 +250,9 @@ export default function LearningCardBrowser({
                 active={selected?.id === card.id}
                 selectedClassName="learning-card-selected"
                 jumpToEdges
-                onPreview={setSelectedId}
+                onPreview={(id) =>
+                  setPreviewCard(cards.find((card) => card.id === id))
+                }
               >
                 {selection && (
                   <td
@@ -284,7 +283,7 @@ export default function LearningCardBrowser({
                     aria-label={t('previewCard', {
                       number: start + index + 1,
                     })}
-                    onClick={() => setSelectedId(card.id)}
+                    onClick={() => setPreviewCard(card)}
                   >
                     <strong>{question(card)}</strong>
                     <small className="position-match-name">
@@ -308,8 +307,10 @@ export default function LearningCardBrowser({
                 <td>
                   <SearchResultNotes
                     tags={[
-                      ...(card.browse?.tags ?? []),
-                      ...(card.browse?.card_tags ?? []),
+                      ...new Set([
+                        ...(card.browse?.card_tags ?? []),
+                        ...(card.browse?.tags ?? []),
+                      ]),
                     ]}
                     comment={card.browse?.comment_excerpt}
                   />
@@ -327,11 +328,9 @@ export default function LearningCardBrowser({
       )}
       <SearchPagination
         page={page}
-        lastPage={lastPage}
-        busy={loading || moreLoading}
-        onPageChange={setPageIndex}
-        onMore={hasMore ? onMore : undefined}
-        moreLabel={t(moreLoading ? 'loading' : 'more')}
+        lastPage={lastSearchPage(total ?? cards.length, CARD_PAGE_SIZE)}
+        busy={loading}
+        onPageChange={onPageChange}
       />
       {children}
     </SearchResultList>

@@ -268,14 +268,16 @@ test('the latest clicked analysis row wins during a delayed game load', async ({
     .getByLabel('Analyse nach Entscheidung filtern')
     .selectOption('checker');
   await expect(panel.locator('tbody tr')).toHaveCount(50);
-  await panel
-    .getByRole('button', { name: 'Weitere Entscheidungen laden' })
-    .click();
-  await expect(panel.locator('tbody tr')).toHaveCount(100);
-  await panel
-    .getByRole('button', { name: 'Weitere Entscheidungen laden' })
-    .click();
-  await expect(panel.locator('tbody tr')).toHaveCount(150);
+  await panel.getByRole('button', { name: 'Nächste Seite' }).click();
+  await expect(
+    panel.getByRole('button', { name: 'Seite 2', exact: true }),
+  ).toHaveAttribute('aria-current', 'page');
+  await expect(panel.locator('tbody tr')).toHaveCount(50);
+  await panel.getByRole('button', { name: 'Nächste Seite' }).click();
+  await expect(
+    panel.getByRole('button', { name: 'Seite 3', exact: true }),
+  ).toHaveAttribute('aria-current', 'page');
+  await expect(panel.locator('tbody tr')).toHaveCount(50);
   let release: (() => void) | undefined;
   const gate = new Promise<void>((resolve) => {
     release = resolve;
@@ -292,8 +294,12 @@ test('the latest clicked analysis row wins during a delayed game load', async ({
     await route.continue();
   });
 
-  await panel.locator('tbody tr').nth(149).getByRole('button').click();
+  await panel.locator('tbody tr').last().getByRole('button').click();
   await started;
+  await panel.getByRole('button', { name: 'Anfang', exact: true }).click();
+  await expect(
+    panel.getByRole('button', { name: 'Seite 1', exact: true }),
+  ).toHaveAttribute('aria-current', 'page');
   await panel.locator('tbody tr').first().getByRole('button').click();
   release?.();
   // Allow the delayed response's React update to render before checking its effect.

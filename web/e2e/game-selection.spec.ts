@@ -286,9 +286,12 @@ test('returning to an analysis filter starts at its first page', async ({
   await expect(analysis.locator('tbody tr')).toHaveCount(50);
   const first = await analysis.locator('tbody tr').first().textContent();
   await analysis
-    .getByRole('button', { name: 'Weitere Entscheidungen laden', exact: true })
+    .getByRole('button', { name: 'Nächste Seite', exact: true })
     .click();
-  await expect(analysis.locator('tbody tr')).toHaveCount(100);
+  await expect(
+    analysis.getByRole('button', { name: 'Seite 2', exact: true }),
+  ).toHaveAttribute('aria-current', 'page');
+  await expect(analysis.locator('tbody tr')).toHaveCount(50);
   await analysis
     .getByLabel('Analyse nach Entscheidung filtern')
     .selectOption('cube');

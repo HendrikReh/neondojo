@@ -516,20 +516,6 @@
   overflow-wrap: anywhere;
   text-align: right;
 }
-.position-pagination {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-  margin: 14px 0 20px;
-}
-.position-pagination span {
-  color: var(--ui-muted);
-  font-size: var(--font-size-table);
-}
-.position-pagination button {
-  font-size: var(--font-size-control);
-}
 .search-pagination {
   margin: 12px 0 16px;
   font-variant-numeric: tabular-nums;
@@ -654,15 +640,6 @@
   }
   .position-preview {
     padding: 12px;
-  }
-  .position-pagination {
-    flex-wrap: wrap;
-  }
-  .position-pagination button {
-    flex: 1 1 110px;
-  }
-  .position-pagination span {
-    text-align: center;
   }
 }
 @media (max-width: 420px) {

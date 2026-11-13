@@ -109,6 +109,10 @@ async fn search_filters_before_pagination_and_shares_one_row_across_decks(pool: 
     assert_eq!(last["items"].as_array().unwrap().len(), 11);
     assert!(last["next_cursor"].is_null());
     assert_eq!(last["total"], 61);
+    let (status, numbered) = call(&app, "/api/cards?limit=50&page=2").await;
+    assert_eq!(status, 200, "{numbered}");
+    assert_eq!(numbered["total"], 61);
+    assert_eq!(numbered["items"], last["items"]);
     for (query, total) in [
         ("q=MOCHY", 61),
         ("player=MOCHY", 31),

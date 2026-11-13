@@ -1,3 +1,5 @@
+import SearchPagination from './SearchPagination';
+import { lastSearchPage } from './useSearchPages';
 import { useEffect, useRef, useState } from 'react';
 import ActionButton from './ActionButton';
 import MistakeGroupTable from './MistakeGroupTable';
@@ -41,6 +43,7 @@ export default function RecurringMistakes({
     [error, setError] = useState<unknown>(),
     [databaseError, setDatabaseError] = useState<unknown>(),
     [revision, setRevision] = useState(0);
+  const [resultPage, setResultPage] = useState(1);
   const [practice, setPractice] = useState<MistakePracticeRequest>();
   const trigger = useRef<HTMLButtonElement | null>(null),
     generation = useRef(0);
@@ -52,6 +55,7 @@ export default function RecurringMistakes({
       minLoss <= 1000;
   useEffect(() => {
     setPractice(undefined);
+    setResultPage(1);
     if (!visible || !valid) return;
     const abort = new AbortController(),
       version = ++generation.current;
@@ -111,6 +115,7 @@ export default function RecurringMistakes({
       mistake_kind: group.mistake_kind,
     });
   }
+  const pageSize = 25;
   return (
     <section className="recurring-mistakes" aria-label={t('title')}>
       <div className="study-reports-heading">
@@ -213,7 +218,20 @@ export default function RecurringMistakes({
                   {t(page.analyzed_decisions ? 'empty' : 'noCoverage')}
                 </p>
               ) : (
-                <MistakeGroupTable groups={page.groups} onPractice={start} />
+                <>
+                  <MistakeGroupTable
+                    groups={page.groups.slice(
+                      (resultPage - 1) * pageSize,
+                      resultPage * pageSize,
+                    )}
+                    onPractice={start}
+                  />
+                  <SearchPagination
+                    page={resultPage}
+                    lastPage={lastSearchPage(page.groups.length, pageSize)}
+                    onPageChange={setResultPage}
+                  />
+                </>
               )}
             </>
           )}

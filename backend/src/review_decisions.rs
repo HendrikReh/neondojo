@@ -61,6 +61,8 @@ pub struct ReviewQuery {
     pub limit: Option<i64>,
     /// Opaque continuation; preserve filters. Restart if the job's checkpoints change.
     pub after: Option<String>,
+    /// One-based result page. Mutually exclusive with `after`.
+    pub page: Option<i64>,
 }
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ReviewDecision {
@@ -85,6 +87,9 @@ pub struct ReviewDecisionPage {
     pub items: Vec<ReviewDecision>,
     /// A bounded scan can return an empty page with a continuation. Follow it until null.
     pub next_cursor: Option<String>,
+    /// Total matching decisions when `page` is supplied.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total: Option<i64>,
 }
 #[derive(Serialize, Deserialize)]
 struct Cursor {
@@ -133,6 +138,7 @@ async fn review(
             "Invalid review limit, game, player or kind",
         ));
     }
+    let offset = crate::search::page_offset(query.page, query.after.is_some(), limit)?;
     crate::play::require_review_available(&state.pool, id).await?;
     if !crate::move_catalog::ensure_catalog(&state.pool, id).await?
         || !crate::imported_analysis::ensure_catalog(&state.pool, id).await?
@@ -227,66 +233,99 @@ async fn review(
     } else {
         None
     };
-    let rows: Vec<Row> = sqlx::query_as(REVIEW_SQL)
-        .bind(id)
-        .bind(query.job_id)
-        .bind(game)
-        .bind(query.player)
-        .bind(&query.kind)
-        .bind(cursor.as_ref().map(|c| c.game))
-        .bind(cursor.as_ref().map(|c| c.decision))
-        .bind(cursor.as_ref().map(|c| &c.kind))
-        .bind(cursor.as_ref().map(|c| &c.id))
-        .bind(SCAN_LIMIT + 1)
-        .fetch_all(&mut *tx)
+    let mut cursor = cursor;
+    let mut items = Vec::new();
+    let mut matched = 0;
+    loop {
+        let rows: Vec<Row> = sqlx::query_as(REVIEW_SQL)
+            .bind(id)
+            .bind(query.job_id)
+            .bind(game)
+            .bind(query.player)
+            .bind(&query.kind)
+            .bind(cursor.as_ref().map(|c| c.game))
+            .bind(cursor.as_ref().map(|c| c.decision))
+            .bind(cursor.as_ref().map(|c| &c.kind))
+            .bind(cursor.as_ref().map(|c| &c.id))
+            .bind(SCAN_LIMIT + 1)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(anyhow::Error::from)?;
+        let format = format.clone();
+        let job = job.clone();
+        let scope = scope.clone();
+        let severity = query.severity;
+        let errors_only = query.errors_only;
+        let (batch, continuation, count) = tokio::task::spawn_blocking(move || {
+            let mut batch = Vec::new();
+            let count = rows.len();
+            let mut last = None;
+            let mut inspected = 0;
+            let mut matched_in_batch = 0;
+            for row in rows.into_iter().take(SCAN_LIMIT as usize) {
+                if offset.is_none() && batch.len() == limit as usize {
+                    break;
+                }
+                inspected += 1;
+                last = Some(Cursor {
+                    scope: scope.clone(),
+                    game: row.game_no,
+                    decision: row.decision_no,
+                    kind: row.kind.clone(),
+                    id: row.id.clone(),
+                });
+                let Some(result) =
+                    filtered_decision(row, id, &format, job.as_ref(), errors_only, severity)
+                else {
+                    continue;
+                };
+                let index = matched + matched_in_batch;
+                if offset.is_none_or(|offset| index >= offset && index - offset < limit) {
+                    batch.push(result);
+                }
+                matched_in_batch += 1;
+            }
+            (batch, last.filter(|_| inspected < count), matched_in_batch)
+        })
         .await
         .map_err(anyhow::Error::from)?;
-    tx.commit().await.map_err(anyhow::Error::from)?;
-    let page = tokio::task::spawn_blocking(move || -> ApiResult<ReviewDecisionPage> {
-        let mut items = vec![];
-        let count = rows.len();
-        let mut last = None;
-        let mut inspected = 0;
-        for row in rows.into_iter().take(SCAN_LIMIT as usize) {
-            if items.len() == limit as usize {
-                break;
-            }
-            inspected += 1;
-            last = Some(Cursor {
-                scope: scope.clone(),
-                game: row.game_no,
-                decision: row.decision_no,
-                kind: row.kind.clone(),
-                id: row.id.clone(),
-            });
-            let Some(mut result) = project(row, id, &format, job.as_ref()) else {
-                continue;
-            };
-            let severity = MoveSeverity::from_normalized_loss(result.decision.equity_loss);
-            result.decision.severity = severity.as_str().into();
-            if query.errors_only
-                && (result.decision.evaluation_status != "evaluated"
-                    || result.decision.equity_loss < MoveSeverity::DOUBTFUL_MIN_LOSS)
-                || query
-                    .severity
-                    .is_some_and(|s| s.as_str() != severity.as_str())
-            {
-                continue;
-            }
-            items.push(result);
-        }
-        let next_cursor = if inspected < count {
-            last.map(|c| serde_json::to_vec(&c).map(|bytes| URL_SAFE_NO_PAD.encode(bytes)))
+        items.extend(batch);
+        matched += count;
+        if offset.is_none() || continuation.is_none() {
+            let next_cursor = continuation
+                .map(|c| serde_json::to_vec(&c).map(|bytes| URL_SAFE_NO_PAD.encode(bytes)))
                 .transpose()
-                .map_err(anyhow::Error::from)?
-        } else {
-            None
-        };
-        Ok(ReviewDecisionPage { items, next_cursor })
-    })
-    .await
-    .map_err(anyhow::Error::from)??;
-    Ok(Json(page))
+                .map_err(anyhow::Error::from)?;
+            tx.commit().await.map_err(anyhow::Error::from)?;
+            return Ok(Json(ReviewDecisionPage {
+                items,
+                next_cursor,
+                total: offset.map(|_| matched),
+            }));
+        }
+        cursor = continuation;
+    }
+}
+
+fn filtered_decision(
+    row: Row,
+    id: Uuid,
+    format: &str,
+    job: Option<&Job>,
+    errors_only: bool,
+    filter: Option<MoveSeverity>,
+) -> Option<ReviewDecision> {
+    let mut result = project(row, id, format, job)?;
+    let severity = MoveSeverity::from_normalized_loss(result.decision.equity_loss);
+    if errors_only
+        && (result.decision.evaluation_status != "evaluated"
+            || result.decision.equity_loss < MoveSeverity::DOUBTFUL_MIN_LOSS)
+        || filter.is_some_and(|s| s.as_str() != severity.as_str())
+    {
+        return None;
+    }
+    result.decision.severity = severity.as_str().into();
+    Some(result)
 }
 fn project(row: Row, match_id: Uuid, format: &str, job: Option<&Job>) -> Option<ReviewDecision> {
     let (decision, move_id, review_position, engine, depth, depth_plies, job_id, source) = if row

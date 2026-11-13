@@ -303,6 +303,16 @@ async fn search_filters_paginates_and_returns_jump_metadata_without_source(pool:
     assert_eq!(second["items"].as_array().unwrap().len(), 1);
     assert!(second["next_cursor"].is_null());
     assert_ne!(first["items"][0]["id"], second["items"][0]["id"]);
+    let (status, numbered) = request(
+        app(&pool),
+        "GET",
+        "/api/annotations/search?q=needle&tag=cube&limit=1&page=2",
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{numbered}");
+    assert_eq!(numbered["total"], 2);
+    assert_eq!(numbered["items"], second["items"]);
     let (status, filtered) = request(
         app(&pool),
         "GET",

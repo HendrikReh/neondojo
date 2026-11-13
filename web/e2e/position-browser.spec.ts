@@ -127,9 +127,7 @@ test('deck memberships refresh on later result pages and retain existing column 
     .toBe('completed');
   const pane = await openBrowser(page, f.database.id);
   await expect(pane.locator('.position-table tbody tr')).toHaveCount(25);
-  await pane
-    .getByRole('button', { name: 'Load more positions', exact: true })
-    .click();
+  await pane.getByRole('button', { name: 'Next page', exact: true }).click();
   await expect(pane.locator('.position-table tbody tr')).toHaveCount(3);
   const row = pane.locator(`tr[data-position-id="${target.id}"]`);
   await row.locator('.position-player').click();
@@ -159,7 +157,9 @@ test('deck memberships refresh on later result pages and retain existing column 
     await expect(row.locator('.position-row-decks')).toContainText(name);
     await expect(row.getByRole('checkbox')).toBeChecked();
     await expect(row).toHaveClass(/position-preview-selected/);
-    await expect(pane.locator('.position-pagination')).toContainText('Page 2');
+    await expect(
+      pane.getByRole('button', { name: 'Page 2', exact: true }),
+    ).toHaveAttribute('aria-current', 'page');
     await expect(pane.locator('.position-preview-decks')).toContainText(name);
   }
   const expected = [...priorDecks.map((deck) => deck.name), ...names]
@@ -230,9 +230,7 @@ test('position notes filter exact decisions, search definitions persist, and pag
   const pane = await openBrowser(page, f.database.id),
     rows = pane.locator('.position-table tbody tr');
   await expect(rows).toHaveCount(25);
-  await pane
-    .getByRole('button', { name: 'Load more positions', exact: true })
-    .click();
+  await pane.getByRole('button', { name: 'Next page', exact: true }).click();
   await expect(rows).toHaveCount(5);
   await pane.locator('.position-filter-details summary').click();
   const tag = pane.getByLabel('Exact tag', { exact: true });

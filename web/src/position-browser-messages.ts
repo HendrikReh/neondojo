@@ -829,13 +829,13 @@ const translations = {
     'Wyniki wyszukiwania',
     'Risultati ricerca',
   ],
-  loaded: [
-    '{count} positions loaded',
-    '{count} Positionen geladen',
-    '{count} posiciones cargadas',
-    '{count} positions chargées',
-    'Wczytano {count} pozycji',
-    '{count} posizioni caricate',
+  resultCount: [
+    '{count} positions',
+    '{count} Positionen',
+    '{count} posiciones',
+    '{count} positions',
+    'Pozycje: {count}',
+    '{count} posizioni',
   ],
   empty: [
     'No saved positions match these filters. In Analysis, use “Save position” to add relevant decisions to your collection.',
@@ -852,14 +852,6 @@ const translations = {
     'Chargement des positions…',
     'Wczytywanie pozycji…',
     'Caricamento posizioni…',
-  ],
-  more: [
-    'Load more positions',
-    'Weitere Positionen laden',
-    'Cargar más posiciones',
-    'Charger plus de positions',
-    'Wczytaj więcej pozycji',
-    'Carica altre posizioni',
   ],
   selectRow: [
     'Select game {game}, ply {ply}, {player}',

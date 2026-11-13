@@ -14,7 +14,8 @@ import {
   type SetStateAction,
 } from 'react';
 import { request, type Match, type Position } from './api';
-import { useCursorSearch } from './useCursorSearch';
+import SearchPagination from './SearchPagination';
+import { useSearchPages } from './useSearchPages';
 import { useLibraryMatchOpening } from './useLibraryMatchOpening';
 import AnnotationSearch, { type AnnotationHit } from './AnnotationSearch';
 import { useI18n } from './i18n';
@@ -127,7 +128,7 @@ export default function MatchDatabase({
     [localRevision, setRevision] = useState(0),
     [expanded, setExpanded] = useState(false),
     [databaseError, setDatabaseError] = useState<unknown>(),
-    [selected, setSelected] = useState<Set<string>>(new Set()),
+    [selectedRows, setSelectedRows] = useState<LibraryMatch[]>([]),
     [dialog, setDialog] = useState<LibraryDialogState>(),
     [result, setResult] = useState<ActionResponse>();
   const profile = useOptionalConfiguration();
@@ -175,6 +176,7 @@ export default function MatchDatabase({
     'desc',
   );
   const resultNames = useRef<Record<string, string>>({});
+  const selected = new Set(selectedRows.map((row) => row.id));
   const [exact, setExact] = useState(''),
     [positionInputError, setPositionInputError] = useState(false);
   const positionSearchForm = useRef<HTMLDetailsElement>(null);
@@ -188,7 +190,7 @@ export default function MatchDatabase({
     consumedPositionSearch.current = requestedPositionSearch.token;
     // An explicit new search also resets transient match actions when its
     // filter values are identical to the previous search.
-    setSelected(new Set());
+    setSelectedRows([]);
     setResult(undefined);
     setExact(requestedPositionSearch.positionId);
     setPositionInputError(false);
@@ -239,23 +241,25 @@ export default function MatchDatabase({
     return () => abort.abort();
   }, [revision, localRevision]);
   useEffect(() => {
-    setSelected(new Set());
+    setSelectedRows([]);
     setResult(undefined);
   }, [matchScope]);
   const loadMatches = useCallback(
-    (signal: AbortSignal, after?: string) =>
-      loadLibrary(databaseId, filters, sort, direction, signal, after),
+    (signal: AbortSignal, page: number) =>
+      loadLibrary(databaseId, filters, sort, direction, signal, page),
     [databaseId, filters, sort, direction],
   );
   const {
     items: matches,
     resultScope: matchResultScope,
-    cursor,
-    loading: matchLoading,
-    moreLoading,
+    total,
+    page,
+    lastPage,
+    setPage,
+    loading,
     error: searchError,
-    more,
-  } = useCursorSearch({
+  } = useSearchPages({
+    pageSize: 50,
     scope: matchScope,
     revision: JSON.stringify([
       revision,
@@ -264,10 +268,8 @@ export default function MatchDatabase({
       visible,
     ]),
     loadPage: loadMatches,
-    itemKey: libraryRowKey,
     debounceMs: 250,
   });
-  const loading = matchLoading || moreLoading;
   const error = searchError || databaseError;
   function searchPosition() {
     const positionId = exact.trim();
@@ -284,47 +286,40 @@ export default function MatchDatabase({
   }
   function changeDatabase(id: string) {
     onDatabase(id);
-    setSelected(new Set());
+    setSelectedRows([]);
   }
-  function toggle(id: string, checked: boolean) {
-    setSelected((previous) => {
-      const next = new Set(previous);
-      if (checked) {
-        if (next.size < 100) next.add(id);
-      } else next.delete(id);
-      return next;
-    });
-  }
-  function selectAll(checked: boolean) {
-    setSelected(
-      checked ? new Set(matches.slice(0, 100).map((m) => m.id)) : new Set(),
-    );
+  function changeSelection(rows: readonly LibraryMatch[], checked: boolean) {
+    const next = new Map(selectedRows.map((row) => [row.id, row]));
+    for (const row of rows) {
+      if (!checked) next.delete(row.id);
+      else if (next.size < 100) next.set(row.id, row);
+    }
+    setSelectedRows([...next.values()]);
   }
   function actionResult(response: ActionResponse) {
     setResult(response);
     resultNames.current = Object.fromEntries(
-      matches.map((m) => [m.id, m.display_name]),
+      selectedRows.map((m) => [m.id, m.display_name]),
     );
     const deleted = response.results
       .filter((r) => r.status === 'deleted')
       .map((r) => r.match_id);
-    setSelected(
-      new Set(
-        response.results
-          .filter(
-            (r) =>
-              ![
-                'copied',
-                'moved',
-                'deleted',
-                'tagged',
-                'same_database',
-                'duplicate',
-              ].includes(r.status),
-          )
-          .map((r) => r.match_id),
-      ),
+    const failed = new Set(
+      response.results
+        .filter(
+          (row) =>
+            ![
+              'copied',
+              'moved',
+              'deleted',
+              'tagged',
+              'same_database',
+              'duplicate',
+            ].includes(row.status),
+        )
+        .map((row) => row.match_id),
     );
+    setSelectedRows((rows) => rows.filter((row) => failed.has(row.id)));
     setRevision((n) => n + 1);
     onChanged(deleted);
   }
@@ -428,7 +423,7 @@ export default function MatchDatabase({
   }, [visible, matches]);
   const active = databases.find((d) => d.id === databaseId);
   const importTarget = acceptsLibraryMatches(databaseId) ? active : undefined;
-  const pausedSelected = matches.some(
+  const pausedSelected = selectedRows.some(
     (m) => m.play_paused && selected.has(m.id),
   );
   const pr = (value: number | null) =>
@@ -574,9 +569,7 @@ export default function MatchDatabase({
           </div>
           <div className="library-table-toolbar">
             <div className="database-count">
-              {loading
-                ? t('app.searching')
-                : `${formatNumber(matches.length)}${cursor ? '+' : ''}`}{' '}
+              {loading ? t('app.searching') : `${formatNumber(total)}`}{' '}
               {filters.position_id ? l('occurrences') : t('app.matches')} ·{' '}
               {active?.name ?? l('allDatabases')}
             </div>
@@ -658,7 +651,7 @@ export default function MatchDatabase({
                 icon="clear"
                 label={l('clearSelection')}
                 compact
-                onClick={() => setSelected(new Set())}
+                onClick={() => setSelectedRows([])}
                 aria-label={l('clearSelection')}
               />
             </div>
@@ -811,8 +804,10 @@ export default function MatchDatabase({
                               .slice(0, 100)
                               .every((m) => selected.has(m.id))
                           }
-                          disabled={!matches.length}
-                          onChange={(e) => selectAll(e.target.checked)}
+                          disabled={loading || !matches.length}
+                          onChange={(e) =>
+                            changeSelection(matches, e.target.checked)
+                          }
                         />
                         {columns.handle('select', l('selection'))}
                       </th>
@@ -897,7 +892,9 @@ export default function MatchDatabase({
                                 : m.display_name,
                             })}
                             checked={selected.has(m.id)}
-                            onChange={(e) => toggle(m.id, e.target.checked)}
+                            onChange={(e) =>
+                              changeSelection([m], e.target.checked)
+                            }
                             disabled={
                               selected.size >= 100 && !selected.has(m.id)
                             }
@@ -1056,19 +1053,12 @@ export default function MatchDatabase({
               {!matches.length && !loading && (
                 <p className="library-empty">{l('noMatches')}</p>
               )}
-              {cursor && (
-                <ActionButton
-                  icon="more"
-                  label={
-                    filters.position_id
-                      ? l('moreOccurrences')
-                      : t('app.moreMatches')
-                  }
-                  className="load-more"
-                  disabled={loading}
-                  onClick={() => void more()}
-                />
-              )}
+              <SearchPagination
+                page={page}
+                lastPage={lastPage}
+                busy={loading}
+                onPageChange={setPage}
+              />
               <p className="fineprint library-pr-help">{l('prHelp')}</p>
             </div>
           </div>

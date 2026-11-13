@@ -14,6 +14,7 @@ export function reviewDecisions(
   options: {
     jobId?: string;
     after?: string | null;
+    page?: number;
     limit?: number;
     signal: AbortSignal;
   },
@@ -21,6 +22,7 @@ export function reviewDecisions(
   const query = new URLSearchParams(decisionFilterQuery(filter));
   query.set('limit', String(options.limit ?? 50));
   if (options.jobId) query.set('job_id', options.jobId);
+  if (options.page != null) query.set('page', String(options.page));
   if (options.after) query.set('after', options.after);
   return request<ReviewDecisionPage>(
     `/matches/${encodeURIComponent(matchId)}/review-decisions?${query}`,

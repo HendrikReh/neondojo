@@ -283,10 +283,6 @@ strong {
   margin: 12px;
   line-height: 1.7;
 }
-.load-more {
-  font-size: var(--font-size-meta);
-  margin-top: 12px;
-}
 .sidebar-footer {
   display: flex;
   align-items: center;

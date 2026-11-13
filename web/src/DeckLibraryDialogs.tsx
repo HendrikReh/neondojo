@@ -1,5 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import ActionButton from './ActionButton';
+import SearchPagination from './SearchPagination';
+import { lastSearchPage, useSearchPages } from './useSearchPages';
 import {
   addDeckCards,
   deleteCards,
@@ -10,6 +12,7 @@ import {
   resolveDuplicate,
   type DuplicateCard,
   type DuplicateDeck,
+  type DuplicatePeer,
   type VersionedDeck,
 } from './deck-management-api';
 import type { components } from './generated-api';
@@ -94,10 +97,14 @@ export function DeckLibraryDialog({
   const learning = useLearningText();
   const { locale } = useI18n();
   const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const pageSize = 25;
   const needle = query.trim().toLocaleLowerCase(locale);
   const matching = decks
     .filter((deck) => deck.name.toLocaleLowerCase(locale).includes(needle))
     .sort((a, b) => a.name.localeCompare(b.name, locale));
+  const lastPage = lastSearchPage(matching.length, pageSize);
+  const currentPage = Math.min(page, lastPage);
   return (
     <DeckDialog title={t('decks')} close={close} wide>
       {create}
@@ -106,43 +113,54 @@ export function DeckLibraryDialog({
         <input
           type="search"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setPage(1);
+          }}
         />
       </label>
       <ul className="deck-library-list">
-        {matching.map((deck) => (
-          <li key={deck.id}>
-            <div>
-              <strong>{deck.name}</strong>
-              <br />
-              {learning('cards', { count: deck.card_count })}
-            </div>
-            <div className="learning-controls">
-              <ActionButton
-                icon="open"
-                label={t('open')}
-                onClick={() => open(deck.id)}
-              >
-                {t('open')}
-              </ActionButton>
-              <ActionButton
-                icon="edit"
-                label={actions('rename')}
-                onClick={() => manage('rename', deck)}
-              >
-                {actions('rename')}
-              </ActionButton>
-              <ActionButton
-                icon="delete"
-                label={actions('delete')}
-                onClick={() => manage('delete', deck)}
-              >
-                {actions('delete')}
-              </ActionButton>
-            </div>
-          </li>
-        ))}
+        {matching
+          .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+          .map((deck) => (
+            <li key={deck.id}>
+              <div>
+                <strong>{deck.name}</strong>
+                <br />
+                {learning('cards', { count: deck.card_count })}
+              </div>
+              <div className="learning-controls">
+                <ActionButton
+                  icon="open"
+                  label={t('open')}
+                  onClick={() => open(deck.id)}
+                >
+                  {t('open')}
+                </ActionButton>
+                <ActionButton
+                  icon="edit"
+                  label={actions('rename')}
+                  onClick={() => manage('rename', deck)}
+                >
+                  {actions('rename')}
+                </ActionButton>
+                <ActionButton
+                  icon="delete"
+                  label={actions('delete')}
+                  onClick={() => manage('delete', deck)}
+                >
+                  {actions('delete')}
+                </ActionButton>
+              </div>
+            </li>
+          ))}
       </ul>
+      <SearchPagination
+        page={currentPage}
+        lastPage={lastPage}
+        onPageChange={setPage}
+        label={t('decks')}
+      />
       {!matching.length && <p role="status">{t('noDecks')}</p>}
     </DeckDialog>
   );
@@ -302,7 +320,7 @@ export function CardBatchDialog({
 
 type DuplicateAction =
   | { card: DuplicateCard; deck: DuplicateDeck }
-  | { card: DuplicateCard; keep: DuplicateCard };
+  | { card: DuplicateCard; keep: DuplicatePeer };
 
 export function DuplicateCardsDialog({
   close,
@@ -315,42 +333,25 @@ export function DuplicateCardsDialog({
   const learning = useLearningText();
   const management = useDeckManagementText();
   const { formatError, formatNumber, t: ui } = useI18n();
-  const [items, setItems] = useState<DuplicateCard[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [writing, setWriting] = useState(false);
   const [revision, setRevision] = useState(0);
-  const [error, setError] = useState<unknown>();
+  const [writeError, setError] = useState<unknown>();
   const [stale, setStale] = useState(false);
   const [action, setAction] = useState<DuplicateAction>();
   const [keepers, setKeepers] = useState<Record<string, string>>({});
-  const active = useRef<AbortController | undefined>(undefined);
-  async function load(after: string | null, controller: AbortController) {
-    setLoading(true);
-    setError(undefined);
-    try {
-      const page = await loadDuplicates(after, controller.signal);
-      if (controller.signal.aborted) return;
-      setItems((old) => (after ? [...old, ...page.items] : page.items));
-      setCursor(page.next_cursor);
-    } catch (failure) {
-      if (!controller.signal.aborted) setError(failure);
-    } finally {
-      if (!controller.signal.aborted) setLoading(false);
-    }
-  }
-  useEffect(() => {
-    const controller = new AbortController();
-    active.current = controller;
-    void load(null, controller);
-    return () => active.current?.abort();
-  }, [revision]);
+  const results = useSearchPages({
+    scope: 'duplicates',
+    revision,
+    pageSize: 50,
+    loadPage: loadDuplicates,
+  });
+  const { items, loading, result } = results;
+  const error = writeError ?? results.error;
   function reload() {
     setAction(undefined);
     setKeepers({});
     setStale(false);
-    setItems([]);
-    setCursor(null);
+    setError(undefined);
     setRevision((value) => value + 1);
   }
   async function confirm() {
@@ -383,6 +384,9 @@ export function DuplicateCardsDialog({
       : entry.card.prompt;
     return `${detail} · ${learning('reviewCount', { count: entry.card.review_count })} · ${entry.decks.map((d) => d.name).join(', ') || '—'}`;
   }
+  function peerLabel(peer: DuplicatePeer) {
+    return `${learning('reviewCount', { count: peer.review_count })} · ${peer.id.slice(0, 8)}`;
+  }
   return (
     <DeckDialog title={t('duplicates')} close={close} busy={writing} wide>
       {loading && <p role="status">{learning('loading')}</p>}
@@ -412,8 +416,7 @@ export function DuplicateCardsDialog({
           </p>
           {'keep' in action && (
             <p>
-              <strong>{t('keep')}</strong> · {label(action.keep)} ·{' '}
-              {action.keep.card.id.slice(0, 8)}
+              <strong>{t('keep')}</strong> · {peerLabel(action.keep)}
             </p>
           )}
           <div className="learning-controls">
@@ -446,12 +449,9 @@ export function DuplicateCardsDialog({
         {items.map((entry) => {
           const { card, duplicate_key: key } = entry;
           const peers = key
-            ? items.filter(
-                (item) =>
-                  item.duplicate_key === key && item.card.id !== card.id,
-              )
+            ? (result?.peers?.[key] ?? []).filter((peer) => peer.id !== card.id)
             : [];
-          const keep = peers.find((peer) => peer.card.id === keepers[card.id]);
+          const keep = peers.find((peer) => peer.id === keepers[card.id]);
           return (
             <li key={card.id}>
               <div className="duplicate-entry">
@@ -490,7 +490,7 @@ export function DuplicateCardsDialog({
                         <label>
                           {t('keep')}
                           <select
-                            value={keep?.card.id ?? ''}
+                            value={keep?.id ?? ''}
                             disabled={!!action || stale || loading}
                             onChange={(event) =>
                               setKeepers((old) => ({
@@ -501,8 +501,8 @@ export function DuplicateCardsDialog({
                           >
                             <option value="">—</option>
                             {peers.map((peer) => (
-                              <option key={peer.card.id} value={peer.card.id}>
-                                {label(peer)} · {peer.card.id.slice(0, 8)}
+                              <option key={peer.id} value={peer.id}>
+                                {peerLabel(peer)}
                               </option>
                             ))}
                           </select>
@@ -526,20 +526,14 @@ export function DuplicateCardsDialog({
           );
         })}
       </ul>
-      {cursor && (
-        <ActionButton
-          icon="add"
-          label={learning('more')}
-          disabled={loading || !!action || stale}
-          onClick={() => {
-            const controller = new AbortController();
-            active.current = controller;
-            void load(cursor, controller);
-          }}
-        >
-          {learning('more')}
-        </ActionButton>
-      )}
+      <SearchPagination
+        page={results.page}
+        lastPage={results.lastPage}
+        busy={loading}
+        disabled={writing || !!action || stale}
+        onPageChange={results.setPage}
+        label={t('duplicates')}
+      />
     </DeckDialog>
   );
 }

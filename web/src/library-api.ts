@@ -1,5 +1,5 @@
-import { cursorSearchParams } from './cursor-search';
-import { request, type Page, type Position } from './api';
+import { numberedSearchParams } from './cursor-search';
+import { request, type Position } from './api';
 import { AppError } from './i18n-core';
 import type { components } from './generated-api';
 import type { PlayMode } from './play-mode-messages';
@@ -115,12 +115,12 @@ export function libraryParams(
   filters: LibraryFilters,
   sort: LibrarySort,
   direction: string,
-  after?: string,
+  page = 1,
 ) {
-  return cursorSearchParams(
+  return numberedSearchParams(
     50,
     { sort, direction, database_id: databaseId, ...filters },
-    after,
+    page,
   );
 }
 export const loadLibrary = (
@@ -129,10 +129,10 @@ export const loadLibrary = (
   sort: LibrarySort,
   direction: string,
   signal: AbortSignal,
-  after?: string,
+  page: number,
 ) =>
-  request<Page<LibraryMatch>>(
-    `/library/matches?${libraryParams(databaseId, filters, sort, direction, after)}`,
+  request<Omit<Schema['LibraryPage'], 'items'> & { items: LibraryMatch[] }>(
+    `/library/matches?${libraryParams(databaseId, filters, sort, direction, page)}`,
     { signal },
   );
 export const loadDecisions = (

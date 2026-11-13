@@ -109,6 +109,13 @@ async fn paginated_imports_have_provenance_filtering_and_scope_bound_cursors(poo
         .0,
         422
     );
+    let (status, numbered) = call(&router, "GET", &format!("{uri}&page=2"), Value::Null).await;
+    assert_eq!(status, 200, "{numbered}");
+    assert_eq!(numbered["total"], 2);
+    assert_eq!(numbered["items"], next["items"]);
+    let (_, beyond) = call(&router, "GET", &format!("{uri}&page=3"), Value::Null).await;
+    assert_eq!(beyond["total"], 2);
+    assert_eq!(beyond["items"], json!([]));
     for filter in ["player=1", "kind=cube", "severity=none"] {
         let (_, empty) = call(
             &router,
@@ -126,6 +133,8 @@ async fn paginated_imports_have_provenance_filtering_and_scope_bound_cursors(poo
         "kind=other",
         "game_no=0",
         "after=bad",
+        "page=0",
+        "page=1&after=bad",
     ] {
         assert_eq!(
             call(

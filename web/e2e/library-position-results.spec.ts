@@ -72,9 +72,13 @@ test('retrying a failed match page clears the error and keeps the loaded rows', 
   await page.route('**/api/library/matches?*', (route) => {
     const params = new URL(route.request().url()).searchParams;
     if (params.get('database_id') !== database.id) return route.fallback();
-    if (!params.has('after'))
+    if (params.get('page') !== '2')
       return route.fulfill({
-        json: { items: first.items.slice(0, 1), next_cursor: 'second' },
+        json: {
+          items: first.items.slice(0, 1),
+          total: 52,
+          next_cursor: 'second',
+        },
       });
     if (++attempts === 1)
       return route.fulfill({
@@ -82,14 +86,14 @@ test('retrying a failed match page clears the error and keeps the loaded rows', 
         json: { error: 'Page unavailable' },
       });
     return route.fulfill({
-      json: { items: first.items.slice(1), next_cursor: null },
+      json: { items: first.items.slice(1), total: 52, next_cursor: null },
     });
   });
   await page.reload();
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();
   await expect(rows(page)).toHaveCount(1);
   const more = page.getByRole('button', {
-    name: 'Load more matches',
+    name: 'Next page',
     exact: true,
   });
   const error = page
@@ -100,7 +104,7 @@ test('retrying a failed match page clears the error and keeps the loaded rows', 
   await expect(error).toBeVisible();
   await expect(rows(page)).toHaveCount(1);
   await more.click();
-  await expect(rows(page)).toHaveCount(3);
+  await expect(rows(page)).toHaveCount(2);
   await expect(error).toHaveCount(0);
 });
 
@@ -292,23 +296,33 @@ test('position-filtered matches paginate in the selected database and show an em
     rows(page).first().locator('[data-column="occurrence_move"]'),
   ).toHaveText('4');
   await expect(rows(page)).toHaveCount(50);
-  await page
-    .getByRole('button', { name: 'Load more occurrences', exact: true })
-    .click();
-  await expect(rows(page)).toHaveCount(53);
-  const moves = (
-    await rows(page)
+  const firstPageMoves = await rows(page)
+    .locator('[data-column="occurrence_move"]')
+    .allTextContents();
+  const firstPageIds = await rows(page).evaluateAll((nodes) =>
+    nodes.map((n) => (n as HTMLElement).dataset.positionId),
+  );
+  const firstPageMatchIds = await rows(page)
+    .locator('.library-id-cell')
+    .allTextContents();
+  await page.getByRole('button', { name: 'Last', exact: true }).click();
+  await expect(rows(page)).toHaveCount(3);
+  const moves = [
+    ...firstPageMoves,
+    ...(await rows(page)
       .locator('[data-column="occurrence_move"]')
-      .allTextContents()
-  ).map(Number);
+      .allTextContents()),
+  ].map(Number);
   expect(moves).toEqual([...moves].sort((a, b) => b - a));
   const ids = await rows(page).evaluateAll((nodes) =>
     nodes.map((n) => (n as HTMLElement).dataset.positionId),
   );
-  expect(new Set(ids).size).toBe(53);
+  expect(new Set([...firstPageIds, ...ids]).size).toBe(53);
   expect(
-    new Set(await rows(page).locator('.library-id-cell').allTextContents())
-      .size,
+    new Set([
+      ...firstPageMatchIds,
+      ...(await rows(page).locator('.library-id-cell').allTextContents()),
+    ]).size,
   ).toBe(51);
   await page
     .getByLabel('Search matches', { exact: true })

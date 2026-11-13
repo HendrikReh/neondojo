@@ -713,6 +713,10 @@ async fn every_sort_cursor_roundtrips_with_nulls_last(pool: PgPool) {
             assert_eq!(status, 200, "{base}: {next}");
             assert_eq!(next["items"].as_array().unwrap().len(), 1, "{base}: {next}");
             assert_ne!(first["items"][0]["id"], next["items"][0]["id"]);
+            let (status, numbered) = request(&pool, "GET", &format!("{base}&page=2"), None).await;
+            assert_eq!(status, 200, "{base}: {numbered}");
+            assert_eq!(numbered["total"], 2);
+            assert_eq!(numbered["items"], next["items"], "{base}");
             if sort == "played_at" {
                 assert_eq!(first["items"][0]["id"], a.to_string());
                 assert!(next["items"][0]["played_on"].is_null());

@@ -43,9 +43,8 @@ function render(cards: CardQuestion[] = [card]) {
       children: createElement(LearningCardBrowser, {
         cards,
         theme: 'walnut',
-        hasMore: true,
-        moreLoading: false,
-        onMore: async () => true,
+        total: cards.length ? 51 : 0,
+        onPageChange: () => {},
       }),
     }),
   );
@@ -63,7 +62,7 @@ test('the first flashcard has one question-side board preview beside the compact
   expect(html).toContain('What move would you play?');
   expect(html).toContain('Ada');
   expect(html).toContain('Grace');
-  expect(html).toContain('More cards');
+  expect(html).toContain('aria-label="Page 2"');
   expect(html).not.toContain('SECRET PLAYED MOVE');
   expect(html).not.toContain('study-answer');
   expect(html).not.toContain('Show answer');
@@ -99,9 +98,7 @@ test('an inactive workspace retains the list without creating a hidden board', (
       children: createElement(LearningCardBrowser, {
         cards: [card],
         theme: 'forest',
-        hasMore: false,
-        moreLoading: false,
-        onMore: async () => false,
+        onPageChange: () => {},
         visible: false,
       }),
     }),

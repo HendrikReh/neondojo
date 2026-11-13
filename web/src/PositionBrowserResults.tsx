@@ -40,7 +40,7 @@ import {
 import type { Theme } from './themes';
 import { useAnalysisMatchHeaderText } from './analysis-match-header-messages';
 export interface PositionResultsProps {
-  items: PositionBrowserHit[];
+  items: readonly PositionBrowserHit[];
   selected: ReadonlySet<string>;
   previewId?: string;
   onPreview: (id: string) => void;

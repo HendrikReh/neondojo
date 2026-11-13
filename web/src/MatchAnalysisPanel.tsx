@@ -4,10 +4,12 @@ import AnalysisTimeEstimate from './AnalysisTimeEstimate';
 import { useProfileValue } from './useProfileValue';
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import ActionButton from './ActionButton';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { request, terminal, type Job, type Match, type MatchGame } from './api';
 import { reviewDecisions, type ReviewDecision } from './review-decisions-api';
+import SearchPagination from './SearchPagination';
+import { useSearchPages } from './useSearchPages';
 import { useSourceText } from './analysis-source-messages';
 import { useMatchAnalysis, type MatchAnalysisEngine } from './useMatchAnalysis';
 import { useI18n, type TranslationKey } from './i18n';
@@ -242,14 +244,6 @@ export default function MatchAnalysisPanel({
       });
     return () => abort.abort();
   }, [job?.id, statisticsKey]);
-  const [results, setResults] = useState<{
-    key: string;
-    rows: ReviewDecision[];
-    cursor: string | null;
-  }>();
-  const [page, setPage] = useState<{ key: string; cursor: string }>();
-  const [pageError, setPageError] = useState<{ key: string; error: unknown }>();
-  const [loaded, setLoaded] = useState<string>();
   const active = job && !terminal(job);
   const controlsDisabled = !configured || !!active || submitting;
   const analysisConfigured =
@@ -258,43 +252,19 @@ export default function MatchAnalysisPanel({
     controlsDisabled || !analysisConfigured || (scoped && gameNo === undefined);
   const names = [match.white, match.black];
   const filter = decisionFilterQuery(selected);
-  // Filters, checkpoints and scope changes each start their own pagination chain.
-  const resultKey = `${match.id}:${statisticsKey}:${filter}`;
-  const after = page?.key === resultKey ? page.cursor : null;
-  const requestKey = `${resultKey}:${after}`;
-  const rows = results?.key === resultKey ? results.rows : [];
-  const cursor = results?.key === resultKey ? results.cursor : null;
-  const loading = loaded !== requestKey;
-  useEffect(() => {
-    setPage(undefined);
-  }, [resultKey]);
-  useEffect(() => {
-    const abort = new AbortController();
-    void reviewDecisions(match.id, selected, {
-      jobId: job?.id,
-      after,
-      signal: abort.signal,
-    })
-      .then((result) => {
-        if (abort.signal.aborted) return;
-        setResults((previous) => ({
-          key: resultKey,
-          rows:
-            after && previous?.key === resultKey
-              ? [...previous.rows, ...result.items]
-              : result.items,
-          cursor: result.next_cursor ?? null,
-        }));
-        setPageError(undefined);
-      })
-      .catch((error) => {
-        if (!abort.signal.aborted) setPageError({ key: resultKey, error });
-      })
-      .finally(() => {
-        if (!abort.signal.aborted) setLoaded(requestKey);
-      });
-    return () => abort.abort();
-  }, [match.id, job?.id, filter, after, resultKey, requestKey]);
+  const loadDecisionPage = useCallback(
+    (signal: AbortSignal, page: number) =>
+      reviewDecisions(match.id, selected, { jobId: job?.id, page, signal }),
+    [match.id, job?.id, filter],
+  );
+  const decisions = useSearchPages({
+    scope: `${match.id}:${job?.id ?? ''}:${filter}`,
+    enabled: showResults,
+    revision: statisticsKey,
+    pageSize: 50,
+    loadPage: loadDecisionPage,
+  });
+  const { items: rows, loading, error: pageError } = decisions;
 
   const progress = job && (
     <div className="match-analysis-progress" role="status" aria-live="polite">
@@ -571,9 +541,7 @@ export default function MatchAnalysisPanel({
                   }
                 />
               </div>
-              {pageError?.key === resultKey && (
-                <p role="alert">{formatError(pageError.error)}</p>
-              )}
+              {!!pageError && <p role="alert">{formatError(pageError)}</p>}
               <div className="match-moves-scroll">
                 <table className="match-moves-table">
                   <thead>
@@ -686,20 +654,18 @@ export default function MatchAnalysisPanel({
                   </tbody>
                 </table>
               </div>
-              {rows.length === 0 && !loading && !cursor && (
+              {rows.length === 0 && !loading && !pageError && (
                 <p className="analysis-empty">
                   {t('matchAnalysis.noDecisions')}
                 </p>
               )}
               {loading && <p role="status">{t('matchAnalysis.loading')}</p>}
-              {cursor && (
-                <ActionButton
-                  icon="more"
-                  label={t('matchAnalysis.more')}
-                  onClick={() => setPage({ key: resultKey, cursor })}
-                  disabled={loading}
-                />
-              )}
+              <SearchPagination
+                page={decisions.page}
+                lastPage={decisions.lastPage}
+                busy={loading}
+                onPageChange={decisions.setPage}
+              />
             </details>
           </>
         </section>

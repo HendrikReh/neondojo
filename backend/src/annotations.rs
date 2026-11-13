@@ -13,7 +13,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{PgPool, Postgres, QueryBuilder};
+use sqlx::{FromRow, PgPool, Postgres, QueryBuilder, Row};
 use std::collections::BTreeSet;
 use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
@@ -90,6 +90,9 @@ pub struct AnnotationHit {
 pub struct AnnotationPage {
     pub items: Vec<AnnotationHit>,
     pub next_cursor: Option<Uuid>,
+    /// Total matching rows when `page` is supplied.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total: Option<i64>,
 }
 
 #[derive(Deserialize, IntoParams)]
@@ -100,6 +103,8 @@ struct SearchQuery {
     tag: Option<String>,
     kind: Option<AnnotationKind>,
     after: Option<Uuid>,
+    /// One-based result page. Mutually exclusive with `after`.
+    page: Option<i64>,
     limit: Option<i64>,
     /// Restrict all note scopes to one logical database.
     database_id: Option<Uuid>,
@@ -402,7 +407,12 @@ async fn search_annotations(
         return Err(ApiError::invalid("Supply search text or an exact tag"));
     }
     let limit = limit(query.limit)?;
-    let mut sql = QueryBuilder::<Postgres>::new(
+    let offset = crate::search::page_offset(query.page, query.after.is_some(), limit)?;
+    let mut sql = QueryBuilder::<Postgres>::new("");
+    if offset.is_some() {
+        sql.push("WITH filtered AS NOT MATERIALIZED (");
+    }
+    sql.push(
         "SELECT a.id,a.target_kind,a.target_id,m.id AS match_uuid,m.filename,m.white,m.black,coalesce(p.game_no,g.game_no,mv.game_no) AS game_no,coalesce(p.ply,mv.move_no) AS ply,a.tags,left(a.comment,300) AS comment_excerpt,a.updated_at FROM annotations a LEFT JOIN positions p ON p.id=a.position_uuid LEFT JOIN match_games g ON g.id=a.game_uuid LEFT JOIN match_moves mv ON mv.id=a.move_uuid JOIN matches m ON m.id=coalesce(a.match_uuid,p.match_uuid,g.match_uuid,mv.match_uuid) WHERE true",
     );
     if !q.is_empty() {
@@ -421,19 +431,44 @@ async fn search_annotations(
     if let Some(after) = query.after {
         sql.push(" AND a.id>").push_bind(after);
     }
-    sql.push(" ORDER BY a.id LIMIT ").push_bind(limit + 1);
-    let mut items = sql
-        .build_query_as::<AnnotationHit>()
-        .fetch_all(&state.pool)
-        .await
-        .map_err(anyhow::Error::from)?;
+    let (mut items, total) = if let Some(offset) = offset {
+        sql.push("), page AS (SELECT * FROM filtered ORDER BY id LIMIT ").push_bind(limit + 1)
+            .push(" OFFSET ").push_bind(offset)
+            .push(") SELECT page.*,totals.total FROM (SELECT count(*) AS total FROM filtered) totals LEFT JOIN page ON true ORDER BY page.id");
+        let rows = sql
+            .build()
+            .fetch_all(&state.pool)
+            .await
+            .map_err(anyhow::Error::from)?;
+        let total = rows[0].get::<i64, _>("total");
+        let items = rows
+            .iter()
+            .filter(|row| row.get::<Option<Uuid>, _>("id").is_some())
+            .map(AnnotationHit::from_row)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(anyhow::Error::from)?;
+        (items, Some(total))
+    } else {
+        sql.push(" ORDER BY a.id LIMIT ").push_bind(limit + 1);
+        (
+            sql.build_query_as::<AnnotationHit>()
+                .fetch_all(&state.pool)
+                .await
+                .map_err(anyhow::Error::from)?,
+            None,
+        )
+    };
     let next_cursor = if items.len() > limit as usize {
         items.pop();
         items.last().map(|a| a.id)
     } else {
         None
     };
-    Ok(Json(AnnotationPage { items, next_cursor }))
+    Ok(Json(AnnotationPage {
+        items,
+        next_cursor,
+        total,
+    }))
 }
 
 #[utoipa::path(get, path="/api/tags", params(TagQuery), responses((status=200,body=Vec<String>),(status=422,body=ErrorBody)), tag="Annotations")]

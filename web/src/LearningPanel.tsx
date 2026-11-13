@@ -12,11 +12,12 @@ import LearningCardBrowser from './LearningCardBrowser';
 import CardSuggestionsPanel from './CardSuggestionsPanel';
 import CardSearchControls from './CardSearchControls';
 import { SearchFilterSelect } from './SearchFilterForm';
-import { useCursorSearch } from './useCursorSearch';
+import { useSearchPages } from './useSearchPages';
 import {
   ALL_CARDS,
   CARDS_WITHOUT_DECK,
   CARD_SELECTION_LIMIT,
+  CARD_PAGE_SIZE,
   cardListPath,
   emptyCardFilters,
   isCollectionScope,
@@ -40,7 +41,6 @@ import type {
   Deck,
   NextCard,
   CardPage,
-  CardQuestion,
   RevealedCard,
   AddCardsResult,
   ImportedAnkiDeck,
@@ -48,7 +48,6 @@ import type {
   Rating,
 } from './learning-api';
 
-const cardKey = (card: CardQuestion) => card.id;
 function savedDeck() {
   try {
     return localStorage.getItem('bgtutor.deck') || ALL_CARDS;
@@ -415,7 +414,7 @@ export default function LearningWorkspace({
   const [cardNotice, setCardNotice] = useState<string>();
   const [cardSelection, setCardSelection] = useState<{
     scope: string;
-    ids: Set<string>;
+    items: Map<string, CardPage['items'][number]>;
   }>();
 
   const [management, setManagement] = useState<{
@@ -487,29 +486,30 @@ export default function LearningWorkspace({
   const contentRevision = listRevision.current.value;
   const searchKey = JSON.stringify([deckId, filters, searchRun]);
   const listKey = JSON.stringify([searchKey, contentRevision]);
-  const selectedCards =
-    cardSelection?.scope === listKey ? cardSelection.ids : new Set<string>();
+  const selectedItems = cardSelection?.scope === listKey ? [...cardSelection.items.values()] : [];
+  const selectedCards = new Set(selectedItems.map((item) => item.id));
   const sourceDeck = decks.find((deck) => deck.id === deckId);
   function toggleCards(ids: string[], checked: boolean) {
     setCardSelection((previous) => {
-      const next = new Set(previous?.scope === listKey ? previous.ids : []);
-      for (const id of ids) {
-        if (!checked) next.delete(id);
-        else if (next.size < CARD_SELECTION_LIMIT) next.add(id);
+      const next = new Map(previous?.scope === listKey ? previous.items : []);
+      for (const item of cardSearch.items) {
+        if (!ids.includes(item.id)) continue;
+        if (!checked) next.delete(item.id);
+        else if (next.size < CARD_SELECTION_LIMIT) next.set(item.id, item);
       }
-      return { scope: listKey, ids: next };
+      return { scope: listKey, items: next };
     });
   }
   const loadCards = useCallback(
-    (signal: AbortSignal, after?: string) =>
-      request<CardPage>(cardListPath(deckId, filters, after), { signal }),
+    (signal: AbortSignal, page: number) =>
+      request<CardPage>(cardListPath(deckId, filters, page), { signal }),
     [deckId, filters],
   );
-  const cardSearch = useCursorSearch({
+  const cardSearch = useSearchPages({
     scope: listKey,
+    pageSize: CARD_PAGE_SIZE,
     enabled: !!deckId,
     loadPage: loadCards,
-    itemKey: cardKey,
   });
   useEffect(() => {
     if (!ready || profile) return;
@@ -841,9 +841,7 @@ export default function LearningWorkspace({
     const ids = [...selectedCards];
     setCardNotice(undefined);
     if (mode === 'delete') {
-      const cards = cardSearch.items
-        .filter((item) => selectedCards.has(item.id))
-        .map((item) => ({
+      const cards = selectedItems.map((item) => ({
           id: item.id,
           version: item.version,
           deck_ids: item.browse.decks.map((deck) => deck.id),
@@ -1077,7 +1075,7 @@ export default function LearningWorkspace({
           </CardSearchControls>
           {deckPanel}
           <LearningCardBrowser
-            key={searchKey}
+            key={listKey}
             visible={visible}
             cards={cardSearch.items}
             total={cardSearch.total ?? cardSearch.items.length}
@@ -1090,9 +1088,8 @@ export default function LearningWorkspace({
             }}
             actions={cardActions}
             theme={theme}
-            hasMore={!!cardSearch.cursor}
-            moreLoading={cardSearch.moreLoading}
-            onMore={cardSearch.more}
+            page={cardSearch.page}
+            onPageChange={cardSearch.setPage}
           />
         </>
       )}

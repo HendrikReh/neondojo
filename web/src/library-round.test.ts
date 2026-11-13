@@ -15,11 +15,11 @@ describe('library round filter', () => {
       round: '  Final 100%_A\\B  ',
       tournament: 'Autumn Open',
     };
-    const params = libraryParams('database', filters, 'name', 'asc', 'cursor');
+    const params = libraryParams('database', filters, 'name', 'asc', 2);
     expect(params.get('round')).toBe('Final 100%_A\\B');
     expect(params.get('tournament')).toBe('Autumn Open');
     expect(params.get('database_id')).toBe('database');
-    expect(params.get('after')).toBe('cursor');
+    expect(params.get('page')).toBe('2');
     expect(libraryParams('', emptyFilters(), 'name', 'asc').has('round')).toBe(
       false,
     );

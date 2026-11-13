@@ -2055,6 +2055,11 @@ export interface components {
             items: components["schemas"]["AnnotationHit"][];
             /** Format: uuid */
             next_cursor?: string | null;
+            /**
+             * Format: int64
+             * @description Total matching rows when `page` is supplied.
+             */
+            total?: number | null;
         };
         AnnotationUpdate: {
             comment: string;
@@ -2853,6 +2858,19 @@ export interface components {
             items: components["schemas"]["DuplicateCard"][];
             /** Format: uuid */
             next_cursor: string | null;
+            peers?: {
+                [key: string]: components["schemas"]["DuplicatePeer"][];
+            };
+            /** Format: int64 */
+            total?: number | null;
+        };
+        DuplicatePeer: {
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            review_count: number;
+            /** Format: int64 */
+            version: number;
         };
         EngineCheckRequest: {
             path: string;
@@ -3936,6 +3954,11 @@ export interface components {
         PositionBrowserPage: {
             items: components["schemas"]["PositionBrowserHit"][];
             next_cursor?: string | null;
+            /**
+             * Format: int64
+             * @description Total matching rows when `page` is supplied.
+             */
+            total?: number | null;
         };
         /** @enum {string} */
         PositionBrowserSort: "match" | "loss" | "match_id" | "database" | "game" | "ply" | "player" | "opponent" | "dice" | "score" | "cube" | "played_move" | "decks" | "tags" | "comment";
@@ -4165,6 +4188,11 @@ export interface components {
             items: components["schemas"]["ReviewDecision"][];
             /** @description A bounded scan can return an empty page with a continuation. Follow it until null. */
             next_cursor?: string | null;
+            /**
+             * Format: int64
+             * @description Total matching decisions when `page` is supplied.
+             */
+            total?: number | null;
         };
         ReviewResult: {
             /** Format: uuid */
@@ -4543,6 +4571,8 @@ export interface operations {
                 tag: string | null;
                 kind: null | components["schemas"]["AnnotationKind"];
                 after: string | null;
+                /** @description One-based result page. Mutually exclusive with `after`. */
+                page: number | null;
                 limit: number | null;
                 /** @description Restrict all note scopes to one logical database. */
                 database_id: string | null;
@@ -4737,6 +4767,8 @@ export interface operations {
         parameters: {
             query?: {
                 after?: string;
+                /** @description One-based result page. Mutually exclusive with `after`. */
+                page?: number;
                 limit?: number;
                 deck_id?: string;
                 /** @description Include only cards without a deck membership. */
@@ -4826,6 +4858,8 @@ export interface operations {
         parameters: {
             query?: {
                 after?: string;
+                /** @description One-based result page. Mutually exclusive with `after`. */
+                page?: number;
             };
             header?: never;
             path?: never;
@@ -5714,6 +5748,8 @@ export interface operations {
         parameters: {
             query?: {
                 after?: string;
+                /** @description One-based result page. Mutually exclusive with `after`. */
+                page?: number;
                 limit?: number;
                 deck_id?: string;
                 /** @description Include only cards without a deck membership. */
@@ -7492,6 +7528,8 @@ export interface operations {
                 limit?: number;
                 /** @description Opaque continuation; preserve filters. Restart if the job's checkpoints change. */
                 after?: string;
+                /** @description One-based result page. Mutually exclusive with `after`. */
+                page?: number;
             };
             header?: never;
             path: {
@@ -8446,6 +8484,8 @@ export interface operations {
                  */
                 filters?: string;
                 after?: string;
+                /** @description One-based result page. Mutually exclusive with `after`. */
+                page?: number;
                 /** @description Default 25, maximum 100. */
                 limit?: number;
             };

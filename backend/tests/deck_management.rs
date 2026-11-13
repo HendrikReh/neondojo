@@ -820,6 +820,13 @@ async fn cards_move_and_duplicates_can_be_resolved_without_changing_keeper_progr
         .iter()
         .find(|c| c["card"]["id"] == json!(duplicate_id))
         .unwrap();
+    let (status, numbered) = call(&app, "GET", "/api/cards/duplicates?page=1", Value::Null).await;
+    assert_eq!(status, 200, "{numbered}");
+    assert_eq!(numbered["total"], 2);
+    let key = keeper["duplicate_key"].as_str().unwrap();
+    let peers = numbered["peers"][key].as_array().unwrap();
+    assert!(peers.iter().any(|peer| peer["id"] == json!(duplicate_id)));
+    assert!(peers.iter().any(|peer| peer["id"] == json!(shared_id)));
     review(&app, &duplicate["card"]).await;
     let mut merge = json!({"keep_id":shared_id,"keep_version":keeper["card"]["version"],"delete_id":duplicate_id,"delete_version":0});
     assert_eq!(

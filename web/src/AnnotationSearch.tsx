@@ -2,7 +2,7 @@ import Tooltip from './Tooltip';
 import { useProfileValue } from './useProfileValue';
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import ActionButton from './ActionButton';
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useId, useState, type FormEvent } from 'react';
 import {
   normalizeAnnotationTag,
   searchAnnotations,
@@ -12,6 +12,8 @@ import {
   type AnnotationKind,
   type SearchValidation,
 } from './annotation-api';
+import SearchPagination from './SearchPagination';
+import { useSearchPages } from './useSearchPages';
 import { useLibraryText } from './library-messages';
 import { useAnnotationI18n } from './annotation-messages';
 
@@ -46,61 +48,38 @@ export default function AnnotationSearch({
     setKind(filters?.kind ?? '');
     setValidation(null);
   }, [profile?.generation, profile?.ready]);
-  const [items, setItems] = useState<AnnotationHit[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [complete, setComplete] = useState(false);
-  const [error, setError] = useState<unknown>(null);
   const [validation, setValidation] = useState<SearchValidation | null>(null);
-  const moreController = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    if (!submitted) {
-      moreController.current?.abort();
-      setItems([]);
-      setCursor(null);
-      setComplete(false);
-      setLoading(false);
-      setLoadingMore(false);
-      return;
-    }
-    const controller = new AbortController();
-    moreController.current?.abort();
-    setItems([]);
-    setCursor(null);
-    setLoading(true);
-    setLoadingMore(false);
-    setComplete(false);
-    setError(null);
-    void searchAnnotations(
-      { ...submitted, database_id: submitted.database_id ?? databaseId },
-      null,
-      controller.signal,
-    )
-      .then((result) => {
-        if (controller.signal.aborted) return;
-        setItems(result.items);
-        setCursor(result.next_cursor);
-        setComplete(true);
-      })
-      .catch((failure) => {
-        if (!controller.signal.aborted) setError(failure);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => {
-      controller.abort();
-      moreController.current?.abort();
-    };
-  }, [submitted, revision, databaseId]);
+  const [searchRun, setSearchRun] = useState(0);
+  const loadPage = useCallback(
+    (signal: AbortSignal, page: number) =>
+      searchAnnotations(
+        {
+          q: '',
+          tag: '',
+          kind: '',
+          ...submitted,
+          database_id: submitted?.database_id ?? databaseId,
+        },
+        page,
+        signal,
+      ),
+    [submitted, databaseId],
+  );
+  const results = useSearchPages({
+    scope: JSON.stringify([submitted, databaseId, searchRun]),
+    revision,
+    pageSize: 20,
+    enabled: !!submitted,
+    loadPage,
+  });
+  const { items, loading, error } = results;
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const issue = searchValidation(q, tag);
     setValidation(issue);
     if (issue) return;
+    setSearchRun((run) => run + 1);
     setSubmitted({
       q: q.trim(),
       tag: normalizeAnnotationTag(tag),
@@ -109,36 +88,9 @@ export default function AnnotationSearch({
     });
   };
 
-  const more = async () => {
-    if (!submitted || !cursor || loading || loadingMore) return;
-    const controller = new AbortController();
-    moreController.current = controller;
-    setLoadingMore(true);
-    setError(null);
-    try {
-      const result = await searchAnnotations(
-        { ...submitted, database_id: submitted.database_id ?? databaseId },
-        cursor,
-        controller.signal,
-      );
-      if (controller.signal.aborted) return;
-      setItems((previous) => {
-        const ids = new Set(previous.map((item) => item.id));
-        return [
-          ...previous,
-          ...result.items.filter((item) => !ids.has(item.id)),
-        ];
-      });
-      setCursor(result.next_cursor);
-    } catch (failure) {
-      if (!controller.signal.aborted) setError(failure);
-    } finally {
-      if (!controller.signal.aborted) setLoadingMore(false);
-    }
-  };
-
   const findTag = (value: string) => {
     setQuery('');
+    setSearchRun((run) => run + 1);
     setTag(value);
     setValidation(null);
     setSubmitted({
@@ -217,15 +169,12 @@ export default function AnnotationSearch({
           {formatError(error)}
         </p>
       )}
-      <div
-        className="annotation-search-results"
-        aria-busy={loading || loadingMore}
-      >
+      <div className="annotation-search-results" aria-busy={loading}>
         {loading && <p role="status">{t('searching')}</p>}
-        {complete && !loading && (
+        {submitted && !loading && !error && (
           <p className="fineprint" role="status">
             {items.length
-              ? t('resultCount', { count: items.length })
+              ? t('resultCount', { count: results.total })
               : t('noResults')}
           </p>
         )}
@@ -284,20 +233,13 @@ export default function AnnotationSearch({
           </article>
         ))}
       </div>
-      {cursor && (
-        <div className="annotation-search-actions">
-          <ActionButton
-            icon="more"
-            label={t(loadingMore ? 'searching' : 'more')}
-            compact
-            type="button"
-            disabled={loading || loadingMore}
-            onClick={() => void more()}
-          >
-            {t(loadingMore ? 'searching' : 'more')}
-          </ActionButton>
-        </div>
-      )}
+      <SearchPagination
+        page={results.page}
+        lastPage={results.lastPage}
+        busy={loading}
+        onPageChange={results.setPage}
+        label={t('searchTitle')}
+      />
     </details>
   );
 }

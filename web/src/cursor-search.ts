@@ -12,12 +12,12 @@ export function cursorSearchParams(
   return params;
 }
 
-export function mergeSearchItems<T>(
-  previous: T[],
-  incoming: T[],
-  itemKey: (item: T) => string,
+export function numberedSearchParams(
+  limit: number,
+  filters: Record<string, string>,
+  page: number,
 ) {
-  const items = new Map(previous.map((item) => [itemKey(item), item]));
-  for (const item of incoming) items.set(itemKey(item), item);
-  return [...items.values()];
+  const params = cursorSearchParams(limit, filters);
+  params.set('page', String(page));
+  return params;
 }

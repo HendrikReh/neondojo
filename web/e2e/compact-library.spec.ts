@@ -163,7 +163,7 @@ for (const [width, height] of [
     await expect(dialog.getByLabel('Name', { exact: true })).toHaveValue(
       entries[1].display_name,
     );
-    await expect(dialog.getByLabel('Tournament', { exact: true })).toHaveValue(
+    await expect(dialog.getByLabel('Event', { exact: true })).toHaveValue(
       entries[1].tournament,
     );
     await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();

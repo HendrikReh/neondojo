@@ -126,20 +126,16 @@ test('numeric IDs and every data column sort through the API and reset paged sel
   }
   await sort('id', 'asc');
   await expect.poll(readIds).toEqual(expectedIds.slice(0, 50));
-  await page
-    .getByRole('button', { name: 'Load more matches', exact: true })
-    .click();
-  await expect(rows).toHaveCount(55);
-  expect(await readIds()).toEqual(expectedIds);
+  await page.getByRole('button', { name: 'Next page', exact: true }).click();
+  await expect(rows).toHaveCount(5);
+  expect(await readIds()).toEqual(expectedIds.slice(50));
   await rows.first().getByRole('checkbox').check();
   await expect(page.locator('.library-batch-bar')).toBeVisible();
   await sort('id', 'desc');
   await expect(page.locator('.library-batch-bar')).toHaveCount(0);
-  await page
-    .getByRole('button', { name: 'Load more matches', exact: true })
-    .click();
-  await expect(rows).toHaveCount(55);
-  expect(await readIds()).toEqual([...expectedIds].reverse());
+  await page.getByRole('button', { name: 'Next page', exact: true }).click();
+  await expect(rows).toHaveCount(5);
+  expect(await readIds()).toEqual([...expectedIds].reverse().slice(50));
   await page.locator('.library-column-picker summary').click();
   await page
     .getByRole('button', { name: 'Show all columns', exact: true })

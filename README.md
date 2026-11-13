@@ -80,7 +80,7 @@ Open <http://127.0.0.1:5173>. Vite forwards `/api` to `http://127.0.0.1:8787` by
 
 ## Analyze your first match
 
-1. In **Match database**, choose **Import match** and open [tutorial.mat](backend/tests/fixtures/tutorial.mat) or the reference match [WC2014.xg](backend/tests/fixtures/WC2014.xg). You can also drop a file on the welcome screen. Search by player or file name to find an imported match. Results load in pages using stable cursors.
+1. In **Match database**, choose **Import match** and open [tutorial.mat](backend/tests/fixtures/tutorial.mat) or the reference match [WC2014.xg](backend/tests/fixtures/WC2014.xg). You can also drop a file on the welcome screen. Search by player or file name to find an imported match. Use the numbered navigation to browse results or jump to the first or last page.
 2. In **Analysis**, use **Select game** or its adjacent arrows to choose a game. The selector shows the game number, starting score, move count, and Crawford status when applicable. The move history stays within the selected game and loads more moves as needed.
 3. Select a move. The board shows the decision position before the recorded play, together with the score and doubling cube. Point numbering and notation follow the player on roll. Pip counts include checkers on the bar.
 4. In **Overview**, choose **Analyze position** to queue a persistent GNUbg job. Choose 0–4 ply, with 2-ply as the default. The result includes up to five candidate moves, cubeful equity, and win probabilities.
@@ -196,7 +196,7 @@ Filter by database, search text, player on roll, match name, event, round, exact
 
 Results retain the full GNUbg position and match IDs. Comment filters consider the match, the relevant game, the position, and the matching checker move. Native loss values show their actual engine and depth, with unavailable evaluations shown as unknown. The collection searches checker decisions. Use **Statistics** or **Cube and move notes** to review cube decisions.
 
-**Saved searches** lets you load, save, update, rename, and delete named searches. PostgreSQL stores the filters, sort, direction, and revision. Concurrent edits return HTTP 409 and preserve the draft. A search referencing a deleted database flags the missing database. Pagination ties each cursor to the complete filter definition. Returning to the workspace keeps loaded results, selection, and preview in place while refreshing.
+**Saved searches** lets you load, save, update, rename, and delete named searches. PostgreSQL stores the filters, sort, direction, and revision. Concurrent edits return HTTP 409 and preserve the draft. A search referencing a deleted database flags the missing database. The numbered navigation jumps within the current search, including directly to its first and last pages. Returning to the workspace keeps the current page, selection, and preview in place while refreshing.
 
 Add up to 200 selected positions to a new or existing study deck. Each position reports whether it was added, updated, already in the deck, requires analysis, or is no longer available. Study answers require a usable completed local analysis. Identical questions share FSRS review history. **Study this deck** opens a fresh study view, and **Download entire deck as Anki** uses the Rust APKG export. A deck can hold 1,000 cards. If a batch would exceed that limit, the entire batch is rejected.
 
@@ -655,6 +655,10 @@ npm run api:types --prefix web
 ```
 
 ### Library and position search
+
+The match, player, saved position, annotation, flashcard, duplicate and decision
+search endpoints accept a one-based `page` and return the filtered `total`.
+Existing cursor clients can continue to use `after` on its own.
 
 | Method       | Path                                                             | Purpose                                                                                                                                                                       |
 | ------------ | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

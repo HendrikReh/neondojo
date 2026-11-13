@@ -179,12 +179,14 @@ export function togglePositionSelection(
 export const loadPositionPage = (
   definition: PositionFilterDefinition,
   signal: AbortSignal,
-  after?: string,
-) =>
-  request<PositionBrowserPage>(
-    `/position-browser?${positionParams(definition, after)}`,
-    { signal },
-  );
+  page: number,
+) => {
+  const params = positionParams(definition);
+  params.set('page', String(page));
+  return request<PositionBrowserPage>(`/position-browser?${params}`, {
+    signal,
+  });
+};
 export const loadPositionFilters = (signal: AbortSignal) =>
   request<SavedPositionFilter[]>('/position-filters', { signal });
 export const savePositionFilter = (

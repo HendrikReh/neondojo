@@ -75,15 +75,14 @@ export const isAnnotationConflict = (error: unknown) =>
 
 export function searchAnnotations(
   filters: AnnotationFilters,
-  after: string | null,
+  page: number,
   signal: AbortSignal,
 ) {
-  const params = new URLSearchParams({ limit: '20' });
+  const params = new URLSearchParams({ limit: '20', page: String(page) });
   if (filters.q) params.set('q', filters.q);
   if (filters.tag) params.set('tag', filters.tag);
   if (filters.kind) params.set('kind', filters.kind);
   if (filters.database_id) params.set('database_id', filters.database_id);
-  if (after) params.set('after', after);
   return request<AnnotationSearchPage>(`/annotations/search?${params}`, {
     signal,
   });

@@ -35,6 +35,8 @@ pub enum CardReviewState {
 #[into_params(parameter_in = Query)]
 pub struct CardQuery {
     pub after: Option<Uuid>,
+    /// One-based result page. Mutually exclusive with `after`.
+    pub page: Option<i64>,
     #[param(minimum = 1, maximum = 100)]
     pub limit: Option<i64>,
     pub deck_id: Option<Uuid>,
@@ -221,6 +223,8 @@ pub(super) async fn load(
         ));
     }
     let deck = path.or(q.deck_id);
+    let limit = q.limit.unwrap_or(50);
+    let offset = crate::search::page_offset(q.page, q.after.is_some(), limit)?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
         .execute(&mut *tx)
@@ -249,13 +253,15 @@ pub(super) async fn load(
         .fetch_one(&mut *tx)
         .await
         .map_err(anyhow::Error::from)?;
-    let limit = q.limit.unwrap_or(50);
     let mut sql = QueryBuilder::new("SELECT c.* FROM learning_cards c");
     filters(&mut sql, &q, deck);
     if let Some(after) = q.after {
         sql.push(" AND c.id>").push_bind(after);
     }
     sql.push(" ORDER BY c.id LIMIT ").push_bind(limit + 1);
+    if let Some(offset) = offset {
+        sql.push(" OFFSET ").push_bind(offset);
+    }
     let mut rows: Vec<CardRow> = sql
         .build_query_as()
         .fetch_all(&mut *tx)

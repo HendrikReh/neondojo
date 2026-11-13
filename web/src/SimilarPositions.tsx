@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import ActionButton from './ActionButton';
+import SearchPagination from './SearchPagination';
+import { lastSearchPage } from './useSearchPages';
 import Board from './Board';
 import { request, type Position } from './api';
 import { matchContext } from './boardMath';
@@ -47,6 +49,7 @@ export default function SimilarPositions({
   const [practiceItems, setPracticeItems] =
     useState<SimilarResponse['items']>();
   const [selected, setSelected] = useState<string>();
+  const [resultPage, setResultPage] = useState({ key: '', number: 1 });
   const params = new URLSearchParams(
     Object.entries(filters)
       .filter(([, enabled]) => enabled)
@@ -84,6 +87,9 @@ export default function SimilarPositions({
 
   const { result, error } = response?.key === searchKey ? response : {};
   const hits = result?.items ?? [];
+  const pageSize = 25;
+  const page = resultPage.key === searchKey ? resultPage.number : 1;
+  const rows = hits.slice((page - 1) * pageSize, page * pageSize);
   const preview = hits.find((hit) => hit.position.id === selected) ?? hits[0];
   const context = preview && matchContext(preview.position.gnubg_match_id);
   return (
@@ -145,42 +151,58 @@ export default function SimilarPositions({
       )}
       {preview && context && (
         <div className="position-browser-layout">
-          <div className="position-table-scroll">
-            <table className="similar-position-table" aria-label={p('results')}>
-              <thead>
-                <tr>
-                  <th scope="col">{p('similarMatch')}</th>
-                  <th scope="col">{p('player')}</th>
-                  <th scope="col">{p('gameNumber')}</th>
-                  <th scope="col">{p('moveNumber')}</th>
-                  <th scope="col">{p('checkerDistance')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {hits.map((hit) => (
-                  <tr
-                    key={hit.position.id}
-                    className={
-                      hit === preview ? 'similar-position-selected' : undefined
-                    }
-                  >
-                    <td>
-                      <button
-                        type="button"
-                        aria-pressed={hit === preview}
-                        onClick={() => setSelected(hit.position.id)}
-                      >
-                        {hit.match_name}
-                      </button>
-                    </td>
-                    <td>{hit.position.player === 0 ? hit.white : hit.black}</td>
-                    <td>{hit.position.game_no}</td>
-                    <td>{hit.position.ply}</td>
-                    <td>{hit.distance}</td>
+          <div>
+            <div className="position-table-scroll">
+              <table
+                className="similar-position-table"
+                aria-label={p('results')}
+              >
+                <thead>
+                  <tr>
+                    <th scope="col">{p('similarMatch')}</th>
+                    <th scope="col">{p('player')}</th>
+                    <th scope="col">{p('gameNumber')}</th>
+                    <th scope="col">{p('moveNumber')}</th>
+                    <th scope="col">{p('checkerDistance')}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {rows.map((hit) => (
+                    <tr
+                      key={hit.position.id}
+                      className={
+                        hit === preview
+                          ? 'similar-position-selected'
+                          : undefined
+                      }
+                    >
+                      <td>
+                        <button
+                          type="button"
+                          aria-pressed={hit === preview}
+                          onClick={() => setSelected(hit.position.id)}
+                        >
+                          {hit.match_name}
+                        </button>
+                      </td>
+                      <td>
+                        {hit.position.player === 0 ? hit.white : hit.black}
+                      </td>
+                      <td>{hit.position.game_no}</td>
+                      <td>{hit.position.ply}</td>
+                      <td>{hit.distance}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <SearchPagination
+              page={page}
+              lastPage={lastSearchPage(hits.length, pageSize)}
+              onPageChange={(number) =>
+                setResultPage({ key: searchKey, number })
+              }
+            />
           </div>
           <aside className="position-preview" aria-label={p('preview')}>
             <h3>{preview.match_name}</h3>

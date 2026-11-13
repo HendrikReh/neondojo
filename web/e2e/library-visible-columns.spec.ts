@@ -75,7 +75,7 @@ test('optional columns persist without changing filters, sorting or batch select
       requests.push(request.url());
   });
   const menu = await picker(page);
-  await menu.getByRole('checkbox', { name: 'Tournament', exact: true }).check();
+  await menu.getByRole('checkbox', { name: 'Event', exact: true }).check();
   await menu.getByRole('checkbox', { name: 'Comment', exact: true }).check();
   await expect(head(page, 'tournament')).toBeVisible();
   await expect(head(page, 'comment')).toBeVisible();

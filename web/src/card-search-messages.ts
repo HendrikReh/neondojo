@@ -139,12 +139,12 @@ const rows = {
     'Già ripassata',
   ],
   scopeHint: [
-    'Filters affect this list. Study and export use the selected deck.',
-    'Filter gelten für diese Liste. Lernen und Export verwenden das ausgewählte Deck.',
-    'Los filtros afectan a esta lista. El estudio y la exportación usan el mazo seleccionado.',
-    'Les filtres concernent cette liste. L’étude et l’export utilisent le paquet sélectionné.',
-    'Filtry dotyczą tej listy. Nauka i eksport używają wybranej talii.',
-    'I filtri riguardano questo elenco. Lo studio e l’esportazione usano il mazzo selezionato.',
+    'Study now and export use the selected deck.',
+    'Jetzt lernen und Export verwenden das ausgewählte Deck.',
+    'Estudiar ahora y exportar usan el mazo seleccionado.',
+    'Étudier et exporter utilisent le paquet sélectionné.',
+    'Nauka i eksport używają wybranej talii.',
+    'Studia ora ed esporta usano il mazzo selezionato.',
   ],
 } as const;
 export type CardSearchMessage = keyof typeof rows;

@@ -63,6 +63,8 @@ pub(super) struct DeleteCard {
 #[into_params(parameter_in = Query)]
 pub(super) struct DuplicateQuery {
     after: Option<Uuid>,
+    /// One-based result page. Mutually exclusive with `after`.
+    page: Option<i64>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -81,11 +83,22 @@ pub(super) struct DuplicateDeck {
     version: i64,
 }
 
+#[derive(Serialize, FromRow, ToSchema)]
+pub(super) struct DuplicatePeer {
+    id: Uuid,
+    version: i64,
+    review_count: i32,
+}
+
 #[derive(Serialize, ToSchema)]
 pub(super) struct DuplicatePage {
     items: Vec<DuplicateCard>,
     #[schema(required = true)]
     next_cursor: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    total: Option<i64>,
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    peers: HashMap<String, Vec<DuplicatePeer>>,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -313,6 +326,7 @@ pub(super) async fn duplicates(
 ) -> ApiResult<Json<DuplicatePage>> {
     let Query(query) = query.map_err(|error| ApiError::invalid(error.body_text()))?;
     const LIMIT: usize = 50;
+    let offset = crate::search::page_offset(query.page, query.after.is_some(), LIMIT as i64)?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
         .execute(&mut *tx)
@@ -325,8 +339,7 @@ pub(super) async fn duplicates(
         identity: Option<String>,
         copies: i64,
     }
-    let mut rows: Vec<Entry> = sqlx::query_as(
-        "WITH identities AS (
+    const IDENTITIES: &str = "WITH identities AS (
              SELECT id, (payload#>>'{position,position_id}') || ':' ||
                         (payload#>>'{position,gnubg_match_id}') || ':' ||
                         (payload->>'kind') AS identity
@@ -335,18 +348,31 @@ pub(super) async fn duplicates(
              SELECT identity, count(*) AS copies
              FROM identities WHERE identity IS NOT NULL
              GROUP BY identity HAVING count(*) > 1
-         )
-         SELECT c.*, copies.identity, coalesce(copies.copies, 1) AS copies
-         FROM identities i JOIN learning_cards c ON c.id=i.id
-         LEFT JOIN copies USING (identity)
-         WHERE ($1::uuid IS NULL OR c.id>$1)
-           AND (copies.copies IS NOT NULL OR EXISTS (
-               SELECT 1 FROM deck_cards WHERE card_id=c.id OFFSET 1
-           ))
-         ORDER BY c.id LIMIT $2",
-    )
+         )";
+    const MATCHING: &str = "FROM identities i LEFT JOIN copies USING (identity)
+         WHERE copies.copies IS NOT NULL OR EXISTS (
+             SELECT 1 FROM deck_cards WHERE card_id=i.id OFFSET 1
+         )";
+    let total = if offset.is_some() {
+        Some(
+            sqlx::query_scalar(&format!("{IDENTITIES} SELECT count(*) {MATCHING}"))
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(anyhow::Error::from)?,
+        )
+    } else {
+        None
+    };
+    let mut rows: Vec<Entry> = sqlx::query_as(&format!(
+        "{IDENTITIES}, matching AS (
+            SELECT i.id,copies.identity,coalesce(copies.copies,1) AS copies {MATCHING}
+        )
+        SELECT c.*,m.identity,m.copies FROM matching m JOIN learning_cards c ON c.id=m.id
+        WHERE ($1::uuid IS NULL OR m.id>$1) ORDER BY m.id LIMIT $2 OFFSET $3"
+    ))
     .bind(query.after)
     .bind((LIMIT + 1) as i64)
+    .bind(offset.unwrap_or(0))
     .fetch_all(&mut *tx)
     .await
     .map_err(anyhow::Error::from)?;
@@ -372,6 +398,28 @@ pub(super) async fn duplicates(
     for row in decks {
         memberships.entry(row.card_id).or_default().push(row.deck);
     }
+    let keys: Vec<_> = rows.iter().filter_map(|row| row.identity.clone()).collect();
+    let mut peers = HashMap::<String, Vec<DuplicatePeer>>::new();
+    if offset.is_some() && !keys.is_empty() {
+        #[derive(FromRow)]
+        struct Peer {
+            identity: String,
+            #[sqlx(flatten)]
+            card: DuplicatePeer,
+        }
+        let matching: Vec<Peer> = sqlx::query_as(&format!(
+            "{IDENTITIES} SELECT i.identity,c.id,c.version,c.review_count
+             FROM identities i JOIN learning_cards c ON c.id=i.id
+             WHERE i.identity=ANY($1) ORDER BY c.id"
+        ))
+        .bind(keys)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?;
+        for peer in matching {
+            peers.entry(peer.identity).or_default().push(peer.card);
+        }
+    }
     let items = rows
         .into_iter()
         .map(|entry| {
@@ -387,6 +435,8 @@ pub(super) async fn duplicates(
     Ok(Json(DuplicatePage {
         items,
         next_cursor: ids.last().copied().filter(|_| more),
+        total,
+        peers,
     }))
 }
 

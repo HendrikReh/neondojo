@@ -68,17 +68,18 @@ export function deleteCards(cards: Schema['DeleteCard'][]) {
   return post<void>('/cards/delete', { cards } satisfies Schema['DeleteCards']);
 }
 
-export function loadDuplicates(after: string | null, signal: AbortSignal) {
-  const query = after ? `?after=${encodeURIComponent(after)}` : '';
-  return request<Schema['DuplicatePage']>(`/cards/duplicates${query}`, {
+export type DuplicatePeer = Schema['DuplicatePeer'];
+
+export function loadDuplicates(signal: AbortSignal, page: number) {
+  return request<Schema['DuplicatePage']>(`/cards/duplicates?page=${page}`, {
     signal,
   });
 }
 
-export function resolveDuplicate(keep: DuplicateCard, remove: DuplicateCard) {
+export function resolveDuplicate(keep: DuplicatePeer, remove: DuplicateCard) {
   return post<void>('/cards/duplicates/resolve', {
-    keep_id: keep.card.id,
-    keep_version: keep.card.version,
+    keep_id: keep.id,
+    keep_version: keep.version,
     delete_id: remove.card.id,
     delete_version: remove.card.version,
   } satisfies Schema['ResolveDuplicate']);

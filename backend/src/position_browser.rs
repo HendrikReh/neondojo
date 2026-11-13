@@ -252,6 +252,9 @@ pub struct PositionBrowserHit {
 pub struct PositionBrowserPage {
     pub items: Vec<PositionBrowserHit>,
     pub next_cursor: Option<String>,
+    /// Total matching rows when `page` is supplied.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total: Option<i64>,
 }
 
 #[derive(Deserialize, IntoParams)]
@@ -263,6 +266,8 @@ pub struct PositionBrowserQuery {
     #[param(example = r#"{"schema_version":1,"player":"Alice","sort":"match"}"#)]
     pub filters: Option<String>,
     pub after: Option<String>,
+    /// One-based result page. Mutually exclusive with `after`.
+    pub page: Option<i64>,
     /// Default 25, maximum 100.
     pub limit: Option<i64>,
 }
@@ -448,6 +453,7 @@ async fn search(
     if !(1..=100).contains(&limit) {
         return Err(ApiError::invalid("limit must be 1–100"));
     }
+    let offset = crate::search::page_offset(query.page, query.after.is_some(), limit)?;
     database_exists(&s.pool, filters.database_id).await?;
     if filters.game_plan.is_some() {
         crate::position_game_plans::ensure_saved(&s.pool, filters.database_id).await?;
@@ -608,6 +614,13 @@ async fn search(
         sql.push(" LIMIT ").push_bind(limit + 1)
             .push(") SELECT page.*,EXISTS(SELECT 1 FROM anchor) AS anchor_exists FROM (VALUES (1)) marker(n) LEFT JOIN page ON true");
         table_order(&mut sql, "page", direction);
+    } else if let Some(offset) = offset {
+        sql.push("), page AS (SELECT f.* FROM filtered f");
+        table_order(&mut sql, "f", direction);
+        sql.push(" LIMIT ").push_bind(limit + 1)
+            .push(" OFFSET ").push_bind(offset)
+            .push(") SELECT page.*,totals.total FROM (SELECT count(*) AS total FROM filtered) totals LEFT JOIN page ON true");
+        table_order(&mut sql, "page", direction);
     } else {
         sql.push(") SELECT f.* FROM filtered f");
         table_order(&mut sql, "f", direction);
@@ -632,6 +645,13 @@ async fn search(
                 .is_some()
         });
     }
+    let total = if offset.is_some() {
+        let total = rows[0].get::<i64, _>("total");
+        rows.retain(|row| row.get::<Option<Uuid>, _>("sort_id").is_some());
+        Some(total)
+    } else {
+        None
+    };
     let more = rows.len() > limit as usize;
     rows.truncate(limit as usize);
     let mut items = Vec::with_capacity(rows.len());
@@ -706,7 +726,11 @@ async fn search(
         });
     }
     load_deck_memberships(&s.pool, &mut items).await?;
-    Ok(Json(PositionBrowserPage { items, next_cursor }))
+    Ok(Json(PositionBrowserPage {
+        items,
+        next_cursor,
+        total,
+    }))
 }
 
 async fn load_deck_memberships(pool: &PgPool, items: &mut [PositionBrowserHit]) -> ApiResult<()> {

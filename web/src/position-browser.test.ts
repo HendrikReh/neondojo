@@ -1,4 +1,3 @@
-import { mergeSearchItems } from './cursor-search';
 import { expect, test } from 'vitest';
 import {
   emptyPositionFilters,
@@ -8,7 +7,6 @@ import {
   positionParams,
   samePositionDefinition,
   togglePositionSelection,
-  type PositionBrowserHit,
 } from './position-browser-api';
 
 test('position search defaults to every database and a versioned definition', () => {
@@ -86,24 +84,6 @@ test('page selection preserves earlier choices and enforces the 200 position lim
   expect(original.size).toBe(1);
   expect(togglePositionSelection(selected, ['p0', 'p1'], false).size).toBe(198);
 });
-test('merges repeated UUIDs while retaining identical boards in distinct game contexts', () => {
-  const hit = (id: string, ply: number) =>
-    ({
-      position: { id, position_id: 'same-board', ply },
-      card_ready: false,
-    }) as PositionBrowserHit;
-  const first = hit('one', 1),
-    second = hit('two', 2),
-    refreshed = { ...first, card_ready: true };
-  expect(
-    mergeSearchItems(
-      [first, second],
-      [refreshed, hit('three', 3)],
-      (hit) => hit.position.id,
-    ),
-  ).toEqual([refreshed, second, hit('three', 3)]);
-});
-
 test('saved filter equality follows backend tag and dice canonicalization', () => {
   const first = positionDefinition({
     ...emptyPositionFilters(),

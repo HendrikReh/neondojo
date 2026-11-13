@@ -28,9 +28,14 @@ export const emptyCardFilters = (): CardFilters => ({
 export function cardListPath(
   deck: string,
   filters: CardFilters,
-  after?: string,
+  page?: number | string,
 ) {
-  const params = cursorSearchParams(CARD_PAGE_SIZE, filters, after);
+  const params = cursorSearchParams(
+    CARD_PAGE_SIZE,
+    filters,
+    typeof page === 'string' ? page : undefined,
+  );
+  if (typeof page === 'number') params.set('page', String(page));
   if (deck === CARDS_WITHOUT_DECK) params.set('without_deck', 'true');
   return `${isCollectionScope(deck) ? '/cards' : `/decks/${encodeURIComponent(deck)}/cards`}?${params}`;
 }

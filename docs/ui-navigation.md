@@ -35,7 +35,12 @@ focus states in all six light/dark theme variants, actual spacing between labels
 and the established desktop viewports. Related workflow tests cover settings,
 notes, sources, board views and header navigation.
 
-## Player database
+## Search results
+
+Result lists with multiple pages use the same underlined navigation. The
+numbered buttons show up to five nearby pages. **First** and **Last** jump
+directly to the ends of the current result set. A new filter or sort starts at
+page 1. Match, saved position and flashcard selections can span pages.
 
 The player database uses the Positions layout with a result table on the left
 and the selected profile on the right. Click a row or use the arrow keys to
@@ -96,7 +101,8 @@ specific deck is selected, its study and export actions appear below the search.
 On wide windows, drag the divider between the card list and the preview. The
 Left and Right arrow keys move the focused divider. Double-click it or press
 Enter to restore the default width. The browser remembers the chosen width.
-The results have selection checkboxes and actions above the table. Cards can be added to a deck or deleted
+The results have selection
+checkboxes and actions above the table. Cards can be added to a deck or deleted
 from the collection after confirmation. Select a deck to move cards or remove
 its memberships, or choose **Without a deck** to find unassigned cards. **Find duplicates**
 shows shared deck memberships and duplicate records, with confirmation before

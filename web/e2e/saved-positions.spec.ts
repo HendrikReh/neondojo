@@ -238,13 +238,11 @@ test('failed removal on a later loaded page retains selection for immediate retr
     rows = pane.locator('.position-table tbody tr');
   await expect(rows).toHaveCount(25);
   await rows.first().getByRole('checkbox').check();
-  await pane
-    .getByRole('button', { name: 'Load more positions', exact: true })
-    .click();
-  await expect(pane.getByText('Page 2', { exact: true })).toBeVisible();
-  await pane
-    .getByRole('button', { name: 'Load more positions', exact: true })
-    .click();
+  await pane.getByRole('button', { name: 'Next page', exact: true }).click();
+  await expect(
+    pane.getByRole('button', { name: 'Page 2', exact: true }),
+  ).toBeVisible();
+  await pane.getByRole('button', { name: 'Next page', exact: true }).click();
   await expect(rows).toHaveCount(10);
   const failed = await rows.first().getAttribute('data-position-id');
   await rows.first().getByRole('checkbox').check();
@@ -273,10 +271,8 @@ test('failed removal on a later loaded page retains selection for immediate retr
     'aria-busy',
     'false',
   );
-  // Let the fresh prefix finish; a failure must remain selected across that read.
-  await expect(
-    pane.getByText('59 positions loaded', { exact: true }),
-  ).toBeVisible();
+  // The failed item remains selected while the current page refreshes.
+  await expect(pane.getByText('59 positions', { exact: true })).toBeVisible();
   await expect(
     pane.getByText('1 / 200 selected', { exact: true }).first(),
   ).toBeVisible();

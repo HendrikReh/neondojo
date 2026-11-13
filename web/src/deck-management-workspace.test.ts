@@ -306,7 +306,7 @@ it('consumes a requested deck that is absent after the current revision actually
 });
 
 it.each([1, 2])(
-  'a rename preserves loaded later pages only for its own single revision (delta %s)',
+  'a rename preserves the current page only for its own single revision (delta %s)',
   async (delta) => {
     fetch.mockImplementation(async (path) =>
       Response.json(
@@ -316,24 +316,27 @@ it.each([1, 2])(
               items: [
                 {
                   ...card,
-                  id: String(path).includes('after=')
+                  id: String(path).includes('page=2')
                     ? 'later-card'
                     : 'first-card',
                 },
               ],
-              next_cursor: String(path).includes('after=') ? null : 'later',
+              total: 51,
+              next_cursor: null,
             },
       ),
     );
     let view = await loaded();
     elements(view)
-      .find((element) => element.props?.onMore)!
-      .props.onMore();
+      .find((element) => element.props?.onPageChange)!
+      .props.onPageChange(2);
+    render();
+    commit();
     await settle();
     view = render();
     expect(
       elements(view).find((element) => element.props?.cards)!.props.cards,
-    ).toHaveLength(2);
+    ).toMatchObject([{ id: 'later-card' }]);
     elements(view)
       .find(
         (element) =>
@@ -362,6 +365,6 @@ it.each([1, 2])(
     expect(readsAfter - readsBefore).toBe(delta === 1 ? 0 : 1);
     expect(
       elements(view).find((element) => element.props?.cards)!.props.cards,
-    ).toHaveLength(delta === 1 ? 2 : 1);
+    ).toMatchObject([{ id: delta === 1 ? 'later-card' : 'first-card' }]);
   },
 );

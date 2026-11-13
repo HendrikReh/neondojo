@@ -1,12 +1,9 @@
 import { useProfileValue } from './useProfileValue';
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import ActionButton from './ActionButton';
-import SearchPagination, {
-  lastSearchPage,
-  useSearchResultPage,
-} from './SearchPagination';
+import SearchPagination from './SearchPagination';
 import { SearchResultList } from './SearchResultList';
-import { useCursorSearch } from './useCursorSearch';
+import { useSearchPages } from './useSearchPages';
 import { useCallback, useEffect, useState } from 'react';
 import { request } from './api';
 import { removePositionBookmark } from './position-bookmark-api';
@@ -38,8 +35,6 @@ import {
 } from './position-browser-api';
 import { usePositionText } from './position-browser-messages';
 import './position-browser.css';
-
-const positionKey = (hit: PositionBrowserHit) => hit.position.id;
 
 export default function PositionBrowser({
   visible,
@@ -82,9 +77,8 @@ export default function PositionBrowser({
     }
   }, [profile?.generation, profile?.ready]);
   const [databases, setDatabases] = useState<Database[]>([]),
-    [pageIndex, setPageIndex] = useState(0),
-    [previewId, setPreviewId] = useState<string>(),
-    [selected, setSelected] = useState<Set<string>>(new Set()),
+    [preview, setPreview] = useState<PositionBrowserHit>(),
+    [selectedHits, setSelectedHits] = useState<PositionBrowserHit[]>([]),
     [transferBusy, setTransferBusy] = useState(false),
     [removing, setRemoving] = useState(false),
     [removeError, setRemoveError] = useState<unknown>(),
@@ -115,37 +109,17 @@ export default function PositionBrowser({
     return () => abort.abort();
   }, [revision]);
   useEffect(() => {
-    setPageIndex(0);
-    setPreviewId(undefined);
-    setSelected(new Set());
+    setPreview(undefined);
+    setSelectedHits([]);
   }, [scope]);
   const loadPage = useCallback(
-    (signal: AbortSignal, after?: string) =>
-      loadPositionPage(definition, signal, after),
+    (signal: AbortSignal, page: number) =>
+      loadPositionPage(definition, signal, page),
     [definition],
   );
-  const onReplace = useCallback((items: PositionBrowserHit[]) => {
-    const ids = new Set(items.map(positionKey));
-    setPreviewId((previous) =>
-      previous && ids.has(previous) ? previous : items[0]?.position.id,
-    );
-    setSelected(
-      (previous) => new Set([...previous].filter((id) => ids.has(id))),
-    );
-    setPageIndex((previous) =>
-      Math.min(previous, lastSearchPage(items.length, POSITION_PAGE_SIZE)),
-    );
-  }, []);
-  const {
-    items,
-    cursor,
-    loading,
-    moreLoading,
-    error,
-    more,
-    invalidateResults,
-  } = useCursorSearch({
+  const results = useSearchPages({
     scope,
+    pageSize: POSITION_PAGE_SIZE,
     revision: JSON.stringify([
       revision,
       annotationRevision,
@@ -154,11 +128,26 @@ export default function PositionBrowser({
       refresh,
     ]),
     enabled: visible,
-    keepLoadedPages: true,
     loadPage,
-    itemKey: positionKey,
-    onReplace,
   });
+  const { items, loading, error } = results;
+  const activePreview = preview
+    ? (items.find((item) => item.position.id === preview.position.id) ??
+      preview)
+    : items[0];
+
+  const selected = new Set(selectedHits.map((hit) => hit.position.id));
+  function changeSelection(ids: string[], checked: boolean) {
+    const next = togglePositionSelection(selected, ids, checked);
+    setSelectedHits([
+      ...selectedHits.filter(
+        (hit) =>
+          next.has(hit.position.id) &&
+          !items.some((item) => item.position.id === hit.position.id),
+      ),
+      ...items.filter((hit) => next.has(hit.position.id)),
+    ]);
+  }
   function apply(next: PositionFilterDraft) {
     try {
       const value = positionDefinition(next);
@@ -185,8 +174,7 @@ export default function PositionBrowser({
     apply({ ...positionDraft(definition), sort, direction: nextDirection });
   }
   async function removeSaved(ids: string[]) {
-    if (loading || moreLoading || transferBusy || removing || !ids.length)
-      return;
+    if (loading || transferBusy || removing || !ids.length) return;
     setRemoving(true);
     setRemoveError(undefined);
     const removed = new Set<string>();
@@ -204,14 +192,12 @@ export default function PositionBrowser({
         });
       }
       if (removed.size) {
-        // Reload the complete prefix so failed selections on later pages remain retryable.
-        setPageIndex(0);
-        invalidateResults(removed);
-        setSelected(
-          (previous) => new Set([...previous].filter((id) => !removed.has(id))),
+        results.invalidateResults();
+        setSelectedHits((previous) =>
+          previous.filter((hit) => !removed.has(hit.position.id)),
         );
-        setPreviewId((previous) =>
-          previous && removed.has(previous) ? undefined : previous,
+        setPreview((previous) =>
+          previous && removed.has(previous.position.id) ? undefined : previous,
         );
         onBookmarkChanged();
         setRefresh((value) => value + 1);
@@ -221,13 +207,7 @@ export default function PositionBrowser({
       setRemoving(false);
     }
   }
-  const { page, lastPage, rows } = useSearchResultPage(
-    items,
-    POSITION_PAGE_SIZE,
-    pageIndex,
-  );
-  const preview = items.find((hit) => hit.position.id === previewId);
-  const busy = loading || moreLoading || transferBusy || removing;
+  const busy = loading || transferBusy || removing;
   return (
     <section className="position-browser" aria-label={p('title')}>
       <div className="position-browser-heading">
@@ -267,14 +247,17 @@ export default function PositionBrowser({
       )}
       {!!error && (
         <p role="alert" className="error">
-          {formatError(error)}
+          {formatError(error)}{' '}
+          <button type="button" onClick={results.retry}>
+            {p('retrySimilar')}
+          </button>
         </p>
       )}
       <SearchResultList
-        count={<span>{p('loaded', { count: items.length })}</span>}
+        count={<span>{p('resultCount', { count: results.total })}</span>}
         preview={
           <PositionBrowserPreview
-            hit={preview}
+            hit={activePreview}
             theme={theme}
             onOpen={onOpenPosition}
             showPlayed={showPlayed}
@@ -289,7 +272,7 @@ export default function PositionBrowser({
             label={p('clearSelection')}
             compact
             disabled={!selected.size || busy}
-            onClick={() => setSelected(new Set())}
+            onClick={() => changeSelection([...selected], false)}
           />
           <ActionButton
             icon="delete"
@@ -305,15 +288,13 @@ export default function PositionBrowser({
           <p className="position-empty">{p('empty')}</p>
         ) : (
           <PositionBrowserResults
-            items={rows}
+            items={items}
             selected={selected}
-            previewId={previewId}
-            onPreview={setPreviewId}
-            onToggle={(ids, checked) =>
-              setSelected((previous) =>
-                togglePositionSelection(previous, ids, checked),
-              )
+            previewId={activePreview?.position.id}
+            onPreview={(id) =>
+              setPreview(items.find((hit) => hit.position.id === id))
             }
+            onToggle={changeSelection}
             onOpen={onOpenPosition}
             onRemove={(ids) => void removeSaved(ids)}
             busy={busy}
@@ -333,17 +314,16 @@ export default function PositionBrowser({
           />
         )}
         <SearchPagination
-          page={page}
-          lastPage={lastPage}
-          busy={busy}
-          onPageChange={setPageIndex}
-          onMore={cursor ? more : undefined}
-          moreLabel={p(moreLoading ? 'loading' : 'more')}
+          page={results.page}
+          lastPage={results.lastPage}
+          busy={loading}
+          disabled={transferBusy || removing}
+          onPageChange={results.setPage}
         />
         <PositionBrowserDecks
           revision={deckRevision}
           selected={selected}
-          hits={items}
+          hits={selectedHits}
           onChanged={onDeckChanged}
           onStudy={onStudy}
           onOpen={onOpenPosition}

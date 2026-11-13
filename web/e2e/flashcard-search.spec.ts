@@ -99,9 +99,8 @@ async function setup(page: Page, singleDeck = false) {
     if (url.pathname.includes(deckB))
       result = result.filter((c) => c.browse.decks.some((d) => d.id === deckB));
     const total = result.length;
-    const after = p.get('after');
-    if (after)
-      result = result.slice(result.findIndex((c) => c.id === after) + 1);
+    const page = Number(p.get('page') ?? '1');
+    result = result.slice((page - 1) * 50);
     const items = result.slice(0, 50);
     await route
       .fulfill({
@@ -284,19 +283,21 @@ test('flashcard search uses the position search layout and page controls', async
     pagination.getByRole('button', { name: 'Previous page' }),
   ).toBeDisabled();
   await expect(results.locator('tbody tr')).toHaveCount(50);
-  await pagination.getByRole('button', { name: 'More cards' }).click();
-  await expect(pagination).toContainText('Page 2');
+  await pagination.getByRole('button', { name: 'Page 2' }).click();
+  await expect(
+    pagination.getByRole('button', { name: 'Page 2' }),
+  ).toHaveAttribute('aria-current', 'page');
   await expect(results.locator('tbody tr')).toHaveCount(3);
-  await expect(preview).toHaveAttribute('data-card-id', 'card-0');
+  await expect(preview).toHaveAttribute('data-card-id', 'card-50');
   await pagination.getByRole('button', { name: 'Previous page' }).click();
   await expect(results.locator('tbody tr')).toHaveCount(50);
   await pagination.getByRole('button', { name: 'Next page' }).click();
   await expect(results.locator('tbody tr')).toHaveCount(3);
   expect(
-    queries.filter((query) => query.searchParams.has('after')),
-  ).toHaveLength(1);
+    queries.filter((query) => query.searchParams.get('page') === '2'),
+  ).toHaveLength(2);
   await chooser.selectOption(deckB);
-  await expect(pagination).toContainText('Page 1');
+  await expect(pagination).toHaveCount(0);
   await expect(results.locator('tbody tr')).toHaveCount(1);
   await expect(preview).toHaveAttribute('data-card-id', 'card-52');
   await page.setViewportSize({ width: 390, height: 844 });

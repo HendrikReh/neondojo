@@ -121,6 +121,19 @@
             }
           },
           {
+            "name": "page",
+            "in": "path",
+            "description": "One-based result page. Mutually exclusive with `after`.",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
             "name": "limit",
             "in": "path",
             "required": true,
@@ -395,6 +408,16 @@
             }
           },
           {
+            "name": "page",
+            "in": "query",
+            "description": "One-based result page. Mutually exclusive with `after`.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -575,6 +598,16 @@
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "One-based result page. Mutually exclusive with `after`.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
             }
           }
         ],
@@ -1814,6 +1847,16 @@
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "One-based result page. Mutually exclusive with `after`.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
             }
           },
           {
@@ -4758,6 +4801,16 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "One-based result page. Mutually exclusive with `after`.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
           }
         ],
         "responses": {
@@ -6112,6 +6165,16 @@
             "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "One-based result page. Mutually exclusive with `after`.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
             }
           },
           {
@@ -8843,6 +8906,14 @@
               "null"
             ],
             "format": "uuid"
+          },
+          "total": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Total matching rows when `page` is supplied."
           }
         }
       },
@@ -11635,6 +11706,47 @@
               "null"
             ],
             "format": "uuid"
+          },
+          "peers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/DuplicatePeer"
+              }
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "total": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "DuplicatePeer": {
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "review_count"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "review_count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -15327,6 +15439,14 @@
               "string",
               "null"
             ]
+          },
+          "total": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Total matching rows when `page` is supplied."
           }
         }
       },
@@ -16154,6 +16274,14 @@
               "null"
             ],
             "description": "A bounded scan can return an empty page with a continuation. Follow it until null."
+          },
+          "total": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Total matching decisions when `page` is supplied."
           }
         }
       },
