@@ -1,39 +1,27 @@
 # BG Tutor
 
-BG Tutor is a local backgammon application for importing matches, finding positions, analyzing decisions with GNU Backgammon (GNUbg) or Open Sage, playing, and studying. Its headless Rust backend uses Tokio, Axum, PostgreSQL, and SQLx. The React and TypeScript client connects through REST and server-sent events (SSE).
+BG Tutor is a local backgammon application for importing matches, finding positions, analyzing decisions with GNU Backgammon (GNUbg) or Open Sage, playing against an engine, and practicing your own mistakes. Its headless Rust backend uses Tokio, Axum, PostgreSQL, and SQLx. The React and TypeScript client connects through REST and server-sent events (SSE).
 
-[Quick start](#quick-start) · [Analyze a match](#analyze-your-first-match) · [Match databases](#match-databases) · [Playing](#playing-against-gnubg) · [Study](#study) · [API](#api-reference) · [Verification](#verification)
+[Quick start](#quick-start) · [Restart on port 8787](#restart-bg-tutor-locally-on-port-8787) · [Analyze a match](#analyze-your-first-match) · [Import formats](#import-formats) · [Playing](#playing-against-gnubg) · [Study](#study) · [HedgeHog comparison](#hedgehog-comparison) · [API](#api-reference) · [Verification](#verification) · [Repository guidance](AGENTS.md)
 
 ## Quick start
 
 - Rust, tested with 1.94.1
-- Node.js 22.12+ and npm
-- Docker Compose
+- Node.js 22.12 or later in the 22.x series, or Node.js 24 or later, with npm
+- Docker Compose for the bundled PostgreSQL 17 database, or an existing PostgreSQL server
 - Python 3.10 or later for the frontend build and development scripts
 - A local GNUbg installation with its neural network weights. Playing also requires GNUbg's embedded Python module. Analysis and playing were tested with GNUbg 1.08.003 on macOS. Earlier analysis checks used 1.05.002.
 
-From the repository root, create `.env` if needed, then start PostgreSQL and the backend.
+From the repository root, create `.env` if needed and start PostgreSQL. Use the Compose command below for the bundled database. To use another server, set `DATABASE_URL` in `.env` to the intended database. If you change the Compose port with `BGTUTOR_DB_PORT`, update `DATABASE_URL` to match.
 
 ```sh
 [ -f .env ] || cp .env.example .env
 docker compose up -d --wait db
-cargo run -p bgtutor
 ```
 
 The backend applies migrations at startup. Cargo can compile with PostgreSQL stopped. The backend reads `.env` from its working directory. See [.env.example](.env.example) for available settings.
 
 Check that `gnubg --version` works. If the executable is outside the backend's `PATH`, set `GNUBG_BIN` in `.env` before the first launch or configure the executable under **Settings → Analysis**. Use **Check installation** to verify that GNUbg can evaluate a position with its installed weights.
-
-### Frontend development with Vite
-
-In a second terminal at the repository root, start the Vite development server.
-
-```sh
-npm ci --prefix web
-npm run dev --prefix web
-```
-
-Open <http://127.0.0.1:5173> while developing the frontend. By default, Vite forwards `/api` requests to the backend on port `8787`.
 
 ### Local use with the built frontend
 
@@ -52,6 +40,17 @@ Open <http://127.0.0.1:8787> to use BG Tutor. By default the services listen on 
 | API health  | <http://127.0.0.1:8787/api/health>                                     |
 | OpenAPI 3.1 | <http://127.0.0.1:8787/api/openapi.json>                               |
 | PostgreSQL  | `127.0.0.1:54329`, backed by the `bgtutor_postgres_data` Docker volume |
+
+### Frontend development with Vite
+
+Start the backend from the repository root with `cargo run -p bgtutor`. In a second terminal at the repository root, start the Vite development server.
+
+```sh
+npm ci --prefix web
+npm run dev --prefix web
+```
+
+Open <http://127.0.0.1:5173>. Vite forwards `/api` to `http://127.0.0.1:8787` by default. Set `BGTUTOR_API_URL` in Vite's environment to point it at a different backend. If port `5173` is in use, Vite reports the conflict at startup.
 
 ### Restart BG Tutor locally on port 8787
 
@@ -73,7 +72,7 @@ Open <http://127.0.0.1:8787> to use BG Tutor. By default the services listen on 
    BGTUTOR_BIND=127.0.0.1:8787 BGTUTOR_WEB_DIR="$PWD/web/dist" ./target/local-restart/bgtutor
    ```
 
-5. In another terminal, check the health endpoint. Once it reports `"status":"ok"`, open or reload [BG Tutor](http://127.0.0.1:8787/). Check [the database list](http://127.0.0.1:8787/api/databases) for **Paused Matches** after applying migration `0040`.
+5. Check the health endpoint from another terminal, then open or reload BG Tutor and verify the workflow you changed. A response with `"status":"ok"` confirms PostgreSQL responds and the configured GNUbg reports its version. **Check installation** runs the evaluation probe. [BG Tutor on port 8787](http://127.0.0.1:8787/)
 
    ```sh
    curl --fail --silent --show-error http://127.0.0.1:8787/api/health
@@ -712,7 +711,7 @@ A forced pass has zero loss and no alternative equity (`evaluation_status=forced
 
 ## Verification
 
-Run the checks relevant to the change from the repository root. Install the frontend dependencies with `npm ci --prefix web` before running frontend checks. The workspace test suite includes non-ignored SQLx tests, so configure `DATABASE_URL` as described below before running it. Use `cargo test --workspace --lib` to run the Rust library tests without those integration targets.
+Run the checks relevant to the change from the repository root. Install the frontend dependencies with `npm ci --prefix web`. For the full Rust suite, configure `DATABASE_URL` as described below. Use `cargo test --workspace --lib` to run the Rust library tests without the SQLx integration targets.
 
 ```sh
 cargo fmt --all --check
@@ -723,9 +722,11 @@ npm run test:themes --prefix web
 npm run build --prefix web
 ```
 
+After changing an API contract, run `npm run api:types --prefix web` before the frontend checks. It regenerates [OpenAPI](docs/openapi.json) and [the TypeScript types](web/src/generated-api.d.ts) from the Rust API. The `test:themes` script discovers the Python tests under `tools/`, including tests for tools beyond theme preparation.
+
 ### PostgreSQL and GNUbg integration tests
 
-Start PostgreSQL with `docker compose up -d --wait db` or use a dedicated test server. Set `DATABASE_URL` to a connection on that server with permission to create databases. SQLx creates and drops separate test databases. Set `GNUBG_BIN` to a working GNUbg installation with its neural-network weights and embedded Python support for native play tests.
+Start PostgreSQL with `docker compose up -d --wait db` or use a dedicated test server. Export `DATABASE_URL` for a maintenance database on that server using a role with `CREATEDB`. For the default local Compose instance, use the connection settings from [.env.example](.env.example) with `/postgres` as the database name. SQLx creates and drops separate test databases. Set `GNUBG_BIN` if GNUbg is outside `PATH`. Native analysis needs the neural-network weights, and native play tests also need GNUbg's embedded Python support.
 
 ```sh
 cargo test --workspace -- --ignored --nocapture --skip all_local_game_files_import_atomically_and_deduplicate
@@ -754,6 +755,13 @@ Playwright requires Google Chrome, `psql`, PostgreSQL, and the frontend dependen
 npm run test:e2e --prefix web
 ```
 
+Pass a spec path to run only the affected workflow. These specs cover native match analysis and the Study overview, including its two direct practice actions.
+
+```sh
+npm run test:e2e --prefix web -- e2e/workflow.spec.ts
+npm run test:e2e --prefix web -- e2e/study-overview.spec.ts
+```
+
 The default PostgreSQL connection targets the Compose instance. For another server or port, set `BGTUTOR_E2E_POSTGRES_URL` to a connection with `CREATEDB`. For tests that need prepared data, set `BGTUTOR_E2E_POSTGRES_TEMPLATE` to a dedicated fixture database named `bgtutor_e2e_template_*`. The harness copies the template for each run. Unset the obsolete `BGTUTOR_TEST_URL` before running Playwright.
 
 Coverage includes import and analysis, game selection and move pagination, search and filters, saved notes and revision conflicts, deck creation, review and Anki exports, themes and all six locales, and selection changes while responses are in flight.
@@ -772,7 +780,10 @@ BGTUTOR_NATIVE_ESTIMATE=1 npm run test:e2e --prefix web -- e2e/analysis-time-est
 | [`backend/src/import/`](backend/src/import/)                                                                       | Import, rule validation, and GNUbg identifiers                      |
 | [`backend/src/engine.rs`](backend/src/engine.rs), [`backend/src/match_analysis.rs`](backend/src/match_analysis.rs) | Isolated GNUbg processes and native checker and cube analysis       |
 | [`backend/src/jobs.rs`](backend/src/jobs.rs), [`backend/src/match_jobs.rs`](backend/src/match_jobs.rs)             | Job state, progress events, game checkpoints, and player statistics |
+| [`backend/src/engines/`](backend/src/engines/) | Engine providers, capability checks, and Open Sage integration |
+| [`backend/src/learning/`](backend/src/learning/), [`backend/src/recurring_mistakes.rs`](backend/src/recurring_mistakes.rs), [`backend/src/practice.rs`](backend/src/practice.rs) | Flashcards and FSRS, recurring mistakes, and shared answer evaluation |
 | [`backend/src/store.rs`](backend/src/store.rs), [`backend/migrations/`](backend/migrations/)                       | SQLx persistence, schema, and search indexes                        |
 | [`web/src/`](web/src/)                                                                                             | React client, SVG board, and generated API types                    |
+| [`web/e2e/`](web/e2e/), [`web/playwright.setup.ts`](web/playwright.setup.ts) | Browser workflows and isolated PostgreSQL test setup |
 
 The Rust backend runs independently of the browser. A future Tauri shell could start it as a sidecar and reuse the HTTP API.
