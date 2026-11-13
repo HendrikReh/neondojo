@@ -875,7 +875,7 @@ The November 8, 2026 rerun imported 33 of 42 files and rejected nine invalid XG 
 
 ### Browser tests
 
-Playwright requires Google Chrome, `psql`, PostgreSQL, and the frontend dependencies. GNUbg workflows require a working local engine. The harness creates a fresh database, verifies that the API is using it, starts a dedicated backend and Vite on local ports, and removes the test database after the run. Screenshots and other test artifacts are written to `web/test-results/`.
+Playwright requires Google Chrome, `psql`, PostgreSQL, and the frontend dependencies. GNUbg workflows require a working local engine. The harness creates a fresh database, verifies that the API is using it, starts a dedicated backend and Vite on local ports, and removes the test database after the run. Vite serves HTTP and its development WebSocket on the same loopback port. Screenshots and other test artifacts are written to `web/test-results/`.
 
 ```sh
 npm run test:e2e --prefix web
