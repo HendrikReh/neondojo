@@ -337,6 +337,10 @@ Each row shows the score and match length (or money game), dice when relevant an
 
 ### Review cards and export to Anki
 
+Existing Anki tags are carried into the shared card tag field when the database is upgraded.
+
+**Card tags** can be entered when adding an analyzed position, edited on selected search results, or edited after revealing a flashcard. Use `::` for subtopics, such as `cube::take-point`. The comma-separated **Topic tags** filter requires every term and matches descendants by segment. **Saved topics** stores the applied filters and deck scope, including the game plan and decision type. Reopening the topic searches the current collection.
+
 Study shows due cards with the chosen board theme, match length, score and player on roll. Money games also show the Jacoby status. Play your checker move on the board and check it, or select and check your cube answer. An offer asks whether to double. A response asks whether to take or pass and shows the offered cube value. Undo lets you adjust a checker move before checking it. The solution stays hidden until you check the answer or choose **Show answer** for self-assessment.
 
 The server verifies your move and scores it against the best decision using comparable saved evaluations when available. Otherwise it evaluates your choice and the best decision together with the configured analysis engine and labels the result with its source and depth. A legal answer with a positive equity loss below 0.040 is playable. If the engine is busy or unavailable, you can keep your answer and retry or reveal the solution. The first checked answer and its result survive a reload.

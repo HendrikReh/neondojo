@@ -157,6 +157,11 @@ export default function LearningCardBrowser({
               <SearchResultTags tags={selected.browse.tags} />
             </div>
           )}
+          {!!selected.browse?.card_tags?.length && (
+            <div className="annotation-tags">
+              <SearchResultTags tags={selected.browse.card_tags} />
+            </div>
+          )}
           {!!selected.browse?.comment_excerpt && (
             <p className="learning-preview-comment">
               {selected.browse.comment_excerpt}

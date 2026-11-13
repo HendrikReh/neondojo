@@ -324,5 +324,7 @@ pub(super) async fn save(
             "Match analysis has changed. Reload suggestions.".into(),
         ));
     }
-    Ok(Json(write_match_cards(pool, id, unique).await?))
+    Ok(Json(
+        write_match_cards(pool, id, unique, &BTreeSet::new()).await?,
+    ))
 }

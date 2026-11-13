@@ -10,6 +10,7 @@ afterEach(() => vi.unstubAllGlobals());
 const card = {
   id: 'card-one',
   version: 1,
+  tags_version: 0,
   kind: 'checker',
   players: ['Ada', 'Grace'],
   prompt: 'Internal prompt',

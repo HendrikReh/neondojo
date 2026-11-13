@@ -30,7 +30,10 @@ describe('configuration comparison', () => {
       analysis_board_width: 540,
       analysis_overview_board_width: 360,
     });
-    for (const field of ['analysis_board_width', 'analysis_overview_board_width'])
+    for (const field of [
+      'analysis_board_width',
+      'analysis_overview_board_width',
+    ])
       for (const width of [0, 319, 961, 400.5, Number.NaN])
         expect(() =>
           normalizeConfiguration({
@@ -53,7 +56,15 @@ describe('configuration comparison', () => {
           [area]: { ...input[area], plies: 1 },
         })[area].plies,
       ).toBe(1);
-      for (const plies of [0, 3, 4])
+      if (area === 'analysis')
+        for (const plies of [3, 4])
+          expect(
+            normalizeConfiguration({
+              ...input,
+              analysis: { ...input.analysis, plies },
+            }).analysis.plies,
+          ).toBe(plies);
+      for (const plies of area === 'analysis' ? [0, 5] : [0, 3, 4])
         expect(() =>
           normalizeConfiguration({
             ...input,

@@ -11,6 +11,8 @@ export type CardFilters = {
   q: string;
   player: string;
   tag: string;
+  topics?: string;
+  game_plan?: '' | components['schemas']['GamePlan'];
   comment: string;
   position_id: string;
   kind: '' | components['schemas']['CardKind'];
@@ -32,7 +34,7 @@ export function cardListPath(
 ) {
   const params = cursorSearchParams(
     CARD_PAGE_SIZE,
-    filters,
+    { ...filters, topics: filters.topics ?? '', game_plan: filters.game_plan ?? '' },
     typeof page === 'string' ? page : undefined,
   );
   if (typeof page === 'number') params.set('page', String(page));

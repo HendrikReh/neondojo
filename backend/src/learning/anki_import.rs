@@ -60,31 +60,19 @@ pub(super) async fn import(
         let payload = serde_json::to_value(content).map_err(anyhow::Error::from)?;
         let inserted: Option<Uuid> = sqlx::query_scalar("INSERT INTO learning_cards(id,signature,payload) VALUES($1,$2,$3) ON CONFLICT(signature) DO NOTHING RETURNING id")
             .bind(new_id).bind(&signature).bind(payload).fetch_optional(&mut *tx).await.map_err(anyhow::Error::from)?;
-        let (card_id, saved): (Uuid, serde_json::Value) =
-            sqlx::query_as("SELECT id,payload FROM learning_cards WHERE signature=$1 FOR UPDATE")
-                .bind(signature)
-                .fetch_one(&mut *tx)
-                .await
-                .map_err(anyhow::Error::from)?;
-        let mut merged: BTreeSet<String> =
-            serde_json::from_value(saved["anki_tags"].clone()).unwrap_or_default();
-        let size = merged.len();
-        merged.extend(tags);
-        if merged.len() != size {
-            sqlx::query(
-                "UPDATE learning_cards SET payload=jsonb_set(payload,'{anki_tags}',$2) WHERE id=$1",
-            )
-            .bind(card_id)
-            .bind(sqlx::types::Json(merged))
-            .execute(&mut *tx)
-            .await
-            .map_err(anyhow::Error::from)?;
-        }
+        let mut card: topics::CardTags = sqlx::query_as(
+            "SELECT id,tags,tags_version FROM learning_cards WHERE signature=$1 FOR UPDATE",
+        )
+        .bind(signature)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?;
+        topics::update_card(&mut tx, &mut card, &tags, &BTreeSet::new()).await?;
         memberships += sqlx::query(
             "INSERT INTO deck_cards(deck_id,card_id) VALUES($1,$2) ON CONFLICT DO NOTHING",
         )
         .bind(id)
-        .bind(card_id)
+        .bind(card.id)
         .execute(&mut *tx)
         .await
         .map_err(anyhow::Error::from)?
@@ -206,12 +194,8 @@ pub(super) fn read_package(bytes: &[u8]) -> anyhow::Result<Vec<(CardContent, BTr
             decision_no: None,
         };
         let tags: String = row.get(1)?;
-        let tags = tags
-            .split_whitespace()
-            .map(super::anki_flashcards::import_tag)
-            .collect::<ApiResult<BTreeSet<_>>>()
+        let tags = topics::tags(tags.split_whitespace().map(str::to_owned).collect())
             .map_err(|e| anyhow::anyhow!("{}", e.1))?;
-        anyhow::ensure!(tags.len() <= 100, "Too many Anki tags");
         cards.insert(card_signature(&content), (content, tags));
     }
     anyhow::ensure!(

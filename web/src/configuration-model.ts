@@ -400,13 +400,18 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
   c.positions.definition = positionDefinition(
     positionDraft(c.positions.definition),
   );
-  strings(
+  exactKeys(
     c.learning.filters,
     Object.keys(emptyCardFilters()),
+    ['topics', 'game_plan'],
     'learning.filters',
   );
+  if (
+    Object.values(c.learning.filters).some((value) => typeof value !== 'string')
+  )
+    invalid('learning.filters');
   for (const key of Object.keys(c.learning.filters) as (keyof CardFilters)[])
-    c.learning.filters[key] = c.learning.filters[key].trim() as never;
+    c.learning.filters[key] = c.learning.filters[key]?.trim() as never;
   if (
     !['', 'checker', 'cube_offer', 'cube_response'].includes(
       c.learning.filters.kind,
@@ -415,6 +420,12 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
   )
     invalid('learning.filters');
   c.learning.filters.tag = c.learning.filters.tag.toLowerCase();
+  if (
+    !['', 'pure_race', 'racing', 'attacking', 'priming', 'anchoring'].includes(
+      c.learning.filters.game_plan ?? '',
+    )
+  )
+    invalid('learning.filters.game_plan');
   if (!isCollectionScope(c.learning.deck_id) && !uuid.test(c.learning.deck_id))
     invalid('learning.deck_id');
   exactKeys(

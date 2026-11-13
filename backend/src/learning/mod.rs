@@ -7,6 +7,7 @@ mod management;
 mod scheduler;
 mod search;
 mod suggestions;
+mod topics;
 use crate::practice::evaluation::{self, PracticeAnswer, PracticeEvaluation, SavedEvaluation};
 pub(crate) use content::saved_checker_move;
 pub use search::{
@@ -104,6 +105,8 @@ pub struct AddCards {
     pub job_id: Option<Uuid>,
     pub min_loss: Option<f64>,
     pub player: Option<i32>,
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct AddCardsResult {
@@ -180,6 +183,7 @@ pub struct CardQuestion {
     pub source: Option<CardSource>,
     pub due_at: DateTime<Utc>,
     pub review_count: i32,
+    pub tags_version: i64,
 }
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct CardPage {
@@ -294,6 +298,8 @@ struct CardRow {
     stability: Option<f64>,
     difficulty: Option<f64>,
     last_review: Option<DateTime<Utc>>,
+    tags: Vec<String>,
+    tags_version: i64,
 }
 impl CardRow {
     fn content(&self) -> anyhow::Result<CardContent> {
@@ -301,10 +307,6 @@ impl CardRow {
     }
     fn is_anki(&self) -> bool {
         self.payload["kind"] == "anki"
-    }
-
-    fn anki_tags(&self) -> Vec<String> {
-        serde_json::from_value(self.payload["anki_tags"].clone()).unwrap_or_default()
     }
 
     fn question(&self) -> anyhow::Result<CardQuestion> {
@@ -340,6 +342,7 @@ impl CardRow {
             source,
             due_at: self.due_at,
             review_count: self.review_count,
+            tags_version: self.tags_version,
         })
     }
 
@@ -348,15 +351,11 @@ impl CardRow {
             return Ok(CardAnswer {
                 solution: None,
                 notes: String::new(),
-                tags: self.anki_tags(),
+                tags: self.tags.clone(),
                 played: String::new(),
             });
         }
-        let mut answer = content::answer_on_connection(connection, &self.content()?).await?;
-        let mut tags: BTreeSet<_> = answer.tags.into_iter().collect();
-        tags.extend(self.anki_tags());
-        answer.tags = tags.into_iter().collect();
-        Ok(answer)
+        content::answer_on_connection(connection, self.id, &self.content()?).await
     }
 }
 
@@ -478,9 +477,10 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/api/decks/{id}/export.apkg", get(export_deck))
         .route("/api/decks/{id}/import.apkg", post(anki_import::import))
-        .merge(anki_flashcards::routes())
         .route("/api/decks/{id}/next", get(next_card))
         .route("/api/study/learning-summary", get(learning_summary))
+        .merge(topics::routes())
+        .merge(anki_flashcards::routes())
         .route("/api/cards/{id}/reveal", post(reveal))
         .route("/api/cards/{id}/attempt", post(submit_attempt))
         .route("/api/cards/{id}/review", post(review))
@@ -512,6 +512,11 @@ pub fn routes() -> Router<AppState> {
         anki_flashcards::upload,
         next_card,
         learning_summary,
+        topics::suggest_tags,
+        topics::edit_tags,
+        topics::list_topics,
+        topics::save_topic,
+        topics::delete_topic,
         reveal,
         submit_attempt,
         review
@@ -521,14 +526,12 @@ pub fn routes() -> Router<AppState> {
         CreateDeck,
         RenameDeck,
         AddCards,
+        AddCardsResult,
         anki_import::AnkiUpload,
         anki_flashcards::ImportedAnkiDeck,
-        AddCardsResult,
         management::DuplicateCard,
         management::DuplicateDeck,
         management::DuplicatePage,
-        management::DuplicatePeer,
-        management::DuplicatePeer,
         management::DuplicatePeer,
         management::MoveCards,
         management::MoveCardsResult,
@@ -556,6 +559,12 @@ pub fn routes() -> Router<AppState> {
         CardDeck,
         CardKind,
         CardReviewState,
+        CardQuery,
+        topics::TagCard,
+        topics::EditCardTags,
+        topics::CardTags,
+        topics::SaveCardTopic,
+        topics::CardTopic,
         ReviewCounts,
         NextCard,
         LearningSummary,
@@ -575,10 +584,10 @@ pub struct LearningDoc;
 fn conflict(message: &str) -> ApiError {
     ApiError(StatusCode::CONFLICT, message.into())
 }
-async fn require_deck(pool: &PgPool, id: Uuid) -> ApiResult<()> {
+async fn require_deck(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> ApiResult<()> {
     if !sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM decks WHERE id=$1)")
         .bind(id)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
         .map_err(anyhow::Error::from)?
     {
@@ -707,7 +716,10 @@ async fn add_cards(
     for c in contents {
         unique.insert(card_signature(&c), c);
     }
-    Ok(Json(write_match_cards(&state.pool, id, unique).await?))
+    let tags = topics::tags(body.tags)?;
+    Ok(Json(
+        write_match_cards(&state.pool, id, unique, &tags).await?,
+    ))
 }
 
 #[utoipa::path(post,path="/api/decks/{id}/positions",params(("id"=Uuid,Path)),request_body=AddPositions,responses((status=200,body=AddPositionsResult),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
@@ -730,6 +742,7 @@ async fn add_positions(
             job_id: None,
             min_loss: None,
             player: None,
+            tags: Vec::new(),
         };
         // Use the same native-source selection and solutions as single-card imports.
         // Only expected missing/unanalysed sources become item outcomes; database or
@@ -768,7 +781,7 @@ async fn add_positions(
         });
         resolved.push(source);
     }
-    let written = write_cards(&state.pool, id, unique).await?;
+    let written = write_cards(&state.pool, id, unique, &BTreeSet::new()).await?;
     let mut added = 0;
     let mut updated = 0;
     for (item, source) in items.iter_mut().zip(resolved) {
@@ -824,8 +837,9 @@ async fn write_match_cards(
     pool: &PgPool,
     deck_id: Uuid,
     contents: BTreeMap<String, CardContent>,
+    tags: &BTreeSet<String>,
 ) -> ApiResult<AddCardsResult> {
-    let written = write_cards(pool, deck_id, contents).await?;
+    let written = write_cards(pool, deck_id, contents, tags).await?;
     let added = written.cards.values().filter(|card| card.added).count() as i64;
     Ok(AddCardsResult {
         added,
@@ -848,6 +862,7 @@ async fn write_cards(
     pool: &PgPool,
     deck_id: Uuid,
     unique: BTreeMap<String, CardContent>,
+    tags: &BTreeSet<String>,
 ) -> ApiResult<WrittenCards> {
     let mut tx = pool.begin().await.map_err(anyhow::Error::from)?;
     // Serializing deck mutations keeps the size bound valid under concurrent requests.
@@ -876,6 +891,15 @@ async fn write_cards(
                 .await
                 .map_err(anyhow::Error::from)?
         };
+        if !tags.is_empty() {
+            let mut card: topics::CardTags =
+                sqlx::query_as("SELECT id,tags,tags_version FROM learning_cards WHERE id=$1")
+                    .bind(card_id)
+                    .fetch_one(&mut *tx)
+                    .await
+                    .map_err(anyhow::Error::from)?;
+            topics::update_card(&mut tx, &mut card, tags, &BTreeSet::new()).await?;
+        }
         let result = sqlx::query(
             "INSERT INTO deck_cards(deck_id,card_id) VALUES($1,$2) ON CONFLICT DO NOTHING",
         )
@@ -1256,7 +1280,7 @@ async fn export_deck(
             .await
             .map_err(anyhow::Error::from)?;
         let c = row.content()?;
-        let a = row.answer(&mut tx).await?;
+        let a = content::answer_on_connection(&mut tx, row.id, &c).await?;
         cards.push((row.id, c, a));
     }
     let (mut prepared, permit) = tokio::task::spawn_blocking(move || {

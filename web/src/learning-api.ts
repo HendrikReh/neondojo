@@ -7,7 +7,6 @@ export type CardQuestion = Omit<
   'position' | 'source'
 > &
   Pick<Schema['CardQuestion'], 'position' | 'source'>;
-
 export type CardPage = Required<Schema['CardPage']>;
 export type NextCard = Required<Schema['NextCard']>;
 export type StudyDeck = Schema['StudyDeck'];
@@ -53,4 +52,8 @@ export function saveCardSuggestions(deckId: string, body: SaveSuggestions) {
   });
 }
 
+export type CardTopic = Schema['CardTopic'];
+export type CardQuery = Schema['CardQuery'];
+export type CardTags = Schema['CardTags'];
+export type EditCardTags = Schema['EditCardTags'];
 export type ImportedAnkiDeck = Schema['ImportedAnkiDeck'];

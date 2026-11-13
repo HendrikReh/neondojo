@@ -371,10 +371,23 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
         .validate()
         .map_err(|e| ConfigurationError::invalid("positions.definition", e.1))?;
     let f = &mut config.learning.filters;
+    choice(
+        "learning.filters.game_plan",
+        &f.game_plan,
+        &[
+            "",
+            "pure_race",
+            "racing",
+            "attacking",
+            "priming",
+            "anchoring",
+        ],
+    )?;
     for (key, value, max) in [
         ("q", &mut f.q, 200),
         ("player", &mut f.player, 240),
         ("tag", &mut f.tag, 64),
+        ("topics", &mut f.topics, 650),
         ("comment", &mut f.comment, 200),
         ("position_id", &mut f.position_id, 14),
     ] {

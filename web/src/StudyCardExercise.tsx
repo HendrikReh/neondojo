@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import ActionButton from './ActionButton';
 import AnkiCardFace from './AnkiCardFace';
+import CardTagEditor from './CardTagEditor';
 import Board from './Board';
 import CheckerPracticeBoard, {
   type CheckerDraft,
@@ -126,6 +127,8 @@ export default function StudyCardExercise({
   }
 
   const ratings = answer && (
+    <>
+      <CardTagEditor cards={[{ id: card.id, tags_version: card.tags_version ?? 0 }]} />
     <div className="study-ratings">
       {(['again', 'hard', 'good', 'easy'] as const).map((rating) => (
         <ActionButton
@@ -140,6 +143,7 @@ export default function StudyCardExercise({
         </ActionButton>
       ))}
     </div>
+    </>
   );
   if (!card.position) {
     return (

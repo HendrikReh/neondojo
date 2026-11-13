@@ -1,5 +1,10 @@
 import type { ReactNode } from 'react';
-import SearchFilterForm, { SearchFilterSelect } from './SearchFilterForm';
+import SearchFilterForm, {
+  SearchFilterInput,
+  SearchFilterSelect,
+} from './SearchFilterForm';
+import { useCardPracticeText } from './card-practice-messages';
+import { useGamePlanText } from './game-plan-messages';
 import type { CardFilters } from './card-search-api';
 import { useCardSearchText } from './card-search-messages';
 export default function CardSearchControls({
@@ -16,6 +21,15 @@ export default function CardSearchControls({
   children: ReactNode;
 }) {
   const t = useCardSearchText();
+  const practice = useCardPracticeText();
+  const gamePlan = useGamePlanText();
+  const plans = [
+    'pure_race',
+    'racing',
+    'attacking',
+    'priming',
+    'anchoring',
+  ] as const;
   return (
     <SearchFilterForm
       filters={filters}
@@ -26,6 +40,29 @@ export default function CardSearchControls({
       limitTextLength
       scope={children}
     >
+      <SearchFilterInput
+        label={practice('topicFilter')}
+        value={filters.topics ?? ''}
+        maxLength={650}
+        onChange={(topics) => onChange({ ...filters, topics })}
+      />
+      <SearchFilterSelect
+        label={gamePlan('title')}
+        value={filters.game_plan ?? ''}
+        onChange={(value) =>
+          onChange({
+            ...filters,
+            game_plan: plans.find((plan) => plan === value) ?? '',
+          })
+        }
+      >
+        <option value="">—</option>
+        {plans.map((plan) => (
+          <option value={plan} key={plan}>
+            {gamePlan(plan)}
+          </option>
+        ))}
+      </SearchFilterSelect>
       <SearchFilterSelect
         label={t('kind')}
         value={filters.kind}

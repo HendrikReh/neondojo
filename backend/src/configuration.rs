@@ -182,6 +182,10 @@ pub struct ConfigurationCardFilters {
     pub q: String,
     pub player: String,
     pub tag: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub topics: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub game_plan: String,
     pub comment: String,
     pub position_id: String,
     pub kind: String,

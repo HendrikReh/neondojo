@@ -114,6 +114,8 @@ offer and response choices and show the offered cube on response cards. Check
 the answer to see your choice, the best answer and the analysis source, or use
 Show answer for self-assessment. A checked answer reopens at the review step
 after a reload. The four FSRS buttons schedule the next review.
+**Saved topics** restores applied card filters and their deck scope. Edit **Card tags** from selected rows or after revealing a solution.
+
 
 My recurring mistakes requires a player selection and offers database, game-plan
 and minimum-loss filters. Players in the selected database remain selectable

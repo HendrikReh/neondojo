@@ -13,6 +13,7 @@ static PACKAGE_IMPORT: tokio::sync::Semaphore = tokio::sync::Semaphore::const_ne
 
 #[derive(Serialize, Deserialize)]
 pub(super) struct AnkiCard {
+    pub kind: String,
     pub prompt: String,
 }
 
@@ -288,10 +289,6 @@ fn media_type(name: &str, bytes: &[u8]) -> Result<&'static str> {
     Ok(media_type)
 }
 
-pub(super) fn import_tag(tag: &str) -> ApiResult<String> {
-    crate::annotations::normalize_tag(&tag.replace(',', " "))
-}
-
 async fn save_card(
     tx: &mut PgConnection,
     package: &str,
@@ -316,18 +313,24 @@ async fn save_card(
     ensure!(input.tags.len() <= 100, "Too many Anki tags");
     let mut tags = BTreeSet::new();
     for tag in input.tags {
-        tags.insert(import_tag(&tag).map_err(|error| anyhow::anyhow!("{}", error.1))?);
+        // A comma separates terms in the BG Tutor topic filter.
+        let tag = tag.replace(',', " ");
+        tags.extend(topics::tags(vec![tag]).map_err(|error| anyhow::anyhow!("{}", error.1))?);
     }
     let signature = format!("anki:{}:{}", input.guid, input.template_number);
-    let payload = serde_json::json!({"kind":"anki", "prompt":input.prompt, "anki_tags":tags});
+    let payload = serde_json::to_value(AnkiCard {
+        kind: "anki".into(),
+        prompt: input.prompt,
+    })?;
     let candidate = Uuid::new_v4();
     let card_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO learning_cards(id,signature,payload) VALUES($1,$2,$3)
+        "INSERT INTO learning_cards(id,signature,payload,tags) VALUES($1,$2,$3,$4)
          ON CONFLICT(signature) DO UPDATE SET payload=EXCLUDED.payload RETURNING id",
     )
     .bind(candidate)
     .bind(&signature)
     .bind(&payload)
+    .bind(tags.into_iter().collect::<Vec<_>>())
     .fetch_one(&mut *tx)
     .await?;
     let updated = sqlx::query(

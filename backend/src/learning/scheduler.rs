@@ -73,6 +73,8 @@ mod tests {
             stability: None,
             difficulty: None,
             last_review: None,
+            tags: vec![],
+            tags_version: 0,
         };
         let p = previews(&row, now).unwrap();
         assert_eq!(p.again, 60);

@@ -473,6 +473,23 @@
             }
           },
           {
+            "name": "topics",
+            "in": "query",
+            "description": "Comma-separated card tags. Each term includes its descendants.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "game_plan",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/GamePlan"
+            }
+          },
+          {
             "name": "comment",
             "in": "query",
             "required": false,
@@ -654,6 +671,90 @@
         "responses": {
           "204": {
             "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cards/tags": {
+      "get": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "suggest_tags",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "edit_tags",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditCardTags"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CardTags"
+                  }
+                }
+              }
+            }
           },
           "404": {
             "description": "",
@@ -1912,6 +2013,23 @@
             "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "topics",
+            "in": "query",
+            "description": "Comma-separated card tags. Each term includes its descendants.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "game_plan",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/GamePlan"
             }
           },
           {
@@ -7692,6 +7810,111 @@
         }
       }
     },
+    "/api/study/card-topics": {
+      "get": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "list_topics",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CardTopic"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "save_topic",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveCardTopic"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardTopic"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/study/card-topics/{id}": {
+      "delete": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "delete_topic",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/study/learning-summary": {
       "get": {
         "tags": [
@@ -8419,6 +8642,12 @@
               "null"
             ],
             "format": "uuid"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -9809,6 +10038,7 @@
           "decks",
           "tags",
           "card_tags",
+          "tags_version",
           "comment_excerpt"
         ],
         "properties": {
@@ -9832,6 +10062,10 @@
             "items": {
               "type": "string"
             }
+          },
+          "tags_version": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -9906,6 +10140,119 @@
           }
         }
       },
+      "CardQuery": {
+        "type": "object",
+        "properties": {
+          "after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "comment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "deck_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "game_plan": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GamePlan"
+              }
+            ]
+          },
+          "kind": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CardKind"
+              }
+            ]
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "page": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "One-based result page. Mutually exclusive with `after`."
+          },
+          "player": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Literal substring of the name of the player on roll."
+          },
+          "position_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Exact 14-character GNUbg checker position ID."
+          },
+          "q": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Literal substring of players, question, IDs, deck names, tags or comments."
+          },
+          "status": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CardReviewState",
+                "description": "New and due may overlap. Reviewed means at least one completed review."
+              }
+            ]
+          },
+          "tag": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "topics": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Comma-separated card tags. Each term includes its descendants."
+          },
+          "without_deck": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Include only cards without a deck membership."
+          }
+        },
+        "additionalProperties": false
+      },
       "CardQuestion": {
         "type": "object",
         "required": [
@@ -9915,7 +10262,8 @@
           "players",
           "prompt",
           "due_at",
-          "review_count"
+          "review_count",
+          "tags_version"
         ],
         "properties": {
           "due_at": {
@@ -9963,6 +10311,10 @@
                 "$ref": "#/components/schemas/CardSource"
               }
             ]
+          },
+          "tags_version": {
+            "type": "integer",
+            "format": "int64"
           },
           "version": {
             "type": "integer",
@@ -10122,6 +10474,50 @@
             "items": {
               "$ref": "#/components/schemas/CardSuggestion"
             }
+          }
+        }
+      },
+      "CardTags": {
+        "type": "object",
+        "required": [
+          "id",
+          "tags",
+          "tags_version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tags_version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "CardTopic": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "filter"
+        ],
+        "properties": {
+          "filter": {
+            "$ref": "#/components/schemas/CardQuery"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
           }
         }
       },
@@ -10399,6 +10795,9 @@
           "comment": {
             "type": "string"
           },
+          "game_plan": {
+            "type": "string"
+          },
           "kind": {
             "type": "string"
           },
@@ -10415,6 +10814,9 @@
             "type": "string"
           },
           "tag": {
+            "type": "string"
+          },
+          "topics": {
             "type": "string"
           }
         },
@@ -11749,6 +12151,35 @@
             "format": "int64"
           }
         }
+      },
+      "EditCardTags": {
+        "type": "object",
+        "required": [
+          "cards",
+          "add",
+          "remove"
+        ],
+        "properties": {
+          "add": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cards": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TagCard"
+            }
+          },
+          "remove": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
       },
       "EngineCheckRequest": {
         "type": "object",
@@ -16367,6 +16798,22 @@
           }
         }
       },
+      "SaveCardTopic": {
+        "type": "object",
+        "required": [
+          "name",
+          "filter"
+        ],
+        "properties": {
+          "filter": {
+            "$ref": "#/components/schemas/CardQuery"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "SaveConfigurationProfile": {
         "type": "object",
         "required": [
@@ -17034,6 +17481,24 @@
           "job_id": {
             "type": "string",
             "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TagCard": {
+        "type": "object",
+        "required": [
+          "id",
+          "tags_version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tags_version": {
+            "type": "integer",
+            "format": "int64"
           }
         },
         "additionalProperties": false

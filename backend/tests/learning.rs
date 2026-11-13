@@ -841,6 +841,38 @@ async fn anki_exports_update_monotonically_for_annotations_and_locales(pool: PgP
         200
     );
     let before = export_bytes(app.clone(), id, "de").await;
+    let (status, target) = call(
+        app.clone(),
+        "POST",
+        "/api/decks",
+        json!({"name":"Portable copy"}),
+    )
+    .await;
+    assert_eq!(status, 201);
+    let target_id = target["id"].as_str().unwrap();
+    let boundary = "bg-tutor-package-test";
+    let mut multipart = format!("--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"study.apkg\"\r\nContent-Type: application/octet-stream\r\n\r\n").into_bytes();
+    multipart.extend_from_slice(&before);
+    multipart.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+    let uploaded = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/decks/{target_id}/import.apkg"))
+                .header(
+                    "content-type",
+                    format!("multipart/form-data; boundary={boundary}"),
+                )
+                .body(Body::from(multipart))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(uploaded.status(), 200);
+    let imported: Value =
+        serde_json::from_slice(&uploaded.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(imported, json!({"added":0,"updated":1,"total":1}));
     let first = package_note(&before);
     let (a, b) = tokio::join!(
         export_bytes(app.clone(), id, "de"),
@@ -1069,4 +1101,59 @@ async fn imported_anki_cards_can_be_revealed_and_rated_without_a_board(pool: PgP
     .await;
     assert_eq!(status, 200);
     assert_eq!(result["review_count"], 1);
+}
+
+#[sqlx::test(migrations = false)]
+async fn migration_preserves_legacy_anki_tags_and_existing_card_tags(pool: PgPool) {
+    let migrations = sqlx::migrate!("./migrations");
+    let previous = sqlx::migrate::Migrator {
+        migrations: std::borrow::Cow::Owned(
+            migrations
+                .iter()
+                .filter(|m| m.version < 60)
+                .cloned()
+                .collect(),
+        ),
+        ..sqlx::migrate::Migrator::DEFAULT
+    };
+    previous.run(&pool).await.unwrap();
+    let anki = Uuid::new_v4();
+    let native = Uuid::new_v4();
+    for (id, payload, tags) in [
+        (
+            anki,
+            json!({"kind":"anki","prompt":"Take Point","anki_tags":["cube", "Anki::take", "cube"]}),
+            vec!["local", "cube"],
+        ),
+        (
+            native,
+            json!({"kind":"checker","anki_tags":["imported", 42, null]}),
+            vec![],
+        ),
+    ] {
+        sqlx::query("INSERT INTO learning_cards(id,signature,payload,tags) VALUES($1,$2,$3,$4)")
+            .bind(id)
+            .bind(id.to_string())
+            .bind(payload)
+            .bind(tags)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+
+    migrations.run(&pool).await.unwrap();
+    for (id, expected) in [
+        (anki, vec!["Anki::take", "cube", "local"]),
+        (native, vec!["imported"]),
+    ] {
+        let (tags, version, payload): (Vec<String>, i64, Value) =
+            sqlx::query_as("SELECT tags,tags_version,payload FROM learning_cards WHERE id=$1")
+                .bind(id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(tags, expected);
+        assert_eq!(version, 1);
+        assert!(payload["anki_tags"].is_array());
+    }
 }

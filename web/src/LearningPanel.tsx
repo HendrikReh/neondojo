@@ -23,6 +23,9 @@ import {
   isCollectionScope,
 } from './card-search-api';
 import { useCardSearchText } from './card-search-messages';
+import { useCardPracticeText } from './card-practice-messages';
+import CardTagEditor from './CardTagEditor';
+import CardTopics from './CardTopics';
 import { usePositionText } from './position-browser-messages';
 import './learning-workspace.css';
 import DeckManagementDialog from './DeckManagementDialog';
@@ -149,6 +152,8 @@ export function AddCardsPanel({
 }) {
   const profile = useOptionalConfiguration();
   const t = useLearningText();
+  const practiceT = useCardPracticeText();
+  const [newTags, setNewTags] = useState('');
   const { formatError, t: baseT } = useI18n();
   const { decks, error: deckError, addDeck, ready } = useDecks(revision);
   const [deckId, setDeckId] = useProfileValue<string>(
@@ -245,7 +250,13 @@ export function AddCardsPanel({
       }>(`/decks/${deckId}/cards`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          ...body,
+          tags: newTags
+            .split(',')
+            .map((tag) => tag.trim())
+            .filter(Boolean),
+        }),
       });
       if (version === generation.current) {
         setProcessed(result.added + result.updated);
@@ -342,6 +353,14 @@ export function AddCardsPanel({
           </ActionButton>
         </div>
       )}
+      <label>
+        {practiceT('topicFilter')}{' '}
+        <input
+          value={newTags}
+          maxLength={650}
+          onChange={(event) => setNewTags(event.target.value)}
+        />
+      </label>
       {allowBatch && (
         <CardSuggestionsPanel
           key={JSON.stringify([
@@ -836,6 +855,8 @@ export default function LearningWorkspace({
   const workspaceError = error || cardSearch.error || deckError;
   const actionDisabled = !selectedCards.size || cardSearch.loading;
   const canPickTarget = decks.some((deck) => deck.id !== sourceDeck?.id);
+  const selectedItem =
+    selectedItems.length === 1 ? selectedItems[0] : undefined;
   function openCardAction(mode: CardBatchAction['mode']) {
     if (actionDisabled) return;
     const ids = [...selectedCards];
@@ -1074,6 +1095,16 @@ export default function LearningWorkspace({
             {deckSelector}
           </CardSearchControls>
           {deckPanel}
+          <CardTopics
+            filters={filters}
+            deck={deckId}
+            onSelect={(deck, nextFilters) => {
+              chooseDeck(deck);
+              setDraftFilters(nextFilters);
+              setFilters(nextFilters);
+              setSearchRun((value) => value + 1);
+            }}
+          />
           <LearningCardBrowser
             key={listKey}
             visible={visible}
@@ -1086,7 +1117,20 @@ export default function LearningWorkspace({
               toggle: toggleCards,
               disabled: cardSearch.loading,
             }}
-            actions={cardActions}
+            actions={
+              <>
+                {cardActions}
+                <CardTagEditor
+                  key={[...selectedCards].sort().join(',')}
+                  cards={selectedItems.map((item) => ({
+                    id: item.id,
+                    tags_version: item.browse.tags_version ?? 0,
+                  }))}
+                  tags={selectedItem?.browse.card_tags}
+                  onSaved={onChanged}
+                />
+              </>
+            }
             theme={theme}
             page={cardSearch.page}
             onPageChange={cardSearch.setPage}

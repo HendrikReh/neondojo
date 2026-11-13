@@ -180,6 +180,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cards/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["suggest_tags"];
+        put: operations["edit_tags"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cards/{id}/anki/{side}": {
         parameters: {
             query?: never;
@@ -1700,6 +1716,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/study/card-topics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_topics"];
+        put?: never;
+        post: operations["save_topic"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/study/card-topics/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["delete_topic"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/study/learning-summary": {
         parameters: {
             query?: never;
@@ -1917,6 +1965,7 @@ export interface components {
             player?: number | null;
             /** Format: uuid */
             position_id?: string | null;
+            tags?: string[];
         };
         AddCardsResult: {
             /** Format: int64 */
@@ -2310,6 +2359,8 @@ export interface components {
             comment_excerpt: string;
             decks: components["schemas"]["CardDeck"][];
             tags: string[];
+            /** Format: int64 */
+            tags_version: number;
         };
         CardBrowseItem: components["schemas"]["CardQuestion"] & {
             /** @description Library metadata only; engine answers remain behind explicit reveal. */
@@ -2332,6 +2383,34 @@ export interface components {
              */
             total: number;
         };
+        CardQuery: {
+            /** Format: uuid */
+            after?: string | null;
+            comment?: string | null;
+            /** Format: uuid */
+            deck_id?: string | null;
+            game_plan?: null | components["schemas"]["GamePlan"];
+            kind?: null | components["schemas"]["CardKind"];
+            /** Format: int64 */
+            limit?: number | null;
+            /**
+             * Format: int64
+             * @description One-based result page. Mutually exclusive with `after`.
+             */
+            page?: number | null;
+            /** @description Literal substring of the name of the player on roll. */
+            player?: string | null;
+            /** @description Exact 14-character GNUbg checker position ID. */
+            position_id?: string | null;
+            /** @description Literal substring of players, question, IDs, deck names, tags or comments. */
+            q?: string | null;
+            status?: null | components["schemas"]["CardReviewState"];
+            tag?: string | null;
+            /** @description Comma-separated card tags. Each term includes its descendants. */
+            topics?: string | null;
+            /** @description Include only cards without a deck membership. */
+            without_deck?: boolean | null;
+        };
         CardQuestion: {
             /** Format: date-time */
             due_at: string;
@@ -2346,6 +2425,8 @@ export interface components {
             /** Format: int32 */
             review_count: number;
             source?: null | components["schemas"]["CardSource"];
+            /** Format: int64 */
+            tags_version: number;
             /** Format: int64 */
             version: number;
         };
@@ -2391,6 +2472,19 @@ export interface components {
             /** @description False when the history exceeds the recurring-mistake query bounds. */
             history_available: boolean;
             items: components["schemas"]["CardSuggestion"][];
+        };
+        CardTags: {
+            /** Format: uuid */
+            id: string;
+            tags: string[];
+            /** Format: int64 */
+            tags_version: number;
+        };
+        CardTopic: {
+            filter: components["schemas"]["CardQuery"];
+            /** Format: uuid */
+            id: string;
+            name: string;
         };
         CheckerPracticeAnswer: {
             best: string;
@@ -2468,12 +2562,14 @@ export interface components {
         ConfigurationBookProvider: "Off" | "Automatic" | "Backgammondb" | "Xg";
         ConfigurationCardFilters: {
             comment: string;
+            game_plan?: string;
             kind: string;
             player: string;
             position_id: string;
             q: string;
             status: string;
             tag: string;
+            topics?: string;
         };
         ConfigurationDifference: {
             current: unknown;
@@ -2871,6 +2967,11 @@ export interface components {
             review_count: number;
             /** Format: int64 */
             version: number;
+        };
+        EditCardTags: {
+            add: string[];
+            cards: components["schemas"]["TagCard"][];
+            remove: string[];
         };
         EngineCheckRequest: {
             path: string;
@@ -4223,6 +4324,10 @@ export interface components {
             /** Format: int32 */
             threads: number;
         };
+        SaveCardTopic: {
+            filter: components["schemas"]["CardQuery"];
+            name: string;
+        };
         SaveConfigurationProfile: {
             configuration: components["schemas"]["ProfileConfiguration"];
             /** Format: int64 */
@@ -4435,6 +4540,12 @@ export interface components {
             game_no: number;
             /** Format: uuid */
             job_id: string;
+        };
+        TagCard: {
+            /** Format: uuid */
+            id: string;
+            /** Format: int64 */
+            tags_version: number;
         };
         UpdateConfiguration: {
             configuration: components["schemas"]["ProfileConfiguration"];
@@ -4778,6 +4889,9 @@ export interface operations {
                 /** @description Literal substring of the name of the player on roll. */
                 player?: string;
                 tag?: string;
+                /** @description Comma-separated card tags. Each term includes its descendants. */
+                topics?: string;
+                game_plan?: components["schemas"]["GamePlan"];
                 comment?: string;
                 /** @description Exact 14-character GNUbg checker position ID. */
                 position_id?: string;
@@ -4903,6 +5017,72 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    suggest_tags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+        };
+    };
+    edit_tags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EditCardTags"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardTags"][];
+                };
             };
             404: {
                 headers: {
@@ -5759,6 +5939,9 @@ export interface operations {
                 /** @description Literal substring of the name of the player on roll. */
                 player?: string;
                 tag?: string;
+                /** @description Comma-separated card tags. Each term includes its descendants. */
+                topics?: string;
+                game_plan?: components["schemas"]["GamePlan"];
                 comment?: string;
                 /** @description Exact 14-character GNUbg checker position ID. */
                 position_id?: string;
@@ -9533,6 +9716,91 @@ export interface operations {
                 };
             };
             504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_topics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardTopic"][];
+                };
+            };
+        };
+    };
+    save_topic: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveCardTopic"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardTopic"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_topic: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

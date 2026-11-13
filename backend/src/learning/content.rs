@@ -358,15 +358,14 @@ pub(crate) fn decode_board(position_id: &str, match_id: &str) -> anyhow::Result<
 
 pub(super) async fn answer_on_connection(
     connection: &mut sqlx::PgConnection,
+    id: Uuid,
     c: &CardContent,
 ) -> anyhow::Result<CardAnswer> {
-    // One statement reads the match and position annotations from the same fresh snapshot.
-    // Export callers use their existing transaction connection while holding shared-card locks.
     let annotations: Vec<(Vec<String>, String)> = sqlx::query_as(
-        "SELECT tags,comment FROM annotations WHERE match_uuid=$1 OR match_uuid=(SELECT match_uuid FROM positions WHERE id=$2) OR position_uuid=$2 ORDER BY target_kind",
+        &format!("(SELECT a.tags,a.comment FROM learning_cards c JOIN annotations a ON {} WHERE c.id=$1 ORDER BY a.target_kind,a.id)
+                  UNION ALL SELECT tags,'' FROM learning_cards WHERE id=$1", super::search::NOTE_SCOPE),
     )
-    .bind(c.source.match_id)
-    .bind(c.source.position_id)
+    .bind(id)
     .fetch_all(connection)
     .await?;
     let mut tags = BTreeSet::new();
