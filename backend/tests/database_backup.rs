@@ -283,3 +283,86 @@ async fn invalid_rows_roll_back_the_target_after_the_restore_starts(pool: PgPool
         2
     );
 }
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn restores_anki_review_history(pool: PgPool) {
+    let app = router(AppState::new(pool.clone(), Engine::new("gnubg".into())));
+    let card = uuid::Uuid::new_v4();
+    let session = uuid::Uuid::new_v4();
+    let request = uuid::Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO learning_cards(id,signature,payload,review_count,anki_review_count)
+         VALUES($1,'anki-backup-card','{}',1,1)",
+    )
+    .bind(card)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO review_sessions(id,card_id,card_version,expires_at) VALUES($1,$2,0,now())",
+    )
+    .bind(session)
+    .bind(card)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO card_reviews(card_id,request_id,session_id,rating,result,reviewed_at)
+         VALUES($1,$2,$3,'good','{}',now())",
+    )
+    .bind(card)
+    .bind(request)
+    .bind(session)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO anki_received_reviews VALUES($1,100,'hard')")
+        .bind(card)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO anki_review_exports VALUES($1,$2,200)")
+        .bind(card)
+        .bind(request)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let response = app
+        .clone()
+        .oneshot(Request::get(BACKUP).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let archive = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    for table in ["anki_received_reviews", "anki_review_exports"] {
+        sqlx::query(&format!("DELETE FROM {table}"))
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    sqlx::query("UPDATE learning_cards SET anki_review_count=0 WHERE id=$1")
+        .bind(card)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let response = app.oneshot(restore(archive, true)).await.unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    let restored: (i32, i32, i64, String, i64, String) = sqlx::query_as(
+        "SELECT c.review_count,c.anki_review_count,received.review_id,received.rating,
+                sent.review_id,r.rating
+         FROM learning_cards c
+         JOIN anki_received_reviews received ON received.card_id=c.id
+         JOIN anki_review_exports sent ON sent.card_id=c.id
+         JOIN card_reviews r ON r.card_id=sent.card_id AND r.request_id=sent.request_id
+         WHERE c.id=$1 AND sent.request_id=$2",
+    )
+    .bind(card)
+    .bind(request)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(restored, (1, 1, 100, "hard".into(), 200, "good".into()));
+}

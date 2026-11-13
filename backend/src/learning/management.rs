@@ -408,7 +408,7 @@ pub(super) async fn duplicates(
             card: DuplicatePeer,
         }
         let matching: Vec<Peer> = sqlx::query_as(&format!(
-            "{IDENTITIES} SELECT i.identity,c.id,c.version,c.review_count
+            "{IDENTITIES} SELECT i.identity,c.id,c.version,c.review_count+c.anki_review_count AS review_count
              FROM identities i JOIN learning_cards c ON c.id=i.id
              WHERE i.identity=ANY($1) ORDER BY c.id"
         ))

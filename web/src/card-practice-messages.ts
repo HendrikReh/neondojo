@@ -426,6 +426,30 @@ const rows = {
     'AnkiConnect nie potwierdził importu na czas. Sprawdź talię w Anki przed ponowną próbą.',
     'AnkiConnect non ha confermato l’importazione in tempo. Controlla il mazzo in Anki prima di riprovare.',
   ],
+  syncAnkiReviews: [
+    'Sync Anki reviews',
+    'Lernhistorie mit Anki abgleichen',
+    'Sincronizar repasos con Anki',
+    'Synchroniser les révisions avec Anki',
+    'Synchronizuj powtórki z Anki',
+    'Sincronizza i ripassi con Anki',
+  ],
+  syncingAnkiReviews: [
+    'Synchronizing review history…',
+    'Lernhistorie wird abgeglichen…',
+    'Sincronizando el historial de repasos…',
+    'Synchronisation de l’historique des révisions…',
+    'Synchronizowanie historii powtórek…',
+    'Sincronizzazione della cronologia dei ripassi…',
+  ],
+  ankiReviewsSynced: [
+    '“{deck}” · Anki profile {profile} · {received} reviews received · {sent} sent · {matched} cards matched · {unmatched} unmatched',
+    '„{deck}“ · Anki-Profil {profile} · {received} Wiederholungen übernommen · {sent} gesendet · {matched} Karten zugeordnet · {unmatched} ohne Zuordnung',
+    '«{deck}» · Perfil de Anki {profile} · {received} repasos recibidos · {sent} enviados · {matched} tarjetas vinculadas · {unmatched} sin vincular',
+    '« {deck} » · Profil Anki {profile} · {received} révisions reçues · {sent} envoyées · {matched} cartes associées · {unmatched} sans correspondance',
+    '„{deck}” · Profil Anki {profile} · Odebrano {received} powtórek · Wysłano {sent} · Dopasowano {matched} kart · Bez dopasowania {unmatched}',
+    '«{deck}» · Profilo Anki {profile} · {received} ripassi ricevuti · {sent} inviati · {matched} schede abbinate · {unmatched} senza corrispondenza',
+  ],
 } as const;
 
 const languages: readonly Locale[] = ['en', 'de', 'es', 'fr', 'pl', 'it'];

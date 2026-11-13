@@ -6,10 +6,27 @@ use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
 
+static ANKI_CONNECT_TESTS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 static EXPORT_TESTS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[sqlx::test(migrations = "./migrations")]
+async fn anki_review_sync_rejects_missing_decks_without_contacting_anki(pool: PgPool) {
+    let _anki_guard = ANKI_CONNECT_TESTS.lock().await;
+    let app = api::router(api::AppState::new(pool, Engine::new("unused".into())));
+    let path = format!("/api/decks/{}/sync-anki-reviews", Uuid::new_v4());
+    let (status, body) = call(app.clone(), "POST", &path, json!({})).await;
+    assert_eq!((status, body), (404, json!({"error":"Not found"})));
+    let (_, deck) = call(app.clone(), "POST", "/api/decks", json!({"name":"Empty"})).await;
+    let path = format!(
+        "/api/decks/{}/sync-anki-reviews",
+        deck["id"].as_str().unwrap()
+    );
+    assert_eq!(call(app, "POST", &path, json!({})).await.0, 422);
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn send_to_anki_validates_the_selected_deck_before_connecting(pool: PgPool) {
+    let _anki_guard = ANKI_CONNECT_TESTS.lock().await;
     let app = api::router(api::AppState::new(pool, Engine::new("unused".into())));
     let path = format!("/api/decks/{}/send-to-anki", Uuid::new_v4());
     assert_eq!(

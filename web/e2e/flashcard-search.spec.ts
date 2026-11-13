@@ -265,6 +265,32 @@ test('Send to Anki targets the selected deck and reports the import outcome', as
   expect(attempts).toBe(2);
 });
 
+test('Sync Anki reviews reports both directions for the selected deck', async ({
+  page,
+}) => {
+  const { study } = await setup(page);
+  const sync = study.getByRole('button', { name: 'Sync Anki reviews' });
+  await expect(sync).toHaveCount(0);
+  await study.getByLabel('Choose deck', { exact: true }).selectOption(deckB);
+  await page.route(`**/api/decks/${deckB}/sync-anki-reviews`, async (route) => {
+    expect(route.request().method()).toBe('POST');
+    expect(route.request().postDataJSON()).toEqual({});
+    await route.fulfill({
+      json: {
+        profile: 'Test profile',
+        matched_cards: 1,
+        unmatched_cards: 0,
+        received_reviews: 2,
+        sent_reviews: 1,
+      },
+    });
+  });
+  await sync.click();
+  await expect(study.getByText(/Anki profile Test profile/)).toContainText(
+    '2 reviews received · 1 sent · 1 cards matched · 0 unmatched',
+  );
+});
+
 test('Move stays visible when the search has no source or the source has no destination', async ({
   page,
 }) => {

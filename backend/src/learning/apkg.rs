@@ -12,6 +12,7 @@ use std::{
 use zip::write::SimpleFileOptions;
 
 const MODEL_ID: i64 = 1731000001;
+pub(super) const MODEL_NAME: &str = "BG Tutor Decision v1";
 const SCHEMA: &str = r#"
 CREATE TABLE col(id integer primary key,crt integer not null,mod integer not null,scm integer not null,ver integer not null,dty integer not null,usn integer not null,ls integer not null,conf text not null,models text not null,decks text not null,dconf text not null,tags text not null);
 CREATE TABLE notes(id integer primary key,guid text not null,mid integer not null,mod integer not null,usn integer not null,tags text not null,flds text not null,sfld integer not null,csum integer not null,flags integer not null,data text not null);
@@ -55,7 +56,7 @@ pub(super) fn prepare(
             let guid = URL_SAFE_NO_PAD.encode(&digest[..12]);
             let filename = format!("bgtutor-{guid}.svg");
             let fields = [
-                html(&signature),
+                identity_field(&signature),
                 question(&content, &filename, &labels)?,
                 answer_html(&content, &answer, &labels),
             ]
@@ -103,10 +104,10 @@ pub(super) fn build(deck_id: Uuid, name: &str, cards: &[ExportCard]) -> anyhow::
     let mut conn = Connection::open(&path)?;
     conn.execute_batch(SCHEMA)?;
     let tx = conn.transaction()?;
-    let model = json!({"id":MODEL_ID,"name":"BG Tutor Decision v1","type":0,"mod":timestamp,"usn":-1,"sortf":0,"did":did,"tags":[],"vers":[],"latexPre":"","latexPost":"","css":".card{font-family:Arial,sans-serif;font-size:18px;text-align:center;color:#182a24;background:#f8faf7}.board{width:100%;max-width:680px}table{margin:1em auto;border-collapse:collapse}th,td{padding:.35em .75em;border-bottom:1px solid #ccd3cd}.notes{white-space:pre-wrap;text-align:left;max-width:680px;margin:1em auto}.context{font-size:.85em;color:#52635b}.best{font-size:1.2em;font-weight:bold}","flds":[{"name":"Identity","ord":0,"sticky":false,"rtl":false,"font":"Arial","size":12,"media":[]},{"name":"Question","ord":1,"sticky":false,"rtl":false,"font":"Arial","size":20,"media":[]},{"name":"Answer","ord":2,"sticky":false,"rtl":false,"font":"Arial","size":20,"media":[]}],"tmpls":[{"name":"Decision","ord":0,"qfmt":"{{Question}}","afmt":"{{FrontSide}}<hr id=answer>{{Answer}}","bqfmt":"","bafmt":"","did":null}],"req":[[0,"all",[1]]]});
+    let model = json!({"id":MODEL_ID,"name":MODEL_NAME,"type":0,"mod":timestamp,"usn":-1,"sortf":0,"did":did,"tags":[],"vers":[],"latexPre":"","latexPost":"","css":".card{font-family:Arial,sans-serif;font-size:18px;text-align:center;color:#182a24;background:#f8faf7}.board{width:100%;max-width:680px}table{margin:1em auto;border-collapse:collapse}th,td{padding:.35em .75em;border-bottom:1px solid #ccd3cd}.notes{white-space:pre-wrap;text-align:left;max-width:680px;margin:1em auto}.context{font-size:.85em;color:#52635b}.best{font-size:1.2em;font-weight:bold}","flds":[{"name":"Identity","ord":0,"sticky":false,"rtl":false,"font":"Arial","size":12,"media":[]},{"name":"Question","ord":1,"sticky":false,"rtl":false,"font":"Arial","size":20,"media":[]},{"name":"Answer","ord":2,"sticky":false,"rtl":false,"font":"Arial","size":20,"media":[]}],"tmpls":[{"name":"Decision","ord":0,"qfmt":"{{Question}}","afmt":"{{FrontSide}}<hr id=answer>{{Answer}}","bqfmt":"","bafmt":"","did":null}],"req":[[0,"all",[1]]]});
     let mut models = serde_json::Map::new();
     models.insert(MODEL_ID.to_string(), model);
-    let deck = json!({"id":did,"name":name,"desc":"BG Tutor decisions. Anki and BG Tutor maintain independent review histories.","mod":timestamp,"usn":-1,"dyn":0,"conf":1,"collapsed":false,"extendNew":0,"extendRev":50,"lrnToday":[0,0],"newToday":[0,0],"revToday":[0,0],"timeToday":[0,0]});
+    let deck = json!({"id":did,"name":name,"desc":"BG Tutor decisions.","mod":timestamp,"usn":-1,"dyn":0,"conf":1,"collapsed":false,"extendNew":0,"extendRev":50,"lrnToday":[0,0],"newToday":[0,0],"revToday":[0,0],"timeToday":[0,0]});
     let mut decks = serde_json::Map::new();
     decks.insert(did.to_string(), deck);
     let dconf = json!({"1":{"id":1,"name":"Default","mod":0,"usn":0,"maxTaken":60,"autoplay":true,"timer":0,"replayq":true,"new":{"delays":[1,10],"ints":[1,4,7],"initialFactor":2500,"order":1,"perDay":20,"bury":true,"separate":true},"rev":{"perDay":200,"ease4":1.3,"fuzz":0.05,"ivlFct":1.0,"maxIvl":36500,"minSpace":1,"bury":true},"lapse":{"delays":[10],"mult":0,"minInt":1,"leechFails":8,"leechAction":0}}});
@@ -169,6 +170,10 @@ fn numeric_id(input: &[u8], namespace: &[u8]) -> i64 {
     let digest = hash.finalize();
     (u64::from_be_bytes(digest[..8].try_into().unwrap()) & ((1 << 53) - 1)) as i64 + 1
 }
+pub(super) fn identity_field(signature: &str) -> String {
+    html(signature)
+}
+
 fn html(input: &str) -> String {
     let mut output = String::new();
     for c in input.chars() {

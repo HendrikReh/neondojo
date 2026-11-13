@@ -1,6 +1,8 @@
 //! User-initiated transfer to the local AnkiConnect instance.
 use super::*;
 use anyhow::{Context, ensure};
+use serde::de::DeserializeOwned;
+use serde_json::{Value, json};
 use std::{
     net::{Ipv4Addr, SocketAddr},
     path::Path as FilePath,
@@ -13,13 +15,89 @@ use tokio::{
 
 const ADDRESS: SocketAddr = SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::LOCALHOST), 8765);
 const TIMEOUT: Duration = Duration::from_secs(20);
-const MAX_RESPONSE_BYTES: usize = 32 * 1024;
+const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
 static TRANSFER: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
 
-#[derive(Deserialize)]
-struct Reply {
-    result: Option<bool>,
-    error: Option<String>,
+pub(super) fn reserve() -> ApiResult<tokio::sync::SemaphorePermit<'static>> {
+    TRANSFER.try_acquire().map_err(|_| {
+        ApiError(
+            StatusCode::TOO_MANY_REQUESTS,
+            "An Anki operation is already in progress".into(),
+        )
+    })
+}
+
+pub(super) struct Client {
+    key: Option<String>,
+}
+
+impl Client {
+    pub(super) fn local() -> Self {
+        Self {
+            key: std::env::var("BGTUTOR_ANKI_CONNECT_KEY")
+                .ok()
+                .filter(|key| !key.is_empty()),
+        }
+    }
+
+    pub(super) async fn rpc<T: DeserializeOwned>(
+        &self,
+        method: &str,
+        params: Value,
+    ) -> ApiResult<T> {
+        let body = json!({"jsonrpc":"2.0", "id":1, "method":method, "params":params});
+        let reply = self.request("/api/v1", &body, self.key.as_deref()).await?;
+        if reply["id"] != 1 {
+            return Err(upstream_error(
+                "AnkiConnect must support its versioned API to synchronize reviews",
+            ));
+        }
+        if let Some(error) = reply["error"]["message"].as_str() {
+            return Err(self.error(error));
+        }
+        serde_json::from_value(reply["result"].clone())
+            .map_err(|_| upstream_error("AnkiConnect returned unexpected data"))
+    }
+
+    pub(super) fn error(&self, error: &str) -> ApiError {
+        upstream_error(sanitize(error, self.key.as_deref()))
+    }
+
+    async fn request(&self, path: &str, body: &Value, bearer: Option<&str>) -> ApiResult<Value> {
+        let stream = tokio::time::timeout(Duration::from_secs(2), TcpStream::connect(ADDRESS))
+            .await
+            .ok()
+            .and_then(Result::ok)
+            .ok_or_else(|| {
+                ApiError(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "Open Anki Desktop with AnkiConnect listening on port 8765".into(),
+                )
+            })?;
+        match tokio::time::timeout(TIMEOUT, exchange(stream, path, body, bearer)).await {
+            Ok(result) => result.map_err(|error| self.error(&error.to_string())),
+            Err(_) => Err(ApiError(
+                StatusCode::GATEWAY_TIMEOUT,
+                "AnkiConnect did not confirm the operation in time".into(),
+            )),
+        }
+    }
+}
+
+pub(super) fn upstream_error(message: impl Into<String>) -> ApiError {
+    ApiError(StatusCode::BAD_GATEWAY, message.into())
+}
+
+fn sanitize(error: &str, key: Option<&str>) -> String {
+    let error = match key.filter(|key| !key.is_empty()) {
+        Some(key) => error.replace(key, "[redacted]"),
+        None => error.to_owned(),
+    };
+    error
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(300)
+        .collect()
 }
 
 #[utoipa::path(post,path="/api/decks/{id}/send-to-anki",params(("id"=Uuid,Path)),request_body=ExportQuery,responses((status=204),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=429,body=ErrorBody),(status=502,body=ErrorBody),(status=503,body=ErrorBody),(status=504,body=ErrorBody)),tag="Learning")]
@@ -28,65 +106,66 @@ pub(super) async fn send(
     Path(id): Path<Uuid>,
     LearningJson(query): LearningJson<ExportQuery>,
 ) -> ApiResult<StatusCode> {
-    let _transfer = TRANSFER.try_acquire().map_err(|_| {
-        ApiError(
-            StatusCode::TOO_MANY_REQUESTS,
-            "An Anki transfer is already in progress".into(),
-        )
-    })?;
+    let _transfer = reserve()?;
     let bytes = build_deck_package(&state, id, query).await?;
     let directory = tempfile::tempdir().map_err(anyhow::Error::from)?;
     let package = directory.path().join("bg-tutor.apkg");
     tokio::fs::write(&package, bytes)
         .await
         .map_err(anyhow::Error::from)?;
-    let stream = tokio::time::timeout(Duration::from_secs(2), TcpStream::connect(ADDRESS))
-        .await
-        .ok()
-        .and_then(Result::ok)
-        .ok_or_else(|| {
-            ApiError(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Open Anki Desktop with AnkiConnect listening on port 8765".into(),
-            )
-        })?;
-    let key = std::env::var("BGTUTOR_ANKI_CONNECT_KEY").ok();
-    let outcome =
-        tokio::time::timeout(TIMEOUT, import_package(stream, &package, key.as_deref())).await;
-    match outcome {
-        Ok(Ok(())) => Ok(StatusCode::NO_CONTENT),
-        Ok(Err(error)) => Err(ApiError(StatusCode::BAD_GATEWAY, error.to_string())),
-        Err(_) => Err(ApiError(
-            StatusCode::GATEWAY_TIMEOUT,
-            "AnkiConnect did not confirm the import. Check the deck in Anki before retrying."
-                .into(),
-        )),
-    }
+    let client = Client::local();
+    let body = package_request(&package, client.key.as_deref())?;
+    let reply = client.request("/", &body, None).await?;
+    confirm_import(&reply, client.key.as_deref())
+        .map_err(|error| upstream_error(error.to_string()))?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
-async fn import_package(
-    mut stream: TcpStream,
-    path: &FilePath,
-    key: Option<&str>,
-) -> anyhow::Result<()> {
+fn package_request(path: &FilePath, key: Option<&str>) -> anyhow::Result<Value> {
     let path = path
         .to_str()
         .context("Anki package path is not valid UTF-8")?;
-    let mut body =
-        serde_json::json!({"action":"importPackage", "version":6, "params":{"path":path}});
-    if let Some(key) = key.filter(|key| !key.is_empty()) {
-        body["key"] = serde_json::json!(key);
+    let mut body = json!({"action":"importPackage", "version":6, "params":{"path":path}});
+    if let Some(key) = key {
+        body["key"] = json!(key);
     }
-    let body = serde_json::to_vec(&body)?;
-    // AnkiConnect returns a content-length-delimited response and closes the socket.
-    let header = format!(
-        "POST / HTTP/1.1\r\nHost: {ADDRESS}\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+    Ok(body)
+}
+
+fn confirm_import(reply: &Value, key: Option<&str>) -> anyhow::Result<()> {
+    if let Some(error) = reply["error"].as_str() {
+        anyhow::bail!("AnkiConnect: {}", sanitize(error, key));
+    }
+    ensure!(
+        reply["result"] == true,
+        "AnkiConnect did not import the package"
+    );
+    Ok(())
+}
+
+async fn exchange(
+    mut stream: TcpStream,
+    path: &str,
+    body: &Value,
+    bearer: Option<&str>,
+) -> anyhow::Result<Value> {
+    let body = serde_json::to_vec(body)?;
+    let mut header = format!(
+        "POST {path} HTTP/1.1\r\nHost: {ADDRESS}\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n",
         body.len()
     );
+    if let Some(key) = bearer {
+        ensure!(
+            !key.chars().any(char::is_control),
+            "Invalid AnkiConnect API key"
+        );
+        header.push_str(&format!("Authorization: Bearer {key}\r\n"));
+    }
+    header.push_str("\r\n");
     stream.write_all(header.as_bytes()).await?;
     stream.write_all(&body).await?;
     let mut response = Vec::new();
-    let mut chunk = [0_u8; 4096];
+    let mut chunk = [0_u8; 8192];
     loop {
         let count = stream.read(&mut chunk).await?;
         ensure!(count > 0, "AnkiConnect returned an incomplete response");
@@ -96,28 +175,8 @@ async fn import_package(
             "AnkiConnect returned an oversized response"
         );
         if let Some(body) = response_body(&response)? {
-            let reply: Reply = serde_json::from_slice(body)
-                .context("AnkiConnect returned an unexpected response")?;
-            if let Some(error) = reply.error {
-                let error = if let Some(key) = key.filter(|key| !key.is_empty()) {
-                    error.replace(key, "[redacted]")
-                } else {
-                    error
-                };
-                anyhow::bail!(
-                    "AnkiConnect: {}",
-                    error
-                        .chars()
-                        .filter(|c| !c.is_control())
-                        .take(300)
-                        .collect::<String>()
-                );
-            }
-            ensure!(
-                reply.result == Some(true),
-                "AnkiConnect did not import the package"
-            );
-            return Ok(());
+            return serde_json::from_slice(body)
+                .context("AnkiConnect returned an unexpected response");
         }
     }
 }
@@ -195,12 +254,9 @@ mod tests {
                 stream.get_mut().write_all(reply.as_bytes()).await.unwrap();
             });
             let stream = TcpStream::connect(address).await.unwrap();
-            let result = import_package(
-                stream,
-                FilePath::new("/tmp/bg tutor.apkg"),
-                Some("test-key"),
-            )
-            .await;
+            let key = Some("test-key");
+            let body = package_request(FilePath::new("/tmp/bg tutor.apkg"), key).unwrap();
+            let result = confirm_import(&exchange(stream, "/", &body, None).await.unwrap(), key);
             assert_eq!(result.is_ok(), accepted, "{result:?}");
             server.await.unwrap();
         }

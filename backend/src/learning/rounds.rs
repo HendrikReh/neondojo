@@ -178,6 +178,7 @@ async fn item_card(connection: &mut PgConnection, item: &Item) -> ApiResult<Opti
             payload: serde_json::to_value(question).map_err(anyhow::Error::from)?,
             due_at: DateTime::UNIX_EPOCH,
             review_count: 0,
+            anki_review_count: 0,
             stability: None,
             difficulty: None,
             last_review: None,

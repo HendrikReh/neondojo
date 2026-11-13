@@ -2,6 +2,7 @@
 mod anki_connect;
 pub mod anki_flashcards;
 mod anki_import;
+mod anki_review_sync;
 mod apkg;
 mod content;
 mod exercises;
@@ -299,6 +300,7 @@ struct CardRow {
     payload: serde_json::Value,
     due_at: DateTime<Utc>,
     review_count: i32,
+    anki_review_count: i32,
     stability: Option<f64>,
     difficulty: Option<f64>,
     last_review: Option<DateTime<Utc>>,
@@ -345,7 +347,7 @@ impl CardRow {
             prompt,
             source,
             due_at: self.due_at,
-            review_count: self.review_count,
+            review_count: self.review_count + self.anki_review_count,
             tags_version: self.tags_version,
         })
     }
@@ -481,6 +483,10 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/api/decks/{id}/export.apkg", get(export_deck))
         .route("/api/decks/{id}/send-to-anki", post(anki_connect::send))
+        .route(
+            "/api/decks/{id}/sync-anki-reviews",
+            post(anki_review_sync::sync),
+        )
         .route("/api/decks/{id}/import.apkg", post(anki_import::import))
         .route("/api/decks/{id}/next", get(next_card))
         .route("/api/study/learning-summary", get(learning_summary))
@@ -515,6 +521,7 @@ pub fn routes() -> Router<AppState> {
         suggestions::save,
         export_deck,
         anki_connect::send,
+        anki_review_sync::sync,
         anki_import::import,
         anki_flashcards::face,
         anki_flashcards::media,
@@ -1032,7 +1039,7 @@ async fn next_card(
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<NextCard>> {
     require_deck(&state.pool, id).await?;
-    let (total,due,new):(i64,i64,i64)=sqlx::query_as("SELECT count(*),count(*) FILTER(WHERE due_at<=now()),count(*) FILTER(WHERE review_count=0) FROM learning_cards c JOIN deck_cards dc ON dc.card_id=c.id WHERE dc.deck_id=$1").bind(id).fetch_one(&state.pool).await.map_err(anyhow::Error::from)?;
+    let (total,due,new):(i64,i64,i64)=sqlx::query_as("SELECT count(*),count(*) FILTER(WHERE due_at<=now()),count(*) FILTER(WHERE review_count+anki_review_count=0) FROM learning_cards c JOIN deck_cards dc ON dc.card_id=c.id WHERE dc.deck_id=$1").bind(id).fetch_one(&state.pool).await.map_err(anyhow::Error::from)?;
     let row: Option<DueCardRow> = sqlx::query_as(
         "SELECT due.*, (SELECT jsonb_build_object('session_id',s.id,'submitted',s.attempt_input,
                     'evaluation',s.attempt_result) FROM review_sessions s
@@ -1250,13 +1257,14 @@ async fn review(
     if !is_attempt && active_attempt(&mut *tx, &row).await?.is_some() {
         return Err(conflict("Rate the saved first attempt for this card"));
     }
-    let result = scheduler::rate(&row, body.rating, now)?;
+    let mut result = scheduler::rate(&row, body.rating, now)?;
     sqlx::query("UPDATE learning_cards SET stability=$2,difficulty=$3,last_review=$4,due_at=$5,version=$6,review_count=$7,updated_at=$4 WHERE id=$1").bind(id).bind(result.stability).bind(result.difficulty).bind(now).bind(result.due_at).bind(result.version).bind(result.review_count).execute(&mut *tx).await.map_err(anyhow::Error::from)?;
+    result.review_count += row.anki_review_count;
     sqlx::query("INSERT INTO card_reviews(card_id,request_id,session_id,rating,result,reviewed_at) VALUES($1,$2,$3,$4,$5,$6)").bind(id).bind(body.request_id).bind(body.session_id).bind(body.rating.as_str()).bind(serde_json::to_value(&result).map_err(anyhow::Error::from)?).bind(now).execute(&mut *tx).await.map_err(anyhow::Error::from)?;
     tx.commit().await.map_err(anyhow::Error::from)?;
     Ok(Json(result))
 }
-#[utoipa::path(get,path="/api/decks/{id}/export.apkg",params(("id"=Uuid,Path),ExportQuery),responses((status=200,description="Native Anki package; review history remains independent",content_type="application/zip",body=Vec<u8>),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=429,body=ErrorBody)),tag="Learning")]
+#[utoipa::path(get,path="/api/decks/{id}/export.apkg",params(("id"=Uuid,Path),ExportQuery),responses((status=200,description="Native Anki package without review history",content_type="application/zip",body=Vec<u8>),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=429,body=ErrorBody)),tag="Learning")]
 async fn export_deck(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,

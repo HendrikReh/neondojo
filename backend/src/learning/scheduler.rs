@@ -70,6 +70,7 @@ mod tests {
             payload: serde_json::Value::Null,
             due_at: now,
             review_count: 0,
+            anki_review_count: 0,
             stability: None,
             difficulty: None,
             last_review: None,

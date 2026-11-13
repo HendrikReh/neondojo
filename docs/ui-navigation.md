@@ -102,6 +102,9 @@ In **Manage decks**, create, open, rename or delete a deck. When a specific deck
 is selected, its study and export actions appear below the search.
 **Send to Anki** transfers the selected native deck to local Anki Desktop
 through AnkiConnect.
+**Sync Anki reviews** exchanges missing reviews for the selected native deck
+with the active Anki profile. The result shows how many cards matched and how
+many reviews each application received.
 On wide windows, drag the divider between the card list and the preview. The
 Left and Right arrow keys move the focused divider. Double-click it or press
 Enter to restore the default width. The browser remembers the chosen width.

@@ -56,6 +56,8 @@ const TABLES: &[&str] = &[
     "score_practice_profiles",
     "review_sessions",
     "card_reviews",
+    "anki_received_reviews",
+    "anki_review_exports",
     "card_practice_rounds",
     "card_practice_items",
     "card_topics",

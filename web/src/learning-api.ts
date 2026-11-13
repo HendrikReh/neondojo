@@ -77,3 +77,12 @@ export function sendDeckToAnki(deckId: string, body: Schema['ExportQuery']) {
     body: JSON.stringify(body),
   });
 }
+
+export function syncAnkiReviews(deckId: string) {
+  const body: Schema['SyncRequest'] = {};
+  return request<Schema['SyncResult']>(`/decks/${deckId}/sync-anki-reviews`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}

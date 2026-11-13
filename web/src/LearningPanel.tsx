@@ -43,7 +43,7 @@ import {
 import { useDeckLibraryText } from './deck-library-messages';
 import { useStudyOverviewText } from './study-messages';
 import type { VersionedDeck } from './deck-management-api';
-import { sendDeckToAnki } from './learning-api';
+import { sendDeckToAnki, syncAnkiReviews } from './learning-api';
 import type {
   Deck,
   NextCard,
@@ -441,7 +441,8 @@ export default function LearningWorkspace({
   const [ankiNotice, setAnkiNotice] = useState<string>();
   const [ankiError, setAnkiError] = useState<string>();
   const [sendingAnki, setSendingAnki] = useState(false);
-  const ankiBusy = importingAnki || sendingAnki;
+  const [syncingAnki, setSyncingAnki] = useState(false);
+  const ankiBusy = importingAnki || sendingAnki || syncingAnki;
   const ankiInput = useRef<HTMLInputElement>(null);
   const externalAnkiInput = useRef<HTMLInputElement>(null);
   const practiceRequest = useRef<AbortController | null>(null);
@@ -449,6 +450,7 @@ export default function LearningWorkspace({
   const p = usePositionText();
   const [draftFilters, setDraftFilters] = useState(emptyCardFilters);
   const [searchRun, setSearchRun] = useState(0);
+  const [historyRevision, setHistoryRevision] = useState(0);
   const [filters, setFilters] = useProfileValue(
     (c) => c.learning.filters,
     (c, filters) => ({ ...c, learning: { ...c.learning, filters } }),
@@ -643,6 +645,31 @@ export default function LearningWorkspace({
       setSendingAnki(false);
     }
   }
+  async function syncReviews(deck: Deck) {
+    if (ankiBusy) return;
+    setSyncingAnki(true);
+    setAnkiNotice(undefined);
+    setAnkiError(undefined);
+    try {
+      const result = await syncAnkiReviews(deck.id);
+      setAnkiNotice(practiceT('ankiReviewsSynced', {
+        deck: deck.name,
+        profile: result.profile,
+        received: formatNumber(result.received_reviews),
+        sent: formatNumber(result.sent_reviews),
+        matched: formatNumber(result.matched_cards),
+        unmatched: formatNumber(result.unmatched_cards),
+      }));
+    } catch (failure) {
+      const status = failure instanceof AppError ? failure.params.status : undefined;
+      setAnkiError(status === '503' ? practiceT('ankiUnavailable') : formatError(failure));
+    } finally {
+      // Anki may have stopped responding after BG Tutor saved incoming reviews.
+      setHistoryRevision((value) => value + 1);
+      onChanged();
+      setSyncingAnki(false);
+    }
+  }
   const selectedItems = cardSelection?.scope === listKey ? [...cardSelection.items.values()] : [];
   const selectedCards = new Set(selectedItems.map((item) => item.id));
   const sourceDeck = decks.find((deck) => deck.id === deckId);
@@ -664,6 +691,7 @@ export default function LearningWorkspace({
   );
   const cardSearch = useSearchPages({
     scope: listKey,
+    revision: historyRevision,
     pageSize: CARD_PAGE_SIZE,
     enabled: !!deckId,
     loadPage: loadCards,
@@ -933,6 +961,14 @@ export default function LearningWorkspace({
         >
           {practiceT('sendAnki')}
         </ActionButton>
+        <ActionButton
+          icon="refresh"
+          label={practiceT('syncAnkiReviews')}
+          disabled={!sourceDeck.card_count || ankiBusy}
+          onClick={() => void syncReviews(sourceDeck)}
+        >
+          {practiceT('syncAnkiReviews')}
+        </ActionButton>
         <input
           ref={ankiInput}
           type="file"
@@ -1101,6 +1137,7 @@ export default function LearningWorkspace({
       </div>
       {importingAnki && <p role="status">{practiceT('ankiImporting')}</p>}
       {sendingAnki && <p role="status">{practiceT('sendingAnki')}</p>}
+      {syncingAnki && <p role="status">{practiceT('syncingAnkiReviews')}</p>}
       {ankiNotice && <p role="status">{ankiNotice}</p>}
       {ankiError && <p role="alert">{ankiError}</p>}
       {!!workspaceError && <p role="alert">{formatError(workspaceError)}</p>}

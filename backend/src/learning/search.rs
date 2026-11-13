@@ -175,9 +175,9 @@ pub(super) fn filters(sql: &mut QueryBuilder<'_, Postgres>, q: &CardQuery, deck:
     }
     if let Some(status) = q.status {
         sql.push(match status {
-            CardReviewState::New => " AND c.review_count=0",
+            CardReviewState::New => " AND c.review_count+c.anki_review_count=0",
             CardReviewState::Due => " AND c.due_at<=now()",
-            CardReviewState::Reviewed => " AND c.review_count>0",
+            CardReviewState::Reviewed => " AND c.review_count+c.anki_review_count>0",
         });
     }
     if let Some(id) = &q.position_id {

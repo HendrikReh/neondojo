@@ -2525,7 +2525,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Native Anki package; review history remains independent",
+            "description": "Native Anki package without review history",
             "content": {
               "application/zip": {
                 "schema": {
@@ -2902,6 +2902,117 @@
             "description": ""
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decks/{id}/sync-anki-reviews": {
+      "post": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "sync",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -18853,6 +18964,41 @@
           }
         },
         "additionalProperties": false
+      },
+      "SyncRequest": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "SyncResult": {
+        "type": "object",
+        "required": [
+          "profile",
+          "matched_cards",
+          "unmatched_cards",
+          "received_reviews",
+          "sent_reviews"
+        ],
+        "properties": {
+          "matched_cards": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "profile": {
+            "type": "string"
+          },
+          "received_reviews": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sent_reviews": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unmatched_cards": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
       },
       "TagCard": {
         "type": "object",
