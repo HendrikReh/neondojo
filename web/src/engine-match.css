@@ -1,67 +1,274 @@
-.engine-match-setup {
-  padding: 20px 0;
-  border-bottom: 1px solid var(--ui-border);
+.engine-match-heading,
+.engine-match-progress {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
 }
 
-.engine-match-fields,
-.engine-match-progress,
-.engine-match-statistics {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
-  gap: 16px;
+.engine-match-heading {
+  justify-content: space-between;
   margin-bottom: 16px;
 }
 
-.engine-match-fields fieldset {
+.engine-match-layout {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  align-items: end;
-  gap: 8px;
-  margin: 0;
-  padding: 8px;
-  border: 1px solid var(--ui-border);
+  grid-template-columns: minmax(230px, 286px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
 }
 
-.engine-match-fields label {
+.engine-match-workspace h2 {
+  margin: 0 0 10px;
+  font-size: var(--font-size-panel);
+}
+
+.engine-match-archive {
+  padding-inline-end: 20px;
+  border-inline-end: 1px solid var(--ui-border);
+}
+
+.engine-match-series-list {
   display: grid;
-  gap: 6px;
+  align-content: start;
+  gap: 4px;
+  max-height: min(630px, 65vh);
+  overflow: auto;
+  padding: 4px;
+  margin: 0 -4px 8px;
+  list-style: none;
 }
 
-.engine-match-fields input[type='number'] {
-  width: 7ch;
+.engine-match-series-list button {
+  display: grid;
+  justify-items: start;
+  gap: 1px;
+  width: 100%;
+  padding: 6px 10px;
+  text-align: start;
+  background: var(--ui-surface);
 }
 
-.engine-match-fields input[pattern] {
-  width: 39ch;
+.engine-match-series-list button:is(:hover, [aria-current='true']) {
+  border-color: var(--ui-accent);
+  background: var(--ui-selected);
 }
 
-.engine-match-history {
-  margin-top: 24px;
+.engine-match-series-list button:focus-visible {
+  outline-offset: 0;
+}
+
+.engine-match-series-list time,
+.engine-match-series-status,
+.engine-match-rate span,
+.engine-match-rate-count,
+.engine-match-statistics dt,
+.engine-match-settings {
+  font-size: var(--font-size-meta);
+  font-weight: var(--font-weight-normal);
+  color: var(--ui-muted);
+}
+
+.engine-match-series-status:is(
+  [data-status='queued'],
+  [data-status='running']
+) {
+  color: var(--ui-accent);
+}
+
+.engine-match-series-status[data-status='failed'] {
+  color: var(--ui-danger-text);
 }
 
 .engine-match-progress {
-  align-items: center;
-  margin-top: 12px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 7px;
+  background: var(--ui-surface-alt);
+}
+
+.engine-match-progress[data-active='true'] {
+  border-inline-start: 3px solid var(--ui-accent);
 }
 
 .engine-match-progress p {
-  margin: 0;
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
 }
 
 .engine-match-progress progress {
   accent-color: var(--ui-accent);
+  width: min(240px, 100%);
 }
 
-.engine-match-statistics dt {
-  color: var(--ui-muted);
+.engine-match-progress button:last-child {
+  margin-inline-start: auto;
 }
 
-.engine-match-statistics dd {
-  margin: 6px 0 0;
+.engine-match-archive button,
+.engine-match-progress button,
+.engine-match-pagination button {
+  padding-block: 6px;
+}
+
+.engine-match-win-rates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.engine-match-win-rates dl {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 7px;
+  background: var(--ui-surface);
+}
+
+.engine-match-rate,
+.engine-match-rate-count {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 2px 12px;
+}
+
+.engine-match-rate strong {
+  display: block;
+  font-size: var(--font-size-subject);
+}
+
+.engine-match-rate dd {
+  font-size: var(--font-size-question);
+  font-weight: var(--font-weight-semibold);
+}
+
+.engine-match-rate-count {
+  margin-top: 4px;
+}
+
+.engine-match-rate dd,
+.engine-match-rate-count dd {
+  margin: 0;
+  color: var(--ui-text);
   font-variant-numeric: tabular-nums;
 }
 
-.engine-match-history > select + button {
-  margin-inline-start: 8px;
+.engine-match-statistics,
+.engine-match-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+}
+
+.engine-match-statistics {
+  margin: 10px 0;
+}
+
+.engine-match-statistics dd {
+  margin: 2px 0 0;
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.engine-match-settings {
+  margin: 0 0 14px;
+  padding: 5px 0;
+  border-block: 1px solid var(--ui-border);
+  overflow-wrap: anywhere;
+}
+
+.engine-match-workspace summary {
+  width: fit-content;
+  cursor: pointer;
+}
+
+.engine-match-failure details,
+.engine-match-settings p {
+  margin-top: 5px;
+}
+
+.engine-match-history table td a {
+  color: var(--ui-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.engine-match-pagination {
+  margin-top: 12px;
+}
+
+.engine-match-pagination button[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.library-dialog:has(.engine-match-setup) {
+  max-width: 690px;
+}
+
+.engine-match-fields,
+.engine-match-rules {
+  display: grid;
+  gap: 12px;
+}
+
+.engine-match-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.engine-match-fields fieldset {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: 8px;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+}
+
+.engine-match-fields legend {
+  font-weight: var(--font-weight-semibold);
+}
+
+.engine-match-rules {
+  grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr));
+  align-items: end;
+}
+
+.engine-match-advanced label {
+  width: min(100%, 40ch);
+  margin-top: 8px;
+}
+
+.engine-match-setup .error {
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .engine-match-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .engine-match-archive {
+    padding: 0 0 12px;
+    border-inline-end: 0;
+    border-bottom: 1px solid var(--ui-border);
+  }
+
+  .engine-match-series-list {
+    max-height: 200px;
+  }
+}
+
+@media (max-width: 580px) {
+  .engine-match-fields,
+  .engine-match-rules {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

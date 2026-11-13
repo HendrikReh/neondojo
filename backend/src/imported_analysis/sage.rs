@@ -1,7 +1,7 @@
 //! Portable checker evaluations captured while Open Sage plays an engine duel.
 use super::{ImportedAnalysisData, ImportedCandidate, base};
 use crate::{
-    engines::{SageCheckerCandidate, SageSnapshot, validate_evaluation},
+    engines::{SageCheckerCandidate, SageSnapshot, valid_sage_depth, validate_evaluation},
     import::sgf::{
         SourceMove, decode_retained_analysis, encode_retained_analysis, parse_sgf_source_moves,
         parse_trees, serialize_trees,
@@ -46,7 +46,7 @@ impl RetainedChecker {
 
     fn record(self, source: &SourceMove) -> Result<ImportedAnalysisData> {
         ensure!(
-            self.version == 1 && matches!(self.plies, 1 | 2),
+            self.version == 1 && valid_sage_depth(self.plies),
             "Unsupported retained Open Sage evaluation"
         );
         ensure!(
@@ -172,6 +172,17 @@ mod tests {
         assert_eq!(r.raw["artifact_fingerprint"], "a".repeat(64));
         assert!(r.raw.get("python").is_none());
         assert_eq!(retain(SOURCE, vec![]).unwrap(), SOURCE);
+    }
+
+    #[test]
+    fn retained_checker_preserves_duel_depths_above_two() {
+        for plies in [3, 4] {
+            let mut saved = evaluation();
+            saved.plies = plies;
+            let sgf = retain(SOURCE, vec![(0, saved)]).unwrap();
+            let records = crate::imported_analysis::extract(&sgf).unwrap();
+            assert_eq!(records[0].depth_plies, Some(plies));
+        }
     }
 
     #[test]

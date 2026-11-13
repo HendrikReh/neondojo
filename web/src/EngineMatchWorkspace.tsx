@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import options from '../../shared/configuration-options.json' with { type: 'json' };
 import {
   cancelSeries,
@@ -16,12 +16,33 @@ import {
   type EngineMatchLabel,
 } from './engine-match-messages';
 import { useI18n } from './i18n';
+import LibraryDialog from './LibraryDialog';
 import { loadEngines, type EngineInfo } from './settings-api';
 import './engine-match.css';
 
 type Competitor = CreateSeries['a'];
 type Mode = NonNullable<CreateSeries['mode']>;
 type Text = (key: EngineMatchLabel) => string;
+type SeriesDraft = {
+  a: Competitor;
+  b: Competitor;
+  mode: Mode;
+  length: string;
+  count: string;
+  seed: string;
+};
+
+const initialDraft: SeriesDraft = {
+  a: { engine_id: 'gnubg', plies: 1 },
+  b: { engine_id: 'gnubg', plies: 0 },
+  mode: 'paired',
+  length: '5',
+  count: '1',
+  seed: '',
+};
+
+const engineName = (id: string) =>
+  id === 'gnubg' ? 'GNUbg' : id === 'bgsage' ? 'Open Sage' : id;
 
 const active = (status: string) => status === 'queued' || status === 'running';
 const statusLabel = (status: string, text: Text) => {
@@ -36,10 +57,24 @@ const statusLabel = (status: string, text: Text) => {
       return status;
   }
 };
-const playingDepths = (id: string) =>
-  id === 'gnubg' || id === 'bgsage' ? options.engine_profiles[id].play : [];
+const duelDepths = (id: string, engines: EngineInfo[]) =>
+  id === 'gnubg' || id === 'bgsage'
+    ? options.engine_profiles[id].duel.filter(
+        (depth) =>
+          id !== 'bgsage' ||
+          depth !== 1 ||
+          engines.find((e) => e.id === id)?.plies.includes(1),
+      )
+    : [];
+
 const validNumber = (value: string, max: number) =>
   Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= max;
+const progressLabel = (
+  run: Series,
+  text: Text,
+  number: (value: number) => string,
+) =>
+  `${number(run.completed_matches)} / ${number(run.total_matches)} ${text('matches')}`;
 
 function EngineChoice({
   side,
@@ -56,6 +91,7 @@ function EngineChoice({
   text: Text;
   number: (value: number) => string;
 }) {
+  const depths = duelDepths(value.engine_id, engines);
   return (
     <fieldset>
       <legend>{text(side)}</legend>
@@ -64,9 +100,14 @@ function EngineChoice({
         value={value.engine_id}
         onChange={(event) => {
           const id = event.target.value;
-          onChange({ engine_id: id, plies: playingDepths(id).at(-1) ?? 0 });
+          onChange({ engine_id: id, plies: 2 });
         }}
       >
+        {!engines.some((engine) => engine.id === value.engine_id) && (
+          <option value={value.engine_id} disabled>
+            {engineName(value.engine_id)}
+          </option>
+        )}
         {engines.map((engine) => (
           <option
             key={engine.id}
@@ -74,6 +115,7 @@ function EngineChoice({
             disabled={!engine.available}
           >
             {engine.name}
+            {!engine.available && ` · ${text('unavailable')}`}
           </option>
         ))}
       </select>
@@ -88,7 +130,12 @@ function EngineChoice({
             })
           }
         >
-          {playingDepths(value.engine_id).map((depth) => (
+          {!depths.includes(value.plies) && (
+            <option value={value.plies} disabled>
+              {number(value.plies)}-ply · {text('unavailable')}
+            </option>
+          )}
+          {depths.map((depth) => (
             <option value={depth} key={depth}>
               {number(depth)}-ply
             </option>
@@ -106,19 +153,24 @@ export default function EngineMatchWorkspace({
 }) {
   const { locale, formatNumber, formatError } = useI18n();
   const text: Text = (key) => engineMatchText(locale, key);
-  const [a, setA] = useState<Competitor>({ engine_id: 'gnubg', plies: 1 });
-  const [b, setB] = useState<Competitor>({ engine_id: 'gnubg', plies: 0 });
-  const [mode, setMode] = useState<Mode>('paired');
-  const [length, setLength] = useState('5');
-  const [count, setCount] = useState('1');
-  const [seed, setSeed] = useState('');
+  const seriesHeading = useId();
+  const resultsHeading = useId();
+  const newSeriesButton = useRef<HTMLButtonElement>(null);
+  const setupTrigger = useRef<HTMLButtonElement>(null);
+  const [draft, setDraft] = useState(initialDraft);
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [setupError, setSetupError] = useState<unknown>();
   const [engines, setEngines] = useState<EngineInfo[]>();
   const [recent, setRecent] = useState<SeriesPage>();
   const [older, setOlder] = useState<{ anchor: string; pages: SeriesPage[] }>();
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [selection, setSelection] = useState('');
   const [offset, setOffset] = useState(0);
-  const [details, setDetails] = useState<SeriesDetails>();
+  const [resultPage, setResultPage] = useState<{
+    offset: number;
+    details: SeriesDetails;
+  }>();
   const [action, setAction] = useState(false);
   const [error, setError] = useState<unknown>();
   const [loadError, setLoadError] = useState<unknown>();
@@ -126,6 +178,15 @@ export default function EngineMatchWorkspace({
   const [refresh, setRefresh] = useState(0);
   const [retry, setRetry] = useState(0);
   const id = selection || recent?.runs[0]?.id;
+
+  useEffect(() => {
+    if (setupOpen || !setupTrigger.current) return;
+    const trigger = setupTrigger.current.isConnected
+      ? setupTrigger.current
+      : newSeriesButton.current;
+    setupTrigger.current = null;
+    if (visible) trigger?.focus({ preventScroll: true });
+  }, [setupOpen, visible]);
 
   useEffect(() => {
     if (!visible) return;
@@ -150,13 +211,13 @@ export default function EngineMatchWorkspace({
     async function poll() {
       let pollAgain = true;
       try {
-        const list = await listSeries(abort.signal);
-        const selected = id
-          ? await loadSeries(id, offset, abort.signal)
-          : undefined;
+        const [list, selected] = await Promise.all([
+          listSeries(abort.signal),
+          id ? loadSeries(id, offset, abort.signal) : undefined,
+        ]);
         if (!abort.signal.aborted) {
           setRecent(list);
-          setDetails(selected);
+          if (selected) setResultPage({ offset, details: selected });
           setLoadError(undefined);
           pollAgain =
             list.runs.some((run) => active(run.status)) ||
@@ -178,14 +239,20 @@ export default function EngineMatchWorkspace({
 
   const available = (engineId: string) =>
     engines?.some((engine) => engine.id === engineId && engine.available);
+  const { a, b, mode, length, count, seed } = draft;
+  const selectable = (side: Competitor) =>
+    available(side.engine_id) &&
+    engines &&
+    duelDepths(side.engine_id, engines).includes(side.plies);
   const canStart =
-    available('gnubg') &&
-    available(a.engine_id) &&
-    available(b.engine_id) &&
+    !!available('gnubg') &&
+    !!selectable(a) &&
+    !!selectable(b) &&
     validNumber(length, 25) &&
     validNumber(count, 1000);
-  const selected = details?.series.id === id ? details : undefined;
-  const displayedError = error ?? loadError ?? engineError;
+  const selected =
+    resultPage?.details.series.id === id ? resultPage?.details : undefined;
+  const displayedError = error ?? loadError;
   const olderPages =
     older?.anchor === recent?.next_cursor ? (older?.pages ?? []) : [];
   const runs = new Map(recent?.runs.map((run) => [run.id, run]));
@@ -215,13 +282,13 @@ export default function EngineMatchWorkspace({
     }
   }
 
-  async function mutate(operation: () => Promise<Series>) {
+  async function cancelRun(runId: string) {
+    if (action) return;
     setAction(true);
     setError(undefined);
     try {
-      const series = await operation();
+      await cancelSeries(runId);
       setRefresh((revision) => revision + 1);
-      return series;
     } catch (reason) {
       setError(reason);
     } finally {
@@ -230,14 +297,76 @@ export default function EngineMatchWorkspace({
   }
 
   const profile = (side: Competitor) =>
-    `${side.engine_id === 'gnubg' ? 'GNUbg' : 'Open Sage'} ${formatNumber(side.plies)}-ply`;
-  const runLabel = (run: Series) =>
-    `${new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'medium' }).format(new Date(run.created_at))} · ${profile(run.configuration.a)} / ${profile(run.configuration.b)} · ${statusLabel(run.status, text)}`;
+    `${engineName(side.engine_id)} ${formatNumber(side.plies)}-ply`;
+  const date = new Intl.DateTimeFormat(locale, {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  });
+  const rows = [...runs.values()].sort(
+    (left, right) => Number(active(right.status)) - Number(active(left.status)),
+  );
+
+  const chooseSeries = (runId: string) => {
+    if (runId === id) return;
+    setSelection(runId);
+    setResultPage(undefined);
+    setOffset(0);
+  };
+
+  function openSetup(
+    trigger: HTMLButtonElement,
+    config?: Series['configuration'],
+  ) {
+    setupTrigger.current = trigger;
+    if (config) {
+      setDraft({
+        a: config.a,
+        b: config.b,
+        mode: config.mode,
+        length: String(config.match_length),
+        count: String(config.count),
+        seed: config.seed,
+      });
+      setAdvancedOpen(true);
+    }
+    setSetupError(undefined);
+    setSetupOpen(true);
+  }
+
+  async function startSeries() {
+    if (!canStart || action) return;
+    setAction(true);
+    setSetupError(undefined);
+    try {
+      const run = await createSeries({
+        a,
+        b,
+        mode,
+        match_length: Number(length),
+        count: Number(count),
+        seed: seed.trim() || undefined,
+      });
+      chooseSeries(run.id);
+      setSetupOpen(false);
+    } catch (reason) {
+      setSetupError(reason);
+    } finally {
+      setAction(false);
+    }
+  }
 
   return (
     <div className="benchmark-workspace engine-match-workspace">
-      <header className="benchmark-heading">
+      <header className="engine-match-heading">
         <h1>{text('title')}</h1>
+        <button
+          type="button"
+          className="primary"
+          ref={newSeriesButton}
+          onClick={(event) => openSetup(event.currentTarget)}
+        >
+          {text('newSeries')}
+        </button>
       </header>
       {displayedError !== undefined && (
         <div className="error" role="alert">
@@ -253,26 +382,151 @@ export default function EngineMatchWorkspace({
           </button>
         </div>
       )}
+      <div className="engine-match-layout">
+        <section
+          className="engine-match-archive"
+          aria-labelledby={seriesHeading}
+        >
+          <h2 id={seriesHeading}>{text('series')}</h2>
+          {!recent ? (
+            loadError === undefined && <p role="status">{text('loading')}</p>
+          ) : rows.length === 0 ? (
+            <p>{text('empty')}</p>
+          ) : (
+            <ul className="engine-match-series-list">
+              {rows.map((run) => (
+                <li key={run.id}>
+                  <button
+                    type="button"
+                    aria-current={run.id === id ? 'true' : undefined}
+                    onClick={() => chooseSeries(run.id)}
+                  >
+                    <time dateTime={run.created_at}>
+                      {date.format(new Date(run.created_at))}
+                    </time>
+                    <strong>
+                      {profile(run.configuration.a)} /{' '}
+                      {profile(run.configuration.b)}
+                    </strong>
+                    <span
+                      className="engine-match-series-status"
+                      data-status={run.status}
+                    >
+                      {statusLabel(run.status, text)}
+                      {active(run.status) &&
+                        ` · ${progressLabel(run, text, formatNumber)}`}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {historyCursor && (
+            <button
+              type="button"
+              disabled={loadingOlder}
+              onClick={() => void loadOlder()}
+            >
+              {text('olderSeries')}
+            </button>
+          )}
+        </section>
+        {id && (
+          <section
+            className="engine-match-history"
+            aria-labelledby={resultsHeading}
+          >
+            <h2 id={resultsHeading}>{text('results')}</h2>
+            {!selected && loadError === undefined && (
+              <p role="status">{text('loading')}</p>
+            )}
+            {selected && (
+              <SeriesResults
+                key={id}
+                details={selected}
+                setOffset={(next) => {
+                  setSelection(id);
+                  setOffset(next);
+                }}
+                paging={
+                  offset !== resultPage?.offset && loadError === undefined
+                }
+                text={text}
+                profile={profile}
+                busy={action}
+                onCancel={() => void cancelRun(selected.series.id)}
+                onReuse={(trigger) =>
+                  openSetup(trigger, selected.series.configuration)
+                }
+              />
+            )}
+          </section>
+        )}
+      </div>
+      {visible && setupOpen && (
+        <SeriesSetup
+          draft={draft}
+          setDraft={setDraft}
+          engines={engines}
+          engineError={engineError}
+          retryEngines={() => setRetry((revision) => revision + 1)}
+          missingRulesEngine={!!engines && !available('gnubg')}
+          advancedOpen={advancedOpen}
+          setAdvancedOpen={setAdvancedOpen}
+          error={setupError}
+          canStart={canStart}
+          busy={action}
+          close={() => setSetupOpen(false)}
+          start={() => void startSeries()}
+          text={text}
+        />
+      )}
+    </div>
+  );
+}
+
+function SeriesSetup({
+  draft,
+  setDraft,
+  engines,
+  engineError,
+  retryEngines,
+  missingRulesEngine,
+  advancedOpen,
+  setAdvancedOpen,
+  error,
+  canStart,
+  busy,
+  close,
+  start,
+  text,
+}: {
+  draft: SeriesDraft;
+  setDraft: (draft: SeriesDraft) => void;
+  engines: EngineInfo[] | undefined;
+  engineError: unknown;
+  retryEngines: () => void;
+  missingRulesEngine: boolean;
+  advancedOpen: boolean;
+  setAdvancedOpen: (open: boolean) => void;
+  error: unknown;
+  canStart: boolean;
+  busy: boolean;
+  close: () => void;
+  start: () => void;
+  text: Text;
+}) {
+  const { formatNumber, formatError } = useI18n();
+  const advancedBody = useId();
+  const { a, b, mode, length, count, seed } = draft;
+
+  return (
+    <LibraryDialog native title={text('newSeries')} onClose={close} busy={busy}>
       <form
-        className="engine-match-setup"
+        className="library-dialog-form engine-match-setup"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!canStart || action) return;
-          void mutate(() =>
-            createSeries({
-              a,
-              b,
-              mode,
-              match_length: Number(length),
-              count: Number(count),
-              seed: seed.trim() || undefined,
-            }),
-          ).then((series) => {
-            if (series) {
-              setSelection(series.id);
-              setOffset(0);
-            }
-          });
+          start();
         }}
       >
         <div className="engine-match-fields">
@@ -280,7 +534,7 @@ export default function EngineMatchWorkspace({
             side="engineA"
             value={a}
             engines={engines ?? []}
-            onChange={setA}
+            onChange={(value) => setDraft({ ...draft, a: value })}
             text={text}
             number={formatNumber}
           />
@@ -288,16 +542,21 @@ export default function EngineMatchWorkspace({
             side="engineB"
             value={b}
             engines={engines ?? []}
-            onChange={setB}
+            onChange={(value) => setDraft({ ...draft, b: value })}
             text={text}
             number={formatNumber}
           />
+        </div>
+        <div className="engine-match-rules">
           <label>
             {text('dice')}
             <select
               value={mode}
               onChange={(event) =>
-                setMode(event.target.value === 'random' ? 'random' : 'paired')
+                setDraft({
+                  ...draft,
+                  mode: event.target.value === 'random' ? 'random' : 'paired',
+                })
               }
             >
               <option value="paired">{text('paired')}</option>
@@ -312,7 +571,9 @@ export default function EngineMatchWorkspace({
               min="1"
               max="25"
               value={length}
-              onChange={(event) => setLength(event.target.value)}
+              onChange={(event) =>
+                setDraft({ ...draft, length: event.target.value })
+              }
             />
           </label>
           <label>
@@ -323,92 +584,70 @@ export default function EngineMatchWorkspace({
               min="1"
               max="1000"
               value={count}
-              onChange={(event) => setCount(event.target.value)}
+              onChange={(event) =>
+                setDraft({ ...draft, count: event.target.value })
+              }
             />
           </label>
-          <label>
+        </div>
+        <details
+          className="engine-match-advanced"
+          open={advancedOpen}
+          onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
+        >
+          <summary aria-controls={advancedBody}>{text('advanced')}</summary>
+          <label id={advancedBody}>
             {text('optionalSeed')}
             <input
               value={seed}
-              onChange={(event) => setSeed(event.target.value)}
+              onChange={(event) =>
+                setDraft({ ...draft, seed: event.target.value })
+              }
+              onInvalid={() => setAdvancedOpen(true)}
               spellCheck={false}
               pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
             />
           </label>
-        </div>
-        <button type="submit" disabled={!canStart || action}>
-          {text('start')}
-        </button>
-        {engines && !available('gnubg') && (
-          <p role="status">{text('noEngines')}</p>
+        </details>
+        {engineError !== undefined && (
+          <div className="error" role="alert">
+            {formatError(engineError)}{' '}
+            <button type="button" onClick={retryEngines}>
+              {text('retry')}
+            </button>
+          </div>
         )}
-      </form>
-
-      <section className="engine-match-history" aria-label={text('series')}>
-        <h2>{text('series')}</h2>
-        {!recent ? (
-          <p>{text('loading')}</p>
-        ) : runs.size === 0 ? (
-          <p>{text('empty')}</p>
-        ) : (
-          <select
-            aria-label={text('series')}
-            value={id}
-            onChange={(event) => {
-              setSelection(event.target.value);
-              setDetails(undefined);
-              setOffset(0);
-            }}
-          >
-            {Array.from(runs.values(), (run) => (
-              <option key={run.id} value={run.id}>
-                {runLabel(run)}
-              </option>
-            ))}
-          </select>
+        {!engines && engineError === undefined && (
+          <p role="status">{text('loading')}</p>
         )}
-        {historyCursor && (
+        {missingRulesEngine && <p role="status">{text('noEngines')}</p>}
+        {error !== undefined && (
+          <div className="error">
+            <p role="alert">{text('startFailed')}</p>
+            <details>
+              <summary>{text('details')}</summary>
+              <p>{formatError(error)}</p>
+            </details>
+          </div>
+        )}
+        <div className="library-dialog-actions">
           <button
-            type="button"
-            disabled={loadingOlder}
-            onClick={() => void loadOlder()}
+            type="submit"
+            className="primary"
+            disabled={!canStart || busy}
           >
-            {text('olderSeries')}
+            {text('start')}
           </button>
-        )}
-        {id && !selected && <p>{text('loading')}</p>}
-        {selected && (
-          <SeriesResults
-            details={selected}
-            setOffset={(next) => {
-              setDetails(undefined);
-              setOffset(next);
-            }}
-            text={text}
-            profile={profile}
-            busy={action}
-            onCancel={() => {
-              void mutate(() => cancelSeries(selected.series.id));
-            }}
-            onReuse={() => {
-              const config = selected.series.configuration;
-              setA(config.a);
-              setB(config.b);
-              setMode(config.mode);
-              setLength(String(config.match_length));
-              setCount(String(config.count));
-              setSeed(config.seed);
-            }}
-          />
-        )}
-      </section>
-    </div>
+        </div>
+      </form>
+    </LibraryDialog>
   );
 }
 
 function SeriesResults({
   details,
   setOffset,
+  paging,
   text,
   profile,
   busy,
@@ -417,11 +656,12 @@ function SeriesResults({
 }: {
   details: SeriesDetails;
   setOffset: (offset: number) => void;
+  paging: boolean;
   text: Text;
   profile: (side: Competitor) => string;
   busy: boolean;
   onCancel: () => void;
-  onReuse: () => void;
+  onReuse: (trigger: HTMLButtonElement) => void;
 }) {
   const { formatNumber, formatPercent } = useI18n();
   const { series, statistics, matches, next_offset, previous_offset } = details;
@@ -429,14 +669,24 @@ function SeriesResults({
   const paired = config.mode === 'paired';
   const rate = statistics.win_rate_a;
   const interval = statistics.confidence_interval_a;
-  const progress = `${formatNumber(series.completed_matches)} / ${formatNumber(series.total_matches)}`;
+  const playing = active(series.status);
+  const competitors = [
+    { side: 'A', profile: config.a, rate, wins: statistics.wins_a },
+    {
+      side: 'B',
+      profile: config.b,
+      rate: rate == null ? rate : 1 - rate,
+      wins: statistics.wins_b,
+    },
+  ];
   return (
     <>
-      <div className="engine-match-progress">
+      <div className="engine-match-progress" data-active={playing}>
         <p role="status">
-          {statusLabel(series.status, text)} · {progress} {text('matches')}
+          {statusLabel(series.status, text)} ·{' '}
+          {progressLabel(series, text, formatNumber)}
         </p>
-        {active(series.status) && (
+        {playing && (
           <>
             <progress
               aria-label={text('matches')}
@@ -448,24 +698,54 @@ function SeriesResults({
             </button>
           </>
         )}
-        <button type="button" onClick={onReuse}>
+        <button type="button" onClick={(event) => onReuse(event.currentTarget)}>
           {text('reuse')}
         </button>
       </div>
-      {series.error && (
-        <p className="error" role="alert">
-          {series.error}
-        </p>
+      {(series.status === 'failed' || series.error) && (
+        <div className="engine-match-failure error">
+          {series.status === 'failed' && (
+            <p role="alert">
+              {text('failedSummary')}
+              {series.completed_matches > 0 && ` ${text('partialResults')}`}
+            </p>
+          )}
+          {series.error && (
+            <details>
+              <summary>{text('details')}</summary>
+              <p>{series.error}</p>
+            </details>
+          )}
+        </div>
       )}
-      <p className="benchmark-help">
-        A · {profile(config.a)} · {engines.a.engine_version ?? '—'}
-        <br />B · {profile(config.b)} · {engines.b.engine_version ?? '—'}
-        <br />
-        {text(config.mode)} · {text('length')}{' '}
-        {formatNumber(config.match_length)} · {text('seed')}{' '}
-        <code>{config.seed}</code> · {series.dice_version}
-      </p>
+      <div className="engine-match-win-rates">
+        {competitors.map((competitor) => (
+          <dl key={competitor.side}>
+            <div className="engine-match-rate">
+              <dt>
+                <strong>
+                  {competitor.side} · {profile(competitor.profile)}
+                </strong>
+                <span>{text('winRate')}</span>
+              </dt>
+              <dd>
+                {competitor.rate == null
+                  ? '—'
+                  : formatPercent(competitor.rate, 1)}
+              </dd>
+            </div>
+            <div className="engine-match-rate-count">
+              <dt>{text('matchWins')}</dt>
+              <dd>{formatNumber(competitor.wins)}</dd>
+            </div>
+          </dl>
+        ))}
+      </div>
       <dl className="engine-match-statistics">
+        <div>
+          <dt>{text('matchesCounted')}</dt>
+          <dd>{formatNumber(statistics.wins_a + statistics.wins_b)}</dd>
+        </div>
         {paired && (
           <div>
             <dt>{text('completePairs')}</dt>
@@ -475,20 +755,6 @@ function SeriesResults({
             </dd>
           </div>
         )}
-        <div>
-          <dt>{text('winRate')}</dt>
-          <dd>
-            {rate == null ? (
-              '—'
-            ) : (
-              <>
-                A {formatPercent(rate, 1)} ({formatNumber(statistics.wins_a)}) ·
-                B {formatPercent(1 - rate, 1)} (
-                {formatNumber(statistics.wins_b)})
-              </>
-            )}
-          </dd>
-        </div>
         {interval && (
           <div>
             <dt>{text('interval')}</dt>
@@ -498,10 +764,28 @@ function SeriesResults({
           </div>
         )}
       </dl>
+      <details className="engine-match-settings">
+        <summary>{text('seriesSettings')}</summary>
+        <p>
+          {text(config.mode)} · {text('length')}{' '}
+          {formatNumber(config.match_length)}
+        </p>
+        <p>
+          {text('seed')} <code>{config.seed}</code> · {series.dice_version}
+        </p>
+        <p>
+          {text('engineA')} · {profile(config.a)} ·{' '}
+          {engines.a.engine_version ?? '—'}
+        </p>
+        <p>
+          {text('engineB')} · {profile(config.b)} ·{' '}
+          {engines.b.engine_version ?? '—'}
+        </p>
+      </details>
       {matches.length === 0 ? (
         <p>{text('noMatches')}</p>
       ) : (
-        <div className="benchmark-table-scroll">
+        <div className="benchmark-table-scroll" aria-busy={paging}>
           <table>
             <thead>
               <tr>
@@ -556,12 +840,14 @@ function SeriesResults({
         </div>
       )}
       {(previous_offset != null || next_offset != null) && (
-        <div className="engine-match-progress">
+        <div className="engine-match-pagination">
           <button
             type="button"
             disabled={previous_offset == null}
+            aria-disabled={paging || undefined}
             onClick={() => {
-              if (previous_offset != null) setOffset(previous_offset);
+              if (!paging && previous_offset != null)
+                setOffset(previous_offset);
             }}
           >
             {text('previous')}
@@ -569,8 +855,9 @@ function SeriesResults({
           <button
             type="button"
             disabled={next_offset == null}
+            aria-disabled={paging || undefined}
             onClick={() => {
-              if (next_offset != null) setOffset(next_offset);
+              if (!paging && next_offset != null) setOffset(next_offset);
             }}
           >
             {text('next')}

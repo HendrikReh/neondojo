@@ -293,6 +293,10 @@ async fn series_api_persists_results_recovers_expired_claim_and_cancels(pool: sq
             .unwrap();
         assert_eq!(match_entry["white_score"], result[white]);
         assert_eq!(match_entry["black_score"], result[black]);
+        assert_eq!(
+            match_entry["tournament"],
+            "Duel GNUbg 0-ply vs. GNUbg 0-ply"
+        );
         assert_eq!(match_entry["result_state"], "completed");
         assert_eq!(match_entry["game_count"], result["games"]);
         assert!(match_entry["position_count"].as_u64().unwrap() > 0);
@@ -383,4 +387,40 @@ async fn open_sage_and_gnubg_complete_both_legs() {
         assert_eq!(a.player, b.player);
         assert_eq!(a.dice, b.dice);
     }
+}
+
+#[tokio::test]
+#[ignore = "requires local GNUbg and BGTUTOR_SAGE_PYTHON"]
+async fn mixed_duel_preserves_legal_moves_for_retained_seed() {
+    let python = std::env::var("BGTUTOR_SAGE_PYTHON").unwrap();
+    let sage = crate::engines::SageEngine::probe_profile(python, 3, 10)
+        .await
+        .unwrap();
+    let sage = AnalysisEngine::OpenSage(crate::engines::SageEngine::new(sage).unwrap());
+    let rules = Engine::new(std::env::var("GNUBG_BIN").unwrap_or_else(|_| "gnubg".into()))
+        .with_threads(Some(10));
+    let gnubg = AnalysisEngine::Gnubg(rules.clone());
+    let config = SeriesConfig {
+        a: Competitor {
+            engine_id: "gnubg".into(),
+            plies: 3,
+        },
+        b: Competitor {
+            engine_id: "bgsage".into(),
+            plies: 3,
+        },
+        match_length: 5,
+        count: 100,
+        mode: DiceMode::Paired,
+        seed: Uuid::parse_str("8c0a1bb0-90c3-444b-871a-492bcaca83ff").unwrap(),
+    };
+    let seed = match_plan(&config, 64).seed;
+    engine_match::play(&rules, [&gnubg, &sage], [3, 3], 5, |game| {
+        Ok(GameDice {
+            opening: dice::opening(seed, game)?,
+            turns: dice::turns(seed, game),
+        })
+    })
+    .await
+    .unwrap();
 }

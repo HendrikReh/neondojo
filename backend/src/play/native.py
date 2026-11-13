@@ -140,7 +140,7 @@ if match_bots is not None and action != 'opening_roll':
     for player, depth in enumerate(match_bots):
         if depth is None:
             continue
-        assert type(depth) is int and 0 <= depth <= 2
+        assert type(depth) is int and 0 <= depth <= 4
         configure_player(player, depth)
     for _ in range(4096):
         state = gnubg.posinfo()

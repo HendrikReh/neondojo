@@ -1,12 +1,12 @@
-use super::{DiceMode, Series, SeriesConfig, dice};
+use super::{Competitor, DiceMode, Series, SeriesConfig, dice};
 use crate::{
     api::AppState,
     engine::Engine,
-    import::parse_sgf,
+    import::{parse_sgf, sgf::escape_value},
     play::engine_match::{self, GameDice},
     store::{MatchImport, insert_match_import},
 };
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use std::time::Duration;
@@ -93,6 +93,11 @@ async fn execute(pool: &PgPool, series: &Series, token: Uuid) -> Result<()> {
     let b = series.engines.b.engine()?;
     let configuration = &series.configuration;
     let length = configuration.match_length;
+    let event = escape_value(&format!(
+        "Duel {} vs. {}",
+        competitor_label(&configuration.a)?,
+        competitor_label(&configuration.b)?,
+    ));
     for index in series.completed_matches..series.total_matches {
         let plan = match_plan(configuration, index);
         let mut bots = [&a, &b];
@@ -128,7 +133,10 @@ async fn execute(pool: &PgPool, series: &Series, token: Uuid) -> Result<()> {
             crate::play::named_export(&finished.sgf, &a_name, i32::from(plan.swapped), &b_name);
         // Each run owns its played matches, even if a seed replay produces identical moves.
         let root = sgf.find(';').context("Missing engine duel SGF root")?;
-        sgf.insert_str(root + 1, &format!("BGTDUEL[{}:{index}]", series.id));
+        sgf.insert_str(
+            root + 1,
+            &format!("BGTDUEL[{}:{index}]EV[{event}]", series.id),
+        );
         let (sgf, imported) = tokio::task::spawn_blocking(move || {
             let imported = parse_sgf(&sgf).context("Invalid engine duel SGF")?;
             Ok::<_, anyhow::Error>((sgf, imported))
@@ -151,6 +159,15 @@ async fn execute(pool: &PgPool, series: &Series, token: Uuid) -> Result<()> {
         tx.commit().await?;
     }
     Ok(())
+}
+
+fn competitor_label(side: &Competitor) -> Result<String> {
+    let name = match side.engine_id.as_str() {
+        "gnubg" => "GNUbg",
+        "bgsage" => "Open Sage",
+        _ => bail!("Unsupported saved duel engine {}", side.engine_id),
+    };
+    Ok(format!("{name} {}-ply", side.plies))
 }
 
 pub(super) struct MatchPlan {

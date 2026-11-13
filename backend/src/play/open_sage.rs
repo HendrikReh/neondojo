@@ -8,6 +8,7 @@ use crate::{
     engines::{SageCheckerCandidate, SageEngine},
 };
 use anyhow::{Context, Result, ensure};
+use std::collections::HashMap;
 
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
@@ -85,7 +86,7 @@ async fn chosen_move(
         .native_id
         .split_once(':')
         .context("Invalid native ID")?;
-    let candidates = bot.checker_boards(position, context, None, None).await?;
+    let mut candidates = bot.checker_boards(position, context, None, None).await?;
     let best = candidates
         .first()
         .context("Open Sage returned no chosen move")?;
@@ -101,13 +102,46 @@ async fn chosen_move(
         );
         return Ok((None, candidates));
     }
+    let mut legal = HashMap::new();
     for choice in &snapshot.legal_moves {
-        if resulting_board(&snapshot.board, snapshot.player, &snapshot.dice, choice)? == best.board
-        {
+        let board = resulting_board(&snapshot.board, snapshot.player, &snapshot.dice, choice)?;
+        if board == best.board {
             return Ok((Some(choice.notation.clone()), candidates));
         }
+        legal.entry(board).or_insert(choice.notation.as_str());
     }
-    anyhow::bail!("Open Sage best move is absent from GNUbg legal results")
+
+    // Sage can stop at a winning bear-off before using all playable dice.
+    // Use its highest-ranked native candidate only for this terminal discrepancy.
+    let checker_sign = if snapshot.player == 0 { 1 } else { -1 };
+    let bore_off = |candidate: &SageCheckerCandidate| {
+        candidate
+            .board
+            .iter()
+            .all(|point| point.signum() != checker_sign)
+    };
+    let first_legal = candidates
+        .iter()
+        .find(|candidate| legal.contains_key(&candidate.board));
+    ensure!(
+        bore_off(best) && first_legal.is_some_and(bore_off),
+        "Open Sage best move is absent from GNUbg legal results for {} (player {}, dice {:?}): best {:?} -> {:?}; GNUbg has {} candidates",
+        snapshot.native_id,
+        snapshot.player,
+        snapshot.dice,
+        best.notation,
+        best.board,
+        legal.len()
+    );
+    // The first retained candidate and its notation must describe the played board.
+    candidates.retain_mut(|candidate| {
+        let Some(&notation) = legal.get(&candidate.board) else {
+            return false;
+        };
+        candidate.notation = notation.to_owned();
+        true
+    });
+    Ok((Some(candidates[0].notation.clone()), candidates))
 }
 
 pub(super) struct ChosenAction {

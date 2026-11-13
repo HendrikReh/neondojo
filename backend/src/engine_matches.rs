@@ -183,7 +183,7 @@ async fn create(
         ));
     }
     for side in [&request.a, &request.b] {
-        if !crate::configuration::engine_depths(&side.engine_id, "play").contains(&side.plies) {
+        if !crate::configuration::engine_depths(&side.engine_id, "duel").contains(&side.plies) {
             return Err(ApiError::invalid("Unsupported playing engine or strength"));
         }
     }
