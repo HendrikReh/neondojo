@@ -199,13 +199,7 @@ async fn health(State(state): State<AppState>) -> (StatusCode, Json<Health>) {
             match crate::benchmarks::running_engine_version(&state.pool, &settings.gnubg_path).await
             {
                 Ok(Some(version)) => Some(version),
-                Ok(None) => tokio::time::timeout(
-                    std::time::Duration::from_millis(300),
-                    Engine::new(settings.gnubg_path).version(),
-                )
-                .await
-                .ok()
-                .and_then(Result::ok),
+                Ok(None) => settings.gnubg().health_version().await.ok(),
                 Err(_) => None,
             }
         }

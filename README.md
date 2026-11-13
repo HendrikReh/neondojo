@@ -72,7 +72,7 @@ Open <http://127.0.0.1:5173>. Vite forwards `/api` to `http://127.0.0.1:8787` by
    BGTUTOR_BIND=127.0.0.1:8787 BGTUTOR_WEB_DIR="$PWD/web/dist" ./target/local-restart/bgtutor
    ```
 
-5. Check the health endpoint from another terminal, then open or reload BG Tutor and verify the workflow you changed. A response with `"status":"ok"` confirms PostgreSQL responds and the configured GNUbg reports its version. **Check installation** runs the evaluation probe. [BG Tutor on port 8787](http://127.0.0.1:8787/)
+5. Check the health endpoint from another terminal, then open or reload BG Tutor and verify the workflow you changed. A response with `"status":"ok"` confirms PostgreSQL responds and the configured GNUbg reports its version. Allow up to five seconds for the GNUbg version command. During a benchmark, the health check can reuse the recorded engine version. **Check installation** runs the evaluation probe. [BG Tutor on port 8787](http://127.0.0.1:8787/)
 
    ```sh
    curl --fail --silent --show-error http://127.0.0.1:8787/api/health
