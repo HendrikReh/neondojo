@@ -726,6 +726,7 @@ curl 'http://127.0.0.1:8787/api/matches?q=Tutor'
 | GET        | `/api/health`, `/api/engines`                                                | PostgreSQL and GNUbg health, or available engines, versions and depths.                                                                                                                                                    |
 | GET        | `/api/database-backup` | Export a compressed BG Tutor backup as a file. |
 | POST       | `/api/database-backup/check` | Check a raw backup archive and report schema compatibility and archive contents. |
+| GET        | `/api/database-backup/target-counts` | Read the current match, saved position, and flashcard counts in the destination. |
 | POST       | `/api/database-backup?replace=true` | Restore a BG Tutor backup with media type `application/vnd.bgtutor.backup`. |
 | GET / PUT  | `/api/settings`                                                              | Persistent engine and player settings with revision checks.                                                                                                                                                                |
 | POST       | `/api/engines/gnubg/check`                                                   | Check the installation using `{ "path": "..." }`.                                                                                                                                                                          |
@@ -787,11 +788,17 @@ saved positions, player profiles, preferences and learning history.
 On the destination, open **Extras → Database backup** and choose a file. BG Tutor
 checks the archive and compares its migration fingerprint with the destination
 database. The preview shows when the archive was created and how many library
-matches, saved positions, and flashcards it contains. Older archives retain
-their counts and may have no recorded creation time. A successful check
-enables **Review database replacement**. The check uses a temporary upload and
-leaves the destination data intact. Damaged archives and incompatible schemas
-prevent confirmation.
+matches, saved positions, and flashcards it contains. If an older archive lacks
+a recorded creation time, BG Tutor uses a valid original filename
+(`bgtutor-YYYY-MM-DD-HHMMSS.bgtutor-backup`, UTC) and labels the time
+**from filename**. A successful check enables **Review database replacement**.
+The confirmation dialog shows the creation time and compares the backup counts
+with the destination counts fetched when the dialog opens.
+**Difference** shows how many entries each category gains or loses after
+replacement. Increases have a plus sign and appear in green. Decreases have a
+minus sign and appear in red. Unchanged counts show a neutral zero.
+The check uses a temporary upload and leaves the destination data intact.
+Damaged archives and incompatible schemas prevent confirmation.
 
 **Replace database** overwrites the application data on the destination. Export
 its current database first if you need to keep that data. After confirmation,

@@ -124,6 +124,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/jobs/{id}/events", get(events))
         .route("/api/jobs/{id}/moves", get(move_analyses))
         .route("/api/openapi.json", get(openapi))
+        .route(
+            "/api/database-backup/target-counts",
+            get(crate::database_backup::target_counts),
+        )
         .fallback(|| async { ApiError::missing() })
         .layer(middleware::from_fn_with_state(
             state.clone(),

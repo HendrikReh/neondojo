@@ -1,4 +1,6 @@
 import { expect, test, type FileChooser } from '@playwright/test';
+import { defaultConfiguration } from '../src/configuration-model';
+import { profileBackend } from './profile-backend';
 
 test('exports a backup and restores it only after confirmation', async ({
   page,
@@ -10,6 +12,20 @@ test('exports a backup and restores it only after confirmation', async ({
       data: { name, description: '' },
     });
     expect(response.ok()).toBeTruthy();
+  };
+  const importTargetMatch = async (player: string) => {
+    const imported = await request.post('/api/imports', {
+      multipart: {
+        file: {
+          name: 'target.sgf',
+          mimeType: 'application/octet-stream',
+          buffer: Buffer.from(
+            `(;GM[6]PW[${player}]PB[Opponent]MI[length:7];W[31hefe])`,
+          ),
+        },
+      },
+    });
+    expect(imported.status()).toBe(201);
   };
 
   await createDatabase('Transfer fixture');
@@ -85,8 +101,18 @@ test('exports a backup and restores it only after confirmation', async ({
     '0',
     '0',
   ]);
+  await importTargetMatch('Target player');
   await review.click();
   const dialog = page.getByRole('dialog', { name: 'Restore backup' });
+  const comparison = dialog.getByRole('table', { name: 'Compare contents' });
+  await expect(comparison.getByRole('columnheader')).toHaveText([
+    'Backup',
+    'Target database',
+    'Difference',
+  ]);
+  await expect(
+    comparison.getByRole('row', { name: /^Matches/ }).getByRole('cell'),
+  ).toHaveText(['0', '1', '-1']);
   await expect(
     dialog.getByText('Restoring replaces all BG Tutor data', { exact: false }),
   ).toBeVisible();
@@ -125,7 +151,11 @@ test('exports a backup and restores it only after confirmation', async ({
     ]),
   );
   await pickBackup(archive);
+  await importTargetMatch('Second target player');
   await review.click();
+  await expect(
+    comparison.getByRole('row', { name: /^Matches/ }).getByRole('cell'),
+  ).toHaveText(['0', '2', '-2']);
   const replace = dialog.getByRole('button', { name: 'Replace database' });
   const confirmRestore = async () => {
     const [response] = await Promise.all([
@@ -220,4 +250,117 @@ test('only the latest selected archive can enable review', async ({ page }) => {
       .getByRole('definition'),
   ).toHaveText(['Unavailable in this archive', '1,234', '2', '3']);
   await expect(review).toBeDisabled();
+});
+
+test('dates older backups from a valid BG Tutor filename', async ({ page }) => {
+  const archivedDate = '2025-03-01T10:11:12Z';
+  await page.route('**/api/database-backup/target-counts', (route) =>
+    route.fulfill({
+      json: { matches: 40, saved_positions: 3502, learning_cards: 3 },
+    }),
+  );
+  await page.route('**/api/database-backup/check', (route) =>
+    route.fulfill({
+      json: {
+        status: 'compatible',
+        contents: {
+          matches: 42,
+          saved_positions: 2,
+          learning_cards: 3,
+          ...(route.request().postData() === 'current' && {
+            created_at: archivedDate,
+          }),
+        },
+      },
+    }),
+  );
+  const configuration = structuredClone(defaultConfiguration);
+  configuration.general.locale = 'de';
+  configuration.appearance.mode = 'light';
+  await profileBackend(page, { configuration });
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Extras', exact: true }).click();
+  await page
+    .getByRole('tab', { name: 'Datenbanksicherung', exact: true })
+    .click();
+  const contents = page.getByRole('region', { name: 'Inhalt der Sicherung' });
+  const input = page.locator('input[type=file][accept*=".bgtutor-backup"]');
+  const selectArchive = (name: string, body = 'legacy') =>
+    input.setInputFiles({
+      name,
+      mimeType: 'application/vnd.bgtutor.backup',
+      buffer: Buffer.from(body),
+    });
+
+  const goodName = 'bgtutor-2024-02-29-230405.bgtutor-backup';
+  await selectArchive(goodName);
+  await expect(contents.locator('time')).toHaveAttribute(
+    'datetime',
+    '2024-02-29T23:04:05Z',
+  );
+  await expect(
+    contents.getByText('aus Dateiname', { exact: false }),
+  ).toBeVisible();
+
+  await page.getByRole('button', { name: 'Wiederherstellung ansehen' }).click();
+  const dialog = page.getByRole('dialog', {
+    name: 'Sicherung wiederherstellen',
+  });
+  const dialogContents = dialog.getByRole('region', {
+    name: 'Bestände vergleichen',
+  });
+  await expect(dialogContents.locator('time')).toHaveAttribute(
+    'datetime',
+    '2024-02-29T23:04:05Z',
+  );
+  await expect(
+    dialogContents.getByText('aus Dateiname', { exact: false }),
+  ).toBeVisible();
+  await expect(dialogContents.getByRole('columnheader')).toHaveText([
+    'Sicherung',
+    'Zieldatenbank',
+    'Differenz',
+  ]);
+  await expect(
+    dialogContents.getByRole('row', { name: /^Matches/ }).getByRole('cell'),
+  ).toHaveText(['42', '40', '+2']);
+  await expect(
+    dialogContents
+      .getByRole('row', { name: /^Gespeicherte Positionen/ })
+      .getByRole('cell'),
+  ).toHaveText(['2', '3.502', '-3.500']);
+  await expect(
+    dialogContents.getByRole('row', { name: /^Lernkarten/ }).getByRole('cell'),
+  ).toHaveText(['3', '3', '0']);
+  await expect(
+    dialogContents.getByRole('cell', { name: '+2', exact: true }),
+  ).toHaveCSS('color', 'rgb(37, 99, 60)');
+  await expect(
+    dialogContents.getByRole('cell', { name: '-3.500', exact: true }),
+  ).toHaveCSS('color', 'rgb(161, 52, 40)');
+  await expect(
+    dialogContents.getByRole('cell', { name: '0', exact: true }),
+  ).toHaveCSS('color', 'rgb(32, 40, 51)');
+  await dialog.getByRole('button', { name: 'Abbrechen', exact: true }).click();
+
+  for (const name of [
+    'bgtutor-2025-02-29-230405.bgtutor-backup',
+    'bgtutor-2024-02-29-240000.bgtutor-backup',
+    'renamed-bgtutor-2024-02-29-230405.bgtutor-backup',
+  ]) {
+    await selectArchive(name);
+    await expect(
+      contents.getByText('Im Archiv nicht gespeichert'),
+    ).toBeVisible();
+    await expect(contents.locator('time')).toHaveCount(0);
+  }
+
+  await selectArchive(goodName, 'current');
+  await expect(contents.locator('time')).toHaveAttribute(
+    'datetime',
+    archivedDate,
+  );
+  await expect(
+    contents.getByText('aus Dateiname', { exact: false }),
+  ).toHaveCount(0);
 });

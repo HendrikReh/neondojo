@@ -1715,6 +1715,46 @@
         }
       }
     },
+    "/api/database-backup/target-counts": {
+      "get": {
+        "tags": [
+          "Database backup"
+        ],
+        "operationId": "database_backup_target_counts",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupTargetCounts"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/databases": {
       "get": {
         "tags": [
@@ -11015,6 +11055,28 @@
             "type": "integer",
             "format": "int64",
             "minimum": 0
+          }
+        }
+      },
+      "BackupTargetCounts": {
+        "type": "object",
+        "required": [
+          "matches",
+          "saved_positions",
+          "learning_cards"
+        ],
+        "properties": {
+          "learning_cards": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "matches": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "saved_positions": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },

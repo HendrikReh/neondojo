@@ -236,8 +236,14 @@ engine, and the confidence interval when the sample supports it.
 Database backup shows the scope of a restore before file selection. BG Tutor
 automatically checks each selected archive and compares its schema with the
 destination. The preview shows the creation time and counts for matches, saved
-positions, and flashcards. Older archives can lack a creation time. Only a
-compatible archive enables **Review database replacement**.
+positions, and flashcards. For older archives without a stored creation time,
+a valid BG Tutor filename supplies the time, marked **from filename**. Only
+a compatible archive enables **Review database replacement**.
+The confirmation dialog shows the creation time and compares the backup counts
+with the destination counts fetched when the dialog opens.
+The **Difference** column shows the expected change in each count after
+replacement. Increases are green with a plus sign, decreases are red with a
+minus sign, and zero uses the regular text color.
 After **Replace database**, the backend checks the archive again and validates
 the rows during the restore transaction. Reload BG Tutor after success.
 

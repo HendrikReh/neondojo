@@ -388,6 +388,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/database-backup/target-counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["database_backup_target_counts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/databases": {
         parameters: {
             query?: never;
@@ -2493,6 +2509,14 @@ export interface components {
         BackupContents: {
             /** Format: date-time */
             created_at?: string | null;
+            /** Format: int64 */
+            learning_cards: number;
+            /** Format: int64 */
+            matches: number;
+            /** Format: int64 */
+            saved_positions: number;
+        };
+        BackupTargetCounts: {
             /** Format: int64 */
             learning_cards: number;
             /** Format: int64 */
@@ -6304,6 +6328,41 @@ export interface operations {
                 };
             };
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    database_backup_target_counts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupTargetCounts"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

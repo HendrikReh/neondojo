@@ -129,3 +129,35 @@
   font-weight: var(--font-weight-medium);
   font-variant-numeric: tabular-nums;
 }
+
+.database-backup-comparison {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-size: var(--font-size-body);
+}
+
+.database-backup-comparison :is(th, td) {
+  padding: 5px 0 5px 8px;
+  border-top: 1px solid var(--ui-border);
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.database-backup-comparison th[scope='row'] {
+  padding-inline-start: 0;
+  text-align: start;
+  font-weight: var(--font-weight-medium);
+}
+
+.database-backup-comparison th[scope='col'] {
+  color: var(--ui-muted);
+}
+
+.database-backup-comparison td[data-difference='increase'] {
+  color: var(--ui-success-text);
+}
+
+.database-backup-comparison td[data-difference='decrease'] {
+  color: var(--ui-danger-text);
+}
