@@ -63,7 +63,9 @@ Open <http://127.0.0.1:5173>. Vite forwards `/api` to `http://127.0.0.1:8787` by
 
    The script builds from the current checkout, including uncommitted changes. It uses `target/local-restart` to keep the restart build separate from other Cargo builds and recompiles the BG Tutor package on each run so SQLx embeds the current migration files. Continue once both builds succeed and the script prints the path to the new binary.
 
-   If macOS 27 reports `mis-aligned LINKEDIT string pool` while loading a Rust procedural macro, rerun with `CARGO_PROFILE_RELEASE_STRIP=none ./tools/build_local_restart.sh`. This keeps release optimization and disables stripping. [Rust issue](https://github.com/rust-lang/rust/issues/157750)
+   The workspace `Cargo.toml` explicitly sets `strip = "none"` for the `dev` and `release` profiles; `test` and `bench` inherit these settings. This also covers direct Cargo commands and fresh build directories. No `CARGO_PROFILE_RELEASE_STRIP` prefix is needed. Release optimization remains enabled, but the artifacts can be larger.
+
+   Keep these explicit settings while supporting Rust 1.94.1 on macOS 27: Cargo can implicitly strip debug information when no `strip` setting is present, and the bundled LLVM can then produce procedural-macro libraries that fail to load with `mis-aligned LINKEDIT string pool`. Removing an explicit `strip` option is therefore not equivalent to disabling stripping. Environment variables, Cargo config overrides, and `RUSTFLAGS` must not re-enable stripping. After a toolchain or profile change, verify a release build in a fresh target directory without a strip override. [Rust issue](https://github.com/rust-lang/rust/issues/157750)
 
 3. Stop BG Tutor with `Ctrl+C` in its terminal. If it runs in the background, use `lsof -nP -iTCP:8787 -sTCP:LISTEN` to find the listener. Confirm that it is the `bgtutor` process, then replace `PID` with its process ID in `kill -TERM PID`. Wait until the listener has stopped.
 4. From the repository root, start the binary produced by step 2. It applies pending migrations at startup and serves the built frontend on the same port.

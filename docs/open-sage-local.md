@@ -129,7 +129,7 @@ Vor dem Neustart wurde die PostgreSQL-Datenbank vollständig als `bgtutor-before
 
 Die gespeicherten Vorgaben für neue Spiele und Analysen sind auf ausdrücklichen Wunsch **Open Sage, 2-ply**. Die Benchmarkauswahl bleibt unabhängig. Vorhandene Spielsitzungen und Aufträge behalten ihre bisherigen Einstellungen; gespeicherte Profile wurden nicht überschrieben. Die verifizierte Python-Umgebung liegt unter `local-data/open-sage/venv/bin/python`.
 
-Der optimierte Backendbuild läuft unter `http://127.0.0.1:8787` und liefert `web/dist` aus. Seine dauerhafte ausführbare Datei ist `local-data/bin/bgtutor`, das Protokoll `local-data/bgtutor.log`. Zum erneuten Bauen/Starten gelten die [README-Schritte](../README.md#restart-bg-tutor-locally-on-port-8787). Auf diesem macOS-27-Rechner war `CARGO_PROFILE_RELEASE_STRIP=none` nötig; die Releaseoptimierung bleibt dabei aktiv. Der erste Build ohne diese Umgebungsvariable scheiterte am dokumentierten Rust-LINKEDIT-Problem.
+Der optimierte Backendbuild läuft unter `http://127.0.0.1:8787` und liefert `web/dist` aus. Seine dauerhafte ausführbare Datei ist `local-data/bin/bgtutor`, das Protokoll `local-data/bgtutor.log`. Zum erneuten Bauen/Starten gelten die [README-Schritte](../README.md#restart-bg-tutor-locally-on-port-8787). Die zentrale `Cargo.toml` deaktiviert Stripping ausdrücklich für Entwicklungs- und Releasebuilds, um das Rust-LINKEDIT-Problem unter macOS 27 zu vermeiden. Der frühere manuelle Präfix `CARGO_PROFILE_RELEASE_STRIP=none` ist damit nicht mehr nötig; die Releaseoptimierung bleibt aktiv.
 
 Nach dem Zusammenführen erneut erfolgreich geprüft:
 
