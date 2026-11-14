@@ -1,3 +1,4 @@
+import { applyAndCloseSettings } from './settings-actions';
 import { expect, test, type Page } from './test';
 import { readFileSync } from 'node:fs';
 
@@ -13,7 +14,7 @@ const initialSettings = {
   gnubg_path: '/opt/bin/gnubg',
 };
 
-async function setup(page: Page) {
+async function setup(page: Page, boardTheme = 'walnut') {
   let saved = { ...initialSettings },
     conflict = false,
     loadFailure = false;
@@ -68,10 +69,10 @@ async function setup(page: Page) {
       ],
     }),
   );
-  await page.addInitScript(() => {
+  await page.addInitScript((boardTheme) => {
     localStorage.setItem('bgtutor.locale', 'en');
-    localStorage.setItem('bgtutor.theme', 'walnut');
-  });
+    localStorage.setItem('bgtutor.theme', boardTheme);
+  }, boardTheme);
   return {
     writes,
     conflict: (value: boolean) => {
@@ -92,6 +93,121 @@ async function appearanceSettings(page: Page) {
   await dialog.getByRole('button', { name: 'Appearance', exact: true }).click();
   return dialog;
 }
+
+const desktopSizes = [
+  { width: 1800, height: 1169 },
+  { width: 2560, height: 1440 },
+  { width: 3840, height: 2160 },
+];
+
+test('appearance and board place their previews alongside the choices on desktop', async ({
+  page,
+}, info) => {
+  await setup(page);
+  await page.goto('/');
+  const dialog = await appearanceSettings(page);
+  const theme = dialog.getByRole('combobox', {
+    name: 'Interface theme',
+    exact: true,
+  });
+  const gallery = dialog.getByRole('group', {
+    name: 'Available board themes',
+    exact: true,
+  });
+
+  for (const size of desktopSizes) {
+    await page.setViewportSize(size);
+    await dialog
+      .getByRole('button', { name: 'Appearance', exact: true })
+      .click();
+    const appearance = dialog.getByRole('figure', {
+      name: 'Interface preview',
+    });
+    const themeBox = (await theme.boundingBox())!;
+    const appearanceBox = (await appearance.boundingBox())!;
+    expect(appearanceBox.x).toBeGreaterThan(themeBox.x + themeBox.width);
+    expect(Math.abs(appearanceBox.y - themeBox.y)).toBeLessThan(45);
+    await expect(appearance).toBeInViewport({ ratio: 1 });
+    await dialog.screenshot({
+      path: info.outputPath(`appearance-${size.width}.png`),
+    });
+
+    await dialog.getByRole('button', { name: 'Board', exact: true }).click();
+    const preview = dialog.getByRole('region', { name: /^Preview: / });
+    const galleryBox = (await gallery.boundingBox())!;
+    const previewBox = (await preview.boundingBox())!;
+    expect(previewBox.x).toBeGreaterThan(galleryBox.x + galleryBox.width);
+    expect(Math.abs(previewBox.y - galleryBox.y)).toBeLessThan(8);
+    await expect(preview).toBeInViewport({ ratio: 1 });
+    await dialog.screenshot({
+      path: info.outputPath(`board-${size.width}.png`),
+    });
+  }
+});
+
+test('scrolling and choosing from the board gallery keeps the preview in view', async ({
+  page,
+}) => {
+  const archives = JSON.parse(
+    readFileSync(
+      new URL('../src/generated-themes.json', import.meta.url),
+      'utf8',
+    ),
+  ) as { id: string; name: string }[];
+  test.skip(
+    archives.length < 7,
+    'Requires enough local themes to scroll the gallery',
+  );
+  const savedTheme = archives.at(-1)!;
+  await setup(page, savedTheme.id);
+  await page.goto('/');
+  const dialog = await appearanceSettings(page);
+  await dialog.getByRole('button', { name: 'Board', exact: true }).click();
+  const gallery = dialog.getByRole('group', {
+    name: 'Available board themes',
+    exact: true,
+  });
+  const preview = dialog.getByRole('region', { name: /^Preview: / });
+  const selected = gallery.getByText(/^✓ Selected$/);
+  const initialChoice = gallery.getByRole('button', { pressed: true });
+  await expect(initialChoice).toHaveAccessibleName(savedTheme.name);
+  await expect(initialChoice).toBeInViewport({ ratio: 1 });
+  await expect(
+    dialog.getByRole('button', { name: 'Board', exact: true }),
+  ).toBeFocused();
+  const before = await preview.boundingBox();
+  await gallery.press('Home');
+  await expect
+    .poll(() => gallery.evaluate((element) => element.scrollTop))
+    .toBe(0);
+  await expect(initialChoice).not.toBeInViewport();
+  await dialog.getByRole('button', { name: 'Appearance', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Board', exact: true }).click();
+  await expect(initialChoice).toBeInViewport({ ratio: 1 });
+  await gallery.press('Home');
+  await expect
+    .poll(() => gallery.evaluate((element) => element.scrollTop))
+    .toBe(0);
+  await gallery.hover();
+  await page.mouse.wheel(0, 1100);
+  await expect
+    .poll(() => gallery.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(0);
+  expect(await preview.boundingBox()).toEqual(before);
+  await expect(preview).toBeInViewport({ ratio: 1 });
+  const choice = gallery.getByRole('button').nth(-2);
+  const name = await choice.getAttribute('aria-label');
+  await choice.press('Space');
+  await expect(choice).toBeFocused();
+  await expect(choice).toHaveAttribute('aria-pressed', 'true');
+  await expect(selected).toHaveCount(1);
+  await expect(choice.getByText(/^✓ Selected$/)).toBeInViewport();
+  await expect(preview).toHaveAccessibleName(`Preview: ${name}`);
+  await expect(preview).toBeInViewport({ ratio: 1 });
+  await expect(
+    dialog.getByRole('button', { name: 'Apply', exact: true }),
+  ).toBeInViewport();
+});
 
 const backgrounds = {
   graphite: { light: 'rgb(238, 241, 245)', dark: 'rgb(21, 25, 31)' },
@@ -143,8 +259,7 @@ for (const theme of ['graphite', 'club', 'paper'] as const) {
       await expect(
         dialog.locator('.settings-preview .theme-walnut'),
       ).toBeVisible();
-      await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
-      await expect(dialog).not.toBeVisible();
+      await applyAndCloseSettings(dialog);
       await expect(page.locator('html')).toHaveAttribute(
         'data-ui-theme',
         theme,
@@ -175,7 +290,7 @@ for (const theme of ['graphite', 'club', 'paper'] as const) {
         }),
       ).toHaveCSS('background-color', surfaces[theme][mode]);
       await savedDialog
-        .getByRole('button', { name: 'Cancel', exact: true })
+        .getByRole('button', { name: 'Close', exact: true })
         .click();
       for (const tab of ['Match database', 'Positions', 'Study']) {
         await page.getByRole('tab', { name: tab, exact: true }).click();
@@ -200,7 +315,7 @@ test('interface appearance preserves selected original ZIP artwork', async ({
   test.skip(!archive, 'No local board archives are installed');
   await setup(page);
   await page.goto('/');
-  let dialog = await appearanceSettings(page);
+  const dialog = await appearanceSettings(page);
   await dialog.getByRole('button', { name: 'Board', exact: true }).click();
   await dialog
     .getByRole('button', { name: archive!.name, exact: true })
@@ -210,7 +325,7 @@ test('interface appearance preserves selected original ZIP artwork', async ({
     .first()
     .getAttribute('href');
   await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
-  dialog = await appearanceSettings(page);
+  await dialog.getByRole('button', { name: 'Appearance', exact: true }).click();
   await dialog
     .getByRole('combobox', { name: 'Interface theme', exact: true })
     .selectOption('paper');
@@ -218,7 +333,6 @@ test('interface appearance preserves selected original ZIP artwork', async ({
     .getByRole('combobox', { name: 'Display mode', exact: true })
     .selectOption('dark');
   await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
-  dialog = await appearanceSettings(page);
   await dialog.getByRole('button', { name: 'Board', exact: true }).click();
   await expect(
     dialog.locator('.settings-preview .bgblitz-board'),
@@ -244,7 +358,11 @@ test('cancel and save conflicts retain the applied appearance and board preferen
   await dialog
     .getByRole('combobox', { name: 'Display mode', exact: true })
     .selectOption('dark');
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: 'Unapplied settings' })
+    .getByRole('button', { name: 'Discard draft', exact: true })
+    .click();
   expect(backend.writes).toHaveLength(0);
   expect(
     JSON.parse(
@@ -322,7 +440,7 @@ test('loading errors prevent saving appearance before settings are available', a
   );
   await expect(
     dialog.getByRole('button', { name: 'Apply', exact: true }),
-  ).toBeDisabled();
+  ).toBeHidden();
   await expect(
     dialog.getByRole('combobox', { name: 'Interface theme', exact: true }),
   ).toHaveCount(0);

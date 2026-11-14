@@ -90,7 +90,7 @@ test('opening-book preferences and a real opening lookup expose source and depth
     .getByRole('button', { name: 'Analysis', exact: true })
     .click();
   await page
-    .getByRole('button', { name: 'Opening books', exact: true })
+    .getByRole('button', { name: 'Manage opening books', exact: true })
     .click();
   const dialog = page.getByRole('dialog', {
     name: 'Opening books',
@@ -101,6 +101,9 @@ test('opening-book preferences and a real opening lookup expose source and depth
   ).toBeVisible();
   await expect(dialog).toContainText('BackgammonDB');
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Manage opening books', exact: true }),
+  ).toBeFocused();
   await page.keyboard.press('Escape');
   await page.getByLabel('Match file', { exact: true }).setInputFiles({
     name: 'book-hit.sgf',
@@ -185,14 +188,16 @@ test('opening-book navigation explicitly applies or preserves an engine draft', 
   });
   await profile.selectOption('1');
   await settings
-    .getByRole('button', { name: 'Opening books', exact: true })
+    .getByRole('button', { name: 'Manage opening books', exact: true })
     .click();
-  const guard = settings.getByRole('alertdialog');
+  const guard = page.getByRole('dialog', { name: 'Unapplied settings' });
   await expect(guard).toBeVisible();
-  await guard.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await guard
+    .getByRole('button', { name: 'Keep editing', exact: true })
+    .click();
   await expect(profile).toHaveValue('1');
   await settings
-    .getByRole('button', { name: 'Opening books', exact: true })
+    .getByRole('button', { name: 'Manage opening books', exact: true })
     .click();
   await guard
     .getByRole('button', { name: 'Apply and continue', exact: true })
@@ -205,10 +210,30 @@ test('opening-book navigation explicitly applies or preserves an engine draft', 
     books.getByLabel('Opening-book source', { exact: true }),
   ).toBeVisible();
   await books.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(settings).not.toBeVisible();
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
-  await settings.getByRole('button', { name: 'Analysis', exact: true }).click();
   await expect(profile).toHaveValue('1');
+  await expect(
+    settings.getByRole('button', { name: 'Manage opening books', exact: true }),
+  ).toBeFocused();
+  await profile.selectOption('0');
+  await settings
+    .getByRole('button', { name: 'Manage opening books', exact: true })
+    .click();
+  await guard
+    .getByRole('button', { name: 'Discard draft', exact: true })
+    .click();
+  await expect(books).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(books).not.toBeVisible();
+  await expect(profile).toHaveValue('1');
+  await settings
+    .getByRole('button', { name: 'Manage opening books', exact: true })
+    .click();
+  await books
+    .getByRole('combobox', { name: 'Opening-book source', exact: true })
+    .selectOption('off');
+  await books.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(books).not.toBeVisible();
+  await expect(settings.getByText('Off', { exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(settings).not.toBeVisible();
 });

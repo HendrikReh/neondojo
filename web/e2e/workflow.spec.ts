@@ -1,3 +1,4 @@
+import { applyAndCloseSettings } from './settings-actions';
 import { openMatchCalculation, openPositionCalculation } from './analysis-controls';
 import { test, expect } from './test';
 
@@ -50,8 +51,7 @@ test('real import, search, GNUbg analysis, distribution, themes and mobile layou
   const settings = page.getByRole('dialog');
   await settings.getByRole('button', { name: 'Brett', exact: true }).click();
   await settings.getByRole('button', { name: 'Walnut', exact: true }).click();
-  await settings.getByRole('button', { name: 'Anwenden', exact: true }).click();
-  await expect(settings).not.toBeVisible();
+  await applyAndCloseSettings(settings, 'de');
   await expect(page.locator('.analysis-workspace .theme-walnut')).toBeVisible();
   await page.getByRole('button', { name: 'Nächster Zug' }).click();
   await expect(page.locator('.board-navigation')).toContainText('8/4 6/4');

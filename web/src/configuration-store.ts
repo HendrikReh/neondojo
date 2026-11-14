@@ -15,6 +15,7 @@ import { restoreConfigurationField } from './profile-changes';
 
 export const configurationJournalKey = 'bgtutor.configuration-pending.v1';
 type StorageAccess = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+type PendingConflict = { configuration: ProfileConfiguration; error: unknown };
 export type ConfigurationStatus =
   'loading' | 'ready' | 'saving' | 'error' | 'conflict';
 export interface ConfigurationSnapshot {
@@ -116,22 +117,33 @@ export class ConfigurationStore {
       this.publish({ storageError: true });
     }
   }
-  private accept(state: ConfigurationState, generation: number, reset = false) {
+  private accept(
+    state: ConfigurationState,
+    generation: number,
+    reset = false,
+    pending?: PendingConflict,
+  ) {
     if (
       this.snapshot.confirmed &&
       state.revision < this.snapshot.confirmed.revision
     )
       return;
     const noLaterEdits = generation === this.localGeneration;
-    this.recoveryBaseRevision = undefined;
+    this.recoveryBaseRevision = pending
+      ? (this.recoveryBaseRevision ?? this.snapshot.confirmed?.revision)
+      : undefined;
     if (noLaterEdits) this.acceptedGeneration = generation;
     this.publish({
       confirmed: state,
       activeProfile: state.active_profile,
-      ...(noLaterEdits ? { current: state.current_configuration } : {}),
+      ...(pending
+        ? { current: pending.configuration }
+        : noLaterEdits
+          ? { current: state.current_configuration }
+          : {}),
       ready: true,
-      status: 'ready',
-      error: null,
+      status: pending ? 'conflict' : 'ready',
+      error: pending?.error ?? null,
       generation: this.snapshot.generation + (reset ? 1 : 0),
       initializationWarnings:
         state.initialization_warnings ?? this.snapshot.initializationWarnings,
@@ -142,9 +154,11 @@ export class ConfigurationStore {
     this.publish({
       error,
       status:
-        error instanceof ConfigurationApiError &&
-        error.status === 409 &&
-        !['duplicate_name', 'active_profile'].includes(error.code)
+        this.recoveryBaseRevision !== undefined ||
+        this.snapshot.status === 'conflict' ||
+        (error instanceof ConfigurationApiError &&
+          error.status === 409 &&
+          !['duplicate_name', 'active_profile'].includes(error.code))
           ? 'conflict'
           : 'error',
     });
@@ -328,21 +342,80 @@ export class ConfigurationStore {
   flush = () => this.enqueue(() => this.flushNow());
   applyCurrent = (
     updater: (current: ProfileConfiguration) => ProfileConfiguration,
+    { rebaseOnConflict = false } = {},
   ) =>
     this.operation(async () => {
-      await this.flushNow();
-      const proposed = normalizeConfiguration(
-        updater(structuredClone(this.snapshot.current!)),
-      );
-      if (!isConfigurationDirty(this.snapshot.current, proposed)) return;
-      this.publish({ status: 'saving', error: null });
-      const state = await this.writeCurrent(
-        this.snapshot.confirmed!.revision,
-        proposed,
-      );
-      this.localGeneration++;
-      this.accept(state, this.localGeneration);
-      await this.loadAvailability();
+      let pending: PendingConflict | undefined;
+      let base = this.snapshot.confirmed;
+      try {
+        await this.flushNow();
+        base = this.snapshot.confirmed;
+      } catch (error) {
+        if (!rebaseOnConflict || this.snapshot.status !== 'conflict')
+          throw error;
+        base = await this.api.read();
+        if (this.localGeneration !== this.acceptedGeneration)
+          pending = { configuration: this.snapshot.current!, error };
+      }
+      if (!base) throw new Error('Configuration is not loaded');
+
+      // An explicit settings draft can be saved while unrelated autosaved edits
+      // still need conflict recovery. Apply the draft to both versions separately.
+      if (pending)
+        pending.configuration = normalizeConfiguration(
+          updater(structuredClone(pending.configuration)),
+        );
+      for (let canRetry = rebaseOnConflict; ; canRetry = false) {
+        const current = base.current_configuration;
+        const proposed = normalizeConfiguration(
+          updater(structuredClone(current)),
+        );
+        let state = base;
+        try {
+          if (isConfigurationDirty(current, proposed)) {
+            if (!pending) this.publish({ status: 'saving', error: null });
+            state = await this.writeCurrent(base.revision, proposed);
+          }
+        } catch (error) {
+          if (
+            !canRetry ||
+            !(error instanceof ConfigurationApiError) ||
+            error.code !== 'revision_conflict'
+          )
+            throw error;
+          const remote = await this.api.read();
+          if (remote.revision <= base.revision) throw error;
+          base = remote;
+          continue;
+        }
+        const confirmed = this.snapshot.confirmed;
+        if (state === confirmed && this.snapshot.status === 'ready')
+          return current;
+        if (
+          pending &&
+          !isConfigurationDirty(
+            state.current_configuration,
+            pending.configuration,
+          )
+        )
+          pending = undefined;
+        if (!pending) this.localGeneration++;
+        this.accept(
+          state,
+          pending ? this.acceptedGeneration : this.localGeneration,
+          confirmed?.revision !== base.revision,
+          pending,
+        );
+        if (state.active_profile.id !== confirmed?.active_profile.id) {
+          try {
+            await this.loadProfiles();
+          } catch {
+            /* Keep the previous list until the next refresh. */
+          }
+        }
+        await this.loadAvailability();
+        return state.current_configuration;
+      }
     });
   restoreProfileField = (
     profile: Pick<ConfigurationProfile, 'id' | 'revision'>,

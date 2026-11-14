@@ -1,3 +1,4 @@
+import { applyAndCloseSettings } from './settings-actions';
 import { test, expect } from './test';
 const id = '7a8f98a9-8b48-4d76-95fd-c8c8d4ced0ab';
 const decision = {
@@ -333,8 +334,7 @@ test('Playing settings persist a separate threshold and captured mode defaults',
   await dialog
     .getByLabel('Tutor warning threshold', { exact: true })
     .fill('0.02');
-  await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
-  await expect(dialog).not.toBeVisible();
+  await applyAndCloseSettings(dialog);
   const configuration = await page.evaluate(async () => {
     const response = await fetch('/api/configuration');
     return response.json();

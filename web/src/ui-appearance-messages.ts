@@ -1,5 +1,5 @@
 import { useI18n } from './i18n';
-import type { Locale } from './i18n-core';
+import { interpolate, type Locale, type TranslationParams } from './i18n-core';
 
 const en = {
   appearance: 'Appearance',
@@ -11,7 +11,7 @@ const en = {
   light: 'Light',
   dark: 'Dark',
   system: 'System',
-  help: 'Interface theme and display mode apply when you save. The board artwork is selected separately under Board.',
+  help: 'Interface theme and display mode take effect when you select “{action}”. Choose the board artwork under Board.',
   systemHelp: 'System follows the light or dark appearance of your device.',
   preview: 'Interface preview',
   analysis: 'Analysis',
@@ -38,7 +38,7 @@ export const uiAppearanceMessages: Record<Locale, Messages> = {
     light: 'Hell',
     dark: 'Dunkel',
     system: 'System',
-    help: 'Oberflächen-Theme und Anzeigemodus werden beim Speichern übernommen. Die Brettgrafik wählst du separat unter Brett.',
+    help: 'Oberflächen-Theme und Anzeigemodus werden mit „{action}“ wirksam. Die Brettgrafik wählst du unter „Brett“.',
     systemHelp:
       'System folgt der hellen oder dunklen Darstellung deines Geräts.',
     preview: 'Oberflächenvorschau',
@@ -62,7 +62,7 @@ export const uiAppearanceMessages: Record<Locale, Messages> = {
     light: 'Claro',
     dark: 'Oscuro',
     system: 'Sistema',
-    help: 'El tema de la interfaz y el modo se aplican al guardar. Las imágenes del tablero se eligen por separado en Tablero.',
+    help: 'El tema de la interfaz y el modo de visualización cambian al seleccionar «{action}». Elige el diseño del tablero en «Tablero».',
     systemHelp: 'Sistema sigue la apariencia clara u oscura de tu dispositivo.',
     preview: 'Vista previa de la interfaz',
     analysis: 'Análisis',
@@ -85,7 +85,7 @@ export const uiAppearanceMessages: Record<Locale, Messages> = {
     light: 'Clair',
     dark: 'Sombre',
     system: 'Système',
-    help: 'Le thème de l’interface et le mode s’appliquent à l’enregistrement. Les images du plateau se choisissent séparément sous Plateau.',
+    help: 'Le thème de l’interface et le mode d’affichage changent lorsque vous sélectionnez « {action} ». Choisissez le graphisme du plateau dans « Plateau ».',
     systemHelp: 'Système suit l’apparence claire ou sombre de votre appareil.',
     preview: 'Aperçu de l’interface',
     analysis: 'Analyse',
@@ -108,7 +108,7 @@ export const uiAppearanceMessages: Record<Locale, Messages> = {
     light: 'Chiaro',
     dark: 'Scuro',
     system: 'Sistema',
-    help: 'Il tema dell’interfaccia e la modalità si applicano al salvataggio. Le immagini della tavola si scelgono separatamente in Tavola.',
+    help: 'Il tema dell’interfaccia e la modalità di visualizzazione cambiano quando selezioni «{action}». Scegli la grafica della tavola in «Tavola».',
     systemHelp: 'Sistema segue l’aspetto chiaro o scuro del dispositivo.',
     preview: 'Anteprima dell’interfaccia',
     analysis: 'Analisi',
@@ -131,7 +131,7 @@ export const uiAppearanceMessages: Record<Locale, Messages> = {
     light: 'Jasny',
     dark: 'Ciemny',
     system: 'Systemowy',
-    help: 'Motyw interfejsu i tryb zostaną zastosowane po zapisaniu. Grafikę planszy wybiera się osobno w sekcji Plansza.',
+    help: 'Motyw interfejsu i tryb wyświetlania zmienią się po wybraniu „{action}”. Grafikę planszy wybierzesz w sekcji „Plansza”.',
     systemHelp:
       'Tryb systemowy podąża za jasnym lub ciemnym wyglądem urządzenia.',
     preview: 'Podgląd interfejsu',
@@ -146,10 +146,15 @@ export const uiAppearanceMessages: Record<Locale, Messages> = {
     error: 'Poważny błąd',
   },
 };
-export function uiAppearanceText(locale: Locale, key: UiAppearanceMessageKey) {
-  return uiAppearanceMessages[locale][key];
+export function uiAppearanceText(
+  locale: Locale,
+  key: UiAppearanceMessageKey,
+  params?: TranslationParams,
+) {
+  return interpolate(uiAppearanceMessages[locale][key], params);
 }
 export function useUiAppearanceText() {
   const { locale } = useI18n();
-  return (key: UiAppearanceMessageKey) => uiAppearanceText(locale, key);
+  return (key: UiAppearanceMessageKey, params?: TranslationParams) =>
+    uiAppearanceText(locale, key, params);
 }

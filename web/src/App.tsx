@@ -43,7 +43,6 @@ import { AppError } from './i18n-core';
 import type { AnnotationHit } from './AnnotationSearch';
 import type { AnnotationKind } from './annotation-api';
 import './workspace.css';
-import OpeningBookDialog from './OpeningBookDialog';
 import {
   acceptsLibraryMatches,
   PAUSED_MATCHES_DATABASE_ID,
@@ -170,7 +169,6 @@ export default function App() {
   const [settingsError, setSettingsError] = useState<unknown>();
   const [settingsRevision, setSettingsRevision] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [bookOpen, setBookOpen] = useState(false);
   const [bookRevision, setBookRevision] = useState(0);
   const [health, setHealth] = useState<'checking' | 'ok' | 'degraded'>(
     'checking',
@@ -331,7 +329,6 @@ export default function App() {
       if (
         view !== 'analysis' ||
         settingsOpen ||
-        bookOpen ||
         event.altKey ||
         event.ctrlKey ||
         event.metaKey
@@ -355,7 +352,7 @@ export default function App() {
     }
     window.addEventListener('keydown', move);
     return () => window.removeEventListener('keydown', move);
-  }, [view, settingsOpen, bookOpen, navigation]);
+  }, [view, settingsOpen, navigation]);
   function tabKey(event: KeyboardEvent<HTMLButtonElement>, current: View) {
     let next: number;
     const index = views.indexOf(current);
@@ -957,17 +954,11 @@ export default function App() {
           onSaved={notesSaved}
         />
       )}
-      {bookOpen && (
-        <OpeningBookDialog
-          onClose={() => setBookOpen(false)}
-          onSaved={() => setBookRevision((n) => n + 1)}
-        />
-      )}
       <SettingsDialog
         initialCategory={settingsCategory}
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
-        onBookSettings={() => setBookOpen(true)}
+        onBookSaved={() => setBookRevision((n) => n + 1)}
         onBenchmark={() => {
           cancelRestoration();
           setSettingsOpen(false);

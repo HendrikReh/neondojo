@@ -1,3 +1,4 @@
+import { applyAndCloseSettings } from './settings-actions';
 import { openMatchCalculation, openPositionCalculation } from './analysis-controls';
 import { test, expect } from './test';
 
@@ -544,8 +545,7 @@ test('a whole-match deck trains checker, double and response cards with the sele
   });
   await settings.getByRole('button', { name: 'Brett', exact: true }).click();
   await settings.getByRole('button', { name: 'Walnut', exact: true }).click();
-  await settings.getByRole('button', { name: 'Anwenden', exact: true }).click();
-  await expect(settings).not.toBeVisible();
+  await applyAndCloseSettings(settings, 'de');
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
   await page.getByRole('tab', { name: 'Lernkarten & Anki', exact: true }).click();
   const study = page.getByRole('region', {

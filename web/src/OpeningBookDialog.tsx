@@ -8,7 +8,11 @@ import LibraryDialog from './LibraryDialog';
 import { request } from './api';
 import { AppError } from './i18n-core';
 import { useI18n } from './i18n';
-import { useSourceText } from './analysis-source-messages';
+import {
+  openingBookProviderLabel,
+  openingBookProviders,
+  useSourceText,
+} from './analysis-source-messages';
 import {
   bookSettings,
   type BookSettings,
@@ -26,7 +30,7 @@ export default function OpeningBookDialog({
   const configuration = useOptionalConfiguration();
   const profileT = useProfileText();
   const l = useSourceText(),
-    { formatError, formatNumber } = useI18n();
+    { locale, formatError, formatNumber } = useI18n();
   const [xgChecked, setXgChecked] = useState<XgBookStatus>();
   const [saved, setSaved] = useState<BookSettings>(),
     [draft, setDraft] = useState<BookConfig>(),
@@ -193,10 +197,11 @@ export default function OpeningBookDialog({
               disabled={busy}
               onChange={(e) => setDraft({ ...draft, provider: e.target.value })}
             >
-              <option value="automatic">{l('automatic')}</option>
-              <option value="backgammondb">BackgammonDB</option>
-              <option value="xg">eXtreme Gammon (XG)</option>
-              <option value="off">{l('off')}</option>
+              {openingBookProviders.map((provider) => (
+                <option key={provider} value={provider}>
+                  {openingBookProviderLabel(locale, provider)}
+                </option>
+              ))}
             </select>
           </label>
           <label>

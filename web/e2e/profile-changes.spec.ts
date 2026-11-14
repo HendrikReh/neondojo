@@ -1,3 +1,4 @@
+import { applyAndCloseSettings } from './settings-actions';
 import { test, expect } from '@playwright/test';
 import { profileBackend } from './profile-backend';
 import { defaultConfiguration } from '../src/configuration-model';
@@ -113,7 +114,9 @@ test('offers changes only while values differ from the saved active profile', as
   for (const name of ['Changed player', '']) {
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await page.getByLabel('Player name', { exact: true }).fill(name);
-    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await applyAndCloseSettings(
+      page.getByRole('dialog', { name: 'Settings', exact: true }),
+    );
     await selector.click();
     await expect(
       page.getByRole('menuitem', { name: 'Show changes', exact: true }),

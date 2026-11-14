@@ -32,7 +32,7 @@ const en = {
   watchMove: 'Moving the checkers…',
   sounds: 'Game sounds',
   soundsHelp:
-    'Quiet sounds for moves, dice, hits, bearing off and cube offers. Saved in this browser and applied to ongoing games.',
+    'Quiet sounds for moves, dice, hits, bearing off and cube offers. This setting is saved in the current configuration and also applies to games in progress.',
   openingTitle: 'Opening roll',
   openingRolling: 'Both sides are rolling one die…',
   openingPreparing: 'Preparing the first move…',
@@ -144,7 +144,7 @@ const de: Record<Key, string> = {
   watchMove: 'Die Steine werden gezogen…',
   sounds: 'Spielgeräusche',
   soundsHelp:
-    'Dezente Geräusche für Ziehen, Würfeln, Schlagen, Bear-off und Dopplerangebote. In diesem Browser gespeichert und auch für laufende Partien wirksam.',
+    'Dezente Geräusche für Ziehen, Würfeln, Schlagen, Bear-off und Dopplerangebote. Die Einstellung wird in der aktuellen Konfiguration gespeichert und gilt auch für laufende Partien.',
   openingTitle: 'Eröffnungswurf',
   openingRolling: 'Beide Seiten werfen je einen Würfel…',
   openingPreparing: 'Der erste Zug wird vorbereitet…',
@@ -247,7 +247,7 @@ const extra: Record<string, Partial<Record<Key, string>>> = {
     watchMove: 'Moviendo las fichas…',
     sounds: 'Sonidos del juego',
     soundsHelp:
-      'Sonidos suaves para movimientos, dados, golpes, salida y ofertas de doblaje. Se guardan en este navegador y se aplican a las partidas en curso.',
+      'Sonidos suaves para movimientos, dados, golpes, salida y ofertas de doblaje. Este ajuste se guarda en la configuración actual y también se aplica a las partidas en curso.',
     title: 'Jugar',
     newMatch: 'Nueva partida',
     start: 'Iniciar partida',
@@ -302,7 +302,7 @@ const extra: Record<string, Partial<Record<Key, string>>> = {
     watchMove: 'Déplacement des pions…',
     sounds: 'Sons du jeu',
     soundsHelp:
-      'Sons discrets pour les déplacements, dés, frappes, sorties et propositions de double. Enregistrés dans ce navigateur et appliqués aux parties en cours.',
+      'Sons discrets pour les déplacements, dés, frappes, sorties et propositions de double. Ce réglage est enregistré dans la configuration actuelle et s’applique aussi aux parties en cours.',
     title: 'Jouer',
     newMatch: 'Nouveau match',
     start: 'Commencer',
@@ -357,7 +357,7 @@ const extra: Record<string, Partial<Record<Key, string>>> = {
     watchMove: 'Movimento delle pedine…',
     sounds: 'Suoni di gioco',
     soundsHelp:
-      'Suoni discreti per mosse, dadi, colpi, uscita e proposte di raddoppio. Salvati nel browser e applicati alle partite in corso.',
+      'Suoni discreti per mosse, dadi, colpi, uscita e proposte di raddoppio. L’impostazione viene salvata nella configurazione corrente e vale anche per le partite in corso.',
     title: 'Gioca',
     newMatch: 'Nuovo match',
     start: 'Inizia match',
@@ -412,7 +412,7 @@ const extra: Record<string, Partial<Record<Key, string>>> = {
     watchMove: 'Przesuwanie pionków…',
     sounds: 'Dźwięki gry',
     soundsHelp:
-      'Dyskretne dźwięki ruchów, kości, zbić, wyprowadzania i propozycji podwojenia. Zapisywane w tej przeglądarce i stosowane w trwających grach.',
+      'Dyskretne dźwięki ruchów, kości, zbić, wyprowadzania i propozycji podwojenia. Ustawienie jest zapisywane w bieżącej konfiguracji i dotyczy także trwających gier.',
     title: 'Graj',
     newMatch: 'Nowy mecz',
     start: 'Rozpocznij mecz',

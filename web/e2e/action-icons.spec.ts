@@ -32,8 +32,8 @@ test('focus tooltip remains visible above Settings and preserves dialog Escape',
   const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
   await expect(dialog).toBeVisible();
   await expect(
-    dialog.getByRole('button', { name: 'Apply', exact: true }),
-  ).toHaveAttribute('data-action-icon', 'save');
+    dialog.getByRole('button', { name: 'Close', exact: true }),
+  ).toHaveAttribute('data-action-icon', 'close');
   const close = dialog.locator('.settings-close');
   await close.focus();
   const tip = dialog.getByRole('tooltip');

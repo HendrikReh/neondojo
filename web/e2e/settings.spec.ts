@@ -1,3 +1,4 @@
+import { applyAndCloseSettings } from './settings-actions';
 import {
   openMatchCalculation,
   openPositionCalculation,
@@ -111,6 +112,312 @@ async function openSettings(page: Page) {
   return { dialog, trigger };
 }
 
+test('keyboard switches settings categories and respects the profile draft guard', async ({
+  page,
+}) => {
+  const backend = await settingsBackend(page);
+  await page.goto('/');
+  const { dialog } = await openSettings(page);
+  const sidebar = dialog.getByRole('navigation', {
+    name: 'Settings categories',
+  });
+  const general = sidebar.getByRole('button', { name: 'General', exact: true });
+  const appearance = sidebar.getByRole('button', {
+    name: 'Appearance',
+    exact: true,
+  });
+  const profiles = sidebar.getByRole('button', {
+    name: 'Profiles',
+    exact: true,
+  });
+  const name = dialog.getByLabel('Player name', { exact: true });
+
+  await general.press('ArrowDown');
+  await expect(appearance).toBeFocused();
+  await expect(appearance).toHaveAttribute('aria-current', 'page');
+  await page.keyboard.press('ArrowUp');
+  await expect(general).toBeFocused();
+  await expect(name).toBeVisible();
+  await page.keyboard.press('End');
+  await expect(profiles).toBeFocused();
+  await expect(profiles).toHaveAttribute('aria-current', 'page');
+  await page.keyboard.press('Home');
+  await expect(general).toBeFocused();
+  await expect(general).toHaveAttribute('aria-current', 'page');
+
+  await name.fill('Keyboard draft');
+  await name.press('Home');
+  await name.press('End');
+  await expect(name).toBeFocused();
+  await general.press('End');
+  const guard = page.getByRole('dialog', { name: 'Unapplied settings' });
+  await guard
+    .getByRole('button', { name: 'Keep editing', exact: true })
+    .click();
+  await expect(general).toBeFocused();
+  await expect(name).toHaveValue('Keyboard draft');
+  await page.keyboard.press('End');
+  await guard
+    .getByRole('button', { name: 'Discard draft', exact: true })
+    .click();
+  await expect(profiles).toBeFocused();
+  await expect(profiles).toHaveAttribute('aria-current', 'page');
+  await page.keyboard.press('Home');
+  await expect(name).toHaveValue(initialSettings.player_name);
+  expect(backend.writes).toHaveLength(0);
+});
+
+test('Apply appears for changed settings and identifies the save destination', async ({
+  page,
+}) => {
+  const backend = await settingsBackend(page);
+  await page.goto('/');
+  const { dialog } = await openSettings(page);
+  const apply = dialog.getByRole('button', { name: 'Apply', exact: true });
+  const name = dialog.getByLabel('Player name', { exact: true });
+  await expect(apply).toBeHidden();
+  await name.press('Enter');
+  await expect(dialog).toBeVisible();
+  await name.fill('Edited player');
+  await expect(apply).toBeEnabled();
+  await expect(apply).toHaveAccessibleDescription(
+    'Saves changes to the current configuration.',
+  );
+  await name.fill(initialSettings.player_name);
+  await expect(apply).toBeHidden();
+  await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
+  await dialog.getByText('Engines on this computer', { exact: true }).click();
+  const path = dialog.getByLabel('GNUbg executable path', { exact: true });
+  await path.fill('/opt/other/bin/gnubg');
+  await expect(apply).toHaveAccessibleDescription(
+    'Engine paths and thread limits are saved on this computer.',
+  );
+  await dialog.getByRole('button', { name: 'General', exact: true }).click();
+  await name.fill('Edited player');
+  await expect(apply).toHaveAccessibleDescription(
+    'Saves changes to the current configuration. Engine paths and thread limits are saved on this computer.',
+  );
+  await name.fill(initialSettings.player_name);
+  await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
+  await path.fill(initialSettings.gnubg_path);
+  await expect(apply).toBeHidden();
+  expect(backend.writes).toHaveLength(0);
+});
+
+test('analysis puts defaults and book source ahead of local engine setup', async ({
+  page,
+}, info) => {
+  await settingsBackend(page);
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  await page.goto('/');
+  const { dialog } = await openSettings(page);
+  await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
+  const engine = dialog.getByLabel('Analysis engine', { exact: true });
+  const depth = dialog.getByLabel('Default analysis profile', { exact: true });
+  await expect(dialog.getByText('Automatic', { exact: true })).toBeVisible();
+  const setup = dialog.getByText('Engines on this computer', { exact: true });
+  await expect(setup).toBeInViewport();
+  await expect(
+    dialog.getByText('GNUbg · Available', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByText('Open Sage · Not available', { exact: true }),
+  ).toBeVisible();
+  const path = dialog.getByLabel('GNUbg executable path', { exact: true });
+  await expect(path).toBeHidden();
+  for (const [width, height] of [
+    [1800, 1169],
+    [2560, 1440],
+    [3840, 2160],
+  ]) {
+    await page.setViewportSize({ width, height });
+    const engineBox = await engine.boundingBox();
+    const depthBox = await depth.boundingBox();
+    expect(engineBox!.y).toBe(depthBox!.y);
+    expect(engineBox!.x).toBeLessThan(depthBox!.x);
+    await expect(setup).toBeInViewport();
+    await dialog.screenshot({ path: info.outputPath(`analysis-${width}.png`) });
+  }
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  await setup.click();
+  await expect(path).toBeVisible();
+  await dialog.screenshot({
+    path: info.outputPath('analysis-engine-details.png'),
+  });
+});
+
+test('playing groups engine, feedback and game preferences without desktop scrolling', async ({
+  page,
+}, info) => {
+  await settingsBackend(page);
+  await page.goto('/');
+  const { dialog } = await openSettings(page);
+  await dialog.getByRole('button', { name: 'Playing', exact: true }).click();
+  const engine = dialog.getByLabel('Engine for future games', { exact: true });
+  const strength = dialog.getByLabel('Strength for future games', {
+    exact: true,
+  });
+  const feedback = dialog.getByRole('group', {
+    name: 'Play mode and feedback',
+    exact: true,
+  });
+  const preferences = dialog.getByRole('group', {
+    name: 'Sounds and board direction',
+    exact: true,
+  });
+
+  for (const [width, height] of [
+    [1800, 1169],
+    [2560, 1440],
+    [3840, 2160],
+  ]) {
+    await page.setViewportSize({ width, height });
+    const engineBox = (await engine.boundingBox())!;
+    const strengthBox = (await strength.boundingBox())!;
+    expect(engineBox.y).toBe(strengthBox.y);
+    expect(engineBox.x + engineBox.width).toBeLessThan(strengthBox.x);
+    await expect(
+      feedback.getByLabel('Default play mode', { exact: true }),
+    ).toBeInViewport({ ratio: 1 });
+    await expect(
+      feedback.getByLabel('Tutor warning threshold', { exact: true }),
+    ).toBeInViewport({ ratio: 1 });
+    await expect(
+      feedback.getByLabel('Open training analysis automatically', {
+        exact: true,
+      }),
+    ).toBeInViewport({ ratio: 1 });
+    const feedbackBox = (await feedback.boundingBox())!;
+    const preferencesBox = (await preferences.boundingBox())!;
+    expect(feedbackBox.y).toBeGreaterThan(strengthBox.y + strengthBox.height);
+    expect(preferencesBox.y).toBeGreaterThan(
+      feedbackBox.y + feedbackBox.height,
+    );
+    await expect(
+      preferences.getByLabel('Game sounds', { exact: true }),
+    ).toBeInViewport({ ratio: 1 });
+    await expect(
+      preferences.getByLabel('Bear-off direction', { exact: true }),
+    ).toBeInViewport({ ratio: 1 });
+    await dialog.screenshot({ path: info.outputPath(`playing-${width}.png`) });
+  }
+});
+
+test('an edited Open Sage path stays in the draft until verified or discarded', async ({
+  page,
+}) => {
+  const backend = await settingsBackend(page);
+  const original = '/opt/sage/bin/python';
+  const edited = '/opt/new-sage/bin/python';
+  let attempts = 0;
+  await page.route('**/api/engines/bgsage', (route) => {
+    if (route.request().method() === 'GET') {
+      return route.fulfill({ json: { version: 2, python_path: original } });
+    }
+    attempts++;
+    return route.fulfill({
+      status: 422,
+      json: { error: 'Open Sage probe failed' },
+    });
+  });
+  await page.goto('/');
+  const { dialog } = await openSettings(page);
+  await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
+  await dialog.getByText('Engines on this computer', { exact: true }).click();
+  const path = dialog.getByLabel('Python path', { exact: true });
+  await expect(path).toHaveValue(original);
+  await expect(
+    dialog.getByRole('button', { name: 'Verify and save', exact: true }),
+  ).toHaveAccessibleDescription(
+    'Verifies and saves the Python path on this computer.',
+  );
+  await path.fill(edited);
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  const guard = page.getByRole('dialog', { name: 'Unapplied settings' });
+  await expect(
+    guard.getByRole('button', { name: 'Apply', exact: true }),
+  ).toHaveAccessibleDescription(
+    'Engine paths and thread limits are saved on this computer.',
+  );
+  await guard.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(guard.getByRole('alert')).toContainText(
+    'Open Sage probe failed',
+  );
+  await guard
+    .getByRole('button', { name: 'Keep editing', exact: true })
+    .click();
+  await expect(path).toHaveValue(edited);
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await guard
+    .getByRole('button', { name: 'Discard draft', exact: true })
+    .click();
+  await expect(dialog).toBeHidden();
+  expect(attempts).toBe(1);
+  expect(backend.writes).toHaveLength(0);
+});
+
+test('benchmark waits for the settings draft to be applied successfully', async ({
+  page,
+}) => {
+  const backend = await settingsBackend(page);
+  await page.goto('/');
+  const { dialog } = await openSettings(page);
+  await dialog
+    .getByLabel('Player name', { exact: true })
+    .fill('Benchmark draft');
+  await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
+  const benchmark = dialog.getByRole('button', {
+    name: 'Open benchmark',
+    exact: true,
+  });
+  await benchmark.click();
+  const guard = page.getByRole('dialog', { name: 'Unapplied settings' });
+  await expect(guard).toBeVisible();
+  await guard
+    .getByRole('button', { name: 'Keep editing', exact: true })
+    .click();
+  await expect(benchmark).toBeFocused();
+  expect(backend.writes).toHaveLength(0);
+
+  backend.conflict(true);
+  await benchmark.click();
+  await guard
+    .getByRole('button', { name: 'Apply and continue', exact: true })
+    .click();
+  await expect(guard.getByRole('alert')).toContainText(
+    'Settings changed elsewhere',
+  );
+  await expect(guard).toBeVisible();
+  await guard
+    .getByRole('button', { name: 'Keep editing', exact: true })
+    .click();
+  await dialog.getByRole('button', { name: 'General', exact: true }).click();
+  await expect(dialog.getByLabel('Player name', { exact: true })).toHaveValue(
+    'Benchmark draft',
+  );
+  backend.conflict(false);
+  await dialog
+    .getByRole('button', { name: 'Load latest and discard draft', exact: true })
+    .click();
+  await expect(dialog.getByLabel('Player name', { exact: true })).toHaveValue(
+    initialSettings.player_name,
+  );
+  await dialog
+    .getByLabel('Player name', { exact: true })
+    .fill('Apply before benchmark');
+  await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
+  await benchmark.click();
+  await guard
+    .getByRole('button', { name: 'Apply and continue', exact: true })
+    .click();
+  await expect(guard).toBeHidden();
+  await expect(dialog).toBeHidden();
+  await expect(
+    page.getByRole('tab', { name: 'Benchmark', exact: true }),
+  ).toHaveAttribute('aria-selected', 'true');
+  expect(backend.writes.at(-1)?.player_name).toBe('Apply before benchmark');
+});
+
 test('saves separate engine thread limits and restores them when reopened', async ({
   page,
 }) => {
@@ -118,6 +425,7 @@ test('saves separate engine thread limits and restores them when reopened', asyn
   await page.goto('/');
   const { dialog } = await openSettings(page);
   await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
+  await dialog.getByText('Engines on this computer', { exact: true }).click();
   await expect(
     dialog.getByRole('combobox', { name: 'GNUbg threads', exact: true }),
   ).toHaveAccessibleDescription(/Configurable range 1–7/);
@@ -142,15 +450,27 @@ test('saves separate engine thread limits and restores them when reopened', asyn
     .selectOption('6');
   expect(backend.writes).toHaveLength(0);
   await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(
+    dialog.getByRole('combobox', { name: 'GNUbg threads', exact: true }),
+  ).toHaveValue('3');
+  await expect(
+    dialog.getByRole('button', { name: 'Apply', exact: true }),
+  ).toBeHidden();
+  await expect(dialog).toBeVisible();
+  await expect(
+    dialog.getByRole('button', { name: 'Analysis', exact: true }),
+  ).toHaveAttribute('aria-current', 'page');
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(dialog).toBeHidden();
-  expect(backend.writes).toContainEqual(
+  expect(backend.writes).toEqual([
     expect.objectContaining({
       gnubg_threads: 3,
       open_sage_threads: 6,
     }),
-  );
+  ]);
   await openSettings(page);
   await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
+  await dialog.getByText('Engines on this computer', { exact: true }).click();
   await expect(
     dialog.getByRole('combobox', { name: 'GNUbg threads', exact: true }),
   ).toHaveValue('3');
@@ -190,6 +510,18 @@ test('English default, alphabetical languages, draft cancellation, focus trap an
     dialog.getByRole('button', { name: 'Close settings' }),
   ).toBeFocused();
   await page.keyboard.press('Escape');
+  const guard = page.getByRole('dialog', { name: 'Unapplied settings' });
+  await expect(guard).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(guard).toBeHidden();
+  await expect(dialog.locator('.settings-preview .theme-walnut')).toBeVisible();
+  await dialog
+    .getByRole('button', { name: 'Close settings', exact: true })
+    .click();
+  await expect(guard).toBeVisible();
+  await guard
+    .getByRole('button', { name: 'Discard draft', exact: true })
+    .click();
   await expect(dialog).not.toBeVisible();
   await expect(trigger).toBeFocused();
   expect(backend.writes).toHaveLength(0);
@@ -243,8 +575,7 @@ test('real artwork previews, independent profiles and settings persist only afte
       '1',
     );
   }
-  await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
-  await expect(dialog).not.toBeVisible();
+  await applyAndCloseSettings(dialog);
   expect(backend.writes).toHaveLength(1);
   expect(backend.writes[0]).toMatchObject({
     version: 3,
@@ -272,6 +603,7 @@ test('installation failures and save conflicts retain drafts and do not apply pr
     .fill('Retained draft');
   await dialog.getByLabel('Language', { exact: true }).selectOption('de');
   await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
+  await dialog.getByText('Engines on this computer', { exact: true }).click();
   await dialog
     .getByLabel('GNUbg executable path', { exact: true })
     .fill('/missing/gnubg');
@@ -324,7 +656,7 @@ test('load errors offer retry and the mobile dialog has reachable actions', asyn
   );
   await expect(
     dialog.getByRole('button', { name: 'Apply', exact: true }),
-  ).toBeDisabled();
+  ).toBeHidden();
   await expect(dialog.getByLabel('Player name', { exact: true })).toHaveCount(
     0,
   );
@@ -335,11 +667,11 @@ test('load errors offer retry and the mobile dialog has reachable actions', asyn
   );
   await dialog.getByRole('button', { name: 'Board', exact: true }).click();
   await expect(
-    dialog.getByRole('button', { name: 'Cancel', exact: true }),
+    dialog.getByRole('button', { name: 'Close', exact: true }),
   ).toBeInViewport();
   await expect(
     dialog.getByRole('button', { name: 'Apply', exact: true }),
-  ).toBeInViewport();
+  ).toBeHidden();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
@@ -379,8 +711,7 @@ for (const plies of [3, 4]) {
     });
     await expect(profile).toHaveValue('2');
     await profile.selectOption(String(plies));
-    await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
-    await expect(dialog).not.toBeVisible();
+    await applyAndCloseSettings(dialog);
     expect(backend.writes.at(-1)?.analysis_plies).toBe(plies);
     await openMatchCalculation(page);
     await expect(

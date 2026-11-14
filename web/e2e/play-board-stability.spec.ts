@@ -1,3 +1,4 @@
+import { closeSettings } from './settings-actions';
 import { test, expect } from './test';
 import {
   historyFixture,
@@ -86,6 +87,10 @@ for (const { width, human, locale } of [
         .getByRole('button', { name: 'Apply', exact: true })
         .click();
       await expect(page.locator('html')).toHaveAttribute('lang', 'de');
+      await closeSettings(
+        page.getByRole('dialog', { name: 'Einstellungen', exact: true }),
+        'de',
+      );
     }
     const board = page.locator('.play-live-board > .board-shell > .board');
     await expect(board).toBeVisible();

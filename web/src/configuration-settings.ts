@@ -13,14 +13,21 @@ const installationFields = [
   'open_sage_threads',
 ] as const;
 
+export function changedInstallationFields(
+  initial: AppSettings,
+  draft: AppSettings,
+) {
+  return installationFields.filter(
+    (field) => (initial[field] ?? null) !== (draft[field] ?? null),
+  );
+}
+
 export async function saveInstallationSettings(
   initial: AppSettings,
   draft: AppSettings,
   signal?: AbortSignal,
 ) {
-  const changed = installationFields.filter(
-    (field) => (initial[field] ?? null) !== (draft[field] ?? null),
-  );
+  const changed = changedInstallationFields(initial, draft);
   if (!changed.length) return;
   const latest = await loadSettings(signal);
   const edits = changed.filter(
@@ -62,31 +69,27 @@ export function settingsFromConfiguration(
   };
 }
 
-export function applySettingsDraft(
-  current: ProfileConfiguration,
-  draft: {
-    settings: AppSettings;
-    locale: Locale;
-    theme: string;
-    appearance: UiAppearance;
-    sounds: boolean;
-  },
-): ProfileConfiguration {
+interface SettingsDraft {
+  settings: AppSettings;
+  locale: Locale;
+  theme: string;
+  appearance: UiAppearance;
+  sounds: boolean;
+}
+
+function profileSettings(draft: SettingsDraft) {
   const { settings } = draft;
   return {
-    ...current,
     general: {
       player_name: settings.player_name,
       locale: draft.locale,
       play_sounds: draft.sounds,
     },
     analysis: {
-      ...current.analysis,
       engine: settings.analysis_engine,
       plies: settings.analysis_plies,
     },
     play: {
-      ...current.play,
       engine: settings.play_engine,
       plies: settings.play_plies,
       default_mode:
@@ -98,13 +101,52 @@ export function applySettingsDraft(
         defaultConfiguration.play.training_auto_analysis,
     },
     appearance: {
-      ...current.appearance,
       ui_theme: draft.appearance.theme,
       mode: draft.appearance.mode,
       board_theme: draft.theme,
       bearoff_direction:
         settings.bearoff_direction ??
         defaultConfiguration.appearance.bearoff_direction,
+    },
+  };
+}
+
+function changedValues<T extends object>(values: T, initial?: T): Partial<T> {
+  if (!initial) return values;
+  const changes: Partial<T> = {};
+  for (const key in values) {
+    if (values[key] !== initial[key]) changes[key] = values[key];
+  }
+  return changes;
+}
+
+export function applySettingsDraft(
+  current: ProfileConfiguration,
+  draft: SettingsDraft,
+  initial?: SettingsDraft,
+): ProfileConfiguration {
+  const values = profileSettings(draft);
+  const baseline = initial && profileSettings(initial);
+  const analysis = changedValues(values.analysis, baseline?.analysis);
+  const play = changedValues(values.play, baseline?.play);
+  // Engine and depth form one setting because supported depths depend on the engine.
+  if (analysis.engine !== undefined || analysis.plies !== undefined)
+    Object.assign(analysis, values.analysis);
+  if (play.engine !== undefined || play.plies !== undefined) {
+    play.engine = values.play.engine;
+    play.plies = values.play.plies;
+  }
+  return {
+    ...current,
+    general: {
+      ...current.general,
+      ...changedValues(values.general, baseline?.general),
+    },
+    analysis: { ...current.analysis, ...analysis },
+    play: { ...current.play, ...play },
+    appearance: {
+      ...current.appearance,
+      ...changedValues(values.appearance, baseline?.appearance),
     },
   };
 }

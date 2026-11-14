@@ -1,3 +1,4 @@
+import { applyAndCloseSettings } from './settings-actions';
 import { rollDice } from './play-board-actions';
 import { test, expect, type Page } from './test';
 import type { PlaySession } from '../src/play-api';
@@ -270,12 +271,15 @@ test('sound setting cancels, saves, survives reload and applies to ongoing games
   await open();
   await expect(dialog.getByLabel('Game sounds', { exact: true })).toBeChecked();
   await dialog.getByLabel('Game sounds', { exact: true }).uncheck();
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: 'Unapplied settings' })
+    .getByRole('button', { name: 'Discard draft', exact: true })
+    .click();
   await open();
   await expect(dialog.getByLabel('Game sounds', { exact: true })).toBeChecked();
   await dialog.getByLabel('Game sounds', { exact: true }).uncheck();
-  await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
-  await expect(dialog).not.toBeVisible();
+  await applyAndCloseSettings(dialog);
   expect(
     await page.evaluate(() => localStorage.getItem('bgtutor.play-sounds')),
   ).toBe('off');
@@ -297,8 +301,7 @@ test('sound setting cancels, saves, survives reload and applies to ongoing games
     dialog.getByLabel('Game sounds', { exact: true }),
   ).not.toBeChecked();
   await dialog.getByLabel('Game sounds', { exact: true }).check();
-  await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
-  await expect(dialog).not.toBeVisible();
+  await applyAndCloseSettings(dialog);
   await step(page, 6, 5);
   await expect.poll(() => heard(page)).toEqual([0.41]);
 });
@@ -413,8 +416,7 @@ test('muting while a recording loads prevents delayed playback after decode', as
   const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
   await dialog.getByRole('button', { name: 'Playing', exact: true }).click();
   await dialog.getByLabel('Game sounds', { exact: true }).uncheck();
-  await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
-  await expect(dialog).not.toBeVisible();
+  await applyAndCloseSettings(dialog);
   release();
   await expect
     .poll(() => page.evaluate(() => window.__decodedRecordings))

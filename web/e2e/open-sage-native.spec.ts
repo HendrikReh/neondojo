@@ -1,3 +1,4 @@
+import { applyAndCloseSettings } from './settings-actions';
 import { openMatchCalculation } from './analysis-controls';
 import { test, expect } from '@playwright/test';
 test.skip(
@@ -20,6 +21,7 @@ test('independent native engines, immutable sessions and desktop settings', asyn
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
   await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
+  await dialog.getByText('Engines on this computer', { exact: true }).click();
   await expect(dialog.getByLabel('Python path', { exact: true })).toHaveValue(
     process.env.BGTUTOR_SAGE_PYTHON!,
   );
@@ -74,8 +76,7 @@ test('independent native engines, immutable sessions and desktop settings', asyn
   await expect(
     dialog.getByLabel('Engine for future games', { exact: true }),
   ).toHaveValue('gnubg');
-  await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
-  await expect(dialog).not.toBeVisible();
+  await applyAndCloseSettings(dialog);
   const firstResponse = await page.request.post('/api/play/sessions', {
     data: { human_player: 0, match_length: 1, play_mode: 'competition' },
   });

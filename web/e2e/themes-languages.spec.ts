@@ -1,5 +1,6 @@
 import { profileText } from '../src/profile-messages';
 import { test, expect, type Locator, type Page } from './test';
+import { applyAndCloseSettings, closeSettings } from './settings-actions';
 import { readFileSync } from 'node:fs';
 import { catalogs } from '../src/i18n-catalogs';
 import { candidateMessages } from '../src/candidate-messages';
@@ -58,24 +59,21 @@ async function openSettings(page: Page) {
   return { dialog, locale };
 }
 
-async function saveDialog(dialog: Locator, locale: Locale) {
-  await dialog
-    .getByRole('button', { name: profileText(locale, 'apply'), exact: true })
-    .click();
-  await expect(dialog).not.toBeVisible();
-}
-
 async function applyTheme(page: Page, theme: (typeof themes)[number]) {
   const { dialog, locale } = await openSettings(page);
   await dialog
     .getByRole('button', { name: settingsText(locale, 'board'), exact: true })
     .click();
-  await dialog.getByRole('button', { name: theme.name, exact: true }).click();
+  const choice = dialog.getByRole('button', { name: theme.name, exact: true });
+  const alreadySelected =
+    (await choice.getAttribute('aria-pressed')) === 'true';
+  await choice.click();
   await expect(
     dialog.locator('.settings-preview .bgblitz-board'),
   ).toHaveAttribute('data-theme', theme.id);
   await assertArtwork(dialog.locator('.settings-preview .bgblitz-board'));
-  await saveDialog(dialog, locale);
+  if (alreadySelected) await closeSettings(dialog, locale);
+  else await applyAndCloseSettings(dialog, locale);
 }
 
 async function applyLanguage(page: Page, next: Locale) {
@@ -87,8 +85,21 @@ async function applyLanguage(page: Page, next: Locale) {
     .getByLabel(settingsText(locale, 'language'), { exact: true })
     .selectOption(next);
   await expect(page.locator('html')).toHaveAttribute('lang', locale);
-  await saveDialog(dialog, locale);
+  await dialog
+    .getByRole('button', { name: profileText(locale, 'apply'), exact: true })
+    .click();
   await expect(page.locator('html')).toHaveAttribute('lang', next);
+  const translatedSettings = page.getByRole('dialog', {
+    name: settingsText(next, 'title'),
+    exact: true,
+  });
+  await expect(
+    translatedSettings.getByRole('button', {
+      name: settingsText(next, 'general'),
+      exact: true,
+    }),
+  ).toHaveAttribute('aria-current', 'page');
+  await closeSettings(translatedSettings, next);
 }
 
 async function reopenTutor(page: Page) {
@@ -192,7 +203,7 @@ test('every local ZIP theme uses its original assets and survives reload on desk
     dialog.getByRole('button', { name: selected.name, exact: true }),
   ).toHaveAttribute('aria-pressed', 'true');
   await dialog
-    .getByRole('button', { name: settingsText(locale, 'cancel'), exact: true })
+    .getByRole('button', { name: settingsText(locale, 'done'), exact: true })
     .click();
   await expect(dialog).not.toBeVisible();
   await reopenTutor(page);
@@ -335,7 +346,7 @@ test('all six languages switch complete views on save and persist with the theme
     dialog.getByLabel(settingsText(locale, 'language'), { exact: true }),
   ).toHaveValue('fr');
   await dialog
-    .getByRole('button', { name: settingsText(locale, 'cancel'), exact: true })
+    .getByRole('button', { name: settingsText(locale, 'done'), exact: true })
     .click();
   await expect(dialog).not.toBeVisible();
   await reopenTutor(page);
@@ -365,7 +376,7 @@ test('a missing theme image shows a localized preview error and a working fallba
     dialog.locator('.settings-preview .theme-forest .board'),
   ).toBeVisible();
   await expect(analysis(page).locator('.theme-load-error')).toHaveCount(0);
-  await saveDialog(dialog, locale);
+  await applyAndCloseSettings(dialog, locale);
   await expect(analysis(page).locator('.theme-load-error')).toHaveText(
     catalogs.de['board.assetError'],
   );

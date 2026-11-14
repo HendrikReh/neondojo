@@ -1,3 +1,4 @@
+import { applyAndCloseSettings } from './settings-actions';
 import { rollDice, doubleCube } from './play-board-actions';
 import { test, expect } from './test';
 const initialBoard = [
@@ -245,8 +246,7 @@ test('Settings persists the chosen bear-off direction for new matches', async ({
   await dialog
     .getByLabel('Bear-off direction', { exact: true })
     .selectOption('left');
-  await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
-  await expect(dialog).not.toBeVisible();
+  await applyAndCloseSettings(dialog);
   const configuration = await page.evaluate(async () => {
     const response = await fetch('/api/configuration');
     return response.json();

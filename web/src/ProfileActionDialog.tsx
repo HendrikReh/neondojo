@@ -12,6 +12,7 @@ export default function ProfileActionDialog({
   choices,
   onCancel,
   busy = false,
+  lockScroll = true,
   error,
 }: {
   title: string;
@@ -20,11 +21,18 @@ export default function ProfileActionDialog({
   choices: { label: string; action: () => void }[];
   onCancel: () => void;
   busy?: boolean;
+  lockScroll?: boolean;
   error?: unknown;
 }) {
   const t = useProfileText();
   return createPortal(
-    <LibraryDialog title={title} onClose={onCancel} busy={busy} native>
+    <LibraryDialog
+      title={title}
+      onClose={onCancel}
+      busy={busy}
+      native
+      lockScroll={lockScroll}
+    >
       <p>{message}</p>
       {children}
       {!!error && (

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import {
   loadSageInstallation,
   saveSageInstallation,
@@ -58,14 +58,7 @@ const text = {
     'Instalacja niezweryfikowana',
   ],
 };
-export default function OpenSageInstallation({
-  onVerified,
-}: {
-  onVerified: () => void;
-}) {
-  const { locale, formatError } = useI18n();
-  const t = text[locale];
-  const settingsT = useSettingsText();
+export function useOpenSageInstallation(open: boolean, settingsReload: number) {
   const [reload, setReload] = useState(0);
   const [installation, setInstallation] = useState<SageInstallation>();
   const [path, setPath] = useState('');
@@ -73,7 +66,11 @@ export default function OpenSageInstallation({
   const [error, setError] = useState<unknown>();
   const saveAbort = useRef<AbortController | null>(null);
   useEffect(() => {
+    if (!open) return;
     const abort = new AbortController();
+    setInstallation(undefined);
+    setPath('');
+    setBusy(false);
     setError(undefined);
     void loadSageInstallation(abort.signal)
       .then((value) => {
@@ -88,10 +85,11 @@ export default function OpenSageInstallation({
     return () => {
       abort.abort();
       saveAbort.current?.abort();
+      saveAbort.current = null;
     };
-  }, [reload]);
+  }, [open, reload, settingsReload]);
   async function verify() {
-    if (!installation || busy) return;
+    if (!installation || saveAbort.current) return;
     const abort = new AbortController();
     saveAbort.current = abort;
     setBusy(true);
@@ -105,39 +103,80 @@ export default function OpenSageInstallation({
       if (!abort.signal.aborted) {
         setInstallation(value);
         setPath(value.python_path);
-        onVerified();
       }
     } catch (e) {
-      if (!abort.signal.aborted) setError(e);
+      if (!abort.signal.aborted) {
+        setError(e);
+        throw e;
+      }
     } finally {
-      if (!abort.signal.aborted) setBusy(false);
+      if (saveAbort.current === abort) {
+        saveAbort.current = null;
+        setBusy(false);
+      }
     }
   }
+  return {
+    installation,
+    path,
+    setPath,
+    busy,
+    error,
+    dirty: !!installation && path !== installation.python_path,
+    verify,
+    reload: () => setReload((value) => value + 1),
+    discard: () => {
+      setPath(installation?.python_path ?? '');
+      setError(undefined);
+    },
+  };
+}
+
+export default function OpenSageInstallation({
+  setup,
+  onVerified,
+}: {
+  setup: ReturnType<typeof useOpenSageInstallation>;
+  onVerified: () => void;
+}) {
+  const { locale, formatError } = useI18n();
+  const t = text[locale];
+  const settingsT = useSettingsText();
+  const saveTargetId = useId();
+  const { installation, path, setPath, busy, error, verify, reload } = setup;
   return (
-    <fieldset className="settings-section" disabled={busy}>
+    <fieldset className="settings-section settings-engine" disabled={busy}>
       <legend>{t[0]}</legend>
-      <label className="settings-field">
-        <span>{t[1]}</span>
-        <input
-          value={path}
-          onChange={(e) => setPath(e.target.value)}
-          spellCheck={false}
-        />
-      </label>
-      <button
-        type="button"
-        disabled={!installation || !path.trim()}
-        onClick={() => void verify()}
-      >
-        {t[busy ? 3 : 2]}
-      </button>
+      <div className="settings-engine-path">
+        <label className="settings-field">
+          <span>{t[1]}</span>
+          <input
+            value={path}
+            disabled={!installation}
+            onChange={(e) => setPath(e.target.value)}
+            spellCheck={false}
+            autoComplete="off"
+          />
+        </label>
+        <button
+          type="button"
+          aria-describedby={saveTargetId}
+          disabled={!installation || !path.trim()}
+          onClick={() => void verify().then(onVerified, () => {})}
+        >
+          {t[busy ? 3 : 2]}
+        </button>
+      </div>
+      <p className="settings-help" id={saveTargetId}>
+        {settingsT('verifySageTarget')}
+      </p>
       <p className="settings-help" role="status">
         {t[installation?.snapshot && path === installation.python_path ? 4 : 5]}
       </p>
       {error !== undefined && (
         <>
           <p role="alert">{formatError(error)}</p>
-          <button type="button" onClick={() => setReload((value) => value + 1)}>
+          <button type="button" onClick={reload}>
             {settingsT(
               error instanceof SettingsApiError && error.status === 409
                 ? 'loadLatest'

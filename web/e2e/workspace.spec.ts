@@ -1,3 +1,4 @@
+import { applyAndCloseSettings } from './settings-actions';
 import { openMatchCalculation, openPositionCalculation } from './analysis-controls';
 import { expect, test } from './test';
 import { profileBackend } from './profile-backend';
@@ -98,8 +99,7 @@ test('a delayed initial settings response cannot replace a newer saved profile',
   await dialog
     .getByLabel('Standardprofil für Analysen', { exact: true })
     .selectOption('2');
-  await dialog.getByRole('button', { name: 'Anwenden', exact: true }).click();
-  await expect(dialog).not.toBeVisible();
+  await applyAndCloseSettings(dialog, 'de');
   await expect(
     page
       .locator('.workspace-analysis-command')
