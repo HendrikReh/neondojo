@@ -5,6 +5,31 @@ export interface WorkspaceSelection {
 }
 const key = 'bgtutor.workspace';
 const uuid = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
+
+export type BulkAnalysisSession = {
+  jobIds: string[];
+  showMatchList: boolean;
+};
+
+export function decodeBulkAnalysisSession(
+  value: unknown,
+): BulkAnalysisSession | undefined {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    !('jobIds' in value) ||
+    !Array.isArray(value.jobIds) ||
+    !value.jobIds.every(
+      (id): id is string => typeof id === 'string' && uuid.test(id),
+    )
+  )
+    return;
+  return {
+    jobIds: [...new Set(value.jobIds)],
+    showMatchList: 'showMatchList' in value && value.showMatchList === true,
+  };
+}
+
 export function readSelection(
   storage?: Pick<Storage, 'getItem'>,
 ): WorkspaceSelection | null {

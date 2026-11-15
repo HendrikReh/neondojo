@@ -29,7 +29,8 @@ export default function LibraryDialog({
   pending.current = busy;
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
-    if (native) nativeLayer.current?.showModal();
+    const layer = native ? nativeLayer.current : null;
+    layer?.showModal();
     const controls = () =>
       Array.from(
         box.current?.querySelectorAll<HTMLElement>(
@@ -79,7 +80,7 @@ export default function LibraryDialog({
     return () => {
       document.removeEventListener('keydown', key, true);
       if (lockScroll) document.body.style.overflow = overflow;
-      if (native) nativeLayer.current?.close();
+      layer?.close();
       if (previous?.isConnected) previous.focus();
     };
   }, [native, initialFocus, lockScroll]);

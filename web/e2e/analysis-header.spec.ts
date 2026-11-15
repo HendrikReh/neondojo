@@ -140,8 +140,14 @@ test('analysis header shows a compact single-line identity and metadata while da
   });
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();
   await page
+    .locator('.database-table tbody tr')
+    .filter({ hasText: f.metadata.display_name })
+    .getByRole('checkbox')
+    .check();
+  await page
+    .locator('.library-batch-bar')
     .getByRole('button', {
-      name: `Edit match details: ${f.metadata.display_name}`,
+      name: 'Edit match details',
       exact: true,
     })
     .click();

@@ -1,4 +1,6 @@
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import type { Job } from '../src/api';
 import { expect, test } from './test';
 
 test('imported candidates come first and position progress stays in the workspace header', async ({
@@ -231,4 +233,157 @@ test('game and match settings close on start and progress stays in the command b
   }
   await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
   await expect(progress).toBeVisible();
+});
+
+test('reload resumes native bulk match analysis without submitting new jobs', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const testDatabase = process.env.BGTUTOR_E2E_DATABASE_URL;
+  if (!testDatabase)
+    throw new Error('Playwright did not provision a test database');
+
+  const player = `Bulk ${crypto.randomUUID()}`;
+  const plies = 2;
+  const matchIds: string[] = [];
+  const fixtures = [
+    {
+      name: 'bulk-short.sgf',
+      buffer: Buffer.from(
+        `(;GM[6]PW[${player}]PB[Opponent]MI[length:7];W[31hefe];B[42qusu])`,
+      ),
+    },
+    {
+      name: 'bulk-WC2014.sgf',
+      buffer: Buffer.from(
+        readFileSync(
+          '../backend/tests/fixtures/WC2014.gnubg.sgf',
+          'utf8',
+        ).replaceAll('PW[Douglas Mayfield]', `PW[${player}]`),
+      ),
+    },
+  ];
+  for (const fixture of fixtures) {
+    const imported = await page.request.post('/api/imports', {
+      multipart: {
+        file: { ...fixture, mimeType: 'application/octet-stream' },
+      },
+    });
+    expect(imported.status(), await imported.text()).toBe(201);
+    matchIds.push((await imported.json()).match.id);
+  }
+  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Match database', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Search matches' }).fill(player);
+  const rows = page.locator('.database-table tbody tr');
+  await expect(rows).toHaveCount(2);
+  for (const id of matchIds) {
+    await rows
+      .and(page.locator(`[data-match-id="${id}"]`))
+      .getByRole('checkbox')
+      .check();
+  }
+  await page
+    .locator('.library-batch-bar')
+    .getByRole('button', { name: 'Analyze selected matches …', exact: true })
+    .click();
+  const dialog = page.getByRole('dialog', { name: 'Analyze selected matches' });
+  await dialog
+    .getByLabel('Analysis engine', { exact: true })
+    .selectOption('gnubg');
+  await dialog
+    .getByLabel('Match analysis depth', { exact: true })
+    .selectOption(String(plies));
+  let posts = 0;
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (
+      request.method() === 'POST' &&
+      /^\/api\/matches\/[^/]+\/analysis$/.test(path)
+    )
+      posts++;
+  });
+  const submitted = matchIds.map((id) =>
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        new URL(response.url()).pathname === `/api/matches/${id}/analysis`,
+    ),
+  );
+  await dialog
+    .getByRole('button', { name: 'Analyze selected matches', exact: true })
+    .click();
+  await expect(dialog.getByRole('status')).toHaveText(
+    'Analysis jobs accepted (2)',
+  );
+  const jobs: Job[] = [];
+  for (const response of await Promise.all(submitted)) {
+    expect(response.status(), await response.text()).toBe(202);
+    jobs.push(await response.json());
+  }
+  const [shortJob, longJob] = jobs;
+  expect(jobs.map((job) => job.match_uuid)).toEqual(matchIds);
+  for (const job of jobs) {
+    expect(job.kind).toBe('match');
+    expect(job.game_no).toBeNull();
+    expect(job.plies).toBe(plies);
+    expect(job.engine_snapshot?.engine_id).toBe('gnubg');
+  }
+  expect(longJob.total_games).toBe(10);
+  const readJob = async (id: string): Promise<Job> => {
+    const response = await page.request.get(`/api/jobs/${id}`);
+    expect(response.ok(), await response.text()).toBe(true);
+    return response.json();
+  };
+
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  const database = page.getByRole('tabpanel', { name: 'Match database' });
+  const progress = database
+    .getByRole('status')
+    .filter({ hasText: /matches analyzed/ });
+  await expect(progress).toHaveText('1 of 2 matches analyzed', {
+    timeout: 30_000,
+  });
+  expect((await readJob(shortJob.id)).status).toBe('completed');
+  await expect
+    .poll(async () => (await readJob(longJob.id)).status)
+    .toBe('running');
+
+  await page.reload();
+  await expect(database).toBeVisible();
+  await expect(progress).toHaveText('1 of 2 matches analyzed');
+  expect((await readJob(longJob.id)).status).toBe('running');
+  expect(posts).toBe(2);
+
+  await expect(progress).toHaveText('2 of 2 matches analyzed', {
+    timeout: 120_000,
+  });
+  expect((await readJob(longJob.id)).completed_games).toBe(longJob.total_games);
+  expect(posts).toBe(2);
+  const persisted = spawnSync(
+    'psql',
+    [
+      testDatabase,
+      '-XAt',
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-v',
+      `short_match=${matchIds[0]}`,
+      '-v',
+      `long_match=${matchIds[1]}`,
+    ],
+    {
+      encoding: 'utf8',
+      input:
+        "SELECT id FROM jobs WHERE match_uuid IN (:'short_match', :'long_match');",
+    },
+  );
+  expect(
+    persisted.status,
+    'Could not read the jobs from the test database',
+  ).toBe(0);
+  const persistedIds = persisted.stdout.trim().split('\n');
+  expect(persistedIds.sort()).toEqual(jobs.map((job) => job.id).sort());
 });

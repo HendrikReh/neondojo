@@ -35,11 +35,7 @@ export function useLibraryColumns(visible: boolean, positionSearch = false) {
   );
   const activeColumns = useMemo(
     () =>
-      [
-        'select',
-        ...order.filter((id) => shown.includes(id)),
-        'actions',
-      ] as const,
+      ['select', ...order.filter((id) => shown.includes(id))] as const,
     [shown, order],
   );
   const resizeColumns = useMemo(
@@ -83,7 +79,7 @@ export function useLibraryColumns(visible: boolean, positionSearch = false) {
       setOrder(next);
     },
     minimumWidth: LIBRARY_COLUMNS.filter((column) =>
-      activeColumns.includes(column.id),
+      activeColumns.some((id) => id === column.id),
     ).reduce(
       // Player columns use percentages in the automatic layout, so allow
       // them and the mode column to contract to their readable minimums.

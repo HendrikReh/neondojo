@@ -9,6 +9,54 @@ import {
 
 // Each row is complete in English, German, Spanish, French, Polish and Italian.
 const rows = {
+  analyzeSelection: [
+    'Analyze selected matches',
+    'Ausgewählte Matches analysieren',
+    'Analizar las partidas seleccionadas',
+    'Analyser les matchs sélectionnés',
+    'Analizuj wybrane mecze',
+    'Analizza le partite selezionate',
+  ],
+  matchesToAnalyze: [
+    'Matches to analyze ({count})',
+    'Matches zur Analyse ({count})',
+    'Partidas por analizar ({count})',
+    'Matchs à analyser ({count})',
+    'Mecze do analizy ({count})',
+    'Partite da analizzare ({count})',
+  ],
+  analysisUnavailable: [
+    'Matches unavailable for analysis ({count})',
+    'Matches ohne Analysemöglichkeit ({count})',
+    'Partidas no disponibles para el análisis ({count})',
+    'Matchs indisponibles pour l’analyse ({count})',
+    'Mecze niedostępne do analizy ({count})',
+    'Partite non disponibili per l’analisi ({count})',
+  ],
+  analysisAccepted: [
+    'Analysis jobs accepted ({count})',
+    'Angenommene Analyseaufträge ({count})',
+    'Tareas de análisis aceptadas ({count})',
+    'Tâches d’analyse acceptées ({count})',
+    'Przyjęte zadania analizy ({count})',
+    'Attività di analisi accettate ({count})',
+  ],
+  bulkAnalysisProgress: [
+    '{completed} of {total} matches analyzed',
+    '{completed} von {total} Matches analysiert',
+    '{completed} de {total} partidas analizadas',
+    '{completed} matchs analysés sur {total}',
+    'Przeanalizowano {completed} z {total} meczów',
+    '{completed} partite analizzate su {total}',
+  ],
+  retryAnalysis: [
+    'Try again',
+    'Erneut versuchen',
+    'Reintentar',
+    'Réessayer',
+    'Spróbuj ponownie',
+    'Riprova',
+  ],
   moreOccurrences: [
     'Load more occurrences',
     'Weitere Vorkommen laden',

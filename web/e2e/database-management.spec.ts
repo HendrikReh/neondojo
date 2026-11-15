@@ -110,9 +110,11 @@ test('collections, independent copies, filters and metadata work together', asyn
   ).toHaveCount(0);
   await page.locator('.database-table tbody tr').first().click();
   await expect(page.locator('.match-preview')).toHaveCount(0);
+  await page.locator('.database-table tbody tr').first().getByRole('checkbox').check();
   await page
+    .locator('.library-batch-bar')
     .getByRole('button', {
-      name: 'Edit match details: library.sgf',
+      name: 'Edit match details',
       exact: true,
     })
     .click();

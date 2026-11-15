@@ -318,9 +318,10 @@ async function playToEnd(page: Page, initial: PlaySession) {
     .click();
   const row = page.locator(`#library-row-${entry.id}`);
   await expect(row).toBeVisible();
-  await expect(row.getByRole('button', { name: /Resume match:/ })).toHaveCount(
-    0,
-  );
+  await row.getByRole('checkbox').check();
+  await expect(
+    page.locator('.library-batch-bar').getByRole('button', { name: 'Resume match', exact: true }),
+  ).toBeDisabled();
   expect(sgf).toContain('RE[');
   expect(sgf).toContain(`${state.engine.plies}C 0 1 0.000000`);
   writeFileSync(
@@ -435,9 +436,10 @@ for (const config of [
         .locator('.database-sidebar')
         .getByRole('button', { name: /Bot Matches/ })
         .click();
+      await page.locator(`#library-row-${entry.id}`).getByRole('checkbox').check();
       await page
-        .locator(`#library-row-${entry.id}`)
-        .getByRole('button', { name: /Resume match:/ })
+        .locator('.library-batch-bar')
+        .getByRole('button', { name: 'Resume match', exact: true })
         .click();
       await expect(
         page.getByRole('tab', { name: 'Playing', exact: true }),

@@ -1,9 +1,12 @@
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import { useEffect, useRef, useState } from 'react';
 import { mergeJob, request, terminal, type Job } from './api';
-import type { components } from './generated-api';
+import {
+  submitMatchAnalysis,
+  type MatchAnalysisEngine,
+} from './match-analysis-api';
 
-export type MatchAnalysisEngine = components['schemas']['MatchAnalysisEngine'];
+export type { MatchAnalysisEngine } from './match-analysis-api';
 
 /** Jobs and subscriptions belong to the selected match, game scope and engine. */
 export function useMatchAnalysis(
@@ -116,16 +119,7 @@ export function useMatchAnalysis(
     setFailure(undefined);
     try {
       // Accepted work survives navigation; only its local display is scoped.
-      const start = () =>
-        request<Job>(`/matches/${matchId}/analysis`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            engine_id: engineId,
-            plies,
-            game_no: gameNo,
-          } satisfies components['schemas']['MatchAnalysisRequest']),
-        });
+      const start = () => submitMatchAnalysis(matchId, engineId, plies, gameNo);
       const incoming = configuration
         ? await configuration.runWithConfiguration(start)
         : await start();

@@ -131,12 +131,7 @@ describe('profile-controlled table widths', () => {
     }
     const firstHtml = renderToStaticMarkup(createElement(Table));
     expect(firstHtml).toContain('select');
-    expect(controls!.activeColumns).toEqual([
-      'select',
-      'id',
-      'white',
-      'actions',
-    ]);
+    expect(controls!.activeColumns).toEqual(['select', 'id', 'white']);
     expect(controls!.widths?.id).toBe(125);
     expect(controls!.widths?.occurrence_database).toBe(240);
     expect(controls!.widths?.occurrence_game).toBe(90);
@@ -144,12 +139,7 @@ describe('profile-controlled table widths', () => {
     state.current = second;
     state.generation++;
     renderToStaticMarkup(createElement(Table));
-    expect(controls!.activeColumns).toEqual([
-      'select',
-      'black',
-      'id',
-      'actions',
-    ]);
+    expect(controls!.activeColumns).toEqual(['select', 'black', 'id']);
     expect(controls!.widths?.black).toBe(255);
     expect(controls!.widths?.occurrence_database).toBe(300);
     expect(controls!.widths?.occurrence_game).toBe(110);

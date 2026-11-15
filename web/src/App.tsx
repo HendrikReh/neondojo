@@ -1,3 +1,4 @@
+import { useWorkspaceSession } from './useWorkspaceSession';
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import ProfileSelector from './ProfileSelector';
 import { settingsFromConfiguration } from './configuration-settings';
@@ -19,11 +20,12 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from 'react';
-import { request, type Match, type Position } from './api';
+import { request, terminal, type Match, type Position } from './api';
 import AnalysisWorkspace, { type AnalysisDetail } from './AnalysisWorkspace';
 import PlayerDirectory from './PlayerDirectory';
 import { usePlayerText } from './player-directory-messages';
 import MatchDatabase, { type PositionSearchRequest } from './MatchDatabase';
+import BulkMatchAnalysisDialog from './BulkMatchAnalysisDialog';
 import StudyWorkspace from './StudyWorkspace';
 import PositionBrowser from './PositionBrowser';
 import SimilarPositions from './SimilarPositions';
@@ -38,7 +40,11 @@ import { useBackgroundJobs } from './useBackgroundJobs';
 import { useI18n } from './i18n';
 import { useWorkspaceText } from './workspace-messages';
 import { useLearningText } from './learning-messages';
-import { readSelection, saveSelection } from './workspace-state';
+import {
+  decodeBulkAnalysisSession,
+  readSelection,
+  saveSelection,
+} from './workspace-state';
 import { AppError } from './i18n-core';
 import type { AnnotationHit } from './AnnotationSearch';
 import type { AnnotationKind } from './annotation-api';
@@ -154,7 +160,17 @@ export default function App() {
     if (!configuration) saveDatabase(databaseId);
   }, [databaseId, !!configuration]);
   useEffect(() => () => annotationNavigation.current?.abort(), []);
-  const [view, setView] = useState<View>('analysis');
+  const [bulkAnalysis, setBulkAnalysis] = useWorkspaceSession(
+    'library.bulkAnalysis',
+    undefined,
+    { jobIds: [], showMatchList: false },
+    decodeBulkAnalysisSession,
+  );
+  const [view, setView] = useState<View>(() =>
+    bulkAnalysis.showMatchList && bulkAnalysis.jobIds.length
+      ? 'database'
+      : 'analysis',
+  );
   useEffect(() => {
     if (view === 'players') setPlayersOpened(true);
   }, [view]);
@@ -180,6 +196,10 @@ export default function App() {
   const [annotationRevision, setAnnotationRevision] = useState(0);
   const [deckRevision, setDeckRevision] = useState(0);
   const [bookmarkRevision, setBookmarkRevision] = useState(0);
+  const [analysisSelection, setAnalysisSelection] = useState<{
+    matches: LibraryMatch[];
+    unavailableCount: number;
+  }>();
   const [scopeRequest, setScopeRequest] = useState<{
     kind: AnnotationKind;
     token: number;
@@ -189,9 +209,44 @@ export default function App() {
   const navigation = useGameNavigation();
   const {
     active: runningAnalysisJobs,
+    tracked: trackedAnalysisJobs,
     track,
+    missing: missingAnalysisJobs,
     assessmentRevision,
-  } = useBackgroundJobs();
+  } = useBackgroundJobs(bulkAnalysis.jobIds);
+  const bulkAnalysisProgress = {
+    total: bulkAnalysis.jobIds.length,
+    completed: 0,
+    failed: 0,
+    missing: 0,
+    loading: false,
+  };
+  for (const id of bulkAnalysis.jobIds) {
+    const status = trackedAnalysisJobs[id]?.status;
+    if (missingAnalysisJobs.has(id)) bulkAnalysisProgress.missing++;
+    else if (status === 'completed') bulkAnalysisProgress.completed++;
+    else if (status === 'failed') bulkAnalysisProgress.failed++;
+    else if (!status) bulkAnalysisProgress.loading = true;
+  }
+  const bulkAnalysisInProgress =
+    bulkAnalysisProgress.completed +
+      bulkAnalysisProgress.failed +
+      bulkAnalysisProgress.missing <
+    bulkAnalysisProgress.total;
+  const reopenMatchList = view === 'database' && bulkAnalysisInProgress;
+  useEffect(() => {
+    if (bulkAnalysis.showMatchList !== reopenMatchList)
+      setBulkAnalysis((previous) => ({
+        ...previous,
+        showMatchList: reopenMatchList,
+      }));
+  }, [bulkAnalysis.showMatchList, reopenMatchList, setBulkAnalysis]);
+  const analysisInstallationKey = JSON.stringify([
+    installedSettings?.version,
+    installedSettings?.gnubg_path,
+    installedSettings?.analysis_engine,
+    settingsRevision,
+  ]);
   const jobs = useJobs(navigation.position?.id, track);
   const settingsLoad = useRef<AbortController | undefined>(undefined);
   const input = useRef<HTMLInputElement>(null);
@@ -271,7 +326,9 @@ export default function App() {
           id: metadata.play_session_id,
           token: Date.now(),
         });
-        setView('play');
+        setView((currentView) =>
+          currentView === 'analysis' ? 'play' : currentView,
+        );
       } else {
         await (previous.positionId
           ? navigation.openPosition(previous.positionId)
@@ -759,12 +816,7 @@ export default function App() {
             theme={theme}
             defaultEngine={settings?.analysis_engine ?? 'gnubg'}
             defaultPlies={settings?.analysis_plies ?? DEFAULT_ANALYSIS_PLIES}
-            analysisInstallationKey={JSON.stringify([
-              installedSettings?.version,
-              installedSettings?.gnubg_path,
-              installedSettings?.analysis_engine,
-              settingsRevision,
-            ])}
+            analysisInstallationKey={analysisInstallationKey}
             sourceRevision={bookRevision}
             configured={!!settings && (!configuration || configuration.ready)}
             detail={detail}
@@ -849,10 +901,47 @@ export default function App() {
             requestedPositionSearch={requestedPositionSearch}
             selectedMatchId={navigation.match?.id}
             onOpen={openMatch}
+            bulkAnalysisProgress={bulkAnalysisProgress}
+            onAnalyzeMatches={(matches, unavailableCount) =>
+              setAnalysisSelection({ matches, unavailableCount })
+            }
             onPosition={openPosition}
             onAnnotation={openAnnotation}
             onImport={() => input.current?.click()}
           />
+          {view === 'database' && analysisSelection && (
+            <BulkMatchAnalysisDialog
+              matches={analysisSelection.matches}
+              unavailableCount={analysisSelection.unavailableCount}
+              defaultEngine={settings?.analysis_engine ?? 'gnubg'}
+              defaultPlies={settings?.analysis_plies ?? DEFAULT_ANALYSIS_PLIES}
+              configured
+              analysisInstallationKey={analysisInstallationKey}
+              onAccepted={(jobs, continuesBatch) => {
+                if (!jobs.length) return;
+                for (const job of jobs) track(job);
+                setBulkAnalysis((previous) => {
+                  const overlaps = previous.jobIds.some((id) => {
+                    const job = trackedAnalysisJobs[id];
+                    return (
+                      !missingAnalysisJobs.has(id) && (!job || !terminal(job))
+                    );
+                  });
+                  return {
+                    jobIds: [
+                      ...new Set([
+                        ...(continuesBatch || overlaps ? previous.jobIds : []),
+                        ...jobs.map((job) => job.id),
+                      ]),
+                    ],
+                    showMatchList: true,
+                  };
+                });
+                setRevision((value) => value + 1);
+              }}
+              onClose={() => setAnalysisSelection(undefined)}
+            />
+          )}
         </div>
         <div
           id="workspace-panel-players"

@@ -136,21 +136,11 @@ test('bot matches resume from Match Database and Playing has no Saved Matches li
   ).toHaveCount(0);
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();
   await expect(page.locator('.database-table')).toContainText('Library human');
-  expect(
-    await page
-      .locator('.library-row-actions')
-      .first()
-      .evaluate((el) => {
-        const cell = el.parentElement!.getBoundingClientRect();
-        return [...el.children].every((child) => {
-          const box = child.getBoundingClientRect();
-          return box.left >= cell.left && box.right <= cell.right;
-        });
-      }),
-  ).toBe(true);
+  await page.locator('.database-table tbody tr').getByRole('checkbox').check();
   await page
+    .locator('.library-batch-bar')
     .getByRole('button', {
-      name: 'Resume match: Library bot match',
+      name: 'Resume match',
       exact: true,
     })
     .click();
@@ -172,7 +162,7 @@ for (const [label, sessionId, phase] of [
   ['completed', id, 'match_over'],
   ['copy', null, null],
 ] as const)
-  test(`${label} matches have no resume action`, async ({ page }) => {
+  test(`${label} matches disable the resume action`, async ({ page }) => {
     await page.addInitScript(() =>
       localStorage.setItem('bgtutor.locale', 'en'),
     );
@@ -188,9 +178,10 @@ for (const [label, sessionId, phase] of [
     await expect(page.locator('.database-table')).toContainText(
       'Library human',
     );
+    await page.locator('.database-table tbody tr').getByRole('checkbox').check();
     await expect(
-      page.getByRole('button', { name: /Resume match:/ }),
-    ).toHaveCount(0);
+      page.locator('.library-batch-bar').getByRole('button', { name: 'Resume match', exact: true }),
+    ).toBeDisabled();
   });
 
 for (const retry of [false, true])
@@ -237,11 +228,10 @@ for (const retry of [false, true])
       await page
         .getByRole('tab', { name: 'Match database', exact: true })
         .click();
+      await page.locator('.database-table tbody tr').getByRole('checkbox').check();
       await page
-        .getByRole('button', {
-          name: 'Resume match: Library bot match',
-          exact: true,
-        })
+        .locator('.library-batch-bar')
+        .getByRole('button', { name: 'Resume match', exact: true })
         .click();
       await expect(page.locator('.play-board')).toBeVisible({ timeout: 3000 });
       await expect
@@ -463,11 +453,10 @@ test('a paused match resumes from Paused Matches at its saved decision', async (
   await page
     .getByRole('button', { name: 'Paused Matches', exact: true })
     .click();
+  await matchRow.getByRole('checkbox').check();
   await page
-    .getByRole('button', {
-      name: 'Resume match: Library bot match',
-      exact: true,
-    })
+    .locator('.library-batch-bar')
+    .getByRole('button', { name: 'Resume match', exact: true })
     .click();
   await expect(toolbar).toBeVisible();
   await expect(

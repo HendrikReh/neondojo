@@ -249,14 +249,14 @@ BG Tutor automatically provides **Unsorted** for imports without an explicit tar
 
 - Combine filters for players, played or import dates, exact tags, comments, position ID, event, match name, match or money play, result, winning color or draw, round and match points. Position and note searches respect the selected database.
 - An exact GNUbg Position ID filter shows every occurrence as its own row in the match table, including repeats in the same game. Use the **Database**, **Game** and **Move** columns to locate or sort the occurrences. The count and pagination refer to occurrences. Bulk actions apply once per selected match.
-- Click the match button, press Enter or double-click a row to open Analysis. With a position filter active, this opens the exact occurrence. Use the arrow keys to move between rows or click the pencil icon to edit match metadata.
+- Click the match button, press Enter or double-click a row to open Analysis. With a position filter active, this opens the exact occurrence. Use the arrow keys to move between rows. Select a match and choose **Edit match details** above the list to edit its metadata.
 - Sorting applies to all results before pagination. Click a data column header to sort ascending, then click again to sort descending. Names sort case-insensitively. IDs, PR, position counts, scores, game numbers and move numbers sort numerically. Scores sort by White, then Black. Missing values appear last in both directions. Changing the sort returns to the first page and clears the selection. Without a position filter, the occurrence-specific sorts fall back to import date.
 
 ### Table and metadata
 
 The table uses the available width alongside the database selector and scrolls horizontally when needed. It shows players, PR, score, match length or money play, played and import dates, event, analysis status, tags and comments. **ID** is a stable match number. It survives a rename or move, copies get new numbers, and gaps are possible. REST uses the match UUID. **Positions** counts stored positions. The source format is available for import and export.
 
-Use **Columns** to choose and reorder data columns, **Show all columns** to reveal them, or **Default columns** to restore the default layout. **Tournament** and **Comment** are hidden by default, and **Tags** is visible. Selection and actions stay available, and the table requires at least one data column. Hidden values remain searchable and are included in the row summary where applicable. The current sort is shown above the table if its column is hidden. Column visibility and widths are saved separately, and a hidden column retains its width.
+Use **Columns** to choose and reorder data columns, **Show all columns** to reveal them, or **Default columns** to restore the default layout. **Tournament** and **Comment** are hidden by default, and **Tags** is visible. The selection column stays visible, and the table requires at least one data column. Hidden values remain searchable and are included in the row summary where applicable. The current sort is shown above the table if its column is hidden. Column visibility and widths are saved separately, and a hidden column retains its width.
 
 Drag the right edge of a header to resize it, or focus the divider and use the arrow keys. Shift increases the step, Home and End jump to the width limits, and Escape cancels an in-progress resize. **Reset column widths** restores defaults for the current window, including the occurrence columns. Widths and the occurrence sort follow the active profile. Widths from the former notes column carry over to **Tags**. Each row has a shared hover summary with the match ID, players, match length, result, available PR, analysis profile and excerpts of tags and comments.
 
@@ -266,7 +266,9 @@ The library shows PR for a complete match analysis with native GNUbg statistics.
 
 ### Bulk actions and exports
 
-Use the selection controls to **Copy**, **Move**, change **Tags**, **Export** or **Delete**. Most actions support up to 100 matches. Exports support up to 50 matches and 64 MiB of combined source data. Each action reports the outcome per match.
+Select matches with the checkboxes and choose an action in the toolbar above the list. **Open match**, **Resume match** and **Edit match details** require a single selection. **Copy**, **Move**, **Tags**, **Export** and **Delete** support multiple matches. Most actions support up to 100 matches. Exports support SGF and original format, with a limit of 50 matches and 64 MiB of combined source data.
+
+**Analyze selected matches …** uses one engine and depth for the entire selection and submits one background job per available match. The dialog counts matches that cannot be analyzed and reports rejected submissions by match. **Try again** resubmits the rejected matches. Progress above the list counts completed analyses out of the accepted jobs and shows failures separately, including after the dialog closes. Reloading the Match database during a bulk analysis restores the list and resumes progress tracking in the same browser tab.
 
 - Copies get independent match, position, game and move IDs, with copied tags, comments and all completed analyses with their original scopes and the selected analysis. Review history and active jobs belong to their original records.
 - Moves preserve IDs. BG Tutor detects duplicates within a database by original-file hash. If the destination already contains that file, it retains both the existing destination record and the source match, including their notes.
@@ -870,6 +872,14 @@ Pass a spec path to run only the affected workflow. These specs cover native mat
 ```sh
 npm run test:e2e --prefix web -- e2e/workflow.spec.ts
 npm run test:e2e --prefix web -- e2e/study-overview.spec.ts
+```
+
+The bulk analysis regression uses GNUbg to analyze a short match and the
+ten-game WC2014 fixture. It reloads while an analysis is running and checks the
+restored progress and persisted job IDs in the disposable database.
+
+```sh
+npm run test:e2e --prefix web -- e2e/analysis-calculation-controls.spec.ts --grep "reload resumes native bulk"
 ```
 
 The default PostgreSQL connection targets the Compose instance. For another server or port, set `BGTUTOR_E2E_POSTGRES_URL` to a connection with `CREATEDB`. For tests that need prepared data, set `BGTUTOR_E2E_POSTGRES_TEMPLATE` to a dedicated fixture database named `bgtutor_e2e_template_*`. The harness copies the template for each run. Unset the obsolete `BGTUTOR_TEST_URL` before running Playwright.

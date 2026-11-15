@@ -1,4 +1,3 @@
-import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
 import AnalysisRemainingTime from './AnalysisRemainingTime';
 import AnalysisTimeEstimate from './AnalysisTimeEstimate';
 import { useProfileValue } from './useProfileValue';
@@ -23,8 +22,10 @@ import { useSearchPages } from './useSearchPages';
 import { useSourceText } from './analysis-source-messages';
 import { useMatchAnalysis, type MatchAnalysisEngine } from './useMatchAnalysis';
 import { useI18n } from './i18n';
-import { loadEngines, type EngineInfo } from './settings-api';
-import { useSettingsText } from './settings-messages';
+import {
+  MatchAnalysisFields,
+  useMatchAnalysisOptions,
+} from './MatchAnalysisFields';
 import MatchStatisticsView from './MatchStatisticsView';
 import MatchAnalysisComparison from './MatchAnalysisComparison';
 import {
@@ -110,52 +111,25 @@ export default function MatchAnalysisPanel({
   catalog: AnalysisCatalog;
 }) {
   const profile = useOptionalConfiguration();
-  const [engineId, setEngineId] = useState(defaultEngine);
-  const [requestedPlies, setPlies] = useState(defaultPlies);
   const [showSettings, setShowSettings] = useState(false);
   const settingsId = useId();
   const settingsButton = useRef<HTMLButtonElement>(null);
   const scopeSelect = useRef<HTMLSelectElement>(null);
   const errorsToggle = useRef<HTMLInputElement>(null);
   const resetButton = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    setEngineId(defaultEngine);
-    setPlies(defaultPlies);
-  }, [defaultEngine, defaultPlies, profile?.confirmed?.active_profile.id]);
-  const [engineCatalog, setEngineCatalog] = useState<{
-    key?: string;
-    engines: EngineInfo[];
-    error?: unknown;
-  }>();
-  useEffect(() => {
-    if (!configured) return;
-    const abort = new AbortController();
-    void loadEngines(abort.signal)
-      .then((engines) => {
-        if (!abort.signal.aborted)
-          setEngineCatalog({ key: analysisInstallationKey, engines });
-      })
-      .catch((error) => {
-        if (!abort.signal.aborted)
-          setEngineCatalog({
-            key: analysisInstallationKey,
-            engines: [],
-            error,
-          });
-      });
-    return () => abort.abort();
-  }, [configured, analysisInstallationKey]);
-  const availableEngines =
-    engineCatalog?.key === analysisInstallationKey ? engineCatalog : undefined;
-  const engine = availableEngines?.engines.find((item) => item.id === engineId);
-  const supportedPlies = configurationOptions.engine_profiles[
-    engineId
-  ].analysis.filter((depth) => !engine || engine.plies.includes(depth));
-  const plies = supportedPlies.includes(requestedPlies)
-    ? requestedPlies
-    : supportedPlies.includes(DEFAULT_ANALYSIS_PLIES)
-      ? DEFAULT_ANALYSIS_PLIES
-      : (supportedPlies[0] ?? requestedPlies);
+  const options = useMatchAnalysisOptions({
+    defaultEngine,
+    defaultPlies,
+    configured,
+    analysisInstallationKey,
+    resetKey: profile?.confirmed?.active_profile.id,
+  });
+  const {
+    engineId,
+    plies,
+    analysisConfigured,
+    catalog: availableEngines,
+  } = options;
   const {
     t,
     formatNumber,
@@ -165,7 +139,6 @@ export default function MatchAnalysisPanel({
     formatError,
   } = useI18n();
   const text = useStatisticsText();
-  const settingsText = useSettingsText();
   const sourceText = useSourceText();
   const decimal = (value: number) =>
     formatNumber(value, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
@@ -295,8 +268,6 @@ export default function MatchAnalysisPanel({
   const active = job && !terminal(job);
   const calculationActive = calculationJob && !terminal(calculationJob);
   const controlsDisabled = !configured || !!calculationActive || submitting;
-  const analysisConfigured =
-    configured && !!engine?.available && supportedPlies.includes(plies);
   const analysisDisabled =
     controlsDisabled ||
     !analysisConfigured ||
@@ -619,60 +590,11 @@ export default function MatchAnalysisPanel({
               <option value="match">{t('gameAnalysis.scopeMatch')}</option>
             </select>
           </label>
-          <label>
-            {settingsText('analysisEngine')}
-            <select
-              aria-label={settingsText('analysisEngine')}
-              value={engineId}
-              disabled={!configured || submitting}
-              onChange={(event) => {
-                const value = event.target.value;
-                if (value !== 'gnubg' && value !== 'bgsage') return;
-                setEngineId(value);
-                setPlies(plies);
-              }}
-            >
-              {(['gnubg', 'bgsage'] as const).map((id) => {
-                const item = availableEngines?.engines.find(
-                  (entry) => entry.id === id,
-                );
-                const name = id === 'gnubg' ? 'GNUbg' : 'Open Sage';
-                return (
-                  <option key={id} value={id}>
-                    {item?.name ?? name}
-                    {availableEngines && !item?.available
-                      ? ` — ${settingsText('unavailable')}`
-                      : ''}
-                  </option>
-                );
-              })}
-            </select>
-          </label>
-          <label>
-            {t('matchAnalysis.depth')}{' '}
-            <select
-              aria-label={t('matchAnalysis.depthLabel')}
-              value={plies}
-              disabled={analysisDisabled}
-              onChange={(event) => setPlies(Number(event.target.value))}
-            >
-              <option value={0} disabled={!supportedPlies.includes(0)}>
-                {t('matchAnalysis.fast')}
-              </option>
-              <option value={1} disabled={!supportedPlies.includes(1)}>
-                1-Ply
-              </option>
-              <option value={2} disabled={!supportedPlies.includes(2)}>
-                {t('matchAnalysis.thorough')}
-              </option>
-              <option value={3} disabled={!supportedPlies.includes(3)}>
-                3-ply
-              </option>
-              <option value={4} disabled={!supportedPlies.includes(4)}>
-                4-ply
-              </option>
-            </select>
-          </label>
+          <MatchAnalysisFields
+            options={options}
+            disabled={!configured || submitting}
+            depthDisabled={analysisDisabled}
+          />
           <ActionButton
             icon="analysis"
             label={

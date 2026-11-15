@@ -192,16 +192,13 @@ test('opening and selection remain available with both player columns hidden', a
     .uncheck();
   await page.keyboard.press('Escape');
   await row.getByRole('checkbox').check();
-  await expect(page.locator('.library-batch-bar')).toBeVisible();
-  const actions = await row
-    .locator('.library-row-actions')
-    .evaluate((element) => ({
-      available: element.clientWidth,
-      required: element.scrollWidth,
-    }));
-  expect(actions.required).toBeLessThanOrEqual(actions.available);
+  const open = page.locator('.library-batch-bar').getByRole('button', {
+    name: 'Open match',
+    exact: true,
+  });
+  await expect(open).toBeInViewport();
   const id = await row.getAttribute('id');
-  await row.locator('.library-row-open').click();
+  await open.click();
   await expect(page.locator('.analysis-heading')).toHaveAttribute(
     'data-match-id',
     id!.replace('library-row-', ''),

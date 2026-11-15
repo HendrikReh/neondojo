@@ -22,6 +22,15 @@ The main header retains its 20 px gap; other horizontal groups use 16 px.
 The header orders its workspaces as Analysis, Positions, Study, Play,
 Match database, Player database, and Extras. The arrow keys follow this order.
 
+In the **Match database**, select matches with the checkboxes and choose
+**Analyze selected matches …** above the list. The dialog uses the same engine
+and depth for each available match and adds their jobs to the background queue.
+It reports rejected submissions and allows you to retry them from the dialog.
+The toolbar above the match list shows how many accepted matches have been
+analyzed and counts failed jobs separately, including after the dialog closes.
+Reloading the Match database during a bulk analysis reopens the list and
+refreshes the progress from the saved jobs.
+
 The shared rules live in `web/src/text-navigation.css`, imported after the other
 styles. Local CSS manages surrounding layout and should not reintroduce filled
 navigation states or competing padding/gap rules.

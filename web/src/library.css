@@ -164,6 +164,10 @@
   gap: 12px;
   flex-wrap: wrap;
 }
+.library-bulk-analysis-progress {
+  margin: 0;
+  font-size: var(--font-size-table);
+}
 .library-column-picker {
   position: relative;
   margin-left: auto;
@@ -306,9 +310,6 @@
 .library-col-analysis {
   width: 126px;
 }
-.library-col-actions {
-  width: 160px;
-}
 .match-database .database-table th {
   position: sticky;
   top: 0;
@@ -435,8 +436,7 @@
   text-align: right;
 }
 .library-notes-summary,
-.library-note-tags,
-.library-row-actions {
+.library-note-tags {
   display: flex;
   align-items: center;
   min-width: 0;
@@ -467,24 +467,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--ui-muted);
-}
-.match-database .library-row-edit {
-  border-radius: 4px;
-}
-.match-database .library-row-open {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  font-size: 16px;
-  background: transparent;
-}
-.match-database .library-row-actions a {
-  display: inline-flex;
-  margin: 0;
-  font-size: var(--font-size-meta);
-  white-space: nowrap;
 }
 .library-pr-help {
   font-size: var(--font-size-meta);
@@ -529,6 +511,13 @@
 .library-dialog-form label {
   font-size: var(--font-size-label);
 }
+.library-dialog .match-analysis-dialog {
+  padding-bottom: 16px;
+}
+.match-analysis-dialog > p {
+  margin: 0;
+}
+
 .library-dialog-form textarea {
   min-height: 90px;
   resize: vertical;
@@ -667,19 +656,6 @@
 .library-position-filter button {
   padding: 4px 7px;
   font-size: var(--font-size-control);
-}
-
-.library-row-actions {
-  flex-wrap: wrap;
-}
-.match-database .library-row-resume {
-  flex: 0 0 100%;
-  min-width: 0;
-  max-width: 100%;
-  padding: 2px 4px;
-  font-size: var(--font-size-meta);
-  line-height: 18px;
-  white-space: normal;
 }
 
 .library-play-mode {

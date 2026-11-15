@@ -63,6 +63,7 @@ export const LIBRARY_COLUMNS = [
     defaultWidth: 220,
   },
   {
+    // Retain this width in the saved layout format for existing profiles.
     id: 'actions',
     className: 'library-col-actions',
     min: 160,

@@ -2,7 +2,7 @@ import Tooltip from './Tooltip';
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import { Children, type HTMLAttributes, type ReactNode } from 'react';
 import { useProfileValue } from './useProfileValue';
-import ActionButton, { ActionLink } from './ActionButton';
+import ActionButton from './ActionButton';
 import ActionIcon from './action-icons';
 import {
   useCallback,
@@ -84,6 +84,8 @@ export default function MatchDatabase({
   databaseId,
   onDatabase,
   onOpen,
+  bulkAnalysisProgress,
+  onAnalyzeMatches,
   onPosition,
   onAnnotation,
   onImport,
@@ -100,7 +102,16 @@ export default function MatchDatabase({
   databaseId: string;
   onDatabase: (id: string) => void;
   onOpen: (match: Match, gameNo?: number) => void;
+  bulkAnalysisProgress?: {
+    total: number;
+    completed: number;
+    failed: number;
+    missing: number;
+    loading: boolean;
+  };
+  onAnalyzeMatches?: (matches: LibraryMatch[], unavailableCount: number) => void;
   onPosition: (p: Position) => void;
+
   onAnnotation: (hit: AnnotationHit) => void;
   onImport: () => void;
   onOpenPlay?: (id: string, resume?: boolean) => void;
@@ -127,7 +138,7 @@ export default function MatchDatabase({
     tags: l('tags'),
     comment: l('comment'),
   };
-  const showColumn = (id: LibraryColumn) => columns.activeColumns.includes(id);
+  const showColumn = (id: LibraryColumn) => columns.activeColumns.some((column) => column === id);
   const [databases, setDatabases] = useState<Database[]>([]),
     [localRevision, setRevision] = useState(0),
     [expanded, setExpanded] = useState(false),
@@ -142,7 +153,6 @@ export default function MatchDatabase({
     emptyFilters,
   );
   const columns = useLibraryColumns(visible, !!filters.position_id);
-  const compactActions = !showColumn('white') && !showColumn('black');
   const [draftFilters, setDraftFilters] = useState<Filters>(filters);
   const filterDraft = useRef(draftFilters);
   filterDraft.current = draftFilters;
@@ -364,6 +374,9 @@ export default function MatchDatabase({
     }
     void matchOpening.open(match);
   }
+  const rowOpeningDisabled = (match: LibraryMatch) =>
+    matchResultScope !== matchScope ||
+    matchOpening.openingId === libraryRowKey(match);
   function isCurrentRow(match: LibraryMatch) {
     return match.occurrence
       ? match.occurrence.id === currentPosition?.id
@@ -373,10 +386,7 @@ export default function MatchDatabase({
     return (
       <button
         className={`match-card ${isCurrentRow(match) ? 'active' : ''}`}
-        disabled={
-          matchResultScope !== matchScope ||
-          matchOpening.openingId === libraryRowKey(match)
-        }
+        disabled={rowOpeningDisabled(match)}
         aria-busy={matchOpening.openingId === libraryRowKey(match)}
         onClick={(event) => {
           event.stopPropagation();
@@ -427,9 +437,26 @@ export default function MatchDatabase({
   }, [visible, matches]);
   const active = databases.find((d) => d.id === databaseId);
   const importTarget = acceptsLibraryMatches(databaseId) ? active : undefined;
+  const visibleRows = new Map(
+    matches.map((match) => [libraryRowKey(match), match]),
+  );
+  const selection = selectedRows.map(
+    (match) => visibleRows.get(libraryRowKey(match)) ?? match,
+  );
   const hasSelection = selected.size > 0;
-  const pausedSelected = selectedRows.some(
-    (m) => m.play_paused && selected.has(m.id),
+  const pausedSelected = selection.some((match) => match.play_paused);
+  const singleSelected = selection.length === 1 ? selection[0] : undefined;
+  const resumeId =
+    singleSelected &&
+    (singleSelected.play_paused || singleSelected.play_phase !== 'match_over')
+      ? singleSelected.play_session_id
+      : undefined;
+  const selectionIsCurrent = matchResultScope === matchScope;
+  const analyzableMatches = selection.filter(
+    (match) =>
+      match.source_available &&
+      !match.play_paused &&
+      !isUnfinishedCompetition(match),
   );
   const pr = (value: number | null) =>
     value == null
@@ -578,6 +605,24 @@ export default function MatchDatabase({
               {filters.position_id ? l('occurrences') : t('app.matches')} ·{' '}
               {active ? databaseDisplayName(active, l) : l('allDatabases')}
             </div>
+            {!!bulkAnalysisProgress?.total && (
+              <p className="library-bulk-analysis-progress" role="status">
+                {bulkAnalysisProgress.loading ? (
+                  l('loading')
+                ) : (
+                  <>
+                    {l('bulkAnalysisProgress', {
+                      completed: formatNumber(bulkAnalysisProgress.completed),
+                      total: formatNumber(bulkAnalysisProgress.total),
+                    })}
+                    {bulkAnalysisProgress.failed > 0 &&
+                      ` · ${l('failed')} (${formatNumber(bulkAnalysisProgress.failed)})`}
+                    {bulkAnalysisProgress.missing > 0 &&
+                      ` · ${l('notFound')} (${formatNumber(bulkAnalysisProgress.missing)})`}
+                  </>
+                )}
+              </p>
+            )}
             {filters.position_id.trim() && (
               <span className="library-position-filter">
                 <span>
@@ -626,17 +671,83 @@ export default function MatchDatabase({
               disabled={!columns.custom}
             />
           </div>
-          <div className="library-batch-bar" data-has-selection={hasSelection}>
-            <strong>{l('selected', { count: selected.size })}</strong>
+          <div
+            className="library-batch-bar"
+            role="group"
+            aria-label={l('actions')}
+            data-has-selection={hasSelection}
+          >
+            <strong role="status">
+              {l('selected', { count: formatNumber(selected.size) })}
+            </strong>
+            <ActionButton
+              type="button"
+              icon="open"
+              label={w('openMatch')}
+              compact
+              disabled={
+                !singleSelected ||
+                !!resumeId ||
+                singleSelected.play_paused ||
+                rowOpeningDisabled(singleSelected)
+              }
+              onClick={() => {
+                if (singleSelected) openMatchRow(singleSelected);
+              }}
+            />
+            <ActionButton
+              type="button"
+              icon="resume"
+              label={l('resumePlay')}
+              compact
+              disabled={!selectionIsCurrent || !resumeId || !onOpenPlay}
+              onClick={() => {
+                if (resumeId) onOpenPlay?.(resumeId, true);
+              }}
+            />
+            <ActionButton
+              type="button"
+              icon="analysis"
+              label={`${l('analyzeSelection')} …`}
+              aria-haspopup="dialog"
+              compact
+              disabled={
+                !selectionIsCurrent ||
+                !onAnalyzeMatches ||
+                !analyzableMatches.length
+              }
+              onClick={(event) => {
+                event.currentTarget.focus();
+                onAnalyzeMatches?.(
+                  analyzableMatches,
+                  selection.length - analyzableMatches.length,
+                );
+              }}
+            />
+            <ActionButton
+              type="button"
+              icon="edit"
+              label={l('editMatch')}
+              aria-haspopup="dialog"
+              compact
+              disabled={!selectionIsCurrent || !singleSelected}
+              onClick={(event) => {
+                event.currentTarget.focus();
+                if (singleSelected)
+                  setDialog({ kind: 'metadata', match: singleSelected });
+              }}
+            />
             {(['copy', 'move', 'tags', 'export', 'delete'] as const).map(
               (action) => (
                 <ActionButton
-                  icon={action === 'tags' ? 'edit' : action}
+                  icon={action}
                   label={l(action)}
                   compact
                   key={action}
                   disabled={
+                    !selectionIsCurrent ||
                     !hasSelection ||
+                    (action === 'export' && selected.size > 50) ||
                     (pausedSelected &&
                       ['copy', 'move', 'delete'].includes(action))
                   }
@@ -838,10 +949,6 @@ export default function MatchDatabase({
                       {heading('analysis_status', l('analysis'))}
                       {heading('tags', l('tags'))}
                       {heading('comment', l('comment'))}
-                      <th scope="col" data-column="actions">
-                        {l('actions')}
-                        {columns.handle('actions', l('actions'))}
-                      </th>
                     </OrderedLibraryRow>
                   </thead>
                   <tbody>
@@ -994,62 +1101,6 @@ export default function MatchDatabase({
                             </span>
                           </td>
                         )}
-                        <td>
-                          <div className="library-row-actions">
-                            {m.play_session_id &&
-                              (m.play_paused ||
-                                m.play_phase !== 'match_over') &&
-                              onOpenPlay && (
-                                <ActionButton
-                                  icon="resume"
-                                  label={l('resumePlay')}
-                                  className="library-row-resume"
-                                  aria-label={`${l('resumePlay')}: ${m.display_name}`}
-                                  disabled={matchResultScope !== matchScope}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    onOpenPlay(m.play_session_id!, true);
-                                  }}
-                                />
-                              )}
-                            {compactActions && (
-                              <ActionButton
-                                icon="open"
-                                label={w('openMatch')}
-                                compact
-                                className="library-row-open"
-                                aria-label={`${w('openMatch')}: ${m.display_name}`}
-                                disabled={
-                                  matchResultScope !== matchScope ||
-                                  matchOpening.openingId === libraryRowKey(m)
-                                }
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  openMatchRow(m);
-                                }}
-                              />
-                            )}
-                            <ActionButton
-                              icon="edit"
-                              label={l('editMatch')}
-                              compact
-                              className="library-row-edit"
-                              aria-label={`${l('editMatch')}: ${m.display_name}`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDialog({ kind: 'metadata', match: m });
-                              }}
-                            />
-                            <ActionLink
-                              icon="export"
-                              label={`${l('export')} SGF`}
-                              compact
-                              href={`/api/matches/${m.id}/source`}
-                              aria-label={`${l('export')}: SGF`}
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          </div>
-                        </td>
                       </OrderedLibraryRow>
                     ))}
                   </tbody>

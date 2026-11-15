@@ -160,7 +160,6 @@ test('profiles restore filters, sorting and column layout in already mounted wor
     'white',
     'id',
     'black',
-    'actions',
   ]);
   await expect(
     page.getByRole('textbox', { name: 'Search matches' }),
@@ -179,7 +178,7 @@ test('profiles restore filters, sorting and column layout in already mounted wor
     'Beta black',
   );
 
-  expect(await headers(page)).toEqual(['select', 'black', 'id', 'actions']);
+  expect(await headers(page)).toEqual(['select', 'black', 'id']);
   expect(
     (await page.locator('th[data-column="black"]').boundingBox())!.width,
   ).toBeCloseTo(310, 0);
@@ -200,7 +199,6 @@ test('profiles restore filters, sorting and column layout in already mounted wor
     'white',
     'id',
     'black',
-    'actions',
   ]);
   expect(
     controller.calls
