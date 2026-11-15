@@ -231,8 +231,8 @@ pub(super) fn should_pause_for_feedback(session: &PlaySession, action: &PlayActi
         PlayMode::Competition => false,
         PlayMode::Training => session.training_auto_analysis && !matches!(action, PlayAction::Roll),
         PlayMode::Coach => match action {
-            PlayAction::Move | PlayAction::Pass => false,
-            PlayAction::Roll => session
+            PlayAction::Pass => false,
+            PlayAction::Move | PlayAction::Roll => session
                 .pending_decision
                 .as_ref()
                 .and_then(|decision| decision.loss)
@@ -760,6 +760,20 @@ mod tests {
             };
             assert!(stage_choice(&mut state, "roll", None, vec![roll]).is_ok());
             assert_eq!(should_pause_for_feedback(&state, &PlayAction::Roll), pauses);
+        }
+    }
+
+    #[test]
+    fn coach_pauses_at_the_saved_checker_error_boundary() {
+        let mut state = session(PlayMode::Coach);
+        state.error_thresholds.error = 0.03;
+        state.tutor_threshold = 0.05;
+        for (loss, pauses) in [(0.0, false), (0.029999, false), (0.03, true)] {
+            state.pending_decision = None;
+            let mut choices = alternatives();
+            choices[1].loss = loss;
+            assert!(stage_choice(&mut state, "move", Some(1), choices).is_ok());
+            assert_eq!(should_pause_for_feedback(&state, &PlayAction::Move), pauses);
         }
     }
 

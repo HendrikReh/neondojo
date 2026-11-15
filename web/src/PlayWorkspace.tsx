@@ -848,16 +848,6 @@ export default function PlayWorkspace({
     returnToTurnControl,
   ]);
   const boardRollReady = canRoll && !uiBusy && !interruption && !pauseWarning;
-  const autoRollAfterBotPass =
-    boardRollReady &&
-    !forfeitOpen &&
-    !pending &&
-    error === undefined &&
-    botRoll?.notation === 'pass' &&
-    botRoll === session?.history.at(-1);
-  useEffect(() => {
-    if (autoRollAfterBotPass) action('roll');
-  }, [autoRollAfterBotPass, session]);
   const assessmentButton =
     session && session.match_length > 0 && session.phase === 'match_over' ? (
       <ActionButton

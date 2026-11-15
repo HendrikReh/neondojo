@@ -1982,20 +1982,40 @@ async fn coach_commits_checker_feedback_and_restores_it_after_reload(pool: PgPoo
     if action == "move" {
         request["move"] = json!(0);
     }
-    let (status, committed) = call(
+    let (status, first) = call(
         app.clone(),
         "POST",
         &format!("{uri}/actions"),
         request.clone(),
     )
     .await;
-    assert_eq!(status, 200, "{committed}");
+    assert_eq!(status, 200, "{first}");
+    let staged = !first["pending_decision"].is_null();
+    let committed = if staged {
+        assert_eq!(first["position"], checkpoint["position"]);
+        assert_eq!(first["history"], checkpoint["history"]);
+        assert_eq!(call(app.clone(), "GET", &uri, Value::Null).await.1, first);
+        let mut confirmation = request.clone();
+        confirmation["version"] = first["version"].clone();
+        confirmation["decision_id"] = first["pending_decision"]["id"].clone();
+        let (status, confirmed) =
+            call(app.clone(), "POST", &format!("{uri}/actions"), confirmation).await;
+        assert_eq!(status, 200, "{confirmed}");
+        confirmed
+    } else {
+        first
+    };
     assert!(committed["pending_decision"].is_null());
     assert!(
         committed["history"].as_array().unwrap().len()
             > checkpoint["history"].as_array().unwrap().len()
     );
     let decision = committed["decisions"].as_array().unwrap().last().unwrap();
+    assert_eq!(
+        staged,
+        action == "move"
+            && decision["loss"].as_f64().unwrap() >= thresholds["error"].as_f64().unwrap()
+    );
     assert_eq!(decision["action"], action);
     assert_eq!(decision["committed"], true);
     assert_eq!(decision["revealed"], true);
@@ -3782,8 +3802,13 @@ async fn money_game_coach_evaluates_and_commits_decisions_without_ending_early(p
         let (status, mut committed) = call(app.clone(), "POST", &uri, request.clone()).await;
         assert_eq!(status, 200, "{committed}");
         if !committed["pending_decision"].is_null() {
-            assert!(!matches!(action, "move" | "pass"));
-            assert!(committed["pending_decision"]["first_loss"].is_number());
+            assert_ne!(action, "pass");
+            let loss = committed["pending_decision"]["first_loss"]
+                .as_f64()
+                .unwrap();
+            if matches!(action, "move" | "roll") {
+                assert!(loss >= state["error_thresholds"]["error"].as_f64().unwrap());
+            }
             request["version"] = committed["version"].clone();
             request["decision_id"] = committed["pending_decision"]["id"].clone();
             let (status, next) = call(app.clone(), "POST", &uri, request).await;

@@ -1,4 +1,4 @@
-import { botDice, rollDice } from './play-board-actions';
+import { botDice, doubleCube, rollDice } from './play-board-actions';
 import { test, expect, type Page } from './test';
 import type { PlaySession } from '../src/play-api';
 import { applySteps } from '../src/play-state';
@@ -205,7 +205,7 @@ for (const config of [
       ).position.board,
     ).toEqual(after.position.board);
   });
-test('a blocked bot shows its dice before the human rolls automatically', async ({
+test('a blocked bot waits for the human to roll or double', async ({
   page,
 }) => {
   const before = opening();
@@ -213,11 +213,13 @@ test('a blocked bot shows its dice before the human rolls automatically', async 
     ...played(before),
     position: { ...played(before).position, board: before.position.board },
     history: [{ player: 1, dice: [6, 1], notation: 'pass' }],
+    can_double: true,
   };
   const rolled: PlaySession = {
     ...blocked,
     version: 2,
     phase: 'move',
+    can_double: false,
     position: { ...blocked.position, dice: [3, 1] },
   };
   const writes: unknown[] = [];
@@ -227,8 +229,17 @@ test('a blocked bot shows its dice before the human rolls automatically', async 
   });
   const board = page.locator('.play-board');
   await expect(board).toHaveAttribute('data-animation-player', '1');
+  await expect(botDice(page)).toBeEnabled();
+  await expect(doubleCube(page)).toBeEnabled();
+  await expect(board).toHaveAttribute('data-play-phase', 'roll');
   expect(writes).toEqual([{ version: 0, action: 'start_opening_move' }]);
-  await expect(board).toHaveAttribute('data-animation-player', '0');
+
+  await page.reload();
+  await page.getByRole('tab', { name: 'Playing', exact: true }).click();
+  await expect(botDice(page)).toBeEnabled();
+  await expect(doubleCube(page)).toBeEnabled();
+  expect(writes).toHaveLength(1);
+  await botDice(page).click();
   await expect(board).toHaveAttribute('data-play-phase', 'move');
   await expect(board.locator('[data-dice="3-1"]')).toBeVisible();
   expect(writes).toEqual([

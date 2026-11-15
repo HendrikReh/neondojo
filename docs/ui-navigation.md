@@ -285,8 +285,8 @@ when you choose **Apply**.
 Analysis shows the engine and default depth side by side, followed by four
 editable error thresholds and the configured opening-book source. The thresholds
 classify normalized equity loss in error review, move history and statistics.
-The Error threshold starts Tutor warnings and Coach missed-double feedback
-in new matches. Expand **Engines on this computer** for paths,
+In new matches, the Error threshold sets when Coach pauses for checker errors
+and missed doubles, and sets the initial Tutor warning threshold. Expand **Engines on this computer** for paths,
 installation checks, and thread limits. The collapsed section shows the
 availability of GNUbg and Open Sage.
 

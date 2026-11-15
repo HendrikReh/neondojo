@@ -5,7 +5,6 @@ import {
   matchingCheckerTurns,
   nativeLegalTurns,
   nextCheckerSteps,
-  type CheckerStepWithDie,
 } from '../src/play-state';
 test.skip(
   !process.env.BGTUTOR_FEEDBACK_NATIVE_TEST,
@@ -82,37 +81,65 @@ for (const mode of ['competition', 'training', 'coach', 'tutor'] as const) {
       }, state.id);
       await page.goto('/');
       await page.getByRole('tab', { name: 'Playing', exact: true }).click();
-      const steps: CheckerStepWithDie[] = [];
-      const length = turns[0].steps.length;
-      for (let index = 0; index < length; index++) {
-        const step = nextCheckerSteps(
-          matchingCheckerTurns(turns, steps),
-          index,
-          state.position.dice[index],
-        )
-          .values()
-          .next().value!;
+      // The native legal catalog is ranked at 0 ply, the captured analysis depth.
+      const turn = turns
+        .toSorted((a, b) => b.moveIndex - a.moveIndex)
+        .find((turn) => {
+          const steps = turn.steps.map((step, index) => ({
+            ...step,
+            die: turn.dice[index],
+          }));
+          return steps.every(
+            (step, index) =>
+              nextCheckerSteps(
+                matchingCheckerTurns(turns, steps.slice(0, index)),
+                index,
+                state.position.dice[index],
+              ).get(step.from)?.die === step.die,
+          );
+        })!;
+      for (const step of turn.steps) {
         await page
           .locator(`[data-play-point="${step.from}"] .play-point`)
           .click();
-        steps.push(step);
       }
-      const playedMove = matchingCheckerTurns(turns, steps)[0].moveIndex;
-      const saved = page.waitForResponse(
-        (r) =>
-          r.url().endsWith(`${uri}/actions`) && r.request().method() === 'POST',
-      );
-      await page.locator('[data-dice-action="confirm"]').click();
-      const result = await saved;
-      expect(result.status(), await result.text()).toBe(200);
-      const after = (await result.json()) as PlaySession;
+      const confirm = page.locator('[data-dice-action="confirm"]');
+      const confirmMove = async () => {
+        const result = page.waitForResponse(
+          (r) =>
+            r.url().endsWith(`${uri}/actions`) &&
+            r.request().method() === 'POST',
+        );
+        await confirm.click();
+        const response = await result;
+        expect(response.status(), await response.text()).toBe(200);
+        return (await response.json()) as PlaySession;
+      };
+      const staged = await confirmMove();
+      const pending = staged.pending_decision!;
+      expect(pending).toMatchObject({
+        original_move_index: turn.moveIndex,
+        committed: false,
+        revealed: true,
+        loss: expect.any(Number),
+      });
+      expect(pending.loss).toBeGreaterThanOrEqual(0.02);
+      expect(staged.position).toEqual(state.position);
+      expect(staged.history).toEqual(state.history);
+      const panel = page.getByTestId('play-feedback');
+      await expect(panel).toBeVisible();
+      await page.reload();
+      await page.getByRole('tab', { name: 'Playing', exact: true }).click();
+      await expect(panel).toBeVisible();
+      const after = await confirmMove();
       expect(after.pending_decision).toBeNull();
       expect(after.history.length).toBeGreaterThan(history);
       expect(after.decisions?.at(-1)).toMatchObject({
-        original_move_index: playedMove,
+        id: pending.id,
+        original_move_index: turn.moveIndex,
         committed: true,
         revealed: true,
-        loss: expect.any(Number),
+        loss: pending.loss,
       });
       await expect(page.getByRole('button', { name: 'Play move' })).toHaveCount(
         0,
