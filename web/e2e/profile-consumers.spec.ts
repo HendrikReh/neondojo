@@ -334,7 +334,7 @@ test('switching profiles preserves an unsaved note without submitting it', async
   );
   await page.goto('/');
   const marker = crypto.randomUUID();
-  await page.locator('input[type=file]').setInputFiles({
+  await page.getByLabel('Match file', { exact: true }).setInputFiles({
     name: `profile-note-${marker}.sgf`,
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(
