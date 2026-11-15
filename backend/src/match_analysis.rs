@@ -665,6 +665,41 @@ fn parse_game(sgf: &str, game_no: i32, native: &str, text: &str) -> Result<Vec<D
     Ok(decisions)
 }
 
+/// Aggregate one validated decision consistently for native and imported statistics.
+pub(crate) fn accumulate_decision(
+    players: &mut [crate::model::PlayerAnalysisSummary; 2],
+    decision: &crate::match_analysis::Decision,
+) -> Result<()> {
+    let player = players
+        .get_mut(decision.player as usize)
+        .context("Invalid analysis player")?;
+    match decision.kind.as_str() {
+        "checker" => {
+            player.checker_decisions += 1;
+            player.checker_equity_loss += decision.equity_loss;
+        }
+        "cube" => {
+            player.cube_decisions += 1;
+            player.cube_equity_loss += decision.equity_loss;
+        }
+        _ => anyhow::bail!("Unknown analysis decision kind"),
+    }
+    if decision.evaluation_status == "forced" {
+        player.forced_moves += 1;
+    }
+    if decision.evaluation_status == "unavailable" {
+        player.unavailable += 1;
+    }
+    match decision.severity.as_str() {
+        "doubtful" => player.doubtful += 1,
+        "bad" => player.bad += 1,
+        "very_bad" => player.very_bad += 1,
+        "none" => {}
+        _ => anyhow::bail!("Unknown analysis error severity"),
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -106,6 +106,8 @@ pub struct DeleteDeckQuery {
 }
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct AddCards {
+    pub analysis_id: Option<String>,
+    pub match_id: Option<Uuid>,
     /// Restrict a match analysis source to this source game.
     pub game_no: Option<i32>,
     pub position_id: Option<Uuid>,
@@ -165,7 +167,11 @@ pub struct AddPositionsResult {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CardSource {
     pub kind: String,
-    pub job_id: Uuid,
+    pub job_id: Option<Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub analysis_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub imported_analysis_id: Option<Uuid>,
     pub match_id: Uuid,
     pub position_id: Option<Uuid>,
     pub game_no: i32,
@@ -174,7 +180,9 @@ pub struct CardSource {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CardSolution {
     pub engine: String,
-    pub plies: i32,
+    pub plies: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub imported: Option<crate::imported_analysis::ImportedAnalysisData>,
     pub candidates: Vec<Candidate>,
     pub decision: Option<Decision>,
 }
@@ -747,9 +755,11 @@ async fn add_cards(
     LearningJson(body): LearningJson<AddCards>,
 ) -> ApiResult<Json<AddCardsResult>> {
     require_deck(&state.pool, id).await?;
-    if body.position_id.is_some() == body.job_id.is_some() {
+    if body.position_id.is_some() && body.job_id.is_some()
+        || body.position_id.is_none() && body.job_id.is_none() && body.match_id.is_none()
+    {
         return Err(ApiError::invalid(
-            "Supply exactly one position_id or completed match-analysis job_id",
+            "Supply position_id, or match_id / saved match-analysis job_id",
         ));
     }
     if body.min_loss.is_some_and(|n| !n.is_finite() || n < 0.0)
@@ -1172,10 +1182,10 @@ async fn evaluate_card(
         &card.position,
         SavedEvaluation {
             engine: &card.solution.engine,
-            plies: Some(card.solution.plies),
+            plies: card.solution.plies,
             decision: card.solution.decision.as_ref(),
             candidates: &card.solution.candidates,
-            native: true,
+            native: card.solution.imported.is_none(),
         },
         answer,
     )

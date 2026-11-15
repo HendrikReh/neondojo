@@ -117,6 +117,7 @@ function props(player: 0 | 1 = 0) {
     },
     jobs: {
       jobs: {},
+      refresh: () => {},
       ...{ completedAnalysis: undefined },
       error: null,
       submitting: false,

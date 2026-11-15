@@ -299,71 +299,17 @@ async fn score(
 }
 
 async fn checker_answer(state: &AppState, position: &Position) -> ApiResult<CheckerPracticeAnswer> {
-    if let Some((best, engine, plies)) =
+    let Some((best, engine, depth)) =
         crate::learning::saved_checker_move(&state.pool, position).await?
-    {
-        return Ok(CheckerPracticeAnswer {
-            best,
-            engine,
-            depth: Some(format!("{plies}-ply")),
-        });
-    }
-    for source in crate::imported_analysis::position_checker_records(&state.pool, position).await? {
-        if source.kind != "checker"
-            || source.player != position.player
-            || source.game_no != position.game_no
-            || source.checker_ply.is_some_and(|ply| ply != position.ply)
-            || source.engine.trim().is_empty()
-            || source
-                .position_id
-                .as_ref()
-                .is_some_and(|v| v != &position.position_id)
-            || source
-                .gnubg_match_id
-                .as_ref()
-                .is_some_and(|v| v != &position.gnubg_match_id)
-            || source.dice.is_some_and(|dice| {
-                !dice.iter().eq(&position.dice) && !dice.iter().rev().eq(&position.dice)
-            })
-        {
-            continue;
-        }
-        let mut top = source.candidates.into_iter().filter(|c| c.rank == 1);
-        if let Some(best) = top.next()
-            && top.next().is_none()
-            && best.equity.is_some_and(f64::is_finite)
-            && after_play(position, &best.notation).is_some()
-        {
-            return Ok(CheckerPracticeAnswer {
-                best: best.notation,
-                engine: source.engine,
-                depth: best.depth.or(source.depth),
-            });
-        }
-    }
-
-    let _evaluation = EVALUATION.lock().await;
-    crate::play::require_review_available(&state.pool, position.match_uuid).await?;
-    let settings = crate::settings::load(state).await?;
-    let analysis = settings
-        .gnubg()
-        .analyze(
-            &position.position_id,
-            &position.gnubg_match_id,
-            settings.analysis_plies,
-            None,
-        )
-        .await?;
-    let best = analysis
-        .candidates
-        .into_iter()
-        .next()
-        .filter(|candidate| after_play(position, &candidate.notation).is_some())
-        .ok_or_else(|| ApiError::invalid("No usable checker answer for this position"))?;
+    else {
+        return Err(ApiError::invalid(
+            "The selected analysis has no supported checker answer for this position",
+        ));
+    };
     Ok(CheckerPracticeAnswer {
-        best: best.notation,
-        engine: analysis.engine,
-        depth: Some(format!("{}-ply", analysis.plies)),
+        best,
+        engine,
+        depth,
     })
 }
 
@@ -577,10 +523,8 @@ mod tests {
             .await
             .unwrap();
         let binary = std::env::var("GNUBG_BIN").unwrap_or_else(|_| "gnubg".into());
-        let app = crate::api::router(AppState::new(
-            pool.clone(),
-            crate::engine::Engine::new(binary),
-        ));
+        let state = AppState::new(pool.clone(), crate::engine::Engine::new(binary));
+        let app = crate::api::router(state.clone());
         let post = |route: &str, body: Value| {
             let app = app.clone();
             let uri = format!("/api/positions/{id}/{route}");
@@ -621,15 +565,80 @@ mod tests {
                 .abs()
                 < 1e-6
         );
-        let (status, answer) = post("practice-answer", Value::Null).await;
-        assert_eq!(status, 200, "{answer}");
-        assert_eq!(answer["best"], value["best"]);
+        let (status, unavailable) = post("practice-answer", Value::Null).await;
+        assert_eq!(status, 422, "{unavailable}");
+        assert_eq!(
+            unavailable["error"],
+            "The selected analysis has no supported checker answer for this position"
+        );
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT count(*) FROM jobs")
                 .fetch_one(&pool)
                 .await
                 .unwrap(),
-            0
+            0,
+            "scoring and revealing must not silently create a persisted analysis"
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM analysis_selections")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            0,
+            "scoring and revealing must not silently choose a saved analysis"
+        );
+        let job = store::create_job(&pool, id, "analysis", 2).await.unwrap();
+        assert!(crate::jobs::run_one(&state).await.unwrap());
+        let completed = store::get_job(&pool, job.id).await.unwrap().unwrap();
+        assert_eq!(completed.status, "completed", "{:?}", completed.error);
+        let newer = store::create_job(&pool, id, "analysis", 0).await.unwrap();
+        assert!(crate::jobs::run_one(&state).await.unwrap());
+        let newer = store::get_job(&pool, newer.id).await.unwrap().unwrap();
+        assert_eq!(newer.status, "completed", "{:?}", newer.error);
+        let selected_id = format!("job:{}", job.id);
+        let response = app
+            .clone()
+            .oneshot(
+                Request::put(format!(
+                    "/api/matches/{}/analysis-selection",
+                    imported.r#match.id
+                ))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"analysis_id":selected_id}).to_string()))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status().as_u16(), 200);
+        let (status, answer) = post("practice-answer", Value::Null).await;
+        assert_eq!(status, 200, "{answer}");
+        assert_eq!(answer["best"], value["best"]);
+        assert_eq!(answer["depth"], "2-ply", "{answer}");
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("SELECT analysis_id FROM analysis_selections")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            selected_id
+        );
+        for saved in [completed, newer] {
+            assert_eq!(
+                store::get_job(&pool, saved.id)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .result,
+                saved.result,
+                "revealing must preserve both saved analyses"
+            );
+        }
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM jobs")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            2,
+            "revealing the saved answer must reuse the existing analysis"
         );
     }
 }

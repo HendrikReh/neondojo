@@ -1,4 +1,5 @@
 //! Immutable analysis supplied by the imported artifact, separate from engine jobs.
+pub(crate) mod projections;
 pub(crate) mod sage;
 use crate::import::sgf::{Node, SourceMove, parse_sgf_source_moves, parse_trees};
 use anyhow::{Context, Result};
@@ -458,6 +459,10 @@ pub(crate) fn extract(sgf: &str) -> Result<Vec<ImportedAnalysisData>> {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ImportedAnalysisRecord {
+    /// Source contains recorded evaluation values; this does not imply comparable units.
+    #[serde(default)]
+    #[schema(required = false)]
+    pub evaluated: bool,
     pub id: uuid::Uuid,
     pub match_uuid: uuid::Uuid,
     pub position_uuid: Option<uuid::Uuid>,
@@ -598,23 +603,58 @@ pub async fn match_summary(pool: &PgPool, id: Uuid) -> Result<Option<ImportedAna
         depths,
     }))
 }
+pub(crate) async fn selected_position_records(
+    executor: impl sqlx::PgExecutor<'_>,
+    match_id: Uuid,
+    position: Uuid,
+) -> Result<Vec<ImportedAnalysisRecord>> {
+    read_records(executor, match_id, Some(position), None, true).await
+}
+
 async fn records_where(
-    pool: &PgPool,
+    executor: impl sqlx::PgExecutor<'_>,
     match_id: Uuid,
     position: Option<Uuid>,
     mov: Option<(i32, i32)>,
 ) -> Result<Vec<ImportedAnalysisRecord>> {
-    let rows:Vec<(Uuid,Uuid,Option<Uuid>,String,Value)>=sqlx::query_as("SELECT a.id,a.match_uuid,a.position_uuid,m.format,a.data FROM imported_analyses a JOIN matches m ON m.id=a.match_uuid WHERE a.match_uuid=$1 AND ($2::uuid IS NULL OR a.position_uuid=$2) AND ($3::integer IS NULL OR (a.game_no=$3 AND a.source_move_no=$4)) ORDER BY a.source_ordinal").bind(match_id).bind(position).bind(mov.map(|m|m.0)).bind(mov.map(|m|m.1)).fetch_all(pool).await?;
+    read_records(executor, match_id, position, mov, false).await
+}
+
+async fn read_records(
+    executor: impl sqlx::PgExecutor<'_>,
+    match_id: Uuid,
+    position: Option<Uuid>,
+    mov: Option<(i32, i32)>,
+    primary: bool,
+) -> Result<Vec<ImportedAnalysisRecord>> {
+    let table = if primary {
+        "primary_imported_analyses"
+    } else {
+        "imported_analyses"
+    };
+    let sql = format!(
+        "SELECT a.id,a.match_uuid,a.position_uuid,m.format,a.data,imported_analysis_has_values(a.data) FROM {table} a JOIN matches m ON m.id=a.match_uuid WHERE a.match_uuid=$1 AND ($2::uuid IS NULL OR a.position_uuid=$2) AND ($3::integer IS NULL OR (a.game_no=$3 AND a.source_move_no=$4)) ORDER BY a.source_ordinal"
+    );
+    let rows: Vec<(Uuid, Uuid, Option<Uuid>, String, Value, bool)> = sqlx::query_as(&sql)
+        .bind(match_id)
+        .bind(position)
+        .bind(mov.map(|m| m.0))
+        .bind(mov.map(|m| m.1))
+        .fetch_all(executor)
+        .await?;
     rows.into_iter()
-        .map(|(id, match_uuid, position_uuid, source_format, data)| {
-            Ok(ImportedAnalysisRecord {
-                id,
-                match_uuid,
-                position_uuid,
-                source_format,
-                data: serde_json::from_value(data)?,
-            })
-        })
+        .map(
+            |(id, match_uuid, position_uuid, source_format, data, evaluated)| {
+                Ok(ImportedAnalysisRecord {
+                    evaluated,
+                    id,
+                    match_uuid,
+                    position_uuid,
+                    source_format,
+                    data: serde_json::from_value(data)?,
+                })
+            },
+        )
         .collect()
 }
 pub async fn position_records(
@@ -632,21 +672,6 @@ pub async fn position_records(
         return Ok(None);
     }
     Ok(Some(records_where(pool, match_id, Some(id), None).await?))
-}
-
-pub(crate) async fn position_checker_records(
-    pool: &PgPool,
-    position: &crate::model::Position,
-) -> Result<Vec<ImportedAnalysisData>> {
-    if !ensure_catalog(pool, position.match_uuid).await? {
-        return Ok(vec![]);
-    }
-    let rows: Vec<Value> = sqlx::query_scalar("SELECT data FROM imported_analyses WHERE match_uuid=$1 AND position_uuid=$2 AND kind='checker' ORDER BY source_ordinal")
-        .bind(position.match_uuid).bind(position.id).fetch_all(pool).await?;
-    Ok(rows
-        .into_iter()
-        .filter_map(|data| serde_json::from_value(data).ok())
-        .collect())
 }
 
 pub(crate) fn routes() -> Router<AppState> {

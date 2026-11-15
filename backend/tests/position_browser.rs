@@ -275,7 +275,7 @@ async fn similar_practice_uses_imported_answers_and_respects_competition(pool: P
     let record = json!({
         "game_no":position.game_no,"source_move_no":1,"checker_ply":1,
         "position_id":position.position_id,"gnubg_match_id":position.gnubg_match_id,
-        "dice":[1,3],"kind":"checker","player":position.player,"played":position.notation,
+        "dice":position.dice,"kind":"checker","player":position.player,"played":position.notation,
         "engine":"eXtreme Gammon","method":"evaluation","depth":"XGRoller++",
         "candidates":[{"rank":1,"notation":"8/5 6/5","equity":0.2,"equity_kind":"cubeful","probabilities":{},"raw":{}}],
         "raw":{}
@@ -816,25 +816,30 @@ async fn native(
     loss: f64,
     status: &str,
 ) -> Uuid {
-    let id = Uuid::new_v4();
+    let existing:Option<Uuid>=sqlx::query_scalar("SELECT j.id FROM jobs j WHERE j.match_uuid=$1 AND j.kind='match' AND j.plies=$2 AND j.status=$3 AND NOT EXISTS(SELECT 1 FROM move_analyses ma WHERE ma.job_id=j.id AND ma.position_uuid=$4) ORDER BY j.created_at DESC LIMIT 1")
+        .bind(match_id).bind(plies).bind(status).bind(position.id).fetch_optional(pool).await.unwrap();
+    let id = existing.unwrap_or_else(Uuid::new_v4);
+    if existing.is_none() {
+        sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,result,total_games,completed_games) VALUES($1,$2,'match',$3,$4,$5,1,1)")
+            .bind(id).bind(match_id).bind(plies).bind(status).bind(json!({"engine":format!("GNU Backgammon {plies}")})).execute(pool).await.unwrap();
+    }
     sqlx::query(
-        "INSERT INTO jobs(id,match_uuid,kind,plies,status,result) VALUES($1,$2,'match',$3,$4,$5)",
+        "INSERT INTO match_analysis_games(job_id,game_no) VALUES($1,$2) ON CONFLICT DO NOTHING",
     )
     .bind(id)
-    .bind(match_id)
-    .bind(plies)
-    .bind(status)
-    .bind(json!({"engine":format!("GNU Backgammon {plies}" )}))
+    .bind(position.game_no)
     .execute(pool)
     .await
     .unwrap();
-    sqlx::query("INSERT INTO move_analyses(job_id,position_uuid,game_no,decision_no,player,kind,equity_loss,data) VALUES($1,$2,$3,1,$4,'checker',$5,$6)").bind(id).bind(position.id).bind(position.game_no).bind(position.player).bind(loss).bind(json!({"decision_no":1,"checker_no":position.ply,"player":position.player,"kind":"checker","played":position.notation,"best":"8/5 6/5","severity":"bad","evaluation_status":"evaluated","played_equity":0.0,"best_equity":loss,"equity_loss":loss})).execute(pool).await.unwrap();
+    sqlx::query("INSERT INTO move_analyses(job_id,position_uuid,game_no,decision_no,player,kind,equity_loss,data) VALUES($1,$2,$3,$4,$5,'checker',$6,$7)")
+        .bind(id).bind(position.id).bind(position.game_no).bind(position.ordinal + 1).bind(position.player).bind(loss)
+        .bind(json!({"decision_no":position.ordinal + 1,"checker_no":position.ply,"player":position.player,"kind":"checker","played":position.notation,"best":"8/5 6/5","severity":"bad","evaluation_status":"evaluated","played_equity":0.0,"best_equity":loss,"equity_loss":loss})).execute(pool).await.unwrap();
     id
 }
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
-async fn native_loss_uses_highest_completed_depth_and_hints_only_mark_ready(pool: PgPool) {
+async fn native_loss_and_readiness_use_one_latest_completed_full_match(pool: PgPool) {
     let (app, id, positions) = setup(&pool).await;
     native(&pool, id, &positions[0], 0, 0.5, "completed").await;
     let authoritative = native(&pool, id, &positions[0], 1, 0.09, "completed").await;
@@ -842,14 +847,13 @@ async fn native_loss_uses_highest_completed_depth_and_hints_only_mark_ready(pool
     sqlx::query("INSERT INTO jobs(id,position_uuid,kind,plies,status,result) VALUES($1,$2,'analysis',2,'completed',$3)")
         .bind(Uuid::new_v4()).bind(positions[1].id).bind(json!({"engine":"GNU Backgammon hint","plies":2,"candidates":[{"rank":1,"notation":"best","equity":0.2,"probabilities":[]}]})).execute(&pool).await.unwrap();
     let ready = search(app.clone(), json!({"analysis_state":"ready","sort":"loss"})).await;
-    assert_eq!(ready["items"].as_array().unwrap().len(), 2);
+    assert_eq!(ready["items"].as_array().unwrap().len(), 1);
     assert_eq!(
         ready["items"][0]["native_error"]["job_id"],
         authoritative.to_string()
     );
     assert_eq!(ready["items"][0]["native_error"]["equity_loss"], 0.09);
     assert_eq!(ready["items"][0]["native_error"]["severity"], "bad");
-    assert_eq!(ready["items"][1]["native_error"], Value::Null);
     let (status, readiness) = call(
         app.clone(),
         "POST",
@@ -860,7 +864,7 @@ async fn native_loss_uses_highest_completed_depth_and_hints_only_mark_ready(pool
     assert_eq!(status, 200, "{readiness}");
     assert_eq!(
         readiness,
-        json!({"analysis_required":1,"unavailable":1,"first_analysis_required":positions[2].id})
+        json!({"analysis_required":2,"unavailable":1,"first_analysis_required":positions[1].id})
     );
     assert_eq!(
         search(app.clone(), json!({"min_loss":0.1})).await["items"],
@@ -868,7 +872,7 @@ async fn native_loss_uses_highest_completed_depth_and_hints_only_mark_ready(pool
     );
     assert_eq!(
         search(app, json!({"analysis_state":"missing"})).await["items"][0]["position"]["id"],
-        positions[2].id.to_string()
+        positions[1].id.to_string()
     );
 }
 
@@ -1048,10 +1052,8 @@ async fn malformed_legacy_ids_remain_unknown_and_saved_filter_count_is_bounded(p
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
-async fn readiness_obeys_the_highest_individual_hint_even_when_an_older_hint_is_valid(
-    pool: PgPool,
-) {
-    let (app, _, positions) = setup(&pool).await;
+async fn readiness_keeps_stale_explicit_hint_unavailable_without_using_older_answer(pool: PgPool) {
+    let (app, match_id, positions) = setup(&pool).await;
     for (plies, candidates) in [
         (
             0,
@@ -1059,10 +1061,19 @@ async fn readiness_obeys_the_highest_individual_hint_even_when_an_older_hint_is_
         ),
         (2, json!([])),
     ] {
+        let job = Uuid::new_v4();
         sqlx::query("INSERT INTO jobs(id,position_uuid,kind,plies,status,result) VALUES($1,$2,'analysis',$3,'completed',$4)")
-            .bind(Uuid::new_v4()).bind(positions[0].id).bind(plies)
+            .bind(job).bind(positions[0].id).bind(plies)
             .bind(json!({"engine":"GNU Backgammon","plies":plies,"candidates":candidates}))
             .execute(&pool).await.unwrap();
+        if plies == 2 {
+            sqlx::query("INSERT INTO analysis_selections(match_id,analysis_id) VALUES($1,$2)")
+                .bind(match_id)
+                .bind(format!("job:{job}"))
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
     }
     let found = search(app.clone(), json!({})).await;
     assert_eq!(found["items"][0]["card_ready"], false);
@@ -1083,16 +1094,20 @@ async fn readiness_obeys_the_highest_individual_hint_even_when_an_older_hint_is_
 #[ignore = "requires PostgreSQL"]
 async fn an_empty_selected_individual_hint_blocks_match_solution_fallback(pool: PgPool) {
     let (app, id, positions) = setup(&pool).await;
-    let native = native(&pool, id, &positions[0], 1, 0.08, "completed").await;
+    native(&pool, id, &positions[0], 1, 0.08, "completed").await;
+    let selected = Uuid::new_v4();
     sqlx::query("INSERT INTO jobs(id,position_uuid,kind,plies,status,result) VALUES($1,$2,'analysis',2,'completed',$3)")
-        .bind(Uuid::new_v4()).bind(positions[0].id)
+        .bind(selected).bind(positions[0].id)
         .bind(json!({"engine":"GNU Backgammon","plies":2,"candidates":[]}))
         .execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO analysis_selections(match_id,analysis_id) VALUES($1,$2)")
+        .bind(id)
+        .bind(format!("job:{selected}"))
+        .execute(&pool)
+        .await
+        .unwrap();
     let found = search(app.clone(), json!({})).await;
-    assert_eq!(
-        found["items"][0]["native_error"]["job_id"],
-        native.to_string()
-    );
+    assert!(found["items"][0]["native_error"].is_null());
     assert_eq!(found["items"][0]["card_ready"], false);
     assert_eq!(
         search(app, json!({"analysis_state":"ready"})).await["items"],
@@ -1162,10 +1177,17 @@ async fn forced_zero_loss_is_ready_but_missing_native_equities_or_blank_answers_
         .execute(&pool)
         .await
         .unwrap();
+    let selected = Uuid::new_v4();
     sqlx::query("INSERT INTO jobs(id,position_uuid,kind,plies,status,result) VALUES($1,$2,'analysis',2,'completed',$3)")
-        .bind(Uuid::new_v4()).bind(positions[0].id)
+        .bind(selected).bind(positions[0].id)
         .bind(json!({"engine":"GNU Backgammon","plies":2,"candidates":[{"notation":"   ","equity":0.0,"rank":1,"probabilities":[]}]}))
         .execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO analysis_selections(match_id,analysis_id) VALUES($1,$2)")
+        .bind(id)
+        .bind(format!("job:{selected}"))
+        .execute(&pool)
+        .await
+        .unwrap();
     assert_eq!(
         search(app, json!({"analysis_state":"ready"})).await["items"],
         json!([])

@@ -86,6 +86,7 @@ async fn native(pool: &PgPool, job: &Job, position: Uuid, game: i32, loss: f64, 
 }
 
 async fn checkpoint(pool: &PgPool, job: &Job, game: i32) {
+    sqlx::query("UPDATE jobs SET status=CASE WHEN status='queued' THEN 'running' ELSE status END WHERE id=$1").bind(job.id).execute(pool).await.unwrap();
     sqlx::query("INSERT INTO match_analysis_games(job_id,game_no) VALUES($1,$2)")
         .bind(job.id)
         .bind(game)
@@ -109,6 +110,51 @@ async fn hint(pool: &PgPool, position: Uuid, with_played: bool) -> Uuid {
     sqlx::query("INSERT INTO jobs(id,position_uuid,kind,plies,status,result) VALUES($1,$2,'analysis',2,'completed',$3)")
         .bind(id).bind(position).bind(json!({"engine":"GNUbg hint fixture","plies":2,"candidates":candidates})).execute(pool).await.unwrap();
     id
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn catalog_result_reuses_saved_analysis_independently_of_calculation_profile(pool: PgPool) {
+    let (app, id, p) = setup(&pool).await;
+    sqlx::query("UPDATE app_settings SET analysis_engine='bgsage', analysis_plies=2")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let job = store::create_match_job_scoped(&pool, id, 2, 1, Some(1))
+        .await
+        .unwrap();
+    native(&pool, &job, p[0], 1, 0.08, "evaluated").await;
+    sqlx::query("UPDATE jobs SET status='completed',result=$2 WHERE id=$1")
+        .bind(job.id)
+        .bind(json!({"engine":"GNU Backgammon fixture"}))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let path = format!("/api/positions/{}/analysis-result", p[0]);
+    assert_eq!(get(&app, &path).await, (200, Value::Null));
+
+    checkpoint(&pool, &job, 1).await;
+    let (status, saved) = get(&app, &path).await;
+    assert_eq!(status, 200, "{saved}");
+    assert_eq!(saved["position_id"], p[0].to_string());
+    assert_eq!(saved["analysis_id"], format!("job:{}", job.id));
+    assert_eq!(saved["engine"], "GNU Backgammon fixture");
+    assert_eq!(saved["depth"], "2-ply cubeful");
+    assert_eq!(saved["decision"]["best"], "13/10 6/5");
+    assert_eq!(saved["decision"]["best_equity"], 0.5);
+    assert_eq!(saved["decision"]["played_equity"], 0.42);
+    assert_eq!(saved["decision"]["equity_loss"], 0.08);
+    assert_eq!(
+        get(&app, &format!("/api/positions/{}/analysis-result", p[2])).await,
+        (200, Value::Null),
+    );
+
+    sqlx::query("UPDATE matches SET source_revision=source_revision+1 WHERE id=$1")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(get(&app, &path).await, (200, Value::Null));
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -142,10 +188,10 @@ async fn selected_native_checkpoint_wins_and_recomputes_documented_thresholds(po
     hint(&pool, p[0], true).await;
     let job = store::create_match_job(&pool, id, 0, 2).await.unwrap();
     native(&pool, &job, p[0], 1, 0.0, "evaluated").await;
-    let (_, pending) = get(&app, &uri(id, 1, Some(job.id))).await;
     assert_eq!(
-        pending["items"][0]["equity_loss"], 0.08,
-        "uncheckpointed native rows must not be used: {pending}"
+        get(&app, &uri(id, 1, Some(job.id))).await.0,
+        422,
+        "uncheckpointed results cannot be selected"
     );
     checkpoint(&pool, &job, 1).await;
     sqlx::query("UPDATE jobs SET status='running',completed_games=1,result=$2 WHERE id=$1")
@@ -326,25 +372,25 @@ async fn legacy_source_catalog_is_loaded_without_changing_original_or_manual_met
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
-async fn individual_hint_requires_actual_play_and_has_fallback_priority(pool: PgPool) {
+async fn individual_hint_requires_explicit_choice_and_actual_play(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
     imported(&pool, id, p[0], 1, 0.16, "cubeful").await;
     let hint_id = hint(&pool, p[0], true).await;
-    let (_, data) = get(&app, &uri(id, 1, None)).await;
+    let (_, automatic) = get(&app, &uri(id, 1, None)).await;
+    assert_eq!(automatic["items"][0]["source"], "imported");
+    let chosen = format!("{}&analysis_id=job:{hint_id}", uri(id, 1, None));
+    let (_, data) = get(&app, &chosen).await;
     assert_eq!(data["items"][0]["equity_loss"], 0.08, "{data}");
     assert_eq!(data["items"][0]["job_id"], hint_id.to_string());
-    assert_eq!(data["items"][0]["source"], "native");
-    sqlx::query("UPDATE jobs SET result=jsonb_set(result,'{candidates}','[]'::jsonb) WHERE id=$1")
-        .bind(hint_id)
-        .execute(&pool)
-        .await
-        .unwrap();
-    let (_, fallback) = get(&app, &uri(id, 1, None)).await;
-    assert_eq!(fallback["items"][0]["source"], "imported", "{fallback}");
-    assert_eq!(fallback["items"][0]["equity_loss"], 0.16);
-    sqlx::query("UPDATE imported_analyses SET data=jsonb_set(data,'{candidates,1,equity}','null'::jsonb) WHERE position_uuid=$1").bind(p[0]).execute(&pool).await.unwrap();
-    let (_, unknown) = get(&app, &uri(id, 1, None)).await;
-    assert_eq!(unknown["items"], json!([]));
+    sqlx::query("UPDATE jobs SET result=jsonb_set(result,'{candidates}',jsonb_build_array(result->'candidates'->0)) WHERE id=$1").bind(hint_id).execute(&pool).await.unwrap();
+    let (_, unknown) = get(&app, &chosen).await;
+    assert_eq!(
+        unknown["items"],
+        json!([]),
+        "missing actual move must not borrow imported assessment"
+    );
+    let (_, imported) = get(&app, &uri(id, 1, None)).await;
+    assert_eq!(imported["items"][0]["equity_loss"], 0.16);
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -387,7 +433,7 @@ async fn actual_gnubg_game_results_assess_every_saved_checker_decision(pool: PgP
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
-async fn native_fallback_uses_same_match_and_game_and_never_another_selected_job(pool: PgPool) {
+async fn automatic_selection_respects_scope_and_explicit_selection_never_borrows(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
     let job = store::create_match_job_scoped(&pool, id, 1, 1, Some(1))
         .await
@@ -404,11 +450,10 @@ async fn native_fallback_uses_same_match_and_game_and_never_another_selected_job
     let (_, game2) = get(&app, &uri(id, 2, None)).await;
     assert_eq!(game2["items"], json!([]));
     let selected = store::create_match_job(&pool, id, 0, 2).await.unwrap();
-    let (_, unknown) = get(&app, &uri(id, 1, Some(selected.id))).await;
     assert_eq!(
-        unknown["items"],
-        json!([]),
-        "an explicit selected job must not borrow native decisions from another job"
+        get(&app, &uri(id, 1, Some(selected.id))).await.0,
+        422,
+        "a pending selection must not borrow another result"
     );
     let other_id = import_source(&pool, &SOURCE.replace("Alice", "Other")).await;
     let other_position: Uuid =
@@ -438,15 +483,17 @@ async fn invalid_game_job_identity_and_scope_are_rejected(pool: PgPool) {
     let job = store::create_match_job_scoped(&pool, id, 0, 1, Some(1))
         .await
         .unwrap();
+    native(&pool, &job, p[0], 1, 0.08, "evaluated").await;
+    checkpoint(&pool, &job, 1).await;
     let other_id = import_source(&pool, &SOURCE.replace("Alice", "Other")).await;
     assert_eq!(get(&app, &uri(id, 0, None)).await.0, 422);
     assert_eq!(get(&app, &uri(id, 3, None)).await.0, 404);
     assert_eq!(get(&app, &uri(Uuid::new_v4(), 1, None)).await.0, 404);
-    assert_eq!(get(&app, &uri(id, 1, Some(Uuid::new_v4()))).await.0, 404);
+    assert_eq!(get(&app, &uri(id, 1, Some(Uuid::new_v4()))).await.0, 422);
     assert_eq!(get(&app, &uri(id, 2, Some(job.id))).await.0, 422);
     assert_eq!(get(&app, &uri(other_id, 1, Some(job.id))).await.0, 422);
     let hint_id = hint(&pool, p[0], true).await;
-    assert_eq!(get(&app, &uri(id, 1, Some(hint_id))).await.0, 422);
+    assert_eq!(get(&app, &uri(id, 1, Some(hint_id))).await.0, 200);
     assert!(
         get(
             &app,

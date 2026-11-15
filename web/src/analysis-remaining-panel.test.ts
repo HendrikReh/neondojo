@@ -1,3 +1,4 @@
+import { catalogFixture, entryForJob } from './analysis-catalog-test-fixtures';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -38,6 +39,22 @@ const render = () =>
         } as Match,
         gameNo: 1,
         onPosition: () => {},
+        catalog: catalogFixture(
+          entryForJob(
+            {
+              id: 'timed-job',
+              kind: 'match',
+              status: state.status,
+              completed_games: 0,
+              total_games: 1,
+              progress: 0,
+              plies: 2,
+              attempts: 1,
+              updated_at: '2026-11-10T12:00:00Z',
+            } as Job,
+            1,
+          ),
+        ),
       }),
     }),
   );

@@ -4,13 +4,7 @@ import AnalysisTimeEstimate from './AnalysisTimeEstimate';
 import { useProfileValue } from './useProfileValue';
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import ActionButton from './ActionButton';
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-} from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { request, terminal, type Job, type Match, type MatchGame } from './api';
 import {
@@ -36,8 +30,6 @@ import MatchAnalysisComparison from './MatchAnalysisComparison';
 import {
   buildStatisticsFilter,
   decisionFilterQuery,
-  statisticsRevision,
-  type JobAnalysisStatistics,
   type MatchDecisionFilter,
   type StatisticsAction,
 } from './match-statistics-api';
@@ -47,6 +39,12 @@ import {
 } from './review-statistics-messages';
 import { DEFAULT_ANALYSIS_PLIES } from './analysis-depth';
 import EngineLabel from './EngineLabel';
+import type { AnalysisCatalog } from './useAnalysisCatalog';
+import { useAnalysisCatalogText } from './analysis-catalog-messages';
+import {
+  analysisStatisticsPath,
+  type MatchAnalysisStatistics,
+} from './analysis-catalog-api';
 
 const defaultFilter: MatchDecisionFilter = {
   player: '',
@@ -84,6 +82,7 @@ export default function MatchAnalysisPanel({
   selectedPositionId,
   selectedDecisionId,
   analysisRevision,
+  catalog,
   games,
   onDecision,
 }: {
@@ -108,6 +107,7 @@ export default function MatchAnalysisPanel({
   onAccepted?: (job: Job) => void;
   boardReview?: BoardReviewTarget;
   analysisRevision?: string;
+  catalog: AnalysisCatalog;
 }) {
   const profile = useOptionalConfiguration();
   const [engineId, setEngineId] = useState(defaultEngine);
@@ -145,9 +145,9 @@ export default function MatchAnalysisPanel({
       });
     return () => abort.abort();
   }, [configured, analysisInstallationKey]);
-  const catalog =
+  const availableEngines =
     engineCatalog?.key === analysisInstallationKey ? engineCatalog : undefined;
-  const engine = catalog?.engines.find((item) => item.id === engineId);
+  const engine = availableEngines?.engines.find((item) => item.id === engineId);
   const supportedPlies = configurationOptions.engine_profiles[
     engineId
   ].analysis.filter((depth) => !engine || engine.plies.includes(depth));
@@ -174,24 +174,38 @@ export default function MatchAnalysisPanel({
     (c, scope) => ({ ...c, analysis: { ...c.analysis, scope } }),
     'game',
   );
-  const scoped = scope === 'game';
-  const { job, error, submitting, run } = useMatchAnalysis(
+  const calculationScoped = scope === 'game';
+  const scoped = catalog.selected?.scope === 'game';
+  const analysisId = catalog.analysisId;
+  const job =
+    catalog.selected?.job?.kind === 'match' ? catalog.selected.job : undefined;
+  const catalogText = useAnalysisCatalogText();
+  const {
+    job: calculationJob,
+    error,
+    submitting,
+    run,
+  } = useMatchAnalysis(
     match.id,
     engineId,
-    scoped ? gameNo : undefined,
-    !scoped || gameNo !== undefined,
+    calculationScoped ? gameNo : undefined,
+    !calculationScoped || gameNo !== undefined,
     onAccepted,
   );
-  useEffect(() => onJob?.(job), [job, onJob]);
-  const filterScope = `${match.id}:${scoped ? (gameNo ?? 'none') : 'match'}`;
+  useEffect(() => onJob?.(calculationJob), [calculationJob, onJob]);
+  const filterScope = `${match.id}:${analysisId ?? ''}:${scoped ? (gameNo ?? 'none') : 'match'}`;
   const [selection, setLocalSelection] = useState<{
     scope: string;
     filter: MatchDecisionFilter;
   }>({ scope: filterScope, filter: defaultFilter });
-  useEffect(
-    () => setLocalSelection({ scope: filterScope, filter: defaultFilter }),
-    [filterScope],
-  );
+  useEffect(() => {
+    if (!analysisId) return;
+    setLocalSelection((previous) =>
+      previous.scope === filterScope
+        ? previous
+        : { scope: filterScope, filter: defaultFilter },
+    );
+  }, [analysisId, filterScope]);
   const selected = {
     ...(profile?.current?.review ??
       (selection.scope === filterScope ? selection.filter : defaultFilter)),
@@ -233,10 +247,18 @@ export default function MatchAnalysisPanel({
       onGame?.(action.gameNo);
     onShowErrors?.();
   }
-  const statisticsKey = job ? statisticsRevision(job) : '';
+  const statisticsKey = analysisId
+    ? JSON.stringify([
+        analysisId,
+        job?.status,
+        job?.completed_games,
+        analysisRevision,
+      ])
+    : '';
+
   const [statisticsResult, setStatisticsResult] = useState<{
     key: string;
-    value: JobAnalysisStatistics;
+    value: MatchAnalysisStatistics;
   }>();
   const [statisticsError, setStatisticsError] = useState<{
     key: string;
@@ -248,13 +270,16 @@ export default function MatchAnalysisPanel({
       ? statisticsResult.value
       : undefined;
   useEffect(() => {
-    if (!job?.id) return;
+    if (!analysisId) return;
     const abort = new AbortController();
-    void request<JobAnalysisStatistics>(`/jobs/${job.id}/statistics`, {
-      signal: abort.signal,
-    })
+    void request<MatchAnalysisStatistics>(
+      analysisStatisticsPath(match.id, analysisId),
+      {
+        signal: abort.signal,
+      },
+    )
       .then((value) => {
-        if (abort.signal.aborted || value.job_id !== job.id) return;
+        if (abort.signal.aborted || value.analysis_id !== analysisId) return;
         setStatisticsResult({ key: statisticsKey, value });
         setStatisticsError(undefined);
       })
@@ -266,24 +291,29 @@ export default function MatchAnalysisPanel({
         if (!abort.signal.aborted) setStatisticsLoaded(statisticsKey);
       });
     return () => abort.abort();
-  }, [job?.id, statisticsKey]);
+  }, [match.id, analysisId, statisticsKey]);
   const active = job && !terminal(job);
-  const controlsDisabled = !configured || !!active || submitting;
+  const calculationActive = calculationJob && !terminal(calculationJob);
+  const controlsDisabled = !configured || !!calculationActive || submitting;
   const analysisConfigured =
     configured && !!engine?.available && supportedPlies.includes(plies);
   const analysisDisabled =
-    controlsDisabled || !analysisConfigured || (scoped && gameNo === undefined);
+    controlsDisabled ||
+    !analysisConfigured ||
+    (calculationScoped && gameNo === undefined);
   const names = [match.white, match.black];
   const filter = decisionFilterQuery(selected);
   const scopeGame = scoped ? gameNo : undefined;
   const showDecisions =
-    (showResults || !!boardReview) && (!scoped || scopeGame !== undefined);
-  const reviewScope = `${match.id}:${job?.id ?? ''}:${filter}`;
+    !!analysisId &&
+    (showResults || !!boardReview) &&
+    (!scoped || scopeGame !== undefined);
+  const reviewScope = `${match.id}:${analysisId ?? ''}:${filter}`;
   const reviewRevision = JSON.stringify([statisticsKey, analysisRevision]);
   const loadDecisionPage = useCallback(
     (signal: AbortSignal, page: number) =>
-      reviewDecisions(match.id, selected, { jobId: job?.id, page, signal }),
-    [match.id, job?.id, filter],
+      reviewDecisions(match.id, selected, { analysisId, page, signal }),
+    [match.id, analysisId, filter],
   );
   const decisions = useSearchPages({
     scope: reviewScope,
@@ -374,13 +404,17 @@ export default function MatchAnalysisPanel({
       const entry = await findReviewNeighbor({
         matchId: match.id,
         filter: selected,
-        jobId: job?.id,
+        analysisId,
         origin: boardReview.origin,
         direction,
         signal: abort.signal,
         currentPage:
           selectedIndex >= 0
-            ? { page: decisions.page, pageSize: reviewPageSize, total: decisions.total }
+            ? {
+                page: decisions.page,
+                pageSize: reviewPageSize,
+                total: decisions.total,
+              }
             : undefined,
       });
       if (!current()) return;
@@ -410,7 +444,7 @@ export default function MatchAnalysisPanel({
     void reviewEmptyReason(
       match.id,
       { game_no: scopeGame, errors_only: errorsOnly },
-      { jobId: job?.id, narrowed, signal: abort.signal },
+      { analysisId, narrowed, signal: abort.signal },
     ).then(
       (reason) => {
         if (!abort.signal.aborted) setEmptyReview({ key: emptyKey, reason });
@@ -420,7 +454,7 @@ export default function MatchAnalysisPanel({
       },
     );
     return () => abort.abort();
-  }, [emptyKey, match.id, job?.id, scopeGame, errorsOnly, narrowed]);
+  }, [emptyKey, match.id, analysisId, scopeGame, errorsOnly, narrowed]);
 
   const calculationLabel = `${t('analysis.configureMatch')} …`;
   const emptyActions = {
@@ -468,27 +502,38 @@ export default function MatchAnalysisPanel({
   } as const;
   const emptyAction = emptyState?.reason && emptyActions[emptyState.reason];
   const reviewError = pageError || emptyState?.error;
-  const emptyFeedback = emptyAction ? (
-    <div className="analysis-empty review-empty">
-      <p role="status">{emptyAction.message}</p>
-      <ActionButton
-        type="button"
-        icon={emptyAction.icon}
-        label={emptyAction.label}
-        onClick={emptyAction.run}
-      />
-    </div>
-  ) : reviewError ? (
-    <div className="analysis-empty review-empty">
-      <p className="analysis-error" role="alert">{formatError(reviewError)}</p>
-      <ActionButton
-        type="button"
-        icon="refresh"
-        label={sourceText('retry')}
-        onClick={decisions.retry}
-      />
-    </div>
-  ) : null;
+  const emptyFeedback =
+    emptyState?.reason === 'missing' ? (
+      <div className="analysis-empty review-empty">
+        <p role="status">
+          {text('missing')}{' '}
+          {catalog.entries.some((entry) => entry.id !== analysisId) &&
+            catalogText('alternatives')}
+        </p>
+      </div>
+    ) : emptyAction ? (
+      <div className="analysis-empty review-empty">
+        <p role="status">{emptyAction.message}</p>
+        <ActionButton
+          type="button"
+          icon={emptyAction.icon}
+          label={emptyAction.label}
+          onClick={emptyAction.run}
+        />
+      </div>
+    ) : reviewError ? (
+      <div className="analysis-empty review-empty">
+        <p className="analysis-error" role="alert">
+          {formatError(reviewError)}
+        </p>
+        <ActionButton
+          type="button"
+          icon="refresh"
+          label={sourceText('retry')}
+          onClick={decisions.retry}
+        />
+      </div>
+    ) : null;
 
   const progress = job && (
     <div className="match-analysis-progress" role="status" aria-live="polite">
@@ -588,12 +633,14 @@ export default function MatchAnalysisPanel({
               }}
             >
               {(['gnubg', 'bgsage'] as const).map((id) => {
-                const item = catalog?.engines.find((entry) => entry.id === id);
+                const item = availableEngines?.engines.find(
+                  (entry) => entry.id === id,
+                );
                 const name = id === 'gnubg' ? 'GNUbg' : 'Open Sage';
                 return (
                   <option key={id} value={id}>
                     {item?.name ?? name}
-                    {catalog && !item?.available
+                    {availableEngines && !item?.available
                       ? ` — ${settingsText('unavailable')}`
                       : ''}
                   </option>
@@ -631,11 +678,19 @@ export default function MatchAnalysisPanel({
             label={
               submitting
                 ? t('matchAnalysis.submitting')
-                : active
+                : calculationActive
                   ? t('matchAnalysis.running')
-                  : job
-                    ? t(scoped ? 'gameAnalysis.again' : 'matchAnalysis.again')
-                    : t(scoped ? 'gameAnalysis.start' : 'matchAnalysis.start')
+                  : calculationJob
+                    ? t(
+                        calculationScoped
+                          ? 'gameAnalysis.again'
+                          : 'matchAnalysis.again',
+                      )
+                    : t(
+                        calculationScoped
+                          ? 'gameAnalysis.start'
+                          : 'matchAnalysis.start',
+                      )
             }
             className="primary"
             onClick={() => {
@@ -647,22 +702,24 @@ export default function MatchAnalysisPanel({
             }}
             disabled={analysisDisabled}
           />
-          {(!controlsTarget || showSettings) && !active && !submitting && (
-            <AnalysisTimeEstimate
-              key={match.position_count}
-              matchId={match.id}
-              gameNo={gameNo}
-              scoped={scoped}
-              engineId={engineId}
-              plies={plies}
-              configured={analysisConfigured}
-              installationKey={analysisInstallationKey}
-            />
-          )}
+          {(!controlsTarget || showSettings) &&
+            !calculationActive &&
+            !submitting && (
+              <AnalysisTimeEstimate
+                key={match.position_count}
+                matchId={match.id}
+                gameNo={gameNo}
+                scoped={calculationScoped}
+                engineId={engineId}
+                plies={plies}
+                configured={analysisConfigured}
+                installationKey={analysisInstallationKey}
+              />
+            )}
         </div>
-        {!!catalog?.error && (
+        {!!availableEngines?.error && (
           <p className="analysis-error" role="alert">
-            {formatError(catalog.error)}
+            {formatError(availableEngines.error)}
           </p>
         )}
       </div>
@@ -690,7 +747,7 @@ export default function MatchAnalysisPanel({
             </p>
           )}
           <>
-            <p className="review-source-note">{text('reviewSources')}</p>
+            <p className="review-source-note">{catalogText('analysis')}</p>
             {showResults && !overview && !controlsTarget && progress}
             <details className="match-move-overview" open>
               <summary>
@@ -807,7 +864,7 @@ export default function MatchAnalysisPanel({
                       <th>{t('matchAnalysis.bestDecision')}</th>
                       <th>{t('matchAnalysis.loss')}</th>
                       <th>{t('matchAnalysis.rating')}</th>
-                      <th>{sourceText('sources')}</th>
+                      <th>{catalogText('analysis')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -927,13 +984,17 @@ export default function MatchAnalysisPanel({
         </section>
       </div>
       <MatchStatisticsView
-        job={job}
+        analysisEntry={catalog.selected}
         statistics={statistics}
         names={names}
         onSelect={selectMetric}
         onGame={onGame}
         hidden={!showStatistics}
-        loading={!!job && statisticsLoaded !== statisticsKey}
+        loading={
+          catalog.loading ||
+          catalog.saving ||
+          (!!analysisId && statisticsLoaded !== statisticsKey)
+        }
         error={
           statisticsError?.key === statisticsKey
             ? statisticsError.error
@@ -946,6 +1007,7 @@ export default function MatchAnalysisPanel({
             <MatchAnalysisComparison
               key={match.id}
               matchId={match.id}
+              catalog={catalog}
               gameNo={scoped ? gameNo : undefined}
               names={names}
               visible={showStatistics}

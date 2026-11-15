@@ -3,104 +3,155 @@ import { expect, test } from './test';
 import { readFileSync } from 'node:fs';
 test.use({ actionTimeout: 10000 });
 
-test('compares saved full-match analysis depths side by side', async ({
+test('compares saved catalog analyses without filtering them by calculation engine', async ({
   page,
 }, info) => {
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
-  const player = `Comparison ${crypto.randomUUID()}`;
-  const job = (id: string, engine_id: string, plies: number, loss: number) => ({
-    id,
-    kind: 'match',
-    status: 'completed',
+  const summary = (engine: string, plies: number, loss: number) => ({
+    engine,
     plies,
+    recorded_depth: `${plies}-ply`,
     total_games: 1,
     completed_games: 1,
-    created_at: '2026-11-12T12:00:00Z',
-    engine_snapshot: { engine_id, engine_version: '1.0' },
-    result: {
-      total_games: 1,
-      completed_games: 1,
-      plies,
-      players: [0, 1].map((player) => ({
-        player,
-        checker_decisions: 1,
-        cube_decisions: 1,
-        checker_equity_loss: player === 0 ? loss : 0,
-        cube_equity_loss: 0,
-        unavailable: 0,
-      })),
-    },
+    total_moves: 2,
+    analyzed_moves: 2,
+    performance_rating: null,
+    players: [0, 1].map((player) => ({
+      player,
+      checker_decisions: 1,
+      cube_decisions: 1,
+      checker_equity_loss: player === 0 ? loss : 0,
+      cube_equity_loss: 0,
+      unavailable: 0,
+    })),
   });
-  await page.route(/\/api\/matches\/[^/]+\/analysis\/jobs(?:\?.*)?$/, (route) =>
+  const saved = [
+    {
+      id: 'gnu-four',
+      engine: 'GNU Backgammon 1.08.003',
+      plies: 4,
+      matchLoss: 0.111,
+      gameLoss: 0.444,
+    },
+    {
+      id: 'sage-four',
+      engine: 'Open Sage 2.0.20260907',
+      plies: 4,
+      matchLoss: 0.999,
+      gameLoss: 0.555,
+    },
+    {
+      id: 'gnu-three',
+      engine: 'GNU Backgammon 1.08.003',
+      plies: 3,
+      matchLoss: 0.222,
+      gameLoss: 0.222,
+    },
+  ];
+  const entries = saved.map((run) => ({
+    id: `job:${run.id}`,
+    source: 'native',
+    scope: 'match',
+    engine: run.engine,
+    depth: `${run.plies}-ply cubeful`,
+    game_no: null,
+    position_id: null,
+    created_at: '2026-11-12T12:00:00Z',
+    status: 'completed',
+    complete: true,
+    checker_count: 2,
+    cube_count: 2,
+    job: null,
+  }));
+  await page.route(/\/api\/matches\/[^/]+\/analyses(?:\?.*)?$/, (route) =>
     route.fulfill({
-      json: new URL(route.request().url()).searchParams.has('game_no')
-        ? [
-            { ...job('game-gnu-four', 'gnubg', 4, 0.444), game_no: 1 },
-            {
-              ...job('sage-match-four', 'bgsage', 4, 0.999),
-              game_summary: job('sage-game-four', 'bgsage', 4, 0.555).result,
-            },
-          ]
-        : [
-            job('gnu-four', 'gnubg', 4, 0.111),
-            job('gnu-three', 'gnubg', 3, 0.222),
-            job('sage-three', 'bgsage', 3, 0.333),
-          ],
+      json: {
+        match_id: new URL(route.request().url()).pathname.split('/')[3],
+        items: entries,
+        selected: entries[0],
+        selected_id: null,
+        next_cursor: null,
+      },
     }),
+  );
+  await page.route(
+    /\/api\/matches\/[^/]+\/analysis-statistics(?:\?.*)?$/,
+    (route) => {
+      const id = new URL(route.request().url()).searchParams.get('analysis_id');
+      const run = saved.find((item) => `job:${item.id}` === id)!;
+      return route.fulfill({
+        json: {
+          analysis_id: id,
+          error_breakdown: null,
+          summary: summary(run.engine, run.plies, run.matchLoss),
+          games: [
+            {
+              game_no: 1,
+              white_score: 0,
+              black_score: 0,
+              crawford: false,
+              analyzed: true,
+              summary: summary(run.engine, run.plies, run.gameLoss),
+              error_breakdown: null,
+            },
+          ],
+        },
+      });
+    },
+  );
+  await page.route('**/api/positions/*/analysis-result?*', (route) =>
+    route.fulfill({ json: null }),
+  );
+  await page.route('**/api/matches/*/review-decisions?*', (route) =>
+    route.fulfill({ json: { items: [], next_cursor: null } }),
   );
   await page.goto('/');
   await page.getByLabel('Match file', { exact: true }).setInputFiles({
     name: 'comparison.sgf',
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(
-      `(;GM[6]PW[${player}]PB[Opponent]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])`,
+      `(;GM[6]PW[Comparison ${crypto.randomUUID()}]PB[Opponent]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])`,
     ),
   });
   await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
-  await page.getByText('Compare game analyses', { exact: true }).click();
-  const gnu = page.getByRole('combobox', { name: 'GNUbg analysis' });
-  const sage = page.getByRole('combobox', { name: 'Open Sage analysis' });
+  await page.getByText('Compare saved analyses', { exact: true }).click();
+  const first = page.getByRole('combobox', { name: 'Comparison analysis 1' });
+  const second = page.getByRole('combobox', { name: 'Comparison analysis 2' });
   const table = page.locator('.statistics-comparison-table');
   const loss = table.getByRole('row', { name: /^Checker equity loss/ }).first();
-  await expect(gnu).toHaveValue('game-gnu-four');
-  await expect(sage).toHaveValue('sage-match-four');
-  await expect(
-    table.locator('small').getByText('From full-match analysis'),
-  ).toBeVisible();
-  await expect(loss.getByRole('cell')).toHaveText(['0.444', '0.555']);
-  await openMatchCalculation(page);
-  const scope = page.getByLabel('Analysis scope', { exact: true });
-  await scope.selectOption('match');
-  await expect(
-    page.getByText('Compare match analyses', { exact: true }),
-  ).toBeVisible();
-  await expect(gnu).toHaveValue('gnu-three');
-  await expect(sage).toHaveValue('sage-three');
-  await expect(loss.getByRole('cell')).toHaveText(['0.222', '0.333']);
-  await gnu.selectOption('gnu-four');
-  await expect(loss.getByRole('cell')).toHaveText(['0.111', '0.333']);
-
+  await expect(first).toHaveValue('job:gnu-four');
+  await expect(second).toHaveValue('job:sage-four');
+  await expect(loss.getByRole('cell')).toHaveText(['0.111', '0.999']);
+  await expect(first.locator('option')).toHaveCount(3);
+  await expect(second.locator('option')).toHaveCount(3);
+  await expect(loss.getByRole('cell')).toHaveText(['0.111', '0.999']);
+  await first.selectOption('job:gnu-three');
+  await expect(loss.getByRole('cell')).toHaveText(['0.222', '0.999']);
+  // Both independent columns may compare saved results from the same engine.
+  await second.selectOption('job:gnu-four');
+  await expect(loss.getByRole('cell')).toHaveText(['0.222', '0.111']);
   for (const [width, height] of [
     [1800, 1169],
     [2560, 1440],
     [3840, 2160],
   ]) {
     await page.setViewportSize({ width, height });
-    await expect(gnu).toBeVisible();
-    await expect(sage).toBeVisible();
-    await expect(loss).toBeVisible();
-    const fits = await table.evaluate((element) => {
-      const parent = element.parentElement!;
-      return parent.scrollWidth <= parent.clientWidth;
-    });
-    expect(fits).toBe(true);
+    await expect(first).toBeVisible();
+    await expect(second).toBeVisible();
+    expect(
+      await table.evaluate(
+        (element) =>
+          element.parentElement!.scrollWidth <=
+          element.parentElement!.clientWidth,
+      ),
+    ).toBe(true);
     await table.screenshot({
       path: info.outputPath(`match-analysis-${width}.png`),
     });
   }
-  await scope.selectOption('game');
-  await expect(gnu).toHaveValue('game-gnu-four');
-  await expect(loss.getByRole('cell')).toHaveText(['0.444', '0.555']);
+  await expect(first).toHaveValue('job:gnu-three');
+  await expect(second).toHaveValue('job:gnu-four');
+  await expect(loss.getByRole('cell')).toHaveText(['0.222', '0.111']);
 });
 
 function analyzedGameFile() {
@@ -162,10 +213,10 @@ test('file, book and native candidates preview explicitly and source changes res
   await page
     .getByLabel('Match file', { exact: true })
     .setInputFiles(analyzedGameFile());
-  await page
-    .getByRole('tab', { name: 'Imported analysis', exact: true })
-    .click();
-  const imported = page.locator('.source-analysis');
+  await expect(
+    page.getByLabel('Displayed analysis', { exact: true }).locator('option[value^="imported:"]'),
+  ).toHaveCount(1);
+  const imported = page.locator('.analysis-panel > .source-analysis');
   await imported.getByRole('button', { name: /^Preview move 2:/ }).click();
   await expect(page.locator('.board-review-selection')).toContainText(
     'Candidate 2',
@@ -179,12 +230,18 @@ test('file, book and native candidates preview explicitly and source changes res
     'data-preview-mode',
     'after',
   );
-  await page.getByRole('tab', { name: 'Opening book', exact: true }).click();
+  await page.locator('.analysis-book-reference > summary').click();
   await expect(page.locator('.board-review-selection')).toHaveCount(0);
-  await imported.getByRole('button', { name: /^Preview move 1:/ }).click();
+  await page
+    .locator('.analysis-book-reference')
+    .getByRole('button', { name: /^Preview move 1:/ })
+    .click();
   await expect(page.locator('.board-review-selection')).toContainText(
-    'BackgammonDB',
+    'GNU Backgammon',
   );
+  await expect(
+    page.locator('.board-review-selection .engine-label-details'),
+  ).toHaveAttribute('aria-description', /BackgammonDB/);
   await page
     .getByRole('button', { name: 'Reset preview', exact: true })
     .click();
@@ -194,7 +251,10 @@ test('file, book and native candidates preview explicitly and source changes res
   )
     .getByRole('button', { name: 'Analyze position', exact: true })
     .click();
-  const native = page.locator('.analysis-panel');
+  await page
+    .getByRole('button', { name: 'Show calculated result', exact: true })
+    .click();
+  const native = page.locator('.analysis-panel > .candidate-comparison');
   await native.getByRole('button', { name: /^Preview move 1:/ }).click();
   await expect(page.locator('.board-review-selection')).toContainText(
     'Candidate 1',
@@ -223,9 +283,9 @@ for (const [layout, viewport] of [
       .setInputFiles('../backend/tests/fixtures/WC2014.xg');
     await page.getByLabel('Spiel auswählen', { exact: true }).selectOption('6');
     await expect(page.locator('.board-heading')).toContainText('Spiel 6');
-    await page
-      .getByRole('tab', { name: 'Importierte Analyse', exact: true })
-      .click();
+    await expect(
+      page.getByLabel('Angezeigte Analyse', { exact: true }).locator('option[value^="imported:"]'),
+    ).toHaveCount(1);
     await page.getByRole('button', { name: /^Zug 2 ansehen:/ }).click();
 
     const moveList = page.locator('.analysis-workspace .moves-list');
@@ -316,15 +376,20 @@ test('native match and game metrics open the exact visible decision filters', as
   // The whole-match decision filter stays on game 2 while browsing another game.
   await page.getByLabel('Select game', { exact: true }).selectOption('1');
   await expect(page.locator('.board-heading')).toContainText('Game 1');
+  await expect(page.getByLabel('Filter by game', { exact: true })).toHaveValue('2');
   const nextError = page.waitForRequest(
     (r) =>
       new URL(r.url()).pathname.endsWith('/review-decisions') &&
       new URL(r.url()).searchParams.get('limit') === '100',
   );
-  await page.getByRole('button', { name: /^Next error/ }).click();
-  expect(new URL((await nextError).url()).searchParams.get('game_no')).toBe(
-    '2',
-  );
+  await page.getByRole('button', { name: 'Next decision', exact: true }).click();
+  const nextQuery = new URL((await nextError).url()).searchParams;
+  expect(nextQuery.get('game_no')).toBe('2');
+  expect(nextQuery.get('errors_only')).toBe('false');
+  await expect(page.getByLabel('Select game', { exact: true })).toHaveValue('2');
+  await expect(
+    page.getByRole('group', { name: 'Review errors' }),
+  ).toContainText('Decision 1 of 1');
   await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
   await stats
     .locator('.statistics-summary [data-statistics-metric="very_bad"]')
@@ -348,11 +413,13 @@ test('native match and game metrics open the exact visible decision filters', as
   await expect(
     page.getByLabel('Filter analysis by player', { exact: true }),
   ).toHaveValue('');
-  await openMatchCalculation(page);
-  await page.getByLabel('Analysis scope', { exact: true }).selectOption('game');
   await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
-  await expect(stats).toContainText('run native GNUbg analysis');
-  await expect(stats.locator('.statistics-games-table')).toHaveCount(0);
+  await expect(stats.locator('.statistics-source')).toContainText(
+    'GNU Backgammon',
+  );
+  await expect(
+    page.getByLabel('Displayed analysis', { exact: true }),
+  ).toContainText('Entire match');
 });
 
 test('a delayed next-error response cannot undo manual move navigation', async ({
@@ -385,20 +452,26 @@ test('a delayed next-error response cannot undo manual move navigation', async (
     fulfilled = new Promise<void>((resolve) => {
       finished = resolve;
     });
-  await page.route('**/api/matches/*/review-decisions?**', async (route) => {
-    if (new URL(route.request().url()).searchParams.get('limit') !== '100')
-      return route.continue();
-    const response = await route.fetch();
-    started();
-    await gate;
-    await route.fulfill({ response }).catch(() => {});
-    finished();
-  });
-  await page.getByRole('button', { name: /^Next error/ }).click();
-  await waiting;
-  await page.getByRole('button', { name: 'Next move', exact: true }).click();
-  await expect(page.locator('.board-heading')).toContainText('Move 2');
-  release();
+  await expect(page.getByRole('button', { name: /^Next error/ })).toBeEnabled();
+  await page.route(
+    '**/api/matches/*/review-decisions?**',
+    async (route) => {
+      const response = await route.fetch();
+      started();
+      await gate;
+      await route.fulfill({ response }).catch(() => {});
+      finished();
+    },
+    { times: 1 },
+  );
+  try {
+    await page.getByRole('button', { name: /^Next error/ }).click();
+    await waiting;
+    await page.getByRole('button', { name: 'Next move', exact: true }).click();
+    await expect(page.locator('.board-heading')).toContainText('Move 2');
+  } finally {
+    release();
+  }
   await fulfilled;
   await page.evaluate(
     () =>

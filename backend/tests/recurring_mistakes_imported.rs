@@ -70,14 +70,17 @@ async fn imported(pool: &PgPool) -> (Uuid, Vec<Uuid>) {
 }
 async fn checkpoint(pool: &PgPool, id: Uuid, game: i32) {
     let job = Uuid::new_v4();
-    sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,result) VALUES($1,$2,'match',0,'completed','{}')").bind(job).bind(id).execute(pool).await.unwrap();
+    sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,result,game_no,total_games,completed_games) VALUES($1,$2,'match',0,'completed','{}',$3,1,1)").bind(job).bind(id).bind(game).execute(pool).await.unwrap();
     sqlx::query("INSERT INTO match_analysis_games(job_id,game_no) VALUES($1,$2)")
         .bind(job)
         .bind(game)
         .execute(pool)
         .await
         .unwrap();
+    sqlx::query("INSERT INTO move_analyses(job_id,game_no,decision_no,player,kind,equity_loss,data) VALUES($1,$2,1,0,'checker',0,'{\"evaluation_status\":\"unavailable\"}')").bind(job).bind(game).execute(pool).await.unwrap();
+    sqlx::query("INSERT INTO analysis_selections(match_id,analysis_id) VALUES($1,$2) ON CONFLICT(match_id) DO UPDATE SET analysis_id=EXCLUDED.analysis_id").bind(id).bind(format!("job:{job}")).execute(pool).await.unwrap();
 }
+
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
 async fn imports_are_eligible_private_and_reveal_preserves_metadata(pool: PgPool) {
@@ -149,7 +152,9 @@ async fn imports_are_eligible_private_and_reveal_preserves_metadata(pool: PgPool
 }
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
-async fn native_checkpoint_owns_whole_game_and_stales_imported_references(pool: PgPool) {
+async fn selected_native_checkpoint_stales_all_imported_references_without_cross_game_fallback(
+    pool: PgPool,
+) {
     let (id, ids) = imported(&pool).await;
     let router = app(&pool);
     checkpoint(&pool, id, 1).await;
@@ -160,8 +165,8 @@ async fn native_checkpoint_owns_whole_game_and_stales_imported_references(pool: 
         Value::Null,
     )
     .await;
-    assert_eq!(groups["analyzed_decisions"], 1, "{groups}");
-    assert_eq!(groups["groups"][0]["count"], 1);
+    assert_eq!(groups["analyzed_decisions"], 0, "{groups}");
+    assert_eq!(groups["groups"], json!([]));
     assert_eq!(
         call(
             &router,
@@ -182,7 +187,7 @@ async fn native_checkpoint_owns_whole_game_and_stales_imported_references(pool: 
         )
         .await
         .0,
-        200
+        404
     );
     checkpoint(&pool, id, 2).await;
     assert_eq!(

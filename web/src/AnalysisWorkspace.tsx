@@ -33,7 +33,6 @@ import GameSelector from './GameSelector';
 import { AddCardsPanel } from './LearningPanel';
 import { type Job } from './api';
 import type { ReviewDecision } from './review-decisions-api';
-import { statisticsRevision } from './match-statistics-api';
 import { useGameNavigation } from './useGameNavigation';
 import { useJobs } from './useJobs';
 import { useI18n } from './i18n';
@@ -52,6 +51,8 @@ import { usePositionText } from './position-browser-messages';
 import type { MoveNotesTarget } from './MoveNotesDialog';
 import { useAnalysisBoardResize } from './useAnalysisBoardResize';
 import type { MatchAnalysisEngine } from './useMatchAnalysis';
+import { useAnalysisCatalog, type AnalysisCatalog } from './useAnalysisCatalog';
+import AnalysisCatalogSelect from './AnalysisCatalogSelect';
 
 export type AnalysisDetail =
   'overview' | 'statistics' | 'errors' | 'notes' | 'cards';
@@ -151,17 +152,28 @@ export default function AnalysisWorkspace({
   const gridStyle: CSSProperties & { '--analysis-board-width': string } = {
     '--analysis-board-width': `${boardResize.width}px`,
   };
-  const [matchJob, setMatchJob] = useState<Job>();
-  const reviewJob =
-    matchJob?.match_uuid === match?.id &&
-    (matchJob?.game_no == null || matchJob.game_no === game?.game_no)
-      ? matchJob
-      : undefined;
-  const moveAssessments = useMoveAssessments({
-    matchId: sourceAvailable ? match?.id : undefined,
-    gameNo: game?.game_no,
-    job: reviewJob,
+  const catalog = useAnalysisCatalog(
+    match?.id,
+    position?.id,
+    JSON.stringify([
+      sourceRevision,
+      analysisRevision,
+      jobs.jobs.analysis?.id,
+      jobs.jobs.analysis?.status,
+    ]),
+  );
+  const catalogRevision = JSON.stringify([
     analysisRevision,
+    catalog.analysisId,
+    catalog.selected?.job?.status,
+    catalog.selected?.job?.completed_games,
+    catalog.selected?.job?.updated_at,
+  ]);
+  const moveAssessments = useMoveAssessments({
+    matchId: sourceAvailable && catalog.analysisId ? match?.id : undefined,
+    gameNo: game?.game_no,
+    analysisId: catalog.analysisId,
+    analysisRevision: catalogRevision,
   });
   const moveList = useRef<HTMLDivElement>(null);
   const currentMove = useRef<HTMLButtonElement>(null);
@@ -187,19 +199,26 @@ export default function AnalysisWorkspace({
     ? moveAssessments.assessments[position.id]
     : undefined;
   const [candidate, setCandidate] = useState<
-    PreviewCandidate & { positionId: string }
+    PreviewCandidate & { positionId: string; analysisId?: string }
   >();
   const selectedPreview =
-    candidate?.positionId === position?.id ? candidate : undefined;
+    candidate?.positionId === position?.id &&
+    candidate?.analysisId === catalog.analysisId
+      ? candidate
+      : undefined;
   const onPreview = useCallback(
     (selected: PreviewCandidate | null) => {
       setCandidate(
         selected && position
-          ? { ...selected, positionId: position.id }
+          ? {
+              ...selected,
+              positionId: position.id,
+              analysisId: catalog.analysisId,
+            }
           : undefined,
       );
     },
-    [position],
+    [position, catalog.analysisId],
   );
   const preview = useMemo(
     () =>
@@ -216,16 +235,24 @@ export default function AnalysisWorkspace({
 
   const [comparison, setComparison] = useState<{
     positionId?: string;
+    analysisId?: string;
     value: PreviewComparison;
   }>();
   const onComparison = useCallback(
     (value: PreviewComparison) => {
-      setComparison({ positionId: position?.id, value });
+      setComparison({
+        positionId: position?.id,
+        analysisId: catalog.analysisId,
+        value,
+      });
     },
-    [position?.id],
+    [position?.id, catalog.analysisId],
   );
   const candidateComparison =
-    comparison?.positionId === position?.id ? comparison?.value : undefined;
+    comparison?.positionId === position?.id &&
+    comparison?.analysisId === catalog.analysisId
+      ? comparison?.value
+      : undefined;
 
   const intent = navigation.intent();
   const [reviewSelection, setReviewSelection] = useState<{
@@ -234,13 +261,7 @@ export default function AnalysisWorkspace({
     intent: number;
     jobRevision?: string;
   }>();
-  const [preferredSource, setPreferredSource] = useState<{
-    positionId: string;
-    source: 'file' | 'engine';
-    intent: number;
-    token: number;
-  }>();
-  const jobRevision = reviewJob ? statisticsRevision(reviewJob) : undefined;
+  const jobRevision = catalog.analysisId;
   const reviewRow =
     reviewSelection?.matchId === match?.id &&
     reviewSelection?.intent === intent &&
@@ -269,12 +290,6 @@ export default function AnalysisWorkspace({
     } else if (row.kind === 'checker' && row.position_uuid) {
       onPreview(null);
       onPosition(row.position_uuid);
-      setPreferredSource({
-        positionId: row.position_uuid,
-        source: row.source === 'imported' ? 'file' : 'engine',
-        intent: navigation.intent(),
-        token: Date.now(),
-      });
       setReviewSelection({
         row,
         matchId: match.id,
@@ -310,11 +325,13 @@ export default function AnalysisWorkspace({
     >
       <AnalysisMatchHeader
         match={match}
+        selectedAnalysis={catalog.selected}
         metadataRevision={metadataRevision}
         analysisRevision={analysisRevision}
         theme={theme}
         active={active && !notesSuspended}
       />
+      <AnalysisCatalogSelect key={match.id} catalog={catalog} />
       {!sourceAvailable && (
         <p className="analysis-retained-context" role="status">
           {headerText('retainedPosition')}
@@ -329,7 +346,10 @@ export default function AnalysisWorkspace({
         {sourceAvailable && (
           <div className="workspace-analysis-command" ref={setCommandTarget} />
         )}
-        <AnalysisRunningJobs jobs={runningJobs} displayedJobId={matchJob?.id} />
+        <AnalysisRunningJobs
+          jobs={runningJobs}
+          displayedJobId={catalog.selected?.job?.id}
+        />
       </div>
       <div
         className="inspector-tabs analysis-detail-navigation text-navigation text-navigation--compact"
@@ -600,7 +620,7 @@ export default function AnalysisWorkspace({
             )}
             <AnalysisPanel
               jobs={jobs.jobs}
-              completedAnalysis={jobs.completedAnalysis}
+              catalog={catalog}
               restoring={jobs.restoring}
               active={active && overview && !cubeBoard}
               stats={sourceAvailable ? stats : null}
@@ -616,10 +636,8 @@ export default function AnalysisWorkspace({
                     : match.black
                   : undefined
               }
-              preferredSource={
-                preferredSource?.intent === intent ? preferredSource : undefined
-              }
               sourceRevision={sourceRevision}
+              analysisRevision={catalogRevision}
               onPreview={onPreview}
               selectedPreview={selectedPreview}
               onComparison={onComparison}
@@ -641,8 +659,8 @@ export default function AnalysisWorkspace({
               onPosition={onPosition}
               onDecision={openReviewDecision}
               onTrackJob={onTrackJob}
-              onCurrentJob={setMatchJob}
-              analysisRevision={analysisRevision}
+              catalog={catalog}
+              analysisRevision={catalogRevision}
               boardReview={
                 boardTarget && active && !notesSuspended
                   ? {
@@ -689,6 +707,7 @@ export default function AnalysisWorkspace({
             <AddCardsPanel
               positionId={position?.id}
               matchId={match.id}
+              analysisId={catalog.analysisId}
               gameNo={game?.game_no}
               allowBatch={sourceAvailable}
               white={match.white}
@@ -716,7 +735,7 @@ function MatchResults({
   onPosition,
   onDecision,
   onTrackJob,
-  onCurrentJob,
+  catalog,
   boardReview,
   analysisRevision,
   onShowErrors,
@@ -735,20 +754,13 @@ function MatchResults({
   onPosition: (id: string) => void;
   onDecision: (decision: ReviewDecision) => void;
   onTrackJob: (job: Job | undefined) => void;
-  onCurrentJob: (job: Job | undefined) => void;
+  catalog: AnalysisCatalog;
   boardReview?: BoardReviewTarget;
   analysisRevision?: string;
   onShowErrors: () => void;
   selectedPositionId?: string;
   selectedDecisionId?: string;
 }) {
-  const onJob = useCallback(
-    (job: Job | undefined) => {
-      onCurrentJob(job);
-      onTrackJob(job);
-    },
-    [onCurrentJob, onTrackJob],
-  );
   return (
     <div
       className="workspace-match-results"
@@ -774,8 +786,12 @@ function MatchResults({
         showStatistics={detail === 'statistics'}
         onShowErrors={onShowErrors}
         onGame={(number) => void navigation.selectGame(number)}
-        onJob={onJob}
-        onAccepted={onTrackJob}
+        catalog={catalog}
+        onJob={onTrackJob}
+        onAccepted={(job) => {
+          onTrackJob(job);
+          catalog.refresh();
+        }}
         boardReview={boardReview}
         analysisRevision={analysisRevision}
         onPosition={onPosition}

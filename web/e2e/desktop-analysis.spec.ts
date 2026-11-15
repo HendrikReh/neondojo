@@ -312,6 +312,7 @@ test('move assessments stay scoped while switching games during a delayed respon
         match_id: match.id,
         game_no: game,
         job_id: url.searchParams.get('job_id'),
+        analysis_id: url.searchParams.get('analysis_id'),
         items:
           game === 1
             ? [assessment(first.id, 'very_bad', 0.2)]
@@ -388,7 +389,7 @@ for (const viewport of [
       exact: true,
     });
     await expect(
-      page.getByRole('heading', { name: 'Native analysis statistics' }),
+      page.getByRole('heading', { name: 'Analysis statistics', exact: true }),
     ).toBeHidden();
     const boardBounds = (await page.locator('.board-panel').boundingBox())!;
     expect(boardBounds.width).toBeLessThanOrEqual(viewport.maxBoardWidth);
@@ -432,7 +433,7 @@ for (const viewport of [
     await expect(boardHeading).toContainText('Move 2');
     await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
     await expect(
-      stats.getByRole('heading', { name: 'Native analysis statistics' }),
+      stats.getByRole('heading', { name: 'Analysis statistics', exact: true }),
     ).toBeVisible();
     await expect(boardHeading).toContainText('Move 2');
     await page.getByRole('tab', { name: 'Overview', exact: true }).click();

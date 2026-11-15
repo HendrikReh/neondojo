@@ -13,6 +13,7 @@ export function reviewDecisions(
   filter: MatchDecisionFilter,
   options: {
     jobId?: string;
+    analysisId?: string;
     after?: string | null;
     page?: number;
     limit?: number;
@@ -21,7 +22,8 @@ export function reviewDecisions(
 ) {
   const query = new URLSearchParams(decisionFilterQuery(filter));
   query.set('limit', String(options.limit ?? 50));
-  if (options.jobId) query.set('job_id', options.jobId);
+  if (options.analysisId) query.set('analysis_id', options.analysisId);
+  else if (options.jobId) query.set('job_id', options.jobId);
   if (options.page != null) query.set('page', String(options.page));
   if (options.after) query.set('after', options.after);
   return request<ReviewDecisionPage>(
@@ -41,9 +43,15 @@ export async function reviewEmptyReason(
   scope: Pick<MatchDecisionFilter, 'game_no' | 'errors_only'>,
   {
     jobId,
+    analysisId,
     narrowed,
     signal,
-  }: { jobId?: string; narrowed: boolean; signal: AbortSignal },
+  }: {
+    jobId?: string;
+    analysisId?: string;
+    narrowed: boolean;
+    signal: AbortSignal;
+  },
 ): Promise<ReviewEmptyReason> {
   // The empty numbered page already rules out errors when no selection filters are set.
   if (scope.errors_only && narrowed && (await hasEvaluation(true))) {
@@ -63,7 +71,7 @@ export async function reviewEmptyReason(
           kind: '',
           errors_only: errorsOnly,
         },
-        { jobId, after, limit: errorsOnly ? 1 : 100, signal },
+        { jobId, analysisId, after, limit: errorsOnly ? 1 : 100, signal },
       );
       if (page.items.some((row) => row.evaluation_status === 'evaluated')) {
         return true;
@@ -92,6 +100,7 @@ export async function findReviewNeighbor({
   matchId,
   filter,
   jobId,
+  analysisId,
   origin,
   direction,
   signal,
@@ -100,6 +109,7 @@ export async function findReviewNeighbor({
   matchId: string;
   filter: MatchDecisionFilter;
   jobId?: string;
+  analysisId?: string;
   origin: ReviewNavigationOrigin;
   direction: 'previous' | 'next';
   signal: AbortSignal;
@@ -115,15 +125,20 @@ export async function findReviewNeighbor({
       const target = wrap(page + step * offset);
       const result = await reviewDecisions(matchId, filter, {
         jobId,
+        analysisId,
         page: target,
         limit: pageSize,
         signal,
       });
-      const rows = direction === 'next' ? result.items : [...result.items].reverse();
+      const rows =
+        direction === 'next' ? result.items : [...result.items].reverse();
       const index = rows.findIndex(canOpenReviewDecision);
       if (index >= 0) {
         const inPage = direction === 'next' ? index : rows.length - index - 1;
-        return { row: rows[index], ordinal: (target - 1) * pageSize + inPage + 1 };
+        return {
+          row: rows[index],
+          ordinal: (target - 1) * pageSize + inPage + 1,
+        };
       }
     }
     return undefined;
@@ -139,6 +154,7 @@ export async function findReviewNeighbor({
   do {
     const page = await reviewDecisions(matchId, filter, {
       jobId,
+      analysisId,
       after,
       limit: 100,
       signal,

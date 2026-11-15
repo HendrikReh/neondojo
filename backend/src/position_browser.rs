@@ -85,7 +85,7 @@ pub struct PositionFilterDefinition {
     pub crawford: Option<bool>,
     pub cube_value: Option<i32>,
     pub analysis_state: Option<PositionAnalysisState>,
-    /// Native normalized equity loss. Individual hints do not imply a played-move loss.
+    /// Selected normalized equity loss. Individual hints do not imply a played-move loss.
     pub min_loss: Option<f64>,
     pub max_loss: Option<f64>,
     #[serde(default)]
@@ -208,9 +208,12 @@ pub struct PositionBrowserNote {
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct PositionNativeError {
-    pub job_id: Uuid,
+    pub job_id: Option<Uuid>,
+    pub analysis_id: String,
+    pub imported_analysis_id: Option<Uuid>,
     pub engine: String,
-    pub plies: i32,
+    pub plies: Option<i32>,
+    pub depth: Option<String>,
     pub equity_loss: f64,
     pub severity: MoveSeverity,
 }
@@ -371,6 +374,8 @@ fn text_filter(q: &mut QueryBuilder<'_, Postgres>, column: &str, text: &Option<S
 }
 
 const NOTE_SCOPE: &str = "(a.match_uuid=p.match_uuid OR a.position_uuid=p.id OR a.game_uuid=g.id OR a.move_uuid IN (SELECT mv.id FROM match_moves mv WHERE mv.position_uuid=p.id AND mv.match_uuid=p.match_uuid AND mv.game_no=p.game_no AND mv.kind='checker'))";
+const LOSS: &str =
+    "coalesce(native.equity_loss,(imported.projection#>>'{decision,equity_loss}')::float8)";
 const NAME: &str = "lower(coalesce(nullif(m.display_name,''),m.filename))";
 // A global-library cursor must never resume inside the explicit saved collection.
 const CURSOR_SCOPE: &str = "saved-positions-v1:";
@@ -380,7 +385,7 @@ const CHECKER_SIGNATURE: &str = "(p.position_id || ':' || p.gnubg_match_id || ':
 fn table_sort_expression(sort: PositionBrowserSort) -> String {
     match sort {
         PositionBrowserSort::Match => NAME.into(),
-        PositionBrowserSort::Loss => "native.equity_loss".into(),
+        PositionBrowserSort::Loss => LOSS.into(),
         PositionBrowserSort::MatchId => "coalesce(m.source_match_no,m.match_no)".into(),
         PositionBrowserSort::Database => "lower(coalesce(m.source_database_name,d.name))".into(),
         PositionBrowserSort::Game => "p.game_no".into(),
@@ -412,18 +417,20 @@ fn table_order(sql: &mut QueryBuilder<'_, Postgres>, alias: &str, direction: &st
         .push(alias)
         .push(".sort_id");
 }
-// Learning chooses the highest individual result first and rejects an empty
-// answer there; it does not fall back to an older hint or a match solution.
-const READY: &str = "coalesce((SELECT CASE WHEN jsonb_typeof(hint.result->'candidates')='array' THEN jsonb_array_length(hint.result->'candidates')>0 AND btrim(coalesce(hint.result#>>'{candidates,0,notation}',''))<>'' ELSE false END FROM selected_engine_jobs hint WHERE hint.position_uuid=p.id AND hint.kind='analysis' AND hint.status='completed' AND hint.result IS NOT NULL ORDER BY hint.plies DESC,hint.created_at DESC,hint.id DESC LIMIT 1),native.job_id IS NOT NULL)";
+// Read the same chosen catalog entry as card creation. A missing result in the
+// selected scope never exposes an older hint or another engine's match result.
+const READY: &str = "CASE WHEN selected_job.kind='analysis' AND selected_job.position_uuid=p.id THEN jsonb_array_length(selected_job.result->'candidates')>0 AND btrim(coalesce(selected_job.result#>>'{candidates,0,notation}',''))<>'' ELSE native.job_id IS NOT NULL OR imported.projection IS NOT NULL END";
 
-// Select provenance before checking whether that decision contains a native
-// solution. An unavailable newest decision must not expose an older error.
 const NATIVE_SOLUTION: &str = "btrim(coalesce(chosen.data->>'best',''))<>'' AND ((chosen.data->>'evaluation_status'='forced' AND chosen.equity_loss=0 AND chosen.data->'equity_loss'='0'::jsonb) OR (chosen.data->>'evaluation_status'='evaluated' AND jsonb_typeof(chosen.data->'played_equity')='number' AND jsonb_typeof(chosen.data->'best_equity')='number'))";
 
 fn push_native_analysis(sql: &mut QueryBuilder<'_, Postgres>) {
-    sql.push(" LEFT JOIN LATERAL (SELECT chosen.job_id,chosen.engine,chosen.plies,chosen.equity_loss FROM (SELECT j.id AS job_id,coalesce(j.result->>'engine','GNU Backgammon') AS engine,j.plies,ma.equity_loss,ma.data FROM move_analyses ma JOIN selected_engine_jobs j ON j.id=ma.job_id WHERE ma.position_uuid=p.id AND j.source_revision=m.source_revision AND ma.kind='checker' AND ma.game_no=p.game_no AND j.kind='match' AND j.match_uuid=p.match_uuid AND (j.game_no IS NULL OR j.game_no=p.game_no) AND j.status='completed' ORDER BY j.plies DESC,j.created_at DESC,j.id DESC,ma.id DESC LIMIT 1) chosen WHERE ")
+    sql.push(" LEFT JOIN effective_analysis_selections selected ON selected.match_id=m.id LEFT JOIN jobs selected_job ON selected_job.id=selected.job_id LEFT JOIN LATERAL (SELECT catalog.engine FROM analysis_catalog_sources catalog WHERE catalog.match_id=m.id AND catalog.analysis_id=selected.analysis_id AND selected.source='native' AND nullif(selected_job.result->>'engine','') IS NULL LIMIT 1) fallback_source ON true")
+        .push(" LEFT JOIN LATERAL (SELECT chosen.job_id,chosen.engine,chosen.plies,chosen.equity_loss FROM (SELECT selected_job.id AS job_id,coalesce(nullif(selected_job.result->>'engine',''),fallback_source.engine) AS engine,selected_job.plies,ma.equity_loss,ma.data FROM move_analyses ma WHERE ma.job_id=selected_job.id AND ma.position_uuid=p.id AND ma.kind='checker' AND ma.game_no=p.game_no AND selected_job.kind='match' AND (selected_job.game_no IS NULL OR selected_job.game_no=p.game_no) ORDER BY ma.id DESC LIMIT 1) chosen WHERE ")
         .push(NATIVE_SOLUTION)
-        .push(") native ON true");
+        .push(") native ON true")
+        .push(" LEFT JOIN LATERAL (SELECT cached.projection,ia.id AS imported_id,concat_ws(' ',ia.data->>'engine',ia.data->>'engine_version') AS engine FROM primary_imported_analyses ia JOIN imported_analysis_projections cached ON cached.imported_analysis_id=ia.id WHERE selected.source='imported' AND ia.match_uuid=m.id AND ia.position_uuid=p.id AND ia.kind='checker' AND cached.source_revision=m.source_revision AND cached.revision=")
+        .push(crate::imported_analysis::projections::REVISION.to_string())
+        .push(" ORDER BY ia.source_ordinal LIMIT 1) imported ON true");
 }
 
 pub(crate) const SAVED_VISIBLE: &str = "NOT EXISTS(SELECT 1 FROM play_sessions live WHERE live.library_match_id=m.id AND coalesce(live.state->>'play_mode','competition')='competition' AND live.state->>'phase'<>'match_over' AND NOT (live.state->>'match_length'='0' AND live.state->>'phase'='game_over'))";
@@ -555,10 +562,12 @@ async fn search(
         Some(BrowserCursor::Table(cursor)) => Some(cursor.anchor),
         None => None,
     };
+    crate::imported_analysis::projections::ensure_saved(&s.pool, filters.database_id).await?;
     // Every sort and cursor anchor uses the same saved, filtered snapshot.
     // Explicit summary fields keep source SGF and original bytes out of list reads.
     let mut sql = QueryBuilder::<Postgres>::new("WITH filtered AS NOT MATERIALIZED (");
-    sql.push("SELECT to_jsonb(p) AS position,jsonb_build_object('id',m.id,'source_available',NOT m.collection_only,'filename',m.filename,'format',m.format,'white',m.white,'black',m.black,'match_length',m.match_length,'position_count',m.position_count,'created_at',m.created_at) AS match_info,NOT m.collection_only AS source_available,coalesce(m.source_match_no,m.match_no) AS match_no,coalesce(m.source_database_id,m.database_id) AS database_id,coalesce(m.source_database_name,d.name) AS database_name,coalesce(nullif(m.display_name,''),m.filename) AS display_name,m.tournament,m.round,native.job_id,native.engine,native.plies,native.equity_loss,");
+    sql.push("SELECT to_jsonb(p) AS position,jsonb_build_object('id',m.id,'source_available',NOT m.collection_only,'filename',m.filename,'format',m.format,'white',m.white,'black',m.black,'match_length',m.match_length,'position_count',m.position_count,'created_at',m.created_at) AS match_info,NOT m.collection_only AS source_available,coalesce(m.source_match_no,m.match_no) AS match_no,coalesce(m.source_database_id,m.database_id) AS database_id,coalesce(m.source_database_name,d.name) AS database_name,coalesce(nullif(m.display_name,''),m.filename) AS display_name,m.tournament,m.round,native.job_id,imported.imported_id,coalesce(native.engine,imported.engine) AS engine,coalesce(native.plies,(imported.projection->>'plies')::integer) AS plies,imported.projection->>'depth' AS depth,");
+    sql.push(LOSS).push(" AS equity_loss,");
     sql.push(table_sort_expression(filters.sort))
         .push(" AS sort_value,m.id AS sort_match_id,p.ordinal AS sort_ordinal,p.id AS sort_id,");
     sql.push(READY).push(" AS card_ready,").push(NAME).push(" AS sort_name FROM positions p JOIN saved_positions saved ON saved.position_uuid=p.id JOIN matches m ON m.id=p.match_uuid JOIN databases d ON d.id=m.database_id LEFT JOIN match_games g ON g.match_uuid=p.match_uuid AND g.game_no=p.game_no");
@@ -644,10 +653,10 @@ async fn search(
         sql.push(READY);
     }
     if let Some(loss) = filters.min_loss {
-        sql.push(" AND native.equity_loss>=").push_bind(loss);
+        sql.push(" AND ").push(LOSS).push(">=").push_bind(loss);
     }
     if let Some(loss) = filters.max_loss {
-        sql.push(" AND native.equity_loss<=").push_bind(loss);
+        sql.push(" AND ").push(LOSS).push("<=").push_bind(loss);
     }
     if let Some(anchor) = anchor {
         // Anchor lookup and page read share one filtered snapshot. A left-joined
@@ -730,16 +739,20 @@ async fn search(
             );
         }
         let job_id: Option<Uuid> = row.get("job_id");
-        let native_error = job_id.map(|job_id| {
-            let loss: f64 = row.get("equity_loss");
-            PositionNativeError {
-                job_id,
-                engine: row.get("engine"),
-                plies: row.get("plies"),
-                equity_loss: loss,
-                severity: MoveSeverity::from_normalized_loss(loss),
-            }
-        });
+        let native_error =
+            row.get::<Option<f64>, _>("equity_loss")
+                .map(|loss| PositionNativeError {
+                    job_id,
+                    analysis_id: job_id
+                        .map(|id| format!("job:{id}"))
+                        .unwrap_or_else(|| format!("imported:{}", position.match_uuid)),
+                    imported_analysis_id: row.get("imported_id"),
+                    engine: row.get("engine"),
+                    plies: row.get("plies"),
+                    depth: row.get("depth"),
+                    equity_loss: loss,
+                    severity: MoveSeverity::from_normalized_loss(loss),
+                });
         let context: serde_json::Value = row.get("position");
         let notes=sqlx::query(&format!("SELECT a.target_kind,a.tags,left(a.comment,280) AS comment_excerpt FROM positions p LEFT JOIN match_games g ON g.match_uuid=p.match_uuid AND g.game_no=p.game_no JOIN annotations a ON {NOTE_SCOPE} WHERE p.id=$1 ORDER BY a.target_kind,a.id"))
             .bind(position.id).fetch_all(&s.pool).await.map_err(anyhow::Error::from)?.into_iter()

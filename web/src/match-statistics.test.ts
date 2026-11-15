@@ -1,3 +1,4 @@
+import { entryForJob } from './analysis-catalog-test-fixtures';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -51,6 +52,7 @@ const summary: MatchAnalysisSummary = {
 };
 const job = {
   id: 'native-job',
+  kind: 'match',
   completed_games: 1,
   total_games: 2,
   updated_at: '2026-11-08T10:00:00Z',
@@ -183,10 +185,10 @@ it('renders native source, partial coverage, precise games and missing legacy ga
   const html = renderToStaticMarkup(
     createElement(I18nProvider, {
       children: createElement(MatchStatisticsView, {
-        job,
+        analysisEntry: entryForJob(job),
         names: ['Alice', 'Bob'],
         statistics: {
-          job_id: job.id,
+          analysis_id: `job:${job.id}`,
           summary,
           games: [
             {
@@ -248,10 +250,10 @@ it('single-game native summaries carry their source game in metric actions', () 
   const html = renderToStaticMarkup(
     createElement(I18nProvider, {
       children: createElement(MatchStatisticsView, {
-        job: { ...job, game_no: 7 },
+        analysisEntry: entryForJob({ ...job, game_no: 7 }, 7),
         names: ['Alice', 'Bob'],
         onSelect: () => {},
-        statistics: { job_id: job.id, summary, games: [] },
+        statistics: { analysis_id: `job:${job.id}`, summary, games: [] },
       }),
     }),
   );
@@ -304,11 +306,11 @@ it('renders a compact typed matrix with actionable zeros and preserves total met
   const html = renderToStaticMarkup(
     createElement(I18nProvider, {
       children: createElement(MatchStatisticsView, {
-        job,
+        analysisEntry: entryForJob(job),
         names: ['Alice', 'Bob'],
         onSelect: () => {},
         statistics: {
-          job_id: job.id,
+          analysis_id: `job:${job.id}`,
           summary,
           games: [],
           error_breakdown: [0, 1].map((player) => ({
@@ -334,11 +336,11 @@ it('typed totals equal checker plus cube even when legacy summary severity count
   const html = renderToStaticMarkup(
     createElement(I18nProvider, {
       children: createElement(MatchStatisticsView, {
-        job,
+        analysisEntry: entryForJob(job),
         names: ['Alice', 'Bob'],
         onSelect: () => {},
         statistics: {
-          job_id: job.id,
+          analysis_id: `job:${job.id}`,
           summary: {
             ...summary,
             players: summary.players.map((p) => ({ ...p, bad: 9 })),

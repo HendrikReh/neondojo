@@ -10,6 +10,8 @@ import { hasMatchSource } from './match-source';
 import './analysis-match-header.css';
 import type { Theme } from './themes';
 import AnalysisStudyReportAction from './AnalysisStudyReportAction';
+import type { AnalysisCatalogEntry } from './analysis-catalog-api';
+import { nativePerformanceRating } from './match-statistics-api';
 
 interface HeaderState {
   identity: string;
@@ -24,12 +26,14 @@ export default function AnalysisMatchHeader({
   analysisRevision,
   theme,
   active = true,
+  selectedAnalysis,
 }: {
   match: Match;
   metadataRevision?: number;
   analysisRevision?: string;
   theme: Theme;
   active?: boolean;
+  selectedAnalysis?: AnalysisCatalogEntry;
 }) {
   const [retry, setRetry] = useState(0);
   const [reportLink, setReportLink] = useState<{
@@ -71,6 +75,20 @@ export default function AnalysisMatchHeader({
     return () => abort.abort();
   }, [identity, match.id]);
 
+  const saved = selectedAnalysis?.job?.result;
+  const selectedSummary =
+    selectedAnalysis?.source === 'native' &&
+    selectedAnalysis.scope === 'match' &&
+    selectedAnalysis.complete &&
+    saved &&
+    'players' in saved
+      ? saved
+      : undefined;
+  const analysisPr: [number | null, number | null] = [0, 1].map((player) =>
+    selectedSummary
+      ? (nativePerformanceRating(selectedSummary, player) ?? null)
+      : null,
+  ) as [number | null, number | null];
   // Navigation or a metadata/analysis revision may render before effect cleanup.
   const status = state.identity === identity ? state : { loading: true };
   return (
@@ -78,6 +96,7 @@ export default function AnalysisMatchHeader({
       match={match}
       metadata={'metadata' in status ? status.metadata : undefined}
       loading={status.loading}
+      analysisPr={analysisPr}
       error={'error' in status ? status.error : undefined}
       onRetry={() => setRetry((value) => value + 1)}
       reportAction={
@@ -115,6 +134,7 @@ export function AnalysisMatchHeaderView({
   error,
   onRetry,
   reportAction,
+  analysisPr,
 }: {
   match: Match;
   metadata?: LibraryMatch;
@@ -122,6 +142,7 @@ export function AnalysisMatchHeaderView({
   error?: unknown;
   onRetry: () => void;
   reportAction?: ReactNode;
+  analysisPr?: [number | null, number | null];
 }) {
   const { t, locale, formatNumber, formatError } = useI18n();
   const h = useAnalysisMatchHeaderText();
@@ -214,13 +235,21 @@ export function AnalysisMatchHeaderView({
         {field(
           'pr-white',
           h('whitePr'),
-          sourceAvailable ? (details ? pr(details.white_pr) : pending) : 'n/a',
+          sourceAvailable
+            ? details
+              ? pr(analysisPr ? analysisPr[0] : details.white_pr)
+              : pending
+            : 'n/a',
           players.white,
         )}
         {field(
           'pr-black',
           h('blackPr'),
-          sourceAvailable ? (details ? pr(details.black_pr) : pending) : 'n/a',
+          sourceAvailable
+            ? details
+              ? pr(analysisPr ? analysisPr[1] : details.black_pr)
+              : pending
+            : 'n/a',
           players.black,
         )}
       </dl>

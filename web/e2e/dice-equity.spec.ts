@@ -71,12 +71,7 @@ test('dice equity calculates on selection and reuses results across tabs, positi
     releaseRestore = resolve;
   });
   let restoring = false;
-  const firstJob = await page.evaluate(
-    (positionId) =>
-      JSON.parse(localStorage.getItem(`bgtutor.jobs.${positionId}`)!).dice,
-    submissions[0].position_id,
-  );
-  await page.route(`**/api/jobs/${firstJob}`, async (route) => {
+  await page.route(`**/api/positions/${submissions[0].position_id}/jobs`, async (route) => {
     restoring = true;
     await restoreGate;
     await route.continue();
@@ -92,17 +87,12 @@ test('dice equity calculates on selection and reuses results across tabs, positi
   expect(submissions).toHaveLength(2);
   // A cached scope must become unready immediately on departure, even if
   // the next scope's restoration is interrupted before it finishes.
-  const secondJob = await page.evaluate(
-    (positionId) =>
-      JSON.parse(localStorage.getItem(`bgtutor.jobs.${positionId}`)!).dice,
-    submissions[1].position_id,
-  );
   let releaseSecondRestore!: () => void;
   const secondRestoreGate = new Promise<void>((resolve) => {
     releaseSecondRestore = resolve;
   });
   let secondRestoring = false;
-  await page.route(`**/api/jobs/${secondJob}`, async (route) => {
+  await page.route(`**/api/positions/${submissions[1].position_id}/jobs`, async (route) => {
     secondRestoring = true;
     await secondRestoreGate;
     await route.continue();

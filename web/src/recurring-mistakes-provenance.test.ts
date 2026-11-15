@@ -5,12 +5,18 @@ import {
 } from './recurring-mistakes-provenance';
 
 const text = (
-  key: 'nativeSource' | 'xgSource' | 'bgblitzSource' | 'unknownDepth',
+  key:
+    | 'nativeSource'
+    | 'xgSource'
+    | 'bgblitzSource'
+    | 'sgfSource'
+    | 'unknownDepth',
 ) =>
   ({
     nativeSource: 'Local analysis',
     xgSource: 'Imported XG',
     bgblitzSource: 'Imported BGBlitz',
+    sgfSource: 'Imported GNUbg',
     unknownDepth: 'Unknown depth',
   })[key];
 

@@ -5,28 +5,34 @@ import EngineLabel from './EngineLabel';
 import ActionButton from './ActionButton';
 import LibraryDialog from './LibraryDialog';
 import { useLibraryText } from './library-messages';
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import {
-  type Analysis,
   type Distribution,
   type DiceStats,
   type Match,
   type Position,
-  type Job,
 } from './api';
 import type { Jobs } from './useJobs';
 import { useI18n } from './i18n';
-import { useAnalysisSources } from './useAnalysisSources';
+import { useOpeningBook } from './useOpeningBook';
 import { useSourceText } from './analysis-source-messages';
 import SourceAnalysisView from './SourceAnalysisView';
 import type { PreviewCandidate, PreviewComparison } from './candidate-preview';
 import CandidateTable from './CandidateTable';
+import { BoardDecisionComparison } from './BoardDecisionReview';
+import { useAnalysisResult, type AnalysisCatalog } from './useAnalysisCatalog';
+import type { PositionAnalysisResult } from './analysis-catalog-api';
+import { useAnalysisCatalogText } from './analysis-catalog-messages';
+import { useCandidateText } from './candidate-messages';
 import './analysis-sources.css';
 import { DEFAULT_ANALYSIS_PLIES } from './analysis-depth';
+import type { SourceAnalysis } from './source-analysis-api';
+
+const noImportedRecords: SourceAnalysis[] = [];
 
 export default function AnalysisPanel({
   jobs,
-  completedAnalysis,
+  catalog,
   stats,
   gameNo,
   disabled,
@@ -42,10 +48,10 @@ export default function AnalysisPanel({
   position,
   playerName,
   players,
-  preferredSource,
+  analysisRevision,
 }: {
   jobs: Jobs;
-  completedAnalysis?: Job;
+  catalog: AnalysisCatalog;
   stats: DiceStats | null;
   gameNo?: number;
   disabled: boolean;
@@ -61,11 +67,7 @@ export default function AnalysisPanel({
   position?: Position;
   playerName?: string;
   players?: Pick<Match, 'white' | 'black'>;
-  preferredSource?: {
-    positionId: string;
-    source: 'file' | 'engine';
-    token: number;
-  };
+  analysisRevision?: string;
 }) {
   const {
     t,
@@ -81,54 +83,17 @@ export default function AnalysisPanel({
   const supportedPlies =
     configurationOptions.engine_profiles[configuredEngine].analysis;
   const l = useSourceText();
+  const catalogText = useAnalysisCatalogText();
   const library = useLibraryText();
-  const sources = useAnalysisSources(positionId, sourceRevision);
-  const [sourceChoice, setSourceChoice] = useState<{
-    positionId?: string;
-    source: 'file' | 'book' | 'engine';
-  }>();
-  useEffect(() => {
-    if (preferredSource && preferredSource.positionId === positionId) {
-      setSourceChoice({ positionId, source: preferredSource.source });
-      onPreview?.(null);
-    }
-  }, [preferredSource, positionId, onPreview]);
-  const selectedSource =
-    sourceChoice && sourceChoice.positionId === positionId
-      ? sourceChoice.source
-      : completedAnalysis
-        ? 'engine'
-        : sources.records.length
-          ? 'file'
-          : sources.book?.hit
-            ? 'book'
-            : 'engine';
-  useEffect(() => onPreview?.(null), [selectedSource, positionId, onPreview]);
-  type Source = 'file' | 'book' | 'engine';
-  function selectSource(source: Source) {
-    setRequestedAnalysis(undefined);
-    onPreview?.(null);
-    setSourceChoice({ positionId, source });
-  }
-  const sourceRefs = useRef<Partial<Record<Source, HTMLButtonElement | null>>>(
-    {},
+  const book = useOpeningBook(positionId, sourceRevision);
+  const saved = useAnalysisResult(
+    positionId,
+    catalog.analysisId,
+    analysisRevision,
   );
-  function sourceKey(event: KeyboardEvent<HTMLButtonElement>, current: Source) {
-    const options: Source[] = sources.records.length
-      ? ['file', 'book', 'engine']
-      : ['book', 'engine'];
-    const index = options.indexOf(current);
-    let next: number;
-    if (event.key === 'ArrowRight') next = (index + 1) % options.length;
-    else if (event.key === 'ArrowLeft')
-      next = (index + options.length - 1) % options.length;
-    else if (event.key === 'Home') next = 0;
-    else if (event.key === 'End') next = options.length - 1;
-    else return;
-    event.preventDefault();
-    selectSource(options[next]);
-    sourceRefs.current[options[next]]?.focus();
-  }
+  const resetPreview = useEffectEvent(() => onPreview?.(null));
+  useEffect(() => resetPreview(), [catalog.analysisId, positionId]);
+  const [bookOpen, setBookOpen] = useState(false);
   const [dicePlies, setDicePlies] = useState(defaultPlies);
   const [checkerPlies, setCheckerPlies] = useState(defaultPlies);
   useEffect(() => {
@@ -154,57 +119,12 @@ export default function AnalysisPanel({
   useEffect(() => {
     setCalculation(undefined);
   }, [active, positionId, configuredEngine]);
-  const [requestedAnalysis, setRequestedAnalysis] = useState<{
-    positionId: string;
-    engine: string;
-    previousResult?: string;
-    previousJob?: string;
-  }>();
   const [selectedRoll, setSelectedRoll] = useState('1-1');
   const diceJob = jobs.dice?.plies === dicePlies ? jobs.dice : undefined;
   const latestJob = view === 'dice' ? diceJob : jobs.analysis;
   const pending = Object.values(jobs).some(
     (job) => job.status === 'queued' || job.status === 'running',
   );
-  const analysis = (completedAnalysis?.result as Analysis | undefined) ?? null;
-  useEffect(() => {
-    if (!requestedAnalysis) return;
-    if (
-      requestedAnalysis.positionId !== positionId ||
-      requestedAnalysis.engine !== configuredEngine
-    ) {
-      setRequestedAnalysis(undefined);
-      return;
-    }
-    if (
-      jobs.analysis?.status === 'failed' &&
-      jobs.analysis.id !== requestedAnalysis.previousJob
-    ) {
-      setRequestedAnalysis(undefined);
-      return;
-    }
-    if (
-      completedAnalysis &&
-      completedAnalysis.id !== requestedAnalysis.previousResult
-    ) {
-      setRequestedAnalysis(undefined);
-      setSourceChoice({ positionId, source: 'engine' });
-    }
-  }, [
-    completedAnalysis,
-    configuredEngine,
-    jobs.analysis,
-    positionId,
-    requestedAnalysis,
-  ]);
-  useEffect(() => {
-    if (view !== 'analysis' || (selectedSource === 'engine' && !analysis)) {
-      onComparison?.({
-        loss: null,
-        useSavedGame: view !== 'analysis' || selectedSource === 'engine',
-      });
-    }
-  }, [view, selectedSource, analysis, onComparison]);
   const distribution =
     diceJob?.status === 'completed' ? (diceJob.result as Distribution) : null;
   const requestedDice = useRef<string | undefined>(undefined);
@@ -261,12 +181,6 @@ export default function AnalysisPanel({
       ]);
     } else {
       setCheckerPlies(settings.plies);
-      setRequestedAnalysis({
-        positionId: settings.positionId,
-        engine: configuredEngine,
-        previousResult: completedAnalysis?.id,
-        previousJob: jobs.analysis?.id,
-      });
     }
     onAnalyze(settings.kind, settings.plies);
   };
@@ -330,47 +244,31 @@ export default function AnalysisPanel({
       </div>
       {view === 'analysis' && (
         <>
-          <div className="analysis-source-tools">
-            <span className="eyebrow">{l('sources')}</span>
-          </div>
-          <div
-            className="analysis-source-tabs text-navigation text-navigation--compact"
-            role="tablist"
-            aria-label={l('sources')}
-          >
-            {(['file', 'book', 'engine'] as const).map((source) => (
+          {jobs.analysis?.status === 'completed' &&
+            catalog.analysisId !== `job:${jobs.analysis.id}` && (
               <button
                 type="button"
-                role="tab"
-                key={source}
-                aria-selected={selectedSource === source}
-                tabIndex={selectedSource === source ? 0 : -1}
-                ref={(element) => {
-                  sourceRefs.current[source] = element;
-                }}
-                onKeyDown={(event) => sourceKey(event, source)}
-                disabled={source === 'file' && !sources.records.length}
-                onClick={() => selectSource(source)}
+                disabled={catalog.saving}
+                onClick={() => void catalog.select(`job:${jobs.analysis!.id}`)}
               >
-                {l(source === 'file' ? 'imported' : source)}
+                {catalogText('showCalculated')}
               </button>
-            ))}
-          </div>
-          {sources.loading && (
+            )}
+          {saved.loading || catalog.loading || catalog.saving ? (
             <p className="fineprint" role="status">
               {l('loading')}
             </p>
-          )}
-          {sources.errors.map((error, index) => (
-            <p className="analysis-source-error" key={index}>
-              {formatError(error)}
+          ) : saved.error ? (
+            <p className="analysis-source-error" role="alert">
+              {formatError(saved.error)}
             </p>
-          ))}
-          {selectedSource !== 'engine' && (
-            <SourceAnalysisView
-              records={sources.records}
-              book={sources.book}
-              source={selectedSource}
+          ) : (
+            <SelectedAnalysisResult
+              result={saved.result}
+              selected={!!catalog.selected || !!catalog.selectedId}
+              alternatives={catalog.entries.some(
+                (entry) => entry.id !== catalog.analysisId,
+              )}
               onPreview={onPreview}
               selectedPreview={selectedPreview}
               onComparison={onComparison}
@@ -379,35 +277,31 @@ export default function AnalysisPanel({
               players={players}
             />
           )}
+          <details
+            className="analysis-book-reference"
+            onToggle={(event) => {
+              setBookOpen(event.currentTarget.open);
+              onPreview?.(null);
+            }}
+          >
+            <summary>{l('book')}</summary>
+            {book.loading && <p role="status">{l('loading')}</p>}
+            {!!book.error && <p role="alert">{formatError(book.error)}</p>}
+            {bookOpen && (
+              <SourceAnalysisView
+                records={noImportedRecords}
+                book={book.book}
+                source="book"
+                onPreview={onPreview}
+                selectedPreview={selectedPreview}
+                position={position}
+                playerName={playerName}
+                players={players}
+              />
+            )}
+          </details>
         </>
       )}
-      {view === 'analysis' &&
-        selectedSource === 'engine' &&
-        (analysis ? (
-          <>
-            <CandidateTable
-              candidates={analysis.candidates.map((candidate) => ({
-                ...candidate,
-                equity_kind: 'cubeful',
-                depth: `${analysis.plies}-ply`,
-              }))}
-              source={`${analysis.engine} · ${analysis.plies}-ply`}
-              depth={`${analysis.plies}-ply`}
-              played={position?.notation}
-              position={position}
-              playerName={playerName}
-              onPreview={onPreview}
-              selectedPreview={selectedPreview}
-              onComparison={onComparison}
-            />
-          </>
-        ) : sources.loading || restoring ? null : (
-          <div className="panel-empty">
-            <span className="empty-symbol">↗</span>
-            <h3>{t('analysis.emptyHeading')}</h3>
-            <p>{t('analysis.emptyDescription')}</p>
-          </div>
-        ))}
       {view === 'dice' &&
         (distribution ? (
           <div className="distribution">
@@ -553,6 +447,89 @@ export default function AnalysisPanel({
         </LibraryDialog>
       )}
     </section>
+  );
+}
+
+export function SelectedAnalysisResult({
+  result,
+  selected,
+  alternatives,
+  onPreview,
+  selectedPreview,
+  onComparison,
+  position,
+  playerName,
+  players,
+}: {
+  result?: PositionAnalysisResult | null;
+  selected: boolean;
+  alternatives: boolean;
+  onPreview?: (candidate: PreviewCandidate | null) => void;
+  selectedPreview?: PreviewCandidate;
+  onComparison?: (value: PreviewComparison) => void;
+  position?: Position;
+  playerName?: string;
+  players?: Pick<Match, 'white' | 'black'>;
+}) {
+  const text = useAnalysisCatalogText();
+  const candidateText = useCandidateText();
+  const analysis = result?.analysis;
+  const decision = result?.decision;
+  const candidates = analysis?.candidates;
+  const depth = analysis ? `${analysis.plies}-ply` : result?.depth;
+  const source = [analysis?.engine ?? result?.engine, depth]
+    .filter(Boolean)
+    .join(' · ');
+  if (candidates?.length)
+    return (
+      <CandidateTable
+        candidates={candidates.map((candidate) => ({
+          ...candidate,
+          equity_kind: 'cubeful',
+          depth,
+        }))}
+        source={source}
+        depth={depth}
+        played={decision?.played ?? position?.notation}
+        position={position}
+        playerName={playerName}
+        onPreview={onPreview}
+        selectedPreview={selectedPreview}
+        onComparison={onComparison}
+      />
+    );
+  if (result?.records.length)
+    return (
+      <SourceAnalysisView
+        records={result.records}
+        source="file"
+        onPreview={onPreview}
+        selectedPreview={selectedPreview}
+        onComparison={onComparison}
+        position={position}
+        playerName={playerName}
+        players={players}
+      />
+    );
+  if (decision)
+    return (
+      <BoardDecisionComparison
+        played={decision.played}
+        best={decision.best}
+        loss={
+          decision.evaluation_status === 'evaluated'
+            ? decision.equity_loss
+            : null
+        }
+        context={candidateText('normalizedCubeful')}
+        source={source}
+      />
+    );
+  return (
+    <div className="panel-empty">
+      <p>{text(selected ? 'missing' : 'none')}</p>
+      {alternatives && <p>{text('alternatives')}</p>}
+    </div>
   );
 }
 

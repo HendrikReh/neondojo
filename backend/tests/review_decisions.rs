@@ -71,6 +71,179 @@ async fn imported(pool: &PgPool) -> (Uuid, Vec<Uuid>) {
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
+async fn duplicate_import_records_use_one_primary_decision_in_every_projection(pool: PgPool) {
+    let (id, ids) = imported(&pool).await;
+    sqlx::query("INSERT INTO imported_analyses(id,match_uuid,position_uuid,source_ordinal,game_no,source_move_no,kind,data) SELECT $2,match_uuid,position_uuid,50,game_no,source_move_no,kind,jsonb_set(data,'{candidates,1,equity}','0.16') FROM imported_analyses WHERE id=$1")
+        .bind(ids[0]).bind(Uuid::nil()).execute(&pool).await.unwrap();
+    let router = app(&pool);
+    let (_, review) = call(
+        &router,
+        "GET",
+        &format!("/api/matches/{id}/review-decisions?game_no=1"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(
+        review["items"].as_array().unwrap().len(),
+        1,
+        "one decision cannot be counted twice: {review}"
+    );
+    assert_eq!(review["items"][0]["equity_loss"], 0.2);
+    let (_, marks) = call(
+        &router,
+        "GET",
+        &format!("/api/matches/{id}/move-assessments?game_no=1"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(marks["items"].as_array().unwrap().len(), 1);
+    assert_eq!(marks["items"][0]["equity_loss"], 0.2);
+    let (_, stats) = call(
+        &router,
+        "GET",
+        &format!("/api/matches/{id}/analysis-statistics?game_no=1"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(stats["summary"]["players"][0]["checker_equity_loss"], 0.2);
+    let position = marks["items"][0]["position_id"].as_str().unwrap();
+    let (_, selected) = call(
+        &router,
+        "GET",
+        &format!("/api/positions/{position}/analysis-result"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(selected["records"].as_array().unwrap().len(), 1);
+    assert_eq!(selected["records"][0]["id"], ids[0].to_string());
+    let (_, original) = call(
+        &router,
+        "GET",
+        &format!("/api/positions/{position}/imported-analysis"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(
+        original.as_array().unwrap().len(),
+        2,
+        "original analyses remain accessible and unchanged"
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn imported_catalog_statistics_preserve_unknown_depth_and_do_not_invent_pr(pool: PgPool) {
+    let (id, _) = imported(&pool).await;
+    let (status, data) = call(
+        &app(&pool),
+        "GET",
+        &format!("/api/matches/{id}/analysis-statistics?analysis_id=imported:{id}"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{data}");
+    assert_eq!(data["analysis_id"], format!("imported:{id}"));
+    assert_eq!(data["summary"]["players"][0]["checker_equity_loss"], 0.4);
+    assert_eq!(data["summary"]["analyzed_moves"], 2);
+    assert!(data["summary"]["plies"].is_null());
+    assert!(data["summary"]["performance_rating"].is_null());
+    assert_eq!(data["summary"]["recorded_depth"], "XGRoller++");
+    assert_eq!(data["error_breakdown"][0]["checker"]["very_bad"], 2);
+    // One incomplete game must remain partial after losing its imported assessment.
+    sqlx::query("DELETE FROM imported_analyses WHERE match_uuid=$1 AND game_no=2")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (_, partial) = call(
+        &app(&pool),
+        "GET",
+        &format!("/api/matches/{id}/analysis-statistics?analysis_id=imported:{id}"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(partial["summary"]["analyzed_moves"], 1);
+    assert_eq!(partial["summary"]["completed_games"], 1);
+    assert!(partial["error_breakdown"].is_null());
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn catalog_selection_is_shared_by_review_and_marks_without_source_fallback(pool: PgPool) {
+    let (id, _) = imported(&pool).await;
+    let job = store::create_match_job(&pool, id, 2, 2).await.unwrap();
+    sqlx::query("UPDATE jobs SET status='running' WHERE id=$1")
+        .bind(job.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let position: Uuid =
+        sqlx::query_scalar("SELECT id FROM positions WHERE match_uuid=$1 AND game_no=1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let decision = json!({"decision_no":1,"checker_no":1,"player":0,"kind":"checker","played":"8/5 6/5","best":"6/3 6/5","played_equity":0.1,"best_equity":0.2,"equity_loss":0.1,"severity":"none","dice":[3,1],"evaluation_status":"evaluated"});
+    sqlx::query("INSERT INTO move_analyses(job_id,position_uuid,game_no,decision_no,player,kind,equity_loss,data) VALUES($1,$2,1,1,0,'checker',0.1,$3)")
+        .bind(job.id).bind(position).bind(decision).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO match_analysis_games(job_id,game_no) VALUES($1,1)")
+        .bind(job.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE jobs SET status='running',completed_games=1 WHERE id=$1")
+        .bind(job.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let router = app(&pool);
+    let uri = format!(
+        "/api/matches/{id}/review-decisions?analysis_id=job:{}",
+        job.id
+    );
+    let (status, rows) = call(&router, "GET", &uri, Value::Null).await;
+    assert_eq!(status, 200, "{rows}");
+    assert_eq!(rows["items"].as_array().unwrap().len(), 1, "{rows}");
+    assert_eq!(rows["items"][0]["source"], "native");
+    let (status, selected) = call(
+        &router,
+        "PUT",
+        &format!("/api/matches/{id}/analysis-selection"),
+        json!({"analysis_id":format!("job:{}",job.id)}),
+    )
+    .await;
+    assert_eq!(status, 200, "{selected}");
+    let (_, marks) = call(
+        &router,
+        "GET",
+        &format!("/api/matches/{id}/move-assessments?game_no=1"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(marks["analysis_id"], format!("job:{}", job.id));
+    assert_eq!(marks["items"][0]["equity_loss"], 0.1);
+    assert_eq!(marks["items"][0]["severity"], rows["items"][0]["severity"]);
+    let (_, missing) = call(
+        &router,
+        "GET",
+        &format!("/api/matches/{id}/move-assessments?game_no=2"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(missing["items"], json!([]));
+    let (_, explicit_import) = call(
+        &router,
+        "GET",
+        &format!("/api/matches/{id}/review-decisions?analysis_id=imported:{id}"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(explicit_import["items"].as_array().unwrap().len(), 2);
+    assert_eq!(explicit_import["items"][0]["equity_loss"], 0.2);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
 async fn paginated_imports_have_provenance_filtering_and_scope_bound_cursors(pool: PgPool) {
     let (id, ids) = imported(&pool).await;
     let router = app(&pool);
@@ -152,24 +325,28 @@ async fn paginated_imports_have_provenance_filtering_and_scope_bound_cursors(poo
 }
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
-async fn pending_and_partial_jobs_use_imports_only_for_uncheckpointed_games(pool: PgPool) {
+async fn pending_and_empty_jobs_do_not_fall_back_to_imports(pool: PgPool) {
     let (id, _) = imported(&pool).await;
     let job = store::create_match_job(&pool, id, 0, 2).await.unwrap();
     let router = app(&pool);
     let uri = format!("/api/matches/{id}/review-decisions?job_id={}", job.id);
-    let (_, pending) = call(&router, "GET", &uri, Value::Null).await;
-    assert_eq!(pending["items"].as_array().unwrap().len(), 2, "{pending}");
+    let (status, _) = call(&router, "GET", &uri, Value::Null).await;
+    assert_eq!(status, 422, "a pending job is not an analysis result");
     sqlx::query("INSERT INTO match_analysis_games(job_id,game_no) VALUES($1,1)")
         .bind(job.id)
         .execute(&pool)
         .await
         .unwrap();
-    let (_, partial) = call(&router, "GET", &uri, Value::Null).await;
-    assert_eq!(partial["items"].as_array().unwrap().len(), 1, "{partial}");
-    assert_eq!(partial["items"][0]["game_no"], 2);
-    sqlx::query("UPDATE imported_analyses SET data=jsonb_set(data,'{candidates,1,equity}','null'::jsonb) WHERE match_uuid=$1").bind(id).execute(&pool).await.unwrap();
-    let (_, unknown) = call(&router, "GET", &uri, Value::Null).await;
-    assert_eq!(unknown["items"], json!([]));
+    let (status, _) = call(&router, "GET", &uri, Value::Null).await;
+    assert_eq!(status, 422, "an empty checkpoint is not a result");
+    let (_, imported) = call(
+        &router,
+        "GET",
+        &format!("/api/matches/{id}/review-decisions?analysis_id=imported:{id}"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(imported["items"].as_array().unwrap().len(), 2);
 }
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
@@ -206,9 +383,14 @@ async fn imported_sgf_checker_analysis_remains_reviewable_without_jobs(pool: PgP
 }
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
-async fn native_checkpoints_preserve_values_and_override_imported_game(pool: PgPool) {
+async fn native_checkpoints_preserve_values_without_imported_fallback(pool: PgPool) {
     let (id, _) = imported(&pool).await;
     let job = store::create_match_job(&pool, id, 2, 2).await.unwrap();
+    sqlx::query("UPDATE jobs SET status='running' WHERE id=$1")
+        .bind(job.id)
+        .execute(&pool)
+        .await
+        .unwrap();
     let position: Uuid =
         sqlx::query_scalar("SELECT id FROM positions WHERE match_uuid=$1 AND game_no=1")
             .bind(id)
@@ -228,12 +410,11 @@ async fn native_checkpoints_preserve_values_and_override_imported_game(pool: PgP
     );
     let (status, page) = call(&app(&pool), "GET", &uri, Value::Null).await;
     assert_eq!(status, 200, "{page}");
-    assert_eq!(page["items"].as_array().unwrap().len(), 2);
+    assert_eq!(page["items"].as_array().unwrap().len(), 1);
     assert_eq!(page["items"][0]["source"], "native");
     assert_eq!(page["items"][0]["equity_loss"], 0.1);
     assert_eq!(page["items"][0]["severity"], "bad");
     assert_eq!(page["items"][0]["depth_plies"], 2);
-    assert_eq!(page["items"][1]["source"], "imported");
     sqlx::query(
         "UPDATE move_analyses SET data=jsonb_set(data,'{player}','1'::jsonb) WHERE job_id=$1",
     )
@@ -265,6 +446,11 @@ async fn native_cube_checkpoints_recover_exact_source_context(pool: PgPool) {
     .r#match
     .id;
     let job = store::create_match_job(&pool, id, 1, 2).await.unwrap();
+    sqlx::query("UPDATE jobs SET status='running' WHERE id=$1")
+        .bind(job.id)
+        .execute(&pool)
+        .await
+        .unwrap();
     for (no, checker, player, kind, played, best) in [
         (1, Some(1), 0, "cube", "no double", "double"),
         (2, Some(1), 0, "checker", "8/5 6/5", "6/3 6/5"),
@@ -332,18 +518,14 @@ async fn imported_cube_uses_validated_actor_loss_and_source_event(pool: PgPool) 
 }
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
-async fn cursor_rejects_changed_checkpoints_and_foreign_jobs(pool: PgPool) {
+async fn cursor_rejects_changed_selection_and_foreign_jobs(pool: PgPool) {
     let (id, _) = imported(&pool).await;
-    let job = store::create_match_job(&pool, id, 0, 2).await.unwrap();
     let router = app(&pool);
-    let uri = format!(
-        "/api/matches/{id}/review-decisions?job_id={}&limit=1",
-        job.id
-    );
+    let uri = format!("/api/matches/{id}/review-decisions?limit=1");
     let (_, page) = call(&router, "GET", &uri, Value::Null).await;
     let cursor = page["next_cursor"].as_str().unwrap();
-    sqlx::query("INSERT INTO match_analysis_games(job_id,game_no) VALUES($1,1)")
-        .bind(job.id)
+    sqlx::query("UPDATE matches SET source_revision=source_revision+1 WHERE id=$1")
+        .bind(id)
         .execute(&pool)
         .await
         .unwrap();
@@ -358,27 +540,19 @@ async fn cursor_rejects_changed_checkpoints_and_foreign_jobs(pool: PgPool) {
         .0,
         422
     );
-    sqlx::query("UPDATE jobs SET source_revision=source_revision+1 WHERE id=$1")
-        .bind(job.id)
-        .execute(&pool)
-        .await
-        .unwrap();
-    assert_eq!(call(&router, "GET", &uri, Value::Null).await.0, 422);
     assert_eq!(
         call(
             &router,
             "GET",
-            &format!(
-                "/api/matches/{id}/review-decisions?job_id={}",
-                Uuid::new_v4()
-            ),
+            &format!("{uri}&analysis_id=job:{}", Uuid::new_v4()),
             Value::Null
         )
         .await
         .0,
-        404
+        422
     );
 }
+
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
 async fn native_forced_and_unavailable_rows_keep_status_and_never_become_errors(pool: PgPool) {
@@ -396,6 +570,11 @@ async fn native_forced_and_unavailable_rows_keep_status_and_never_become_errors(
     .r#match
     .id;
     let job = store::create_match_job(&pool, id, 0, 1).await.unwrap();
+    sqlx::query("UPDATE jobs SET status='running' WHERE id=$1")
+        .bind(job.id)
+        .execute(&pool)
+        .await
+        .unwrap();
     let (position,player,ply):(Uuid,i32,i32)=sqlx::query_as("SELECT id,player,ply FROM positions WHERE match_uuid=$1 AND notation='Cannot move' LIMIT 1").bind(id).fetch_one(&pool).await.unwrap();
     for (decision_no, status) in [(1, "forced"), (2, "unavailable")] {
         let d = json!({"decision_no":decision_no,"checker_no":ply,"player":player,"kind":"checker","played":"Cannot move","best":"Cannot move","played_equity":null,"best_equity":null,"equity_loss":0.0,"severity":"none","dice":null,"evaluation_status":status});

@@ -100,6 +100,7 @@ it('integrates the match header with identity and loading fields while omitting 
     },
     jobs: {
       jobs: {},
+      refresh: () => {},
       ...{ completedAnalysis: undefined },
       error: null,
       submitting: false,
@@ -295,4 +296,21 @@ it('distinguishes a metadata request error from unavailable stored values and of
   expect(field(html, 'result')).toContain('—');
   expect(field(html, 'pr-white')).not.toContain('n/a');
   expect(html).not.toContain('aria-busy="true"');
+});
+
+it('uses selected analysis PR explicitly instead of unrelated library ratings', () => {
+  const html = renderToStaticMarkup(
+    createElement(I18nProvider, {
+      children: createElement(AnalysisMatchHeaderView, {
+        match,
+        metadata,
+        loading: false,
+        onRetry: () => {},
+        analysisPr: [null, null],
+      }),
+    }),
+  );
+  expect(field(html, 'pr-white')).toContain('n/a');
+  expect(field(html, 'pr-black')).toContain('n/a');
+  expect(field(html, 'pr-black')).not.toContain('4.75');
 });

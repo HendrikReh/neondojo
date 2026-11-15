@@ -340,6 +340,14 @@ const entries = {
     'Import XG',
     'XG importato',
   ],
+  sgfSource: [
+    'Imported GNUbg',
+    'Importierte GNUbg-Analyse',
+    'GNUbg importado',
+    'GNUbg importé',
+    'Import GNUbg',
+    'GNUbg importato',
+  ],
   bgblitzSource: [
     'Imported BGBlitz',
     'Importierte BGBlitz-Analyse',

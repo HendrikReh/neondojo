@@ -33,8 +33,8 @@ async function fixture(page: Page, theme = 'graphite', mode = 'light') {
       ),
     imported.match.id,
   );
-  await page.route('**/api/positions/*/imported-analysis', (route) =>
-    route.fulfill({ json: [] }),
+  await page.route('**/api/positions/*/analysis-result?*', (route) =>
+    route.fulfill({ json: null }),
   );
   await page.route('**/api/positions/*/opening-book', (route) =>
     route.fulfill({
@@ -109,15 +109,16 @@ for (const theme of ['graphite', 'club', 'paper'])
         color,
       );
       await activeText(
-        page.locator('.analysis-panel > .tabs [aria-selected="true"]'),
+        page.locator('.analysis-panel [role="tablist"] [aria-selected="true"]'),
         color,
       );
-      await page
-        .getByRole('tab', { name: 'Opening book', exact: true })
-        .click();
-      await activeText(
-        page.locator('.analysis-source-tabs [aria-selected="true"]'),
-        color,
+      const selection = page.getByLabel('Displayed analysis', { exact: true });
+      await expect(selection).toBeVisible();
+      await expect(selection).toHaveValue('');
+      await page.locator('.analysis-book-reference > summary').click();
+      await expect(page.locator('.analysis-book-reference')).toHaveAttribute(
+        'open',
+        '',
       );
       await activeText(
         page.locator('.source-book-selector [aria-pressed="true"]'),
@@ -129,10 +130,7 @@ for (const theme of ['graphite', 'club', 'paper'])
       );
       await expect(
         page.getByRole('tab', { name: 'Imported analysis', exact: true }),
-      ).toBeDisabled();
-      await expect(
-        page.getByRole('tab', { name: 'Imported analysis', exact: true }),
-      ).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+      ).toHaveCount(0);
       await page
         .locator('.source-decision-buttons')
         .getByRole('button', { name: 'Cube', exact: true })

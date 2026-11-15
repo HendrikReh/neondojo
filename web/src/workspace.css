@@ -687,6 +687,7 @@
   }
   .database-heading {
     align-items: flex-start;
+    flex-wrap: wrap;
     gap: 12px;
   }
   .database-heading h1 {

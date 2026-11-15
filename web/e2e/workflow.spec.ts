@@ -209,8 +209,6 @@ test('full match analysis, errors, board navigation and persisted results', asyn
     .filter({ hasText: 'Match Review Demo' })
     .first()
     .click();
-  await openMatchCalculation(page);
-  await page.getByLabel('Analyseumfang', { exact: true }).selectOption('match');
   await page.getByRole('tab', { name: 'Fehler', exact: true }).click();
   await expect(
     progress.getByText('Partieanalyse abgeschlossen', { exact: true }),
@@ -234,7 +232,7 @@ test('full match analysis, errors, board navigation and persisted results', asyn
   expect(errors).toEqual([]);
 });
 
-test('the latest clicked analysis row wins during a delayed game load', async ({
+test('the latest clicked analysis row wins during a delayed position request', async ({
   page,
 }) => {
   await page.goto('/');
@@ -246,6 +244,8 @@ test('the latest clicked analysis row wins during a delayed game load', async ({
   await page
     .getByLabel('Partie-Analysetiefe', { exact: true })
     .selectOption('0');
+  await openMatchCalculation(page);
+  await page.getByLabel('Analyseumfang', { exact: true }).selectOption('match');
   await page.getByRole('tab', { name: 'Fehler', exact: true }).click();
   const panel = page.getByRole('region', {
     name: 'Vollständige Partieanalyse',
@@ -267,6 +267,15 @@ test('the latest clicked analysis row wins during a delayed game load', async ({
   const submitted = await analysisResponse;
   expect(submitted.status()).toBe(202);
   const created = await submitted.json();
+  await expect
+    .poll(
+      async () => (await (await page.request.get(`/api/jobs/${created.id}`)).json()).status,
+      { timeout: 45_000 },
+    )
+    .toBe('completed');
+  await page
+    .getByLabel('Angezeigte Analyse', { exact: true })
+    .selectOption(`job:${created.id}`);
   await expect(panel).toHaveAttribute('data-job-id', created.id);
   await expect(
     progress.getByText('Partieanalyse abgeschlossen', { exact: true }),
@@ -286,31 +295,32 @@ test('the latest clicked analysis row wins during a delayed game load', async ({
     panel.getByRole('button', { name: 'Seite 3', exact: true }),
   ).toHaveAttribute('aria-current', 'page');
   await expect(panel.locator('tbody tr')).toHaveCount(50);
-  let release: (() => void) | undefined;
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  let requested: (() => void) | undefined;
-  const started = new Promise<void>((resolve) => {
-    requested = resolve;
-  });
-  await page.route('**/api/positions?**', async (route) => {
-    if (new URL(route.request().url()).searchParams.get('game_no') !== '1') {
-      requested?.();
-      await gate;
-    }
-    await route.continue();
-  });
+  let release = () => {}, requested = () => {}, finished = () => {};
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const started = new Promise<void>((resolve) => { requested = resolve; });
+  const completed = new Promise<void>((resolve) => { finished = resolve; });
+  await page.route(/\/api\/positions\/[^/?]+$/, async (route) => {
+    const response = await route.fetch();
+    requested();
+    await gate;
+    await route.fulfill({ response }).catch(() => {});
+    finished();
+  }, { times: 1 });
 
-  await panel.locator('tbody tr').last().getByRole('button').click();
-  await started;
-  await panel.getByRole('button', { name: 'Anfang', exact: true }).click();
-  await expect(
-    panel.getByRole('button', { name: 'Seite 1', exact: true }),
-  ).toHaveAttribute('aria-current', 'page');
-  await panel.locator('tbody tr').first().getByRole('button').click();
-  release?.();
-  // Allow the delayed response's React update to render before checking its effect.
-  await page.waitForTimeout(100);
+  try {
+    await panel.locator('tbody tr').last().getByRole('button').click();
+    await started;
+    await panel.getByRole('button', { name: 'Anfang', exact: true }).click();
+    await expect(
+      panel.getByRole('button', { name: 'Seite 1', exact: true }),
+    ).toHaveAttribute('aria-current', 'page');
+    await panel.locator('tbody tr').first().getByRole('button').click();
+    await expect(page.locator('.board-navigation')).toContainText('1 / 8');
+  } finally {
+    release();
+  }
+  await completed;
+  await page.evaluate(() => new Promise<void>((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   await expect(page.locator('.board-navigation')).toContainText('1 / 8');
 });

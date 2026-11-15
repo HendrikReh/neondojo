@@ -1,220 +1,149 @@
-import { useEffect, useState } from 'react';
-import EngineLabel from './EngineLabel';
-import { request, type Job } from './api';
-import { useI18n, type TranslationKey } from './i18n';
+import { useEffect, useMemo, useState } from 'react';
+import { request } from './api';
+import { useI18n } from './i18n';
 import { nativePerformanceRating } from './match-statistics-api';
 import { useStatisticsText } from './review-statistics-messages';
-import type { components } from './generated-api';
+import {
+  analysisStatisticsPath,
+  type AnalysisCatalogEntry,
+  type MatchAnalysisStatistics,
+} from './analysis-catalog-api';
+import type { AnalysisCatalog } from './useAnalysisCatalog';
+import { useAnalysisCatalogText } from './analysis-catalog-messages';
+import { useAnalysisEntryLabel } from './AnalysisCatalogSelect';
 
-type ComparisonRun = components['schemas']['AnalysisComparisonRun'];
-
-const engines = [
-  { id: 'gnubg', name: 'GNUbg' },
-  { id: 'bgsage', name: 'Open Sage' },
-] as const;
-const statusLabels: Record<Job['status'], TranslationKey> = {
-  completed: 'matchAnalysis.completed',
-  failed: 'matchAnalysis.failed',
-  queued: 'matchAnalysis.queued',
-  running: 'matchAnalysis.engineRunning',
-};
-
-function completeSummary(job: ComparisonRun | undefined, gameNo?: number) {
-  const fromMatch = gameNo !== undefined && job?.game_no == null;
-  const summary = fromMatch ? job?.game_summary : job?.result;
-  const totalGames = fromMatch ? 1 : job?.total_games;
-  if (
-    job?.status !== 'completed' ||
-    !summary ||
-    !('players' in summary) ||
-    job.completed_games !== job.total_games ||
-    summary.total_games !== totalGames ||
-    summary.completed_games !== totalGames ||
-    summary.plies !== job.plies
-  )
-    return undefined;
-  return summary;
+export function comparisonEntries(
+  entries: AnalysisCatalogEntry[],
+  selection: string[] = [],
+) {
+  return [0, 1].map(
+    (column) =>
+      entries.find((entry) => entry.id === selection[column]) ??
+      entries[column],
+  );
 }
 
 export function MatchAnalysisComparisonResults({
-  jobs,
+  entries,
+  statistics,
   names,
   gameNo,
+  selection = [],
+  onSelection,
 }: {
-  jobs: ComparisonRun[];
+  entries: AnalysisCatalogEntry[];
+  statistics: Record<string, MatchAnalysisStatistics>;
   names: string[];
   gameNo?: number;
+  selection?: string[];
+  onSelection?: (column: number, id: string) => void;
 }) {
-  const { formatNumber, locale, t } = useI18n();
+  const { formatNumber } = useI18n();
   const text = useStatisticsText();
-  const [selection, setSelection] = useState<Record<string, string>>({});
-  const date = new Intl.DateTimeFormat(locale, {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  });
-  const columns = engines.map((engine) => {
-    const options = jobs.filter(
-      (job) => (job.engine_snapshot?.engine_id ?? 'gnubg') === engine.id,
-    );
-    const job =
-      options.find((option) => option.id === selection[engine.id]) ??
-      options.find(
-        (option) => option.plies === 3 && completeSummary(option, gameNo),
-      ) ??
-      options.find((option) => completeSummary(option, gameNo)) ??
-      options[0];
-    return { engine, options, job, summary: completeSummary(job, gameNo) };
+  const catalogText = useAnalysisCatalogText();
+  const label = useAnalysisEntryLabel();
+  const columns = comparisonEntries(entries, selection).map((entry) => {
+    const saved = entry && statistics[entry.id];
+    const result = saved?.analysis_id === entry?.id ? saved : undefined;
+    const summary =
+      gameNo == null
+        ? result?.summary
+        : result?.games.find((game) => game.game_no === gameNo)?.summary;
+    return { entry, summary };
   });
   const decimal = (value: number) =>
     formatNumber(value, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
   const unavailable = <span title={text('unavailable')}>—</span>;
-
   return (
-    <>
-      <div className="statistics-comparison-scroll">
-        <table className="statistics-games-table statistics-comparison-table">
-          <thead>
-            <tr>
-              <th scope="col">{text('compareMetric')}</th>
-              {columns.map(({ engine, options, job, summary }) => (
-                <th key={engine.id} scope="col">
-                  <div>{engine.name}</div>
-                  {job ? (
-                    <>
-                      <select
-                        aria-label={text('compareRun', { engine: engine.name })}
-                        value={job.id}
-                        onChange={(event) => {
-                          const id = event.target.value;
-                          setSelection((current) => ({
-                            ...current,
-                            [engine.id]: id,
-                          }));
-                        }}
-                      >
-                        {options.map((option) => (
-                          <option key={option.id} value={option.id}>
-                            {text('compareDepth', {
-                              plies: formatNumber(option.plies),
-                            })}{' '}
-                            ·{' '}
-                            {t(
-                              option.game_no != null &&
-                                option.status === 'completed'
-                                ? 'gameAnalysis.completed'
-                                : option.game_no != null &&
-                                    option.status === 'failed'
-                                  ? 'gameAnalysis.failed'
-                                  : statusLabels[option.status],
-                            )}{' '}
-                            {gameNo !== undefined && option.game_no == null
-                              ? `· ${text('compareFromMatch')} `
-                              : ''}
-                            · {date.format(new Date(option.created_at))}
-                          </option>
-                        ))}
-                      </select>
-                      <small>
-                        <EngineLabel
-                          details={
-                            job.engine_snapshot?.engine_version ??
-                            summary?.engine
-                          }
-                        />
-                      </small>
-                      <small>
-                        {gameNo !== undefined && job.game_no == null
-                          ? text('compareFromMatch')
-                          : text('coverage', {
-                              completed: formatNumber(job.completed_games),
-                              total: formatNumber(job.total_games),
-                            })}
-                      </small>
-                      {job.error && (
-                        <small>
-                          {t('error.engine', { details: job.error })}
-                        </small>
-                      )}
-                    </>
-                  ) : (
-                    <small>
-                      {text(
-                        gameNo === undefined
-                          ? 'compareNoRun'
-                          : 'compareNoGameRun',
-                      )}
-                    </small>
-                  )}
+    <div className="statistics-comparison-scroll">
+      <table className="statistics-games-table statistics-comparison-table">
+        <thead>
+          <tr>
+            <th scope="col">{text('compareMetric')}</th>
+            {columns.map(({ entry }, column) => (
+              <th key={column} scope="col">
+                <select
+                  aria-label={catalogText('comparison', { number: column + 1 })}
+                  value={entry?.id ?? ''}
+                  onChange={(event) =>
+                    onSelection?.(column, event.target.value)
+                  }
+                >
+                  {!entry && <option value="">{catalogText('none')}</option>}
+                  {entries.map((option) => (
+                    <option value={option.id} key={option.id}>
+                      {label(option)}
+                    </option>
+                  ))}
+                </select>
+                {entry && (
+                  <small>
+                    {entry.engine}
+                    {entry.depth ? ` · ${entry.depth}` : ''}
+                  </small>
+                )}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        {names.map((name, player) => {
+          const stats = columns.map(({ summary }) =>
+            summary?.players.find((entry) => entry.player === player),
+          );
+          const rows = [
+            [
+              text('compareCheckerCount'),
+              stats.map(
+                (entry) => entry && formatNumber(entry.checker_decisions),
+              ),
+            ],
+            [
+              text('compareCubeCount'),
+              stats.map((entry) => entry && formatNumber(entry.cube_decisions)),
+            ],
+            [
+              text('compareCheckerLoss'),
+              stats.map((entry) => entry && decimal(entry.checker_equity_loss)),
+            ],
+            [
+              text('compareCubeLoss'),
+              stats.map((entry) => entry && decimal(entry.cube_equity_loss)),
+            ],
+            [
+              text('compareUnavailable'),
+              stats.map((entry) => entry && formatNumber(entry.unavailable)),
+            ],
+            [
+              'GNUbg PR',
+              columns.map(({ entry, summary }) => {
+                const rating =
+                  entry?.source === 'native' && summary
+                    ? nativePerformanceRating(summary, player)
+                    : undefined;
+                return rating === undefined ? undefined : decimal(rating);
+              }),
+            ],
+          ] as const;
+          return (
+            <tbody key={player}>
+              <tr className="statistics-comparison-player">
+                <th scope="rowgroup" colSpan={3}>
+                  {name}
                 </th>
-              ))}
-            </tr>
-          </thead>
-          {names.map((name, player) => {
-            const stats = columns.map(({ summary }) =>
-              summary?.players.find((entry) => entry.player === player),
-            );
-            const rows = [
-              [
-                text('compareCheckerCount'),
-                stats.map(
-                  (entry) => entry && formatNumber(entry.checker_decisions),
-                ),
-              ],
-              [
-                text('compareCubeCount'),
-                stats.map(
-                  (entry) => entry && formatNumber(entry.cube_decisions),
-                ),
-              ],
-              [
-                text('compareCheckerLoss'),
-                stats.map(
-                  (entry) => entry && decimal(entry.checker_equity_loss),
-                ),
-              ],
-              [
-                text('compareCubeLoss'),
-                stats.map((entry) => entry && decimal(entry.cube_equity_loss)),
-              ],
-              [
-                text('compareUnavailable'),
-                stats.map((entry) => entry && formatNumber(entry.unavailable)),
-              ],
-              [
-                'GNUbg PR',
-                columns.map(({ engine, summary }) => {
-                  const rating =
-                    engine.id === 'gnubg' && summary
-                      ? nativePerformanceRating(summary, player)
-                      : undefined;
-                  return rating === undefined ? undefined : decimal(rating);
-                }),
-              ],
-            ] as const;
-            return (
-              <tbody key={player}>
-                <tr className="statistics-comparison-player">
-                  <th scope="rowgroup" colSpan={3}>
-                    {name}
-                  </th>
+              </tr>
+              {rows.map(([label, values]) => (
+                <tr key={label}>
+                  <th scope="row">{label}</th>
+                  {values.map((value, column) => (
+                    <td key={column}>{value ?? unavailable}</td>
+                  ))}
                 </tr>
-                {rows.map(([label, values]) => (
-                  <tr key={label}>
-                    <th scope="row">{label}</th>
-                    {values.map((value, column) => (
-                      <td key={columns[column].engine.id}>
-                        {value ?? unavailable}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            );
-          })}
-        </table>
-      </div>
-      <p className="analysis-method">{text('compareMethod')}</p>
-    </>
+              ))}
+            </tbody>
+          );
+        })}
+      </table>
+    </div>
   );
 }
 
@@ -223,66 +152,108 @@ export default function MatchAnalysisComparison({
   gameNo,
   names,
   visible,
+  catalog,
 }: {
   matchId: string;
   gameNo?: number;
   names: string[];
   visible: boolean;
+  catalog: AnalysisCatalog;
 }) {
   const { formatError } = useI18n();
-  const text = useStatisticsText();
+  const text = useAnalysisCatalogText();
   const [open, setOpen] = useState(false);
-  const [history, setHistory] = useState<{
-    url: string;
-    jobs: ComparisonRun[];
+  const [selection, setSelection] = useState<string[]>([]);
+  const entries = useMemo(
+    () =>
+      catalog.selected &&
+      !catalog.entries.some((entry) => entry.id === catalog.selected!.id)
+        ? [catalog.selected, ...catalog.entries]
+        : catalog.entries,
+    [catalog.entries, catalog.selected],
+  );
+  const chosen = comparisonEntries(entries, selection);
+  const identity = JSON.stringify([
+    matchId,
+    ...chosen.map((entry) => [
+      entry?.id,
+      entry?.status,
+      entry?.job?.completed_games,
+    ]),
+  ]);
+  const [state, setState] = useState<{
+    identity: string;
+    statistics: Record<string, MatchAnalysisStatistics>;
+    errors: unknown[];
   }>();
-  const [failure, setFailure] = useState<{ url: string; error: unknown }>();
-  const url = `/matches/${matchId}/analysis/jobs${gameNo === undefined ? '' : `?game_no=${gameNo}`}`;
-  const jobs = history?.url === url ? history.jobs : undefined;
-  const error = failure?.url === url ? failure.error : undefined;
-
   useEffect(() => {
     if (!open || !visible) return;
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    async function refresh() {
-      try {
-        const jobs = await request<ComparisonRun[]>(url, {
-          signal: controller.signal,
-        });
-        if (controller.signal.aborted) return;
-        setHistory({ url, jobs });
-        setFailure(undefined);
-      } catch (error) {
-        if (!controller.signal.aborted) setFailure({ url, error });
-      } finally {
-        if (!controller.signal.aborted) timer = setTimeout(refresh, 5000);
-      }
-    }
-    void refresh();
-    return () => {
-      controller.abort();
-      clearTimeout(timer);
-    };
-  }, [url, open, visible]);
-
+    const abort = new AbortController();
+    const ids = [
+      ...new Set(chosen.flatMap((entry) => (entry ? [entry.id] : []))),
+    ];
+    void Promise.allSettled(
+      ids.map((id) =>
+        request<MatchAnalysisStatistics>(analysisStatisticsPath(matchId, id), {
+          signal: abort.signal,
+        }),
+      ),
+    ).then((results) => {
+      if (abort.signal.aborted) return;
+      setState({
+        identity,
+        statistics: Object.fromEntries(
+          results.flatMap((result, index) =>
+            result.status === 'fulfilled' &&
+            result.value.analysis_id === ids[index]
+              ? [[ids[index], result.value]]
+              : [],
+          ),
+        ),
+        errors: results.flatMap((result) =>
+          result.status === 'rejected' ? [result.reason] : [],
+        ),
+      });
+    });
+    return () => abort.abort();
+  }, [identity, open, visible, matchId]);
+  const current = state?.identity === identity ? state : undefined;
   return (
     <details
       className="statistics-comparison"
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
-      <summary>
-        {text(gameNo === undefined ? 'compareEngines' : 'compareGameEngines')}
-      </summary>
-      {!!error && <p role="alert">{formatError(error)}</p>}
-      {open && !jobs && !error && <p role="status">{text('loading')}</p>}
-      {jobs && (
+      <summary>{text('compare')}</summary>
+      {open && !current && <p role="status">{text('loading')}</p>}
+      {current?.errors.map((error, index) => (
+        <p role="alert" key={index}>
+          {formatError(error)}
+        </p>
+      ))}
+      {open && (
         <MatchAnalysisComparisonResults
-          key={url}
-          jobs={jobs}
+          entries={entries}
+          statistics={current?.statistics ?? {}}
           names={names}
           gameNo={gameNo}
+          selection={selection}
+          onSelection={(column, id) =>
+            setSelection(
+              chosen.map((entry, index) =>
+                index === column ? id : (entry?.id ?? ''),
+              ),
+            )
+          }
         />
+      )}
+      {catalog.nextCursor && (
+        <button
+          type="button"
+          onClick={() => void catalog.loadMore()}
+          disabled={catalog.loadingMore}
+        >
+          {text('more')}
+        </button>
       )}
     </details>
   );

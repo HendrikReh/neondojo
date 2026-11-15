@@ -1,3 +1,4 @@
+import { catalogFixture, entryForJob } from './analysis-catalog-test-fixtures';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -9,6 +10,7 @@ vi.mock('./useMatchAnalysis', () => ({
   useMatchAnalysis: () => ({
     job: {
       id: 'failed-native-job',
+      kind: 'match',
       status: 'failed',
       completed_games: 0,
       total_games: 2,
@@ -31,6 +33,21 @@ const render = (showStatistics = false, overview = false) =>
         match,
         gameNo: 3,
         onPosition: () => {},
+        catalog: catalogFixture(
+          entryForJob(
+            {
+              id: 'failed-native-job',
+              kind: 'match',
+              status: 'failed',
+              completed_games: 0,
+              total_games: 2,
+              progress: 0,
+              plies: 2,
+              error: 'native failure',
+            } as Job,
+            3,
+          ),
+        ),
         showStatistics,
         showResults: overview || !showStatistics,
         overview,
@@ -64,4 +81,34 @@ it('shows progress and the review list in the overview with statistics hidden', 
   expect(html.match(/class="match-analysis-progress"/g)).toHaveLength(1);
   expect(html.match(/native failure/g)).toHaveLength(1);
   expect(html).toContain('aria-label="Filter by severity"');
+});
+
+it('does not label a completed position calculation as a completed match or zero-game coverage', () => {
+  const positionJob = {
+    id: 'position-analysis',
+    kind: 'analysis',
+    status: 'completed',
+    completed_games: 0,
+    total_games: 0,
+    progress: 100,
+    plies: 2,
+  } as Job;
+  const html = renderToStaticMarkup(
+    createElement(I18nProvider, {
+      children: createElement(MatchAnalysisPanel, {
+        match,
+        gameNo: 3,
+        showStatistics: true,
+        onPosition: () => {},
+        catalog: catalogFixture({
+          ...entryForJob(positionJob),
+          scope: 'position',
+          position_id: 'position',
+        }),
+      }),
+    }),
+  );
+  expect(html).not.toContain('class="match-analysis-progress"');
+  expect(html).not.toContain('0 of 0 games');
+  expect(html).toContain('GNU Backgammon');
 });

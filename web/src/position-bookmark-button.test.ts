@@ -364,6 +364,7 @@ it('uses the real source occurrence beside review controls during candidate and 
     },
     jobs: {
       jobs: {},
+      refresh: () => {},
       ...{ completedAnalysis: undefined },
       error: null,
       submitting: false,

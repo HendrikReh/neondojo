@@ -40,6 +40,22 @@ async fn target(pool: &PgPool, n: u128) -> Uuid {
     id
 }
 
+async fn checkpointed_job(
+    pool: &PgPool,
+    match_id: Uuid,
+    status: &str,
+    game_no: Option<i32>,
+) -> Uuid {
+    let job = Uuid::new_v4();
+    sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,completed_games,game_no) VALUES($1,$2,'match',0,$3,$4,1,$5)")
+        .bind(job).bind(match_id).bind(status)
+        .bind(if status == "completed" || game_no.is_some() { 1 } else { 2 })
+        .bind(game_no).execute(pool).await.unwrap();
+    sqlx::query("INSERT INTO match_analysis_games(job_id,game_no,summary) VALUES($1,1,'{\"completed_games\":1,\"total_games\":1}')")
+        .bind(job).execute(pool).await.unwrap();
+    job
+}
+
 async fn ordered(pool: &PgPool, sort: &str, direction: &str, limit: usize) -> Vec<Uuid> {
     let base = format!("/api/library/matches?sort={sort}&direction={direction}&limit={limit}");
     let mut after = String::new();
@@ -188,15 +204,7 @@ async fn new_sort_fields_use_visible_values_ties_and_nulls_last_on_every_page(po
             .execute(&pool)
             .await
             .unwrap();
-            sqlx::query(
-                "INSERT INTO jobs(id,match_uuid,kind,plies,status) VALUES($1,$2,'match',0,$3)",
-            )
-            .bind(Uuid::new_v4())
-            .bind(id)
-            .bind(if i < 2 { "queued" } else { "running" })
-            .execute(&pool)
-            .await
-            .unwrap();
+            checkpointed_job(&pool, *id, "completed", if i < 2 { None } else { Some(1) }).await;
         }
     }
     // An explicitly empty annotation also counts as a missing visible value.
@@ -248,7 +256,7 @@ async fn new_sort_fields_use_visible_values_ties_and_nulls_last_on_every_page(po
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
-async fn analysis_sort_uses_displayed_latest_partial_and_imported_status(pool: PgPool) {
+async fn analysis_sort_uses_selected_results_and_keeps_unavailable_results_last(pool: PgPool) {
     let mut ids = Vec::new();
     for n in 1..=7 {
         ids.push(target(&pool, n).await);
@@ -258,21 +266,69 @@ async fn analysis_sort_uses_displayed_latest_partial_and_imported_status(pool: P
         .enumerate()
     {
         let id = ids[if i < 2 { i } else { i + 1 }];
-        sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,game_no,created_at) VALUES($1,$2,'match',0,$3,1,$4,now()-interval '1 hour')")
-            .bind(Uuid::new_v4()).bind(id).bind(if status == "partial" {"completed"} else {status}).bind(if status == "partial" {Some(1)} else {None::<i32>}).execute(&pool).await.unwrap();
+        if status == "queued" {
+            sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games) VALUES($1,$2,'match',0,'queued',1)")
+                .bind(Uuid::new_v4()).bind(id).execute(&pool).await.unwrap();
+        } else {
+            checkpointed_job(
+                &pool,
+                id,
+                if status == "partial" {
+                    "completed"
+                } else {
+                    status
+                },
+                if status == "partial" { Some(1) } else { None },
+            )
+            .await;
+        }
     }
-    sqlx::query("INSERT INTO match_games(match_uuid,game_no,position_count,white_score,black_score,crawford) VALUES($1,1,0,0,0,false)").bind(ids[2]).execute(&pool).await.unwrap();
-    sqlx::query("INSERT INTO imported_analyses(match_uuid,source_ordinal,game_no,source_move_no,kind,data) VALUES($1,0,1,0,'checker','{}')").bind(ids[2]).execute(&pool).await.unwrap();
-    // The displayed whole-match job outranks a newer per-game job.
-    sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,game_no) VALUES($1,$2,'match',1,'failed',1,1)").bind(Uuid::new_v4()).bind(ids[0]).execute(&pool).await.unwrap();
-    assert_eq!(ordered(&pool, "analysis_status", "asc", 1).await, ids);
-    let mut descending = ids[..6].to_vec();
-    descending.reverse();
-    descending.push(ids[6]);
-    assert_eq!(
-        ordered(&pool, "analysis_status", "desc", 1).await,
-        descending
-    );
+    for (id, data) in [
+        (ids[2], json!({"raw":{"best_equity":0.125}})),
+        (ids[6], json!({})),
+    ] {
+        sqlx::query("INSERT INTO match_games(match_uuid,game_no,position_count,white_score,black_score,crawford) VALUES($1,1,0,0,0,false)").bind(id).execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO imported_analyses(match_uuid,source_ordinal,game_no,source_move_no,kind,data) VALUES($1,0,1,0,'checker',$2)").bind(id).bind(data).execute(&pool).await.unwrap();
+    }
+    // A completed whole-match result outranks a newer failed game checkpoint.
+    checkpointed_job(&pool, ids[0], "failed", Some(1)).await;
+    let (status, page) = request(
+        &pool,
+        "GET",
+        "/api/library/matches?sort=analysis_status",
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{page}");
+    for (id, expected) in ids.iter().zip([
+        Some("completed"),
+        Some("failed"),
+        Some("imported"),
+        Some("partial"),
+        None,
+        Some("running"),
+        None,
+    ]) {
+        let item = page["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["id"] == id.to_string())
+            .unwrap();
+        assert_eq!(item["analysis_status"].as_str(), expected, "{item}");
+    }
+    for (direction, indices) in [
+        ("asc", [0, 1, 2, 3, 5, 4, 6]),
+        ("desc", [5, 3, 2, 1, 0, 4, 6]),
+    ] {
+        let expected: Vec<_> = indices.into_iter().map(|index| ids[index]).collect();
+        for limit in [1, 2, 200] {
+            assert_eq!(
+                ordered(&pool, "analysis_status", direction, limit).await,
+                expected
+            );
+        }
+    }
 }
 
 fn altered_cursor(cursor: &str, field: &str, value: Value) -> String {

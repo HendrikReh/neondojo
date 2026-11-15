@@ -1,4 +1,5 @@
-//! Read-only statistics for exactly one native analysis job and its durable games.
+pub(crate) mod catalog;
+// Read-only statistics for exactly one native analysis job and its durable games.
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     model::{Job, MatchAnalysisSummary, PlayerAnalysisSummary},
@@ -81,7 +82,9 @@ struct DecisionTotals {
 }
 
 pub fn routes() -> Router<AppState> {
-    Router::new().route("/api/jobs/{id}/statistics", get(statistics))
+    Router::new()
+        .merge(catalog::routes())
+        .route("/api/jobs/{id}/statistics", get(statistics))
 }
 
 #[utoipa::path(get, path="/api/jobs/{id}/statistics", params(("id"=Uuid, Path)), responses((status=200, body=JobAnalysisStatistics), (status=404, body=ErrorBody), (status=422, body=ErrorBody)), tag="Match analysis")]

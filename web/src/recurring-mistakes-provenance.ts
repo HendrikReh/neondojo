@@ -1,5 +1,10 @@
 type ProvenanceText = (
-  key: 'nativeSource' | 'xgSource' | 'bgblitzSource' | 'unknownDepth',
+  key:
+    | 'nativeSource'
+    | 'xgSource'
+    | 'bgblitzSource'
+    | 'sgfSource'
+    | 'unknownDepth',
 ) => string;
 
 /** Imported search/rollout labels are not interchangeable with GNUbg ply counts. */
@@ -9,7 +14,7 @@ export function mistakeProvenance(
     plies?: number | null;
     depth?: string | null;
     method?: string | null;
-    source?: 'native' | 'xg' | 'bgblitz' | null;
+    source?: 'native' | 'xg' | 'bgblitz' | 'sgf' | null;
   },
   text: ProvenanceText,
 ): string {
@@ -19,7 +24,9 @@ export function mistakeProvenance(
           ? 'nativeSource'
           : value.source === 'xg'
             ? 'xgSource'
-            : 'bgblitzSource',
+            : value.source === 'sgf'
+              ? 'sgfSource'
+              : 'bgblitzSource',
       )
     : undefined;
   const depth =

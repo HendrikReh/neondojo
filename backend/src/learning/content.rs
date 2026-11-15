@@ -1,5 +1,10 @@
 use super::*;
-use crate::{engine::Analysis, move_assessments::after_play, store};
+use crate::{
+    analysis_catalog::{self, SelectedAnalysis},
+    engine::Analysis,
+    move_assessments::after_play,
+    store,
+};
 use anyhow::{Context, ensure};
 use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
 use std::collections::BTreeSet;
@@ -8,256 +13,334 @@ pub(super) async fn from_source(pool: &PgPool, request: &AddCards) -> ApiResult<
     if let Some(id) = request.position_id {
         return from_position(pool, id, request).await;
     }
-    from_match(pool, request.job_id.unwrap(), request).await
-}
-async fn names(pool: &PgPool, id: Uuid) -> anyhow::Result<[String; 2]> {
-    let (white, black): (String, String) =
-        sqlx::query_as("SELECT white,black FROM matches WHERE id=$1")
-            .bind(id)
-            .fetch_one(pool)
-            .await?;
-    Ok([white, black])
+    let match_id = if let Some(id) = request.match_id {
+        id
+    } else if let Some(id) = request.job_id {
+        store::get_job(pool, id)
+            .await?
+            .and_then(|job| job.match_uuid)
+            .ok_or_else(|| ApiError::invalid("job_id must refer to a match analysis"))?
+    } else {
+        return Err(ApiError::invalid(
+            "Supply a position_id, match_id, or job_id",
+        ));
+    };
+    let legacy_id = request.job_id.map(|id| format!("job:{id}"));
+    if request
+        .analysis_id
+        .as_ref()
+        .zip(legacy_id.as_ref())
+        .is_some_and(|(a, b)| a != b)
+    {
+        return Err(ApiError::invalid(
+            "job_id and analysis_id must identify the same analysis",
+        ));
+    }
+    match analysis_catalog::resolve_selection(
+        pool,
+        match_id,
+        request.analysis_id.as_deref().or(legacy_id.as_deref()),
+    )
+    .await?
+    {
+        Some(SelectedAnalysis::Job(job)) => from_match(pool, job.id, request).await,
+        Some(SelectedAnalysis::Imported { .. }) => imported_match(pool, match_id, request).await,
+        None => Err(ApiError::invalid(
+            "The selected analysis has no saved solution",
+        )),
+    }
 }
 
-async fn individual_hint(
-    pool: &PgPool,
-    id: Uuid,
-) -> anyhow::Result<Option<(Uuid, serde_json::Value)>> {
-    Ok(sqlx::query_as("SELECT id,result FROM selected_engine_jobs WHERE position_uuid=$1 AND kind='analysis' AND status='completed' AND result IS NOT NULL ORDER BY plies DESC,created_at DESC,id DESC LIMIT 1")
-        .bind(id).fetch_optional(pool).await?)
-}
-
-#[derive(FromRow)]
-struct MatchCheckerAnalysis {
-    id: Uuid,
-    plies: i32,
-    data: serde_json::Value,
-    engine: String,
-}
-
-async fn match_checker_analysis(
-    pool: &PgPool,
-    id: Uuid,
-) -> anyhow::Result<Option<MatchCheckerAnalysis>> {
-    Ok(sqlx::query_as("SELECT j.id,j.plies,m.data,
-            CASE WHEN jsonb_typeof(j.result->'engine')='string' THEN j.result->>'engine' ELSE 'GNU Backgammon' END AS engine
-        FROM move_analyses m JOIN selected_engine_jobs j ON j.id=m.job_id WHERE m.position_uuid=$1 AND m.kind='checker' AND j.status='completed' ORDER BY j.plies DESC,j.created_at DESC,j.id DESC LIMIT 1")
-        .bind(id).fetch_optional(pool).await?)
-}
-
-/// Practice can continue to another source when the preferred stored analysis has no answer.
+/// The selected catalog entry owns this position, including an absent answer.
 pub(crate) async fn saved_checker_move(
     pool: &PgPool,
     position: &Position,
-) -> anyhow::Result<Option<(String, String, i32)>> {
-    if let Some((_, result)) = individual_hint(pool, position.id).await?
-        && let Ok(analysis) = serde_json::from_value::<Analysis>(result)
-        && let Some(best) = analysis.candidates.into_iter().next()
-        && best.rank == 1
-        && after_play(position, &best.notation).is_some()
-    {
-        return Ok(Some((best.notation, analysis.engine, analysis.plies)));
-    }
-    if let Some(row) = match_checker_analysis(pool, position.id).await?
-        && let Ok(decision) = serde_json::from_value::<Decision>(row.data)
-        && decision.kind == "checker"
-        && decision.player == position.player
-        && matches!(decision.evaluation_status.as_str(), "evaluated" | "forced")
-        && after_play(position, &decision.best).is_some()
-    {
-        return Ok(Some((decision.best, row.engine, row.plies)));
-    }
-    Ok(None)
+) -> anyhow::Result<Option<(String, String, Option<String>)>> {
+    let mut cards = position_cards(pool, &[position.id], None, false)
+        .await
+        .map_err(|error| anyhow::anyhow!("{}", error.1))?;
+    let Some(card) = cards.remove(&position.id).flatten() else {
+        return Ok(None);
+    };
+    let best = card
+        .solution
+        .decision
+        .as_ref()
+        .map(|d| d.best.clone())
+        .or_else(|| {
+            card.solution
+                .candidates
+                .first()
+                .filter(|c| c.rank == 1)
+                .map(|c| c.notation.clone())
+        });
+    let depth = card
+        .solution
+        .imported
+        .as_ref()
+        .and_then(|record| record.depth.clone())
+        .or_else(|| card.solution.plies.map(|plies| format!("{plies}-ply")));
+    Ok(best
+        .filter(|best| after_play(position, best).is_some())
+        .map(|best| (best, card.solution.engine, depth)))
 }
 
 async fn from_position(pool: &PgPool, id: Uuid, request: &AddCards) -> ApiResult<Vec<CardContent>> {
     let position = store::get_position(pool, id)
         .await?
         .ok_or_else(ApiError::missing)?;
+    if request.match_id.is_some_and(|m| m != position.match_uuid) {
+        return Err(ApiError::invalid("match_id does not match this position"));
+    }
     if request.game_no.is_some_and(|n| n != position.game_no) {
         return Err(ApiError::invalid("game_no does not match this position"));
     }
     if request.player.is_some_and(|p| p != position.player) {
         return Ok(vec![]);
     }
-    let players = names(pool, position.match_uuid).await?;
-    if let Some((job_id, result)) = individual_hint(pool, id).await? {
-        let analysis: Analysis = serde_json::from_value(result).map_err(anyhow::Error::from)?;
-        if analysis.candidates.is_empty() {
-            return Err(ApiError::invalid("Completed analysis has no candidates"));
-        }
-        return Ok(vec![CardContent {
-            kind: "checker".into(),
-            prompt: prompt("checker").into(),
-            played: position.notation.clone(),
-            source: CardSource {
-                kind: "analysis".into(),
-                job_id,
-                match_id: position.match_uuid,
-                position_id: Some(position.id),
-                game_no: position.game_no,
-                decision_no: None,
-            },
-            solution: CardSolution {
-                engine: analysis.engine,
-                plies: analysis.plies,
-                candidates: analysis.candidates,
-                decision: None,
-            },
-            position,
-            players,
-        }]);
+    let selection = analysis_catalog::resolve_selection(
+        pool,
+        position.match_uuid,
+        request.analysis_id.as_deref(),
+    )
+    .await?
+    .ok_or_else(|| ApiError::invalid("The selected analysis has no saved solution"))?;
+    let mut cards = position_cards(pool, &[id], Some(&selection.id()), false).await?;
+    let card = cards.remove(&id).flatten().ok_or_else(|| {
+        ApiError::invalid("The selected analysis has no supported solution for this position")
+    })?;
+    if request.min_loss.is_some_and(|loss| {
+        card.solution
+            .decision
+            .as_ref()
+            .is_none_or(|d| d.equity_loss < loss)
+    }) {
+        return Ok(vec![]);
     }
-    if let Some(analysis) = match_checker_analysis(pool, id).await? {
-        let decision: Decision =
-            serde_json::from_value(analysis.data).map_err(anyhow::Error::from)?;
-        if request
-            .min_loss
-            .is_some_and(|loss| decision.equity_loss < loss)
-        {
-            return Ok(vec![]);
-        }
-        return Ok(vec![CardContent {
-            kind: "checker".into(),
-            prompt: prompt("checker").into(),
-            played: decision.played.clone(),
-            source: CardSource {
-                kind: "match".into(),
-                job_id: analysis.id,
-                match_id: position.match_uuid,
-                position_id: Some(position.id),
-                game_no: position.game_no,
-                decision_no: Some(decision.decision_no),
-            },
-            solution: CardSolution {
-                engine: analysis.engine,
-                plies: analysis.plies,
-                candidates: vec![],
-                decision: Some(decision),
-            },
-            position,
-            players,
-        }]);
-    }
-    Err(ApiError::invalid(
-        "Analyze this position or complete its game or match analysis before adding it",
-    ))
+    Ok(vec![card])
 }
 
-/// Resolve the current native source for each visible saved position in one snapshot.
 pub(crate) async fn saved_position_cards(
     pool: &PgPool,
     ids: &[Uuid],
 ) -> ApiResult<std::collections::HashMap<Uuid, Option<CardContent>>> {
+    position_cards(pool, ids, None, true).await
+}
+
+async fn position_cards(
+    pool: &PgPool,
+    ids: &[Uuid],
+    requested: Option<&str>,
+    saved_only: bool,
+) -> ApiResult<std::collections::HashMap<Uuid, Option<CardContent>>> {
+    // Catalog only legacy hosts touched by this bounded occurrence selection.
+    let legacy: Vec<Uuid> = sqlx::query_scalar("SELECT DISTINCT m.id FROM positions p JOIN matches m ON m.id=p.match_uuid WHERE p.id=ANY($1) AND (NOT m.moves_cataloged OR NOT m.imported_analysis_loaded)")
+        .bind(ids).fetch_all(pool).await.map_err(anyhow::Error::from)?;
+    for match_id in legacy {
+        crate::move_catalog::ensure_catalog(pool, match_id).await?;
+        crate::imported_analysis::ensure_catalog(pool, match_id).await?;
+    }
     #[derive(FromRow)]
     struct Row {
         position: sqlx::types::Json<Position>,
         white: String,
         black: String,
-        hint_id: Option<Uuid>,
-        hint: Option<serde_json::Value>,
-        match_job_id: Option<Uuid>,
-        match_plies: Option<i32>,
-        match_data: Option<serde_json::Value>,
-        match_engine: Option<String>,
+        format: String,
+        analysis_id: Option<String>,
+        job_id: Option<Uuid>,
+        job_kind: Option<String>,
+        engine: Option<String>,
+        plies: Option<i32>,
+        result: Option<serde_json::Value>,
+        decision: Option<serde_json::Value>,
+        imported_id: Option<Uuid>,
+        imported: Option<serde_json::Value>,
+        event: Option<sqlx::types::Json<crate::move_catalog::StoredMove>>,
     }
     let rows = sqlx::query_as::<_, Row>(&format!(
-        "SELECT to_jsonb(p) AS position,m.white,m.black,hint.id AS hint_id,hint.result AS hint,
-                native.job_id AS match_job_id,native.plies AS match_plies,
-                native.data AS match_data,native.engine AS match_engine
-         FROM positions p JOIN saved_positions saved ON saved.position_uuid=p.id
-         JOIN matches m ON m.id=p.match_uuid
-         LEFT JOIN LATERAL (
-             SELECT j.id,j.result FROM selected_engine_jobs j
-             WHERE j.position_uuid=p.id AND j.kind='analysis' AND j.status='completed'
-                 AND j.result IS NOT NULL
-             ORDER BY j.plies DESC,j.created_at DESC,j.id DESC LIMIT 1
-         ) hint ON true
-         LEFT JOIN LATERAL (
-             SELECT j.id AS job_id,j.plies,ma.data,
-                 CASE WHEN jsonb_typeof(j.result->'engine')='string'
-                 THEN j.result->>'engine' ELSE 'GNU Backgammon' END AS engine
-             FROM move_analyses ma JOIN selected_engine_jobs j ON j.id=ma.job_id
-             WHERE ma.position_uuid=p.id AND ma.kind='checker' AND ma.game_no=p.game_no
-                 AND j.kind='match' AND j.status='completed' AND j.match_uuid=m.id
-                 AND j.source_revision=m.source_revision AND (j.game_no IS NULL OR j.game_no=p.game_no)
-             ORDER BY j.plies DESC,j.created_at DESC,j.id DESC,ma.id DESC LIMIT 1
-         ) native ON hint.id IS NULL
-         WHERE p.id=ANY($1) AND {}",
+        "SELECT to_jsonb(p) AS position,m.white,m.black,m.format,c.analysis_id,c.engine,j.id AS job_id,j.kind AS job_kind,j.plies,j.result,
+                ma.data AS decision,ia.id AS imported_id,ia.data AS imported,to_jsonb(e) AS event
+         FROM positions p JOIN matches m ON m.id=p.match_uuid
+         LEFT JOIN effective_analysis_selections selected ON selected.match_id=m.id
+         LEFT JOIN analysis_catalog_sources c ON c.match_id=m.id AND c.analysis_id=coalesce($2,selected.analysis_id)
+         LEFT JOIN jobs j ON j.id=c.job_id AND (j.kind='match' AND (j.game_no IS NULL OR j.game_no=p.game_no) OR j.kind='analysis' AND j.position_uuid=p.id)
+         LEFT JOIN LATERAL (SELECT data FROM move_analyses WHERE job_id=j.id AND position_uuid=p.id AND game_no=p.game_no AND kind='checker' ORDER BY id DESC LIMIT 1) ma ON true
+         LEFT JOIN LATERAL (SELECT id,data,source_move_no FROM primary_imported_analyses WHERE match_uuid=m.id AND position_uuid=p.id AND kind='checker' ORDER BY source_ordinal LIMIT 1) ia ON c.source='imported'
+         LEFT JOIN match_moves e ON e.match_uuid=m.id AND e.game_no=p.game_no AND e.move_no=ia.source_move_no AND e.position_uuid=p.id
+         WHERE p.id=ANY($1) AND (NOT $3 OR EXISTS(SELECT 1 FROM saved_positions s WHERE s.position_uuid=p.id)) AND {}",
         crate::position_browser::SAVED_VISIBLE,
-    ))
-    .bind(ids)
-    .fetch_all(pool)
-    .await
-    .map_err(anyhow::Error::from)?;
-
-    let mut sources = std::collections::HashMap::with_capacity(rows.len());
+    )).bind(ids).bind(requested).bind(saved_only).fetch_all(pool).await.map_err(anyhow::Error::from)?;
+    let mut output = std::collections::HashMap::with_capacity(rows.len());
     for row in rows {
         let position = row.position.0;
         let id = position.id;
-        let selected = if let (Some(job), Some(value)) = (row.hint_id, row.hint) {
-            let analysis: Analysis = serde_json::from_value(value).map_err(anyhow::Error::from)?;
-            Some((
-                "analysis",
-                job,
-                position.notation.clone(),
-                CardSolution {
-                    engine: analysis.engine,
-                    plies: analysis.plies,
-                    candidates: analysis.candidates,
-                    decision: None,
-                },
-            ))
-        } else if let (Some(job), Some(plies), Some(value), Some(engine)) = (
-            row.match_job_id,
-            row.match_plies,
-            row.match_data,
-            row.match_engine,
-        ) {
-            let decision: Decision = serde_json::from_value(value).map_err(anyhow::Error::from)?;
-            Some((
-                "match",
-                job,
-                decision.played.clone(),
-                CardSolution {
-                    engine,
-                    plies,
-                    candidates: vec![],
-                    decision: Some(decision),
-                },
-            ))
-        } else {
-            None
-        };
-        sources.insert(
-            id,
-            selected.and_then(|(kind, job_id, played, solution)| {
-                if !has_usable_checker_solution(&solution) {
-                    return None;
-                }
-                Some(CardContent {
+        let players = [row.white, row.black];
+        let card = if let (Some(imported_id), Some(value), Some(event)) =
+            (row.imported_id, row.imported, row.event)
+        {
+            imported_card(
+                imported_id,
+                value,
+                event.0,
+                Some(position.ply),
+                players,
+                &row.format,
+            )
+        } else if let (Some(job_id), Some(kind), Some(plies), Some(engine)) =
+            (row.job_id, row.job_kind, row.plies, row.engine)
+        {
+            let solution = if kind == "analysis" {
+                row.result
+                    .and_then(|v| serde_json::from_value::<Analysis>(v).ok())
+                    .map(|a| CardSolution {
+                        engine: a.engine,
+                        plies: Some(a.plies),
+                        candidates: a.candidates,
+                        decision: None,
+                        imported: None,
+                    })
+            } else {
+                row.decision
+                    .and_then(|v| serde_json::from_value::<Decision>(v).ok())
+                    .map(|decision| CardSolution {
+                        engine,
+                        plies: Some(plies),
+                        candidates: vec![],
+                        decision: Some(decision),
+                        imported: None,
+                    })
+            };
+            solution
+                .filter(has_usable_checker_solution)
+                .map(|solution| CardContent {
                     kind: "checker".into(),
                     prompt: prompt("checker").into(),
-                    played,
+                    played: solution
+                        .decision
+                        .as_ref()
+                        .map(|d| d.played.clone())
+                        .unwrap_or_else(|| position.notation.clone()),
                     source: CardSource {
-                        kind: kind.into(),
-                        job_id,
+                        kind,
+                        job_id: Some(job_id),
+                        analysis_id: row.analysis_id,
+                        imported_analysis_id: None,
                         match_id: position.match_uuid,
                         position_id: Some(id),
                         game_no: position.game_no,
-                        decision_no: solution
-                            .decision
-                            .as_ref()
-                            .map(|decision| decision.decision_no),
+                        decision_no: solution.decision.as_ref().map(|d| d.decision_no),
                     },
                     solution,
                     position,
-                    players: [row.white, row.black],
+                    players,
                 })
-            }),
-        );
+        } else {
+            None
+        };
+        output.insert(id, card);
     }
-    Ok(sources)
+    Ok(output)
+}
+
+fn imported_card(
+    id: Uuid,
+    value: serde_json::Value,
+    event: crate::move_catalog::StoredMove,
+    checker_ply: Option<i32>,
+    players: [String; 2],
+    format: &str,
+) -> Option<CardContent> {
+    let record =
+        serde_json::from_value::<crate::imported_analysis::ImportedAnalysisData>(value).ok()?;
+    let source = crate::recurring_mistakes::imported_projection::source_move(&event, checker_ply)?;
+    let projected = crate::recurring_mistakes::imported_projection::project(
+        &record,
+        &source,
+        event.match_uuid,
+        event.position_uuid,
+        format,
+    )?;
+    let kind = if record.kind == "checker" {
+        "checker"
+    } else if matches!(projected.decision.played.as_str(), "take" | "drop") {
+        "cube_response"
+    } else {
+        "cube_offer"
+    };
+    Some(CardContent {
+        kind: kind.into(),
+        prompt: prompt(kind).into(),
+        played: projected.decision.played.clone(),
+        source: CardSource {
+            kind: "imported".into(),
+            job_id: None,
+            analysis_id: Some(format!("imported:{}", event.match_uuid)),
+            imported_analysis_id: Some(id),
+            match_id: event.match_uuid,
+            position_id: event.position_uuid,
+            game_no: event.game_no,
+            decision_no: Some(event.move_no),
+        },
+        solution: CardSolution {
+            engine: record.engine.clone(),
+            plies: projected.depth_plies,
+            candidates: vec![],
+            decision: Some(projected.decision),
+            imported: Some(record),
+        },
+        position: projected.position,
+        players,
+    })
+}
+
+async fn imported_match(
+    pool: &PgPool,
+    match_id: Uuid,
+    request: &AddCards,
+) -> ApiResult<Vec<CardContent>> {
+    crate::move_catalog::ensure_catalog(pool, match_id).await?;
+    #[derive(FromRow)]
+    struct Row {
+        id: Uuid,
+        data: serde_json::Value,
+        event: Option<sqlx::types::Json<crate::move_catalog::StoredMove>>,
+        checker_ply: Option<i32>,
+        white: String,
+        black: String,
+        format: String,
+    }
+    let rows=sqlx::query_as::<_,Row>("SELECT ia.id,ia.data,to_jsonb(e) AS event,p.ply AS checker_ply,m.white,m.black,m.format FROM primary_imported_analyses ia JOIN matches m ON m.id=ia.match_uuid LEFT JOIN match_moves e ON e.match_uuid=ia.match_uuid AND e.game_no=ia.game_no AND e.move_no=ia.source_move_no AND e.position_uuid IS NOT DISTINCT FROM ia.position_uuid LEFT JOIN positions p ON p.id=e.position_uuid WHERE m.id=$1 AND NOT m.collection_only AND ia.kind IN ('checker','cube') AND ($2::integer IS NULL OR ia.game_no=$2) AND ($3::integer IS NULL OR ia.player=$3) ORDER BY ia.game_no,ia.source_move_no,ia.source_ordinal LIMIT 200001")
+        .bind(match_id).bind(request.game_no).bind(request.player).fetch_all(pool).await.map_err(anyhow::Error::from)?;
+    if rows.len() > 200000 {
+        return Err(ApiError::invalid(
+            "Analysis exceeds supported decision count",
+        ));
+    }
+    let mut output = Vec::new();
+    for row in rows {
+        let card=imported_card(row.id,row.data,row.event.ok_or_else(||ApiError::invalid("The selected imported analysis lacks its original decision context"))?.0,row.checker_ply,[row.white,row.black],&row.format)
+            .ok_or_else(||ApiError::invalid("The selected imported analysis contains an unsupported solution; select supported positions individually"))?;
+        if request.min_loss.is_some_and(|loss| {
+            card.solution
+                .decision
+                .as_ref()
+                .is_none_or(|d| d.equity_loss < loss)
+        }) {
+            continue;
+        }
+        output.push(card);
+        if output.len() > MAX_CARDS as usize {
+            return Err(ApiError::invalid(
+                "Batch exceeds 1000 cards; narrow the player or minimum-loss filter",
+            ));
+        }
+    }
+    if output.is_empty() && request.min_loss.is_none() {
+        return Err(ApiError::invalid(
+            "The selected imported analysis has no supported solutions in this scope",
+        ));
+    }
+    Ok(output)
 }
 
 #[derive(FromRow)]
@@ -270,9 +353,9 @@ async fn from_match(pool: &PgPool, id: Uuid, request: &AddCards) -> ApiResult<Ve
     let job = store::get_job(pool, id)
         .await?
         .ok_or_else(ApiError::missing)?;
-    if job.kind != "match" || job.status != "completed" {
+    if job.kind != "match" {
         return Err(ApiError::invalid(
-            "job_id must refer to a completed match analysis",
+            "job_id must refer to a saved match analysis",
         ));
     }
     let match_id = job.match_uuid.context("Match job lacks match UUID")?;
@@ -304,7 +387,7 @@ async fn from_match(pool: &PgPool, id: Uuid, request: &AddCards) -> ApiResult<Ve
             .fetch_one(pool)
             .await
             .map_err(anyhow::Error::from)?;
-    let rows:Vec<DecisionRow>=sqlx::query_as("SELECT position_uuid,game_no,data FROM move_analyses WHERE job_id=$1 AND ($2::integer IS NULL OR game_no=$2) ORDER BY game_no,decision_no LIMIT 200001").bind(id).bind(request.game_no).fetch_all(pool).await.map_err(anyhow::Error::from)?;
+    let rows:Vec<DecisionRow>=sqlx::query_as("SELECT ma.position_uuid,ma.game_no,ma.data FROM move_analyses ma JOIN match_analysis_games c ON c.job_id=ma.job_id AND c.game_no=ma.game_no WHERE ma.job_id=$1 AND ($2::integer IS NULL OR ma.game_no=$2) ORDER BY ma.game_no,ma.decision_no LIMIT 200001").bind(id).bind(request.game_no).fetch_all(pool).await.map_err(anyhow::Error::from)?;
     if rows.len() > 200000 {
         return Err(ApiError::invalid(
             "Analysis exceeds supported decision count",
@@ -312,13 +395,15 @@ async fn from_match(pool: &PgPool, id: Uuid, request: &AddCards) -> ApiResult<Ve
     }
     let player = request.player;
     let min_loss = request.min_loss.unwrap_or(0.0);
-    let engine = job
-        .result
-        .as_ref()
-        .and_then(|r| r.get("engine"))
-        .and_then(|e| e.as_str())
-        .unwrap_or("GNU Backgammon")
-        .to_owned();
+    let engine: String = sqlx::query_scalar(
+        "SELECT engine FROM analysis_catalog_sources WHERE match_id=$1 AND job_id=$2",
+    )
+    .bind(match_id)
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .map_err(anyhow::Error::from)?
+    .ok_or_else(|| ApiError::invalid("The selected analysis is no longer available"))?;
     let contents = tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<CardContent>> {
         let (_, contexts) = crate::import::sgf::parse_sgf_with_context(&sgf)?;
         let mut output = Vec::new();
@@ -377,7 +462,7 @@ async fn from_match(pool: &PgPool, id: Uuid, request: &AddCards) -> ApiResult<Ve
                 gnubg_match_id: match_state_id.clone(),
                 notation: String::new(),
             };
-            output.push(match_card(
+            let card=match_card(
                 kind,
                 position,
                 [white.clone(), black.clone()],
@@ -385,18 +470,20 @@ async fn from_match(pool: &PgPool, id: Uuid, request: &AddCards) -> ApiResult<Ve
                 engine.clone(),
                 job.plies,
                 d,
-            ));
+            );
+            ensure!(
+                if kind=="checker" {has_usable_checker_solution(&card.solution)} else {
+                    card.solution.decision.as_ref().is_some_and(|d| crate::match_analysis::evaluated_equities(d).is_some())
+                },
+                "The selected analysis contains an unavailable decision; select supported positions individually"
+            );
+            output.push(card);
         }
         Ok(output)
     })
     .await
     .map_err(anyhow::Error::from)?;
-    match contents {
-        Err(e) if e.to_string().starts_with("Batch exceeds") => {
-            Err(ApiError::invalid(e.to_string()))
-        }
-        result => Ok(result?),
-    }
+    contents.map_err(|error| ApiError::invalid(error.to_string()))
 }
 pub(super) fn match_card(
     kind: &str,
@@ -413,7 +500,9 @@ pub(super) fn match_card(
         players,
         source: CardSource {
             kind: "match".into(),
-            job_id,
+            job_id: Some(job_id),
+            analysis_id: Some(format!("job:{job_id}")),
+            imported_analysis_id: None,
             match_id: position.match_uuid,
             position_id: (!position.id.is_nil()).then_some(position.id),
             game_no: position.game_no,
@@ -422,7 +511,8 @@ pub(super) fn match_card(
         played: decision.played.clone(),
         solution: CardSolution {
             engine,
-            plies,
+            plies: Some(plies),
+            imported: None,
             candidates: vec![],
             decision: Some(decision),
         },

@@ -414,7 +414,12 @@ function CardSolution({
   return (
     <div className="study-solution-source">
       <p>
-        {label}: {engine} · {formatNumber(plies)}-ply
+        {label}: {engine}
+        {plies == null
+          ? answer.solution.imported?.depth
+            ? ` · ${answer.solution.imported.depth}`
+            : ''
+          : ` · ${formatNumber(plies)}-ply`}
       </p>
       {decision && (
         <div className="study-decision">

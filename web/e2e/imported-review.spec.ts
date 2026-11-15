@@ -9,11 +9,7 @@ test('all-games review follows the listed checker and cube errors across games',
   await page
     .getByLabel('Match file', { exact: true })
     .setInputFiles('../backend/tests/fixtures/WC2014.xg');
-  await page.getByRole('button', { name: 'Analyze game or match …' }).click();
-  await page
-    .getByLabel('Analysis scope', { exact: true })
-    .selectOption('match');
-  await page.getByRole('button', { name: 'Analyze game or match …' }).click();
+  await page.getByRole('tab', { name: 'Errors', exact: true }).click();
   await page
     .getByLabel('Filter analysis by player', { exact: true })
     .selectOption('0');
@@ -131,6 +127,38 @@ test('imported decisions work in the error list and next-error navigation withou
     depth: 'XGRoller+',
     depth_plies: null,
   }));
+  const importedEntry = {
+    id: `imported:${match.id}`,
+    source: 'imported',
+    scope: 'match',
+    engine: 'eXtreme Gammon',
+    depth: 'XGRoller+',
+    game_no: null,
+    position_id: null,
+    created_at: match.created_at,
+    status: 'completed',
+    complete: false,
+    checker_count: errors.length,
+    cube_count: errors.length,
+    job: null,
+  };
+  await page.route(`**/api/matches/${match.id}/analyses?*`, (route) =>
+    route.fulfill({
+      json: {
+        match_id: match.id,
+        items: [importedEntry],
+        selected: importedEntry,
+        selected_id: null,
+        next_cursor: null,
+      },
+    }),
+  );
+  await page.route('**/api/positions/*/analysis-result?*', (route) =>
+    route.fulfill({ json: null }),
+  );
+  await page.route('**/api/positions/*/jobs?*', (route) =>
+    route.fulfill({ json: [] }),
+  );
   await page.route(`**/api/matches/${match.id}/review-decisions?*`, (route) => {
     const query = new URL(route.request().url()).searchParams;
     const items =
@@ -188,7 +216,7 @@ test('imported decisions work in the error list and next-error navigation withou
   const board = page.locator('.board-panel');
   await expect(
     board.getByRole('group', { name: 'Review errors' }),
-  ).toContainText('Game 1 · Both players · Cube');
+  ).toContainText('All games in this analysis · Both players · Cube');
   await expect(board.getByRole('button', { name: 'Next error' })).toBeVisible();
   await next.click();
   await expect(board.locator('.board-heading')).toContainText('Move 4');
@@ -262,19 +290,23 @@ test('real XG review opens checker and cube decisions with original source and c
     `Zug ${checker.checker_no}`,
   );
   await expect(
-    page.getByRole('tab', { name: 'Importierte Analyse', exact: true }),
-  ).toHaveAttribute('aria-selected', 'true');
+    page.getByLabel('Angezeigte Analyse', { exact: true }).locator('option[value^="imported:"]'),
+  ).toHaveCount(1);
   await expect(
-    page.locator('.candidate-comparison-table .candidate-marker-played'),
+    page.locator(
+      '.analysis-panel > .source-analysis .candidate-comparison-table .candidate-marker-played',
+    ),
   ).toBeVisible();
   for (const name of ['Gesamt', 'Einfach', 'Gammon', 'Backgammon']) {
     await expect(
       page.getByRole('columnheader', { name, exact: true }),
     ).toBeVisible();
   }
-  await expect(page.locator('.candidate-comparison-table')).toContainText(
-    'Verlust',
-  );
+  await expect(
+    page.locator(
+      '.analysis-panel > .source-analysis .candidate-comparison-table',
+    ),
+  ).toContainText('Verlust');
   await expect(
     page.locator('.board-shell a[href*="bgblitz.com/themes.html"]'),
   ).toHaveCount(0);
@@ -305,7 +337,7 @@ test('real XG review opens checker and cube decisions with original source and c
       path: `/tmp/bgtutor-review-${viewport.width}.png`,
     });
     const candidateWidth = await page
-      .locator('.source-candidates')
+      .locator('.analysis-panel > .source-analysis .source-candidates')
       .evaluate((wrapper) => ({
         available: wrapper.clientWidth,
         used: wrapper.scrollWidth,
@@ -390,7 +422,8 @@ test('a late review page jumps straight to its neighboring page', async ({ page 
   const queries: URLSearchParams[] = [];
   const collect = (request: import('@playwright/test').Request) => {
     const url = new URL(request.url());
-    if (url.pathname.endsWith('/review-decisions')) queries.push(url.searchParams);
+    if (url.pathname.endsWith('/review-decisions'))
+      queries.push(url.searchParams);
   };
   page.on('request', collect);
   await board.getByRole('button', { name: 'Next decision', exact: true }).click();

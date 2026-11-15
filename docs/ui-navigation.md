@@ -55,20 +55,27 @@ The merge search has its own page controls.
 
 **Overview** places the position analysis beside the board, with the error list
 below both. Its analysis views are **Candidates**, **Dice equity**, and **Game
-rolls**. Native match and game statistics are available in **Statistics**.
+rolls**. Saved analysis statistics are available in **Statistics**.
 
-The position pane shows saved results with their source and depth. **Recalculate
-position …** opens the search depth and the start action in a dialog. The dice
-view has its own **Recalculate dice equity …** dialog. **Analyze game or match …**
-reveals the scope, engine, depth and time estimate in the command bar. The
-scope and engine select the jobs used by **Errors** and **Statistics**. The
-latest job for that selection and other running jobs tracked in the session
-appear above the analysis tabs.
-Open **Compare game analyses** or **Compare match analyses** to see GNUbg and
-Open Sage side by side for the selected game or the whole match. The game comparison also uses the selected game’s saved statistics from completed whole-match analyses. Each engine defaults to a completed 3-ply run when
-available, with other recorded depths and job states in its selector. The table
-shows each player's saved checker and cube decision counts and equity losses.
-GNUbg's native PR is shown in the GNUbg column when available.
+**Displayed analysis** in the header chooses one saved result for checker and
+cube review, move marks, statistics and new learning cards. Entries identify
+their engine, depth, scope and date; details include origin and coverage.
+The choice persists per match and is independent of calculation preferences.
+Missing results remain explicitly unavailable. Older results are paginated;
+**Load more analyses** includes them in the same selector. Imported and standalone
+position results show their saved candidates. Native match and game decisions
+show the played and best actions. **Opening book** is an expandable reference
+beneath the selected result.
+
+**Recalculate position …** opens the search depth and start action in a dialog.
+The dice view has its own **Recalculate dice equity …** dialog. **Analyze game
+or match …** reveals the scope, engine, depth and time estimate in the command
+bar. The latest job for those calculation settings and other running jobs
+tracked in the session appear above the analysis tabs. Job monitoring does not
+change **Displayed analysis**. **Compare saved analyses** lets the user choose
+any two catalog entries side by side without changing the displayed result.
+The table shows saved checker and cube counts and equity losses; native GNUbg
+PR appears only where it was recorded.
 Above the board, **Previous error** and **Next error** follow the list filters
 and show the current result's index and the total. When all games are selected,
 the buttons cycle across game boundaries. Turning off **Inaccuracies only**
@@ -174,9 +181,9 @@ The evaluation and the original decision are shown together. Reveal is also
 available. Next hides the solution again.
 Escape closes practice and returns focus to its trigger. Leaving the area or
 changing its filters dismisses practice and cancels outstanding requests.
-Completed local analyses take precedence per game; comparable imported XG and
-BGBlitz analyses cover games without one. Practice displays the original source,
-engine and search/rollout depth; unknown depth remains explicitly unknown.
+Each match uses its selected catalog analysis. Comparable imported XG, GNUbg SGF
+and BGBlitz decisions are available through the same selection. Missing scopes
+remain absent; decisions from different analyses are never combined implicitly.
 
 ## Settings
 

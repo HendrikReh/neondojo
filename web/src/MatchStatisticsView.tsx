@@ -1,11 +1,16 @@
 import ActionButton from './ActionButton';
 import EngineLabel from './EngineLabel';
 import type { ReactNode } from 'react';
-import type { Job, MatchAnalysisSummary } from './api';
+import type { components } from './generated-api';
+import type {
+  AnalysisCatalogEntry,
+  MatchAnalysisStatistics,
+} from './analysis-catalog-api';
+import { useAnalysisCatalogText } from './analysis-catalog-messages';
+type MatchAnalysisSummary = components['schemas']['CatalogAnalysisSummary'];
 import { useI18n } from './i18n';
 import {
   nativePerformanceRating,
-  type JobAnalysisStatistics,
   type PlayerErrorBreakdown,
   type StatisticsAction,
   type StatisticsMetric,
@@ -225,7 +230,7 @@ function PlayerStatisticsSummary({
 }
 
 export default function MatchStatisticsView({
-  job,
+  analysisEntry,
   statistics,
   names,
   onSelect,
@@ -236,8 +241,8 @@ export default function MatchStatisticsView({
   progress,
   comparison,
 }: {
-  job?: Job;
-  statistics?: JobAnalysisStatistics;
+  analysisEntry?: AnalysisCatalogEntry;
+  statistics?: MatchAnalysisStatistics;
   names: string[];
   onSelect: SelectMetric;
   onGame?: (gameNo: number) => void;
@@ -249,13 +254,15 @@ export default function MatchStatisticsView({
 }) {
   const text = useStatisticsText();
   const { formatNumber, formatError } = useI18n();
-  // Defense in depth for callers: a new scope never displays an old job's payload.
-  const current = job && statistics?.job_id === job.id ? statistics : undefined;
+  const catalogText = useAnalysisCatalogText();
+  const current =
+    analysisEntry && statistics?.analysis_id === analysisEntry.id
+      ? statistics
+      : undefined;
+  const job =
+    analysisEntry?.job?.kind === 'match' ? analysisEntry.job : undefined;
   const summary = current?.summary;
-  const engine =
-    summary?.engine ??
-    job?.engine_snapshot?.engine_version ??
-    (job?.engine_snapshot?.engine_id === 'bgsage' ? 'Open Sage' : 'GNU Backgammon');
+  const engine = summary?.engine ?? analysisEntry?.engine;
   return (
     <section
       className="match-statistics"
@@ -267,27 +274,30 @@ export default function MatchStatisticsView({
     >
       <h3>{text('title')}</h3>
       {comparison}
-      {!job ? (
-        <p className="analysis-empty">{text('noJob')}</p>
+      {!analysisEntry ? (
+        <p className="analysis-empty">{catalogText('none')}</p>
       ) : (
         <>
           {progress}
           <p className="statistics-source">
             <EngineLabel
-              details={text('source', {
-                engine,
-                plies: summary?.plies ?? job.plies,
-              })}
+              details={[engine, analysisEntry.depth]
+                .filter(Boolean)
+                .join(' · ')}
             />
           </p>
-          <p className="statistics-coverage">
-            {text('coverage', {
-              completed: formatNumber(
-                summary?.completed_games ?? job.completed_games,
-              ),
-              total: formatNumber(summary?.total_games ?? job.total_games),
-            })}
-          </p>
+          {(summary || job) && (
+            <p className="statistics-coverage">
+              {text('coverage', {
+                completed: formatNumber(
+                  summary?.completed_games ?? job?.completed_games ?? 0,
+                ),
+                total: formatNumber(
+                  summary?.total_games ?? job?.total_games ?? 0,
+                ),
+              })}
+            </p>
+          )}
           {summary && (
             <>
               <p className="statistics-coverage">
@@ -301,7 +311,7 @@ export default function MatchStatisticsView({
                 errorBreakdown={current?.error_breakdown}
                 names={names}
                 onSelect={onSelect}
-                gameNo={job.game_no ?? undefined}
+                gameNo={analysisEntry.game_no ?? undefined}
               />
               <p className="analysis-method">{text('prMethod')}</p>
             </>

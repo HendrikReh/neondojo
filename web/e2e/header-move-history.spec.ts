@@ -31,6 +31,14 @@ async function openMatch(
   });
   expect(response.ok()).toBe(true);
   const imported = await response.json();
+  const analyzed = await page.request.post(`/api/matches/${imported.match.id}/analysis`, {
+    data: { engine_id: 'gnubg', plies: 0 },
+  });
+  expect(analyzed.status()).toBe(202);
+  const job = await analyzed.json();
+  await expect.poll(async () =>
+    (await (await page.request.get(`/api/jobs/${job.id}`)).json()).status,
+  ).toBe('completed');
   const positions = (
     await (
       await page.request.get(
@@ -45,11 +53,12 @@ async function openMatch(
         match_id: imported.match.id,
         game_no: 1,
         job_id: query.get('job_id'),
+        analysis_id: query.get('analysis_id'),
         items: positions.slice(0, 4).map((position, index) => ({
           position_id: position.id,
           severity: ['none', 'doubtful', 'bad', 'very_bad'][index],
           equity_loss: [0, 0.045, 0.092, 0.188][index],
-          source: index % 2 ? 'imported' : 'native',
+          source: 'native',
           engine: 'Reference GNUbg',
           depth: '2-ply',
           depth_plies: 2,

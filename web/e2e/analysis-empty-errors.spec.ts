@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import type { ReviewDecision } from '../src/review-decisions-api';
 import { expect, test } from './test';
 
@@ -67,7 +68,9 @@ for (const scenario of ['missing', 'filtered', 'clean'] as const) {
       name: 'empty-errors.sgf',
       mimeType: 'application/octet-stream',
       buffer: Buffer.from(
-        `(;GM[6]PW[Review ${crypto.randomUUID()}]PB[Opponent]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])`,
+        readFileSync('../backend/tests/fixtures/analysis-game1.sgf', 'utf8').replace(
+          /PW\[[^\]]*\]/, `PW[Review ${crypto.randomUUID()}]`,
+        ),
       ),
     });
     await page.getByRole('tab', { name: 'Errors', exact: true }).click();
@@ -77,16 +80,14 @@ for (const scenario of ['missing', 'filtered', 'clean'] as const) {
     const boardEmpty = board.locator('.analysis-empty');
 
     if (scenario === 'missing') {
-      const scope = page.getByLabel('Analysis scope', { exact: true });
-      await expect(scope).toBeHidden();
+      const selection = page.getByLabel('Displayed analysis', { exact: true });
+      await expect(selection).toBeVisible();
       await expect(empty).toContainText('No evaluated decisions are available');
       await expect(boardEmpty).toHaveText(await empty.innerText(), {
         useInnerText: true,
       });
-      await boardEmpty
-        .getByRole('button', { name: 'Analyze game or match …' })
-        .click();
-      await expect(scope).toBeFocused();
+      await expect(empty.getByRole('button')).toHaveCount(0);
+      await expect(boardEmpty.getByRole('button')).toHaveCount(0);
     } else if (scenario === 'filtered') {
       const kind = panel.getByLabel('Filter analysis by decision', {
         exact: true,

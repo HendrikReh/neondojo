@@ -103,6 +103,7 @@ function props(
     },
     jobs: {
       jobs: {},
+      refresh: () => {},
       ...{ completedAnalysis: undefined },
       error: null,
       submitting: false,
@@ -186,7 +187,7 @@ it.each(['notes', 'cards'] as const)(
   },
 );
 
-it('keeps the full match workflow for an available original source', () => {
+it('keeps full-match controls and waits for a catalog selection before requesting assessments', () => {
   const html = render('statistics', true);
   expect(html).toContain('data-full-match-analysis="true"');
   expect(html).toContain('id="inspector-tab-statistics"');
@@ -194,7 +195,7 @@ it('keeps the full match workflow for an available original source', () => {
   expect(html).toContain('class="workspace-analysis-command"');
   expect(html).not.toContain('Original match removed; saved position retained');
   expect(useMoveAssessments).toHaveBeenCalledWith(
-    expect.objectContaining({ matchId: match.id }),
+    expect.objectContaining({ matchId: undefined, analysisId: undefined }),
   );
 });
 

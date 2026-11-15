@@ -196,6 +196,7 @@ test('native error is paired with its actual engine depth and job', () => {
         {
           ...hit,
           native_error: {
+            analysis_id: 'job:native-job',
             engine: 'gnubg',
             plies: 2,
             job_id: 'native-job',
@@ -242,4 +243,34 @@ test('retained preview explains that the source is gone while individual analysi
   expect(html).toContain('Original match removed; saved position retained');
   expect(html).toMatch(/<button\b[^>]*aria-label="Open analysis"[^>]*>/);
   expect(html).toContain('class="board-shell ');
+});
+
+test('imported error provenance retains its original depth and never claims a native job', () => {
+  const html = render(
+    createElement(PositionBrowserResults, {
+      items: [
+        {
+          ...hit,
+          native_error: {
+            analysis_id: 'imported:match',
+            imported_analysis_id: 'record',
+            engine: 'XG',
+            plies: null,
+            depth: 'XGRoller++',
+            job_id: null,
+            equity_loss: 0.04,
+            severity: 'bad',
+          },
+        },
+      ],
+      selected: new Set<string>(),
+      onPreview: () => {},
+      onToggle: () => {},
+      onOpen: () => {},
+      busy: false,
+    }),
+  );
+  expect(html).toContain('Imported · XG · XGRoller++');
+  expect(html).not.toContain('null ply');
+  expect(html).not.toContain('job null');
 });
