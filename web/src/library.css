@@ -137,6 +137,10 @@
   border-radius: 8px;
   margin-bottom: 12px;
 }
+.library-batch-bar[data-has-selection='false'] {
+  background: var(--ui-surface);
+  border-color: var(--ui-border);
+}
 .library-batch-bar strong {
   font-size: var(--font-size-table);
   margin-right: auto;
