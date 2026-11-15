@@ -477,11 +477,7 @@ pub async fn latest_match_job_scoped(
     game_no: Option<i32>,
     engine_id: Option<&str>,
 ) -> Result<Option<Job>> {
-    let mut query = QueryBuilder::new(if engine_id.is_some() {
-        "SELECT * FROM jobs"
-    } else {
-        "SELECT * FROM selected_engine_jobs"
-    });
+    let mut query = QueryBuilder::new("SELECT * FROM jobs");
     query
         .push(" WHERE source_revision=(SELECT source_revision FROM matches WHERE id=")
         .push_bind(match_id)

@@ -47,7 +47,7 @@ const de = {
   player: 'Spieler',
   both: 'Beide Spieler',
   addHint:
-    'Zuerst die Position oder Partie analysieren. Tags und Kommentare werden für die Karten übernommen.',
+    'Die oben gewählte Analyse wird für die Karten verwendet. Tags und Kommentare werden für die Karten übernommen.',
   added: '{count} Karten verarbeitet.',
   adding: 'Karten werden gespeichert …',
   back: 'Zurück zur Kartensuche',
@@ -122,7 +122,7 @@ const en: Messages = {
   player: 'Player',
   both: 'Both players',
   addHint:
-    'Analyze the position or match first. Tags and comments are included in the cards.',
+    'Cards use the analysis selected above. Tags and comments are included in the cards.',
   added: 'Processed {count} cards.',
   adding: 'Saving cards …',
   back: 'Back to card search',
@@ -195,7 +195,7 @@ const es: Messages = {
   player: 'Jugador',
   both: 'Ambos jugadores',
   addHint:
-    'Primero analiza la posición o la partida. Las tarjetas incluyen las etiquetas y los comentarios.',
+    'Las tarjetas usan el análisis seleccionado arriba. Las tarjetas incluyen las etiquetas y los comentarios.',
   added: '{count} tarjetas procesadas.',
   adding: 'Guardando tarjetas …',
   back: 'Volver a la búsqueda de tarjetas',
@@ -269,7 +269,7 @@ const fr: Messages = {
   player: 'Joueur',
   both: 'Les deux joueurs',
   addHint:
-    'Analysez d’abord la position ou le match. Les étiquettes et commentaires sont inclus dans les cartes.',
+    'Les cartes utilisent l’analyse choisie ci-dessus. Les étiquettes et commentaires sont inclus dans les cartes.',
   added: '{count} cartes traitées.',
   adding: 'Enregistrement des cartes …',
   back: 'Retour à la recherche de cartes',
@@ -342,7 +342,7 @@ const pl: Messages = {
   player: 'Gracz',
   both: 'Obaj gracze',
   addHint:
-    'Najpierw przeanalizuj pozycję lub mecz. Tagi i komentarze są dołączane do kart.',
+    'Karty korzystają z analizy wybranej powyżej. Tagi i komentarze są dołączane do kart.',
   added: 'Przetworzono {count} kart.',
   adding: 'Zapisywanie kart …',
   back: 'Wróć do wyszukiwania fiszek',
@@ -415,7 +415,7 @@ const it: Messages = {
   player: 'Giocatore',
   both: 'Entrambi i giocatori',
   addHint:
-    'Analizza prima la posizione o la partita. Le schede includono tag e commenti.',
+    'Le schede usano l’analisi selezionata sopra. Le schede includono tag e commenti.',
   added: '{count} schede elaborate.',
   adding: 'Salvataggio schede …',
   back: 'Torna alla ricerca delle schede',

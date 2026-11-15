@@ -1,8 +1,10 @@
-//! Game-bounded checker assessments with explicit source and evaluation provenance.
+//! Checker marks use the same selected, validated decisions as review and statistics.
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
-    imported_analysis::ImportedAnalysisData,
-    model::{Job, MoveSeverity, Position},
+    engine::Analysis,
+    match_analysis::Decision,
+    model::{MoveSeverity, Position},
+    review_decisions::load_all_review,
 };
 use axum::{
     Json, Router,
@@ -11,199 +13,120 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sqlx::FromRow;
-use std::collections::HashMap;
 use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
 
-// Matches the supported import limit. Every SQL result is bounded before any
-// notation is replayed; this endpoint never starts engine work.
-const MAX_GAME_POSITIONS: usize = 100_000;
-
 #[derive(Debug, Deserialize, IntoParams)]
 pub struct MoveAssessmentQuery {
-    /// One source game, required so loading history never scans the whole match.
     pub game_no: i32,
-    /// Selected native match-analysis job; its scope must include this game.
+    /// Legacy explicit job identity; use analysis_id for native and imported results.
     pub job_id: Option<Uuid>,
+    pub analysis_id: Option<String>,
 }
-
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum AssessmentSource {
     Native,
     Imported,
 }
-
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct MoveAssessment {
-    /// Persisted checker-position UUID, not a GNUbg position encoding.
     pub position_id: Uuid,
     pub severity: MoveSeverity,
-    /// Actual best-minus-played equity, never a default for missing evaluation.
     pub equity_loss: f64,
+    pub best_move: Option<String>,
     pub source: AssessmentSource,
     pub engine: String,
     pub depth: Option<String>,
     pub depth_plies: Option<i32>,
-    /// Native match-analysis or individual-hint job that supplied this result.
     pub job_id: Option<Uuid>,
 }
-
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct GameMoveAssessments {
     pub match_id: Uuid,
     pub game_no: i32,
-    /// Requested job identity, null when the caller allowed automatic selection.
     pub job_id: Option<Uuid>,
-    /// Unknown, unavailable, invalid and non-comparable evaluations are omitted.
+    pub analysis_id: Option<String>,
     pub items: Vec<MoveAssessment>,
 }
-
-#[derive(FromRow)]
-struct NativeRow {
-    position_uuid: Uuid,
-    job_id: Uuid,
-    plies: i32,
-    engine: String,
-    equity_loss: f64,
-    data: Value,
-}
-
-#[derive(FromRow)]
-struct HintRow {
-    position_uuid: Uuid,
-    job_id: Uuid,
-    plies: i32,
-    result: Value,
-}
-
 pub fn routes() -> Router<AppState> {
     Router::new().route("/api/matches/{id}/move-assessments", get(assessments))
 }
-
-#[utoipa::path(get, path="/api/matches/{id}/move-assessments", params(("id"=Uuid,Path),MoveAssessmentQuery), responses((status=200,body=GameMoveAssessments),(status=404,body=ErrorBody),(status=422,body=ErrorBody)), tag="Match analysis")]
+#[utoipa::path(get,path="/api/matches/{id}/move-assessments",params(("id"=Uuid,Path),MoveAssessmentQuery),responses((status=200,body=GameMoveAssessments),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Match analysis")]
 async fn assessments(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    Query(query): Query<MoveAssessmentQuery>,
+    query: Result<Query<MoveAssessmentQuery>, axum::extract::rejection::QueryRejection>,
 ) -> ApiResult<Json<GameMoveAssessments>> {
-    crate::play::require_review_available(&state.pool, id).await?;
+    let Query(query) = query.map_err(|e| ApiError::invalid(e.body_text()))?;
     if query.game_no <= 0 {
         return Err(ApiError::invalid("game_no must be positive"));
     }
-    // Reuse the established lazy source catalog for pre-catalog libraries.
-    if !crate::imported_analysis::ensure_catalog(&state.pool, id).await? {
-        return Err(ApiError::missing());
-    }
-    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
-    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
-        .execute(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?;
-    let game_exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM match_games WHERE match_uuid=$1 AND game_no=$2)",
-    )
-    .bind(id)
-    .bind(query.game_no)
-    .fetch_one(&mut *tx)
-    .await
-    .map_err(anyhow::Error::from)?;
-    if !game_exists {
-        return Err(ApiError::missing());
-    }
-    if let Some(job_id) = query.job_id {
-        let job: Job = sqlx::query_as("SELECT * FROM jobs WHERE id=$1")
-            .bind(job_id)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(anyhow::Error::from)?
-            .ok_or_else(ApiError::missing)?;
-        if job.kind != "match"
-            || job.match_uuid != Some(id)
-            || job.game_no.is_some_and(|game| game != query.game_no)
-        {
-            return Err(ApiError::invalid(
-                "job_id must be a match analysis of this match and game",
-            ));
-        }
-    }
-    let limit = (MAX_GAME_POSITIONS + 1) as i64;
-    let positions: Vec<Position> = sqlx::query_as(
-        "SELECT * FROM positions WHERE match_uuid=$1 AND game_no=$2 ORDER BY ordinal LIMIT $3",
-    )
-    .bind(id)
-    .bind(query.game_no)
-    .bind(limit)
-    .fetch_all(&mut *tx)
-    .await
-    .map_err(anyhow::Error::from)?;
-    let native: Vec<NativeRow> = sqlx::query_as("SELECT DISTINCT ON (ma.position_uuid) ma.position_uuid,j.id AS job_id,j.plies,coalesce(nullif(j.result->>'engine',''),'GNU Backgammon') AS engine,ma.equity_loss,ma.data FROM positions p JOIN move_analyses ma ON ma.position_uuid=p.id AND ma.game_no=p.game_no AND ma.player=p.player AND ma.kind='checker' JOIN jobs j ON j.id=ma.job_id AND j.kind='match' AND j.match_uuid=p.match_uuid AND (j.game_no IS NULL OR j.game_no=p.game_no) JOIN match_analysis_games c ON c.job_id=j.id AND c.game_no=p.game_no WHERE p.match_uuid=$1 AND p.game_no=$2 AND (($3::uuid IS NOT NULL AND j.id=$3) OR ($3::uuid IS NULL AND j.status='completed' AND EXISTS(SELECT 1 FROM selected_engine_jobs selected WHERE selected.id=j.id))) ORDER BY ma.position_uuid,j.plies DESC,j.created_at DESC,j.id DESC,ma.id DESC LIMIT $4")
-        .bind(id).bind(query.game_no).bind(query.job_id).bind(limit).fetch_all(&mut *tx).await.map_err(anyhow::Error::from)?;
-    // As for existing single-position solutions, select the strongest completed
-    // individual hint first. An unusable strongest hint cannot revive an older one.
-    let hints: Vec<HintRow> = sqlx::query_as("SELECT DISTINCT ON (p.id) p.id AS position_uuid,j.id AS job_id,j.plies,j.result FROM positions p JOIN jobs j ON j.position_uuid=p.id AND j.kind='analysis' AND j.status='completed' AND j.result IS NOT NULL WHERE p.match_uuid=$1 AND p.game_no=$2 AND coalesce(j.engine_snapshot->>'engine_id','gnubg')=coalesce((SELECT coalesce(pinned.engine_snapshot->>'engine_id','gnubg') FROM jobs pinned WHERE pinned.id=$4),(SELECT analysis_engine FROM app_settings WHERE singleton=true),'gnubg') ORDER BY p.id,j.plies DESC,j.created_at DESC,j.id DESC LIMIT $3")
-        .bind(id).bind(query.game_no).bind(limit).bind(query.job_id).fetch_all(&mut *tx).await.map_err(anyhow::Error::from)?;
-    let imported: Vec<(Uuid,Value)> = sqlx::query_as("SELECT p.id,a.data FROM positions p JOIN imported_analyses a ON a.position_uuid=p.id AND a.match_uuid=p.match_uuid AND a.game_no=p.game_no AND a.kind='checker' WHERE p.match_uuid=$1 AND p.game_no=$2 ORDER BY p.ordinal,a.source_ordinal LIMIT $3")
-        .bind(id).bind(query.game_no).bind(limit).fetch_all(&mut *tx).await.map_err(anyhow::Error::from)?;
-    if [positions.len(), native.len(), hints.len(), imported.len()]
-        .iter()
-        .any(|n| *n > MAX_GAME_POSITIONS)
+    let legacy = query.job_id.map(|id| format!("job:{id}"));
+    if query.analysis_id.is_some()
+        && legacy
+            .as_ref()
+            .is_some_and(|id| Some(id) != query.analysis_id.as_ref())
     {
         return Err(ApiError::invalid(
-            "Game assessments exceed the supported position count",
+            "analysis_id and job_id must identify the same result",
         ));
     }
-    tx.commit().await.map_err(anyhow::Error::from)?;
-    let job_id = query.job_id;
-    let items = tokio::task::spawn_blocking(move || {
-        let mut native: HashMap<_, _> = native
-            .into_iter()
-            .map(|row| (row.position_uuid, row))
-            .collect();
-        let mut hints: HashMap<_, _> = hints
-            .into_iter()
-            .map(|row| (row.position_uuid, row))
-            .collect();
-        let mut sources: HashMap<_, Vec<ImportedAnalysisData>> = HashMap::new();
-        for (position, data) in imported {
-            // A malformed source record is unknown, not an endpoint failure.
-            if let Ok(record) = serde_json::from_value(data) {
-                sources.entry(position).or_default().push(record);
+    let selected = crate::analysis_catalog::resolve_selection(
+        &state.pool,
+        id,
+        query.analysis_id.as_deref().or(legacy.as_deref()),
+    )
+    .await?;
+    if query.job_id.is_some()
+        && let Some(crate::analysis_catalog::SelectedAnalysis::Job(job)) = &selected
+        && job.game_no.is_some_and(|game| game != query.game_no)
+    {
+        return Err(ApiError::invalid("Job belongs to another game"));
+    }
+    let analysis_id = selected.as_ref().map(|s| s.id());
+    let mut items = Vec::new();
+    if let Some(ref key) = analysis_id {
+        let rows =
+            load_all_review(&state, id, key, Some(query.game_no), Some("checker".into())).await?;
+        items.extend(rows.into_iter().filter_map(|r| {
+            if !matches!(
+                r.decision.evaluation_status.as_str(),
+                "evaluated" | "forced"
+            ) {
+                return None;
             }
-        }
-        positions
-            .into_iter()
-            .filter_map(|position| {
-                let selected = native
-                    .remove(&position.id)
-                    .and_then(|row| native_assessment(&position, row));
-                let mut hint = || {
-                    hints
-                        .remove(&position.id)
-                        .and_then(|row| hint_assessment(&position, row))
-                };
-                let native = if job_id.is_some() {
-                    selected.or_else(hint)
-                } else {
-                    hint().or(selected)
-                };
-                native.or_else(|| {
-                    sources.remove(&position.id).and_then(|records| {
-                        records
-                            .into_iter()
-                            .find_map(|record| imported_assessment(&position, record))
-                    })
-                })
+            Some(MoveAssessment {
+                position_id: r.position_uuid?,
+                severity: serde_json::from_value(Value::String(r.decision.severity)).ok()?,
+                equity_loss: r.decision.equity_loss,
+                best_move: Some(r.decision.best),
+                source: r.source,
+                engine: r.engine,
+                depth: r.depth,
+                depth_plies: r.depth_plies,
+                job_id: r.job_id,
             })
-            .collect()
-    })
-    .await
-    .map_err(anyhow::Error::from)?;
+        }));
+    } else {
+        // Still validate nonexistent games for an empty catalog.
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM match_games WHERE match_uuid=$1 AND game_no=$2)",
+        )
+        .bind(id)
+        .bind(query.game_no)
+        .fetch_one(&state.pool)
+        .await
+        .map_err(anyhow::Error::from)?;
+        if !exists {
+            return Err(ApiError::missing());
+        }
+    }
     Ok(Json(GameMoveAssessments {
         match_id: id,
         game_no: query.game_no,
-        job_id,
+        job_id: query.job_id,
+        analysis_id,
         items,
     }))
 }
@@ -213,14 +136,17 @@ pub(crate) fn rounded_loss(played: f64, best: f64) -> Option<f64> {
     (played.is_finite() && best.is_finite() && loss.is_finite() && loss >= 0.0).then_some(loss)
 }
 
-fn native_assessment(position: &Position, row: NativeRow) -> Option<MoveAssessment> {
-    let data = &row.data;
+pub(crate) fn native_checker_loss(
+    position: &Position,
+    data: &Value,
+    equity_loss: f64,
+) -> Option<f64> {
     if data["kind"] != "checker"
         || data["player"].as_i64()? != i64::from(position.player)
         || data["best"].as_str()?.trim().is_empty()
         || data["played"].as_str()?.trim().is_empty()
-        || !row.equity_loss.is_finite()
-        || row.equity_loss < 0.0
+        || !equity_loss.is_finite()
+        || equity_loss < 0.0
     {
         return None;
     }
@@ -230,7 +156,7 @@ fn native_assessment(position: &Position, row: NativeRow) -> Option<MoveAssessme
     }
     after_play(position, data["best"].as_str()?)?;
     let stored = data["equity_loss"].as_f64()?;
-    if !stored.is_finite() || (stored - row.equity_loss).abs() > 1e-9 {
+    if !stored.is_finite() || (stored - equity_loss).abs() > 1e-9 {
         return None;
     }
     let loss = match data["evaluation_status"].as_str()? {
@@ -241,99 +167,35 @@ fn native_assessment(position: &Position, row: NativeRow) -> Option<MoveAssessme
         )?,
         _ => return None,
     };
-    if (loss - stored).abs() > 1e-9 {
-        return None;
-    }
-    Some(MoveAssessment {
-        position_id: position.id,
-        severity: MoveSeverity::from_normalized_loss(loss),
-        equity_loss: loss,
-        source: AssessmentSource::Native,
-        engine: row.engine,
-        depth: Some(format!("{}-ply cubeful", row.plies)),
-        depth_plies: Some(row.plies),
-        job_id: Some(row.job_id),
-    })
+    ((loss - stored).abs() <= 1e-9).then_some(loss)
 }
 
-fn hint_assessment(position: &Position, row: HintRow) -> Option<MoveAssessment> {
-    let analysis: crate::engine::Analysis = serde_json::from_value(row.result).ok()?;
-    if analysis.engine.trim().is_empty()
-        || analysis.plies != row.plies
-        || analysis.candidates.len() > 256
-    {
+/// A stored single-position candidate list can grade the played move only when
+/// that exact legal final board is included. Missing candidates stay unassessed.
+pub(crate) fn hint_decision(position: &Position, analysis: &Analysis) -> Option<Decision> {
+    if analysis.engine.trim().is_empty() || analysis.candidates.len() > 256 {
         return None;
     }
-    let best = analysis
-        .candidates
-        .iter()
-        .find(|candidate| candidate.rank == 1)?;
-    if !best.equity.is_finite() || best.notation.trim().is_empty() {
-        return None;
-    }
-    after_play(position, &best.notation)?;
+    let best = analysis.candidates.iter().find(|c| c.rank == 1)?;
     let actual = after_play(position, &position.notation)?;
+    after_play(position, &best.notation)?;
     let played = analysis
         .candidates
         .iter()
-        .find(|candidate| after_play(position, &candidate.notation) == Some(actual))?;
-    let loss = rounded_loss(played.equity, best.equity)?;
-    Some(MoveAssessment {
-        position_id: position.id,
-        severity: MoveSeverity::from_normalized_loss(loss),
-        equity_loss: loss,
-        source: AssessmentSource::Native,
-        engine: analysis.engine,
-        depth: Some(format!("{}-ply cubeful", row.plies)),
-        depth_plies: Some(row.plies),
-        job_id: Some(row.job_id),
-    })
-}
-
-fn imported_assessment(
-    position: &Position,
-    record: ImportedAnalysisData,
-) -> Option<MoveAssessment> {
-    if record.kind != "checker"
-        || record.player != position.player
-        || record.game_no != position.game_no
-        || record.engine.trim().is_empty()
-        || record.candidates.len() > 256
-    {
-        return None;
-    }
-    let best = record
-        .candidates
-        .iter()
-        .find(|candidate| candidate.rank == 1)?;
-    // MWC and unknown units cannot use normalized-equity severity thresholds.
-    if !matches!(best.equity_kind.as_str(), "cubeful" | "cubeless") {
-        return None;
-    }
-    after_play(position, &best.notation)?;
-    let actual = after_play(position, &position.notation)?;
-    let played = record.candidates.iter().find(|candidate| {
-        candidate.equity_kind == best.equity_kind
-            && after_play(position, &candidate.notation) == Some(actual)
-    })?;
-    let loss = rounded_loss(played.equity?, best.equity?)?;
-    let engine = record
-        .engine_version
-        .filter(|version| !version.trim().is_empty())
-        .map_or_else(
-            || record.engine.clone(),
-            |version| format!("{} {version}", record.engine),
-        );
-    Some(MoveAssessment {
-        position_id: position.id,
-        severity: MoveSeverity::from_normalized_loss(loss),
-        equity_loss: loss,
-        source: AssessmentSource::Imported,
-        engine,
-        depth: record.depth,
-        depth_plies: record.depth_plies,
-        job_id: None,
-    })
+        .find(|c| after_play(position, &c.notation) == Some(actual))?;
+    rounded_loss(played.equity, best.equity)?;
+    let forced = after_play(position, "Cannot move").is_some();
+    let mut decision = crate::match_analysis::decision(
+        position.player,
+        "checker",
+        &played.notation,
+        &best.notation,
+        (!forced).then_some((played.equity, best.equity)),
+    );
+    decision.decision_no = position.ply;
+    decision.checker_no = Some(position.ply);
+    decision.dice = position.dice.as_slice().try_into().ok();
+    Some(decision)
 }
 
 /// Resolve reordered, grouped and combined checker notation to the same legal

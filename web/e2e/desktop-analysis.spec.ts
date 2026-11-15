@@ -262,6 +262,7 @@ test('move assessments stay scoped while switching games during a delayed respon
         match_id: match.id,
         game_no: game,
         job_id: url.searchParams.get('job_id'),
+        analysis_id: url.searchParams.get('analysis_id'),
         items:
           game === 1
             ? [assessment(first.id, 'very_bad', 0.2)]
@@ -335,7 +336,7 @@ for (const viewport of [
       exact: true,
     });
     await expect(
-      page.getByRole('heading', { name: 'Native analysis statistics' }),
+      page.getByRole('heading', { name: 'Analysis statistics', exact: true }),
     ).toBeHidden();
     const boardBounds = (await page.locator('.board-panel').boundingBox())!;
     expect(boardBounds.width).toBeLessThanOrEqual(440);
@@ -376,9 +377,17 @@ for (const viewport of [
     await page.getByRole('button', { name: 'Next move', exact: true }).click();
     const boardHeading = page.locator('.board-heading');
     await expect(boardHeading).toContainText('Move 2');
+    const displayed = page.getByLabel('Displayed analysis', { exact: true });
+    const selectSaved = async (scope: string) => {
+      const option = displayed.locator('option[value^="job:"]').filter({
+        hasText: ` · ${scope} · `,
+      });
+      await displayed.selectOption({ label: await option.innerText() });
+    };
+    await selectSaved('Game 1');
     await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
     await expect(
-      stats.getByRole('heading', { name: 'Native analysis statistics' }),
+      stats.getByRole('heading', { name: 'Analysis statistics', exact: true }),
     ).toBeVisible();
     await expect(boardHeading).toContainText('Move 2');
     await page.getByRole('tab', { name: 'Overview', exact: true }).click();
@@ -397,6 +406,7 @@ for (const viewport of [
     ).toHaveValue('checker');
     await expect(page.locator('.statistics-summary:visible')).toHaveCount(0);
     await page.getByRole('tab', { name: 'Overview', exact: true }).click();
+    await selectSaved('Single position');
     await page.locator('.candidate-preview-button').first().click();
     await expect(page.locator('.board-review-selection')).toBeVisible();
     await page

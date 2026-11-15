@@ -77,16 +77,18 @@ WITH eligible AS (
             AND NOT (live.state->>'match_length'='0' AND live.state->>'phase'='game_over')
       )
 ), chosen AS (
-    SELECT DISTINCT ON (m.id,c.game_no)
+    SELECT
         j.id AS job_id,m.id AS match_id,c.game_no,j.plies,
-        coalesce(j.result->>'engine','GNU Backgammon') AS engine
+        catalog.engine
     FROM eligible m
-    JOIN selected_engine_jobs j ON j.match_uuid=m.id
+    JOIN effective_analysis_selections selected ON selected.match_id=m.id
+    JOIN analysis_catalog_sources catalog ON catalog.match_id=m.id AND catalog.analysis_id=selected.analysis_id
+    JOIN jobs j ON j.id=selected.job_id AND j.match_uuid=m.id
     JOIN match_analysis_games c ON c.job_id=j.id
     WHERE j.kind='match' AND j.status='completed'
       AND j.source_revision=m.source_revision
       AND (j.game_no IS NULL OR j.game_no=c.game_no)
-    ORDER BY m.id,c.game_no,j.plies DESC,j.created_at DESC,j.id DESC
+    ORDER BY m.id,c.game_no
 )
 "#;
 

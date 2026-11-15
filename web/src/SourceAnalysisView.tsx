@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import { useI18n } from './i18n';
 import XgPositionView from './XgPositionView';
 import { type PreviewCandidate } from './candidate-preview';
@@ -7,30 +7,6 @@ import type { Match, Position } from './api';
 import { useSourceText } from './analysis-source-messages';
 import { useCandidateText } from './candidate-messages';
 import type { SourceAnalysis, BookLookup } from './source-analysis-api';
-
-// The HedgeHog v1 converter derives this UUID from the first block's
-// all-default header. Archive exports can carry this header and zero-filled
-// checker records even when they have no evaluations.
-const emptyLegacyOgxmAnalysisId = 'b86cd1b0-4d12-80e6-86ba-511a59c022f0';
-
-function isOgxmPlaceholder(record: SourceAnalysis): boolean {
-  const raw: unknown = record.raw;
-  return (
-    record.engine === 'Unknown' &&
-    record.method === 'unknown' &&
-    record.depth === null &&
-    typeof raw === 'object' &&
-    raw !== null &&
-    'analysis_id' in raw &&
-    raw.analysis_id === emptyLegacyOgxmAnalysisId &&
-    'currency' in raw &&
-    raw.currency === null &&
-    'best_equity' in raw &&
-    raw.best_equity === 0 &&
-    'equity_loss' in raw &&
-    raw.equity_loss === 0
-  );
-}
 
 function OgxmCheckerSummary({ raw }: { raw: unknown }) {
   const l = useSourceText();
@@ -120,12 +96,13 @@ export default function SourceAnalysisView({
   const [bookChoice, setBookChoice] = useState<'backgammondb' | 'xg'>();
   const [recordId, setRecordId] = useState<string>(),
     [decision, setDecision] = useState<'checker' | 'cube'>('checker');
+  const resetPreview = useEffectEvent(() => onPreview?.(null));
   useEffect(() => {
-    onPreview?.(null);
+    resetPreview();
     setRecordId(undefined);
     setDecision('checker');
     setBookChoice(undefined);
-  }, [records, book, onPreview, preferredKind]);
+  }, [records, book, preferredKind]);
   const record =
     records.find((r) => r.id === recordId) ??
     records.find((r) => r.kind === (preferredKind ?? 'checker')) ??
@@ -202,8 +179,7 @@ export default function SourceAnalysisView({
     candidates.length === 0
       ? record
       : null;
-  const ogxmPlaceholder =
-    ogxmSummaryRecord !== null && isOgxmPlaceholder(ogxmSummaryRecord);
+  const ogxmPlaceholder = ogxmSummaryRecord?.evaluated === false;
   const selectedBook =
     book?.provider === 'xg'
       ? 'xg'

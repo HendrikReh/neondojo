@@ -1012,6 +1012,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matches/{id}/analyses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["catalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matches/{id}/analysis": {
         parameters: {
             query?: never;
@@ -1022,6 +1038,38 @@ export interface paths {
         get: operations["latest_match_analysis"];
         put?: never;
         post: operations["create_match_analysis"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matches/{id}/analysis-selection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["update_selection"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matches/{id}/analysis-statistics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["statistics"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1540,6 +1588,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/position-browser/analysis-readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["analysis_readiness"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/position-filters": {
         parameters: {
             query?: never;
@@ -1604,6 +1668,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/positions/{id}/analysis-result": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["position_result"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/positions/{id}/annotation": {
         parameters: {
             query?: never;
@@ -1644,6 +1724,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["get_position"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/positions/{id}/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["position_jobs"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2192,6 +2288,7 @@ export interface components {
             source_action: components["schemas"]["ProfileSourceAction"];
         };
         AddCards: {
+            analysis_id?: string | null;
             /**
              * Format: int32
              * @description Restrict a match analysis source to this source game.
@@ -2199,6 +2296,8 @@ export interface components {
             game_no?: number | null;
             /** Format: uuid */
             job_id?: string | null;
+            /** Format: uuid */
+            match_id?: string | null;
             /** Format: double */
             min_loss?: number | null;
             /** Format: int32 */
@@ -2244,6 +2343,38 @@ export interface components {
             /** Format: int32 */
             plies: number;
         };
+        AnalysisCatalogEntry: {
+            /** Format: int64 */
+            checker_count: number;
+            /** @description True only when the native scope has completed durable coverage. */
+            complete: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int64 */
+            cube_count: number;
+            depth?: string | null;
+            engine: string;
+            /** Format: int32 */
+            game_no?: number | null;
+            id: string;
+            job?: null | components["schemas"]["Job"];
+            /** Format: uuid */
+            position_id?: string | null;
+            scope: components["schemas"]["AnalysisScope"];
+            source: components["schemas"]["AnalysisSource"];
+            status: string;
+        };
+        AnalysisCatalogPage: {
+            items: components["schemas"]["AnalysisCatalogEntry"][];
+            /** Format: uuid */
+            match_id: string;
+            next_cursor?: string | null;
+            selected?: null | components["schemas"]["AnalysisCatalogEntry"];
+            /** @description Explicit persisted identity; null means the automatic policy is active. */
+            selected_id?: string | null;
+            /** Format: int64 */
+            source_revision: number;
+        };
         AnalysisComparisonRun: components["schemas"]["Job"] & {
             game_summary?: null | components["schemas"]["MatchAnalysisSummary"];
         };
@@ -2270,6 +2401,19 @@ export interface components {
             /** Format: int64 */
             total_moves: number;
         };
+        /** @enum {string} */
+        AnalysisScope: "match" | "game" | "position";
+        AnalysisSelection: {
+            analysis_id?: string | null;
+            /** Format: uuid */
+            match_id: string;
+        };
+        AnalysisSelectionUpdate: {
+            /** @description Null returns the match to the shared automatic policy. */
+            analysis_id?: string | null;
+        };
+        /** @enum {string} */
+        AnalysisSource: "native" | "imported";
         AnalysisTimeEstimate: {
             benchmark?: null | components["schemas"]["EstimateBenchmark"];
             engine_id: string;
@@ -2700,16 +2844,20 @@ export interface components {
             candidates: components["schemas"]["Candidate"][];
             decision?: null | components["schemas"]["Decision"];
             engine: string;
+            imported?: null | components["schemas"]["ImportedAnalysisData"];
             /** Format: int32 */
-            plies: number;
+            plies?: number | null;
         };
         CardSource: {
+            analysis_id?: string | null;
             /** Format: int32 */
             decision_no?: number | null;
             /** Format: int32 */
             game_no: number;
             /** Format: uuid */
-            job_id: string;
+            imported_analysis_id?: string | null;
+            /** Format: uuid */
+            job_id?: string | null;
             kind: string;
             /** Format: uuid */
             match_id: string;
@@ -2749,6 +2897,34 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+        };
+        CatalogAnalysisSummary: {
+            /** Format: int32 */
+            analyzed_moves: number;
+            /** Format: int32 */
+            completed_games: number;
+            engine: string;
+            performance_rating?: null | components["schemas"]["PerformanceRatingSummary"];
+            players: components["schemas"]["PlayerAnalysisSummary"][];
+            /** Format: int32 */
+            plies?: number | null;
+            recorded_depth?: string | null;
+            /** Format: int32 */
+            total_games: number;
+            /** Format: int32 */
+            total_moves: number;
+        };
+        CatalogGameStatistics: {
+            analyzed: boolean;
+            /** Format: int32 */
+            black_score: number;
+            crawford: boolean;
+            error_breakdown?: components["schemas"]["PlayerErrorBreakdown"][] | null;
+            /** Format: int32 */
+            game_no: number;
+            summary?: null | components["schemas"]["CatalogAnalysisSummary"];
+            /** Format: int32 */
+            white_score: number;
         };
         CheckerPracticeAnswer: {
             best: string;
@@ -3325,14 +3501,11 @@ export interface components {
             items: components["schemas"]["StoredMove"][];
         };
         GameMoveAssessments: {
+            analysis_id?: string | null;
             /** Format: int32 */
             game_no: number;
-            /** @description Unknown, unavailable, invalid and non-comparable evaluations are omitted. */
             items: components["schemas"]["MoveAssessment"][];
-            /**
-             * Format: uuid
-             * @description Requested job identity, null when the caller allowed automatic selection.
-             */
+            /** Format: uuid */
             job_id?: string | null;
             /** Format: uuid */
             match_id: string;
@@ -3416,6 +3589,8 @@ export interface components {
             source_move_no: number;
         };
         ImportedAnalysisRecord: components["schemas"]["ImportedAnalysisData"] & {
+            /** @description Source contains recorded evaluation values; this does not imply comparable units. */
+            evaluated?: boolean;
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -3620,6 +3795,12 @@ export interface components {
              */
             plies?: number | null;
         };
+        MatchAnalysisStatistics: {
+            analysis_id?: string | null;
+            error_breakdown?: components["schemas"]["PlayerErrorBreakdown"][] | null;
+            games: components["schemas"]["CatalogGameStatistics"][];
+            summary?: null | components["schemas"]["CatalogAnalysisSummary"];
+        };
         MatchAnalysisSummary: {
             /** Format: int32 */
             analyzed_moves: number;
@@ -3781,7 +3962,7 @@ export interface components {
             job_id?: string | null;
         };
         /** @enum {string} */
-        MistakeSource: "native" | "xg" | "bgblitz";
+        MistakeSource: "native" | "xg" | "bgblitz" | "sgf";
         Mistakes: {
             analyzed_decisions: number;
             analyzed_matches: number;
@@ -3805,24 +3986,16 @@ export interface components {
             next_cursor?: number | null;
         };
         MoveAssessment: {
+            best_move?: string | null;
             depth?: string | null;
             /** Format: int32 */
             depth_plies?: number | null;
             engine: string;
-            /**
-             * Format: double
-             * @description Actual best-minus-played equity, never a default for missing evaluation.
-             */
+            /** Format: double */
             equity_loss: number;
-            /**
-             * Format: uuid
-             * @description Native match-analysis or individual-hint job that supplied this result.
-             */
+            /** Format: uuid */
             job_id?: string | null;
-            /**
-             * Format: uuid
-             * @description Persisted checker-position UUID, not a GNUbg position encoding.
-             */
+            /** Format: uuid */
             position_id: string;
             severity: components["schemas"]["MoveSeverity"];
             source: components["schemas"]["AssessmentSource"];
@@ -4275,6 +4448,14 @@ export interface components {
         };
         /** @enum {string} */
         PositionAddStatus: "added" | "updated" | "duplicate" | "analysis_required" | "not_found";
+        PositionAnalysisReadiness: {
+            /** Format: int64 */
+            analysis_required: number;
+            /** Format: uuid */
+            first_analysis_required?: string | null;
+            /** Format: int64 */
+            unavailable: number;
+        };
         /** @enum {string} */
         PositionAnalysisState: "ready" | "missing";
         PositionBookmark: {
@@ -4370,7 +4551,7 @@ export interface components {
             max_loss?: number | null;
             /**
              * Format: double
-             * @description Native normalized equity loss. Individual hints do not imply a played-move loss.
+             * @description Selected normalized equity loss. Individual hints do not imply a played-move loss.
              */
             min_loss?: number | null;
             /** @description Literal name substring of the player on roll, rather than either match participant. */
@@ -4392,13 +4573,17 @@ export interface components {
         /** @enum {string} */
         PositionJobKind: "analysis" | "dice";
         PositionNativeError: {
+            analysis_id: string;
+            depth?: string | null;
             engine: string;
             /** Format: double */
             equity_loss: number;
             /** Format: uuid */
-            job_id: string;
+            imported_analysis_id?: string | null;
+            /** Format: uuid */
+            job_id?: string | null;
             /** Format: int32 */
-            plies: number;
+            plies?: number | null;
             severity: components["schemas"]["MoveSeverity"];
         };
         PositionPage: {
@@ -4572,9 +4757,14 @@ export interface components {
             job_id?: string | null;
             /**
              * Format: uuid
-             * @description Actual source event for cube navigation; virtual no-double links its checker event.
+             * @description Source event for cube review; a skipped double links its checker event.
              */
             move_id?: string | null;
+            /**
+             * Format: int32
+             * @description Next checker move for an explicit cube event; null after the last checker move.
+             */
+            next_checker_no?: number | null;
             /** Format: uuid */
             position_uuid?: string | null;
             review_position?: null | components["schemas"]["Position"];
@@ -4718,6 +4908,17 @@ export interface components {
         ScoreQuestion: {
             card: components["schemas"]["CardQuestion"];
             index: number;
+        };
+        SelectedPositionAnalysis: {
+            analysis?: null | components["schemas"]["Analysis"];
+            analysis_id: string;
+            decision?: null | components["schemas"]["Decision"];
+            depth?: string | null;
+            engine: string;
+            /** Format: uuid */
+            position_id: string;
+            /** @description Original imported candidates, cube values, units and perspective. */
+            records: components["schemas"]["ImportedAnalysisRecord"][];
         };
         Series: {
             /** Format: int32 */
@@ -8172,6 +8373,50 @@ export interface operations {
             };
         };
     };
+    catalog: {
+        parameters: {
+            query?: {
+                /** @description 1–100; default 50. */
+                limit?: number;
+                /** @description Opaque continuation bound to this match and position filter. */
+                cursor?: string;
+                /** @description Limit individual-position jobs, while retaining all match/game analyses. */
+                position_id?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisCatalogPage"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     latest_match_analysis: {
         parameters: {
             query?: {
@@ -8236,6 +8481,87 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Job"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_selection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnalysisSelectionUpdate"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisSelection"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    statistics: {
+        parameters: {
+            query?: {
+                analysis_id?: string;
+                game_no?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchAnalysisStatistics"];
                 };
             };
             404: {
@@ -8632,15 +8958,14 @@ export interface operations {
     };
     assessments: {
         parameters: {
-            query: {
-                /** @description One source game, required so loading history never scans the whole match. */
-                game_no: number;
-                /** @description Selected native match-analysis job; its scope must include this game. */
-                job_id?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
                 id: string;
+                game_no: number;
+                /** @description Legacy explicit job identity; use analysis_id for native and imported results. */
+                job_id: string | null;
+                analysis_id: string | null;
             };
             cookie?: never;
         };
@@ -8675,8 +9000,9 @@ export interface operations {
     review: {
         parameters: {
             query?: {
-                /** @description Optional pinned match-analysis job; imported data covers its uncheckpointed games. */
+                /** @description Legacy pinned job identity. Does not fall back to other evaluations. */
                 job_id?: string;
+                analysis_id?: string;
                 game_no?: number;
                 /** @description 0 = White, 1 = Black. */
                 player?: number;
@@ -9673,6 +9999,37 @@ export interface operations {
             };
         };
     };
+    analysis_readiness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddPositions"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PositionAnalysisReadiness"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     list_filters: {
         parameters: {
             query?: never;
@@ -9876,6 +10233,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Position"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    position_result: {
+        parameters: {
+            query?: {
+                /** @description Explicit identity; omission resolves the match's persisted or automatic selection. */
+                analysis_id?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": null | components["schemas"]["SelectedPositionAnalysis"];
                 };
             };
             404: {
@@ -10102,6 +10499,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImportedAnalysisRecord"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    position_jobs: {
+        parameters: {
+            query?: {
+                /** @description Calculation monitoring only; saved analysis selection never uses this filter. */
+                engine_id?: components["schemas"]["MatchAnalysisEngine"];
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"][];
                 };
             };
             404: {

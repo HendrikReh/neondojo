@@ -1,5 +1,41 @@
 import { expect, test } from './test';
 
+test('all-games review follows the listed checker and cube errors across games', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.goto('/');
+  await page
+    .getByLabel('Match file', { exact: true })
+    .setInputFiles('../backend/tests/fixtures/WC2014.xg');
+  await page.getByRole('tab', { name: 'Errors', exact: true }).click();
+  await page
+    .getByLabel('Filter analysis by player', { exact: true })
+    .selectOption('0');
+  const table = page.locator('.match-moves-table');
+  const game = page.getByLabel('Select game', { exact: true });
+  const filter = page.getByLabel('Filter by game', { exact: true });
+  await expect(filter).toHaveValue('');
+  const first = table.locator('tbody tr').first();
+  const second = table.locator('tbody tr').nth(1);
+  await expect(first).toContainText('Checker');
+  await expect(second).toContainText('Cube');
+  await first.getByRole('button').click();
+  await expect(game).toHaveValue('2');
+  await expect(first).toHaveAttribute('aria-current', 'true');
+  await second.getByRole('button').click();
+  const details = page.getByRole('dialog');
+  await expect(details.locator('[data-dice]')).toHaveAttribute('data-dice', '0-0');
+  await expect(details.locator('.imported-move-analysis')).toContainText(
+    'eXtreme Gammon',
+  );
+  await page.keyboard.press('Escape');
+  await filter.selectOption('3');
+  await expect(table.locator('tbody tr')).toHaveCount(1);
+  await expect(table.locator('tbody tr').first()).toContainText('Cube');
+});
+
 test('imported decisions work in the error list and next-error navigation without a local job', async ({
   page,
 }) => {
@@ -48,6 +84,38 @@ test('imported decisions work in the error list and next-error navigation withou
     depth: 'XGRoller+',
     depth_plies: null,
   }));
+  const importedEntry = {
+    id: `imported:${match.id}`,
+    source: 'imported',
+    scope: 'match',
+    engine: 'eXtreme Gammon',
+    depth: 'XGRoller+',
+    game_no: null,
+    position_id: null,
+    created_at: match.created_at,
+    status: 'completed',
+    complete: false,
+    checker_count: errors.length,
+    cube_count: errors.length,
+    job: null,
+  };
+  await page.route(`**/api/matches/${match.id}/analyses?*`, (route) =>
+    route.fulfill({
+      json: {
+        match_id: match.id,
+        items: [importedEntry],
+        selected: importedEntry,
+        selected_id: null,
+        next_cursor: null,
+      },
+    }),
+  );
+  await page.route('**/api/positions/*/analysis-result?*', (route) =>
+    route.fulfill({ json: null }),
+  );
+  await page.route('**/api/positions/*/jobs?engine_id=*', (route) =>
+    route.fulfill({ json: [] }),
+  );
   await page.route(`**/api/matches/${match.id}/review-decisions?*`, (route) => {
     const query = new URL(route.request().url()).searchParams;
     const items =
@@ -59,13 +127,19 @@ test('imported decisions work in the error list and next-error navigation withou
               id: `cube:${row.id}`,
               kind: 'cube',
               played: 'No double',
+              best: 'Double',
+              review_position: {
+                ...positions[row.checker_no - 1],
+                dice: [0, 0],
+              },
               move_id: moves.find(
                 (move: { position_uuid: string }) =>
                   move.position_uuid === row.position_uuid,
               ).id,
             }))
           : errors;
-    return route.fulfill({ json: { items, next_cursor: null } });
+    expect(query.get('analysis_id')).toBe(importedEntry.id);
+    return route.fulfill({ json: { items, next_cursor: null, total: items.length } });
   });
   await page.addInitScript(
     (id) =>
@@ -77,6 +151,7 @@ test('imported decisions work in the error list and next-error navigation withou
   );
   await page.goto('/');
   const next = page.getByRole('button', { name: 'Next error', exact: true });
+  const panel = page.locator('.match-analysis');
   await expect(next).toBeEnabled();
   await expect(page.locator('.match-moves-table tbody tr')).toHaveCount(2);
   await expect(
@@ -95,27 +170,22 @@ test('imported decisions work in the error list and next-error navigation withou
     .getByLabel('Filter analysis by decision', { exact: true })
     .selectOption('cube');
   await next.click();
-  const firstCube = await page
-    .getByRole('dialog')
-    .locator('.move-notes-selector select')
-    .inputValue();
+  const dialog = page.getByRole('dialog');
+  const move = dialog.getByLabel('Move', { exact: true });
+  const firstCube = await move.inputValue();
+  await expect(dialog.locator('[data-dice]')).toHaveAttribute('data-dice', '0-0');
   await page.keyboard.press('Escape');
   await next.click();
-  await expect(
-    page.getByRole('dialog').locator('.move-notes-selector select'),
-  ).not.toHaveValue(firstCube);
+  await expect(move).not.toHaveValue(firstCube);
+  await expect(dialog.locator('[data-dice]')).toHaveAttribute('data-dice', '0-0');
   await page.keyboard.press('Escape');
-  await page
-    .locator('.match-analysis-filters')
-    .getByRole('combobox')
-    .first()
-    .selectOption('0');
-  await expect(page.locator('.match-moves-table tbody tr')).toHaveCount(0);
+  await panel.getByLabel('Filter analysis by player', { exact: true }).selectOption('0');
+  await expect(panel.locator('tbody tr')).toHaveCount(0);
   await next.click();
-  await expect(page.locator('.moves-panel')).toContainText(
-    'No analyzed errors',
-  );
+  await expect(page.locator('.moves-panel')).toContainText('No analyzed errors');
   await expect(page.locator('.board-heading')).toContainText('Move 2');
+  await panel.getByRole('button', { name: 'Reset filters', exact: true }).click();
+  await expect(panel.locator('tbody tr')).toHaveCount(2);
 });
 
 test('real XG review opens checker and cube decisions with original source and compact desktop comparisons', async ({
@@ -163,19 +233,23 @@ test('real XG review opens checker and cube decisions with original source and c
     `Zug ${checker.checker_no}`,
   );
   await expect(
-    page.getByRole('tab', { name: 'Importierte Analyse', exact: true }),
-  ).toHaveAttribute('aria-selected', 'true');
+    page.getByLabel('Angezeigte Analyse', { exact: true }).locator('option[value^="imported:"]'),
+  ).toHaveCount(1);
   await expect(
-    page.locator('.candidate-comparison-table .candidate-marker-played'),
+    page.locator(
+      '.analysis-panel > .source-analysis .candidate-comparison-table .candidate-marker-played',
+    ),
   ).toBeVisible();
   for (const name of ['Gesamt', 'Einfach', 'Gammon', 'Backgammon']) {
     await expect(
       page.getByRole('columnheader', { name, exact: true }),
     ).toBeVisible();
   }
-  await expect(page.locator('.candidate-comparison-table')).toContainText(
-    'Verlust',
-  );
+  await expect(
+    page.locator(
+      '.analysis-panel > .source-analysis .candidate-comparison-table',
+    ),
+  ).toContainText('Verlust');
   await expect(
     page.locator('.board-shell a[href*="bgblitz.com/themes.html"]'),
   ).toHaveCount(0);
@@ -196,7 +270,7 @@ test('real XG review opens checker and cube decisions with original source and c
       path: `/tmp/bgtutor-review-${viewport.width}.png`,
     });
     const candidateWidth = await page
-      .locator('.source-candidates')
+      .locator('.analysis-panel > .source-analysis .source-candidates')
       .evaluate((wrapper) => ({
         available: wrapper.clientWidth,
         used: wrapper.scrollWidth,
@@ -242,4 +316,35 @@ test('real XG review opens checker and cube decisions with original source and c
   await expect(
     page.getByRole('dialog').locator('[data-die-owner]'),
   ).toHaveCount(0);
+});
+
+test('review pagination requests the neighboring page of the same catalog entry', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.goto('/');
+  await page.getByLabel('Match file', { exact: true })
+    .setInputFiles('../backend/tests/fixtures/WC2014.xg');
+  await page.getByRole('tab', { name: 'Errors', exact: true }).click();
+  const panel = page.locator('.match-analysis');
+  await panel.getByRole('checkbox').uncheck();
+  const pagination = panel.locator('.search-pagination');
+  const last = pagination.getByRole('button', { name: 'Last', exact: true });
+  const requests: URLSearchParams[] = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.endsWith('/review-decisions') && url.searchParams.has('page'))
+      requests.push(url.searchParams);
+  });
+  await last.click();
+  await expect(last).toBeDisabled({ timeout: 30_000 });
+  const lastPage = requests.at(-1);
+  expect(Number(lastPage?.get('page'))).toBeGreaterThan(4);
+  expect(lastPage?.get('analysis_id')).toMatch(/^imported:/);
+  requests.length = 0;
+  await pagination.getByRole('button', { name: 'Previous page' }).click();
+  await expect(last).toBeEnabled({ timeout: 30_000 });
+  await expect(panel.locator('tbody tr')).toHaveCount(50);
+  expect(requests).toHaveLength(1);
+  expect(requests[0].get('page')).toBe(String(Number(lastPage?.get('page')) - 1));
+  expect(requests[0].get('analysis_id')).toBe(lastPage?.get('analysis_id'));
 });

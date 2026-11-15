@@ -171,6 +171,7 @@ async fn uncatalogued_legacy_saved_positions_retain_one_game_with_available_scor
 async fn match_deletion_retains_exact_saved_occurrences_with_source_context_and_no_ghosts(
     pool: PgPool,
 ) {
+    let original_database_count = get(&pool, "/api/databases").await.as_array().unwrap().len();
     let (source, positions) = imported(&pool).await;
     let position = &positions[0];
     let before = get(&pool, &format!("/api/matches/{source}/metadata")).await;
@@ -245,7 +246,7 @@ async fn match_deletion_retains_exact_saved_occurrences_with_source_context_and_
     assert_eq!(get(&pool, "/api/library/matches").await["items"], json!([]));
     assert_eq!(get(&pool, "/api/matches").await["items"], json!([]));
     let databases = get(&pool, "/api/databases").await;
-    assert_eq!(databases.as_array().unwrap().len(), 4);
+    assert_eq!(databases.as_array().unwrap().len(), original_database_count);
     assert_eq!(databases[0]["match_count"], 0);
     let browser = get(&pool, "/api/position-browser").await;
     assert_eq!(browser["items"].as_array().unwrap().len(), 1);
@@ -266,6 +267,7 @@ async fn match_deletion_retains_exact_saved_occurrences_with_source_context_and_
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
 async fn database_deletion_uses_the_same_retention_and_internal_hosts_are_protected(pool: PgPool) {
+    let original_database_count = get(&pool, "/api/databases").await.as_array().unwrap().len();
     let (source, positions) = imported(&pool).await;
     let (status, db) = call(
         &pool,
@@ -313,7 +315,7 @@ async fn database_deletion_uses_the_same_retention_and_internal_hosts_are_protec
     assert_eq!(browser["items"][0]["database_id"], db);
     assert_eq!(
         get(&pool, "/api/databases").await.as_array().unwrap().len(),
-        4
+        original_database_count
     );
     assert_eq!(
         get(&pool, "/api/position-filters").await[0]["database_missing"],
@@ -599,6 +601,11 @@ async fn native_decisions_survive_only_for_saved_positions_without_fabricating_m
     let (source, positions) = imported(&pool).await;
     let saved = positions[0].id;
     save(&pool, saved).await;
+    sqlx::query("UPDATE matches SET source_revision=7 WHERE id=$1")
+        .bind(source)
+        .execute(&pool)
+        .await
+        .unwrap();
     let players = [
         PlayerAnalysisSummary::default(),
         PlayerAnalysisSummary {
@@ -635,12 +642,22 @@ async fn native_decisions_survive_only_for_saved_positions_without_fabricating_m
             .await
             .unwrap();
     }
+    sqlx::query(
+        "INSERT INTO analysis_selections(match_id,analysis_id,source_revision) VALUES($1,$2,7)",
+    )
+    .bind(source)
+    .bind(format!("job:{job}"))
+    .execute(&pool)
+    .await
+    .unwrap();
     assert_eq!(
         get(&pool, &format!("/api/matches/{source}/metadata")).await["white_pr"],
         2.5
     );
     delete(&pool, source).await;
     let host = owner(&pool, saved).await;
+    let retained_selection:(String,i64,i64)=sqlx::query_as("SELECT s.analysis_id,s.source_revision,m.source_revision FROM analysis_selections s JOIN matches m ON m.id=s.match_id WHERE s.match_id=$1").bind(host).fetch_one(&pool).await.unwrap();
+    assert_eq!(retained_selection, (format!("job:{job}"), 7, 7));
     let retained = store::get_job(&pool, job).await.unwrap().unwrap();
     assert_eq!(retained.match_uuid, Some(host));
     assert_eq!(retained.plies, 0);
@@ -847,11 +864,15 @@ async fn retention_migration_only_adds_infrastructure_and_preserves_existing_use
         old_children.push(rows);
     }
     all.run(&pool).await.unwrap();
-    let unchanged:Value=sqlx::query_scalar("SELECT to_jsonb(m)-ARRAY['collection_only','source_match_id','source_match_no','source_database_id','source_database_name','source_revision','play_mode','play_assisted'] FROM matches m").fetch_one(&pool).await.unwrap();
+    let original_columns: Vec<_> = old_match.as_object().unwrap().keys().cloned().collect();
+    let unchanged:Value=sqlx::query_scalar("SELECT (SELECT jsonb_object_agg(key,value) FROM jsonb_each(to_jsonb(m)) WHERE key=ANY($1)) FROM matches m").bind(&original_columns).fetch_one(&pool).await.unwrap();
     assert_eq!(unchanged, old_match);
-    let databases:Vec<Value>=sqlx::query_scalar("SELECT to_jsonb(d)-ARRAY['collection_only','is_default','is_system','version','updated_at'] FROM databases d WHERE NOT collection_only AND id NOT IN ($1,$2) ORDER BY id")
-        .bind(bgtutor::play::BOT_DATABASE_ID).bind(bgtutor::play::PAUSED_MATCHES_DATABASE_ID)
-        .fetch_all(&pool).await.unwrap();
+    let original_database_ids: Vec<Uuid> = old_databases
+        .iter()
+        .map(|row| Uuid::parse_str(row["id"].as_str().unwrap()).unwrap())
+        .collect();
+    let databases:Vec<Value>=sqlx::query_scalar("SELECT to_jsonb(d)-ARRAY['collection_only','is_default','is_system','version','updated_at'] FROM databases d WHERE NOT collection_only AND id=ANY($1) ORDER BY id")
+        .bind(&original_database_ids).fetch_all(&pool).await.unwrap();
     assert_eq!(databases, old_databases);
     let default_id: Uuid = sqlx::query_scalar("SELECT id FROM databases WHERE is_default")
         .fetch_one(&pool)
@@ -867,11 +888,10 @@ async fn retention_migration_only_adds_infrastructure_and_preserves_existing_use
     .into_iter()
     .zip(old_children)
     {
-        let rows: Vec<Value> = sqlx::query_scalar(&format!("SELECT to_jsonb(t) FROM {table} t"))
-            .fetch_all(&pool)
-            .await
-            .unwrap();
-        assert_eq!(rows, expected, "preserved {table}");
+        let original_columns: Vec<_> = expected[0].as_object().unwrap().keys().cloned().collect();
+        let rows: Vec<Value> = sqlx::query_scalar(&format!("SELECT (SELECT jsonb_object_agg(key,value) FROM jsonb_each(to_jsonb(t)) WHERE key=ANY($1)) FROM {table} t"))
+            .bind(&original_columns).fetch_all(&pool).await.unwrap();
+        assert_eq!(rows, expected, "preserved every original {table} field");
     }
     assert_eq!(
         get(&pool, &format!("/api/matches/{source}")).await["source_available"],
@@ -887,7 +907,11 @@ async fn retention_migration_only_adds_infrastructure_and_preserves_existing_use
     assert_eq!(flags, (false, None, None));
     let databases = get(&pool, "/api/databases").await;
     let databases = databases.as_array().unwrap();
-    assert_eq!(databases.len(), 4);
+    assert_eq!(
+        databases.len(),
+        old_databases.len() + 3,
+        "existing databases plus Bot Matches, Paused Matches and Engine Duels"
+    );
     let paused = databases
         .iter()
         .find(|db| db["id"] == bgtutor::play::PAUSED_MATCHES_DATABASE_ID.to_string())

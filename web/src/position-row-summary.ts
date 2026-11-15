@@ -3,6 +3,7 @@ import type { Locale } from './i18n-core';
 import { localizeDecision } from './i18n-core';
 import { positionText } from './position-browser-messages';
 import { libraryText } from './library-messages';
+import { analysisCatalogText } from './analysis-catalog-messages';
 
 export const positionPlayer = (hit: PositionBrowserHit) =>
   hit.position.player === 0 ? hit.match_info.white : hit.match_info.black;
@@ -14,6 +15,31 @@ const compact = (text: string, limit = 160) => {
     ? chars.slice(0, limit).join('') + '…'
     : chars.join('');
 };
+export function positionAnalysisProvenance(
+  error: NonNullable<PositionBrowserHit['native_error']>,
+  locale: Locale,
+) {
+  if (error.job_id && error.plies != null)
+    return positionText(locale, 'provenance', {
+      engine: error.engine,
+      plies: error.plies,
+      job: error.job_id,
+    });
+  return [
+    analysisCatalogText(
+      locale,
+      error.analysis_id?.startsWith('imported:') ? 'imported' : 'native',
+    ),
+    error.engine,
+    error.depth ??
+      (error.plies == null
+        ? positionText(locale, 'nativeUnknown')
+        : positionText(locale, 'depth', { plies: error.plies })),
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
 export function createPositionSummaryFormatter(
   locale: Locale,
   showPlayed: boolean,
@@ -45,7 +71,7 @@ export function createPositionSummaryFormatter(
         .join(' · '),
       `${p('checkerId')}: ${hit.position.position_id}`,
       hit.native_error
-        ? `${p('nativeError')}: ${loss.format(hit.native_error.equity_loss)} · ${p('provenance', { engine: hit.native_error.engine, plies: hit.native_error.plies, job: hit.native_error.job_id })}`
+        ? `${p('nativeError')}: ${loss.format(hit.native_error.equity_loss)} · ${positionAnalysisProvenance(hit.native_error, locale)}`
         : `${p('nativeError')}: n/a`,
       !hit.card_ready ? p('needed') : '',
       `${p('decks')}: ${hit.decks.length ? hit.decks.map((deck) => deck.name).join(', ') : p('noDecks')}`,

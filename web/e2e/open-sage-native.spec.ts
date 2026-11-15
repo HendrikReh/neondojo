@@ -1,5 +1,6 @@
 import { openMatchCalculation } from './analysis-controls';
 import { test, expect } from '@playwright/test';
+import type { components } from '../src/generated-api';
 test.skip(
   !process.env.BGTUTOR_SAGE_PYTHON,
   'Requires locked local Open Sage and GNUbg',
@@ -54,11 +55,18 @@ test('independent native engines, immutable sessions and desktop settings', asyn
   await expect(
     dialog.getByLabel('Default analysis profile', { exact: true }),
   ).toHaveValue('2');
-  await expect(
-    dialog
-      .getByLabel('Default analysis profile', { exact: true })
-      .locator('option[value="1"]'),
-  ).toBeDisabled();
+  const engines: components['schemas']['EngineInfo'][] = await (
+    await page.request.get('/api/engines')
+  ).json();
+  const sage = engines.find((engine) => engine.id === 'bgsage');
+  expect(sage?.available).toBe(true);
+  for (const plies of [0, 1, 2, 3, 4]) {
+    await expect(
+      dialog
+        .getByLabel('Default analysis profile', { exact: true })
+        .locator(`option[value="${plies}"]`),
+    ).toHaveJSProperty('disabled', !sage?.plies.includes(plies));
+  }
   for (const [width, height] of [
     [1800, 1169],
     [2560, 1440],

@@ -126,3 +126,31 @@ describe('game move-assessment requests', () => {
     ).toEqual({ position: { ...item, severity: 'none', equity_loss: 0 } });
   });
 });
+
+it('uses the shared catalog identity and rejects late responses from another analysis', () => {
+  const selected = {
+    matchId: 'match',
+    gameNo: 2,
+    analysisId: 'imported:match',
+  };
+  expect(assessmentRequestPath(selected)).toBe(
+    '/matches/match/move-assessments?game_no=2&analysis_id=imported%3Amatch',
+  );
+  expect(assessmentIdentity(selected)).not.toBe(
+    assessmentIdentity({ ...selected, analysisId: 'job:other' }),
+  );
+  expect(
+    assessmentItems(selected, {
+      ...data,
+      job_id: null,
+      analysis_id: 'job:other',
+    }),
+  ).toEqual({});
+  expect(
+    assessmentItems(selected, {
+      ...data,
+      job_id: null,
+      analysis_id: 'imported:match',
+    }),
+  ).toEqual({ position: item });
+});

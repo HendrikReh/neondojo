@@ -22,18 +22,14 @@ for (const source of ['engine', 'file', 'book'] as const)
     page,
   }) => {
     await page.addInitScript(
-      ({ matchId, positionId, jobId }) => {
+      ({ matchId }) => {
         localStorage.setItem('bgtutor.locale', 'en');
         localStorage.setItem(
           'bgtutor.workspace',
           JSON.stringify({ matchId, gameNo: 1 }),
         );
-        localStorage.setItem(
-          `bgtutor.jobs.${positionId}`,
-          JSON.stringify({ analysis: jobId }),
-        );
       },
-      { matchId, positionId, jobId },
+      { matchId },
     );
     await page.route('**/api/**', async (route) => {
       if (
@@ -104,51 +100,106 @@ for (const source of ['engine', 'file', 'book'] as const)
         },
       }),
     );
-    await page.route(`**/api/jobs/${jobId}`, (r) =>
-      r.fulfill({
+    const analysis = { engine: 'GNU Backgammon', plies: 2, candidates };
+    const job = {
+      id: jobId,
+      position_uuid: positionId,
+      match_uuid: null,
+      game_no: null,
+      kind: 'analysis',
+      status: 'completed',
+      plies: 2,
+      progress: 100,
+      attempts: 1,
+      total_games: 0,
+      completed_games: 0,
+      engine_snapshot: null,
+      error: null,
+      created_at: match.created_at,
+      updated_at: match.created_at,
+      result: analysis,
+    };
+    const records = [
+      {
+        id: 'file-record',
+        match_uuid: matchId,
+        position_uuid: positionId,
+        source_format: 'sgf',
+        kind: 'checker',
+        engine: 'GNU Backgammon',
+        engine_version: null,
+        game_no: 1,
+        source_move_no: 1,
+        checker_ply: 1,
+        player: 0,
+        played: '8/5 6/5',
+        method: 'evaluation',
+        evaluated: true,
+        depth: '2-ply',
+        depth_plies: 2,
+        raw: null,
+        candidates: candidates.map((candidate) => ({
+          ...candidate,
+          probabilities: {
+            win: candidate.probabilities[0],
+            win_gammon: candidate.probabilities[1],
+            win_backgammon: candidate.probabilities[2],
+            lose_gammon: candidate.probabilities[4],
+            lose_backgammon: candidate.probabilities[5],
+          },
+          equity_kind: 'cubeful',
+          depth: '2-ply',
+          raw: {},
+        })),
+        cube: null,
+      },
+    ];
+    const entry = {
+      id: source === 'file' ? `imported:${matchId}` : `job:${jobId}`,
+      source: source === 'file' ? 'imported' : 'native',
+      scope: source === 'file' ? 'match' : 'position',
+      engine: 'GNU Backgammon',
+      depth: '2-ply',
+      game_no: source === 'file' ? null : 1,
+      position_id: source === 'file' ? null : positionId,
+      created_at: match.created_at,
+      status: 'completed',
+      complete: true,
+      checker_count: 1,
+      cube_count: 0,
+      job: source === 'file' ? null : job,
+    };
+    await page.route(`**/api/matches/${matchId}/analyses?*`, (route) =>
+      route.fulfill({
         json: {
-          id: jobId,
-          position_uuid: positionId,
-          match_uuid: null,
-          kind: 'analysis',
-          status: 'completed',
-          plies: 2,
-          progress: 100,
-          attempts: 1,
-          created_at: '2026-11-09T10:00:00Z',
-          updated_at: '2026-11-09T10:00:00Z',
-          result: { engine: 'GNU Backgammon', plies: 2, candidates },
+          match_id: matchId,
+          items: [entry],
+          selected: entry,
+          selected_id: entry.id,
+          next_cursor: null,
         },
       }),
     );
-    await page.route(`**/api/positions/${positionId}/imported-analysis`, (r) =>
-      r.fulfill({
-        json: [
-          {
-            id: 'file-record',
-            match_uuid: matchId,
-            position_uuid: positionId,
-            source_format: 'sgf',
-            kind: 'checker',
-            engine: 'GNU Backgammon',
-            depth: '2-ply',
-            candidates: candidates.map((c) => ({
-              ...c,
-              probabilities: {
-                win: c.probabilities[0],
-                win_gammon: c.probabilities[1],
-                win_backgammon: c.probabilities[2],
-                lose_gammon: c.probabilities[4],
-                lose_backgammon: c.probabilities[5],
-              },
-              equity_kind: 'cubeful',
-              depth: '2-ply',
-              raw: {},
-            })),
-            cube: null,
+    await page.route(`**/api/positions/${positionId}/jobs?engine_id=*`, (route) =>
+      route.fulfill({ json: [job] }),
+    );
+    await page.route(`**/api/jobs/${jobId}`, (route) =>
+      route.fulfill({ json: job }),
+    );
+    await page.route(
+      `**/api/positions/${positionId}/analysis-result?*`,
+      (route) =>
+        route.fulfill({
+          json: {
+            analysis_id: entry.id,
+            position_id: positionId,
+            engine: entry.engine,
+            depth: entry.depth,
+            records: source === 'file' ? records : [],
+            decision: null,
+            analysis: source === 'file' ? null : analysis,
           },
-        ],
-      }),
+        }),
     );
     await page.route(`**/api/positions/${positionId}/opening-book`, (r) =>
       r.fulfill({
@@ -181,17 +232,17 @@ for (const source of ['engine', 'file', 'book'] as const)
     await expect(page.locator('.analysis-workspace')).not.toHaveClass(
       /board-focus/,
     );
-    if (source !== 'engine')
-      await page
-        .getByRole('tab', {
-          name: source === 'file' ? 'Imported analysis' : 'Opening book',
-          exact: true,
-        })
-        .click();
+    await expect(
+      page.getByLabel('Displayed analysis', { exact: true }),
+    ).toHaveValue(entry.id);
+    if (source === 'book')
+      await page.locator('.analysis-book-reference > summary').click();
     const panel =
-      source === 'engine'
-        ? page.locator('.analysis-panel')
-        : page.locator('.source-analysis');
+      source === 'book'
+        ? page.locator('.analysis-book-reference .source-analysis')
+        : source === 'file'
+          ? page.locator('.analysis-panel > .source-analysis')
+          : page.locator('.analysis-panel > .candidate-comparison');
     const rows = panel.locator('.candidates tbody tr');
     await expect(rows).toHaveCount(2);
     await expect(

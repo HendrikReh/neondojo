@@ -24,6 +24,9 @@ test('imported candidates come first and position progress stays in the workspac
     timeout: 20_000,
   });
   await expect(panel.getByLabel('Search depth', { exact: true })).toBeHidden();
+  await expect(
+    page.getByLabel('Displayed analysis', { exact: true }),
+  ).toBeVisible();
 
   const recalculate = panel.getByRole('button', {
     name: 'Recalculate position …',
@@ -138,6 +141,11 @@ test('the previous engine result survives a pending rerun and position restorati
       updated_at: '2026-11-13T10:00:00Z',
     };
     return route.fulfill({ status: 202, json: nextJob });
+  });
+  await page.route('**/api/positions/*/jobs?engine_id=*', async (route) => {
+    const response = await route.fetch();
+    const jobs = await response.json();
+    await route.fulfill({ json: nextJob ? [nextJob, ...jobs] : jobs });
   });
   await page.route('**/api/jobs/pending-rerun', (route) =>
     route.fulfill({ json: nextJob }),

@@ -89,6 +89,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::recurring_mistakes::routes())
         .merge(crate::opening_book::routes())
         .merge(crate::imported_analysis::routes())
+        .merge(crate::analysis_catalog::routes())
         .merge(crate::databases::routes())
         .merge(crate::player_directory::routes())
         .merge(crate::move_catalog::routes())
@@ -612,13 +613,13 @@ async fn create_job(
 
 #[derive(Deserialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
-enum MatchAnalysisEngine {
+pub(crate) enum MatchAnalysisEngine {
     Gnubg,
     Bgsage,
 }
 
 impl MatchAnalysisEngine {
-    fn id(&self) -> &'static str {
+    pub(crate) fn id(&self) -> &'static str {
         match self {
             Self::Gnubg => "gnubg",
             Self::Bgsage => "bgsage",
@@ -981,6 +982,7 @@ impl OpenApi for ApiDoc {
         doc.merge(crate::recurring_mistakes::RecurringMistakesDoc::openapi());
         doc.merge(crate::opening_book::OpeningBookDoc::openapi());
         doc.merge(crate::imported_analysis::ImportedAnalysisDoc::openapi());
+        doc.merge(crate::analysis_catalog::AnalysisCatalogDoc::openapi());
         doc.merge(crate::databases::DatabaseDoc::openapi());
         doc.merge(crate::database_backup::BackupDoc::openapi());
         doc.merge(crate::player_directory::PlayerDoc::openapi());
@@ -988,6 +990,7 @@ impl OpenApi for ApiDoc {
         doc.merge(crate::annotations::AnnotationDoc::openapi());
         doc.merge(crate::learning::LearningDoc::openapi());
         doc.merge(crate::analysis_statistics::StatisticsDoc::openapi());
+        doc.merge(crate::analysis_statistics::catalog::CatalogStatisticsDoc::openapi());
         doc.merge(crate::position_browser::PositionBrowserDoc::openapi());
         doc.merge(crate::similar_positions::SimilarPositionsDoc::openapi());
         doc.merge(crate::similar_positions::SimilarPracticeHistoryDoc::openapi());

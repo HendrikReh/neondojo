@@ -105,6 +105,7 @@ pub enum MistakeSource {
     Native,
     Xg,
     Bgblitz,
+    Sgf,
 }
 
 #[derive(Serialize, ToSchema)]

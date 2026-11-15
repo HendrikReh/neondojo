@@ -2,7 +2,7 @@ import { request } from './api';
 import type { components } from './generated-api';
 type Schema = components['schemas'];
 export type SourceCandidate = Schema['ImportedCandidate'];
-export type SourceAnalysis = Required<Schema['ImportedAnalysisRecord']>;
+export type SourceAnalysis = Schema['ImportedAnalysisRecord'];
 export type BookConfig = Schema['BookConfig'];
 export type BookStatus = Schema['BookStatus'];
 export type BookSettings = Schema['BookSettings'];

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { expect, test, type FileChooser } from '@playwright/test';
 
 test('exports a backup and restores it only after confirmation', async ({
@@ -55,6 +56,13 @@ test('exports a backup and restores it only after confirmation', async ({
   expect(download.suggestedFilename()).toMatch(/^bgtutor-.*\.bgtutor-backup$/);
   const archive = testInfo.outputPath(download.suggestedFilename());
   await download.saveAs(archive);
+  const checked = await request.post('/api/database-backup/check', {
+    data: readFileSync(archive),
+    headers: { 'Content-Type': 'application/vnd.bgtutor.backup' },
+  });
+  expect(checked.ok()).toBe(true);
+  const counts: import('../src/generated-api').components['schemas']['BackupContents'] = (await checked.json()).contents;
+  const number = (value: number) => new Intl.NumberFormat('en').format(value);
   await expect(
     page.getByRole('status').filter({ hasText: 'Backup download started.' }),
   ).toBeVisible();
@@ -81,9 +89,9 @@ test('exports a backup and restores it only after confirmation', async ({
   );
   await expect(contents.getByRole('definition')).toHaveText([
     /.+/,
-    '0',
-    '0',
-    '0',
+    number(counts.matches),
+    number(counts.saved_positions),
+    number(counts.learning_cards),
   ]);
   await review.click();
   const dialog = page.getByRole('dialog', { name: 'Restore backup' });

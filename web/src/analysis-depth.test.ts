@@ -1,3 +1,4 @@
+import { catalogFixture } from './analysis-catalog-test-fixtures';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -7,9 +8,6 @@ import MatchAnalysisPanel from './MatchAnalysisPanel';
 import { I18nProvider } from './i18n';
 import type { Match } from './api';
 
-vi.mock('./useAnalysisSources', () => ({
-  useAnalysisSources: () => ({ records: [], errors: [], loading: false }),
-}));
 vi.mock('./useMatchAnalysis', () => ({
   useMatchAnalysis: () => ({
     job: undefined,
@@ -41,6 +39,7 @@ it('defaults game/match analysis to two plies and offers three and four plies', 
         match: { id: 'match', white: 'Alice', black: 'Bob' } as Match,
         gameNo: 1,
         onPosition: () => {},
+        catalog: catalogFixture(),
       }),
     }),
   );

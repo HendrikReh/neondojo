@@ -18,37 +18,60 @@ use sqlx::FromRow;
 use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
 
+// Native decision numbering includes skipped doubles that share a source
+// checker event. Recover the source ordinal before filtering out any decisions.
 const REVIEW_SQL: &str = r#"
-        WITH rows AS (
-          SELECT 'native:'||a.id::text AS id,a.game_no,a.decision_no,a.kind,a.position_uuid,a.data,
-                 NULL::jsonb AS event,NULL::integer AS checker_ply,true AS native,a.player,a.equity_loss,to_jsonb(p) AS position
+        WITH native_order AS (
+          SELECT a.*,
+            a.decision_no - count(*) FILTER (WHERE a.kind='cube' AND a.data->>'played'='no double')
+              OVER (PARTITION BY a.game_no ORDER BY a.decision_no ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)
+              AS event_no,
+            row_number() OVER (PARTITION BY a.game_no ORDER BY a.decision_no) AS sequence_no
           FROM move_analyses a JOIN match_analysis_games c ON c.job_id=a.job_id AND c.game_no=a.game_no
+          WHERE a.job_id=$2 AND ($3::integer IS NULL OR a.game_no=$3)
+        ), rows AS (
+          SELECT 'native:'||a.id::text AS id,a.game_no,a.decision_no,a.kind,a.position_uuid,a.data,
+                 to_jsonb(e) AS event,coalesce(p.ply,ep.ply) AS checker_ply,true AS native,a.player,a.equity_loss,
+                 to_jsonb(p) AS position,e.move_no AS source_move_no
+          FROM native_order a
           LEFT JOIN positions p ON p.id=a.position_uuid AND p.match_uuid=$1 AND p.game_no=a.game_no
-          WHERE a.job_id=$2
+          LEFT JOIN match_moves e ON a.kind='cube' AND a.sequence_no=a.decision_no
+            AND e.match_uuid=$1 AND e.game_no=a.game_no AND e.move_no=a.event_no
+          LEFT JOIN positions ep ON ep.id=e.position_uuid AND ep.match_uuid=$1 AND ep.game_no=a.game_no
           UNION ALL
           SELECT 'imported:'||a.id::text,a.game_no,a.source_move_no,a.kind,a.position_uuid,a.data,
-                 to_jsonb(e),p.ply,false,e.player,NULL::double precision,NULL::jsonb
-          FROM imported_analyses a
+                 to_jsonb(e),p.ply,false,e.player,NULL::double precision,NULL::jsonb,e.move_no
+          FROM primary_imported_analyses a
           JOIN match_moves e ON e.match_uuid=a.match_uuid AND e.game_no=a.game_no AND e.move_no=a.source_move_no
           LEFT JOIN positions p ON p.id=e.position_uuid AND p.match_uuid=e.match_uuid AND p.game_no=e.game_no
           WHERE a.match_uuid=$1 AND a.kind IN ('checker','cube')
             AND a.position_uuid IS NOT DISTINCT FROM e.position_uuid
-            AND NOT EXISTS(SELECT 1 FROM match_analysis_games c WHERE c.job_id=$2 AND c.game_no=a.game_no)
+            AND $11
+        ), slice AS (
+          SELECT * FROM rows
+          WHERE ($3::integer IS NULL OR game_no=$3) AND ($4::integer IS NULL OR player=$4)
+            AND ($5::text IS NULL OR kind=$5)
+            AND ($6::integer IS NULL OR (game_no,decision_no,kind='checker',id)>($6,$7,$8,$9))
+          ORDER BY game_no,decision_no,(kind='checker'),id LIMIT $10
         )
-        SELECT id,game_no,decision_no,kind,position_uuid,data,event,checker_ply,native,player,equity_loss,position FROM rows
-        WHERE ($3::integer IS NULL OR game_no=$3) AND ($4::integer IS NULL OR player=$4)
-          AND ($5::text IS NULL OR kind=$5)
-          AND ($6::integer IS NULL OR (game_no,decision_no,kind,id)>($6,$7,$8,$9))
-        ORDER BY game_no,decision_no,kind,id LIMIT $10
+        SELECT s.*, nxt.ply AS next_checker_no
+        FROM slice s LEFT JOIN LATERAL (
+          SELECT p.ply FROM match_moves e JOIN positions p ON p.id=e.position_uuid
+          WHERE s.kind='cube' AND s.checker_ply IS NULL AND e.match_uuid=$1
+            AND e.game_no=s.game_no AND e.move_no>s.source_move_no AND e.kind='checker'
+          ORDER BY e.move_no LIMIT 1
+        ) nxt ON true
+        ORDER BY s.game_no,s.decision_no,(s.kind='checker'),s.id
     "#;
 
 const SCAN_LIMIT: i64 = 512;
 
-#[derive(Debug, Deserialize, Serialize, IntoParams)]
+#[derive(Debug, Default, Deserialize, Serialize, IntoParams)]
 #[into_params(parameter_in=Query)]
 pub struct ReviewQuery {
-    /// Optional pinned match-analysis job; imported data covers its uncheckpointed games.
+    /// Legacy pinned job identity. Does not fall back to other evaluations.
     pub job_id: Option<Uuid>,
+    pub analysis_id: Option<String>,
     pub game_no: Option<i32>,
     /// 0 = White, 1 = Black.
     pub player: Option<i32>,
@@ -69,10 +92,12 @@ pub struct ReviewDecision {
     /// Source-qualified identity, independent of pagination.
     pub id: String,
     pub position_uuid: Option<Uuid>,
-    /// Actual source event for cube navigation; virtual no-double links its checker event.
+    /// Source event for cube review; a skipped double links its checker event.
     pub move_id: Option<Uuid>,
-    /// Exact source cube context, including pre-roll dice for a virtual no-double.
+    /// Exact cube context, including the position before the roll for a skipped double.
     pub review_position: Option<crate::model::Position>,
+    /// Next checker move for an explicit cube event; null after the last checker move.
+    pub next_checker_no: Option<i32>,
     pub game_no: i32,
     #[serde(flatten)]
     pub decision: Decision,
@@ -109,6 +134,7 @@ struct Row {
     data: serde_json::Value,
     event: Option<serde_json::Value>,
     checker_ply: Option<i32>,
+    next_checker_no: Option<i32>,
     native: bool,
     player: i32,
     equity_loss: Option<f64>,
@@ -125,8 +151,56 @@ async fn review(
     query: Result<Query<ReviewQuery>, axum::extract::rejection::QueryRejection>,
 ) -> ApiResult<Json<ReviewDecisionPage>> {
     let Query(query) = query.map_err(|e| ApiError::invalid(e.body_text()))?;
+    Ok(Json(load_review(&state, id, query).await?))
+}
+
+pub(crate) async fn load_review(
+    state: &AppState,
+    id: Uuid,
+    query: ReviewQuery,
+) -> ApiResult<ReviewDecisionPage> {
+    load_review_bounded(state, id, query, 100).await
+}
+
+/// Batch consumers reuse the same projection under one read snapshot.
+pub(crate) async fn load_all_review(
+    state: &AppState,
+    id: Uuid,
+    analysis_id: &str,
+    game_no: Option<i32>,
+    kind: Option<String>,
+) -> ApiResult<Vec<ReviewDecision>> {
+    const MAX: i64 = 200_000;
+    let page = load_review_bounded(
+        state,
+        id,
+        ReviewQuery {
+            analysis_id: Some(analysis_id.into()),
+            game_no,
+            kind,
+            page: Some(1),
+            limit: Some(MAX),
+            ..Default::default()
+        },
+        MAX,
+    )
+    .await?;
+    if page.total.is_some_and(|total| total > MAX) {
+        return Err(ApiError::invalid(
+            "Analysis exceeds supported decision count",
+        ));
+    }
+    Ok(page.items)
+}
+
+async fn load_review_bounded(
+    state: &AppState,
+    id: Uuid,
+    query: ReviewQuery,
+    max_limit: i64,
+) -> ApiResult<ReviewDecisionPage> {
     let limit = query.limit.unwrap_or(50);
-    if !(1..=100).contains(&limit)
+    if !(1..=max_limit).contains(&limit)
         || query.game_no.is_some_and(|g| g <= 0)
         || query.player.is_some_and(|p| !(0..=1).contains(&p))
         || query
@@ -156,31 +230,40 @@ async fn review(
             .fetch_one(&mut *tx)
             .await
             .map_err(anyhow::Error::from)?;
-    let job = if let Some(job_id) = query.job_id {
-        let job: Job = sqlx::query_as("SELECT * FROM jobs WHERE id=$1")
-            .bind(job_id)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(anyhow::Error::from)?
-            .ok_or_else(ApiError::missing)?;
-        let job_revision: i64 = sqlx::query_scalar("SELECT source_revision FROM jobs WHERE id=$1")
-            .bind(job_id)
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(anyhow::Error::from)?;
-        if job.kind != "match"
-            || job.match_uuid != Some(id)
-            || job_revision != revision
-            || query.game_no.zip(job.game_no).is_some_and(|(a, b)| a != b)
-        {
-            return Err(ApiError::invalid(
-                "job_id must refer to the current match source and requested scope",
-            ));
-        }
-        Some(job)
-    } else {
-        None
+    let legacy = query.job_id.map(|id| format!("job:{id}"));
+    if query.analysis_id.is_some()
+        && legacy
+            .as_ref()
+            .is_some_and(|id| Some(id) != query.analysis_id.as_ref())
+    {
+        return Err(ApiError::invalid(
+            "analysis_id and job_id must identify the same result",
+        ));
+    }
+    let selected = crate::analysis_catalog::resolve_selection_on(
+        &mut tx,
+        id,
+        query.analysis_id.as_deref().or(legacy.as_deref()),
+    )
+    .await?;
+    let analysis_id = selected.as_ref().map(|s| s.id());
+    let imported = matches!(
+        selected,
+        Some(crate::analysis_catalog::SelectedAnalysis::Imported { .. })
+    );
+    let job = match selected {
+        Some(crate::analysis_catalog::SelectedAnalysis::Job(j)) => Some(j),
+        _ => None,
     };
+    if query.job_id.is_some()
+        && query
+            .game_no
+            .zip(job.as_ref().and_then(|j| j.game_no))
+            .is_some_and(|(a, b)| a != b)
+    {
+        return Err(ApiError::invalid("game_no does not match this job's scope"));
+    }
+    let job_id = job.as_ref().map(|j| j.id);
     let game = query
         .game_no
         .or_else(|| job.as_ref().and_then(|j| j.game_no));
@@ -199,20 +282,21 @@ async fn review(
     }
     let checkpoints: i64 =
         sqlx::query_scalar("SELECT count(*) FROM match_analysis_games WHERE job_id=$1")
-            .bind(query.job_id)
+            .bind(job_id)
             .fetch_one(&mut *tx)
             .await
             .map_err(anyhow::Error::from)?;
     let scope = serde_json::to_string(&(
         id,
         revision,
-        query.job_id,
+        &analysis_id,
         game,
         query.player,
         &query.kind,
         query.severity,
         query.errors_only,
         checkpoints,
+        "cube-before-checker",
     ))
     .map_err(anyhow::Error::from)?;
     let cursor = if let Some(after) = &query.after {
@@ -233,21 +317,81 @@ async fn review(
     } else {
         None
     };
+    if let Some(job) = job.as_ref().filter(|j| j.kind == "analysis") {
+        let position = sqlx::query_as::<_, crate::model::Position>(
+            "SELECT * FROM positions WHERE id=$1 AND match_uuid=$2",
+        )
+        .bind(job.position_uuid)
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?;
+        let mut items = Vec::new();
+        if let Some(position) = position.filter(|p| game.is_none_or(|g| g == p.game_no))
+            && job.status == "completed"
+            && let Some(analysis) = job
+                .result
+                .as_ref()
+                .and_then(|r| serde_json::from_value::<crate::engine::Analysis>(r.clone()).ok())
+            && analysis.plies == job.plies
+            && let Some(mut decision) = crate::move_assessments::hint_decision(&position, &analysis)
+        {
+            let severity = if decision.evaluation_status == "evaluated" {
+                MoveSeverity::from_normalized_loss(decision.equity_loss)
+            } else {
+                MoveSeverity::None
+            };
+            decision.severity = severity.as_str().into();
+            if query.player.is_none_or(|p| p == position.player)
+                && query.kind.as_deref().is_none_or(|k| k == "checker")
+                && (!query.errors_only || !matches!(severity, MoveSeverity::None))
+                && query
+                    .severity
+                    .is_none_or(|s| s.as_str() == severity.as_str())
+            {
+                items.push(ReviewDecision {
+                    id: format!("hint:{}", job.id),
+                    position_uuid: Some(position.id),
+                    move_id: None,
+                    review_position: None,
+                    next_checker_no: None,
+                    game_no: position.game_no,
+                    decision,
+                    source: crate::move_assessments::AssessmentSource::Native,
+                    engine: analysis.engine,
+                    depth: Some(format!("{}-ply", job.plies)),
+                    depth_plies: Some(job.plies),
+                    job_id: Some(job.id),
+                });
+            }
+        }
+        let total = items.len() as i64;
+        if offset.is_some_and(|offset| offset > 0) || query.after.is_some() {
+            items.clear();
+        }
+        tx.commit().await.map_err(anyhow::Error::from)?;
+        return Ok(ReviewDecisionPage {
+            items,
+            next_cursor: None,
+            total: query.page.map(|_| total),
+        });
+    }
     let mut cursor = cursor;
     let mut items = Vec::new();
     let mut matched = 0;
     loop {
         let rows: Vec<Row> = sqlx::query_as(REVIEW_SQL)
             .bind(id)
-            .bind(query.job_id)
+            .bind(job_id)
             .bind(game)
             .bind(query.player)
             .bind(&query.kind)
             .bind(cursor.as_ref().map(|c| c.game))
             .bind(cursor.as_ref().map(|c| c.decision))
-            .bind(cursor.as_ref().map(|c| &c.kind))
+            .bind(cursor.as_ref().map(|c| c.kind == "checker"))
             .bind(cursor.as_ref().map(|c| &c.id))
             .bind(SCAN_LIMIT + 1)
+            .bind(imported)
             .fetch_all(&mut *tx)
             .await
             .map_err(anyhow::Error::from)?;
@@ -275,7 +419,7 @@ async fn review(
                     id: row.id.clone(),
                 });
                 let Some(result) =
-                    filtered_decision(row, id, &format, job.as_ref(), errors_only, severity)
+                    filtered_decision(row, id, &format, job.as_deref(), errors_only, severity)
                 else {
                     continue;
                 };
@@ -297,11 +441,11 @@ async fn review(
                 .transpose()
                 .map_err(anyhow::Error::from)?;
             tx.commit().await.map_err(anyhow::Error::from)?;
-            return Ok(Json(ReviewDecisionPage {
+            return Ok(ReviewDecisionPage {
                 items,
                 next_cursor,
                 total: offset.map(|_| matched),
-            }));
+            });
         }
         cursor = continuation;
     }
@@ -332,6 +476,11 @@ fn project(row: Row, match_id: Uuid, format: &str, job: Option<&Job>) -> Option<
         .native
     {
         let job = job?;
+        if row.kind == "checker" && row.data["evaluation_status"] != "unavailable" {
+            let position: crate::model::Position =
+                serde_json::from_value(row.position.clone()?).ok()?;
+            crate::move_assessments::native_checker_loss(&position, &row.data, row.equity_loss?)?;
+        }
         let decision: Decision = serde_json::from_value(row.data).ok()?;
         if decision.decision_no != row.decision_no
             || decision.kind != row.kind
@@ -378,10 +527,12 @@ fn project(row: Row, match_id: Uuid, format: &str, job: Option<&Job>) -> Option<
             .and_then(|r| r["engine"].as_str())
             .unwrap_or(saved_engine)
             .to_owned();
+        let context = native_cube_context(row.event, row.checker_ply, match_id, &decision);
+        let (move_id, review_position) = context.unzip();
         (
             decision,
-            None,
-            None,
+            move_id,
+            review_position,
             engine,
             Some(format!("{}-ply", job.plies)),
             Some(job.plies),
@@ -421,6 +572,7 @@ fn project(row: Row, match_id: Uuid, format: &str, job: Option<&Job>) -> Option<
         position_uuid: row.position_uuid,
         move_id,
         review_position,
+        next_checker_no: row.next_checker_no,
         game_no: row.game_no,
         decision,
         source,
@@ -430,6 +582,32 @@ fn project(row: Row, match_id: Uuid, format: &str, job: Option<&Job>) -> Option<
         job_id,
     })
 }
+fn native_cube_context(
+    event: Option<serde_json::Value>,
+    checker_ply: Option<i32>,
+    match_id: Uuid,
+    decision: &Decision,
+) -> Option<(Uuid, crate::model::Position)> {
+    if decision.kind != "cube" {
+        return None;
+    }
+    let event: StoredMove = serde_json::from_value(event?).ok()?;
+    let before_roll = decision.played == "no double";
+    if event.player != decision.player
+        || if before_roll {
+            event.kind != "checker" || checker_ply.is_none() || checker_ply != decision.checker_no
+        } else {
+            event.kind != "cube" || !event.notation.eq_ignore_ascii_case(&decision.played)
+        }
+    {
+        return None;
+    }
+    let source = imported_projection::source_move(&event, checker_ply)?;
+    let position =
+        imported_projection::review_position(&source, match_id, event.position_uuid, before_roll)?;
+    Some((event.id, position))
+}
+
 #[derive(OpenApi)]
 #[openapi(paths(review), components(schemas(ReviewDecision, ReviewDecisionPage)))]
 pub struct ReviewDoc;
@@ -478,9 +656,10 @@ mod tests {
         .bind(Some("checker"))
         .bind(None::<i32>)
         .bind(None::<i32>)
-        .bind(None::<String>)
+        .bind(None::<bool>)
         .bind(None::<String>)
         .bind(SCAN_LIMIT + 1)
+        .bind(true)
         .fetch_one(&pool)
         .await
         .unwrap();
@@ -488,6 +667,7 @@ mod tests {
             "XG review query: games={games}, imported_records={records}, filter game=1/player=0/kind=checker; plan={plan}"
         );
         assert!(records > 100);
-        assert!(plan[0]["Plan"]["Actual Rows"].as_i64().unwrap() <= SCAN_LIMIT + 1);
+        let rows = plan[0]["Plan"]["Actual Rows"].as_i64().unwrap();
+        assert!(rows > 0 && rows <= SCAN_LIMIT + 1);
     }
 }

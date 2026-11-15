@@ -4820,6 +4820,86 @@
         }
       }
     },
+    "/api/matches/{id}/analyses": {
+      "get": {
+        "tags": [
+          "Analysis catalog"
+        ],
+        "operationId": "catalog",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "1–100; default 50.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Opaque continuation bound to this match and position filter.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "position_id",
+            "in": "query",
+            "description": "Limit individual-position jobs, while retaining all match/game analyses.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisCatalogPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/matches/{id}/analysis": {
       "get": {
         "tags": [
@@ -4929,6 +5009,135 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/matches/{id}/analysis-selection": {
+      "put": {
+        "tags": [
+          "Analysis catalog"
+        ],
+        "operationId": "update_selection",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalysisSelectionUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisSelection"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/matches/{id}/analysis-statistics": {
+      "get": {
+        "tags": [
+          "Match analysis"
+        ],
+        "operationId": "statistics",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "analysis_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "game_no",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchAnalysisStatistics"
                 }
               }
             }
@@ -5556,8 +5765,7 @@
           },
           {
             "name": "game_no",
-            "in": "query",
-            "description": "One source game, required so loading history never scans the whole match.",
+            "in": "path",
             "required": true,
             "schema": {
               "type": "integer",
@@ -5566,15 +5774,26 @@
           },
           {
             "name": "job_id",
-            "in": "query",
-            "description": "Selected native match-analysis job; its scope must include this game.",
-            "required": false,
+            "in": "path",
+            "description": "Legacy explicit job identity; use analysis_id for native and imported results.",
+            "required": true,
             "schema": {
               "type": [
                 "string",
                 "null"
               ],
               "format": "uuid"
+            }
+          },
+          {
+            "name": "analysis_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           }
         ],
@@ -5631,11 +5850,19 @@
           {
             "name": "job_id",
             "in": "query",
-            "description": "Optional pinned match-analysis job; imported data covers its uncheckpointed games.",
+            "description": "Legacy pinned job identity. Does not fall back to other evaluations.",
             "required": false,
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          {
+            "name": "analysis_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
             }
           },
           {
@@ -7111,6 +7338,46 @@
         }
       }
     },
+    "/api/position-browser/analysis-readiness": {
+      "post": {
+        "tags": [
+          "Positions"
+        ],
+        "operationId": "analysis_readiness",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddPositions"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PositionAnalysisReadiness"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/position-filters": {
       "get": {
         "tags": [
@@ -7468,6 +7735,73 @@
         }
       }
     },
+    "/api/positions/{id}/analysis-result": {
+      "get": {
+        "tags": [
+          "Analysis catalog"
+        ],
+        "operationId": "position_result",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "analysis_id",
+            "in": "query",
+            "description": "Explicit identity; omission resolves the match's persisted or automatic selection.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SelectedPositionAnalysis"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/positions/{id}/annotation": {
       "get": {
         "tags": [
@@ -7746,6 +8080,69 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/ImportedAnalysisRecord"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/positions/{id}/jobs": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "operationId": "position_jobs",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "engine_id",
+            "in": "query",
+            "description": "Calculation monitoring only; saved analysis selection never uses this filter.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/MatchAnalysisEngine"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Job"
                   }
                 }
               }
@@ -9991,6 +10388,12 @@
       "AddCards": {
         "type": "object",
         "properties": {
+          "analysis_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "game_no": {
             "type": [
               "integer",
@@ -10000,6 +10403,13 @@
             "description": "Restrict a match analysis source to this source game."
           },
           "job_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "match_id": {
             "type": [
               "string",
               "null"
@@ -10169,6 +10579,131 @@
           }
         }
       },
+      "AnalysisCatalogEntry": {
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "scope",
+          "engine",
+          "created_at",
+          "status",
+          "complete",
+          "checker_count",
+          "cube_count"
+        ],
+        "properties": {
+          "checker_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "complete": {
+            "type": "boolean",
+            "description": "True only when the native scope has completed durable coverage."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "cube_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "depth": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "engine": {
+            "type": "string"
+          },
+          "game_no": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "id": {
+            "type": "string"
+          },
+          "job": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Job"
+              }
+            ]
+          },
+          "position_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/AnalysisScope"
+          },
+          "source": {
+            "$ref": "#/components/schemas/AnalysisSource"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "AnalysisCatalogPage": {
+        "type": "object",
+        "required": [
+          "match_id",
+          "source_revision",
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnalysisCatalogEntry"
+            }
+          },
+          "match_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "selected": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AnalysisCatalogEntry",
+                "description": "Effective selection, also returned when it is outside the current page."
+              }
+            ]
+          },
+          "selected_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Explicit persisted identity; null means the automatic policy is active."
+          },
+          "source_revision": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "AnalysisComparisonRun": {
         "allOf": [
           {
@@ -10263,6 +10798,52 @@
             "format": "int64"
           }
         }
+      },
+      "AnalysisScope": {
+        "type": "string",
+        "enum": [
+          "match",
+          "game",
+          "position"
+        ]
+      },
+      "AnalysisSelection": {
+        "type": "object",
+        "required": [
+          "match_id"
+        ],
+        "properties": {
+          "analysis_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "match_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "AnalysisSelectionUpdate": {
+        "type": "object",
+        "properties": {
+          "analysis_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Null returns the match to the shared automatic policy."
+          }
+        },
+        "additionalProperties": false
+      },
+      "AnalysisSource": {
+        "type": "string",
+        "enum": [
+          "native",
+          "imported"
+        ]
       },
       "AnalysisTimeEstimate": {
         "type": "object",
@@ -11813,7 +12394,6 @@
         "type": "object",
         "required": [
           "engine",
-          "plies",
           "candidates"
         ],
         "properties": {
@@ -11836,8 +12416,21 @@
           "engine": {
             "type": "string"
           },
+          "imported": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ImportedAnalysisData"
+              }
+            ]
+          },
           "plies": {
-            "type": "integer",
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int32"
           }
         }
@@ -11846,11 +12439,16 @@
         "type": "object",
         "required": [
           "kind",
-          "job_id",
           "match_id",
           "game_no"
         ],
         "properties": {
+          "analysis_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "decision_no": {
             "type": [
               "integer",
@@ -11862,8 +12460,18 @@
             "type": "integer",
             "format": "int32"
           },
+          "imported_analysis_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
           "job_id": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "uuid"
           },
           "kind": {
@@ -11997,6 +12605,116 @@
           },
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "CatalogAnalysisSummary": {
+        "type": "object",
+        "required": [
+          "engine",
+          "total_games",
+          "completed_games",
+          "total_moves",
+          "analyzed_moves",
+          "players"
+        ],
+        "properties": {
+          "analyzed_moves": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "completed_games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "engine": {
+            "type": "string"
+          },
+          "performance_rating": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PerformanceRatingSummary"
+              }
+            ]
+          },
+          "players": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlayerAnalysisSummary"
+            }
+          },
+          "plies": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "recorded_depth": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "total_games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total_moves": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "CatalogGameStatistics": {
+        "type": "object",
+        "required": [
+          "game_no",
+          "white_score",
+          "black_score",
+          "crawford",
+          "analyzed"
+        ],
+        "properties": {
+          "analyzed": {
+            "type": "boolean"
+          },
+          "black_score": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "crawford": {
+            "type": "boolean"
+          },
+          "error_breakdown": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PlayerErrorBreakdown"
+            }
+          },
+          "game_no": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "summary": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CatalogAnalysisSummary"
+              }
+            ]
+          },
+          "white_score": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -13990,6 +14708,12 @@
           "items"
         ],
         "properties": {
+          "analysis_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "game_no": {
             "type": "integer",
             "format": "int32"
@@ -13998,16 +14722,14 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/MoveAssessment"
-            },
-            "description": "Unknown, unavailable, invalid and non-comparable evaluations are omitted."
+            }
           },
           "job_id": {
             "type": [
               "string",
               "null"
             ],
-            "format": "uuid",
-            "description": "Requested job identity, null when the caller allowed automatic selection."
+            "format": "uuid"
           },
           "match_id": {
             "type": "string",
@@ -14273,6 +14995,10 @@
               "source_format"
             ],
             "properties": {
+              "evaluated": {
+                "type": "boolean",
+                "description": "Source contains recorded evaluation values; this does not imply comparable units."
+              },
               "id": {
                 "type": "string",
                 "format": "uuid"
@@ -14969,6 +15695,45 @@
           }
         }
       },
+      "MatchAnalysisStatistics": {
+        "type": "object",
+        "required": [
+          "games"
+        ],
+        "properties": {
+          "analysis_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error_breakdown": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PlayerErrorBreakdown"
+            }
+          },
+          "games": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogGameStatistics"
+            }
+          },
+          "summary": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CatalogAnalysisSummary"
+              }
+            ]
+          }
+        }
+      },
       "MatchAnalysisSummary": {
         "type": "object",
         "required": [
@@ -15536,7 +16301,8 @@
         "enum": [
           "native",
           "xg",
-          "bgblitz"
+          "bgblitz",
+          "sgf"
         ]
       },
       "Mistakes": {
@@ -15633,6 +16399,12 @@
           "engine"
         ],
         "properties": {
+          "best_move": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "depth": {
             "type": [
               "string",
@@ -15651,21 +16423,18 @@
           },
           "equity_loss": {
             "type": "number",
-            "format": "double",
-            "description": "Actual best-minus-played equity, never a default for missing evaluation."
+            "format": "double"
           },
           "job_id": {
             "type": [
               "string",
               "null"
             ],
-            "format": "uuid",
-            "description": "Native match-analysis or individual-hint job that supplied this result."
+            "format": "uuid"
           },
           "position_id": {
             "type": "string",
-            "format": "uuid",
-            "description": "Persisted checker-position UUID, not a GNUbg position encoding."
+            "format": "uuid"
           },
           "severity": {
             "$ref": "#/components/schemas/MoveSeverity"
@@ -17212,6 +17981,30 @@
           "not_found"
         ]
       },
+      "PositionAnalysisReadiness": {
+        "type": "object",
+        "required": [
+          "analysis_required",
+          "unavailable"
+        ],
+        "properties": {
+          "analysis_required": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "first_analysis_required": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "unavailable": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "PositionAnalysisState": {
         "type": "string",
         "enum": [
@@ -17576,7 +18369,7 @@
               "null"
             ],
             "format": "double",
-            "description": "Native normalized equity loss. Individual hints do not imply a played-move loss."
+            "description": "Selected normalized equity loss. Individual hints do not imply a played-move loss."
           },
           "player": {
             "type": [
@@ -17645,13 +18438,21 @@
       "PositionNativeError": {
         "type": "object",
         "required": [
-          "job_id",
+          "analysis_id",
           "engine",
-          "plies",
           "equity_loss",
           "severity"
         ],
         "properties": {
+          "analysis_id": {
+            "type": "string"
+          },
+          "depth": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "engine": {
             "type": "string"
           },
@@ -17659,12 +18460,25 @@
             "type": "number",
             "format": "double"
           },
+          "imported_analysis_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
           "job_id": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "uuid"
           },
           "plies": {
-            "type": "integer",
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int32"
           },
           "severity": {
@@ -18269,7 +19083,15 @@
                   "null"
                 ],
                 "format": "uuid",
-                "description": "Actual source event for cube navigation; virtual no-double links its checker event."
+                "description": "Source event for cube review; a skipped double links its checker event."
+              },
+              "next_checker_no": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "int32",
+                "description": "Next checker move for an explicit cube event; null after the last checker move."
               },
               "position_uuid": {
                 "type": [
@@ -18285,7 +19107,7 @@
                   },
                   {
                     "$ref": "#/components/schemas/Position",
-                    "description": "Exact source cube context, including pre-roll dice for a virtual no-double."
+                    "description": "Exact cube context, including the position before the roll for a skipped double."
                   }
                 ]
               },
@@ -18752,6 +19574,62 @@
           "index": {
             "type": "integer",
             "minimum": 0
+          }
+        }
+      },
+      "SelectedPositionAnalysis": {
+        "type": "object",
+        "required": [
+          "analysis_id",
+          "position_id",
+          "engine",
+          "records"
+        ],
+        "properties": {
+          "analysis": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Analysis",
+                "description": "Original candidates from a saved individual-position calculation."
+              }
+            ]
+          },
+          "analysis_id": {
+            "type": "string"
+          },
+          "decision": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Decision",
+                "description": "Native match/game decision with best, played, and alternatives when recorded."
+              }
+            ]
+          },
+          "depth": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "engine": {
+            "type": "string"
+          },
+          "position_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImportedAnalysisRecord"
+            },
+            "description": "Original imported candidates, cube values, units and perspective."
           }
         }
       },

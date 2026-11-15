@@ -23,32 +23,28 @@ test('imported GNUbg analysis remains available independently from new engine jo
   });
   const response = await (await imported).json();
   expect(response.match).toBeTruthy();
-  await expect(
-    page.getByRole('tab', { name: 'Imported analysis', exact: true }),
-  ).toBeVisible();
-  await page
-    .getByRole('tab', { name: 'Imported analysis', exact: true })
-    .click();
-  await expect(page.locator('.source-analysis')).toContainText(
-    'GNU Backgammon',
+  await expect(page.getByLabel('Displayed analysis')).toBeVisible();
+  await selectImported(page);
+  const importedEngine = page.locator(
+    '.source-analysis:visible .candidate-metadata strong',
   );
-  await expect(page.locator('.source-analysis')).toContainText('0-ply');
-  await expect(page.locator('.source-analysis')).toContainText('0.014');
+  await expect(importedEngine).toContainText(/GNU Backgammon 1\.05\.002.*0-ply/);
+  await expect(page.locator('.source-analysis:visible')).toContainText('0.014');
   await (
     await openPositionCalculation(page)
   )
     .getByRole('button', { name: 'Analyze position', exact: true })
     .click();
-  await expect(
-    page.getByRole('tab', { name: 'Local engine', exact: true }),
-  ).toHaveAttribute('aria-selected', 'true');
+  const choice = page.getByLabel('Displayed analysis');
+  await expect(choice.locator('option[value^="job:"]')).toHaveCount(1);
+  await choice.selectOption(
+    (await choice.locator('option[value^="job:"]').getAttribute('value')) ?? '',
+  );
   await expect(
     page.locator('.analysis-panel .candidates tbody tr').first(),
   ).toBeVisible();
-  await page
-    .getByRole('tab', { name: 'Imported analysis', exact: true })
-    .click();
-  await expect(page.locator('.source-analysis')).toContainText('0-ply');
+  await selectImported(page);
+  await expect(importedEngine).toContainText(/GNU Backgammon 1\.05\.002.*0-ply/);
   const catalog = await (
     await page.request.get(
       `/api/matches/${response.match.id}/games/1/decisions`,
@@ -109,19 +105,25 @@ test('opening-book preferences and a real opening lookup expose source and depth
       `(;GM[6]PW[Book ${crypto.randomUUID()}]PB[Opponent]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])`,
     ),
   });
-  await page.getByRole('tab', { name: 'Opening book', exact: true }).click();
-  await expect(page.locator('.source-analysis')).toContainText('BackgammonDB');
-  await expect(page.locator('.source-analysis')).toContainText('3-ply');
+  await openBook(page);
+  await expect(page.locator('.source-analysis:visible')).toContainText(
+    'BackgammonDB',
+  );
+  const bookEngine = page.locator(
+    '.source-analysis:visible .candidate-metadata strong',
+  );
+  await expect(bookEngine).toContainText('BackgammonDB');
+  await expect(bookEngine).toContainText(/GNU Backgammon [\d.]+ · 3-ply/);
   await expect(
-    page.locator('.source-analysis .candidates tbody tr'),
+    page.locator('.source-analysis:visible .candidates tbody tr'),
   ).toHaveCount(8);
   await page.getByRole('button', { name: 'Next move', exact: true }).click();
-  await page.getByRole('tab', { name: 'Opening book', exact: true }).click();
+  await openBook(page);
   await page
     .locator('.source-analysis')
     .getByRole('button', { name: 'Cube', exact: true })
     .click();
-  await expect(page.locator('.source-analysis')).toContainText(
+  await expect(page.locator('.source-analysis:visible')).toContainText(
     'before this roll (00)',
   );
   const submitted = page.waitForResponse(
@@ -141,9 +143,9 @@ test('opening-book preferences and a real opening lookup expose source and depth
   ).json();
   expect(completed.status).toBe('completed');
   await page.getByRole('tab', { name: 'Candidate moves', exact: true }).click();
-  await page.getByRole('tab', { name: 'Opening book', exact: true }).click();
+  await openBook(page);
   await page.getByRole('tab', { name: 'Dice equity', exact: true }).click();
-  await expect(page.locator('.analysis-panel .engine-label')).toHaveText(
+  await expect(page.locator('.distribution-caption .engine-label')).toHaveText(
     completed.result.engine,
   );
 });
@@ -227,7 +229,7 @@ test('XG lookup is an attributed position reference, separate from rolled candid
   });
   await expect(page.locator('.analysis-workspace .board')).toBeVisible();
   await page.getByRole('button', { name: 'Next move', exact: true }).click();
-  await page.getByRole('tab', { name: 'Opening book', exact: true }).click();
+  await openBook(page);
   await page
     .locator('.source-book-selector')
     .getByRole('button', { name: 'XG position reference', exact: true })
@@ -257,7 +259,7 @@ test('a late imported source response cannot replace a newer position', async ({
     waiting = new Promise<void>((resolve) => {
       started = resolve;
     });
-  await page.route('**/api/positions/*/imported-analysis', async (route) => {
+  await page.route('**/api/positions/*/analysis-result?*', async (route) => {
     if (!first) return route.continue();
     first = false;
     const response = await route.fetch();
@@ -292,16 +294,27 @@ test('a late imported source response cannot replace a newer position', async ({
   const expected = records.find((r: { kind: string }) => r.kind === 'checker')
     .candidates[0].notation;
   await page.getByRole('button', { name: 'Next move', exact: true }).click();
-  await page
-    .getByRole('tab', { name: 'Imported analysis', exact: true })
-    .click();
   await expect(
-    page.locator('.source-analysis .candidates tbody tr').first(),
+    page.locator('.source-analysis:visible .candidates tbody tr').first(),
   ).toContainText(expected);
   release();
   await page.unrouteAll({ behavior: 'wait' });
   await expect(
-    page.locator('.source-analysis .candidates tbody tr').first(),
+    page.locator('.source-analysis:visible .candidates tbody tr').first(),
   ).toContainText(expected);
   await expect(page.locator('.board-heading')).toContainText('Move 2');
 });
+
+async function selectImported(page: import('@playwright/test').Page) {
+  const match = page.locator('.analysis-heading[data-match-id]');
+  await expect(match).toBeVisible();
+  const matchId = await match.getAttribute('data-match-id');
+  await page
+    .getByLabel('Displayed analysis')
+    .selectOption(`imported:${matchId}`);
+}
+async function openBook(page: import('@playwright/test').Page) {
+  const details = page.locator('.analysis-book-reference');
+  if ((await details.getAttribute('open')) === null)
+    await details.locator('summary').click();
+}

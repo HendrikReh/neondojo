@@ -9,6 +9,7 @@ export interface MoveAssessmentScope {
   matchId?: string;
   gameNo?: number;
   job?: Job;
+  analysisId?: string;
   /** Completion/update identity of a newly available individual checker hint. */
   analysisRevision?: string;
 }
@@ -18,14 +19,16 @@ export function assessmentIdentity({
   gameNo,
   job,
   analysisRevision,
+  analysisId,
 }: MoveAssessmentScope) {
-  return `${matchId ?? ''}:${gameNo ?? ''}:${job ? `${statisticsRevision(job)}:${job.kind}:${job.match_uuid}:${job.game_no}` : ''}:${analysisRevision ?? ''}`;
+  return `${matchId ?? ''}:${gameNo ?? ''}:${job ? `${statisticsRevision(job)}:${job.kind}:${job.match_uuid}:${job.game_no}` : ''}:${analysisId ?? ''}:${analysisRevision ?? ''}`;
 }
 
 export function assessmentRequestPath({
   matchId,
   gameNo,
   job,
+  analysisId,
 }: MoveAssessmentScope): string | undefined {
   if (
     !matchId ||
@@ -42,7 +45,8 @@ export function assessmentRequestPath({
   )
     return undefined;
   const query = new URLSearchParams({ game_no: String(gameNo) });
-  if (job) query.set('job_id', job.id);
+  if (analysisId) query.set('analysis_id', analysisId);
+  else if (job) query.set('job_id', job.id);
   return `/matches/${encodeURIComponent(matchId)}/move-assessments?${query}`;
 }
 
@@ -54,7 +58,9 @@ export function assessmentItems(
   if (
     data.match_id !== scope.matchId ||
     data.game_no !== scope.gameNo ||
-    data.job_id !== (scope.job?.id ?? null) ||
+    (scope.analysisId
+      ? data.analysis_id !== scope.analysisId
+      : data.job_id !== (scope.job?.id ?? null)) ||
     !Array.isArray(data.items)
   )
     return {};

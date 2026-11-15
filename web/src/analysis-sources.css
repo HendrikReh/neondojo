@@ -136,3 +136,33 @@
 .xg-probabilities th {
   padding: 5px;
 }
+
+.analysis-catalog-control {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2, 8px);
+  padding-block: var(--space-2, 8px);
+  min-width: 0;
+}
+.analysis-catalog-control label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  min-width: 0;
+  flex: 1;
+}
+.analysis-catalog-control select {
+  min-width: 0;
+  flex: 1;
+  max-width: 100%;
+}
+
+.analysis-saved-decision dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-1, 4px) var(--space-2, 8px);
+}
+.analysis-saved-decision dd {
+  margin: 0;
+}

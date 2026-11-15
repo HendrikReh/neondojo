@@ -38,6 +38,12 @@ async fn target(pool: &PgPool, label: &str) -> Uuid {
     sqlx::query("INSERT INTO positions(id,match_uuid,ordinal,game_no,ply,player,dice,board,position_id,gnubg_match_id,notation) VALUES($1,$2,0,1,1,0,ARRAY[3,1],array_fill(0,ARRAY[26]),'position','match','8/5')").bind(Uuid::new_v4()).bind(id).execute(pool).await.unwrap();
     id
 }
+async fn checkpoint_jobs(pool: &PgPool, match_id: Uuid) {
+    sqlx::query("INSERT INTO match_analysis_games(job_id,game_no) SELECT id,coalesce(game_no,1) FROM jobs WHERE match_uuid=$1 AND status IN ('completed','running','failed') ON CONFLICT DO NOTHING")
+        .bind(match_id).execute(pool).await.unwrap();
+    sqlx::query("INSERT INTO move_analyses(job_id,position_uuid,game_no,decision_no,player,kind,equity_loss,data) SELECT j.id,p.id,coalesce(j.game_no,1),1,p.player,'checker',0.0,'{\"best\":\"8/5 6/5\",\"evaluation_status\":\"evaluated\",\"played_equity\":0,\"best_equity\":0,\"equity_loss\":0}'::jsonb FROM jobs j JOIN LATERAL (SELECT id,player FROM positions WHERE match_uuid=j.match_uuid ORDER BY ordinal LIMIT 1) p ON true WHERE j.match_uuid=$1 AND j.status IN ('completed','running','failed') ON CONFLICT DO NOTHING")
+        .bind(match_id).execute(pool).await.unwrap();
+}
 async fn database(pool: &PgPool, name: &str) -> Uuid {
     let (status, v) = request(
         pool,
@@ -443,7 +449,7 @@ fn source_metadata_uses_explicit_sgf_context_and_rejects_guesses() {
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
-async fn deep_copy_remaps_all_notes_and_only_latest_completed_analysis(pool: PgPool) {
+async fn deep_copy_preserves_all_completed_analyses_and_remaps_selection(pool: PgPool) {
     let id = target(&pool, "Deep").await;
     let db = database(&pool, "Deep copies").await;
     let position: Uuid = sqlx::query_scalar("SELECT id FROM positions WHERE match_uuid=$1")
@@ -475,6 +481,8 @@ async fn deep_copy_remaps_all_notes_and_only_latest_completed_analysis(pool: PgP
         let result = native_result(rating, 4.0);
         sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,completed_games,engine_config,result,created_at) VALUES($1,$2,'match',0,$3,1,1,$4,$5,now()+$6*interval '1 second')").bind(Uuid::new_v4()).bind(id).bind(status).bind(config).bind(result).bind(n).execute(&pool).await.unwrap();
     }
+    checkpoint_jobs(&pool, id).await;
+    sqlx::query("INSERT INTO analysis_selections(match_id,analysis_id) SELECT $1,'job:'||id::text FROM jobs WHERE match_uuid=$1 AND engine_config='old'").bind(id).execute(&pool).await.unwrap();
     let (status, v) = request(
         &pool,
         "POST",
@@ -484,16 +492,23 @@ async fn deep_copy_remaps_all_notes_and_only_latest_completed_analysis(pool: PgP
     .await;
     assert_eq!(status, 200, "{v}");
     let copied = Uuid::parse_str(v["results"][0]["created_id"].as_str().unwrap()).unwrap();
-    let jobs: Vec<(String, String)> =
-        sqlx::query_as("SELECT status,engine_config FROM jobs WHERE match_uuid=$1")
-            .bind(copied)
-            .fetch_all(&pool)
-            .await
-            .unwrap();
-    assert_eq!(jobs, vec![("completed".into(), "new".into())]);
+    let jobs: Vec<(String, String)> = sqlx::query_as(
+        "SELECT status,engine_config FROM jobs WHERE match_uuid=$1 ORDER BY engine_config",
+    )
+    .bind(copied)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        jobs,
+        vec![
+            ("completed".into(), "new".into()),
+            ("completed".into(), "old".into())
+        ]
+    );
     let terminal:i64=sqlx::query_scalar("SELECT count(*) FROM job_events e JOIN jobs j ON j.id=e.job_id WHERE j.match_uuid=$1 AND e.event='completed'").bind(copied).fetch_one(&pool).await.unwrap();
     assert_eq!(
-        terminal, 1,
+        terminal, 2,
         "copied completed jobs need a terminal event for resumable SSE"
     );
     let note_targets:Vec<(String,Uuid,String)>=sqlx::query_as("SELECT a.target_kind,a.target_id,a.comment FROM annotations a LEFT JOIN positions p ON p.id=a.position_uuid LEFT JOIN match_games g ON g.id=a.game_uuid LEFT JOIN match_moves m ON m.id=a.move_uuid WHERE coalesce(a.match_uuid,p.match_uuid,g.match_uuid,m.match_uuid)=$1 ORDER BY a.target_kind").bind(copied).fetch_all(&pool).await.unwrap();
@@ -508,9 +523,11 @@ async fn deep_copy_remaps_all_notes_and_only_latest_completed_analysis(pool: PgP
         None,
     )
     .await;
-    assert_eq!(page["items"][0]["white_pr"], 2.5);
+    assert_eq!(page["items"][0]["white_pr"], 1.0);
     assert_eq!(page["items"][0]["black_pr"], 4.0);
     assert_eq!(page["items"][0]["analysis_status"], "completed");
+    let selected_config:String=sqlx::query_scalar("SELECT j.engine_config FROM analysis_selections s JOIN jobs j ON s.analysis_id='job:'||j.id::text WHERE s.match_id=$1").bind(copied).fetch_one(&pool).await.unwrap();
+    assert_eq!(selected_config, "old");
 }
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
@@ -786,6 +803,7 @@ async fn latest_completed_missing_native_statistics_suppresses_older_pr(pool: Pg
     ] {
         sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,completed_games,result,created_at) VALUES($1,$2,'match',0,'completed',1,1,$3,now()+$4*interval '1 second')").bind(Uuid::new_v4()).bind(id).bind(result).bind(n).execute(&pool).await.unwrap();
     }
+    checkpoint_jobs(&pool, id).await;
     let (status, page) = request(&pool, "GET", "/api/library/matches", None).await;
     assert_eq!(status, 200, "{page}");
     assert!(page["items"][0]["white_pr"].is_null(), "{page}");
@@ -860,6 +878,7 @@ async fn scoped_game_analysis_has_partial_status_and_never_whole_match_pr(pool: 
     let scoped = Uuid::new_v4();
     sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,completed_games,game_no,result) VALUES($1,$2,'match',0,'completed',1,1,1,$3)")
         .bind(scoped).bind(id).bind(native_result(2.5,4.0)).execute(&pool).await.unwrap();
+    checkpoint_jobs(&pool, id).await;
     let (status, page) = request(&pool, "GET", "/api/library/matches", None).await;
     assert_eq!(status, 200, "{page}");
     assert_eq!(page["items"][0]["analysis_status"], "partial");
@@ -880,12 +899,16 @@ async fn scoped_game_analysis_has_partial_status_and_never_whole_match_pr(pool: 
             .await
             .unwrap();
         let (_, page) = request(&pool, "GET", "/api/library/matches", None).await;
-        assert_eq!(page["items"][0]["analysis_status"], expected, "{page}");
+        assert_eq!(
+            page["items"][0]["analysis_status"], "partial",
+            "new uncompleted work {expected} must not hide saved analysis: {page}"
+        );
         assert!(page["items"][0]["white_pr"].is_null());
     }
     // A whole-match status takes precedence even when the scoped job is newer.
     sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,completed_games,result,created_at) VALUES($1,$2,'match',0,'completed',1,1,$3,now()-interval '1 second')")
         .bind(Uuid::new_v4()).bind(id).bind(native_result(1.0,3.0)).execute(&pool).await.unwrap();
+    checkpoint_jobs(&pool, id).await;
     let (_, page) = request(&pool, "GET", "/api/library/matches", None).await;
     assert_eq!(page["items"][0]["analysis_status"], "completed");
     assert_eq!(page["items"][0]["white_pr"], 1.0);
@@ -1291,4 +1314,41 @@ async fn new_native_import_stores_final_result_in_the_library(pool: PgPool) {
     assert_eq!(page["items"][0]["white_score"], 11);
     assert_eq!(page["items"][0]["black_score"], 9);
     assert_eq!(page["items"][0]["result_state"], "completed");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn copying_a_stale_import_selection_does_not_promote_its_revision(pool: PgPool) {
+    let source = target(&pool, "Stale selection").await;
+    let destination = database(&pool, "Stale selection copy").await;
+    sqlx::query("UPDATE matches SET source_revision=1,moves_cataloged=true,imported_analysis_loaded=true WHERE id=$1").bind(source).execute(&pool).await.unwrap();
+    sqlx::query(
+        "INSERT INTO analysis_selections(match_id,analysis_id,source_revision) VALUES($1,$2,0)",
+    )
+    .bind(source)
+    .bind(format!("imported:{source}"))
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (status, response) = request(
+        &pool,
+        "POST",
+        "/api/library/actions",
+        Some(json!({"action":"copy","match_ids":[source],"target_database_id":destination})),
+    )
+    .await;
+    assert_eq!(status, 200, "{response}");
+    let copied = Uuid::parse_str(response["results"][0]["created_id"].as_str().unwrap()).unwrap();
+    let selected: (String, i64) = sqlx::query_as(
+        "SELECT analysis_id,source_revision FROM analysis_selections WHERE match_id=$1",
+    )
+    .bind(copied)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        selected,
+        (format!("imported:{copied}"), 0),
+        "a stale selection must remain stale on the copied source"
+    );
 }

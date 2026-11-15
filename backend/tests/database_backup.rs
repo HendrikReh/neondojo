@@ -53,6 +53,30 @@ async fn insert_match(pool: &PgPool, name: &str) -> (uuid::Uuid, i64) {
     .unwrap()
 }
 
+async fn analysis_snapshot(pool: &PgPool, match_id: uuid::Uuid) -> serde_json::Value {
+    sqlx::query_scalar(
+        "SELECT jsonb_build_object(
+             'source_revision',m.source_revision,
+             'selection',(SELECT to_jsonb(s) FROM analysis_selections s WHERE s.match_id=m.id),
+             'jobs',(SELECT jsonb_agg(to_jsonb(j) ORDER BY j.id) FROM jobs j
+                 WHERE j.match_uuid=m.id AND j.status='completed'),
+             'checkpoints',(SELECT jsonb_agg(to_jsonb(c) ORDER BY c.job_id,c.game_no)
+                 FROM match_analysis_games c JOIN jobs j ON j.id=c.job_id WHERE j.match_uuid=m.id),
+             'decisions',(SELECT jsonb_agg(to_jsonb(a) ORDER BY a.id)
+                 FROM move_analyses a JOIN jobs j ON j.id=a.job_id WHERE j.match_uuid=m.id),
+             'imports',(SELECT jsonb_agg(to_jsonb(a) ORDER BY a.id)
+                 FROM imported_analyses a WHERE a.match_uuid=m.id),
+             'projections',(SELECT jsonb_agg(to_jsonb(p) ORDER BY p.imported_analysis_id)
+                 FROM imported_analysis_projections p JOIN imported_analyses a ON a.id=p.imported_analysis_id
+                 WHERE a.match_uuid=m.id))
+         FROM matches m WHERE m.id=$1",
+    )
+    .bind(match_id)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
 async fn restores_data_and_keeps_target_installation_settings(pool: PgPool) {
@@ -102,6 +126,87 @@ async fn restores_data_and_keeps_target_installation_settings(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
+    sqlx::query("UPDATE matches SET source_revision=7 WHERE id=$1")
+        .bind(source_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO match_games(id,match_uuid,game_no,position_count,white_score,black_score,crawford) VALUES(gen_random_uuid(),$1,1,1,0,0,false)")
+        .bind(source_id).execute(&pool).await.unwrap();
+    let selected_job = uuid::Uuid::new_v4();
+    for (job, depth, loss) in [(selected_job, 0, 0.125), (uuid::Uuid::new_v4(), 2, 0.25)] {
+        sqlx::query(
+            "INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,completed_games,result)
+             VALUES($1,$2,'match',$3,'completed',1,1,$4)",
+        )
+        .bind(job)
+        .bind(source_id)
+        .bind(depth)
+        .bind(serde_json::json!({"engine":"GNU Backgammon", "total_games":1,"completed_games":1}))
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO match_analysis_games(job_id,game_no,summary) VALUES($1,1,$2)")
+            .bind(job)
+            .bind(serde_json::json!({"total_games":1,"completed_games":1}))
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO move_analyses(job_id,position_uuid,game_no,decision_no,player,kind,equity_loss,data)
+             VALUES($1,$2,1,1,0,'checker',$3,$4)",
+        )
+        .bind(job)
+        .bind(position)
+        .bind(loss)
+        .bind(serde_json::json!({"kind":"checker","played":"13/10 6/5","equity_loss":loss}))
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    sqlx::query(
+        "INSERT INTO analysis_selections(match_id,analysis_id,source_revision) VALUES($1,$2,7)",
+    )
+    .bind(source_id)
+    .bind(format!("job:{selected_job}"))
+    .execute(&pool)
+    .await
+    .unwrap();
+    for (ordinal, kind, projection) in [
+        (
+            0,
+            "checker",
+            Some(serde_json::json!({"equity_loss":0.0625,"player":0})),
+        ),
+        (1, "cube", None),
+    ] {
+        let imported_id = uuid::Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO imported_analyses(id,match_uuid,position_uuid,source_ordinal,game_no,source_move_no,kind,data)
+             VALUES($1,$2,$3,$4,1,1,$5,$6)",
+        )
+        .bind(imported_id)
+        .bind(source_id)
+        .bind(position)
+        .bind(ordinal)
+        .bind(kind)
+        .bind(serde_json::json!({"kind":kind,"engine":"Source engine","raw":{"equity_loss":0.0625,"original":"0.062500"}}))
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO imported_analysis_projections(imported_analysis_id,revision,source_revision,projection) VALUES($1,3,7,$2)")
+            .bind(imported_id).bind(projection).execute(&pool).await.unwrap();
+    }
+    let saved_analyses = analysis_snapshot(&pool, source_id).await;
+    assert_eq!(saved_analyses["source_revision"], 7);
+    assert_eq!(saved_analyses["selection"]["source_revision"], 7);
+    for table in ["jobs", "checkpoints", "decisions", "imports", "projections"] {
+        assert_eq!(
+            saved_analyses[table].as_array().unwrap().len(),
+            2,
+            "{table}"
+        );
+    }
     sqlx::query(
         "INSERT INTO learning_cards(id,signature,payload)
          VALUES(gen_random_uuid(),'backup-card-1','{}'::jsonb),
@@ -334,6 +439,11 @@ async fn restores_data_and_keeps_target_installation_settings(pool: PgPool) {
             "A note with a tab\tand a newline\n".into(),
             "Héndrik".into()
         )
+    );
+    assert_eq!(
+        analysis_snapshot(&pool, source_id).await,
+        saved_analyses,
+        "restore must preserve the selected revision, native history, original imports and derived projections exactly"
     );
     assert_eq!(
         sqlx::query_as::<_, (String, String)>("SELECT player_name,gnubg_path FROM app_settings")

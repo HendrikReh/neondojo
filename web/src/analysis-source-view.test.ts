@@ -174,6 +174,7 @@ test('OGXM legacy empty analysis shows not evaluated instead of placeholder zero
       ...emptyRecord,
       source_format: 'ogxm',
       engine: 'Unknown',
+      evaluated: false,
       engine_version: null,
       depth: null,
       depth_plies: null,

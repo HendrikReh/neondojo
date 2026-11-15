@@ -171,8 +171,12 @@ test('starts GNUbg 4-ply for the selected game with an Open Sage profile', async
     'Game analysis completed',
   );
   await openMatchCalculation(page);
+  const analysis = page.getByLabel('Displayed analysis', { exact: true });
+  const saved = analysis.locator('option:checked');
+  await expect(saved).toContainText('Game 2');
   await engine.selectOption('bgsage');
   await expect(page.locator('.match-analysis-progress:visible')).toHaveCount(0);
+  await expect(saved).toContainText('Game 2');
   await engine.selectOption('gnubg');
   await expect(page.locator('.match-analysis-progress:visible')).toContainText(
     'Game analysis completed',
@@ -182,6 +186,10 @@ test('starts GNUbg 4-ply for the selected game with an Open Sage profile', async
 test('shows benchmark basis before any job and follows game, scope and depth', async ({
   page,
 }) => {
+  const database = await page.request.post('/api/databases', {
+    data: { name: `Estimate collection ${crypto.randomUUID()}` },
+  });
+  expect(database.status()).toBe(201);
   const requests: string[] = [],
     starts: string[] = [];
   page.on('request', (r) => {
@@ -363,6 +371,7 @@ async function mountEstimateHarness(page: Page) {
     const { defaultConfiguration } =
       await import('/src/configuration-model.ts');
     const { default: MatchPanel } = await import('/src/MatchAnalysisPanel.tsx');
+    const { catalogFixture } = await import('/src/analysis-catalog-test-fixtures.ts');
     const config = structuredClone(defaultConfiguration);
     const profile = {
       id: 'fixture',
@@ -412,6 +421,7 @@ async function mountEstimateHarness(page: Page) {
             black: 'Opponent',
             position_count: positionCount,
           },
+          catalog: catalogFixture(),
           onPosition: () => {},
           gameNo: 1,
           defaultPlies: 2,
@@ -556,18 +566,15 @@ test('hides pre-start estimate during submission and queued engine work', async 
   await page.getByRole('button', { name: 'Analyze game', exact: true }).click();
   await expect(estimate(page)).toHaveCount(0);
   release();
-  await expect(page.locator('.match-analysis-progress')).toContainText(
-    'Queued',
-  );
+  const progress = page.locator('.analysis-commandbar .match-analysis-progress');
+  await expect(progress).toContainText('Queued');
   await openMatchCalculation(page);
   const engine = page.getByLabel('Analysis engine', { exact: true });
   await engine.selectOption('bgsage');
   await expect(page.locator('.match-analysis-progress:visible')).toHaveCount(0);
   await expect(page.locator('.analysis-running-jobs')).toContainText('GNUbg');
   await engine.selectOption('gnubg');
-  await expect(page.locator('.match-analysis-progress:visible')).toContainText(
-    'Queued',
-  );
+  await expect(progress).toContainText('Queued');
   await expect(estimate(page)).toHaveCount(0);
 });
 

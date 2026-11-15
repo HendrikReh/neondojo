@@ -200,17 +200,32 @@ async fn positions(pool: &PgPool) -> Vec<Position> {
         .await
         .unwrap()
         .items;
+    // All questions in this fixture share one completed match analysis, as the
+    // saved catalog selection is per match rather than an implicit per-position fallback.
+    let job = store::create_match_job(pool, imported.r#match.id, 0, 1)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE jobs SET status='completed',completed_games=1,result=$2 WHERE id=$1")
+        .bind(job.id)
+        .bind(json!({"engine":"Native fixture"}))
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO match_analysis_games(job_id,game_no) VALUES($1,1)")
+        .bind(job.id)
+        .execute(pool)
+        .await
+        .unwrap();
     for position in &positions {
         sqlx::query("INSERT INTO saved_positions(position_uuid) VALUES($1)")
             .bind(position.id)
             .execute(pool)
             .await
             .unwrap();
-        sqlx::query("INSERT INTO jobs(id,position_uuid,kind,plies,status,result) VALUES($1,$2,'analysis',0,'completed',$3)")
-            .bind(Uuid::new_v4()).bind(position.id)
-            .bind(json!({"engine":"Native fixture","plies":0,"candidates":[{"rank":1,"notation":"13/10 6/5","equity":0.123,"probabilities":[0.6,0.1,0.01,0.4,0.05,0.005]}]}))
-            .execute(pool).await.unwrap();
+        let decision = json!({"decision_no":position.ply,"checker_no":position.ply,"kind":"checker","player":position.player,"dice":position.dice,"played":position.notation,"best":position.notation,"played_equity":0.123,"best_equity":0.123,"equity_loss":0.0,"severity":"none","evaluation_status":"evaluated"});
+        sqlx::query("INSERT INTO move_analyses(job_id,position_uuid,game_no,decision_no,player,kind,equity_loss,data) VALUES($1,$2,1,$3,$4,'checker',0,$5)").bind(job.id).bind(position.id).bind(position.ply).bind(position.player).bind(decision).execute(pool).await.unwrap();
     }
+
     positions
 }
 
@@ -524,7 +539,7 @@ async fn membership_batches_advance_versions_only_for_new_memberships(pool: PgPo
     assert_eq!(listed(&app, &deck["id"]).await["version"], 1);
     add(&app, &deck, &[Uuid::new_v4()]).await;
     assert_eq!(listed(&app, &deck["id"]).await["version"], 1);
-    sqlx::query("UPDATE jobs SET result=jsonb_set(result,'{candidates,0,notation}','\"updated native answer\"') WHERE position_uuid=$1").bind(positions[0].id).execute(&pool).await.unwrap();
+    sqlx::query("UPDATE move_analyses SET equity_loss=0.077,data=data || '{\"best\":\"13/10 6/5\",\"best_equity\":0.2,\"equity_loss\":0.077,\"severity\":\"bad\"}'::jsonb WHERE position_uuid=$1").bind(positions[0].id).execute(&pool).await.unwrap();
     let changed = add(&app, &deck, &[positions[0].id]).await;
     assert_eq!(changed["updated"], 1);
     assert_eq!(listed(&app, &deck["id"]).await["version"], 1);

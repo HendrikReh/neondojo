@@ -25,6 +25,7 @@ import {
   positionPlayer,
   positionOpponent,
   createPositionSummaryFormatter,
+  positionAnalysisProvenance,
 } from './position-row-summary';
 export { positionPlayer } from './position-row-summary';
 import { useI18n } from './i18n';
@@ -86,7 +87,7 @@ function HitNotes({ hit }: { hit: PositionBrowserHit }) {
 }
 function NativeError({ hit }: { hit: PositionBrowserHit }) {
   const p = usePositionText(),
-    { formatNumber } = useI18n();
+    { formatNumber, locale } = useI18n();
   return hit.native_error ? (
     <span className="position-native-error">
       <strong>
@@ -95,15 +96,12 @@ function NativeError({ hit }: { hit: PositionBrowserHit }) {
           maximumFractionDigits: 3,
         })}
       </strong>
-      <small
-        title={p('provenance', {
-          engine: hit.native_error.engine,
-          plies: hit.native_error.plies,
-          job: hit.native_error.job_id,
-        })}
-      >
+      <small title={positionAnalysisProvenance(hit.native_error, locale)}>
         {hit.native_error.engine} ·{' '}
-        {p('depth', { plies: hit.native_error.plies })}
+        {hit.native_error.depth ??
+          (hit.native_error.plies == null
+            ? p('nativeUnknown')
+            : p('depth', { plies: hit.native_error.plies }))}
       </small>
     </span>
   ) : (

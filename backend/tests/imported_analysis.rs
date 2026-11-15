@@ -348,16 +348,36 @@ async fn library_distinguishes_imported_analysis_from_native_job_status_and_pr(p
 
     let job = Uuid::new_v4();
     sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games) VALUES($1,$2,'match',0,'queued',1)").bind(job).bind(id).execute(&pool).await.unwrap();
-    for (native_status, game_no, expected) in [
-        ("queued", None, "queued"),
-        ("running", None, "running"),
-        ("failed", None, "failed"),
-        ("completed", Some(1), "partial"),
-        ("completed", None, "completed"),
-    ] {
-        sqlx::query("UPDATE jobs SET status=$2,game_no=$3 WHERE id=$1")
+    for native_status in ["queued", "running", "failed", "completed"] {
+        sqlx::query("UPDATE jobs SET status=$2 WHERE id=$1")
             .bind(job)
             .bind(native_status)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let source = item(&pool, id).await;
+        assert_eq!(
+            source["analysis_status"], "imported",
+            "{native_status}: {source}"
+        );
+        no_native_pr(&source);
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("SELECT status FROM jobs WHERE id=$1")
+                .bind(job)
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            native_status,
+            "showing a saved result must not change the calculation status"
+        );
+    }
+    // Only durable, complete results outrank an imported analysis in automatic
+    // mode. A completed scoped result remains available for explicit selection.
+    sqlx::query("INSERT INTO match_analysis_games(job_id,game_no,summary) VALUES($1,1,'{\"completed_games\":1,\"total_games\":1}')")
+        .bind(job).execute(&pool).await.unwrap();
+    for (game_no, expected) in [(Some(1), "imported"), (None, "completed")] {
+        sqlx::query("UPDATE jobs SET completed_games=1,game_no=$2 WHERE id=$1")
+            .bind(job)
             .bind(game_no)
             .execute(&pool)
             .await
@@ -366,6 +386,17 @@ async fn library_distinguishes_imported_analysis_from_native_job_status_and_pr(p
         assert_eq!(source["analysis_status"], expected, "{source}");
         no_native_pr(&source);
     }
+    let (status, selected) = call(
+        &pool,
+        "PUT",
+        &format!("/api/matches/{id}/analysis-selection"),
+        Some(json!({"analysis_id":format!("imported:{id}")})),
+    )
+    .await;
+    assert_eq!(status, 200, "{selected}");
+    let source = item(&pool, id).await;
+    assert_eq!(source["analysis_status"], "imported");
+    no_native_pr(&source);
     sqlx::query("DELETE FROM jobs WHERE id=$1")
         .bind(job)
         .execute(&pool)

@@ -26,7 +26,6 @@ import GameSelector from './GameSelector';
 import { AddCardsPanel } from './LearningPanel';
 import { type Job } from './api';
 import { reviewDecisions, type ReviewDecision } from './review-decisions-api';
-import { statisticsRevision } from './match-statistics-api';
 import { useGameNavigation } from './useGameNavigation';
 import { useJobs } from './useJobs';
 import { useI18n } from './i18n';
@@ -45,6 +44,8 @@ import { usePositionText } from './position-browser-messages';
 import type { MoveNotesTarget } from './MoveNotesDialog';
 import { useAnalysisBoardResize } from './useAnalysisBoardResize';
 import type { MatchAnalysisEngine } from './useMatchAnalysis';
+import { useAnalysisCatalog, type AnalysisCatalog } from './useAnalysisCatalog';
+import AnalysisCatalogSelect from './AnalysisCatalogSelect';
 
 export type AnalysisDetail =
   'overview' | 'statistics' | 'errors' | 'notes' | 'cards';
@@ -142,17 +143,36 @@ export default function AnalysisWorkspace({
   const gridStyle: CSSProperties & { '--analysis-board-width': string } = {
     '--analysis-board-width': `${boardResize.width}px`,
   };
-  const [matchJob, setMatchJob] = useState<Job>();
-  const reviewJob =
-    matchJob?.match_uuid === match?.id &&
-    (matchJob?.game_no == null || matchJob.game_no === game?.game_no)
-      ? matchJob
-      : undefined;
-  const moveAssessments = useMoveAssessments({
-    matchId: sourceAvailable ? match?.id : undefined,
-    gameNo: game?.game_no,
-    job: reviewJob,
+  const catalog = useAnalysisCatalog(
+    match?.id,
+    position?.id,
+    JSON.stringify([
+      sourceRevision,
+      analysisRevision,
+      jobs.jobs.analysis?.id,
+      jobs.jobs.analysis?.status,
+    ]),
+  );
+  const catalogRevision = JSON.stringify([
     analysisRevision,
+    catalog.analysisId,
+    catalog.selected?.job?.status,
+    catalog.selected?.job?.completed_games,
+    catalog.selected?.job?.updated_at,
+  ]);
+  const [calculationJobId, setCalculationJobId] = useState<string>();
+  const onCalculationJob = useCallback(
+    (job: Job | undefined) => {
+      setCalculationJobId(job?.id);
+      onTrackJob(job);
+    },
+    [onTrackJob],
+  );
+  const moveAssessments = useMoveAssessments({
+    matchId: sourceAvailable && catalog.analysisId ? match?.id : undefined,
+    gameNo: game?.game_no,
+    analysisId: catalog.analysisId,
+    analysisRevision: catalogRevision,
   });
   const moveList = useRef<HTMLDivElement>(null);
   const currentMove = useRef<HTMLButtonElement>(null);
@@ -181,19 +201,26 @@ export default function AnalysisWorkspace({
     'arrows',
   );
   const [candidate, setCandidate] = useState<
-    PreviewCandidate & { positionId: string }
+    PreviewCandidate & { positionId: string; analysisId?: string }
   >();
   const selectedPreview =
-    candidate?.positionId === position?.id ? candidate : undefined;
+    candidate?.positionId === position?.id &&
+    candidate?.analysisId === catalog.analysisId
+      ? candidate
+      : undefined;
   const onPreview = useCallback(
     (selected: PreviewCandidate | null) => {
       setCandidate(
         selected && position
-          ? { ...selected, positionId: position.id }
+          ? {
+              ...selected,
+              positionId: position.id,
+              analysisId: catalog.analysisId,
+            }
           : undefined,
       );
     },
-    [position],
+    [position, catalog.analysisId],
   );
   const preview = useMemo(
     () =>
@@ -216,13 +243,9 @@ export default function AnalysisWorkspace({
     positionId?: string;
     scope: string;
   }>();
-  const [preferredSource, setPreferredSource] = useState<{
-    positionId: string;
-    source: 'file' | 'engine';
-    token: number;
-  }>();
-  const reviewScope = `${match?.id}:${game?.game_no}:${reviewJob ? statisticsRevision(reviewJob) : ''}:${moveFilter.player}:${moveFilter.kind}:${moveFilter.severity}:${moveFilter.game_no}`;
-  const errorIdentity = `${reviewScope}:${position?.id}:${active}:${notesSuspended}`;
+  const reviewScope = `${match?.id}:${game?.game_no}:${catalogRevision}:${moveFilter.player}:${moveFilter.kind}:${moveFilter.severity}:${moveFilter.game_no}`;
+  const catalogBusy = catalog.loading || catalog.saving;
+  const errorIdentity = `${reviewScope}:${position?.id}:${active}:${notesSuspended}:${catalogBusy}`;
   const currentErrorIdentity = useRef(errorIdentity);
   currentErrorIdentity.current = errorIdentity;
   function openReviewDecision(row: ReviewDecision) {
@@ -239,15 +262,10 @@ export default function AnalysisWorkspace({
         gameNo: row.game_no,
         moveId: row.move_id,
         decisionKind: 'cube',
-        reviewPosition: row.review_position ?? undefined,
-        reviewPlayed: row.played,
+        reviewDecision: row,
       });
     } else if (row.position_uuid) {
-      setPreferredSource({
-        positionId: row.position_uuid,
-        source: row.source === 'imported' ? 'file' : 'engine',
-        token: Date.now(),
-      });
+      onPreview(null);
       onPosition(row.position_uuid);
     }
   }
@@ -279,7 +297,11 @@ export default function AnalysisWorkspace({
   async function nextError() {
     setNextErrorFailure(undefined);
     setNoErrors(false);
-    if (!sourceAvailable || !match || !game) return;
+    if (!sourceAvailable || !match || !game || catalogBusy) return;
+    if (!catalog.analysisId) {
+      setNoErrors(true);
+      return;
+    }
     errorRequest.current?.abort();
     const abort = new AbortController();
     errorRequest.current = abort;
@@ -304,7 +326,12 @@ export default function AnalysisWorkspace({
             errors_only: true,
             game_no: moveFilter.game_no ?? game.game_no,
           },
-          { jobId: reviewJob?.id, after, limit: 100, signal: abort.signal },
+          {
+            analysisId: catalog.analysisId,
+            after,
+            limit: 100,
+            signal: abort.signal,
+          },
         );
         if (!current()) return;
         for (const row of page.items) {
@@ -345,11 +372,13 @@ export default function AnalysisWorkspace({
     >
       <AnalysisMatchHeader
         match={match}
+        selectedAnalysis={catalog.selected}
         metadataRevision={metadataRevision}
         analysisRevision={analysisRevision}
         theme={theme}
         active={active && !notesSuspended}
       />
+      <AnalysisCatalogSelect key={match.id} catalog={catalog} />
       {!sourceAvailable && (
         <p className="analysis-retained-context" role="status">
           {headerText('retainedPosition')}
@@ -366,7 +395,7 @@ export default function AnalysisWorkspace({
         )}
         <AnalysisRunningJobs
           jobs={runningJobs}
-          displayedJobId={reviewJob?.id}
+          displayedJobId={calculationJobId}
         />
       </div>
       <div
@@ -437,7 +466,7 @@ export default function AnalysisWorkspace({
                 label={w('nextError')}
                 className="next-error"
                 onClick={() => void nextError()}
-                disabled={!game || loading || findingError}
+                disabled={!game || loading || findingError || catalogBusy}
               />
               {noErrors && <p role="status">{w('noErrors')}</p>}
               {!!nextErrorFailure && (
@@ -584,7 +613,7 @@ export default function AnalysisWorkspace({
             )}
             <AnalysisPanel
               jobs={jobs.jobs}
-              completedAnalysis={jobs.completedAnalysis}
+              catalog={catalog}
               restoring={jobs.restoring}
               active={active && overview}
               stats={sourceAvailable ? stats : null}
@@ -600,8 +629,8 @@ export default function AnalysisWorkspace({
                     : match.black
                   : undefined
               }
-              preferredSource={preferredSource}
               sourceRevision={sourceRevision}
+              analysisRevision={catalogRevision}
               onPreview={onPreview}
               selectedPreview={selectedPreview}
               disabled={!position || jobs.submitting || !configured}
@@ -622,7 +651,9 @@ export default function AnalysisWorkspace({
               onPosition={onPosition}
               onDecision={openReviewDecision}
               onTrackJob={onTrackJob}
-              onCurrentJob={setMatchJob}
+              catalog={catalog}
+              analysisRevision={catalogRevision}
+              onCalculationJob={onCalculationJob}
               onFilterChange={setMoveFilter}
               onShowErrors={() => onDetail('errors')}
               selectedPositionId={position?.id}
@@ -654,6 +685,7 @@ export default function AnalysisWorkspace({
             <AddCardsPanel
               positionId={position?.id}
               matchId={match.id}
+              analysisId={catalog.analysisId}
               gameNo={game?.game_no}
               allowBatch={sourceAvailable}
               white={match.white}
@@ -681,7 +713,9 @@ function MatchResults({
   onPosition,
   onDecision,
   onTrackJob,
-  onCurrentJob,
+  catalog,
+  analysisRevision,
+  onCalculationJob,
   onFilterChange,
   onShowErrors,
   selectedPositionId,
@@ -698,7 +732,9 @@ function MatchResults({
   onPosition: (id: string) => void;
   onDecision: (decision: ReviewDecision) => void;
   onTrackJob: (job: Job | undefined) => void;
-  onCurrentJob: (job: Job | undefined) => void;
+  catalog: AnalysisCatalog;
+  analysisRevision?: string;
+  onCalculationJob: (job: Job | undefined) => void;
   onFilterChange: (filter: {
     player: string;
     kind: string;
@@ -708,13 +744,6 @@ function MatchResults({
   onShowErrors: () => void;
   selectedPositionId?: string;
 }) {
-  const onJob = useCallback(
-    (job: Job | undefined) => {
-      onCurrentJob(job);
-      onTrackJob(job);
-    },
-    [onCurrentJob, onTrackJob],
-  );
   return (
     <div
       className="workspace-match-results"
@@ -739,9 +768,14 @@ function MatchResults({
         showStatistics={detail === 'statistics'}
         onShowErrors={onShowErrors}
         onGame={(number) => void navigation.selectGame(number)}
-        onJob={onJob}
-        onAccepted={onTrackJob}
+        catalog={catalog}
+        onJob={onCalculationJob}
+        onAccepted={(job) => {
+          onTrackJob(job);
+          catalog.refresh();
+        }}
         onFilterChange={onFilterChange}
+        analysisRevision={analysisRevision}
         onPosition={onPosition}
       />
     </div>

@@ -107,7 +107,7 @@ async fn verified_installation_allows_independent_analysis_and_preserves_snapsho
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires isolated PostgreSQL"]
-async fn selected_results_never_cross_provider_and_legacy_remains_gnubg(pool: PgPool) {
+async fn saved_result_catalog_is_engine_independent_and_legacy_remains_gnubg(pool: PgPool) {
     use uuid::Uuid;
     let app = api::router(AppState::new(pool.clone(), Engine::new("gnubg".into())));
     assert_eq!(call(app, "GET", "/api/settings", Value::Null).await.0, 200);
@@ -125,23 +125,29 @@ async fn selected_results_never_cross_provider_and_legacy_remains_gnubg(pool: Pg
     let legacy = Uuid::new_v4();
     let sage = Uuid::new_v4();
     for (id, snapshot) in [(legacy, Value::Null), (sage, json!({"engine_id":"bgsage"}))] {
-        sqlx::query("INSERT INTO jobs(id,kind,plies,status,engine_snapshot,position_uuid) VALUES($1,'analysis',2,'completed',$2,$3)")
+        sqlx::query("INSERT INTO jobs(id,kind,plies,status,engine_snapshot,position_uuid,result) VALUES($1,'analysis',2,'completed',$2,$3,'{\"engine\":\"fixture\",\"plies\":2,\"candidates\":[{\"rank\":1,\"notation\":\"8/5 6/5\",\"equity\":0.1,\"probabilities\":[]}]}')")
             .bind(id).bind(if snapshot.is_null() {None} else {Some(snapshot)}).bind(position).execute(&pool).await.unwrap();
     }
-    let selected: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM selected_engine_jobs")
-        .fetch_all(&pool)
-        .await
-        .unwrap();
-    assert_eq!(selected, vec![legacy]);
+    let selected: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT job_id FROM analysis_catalog_sources WHERE source='native' ORDER BY job_id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    let mut expected = vec![legacy, sage];
+    expected.sort();
+    assert_eq!(selected, expected);
     sqlx::query("UPDATE app_settings SET analysis_engine='bgsage',analysis_plies=2")
         .execute(&pool)
         .await
         .unwrap();
-    let selected: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM selected_engine_jobs")
-        .fetch_all(&pool)
-        .await
-        .unwrap();
-    assert_eq!(selected, vec![sage]);
+    let selected: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT job_id FROM analysis_catalog_sources WHERE source='native' ORDER BY job_id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(selected, expected);
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM jobs")
             .fetch_one(&pool)
@@ -154,11 +160,13 @@ async fn selected_results_never_cross_provider_and_legacy_remains_gnubg(pool: Pg
         .await
         .unwrap();
     assert_eq!(
-        sqlx::query_scalar::<_, Uuid>("SELECT id FROM selected_engine_jobs")
-            .fetch_one(&pool)
-            .await
-            .unwrap(),
-        legacy
+        sqlx::query_scalar::<_, Uuid>(
+            "SELECT job_id FROM analysis_catalog_sources WHERE source='native' ORDER BY job_id"
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap(),
+        expected
     );
 }
 
@@ -200,7 +208,7 @@ async fn sage_benchmark_snapshots_are_independent_and_complete(pool: PgPool) {
             app.clone(),
             "POST",
             "/api/benchmarks",
-            json!({"engine_id":"bgsage","plies":[4]})
+            json!({"engine_id":"bgsage","plies":[5]})
         )
         .await
         .0,
@@ -411,7 +419,7 @@ async fn provider_lookup_uses_index_with_many_other_engine_results(pool: PgPool)
     sqlx::query("INSERT INTO jobs(id,position_uuid,kind,plies,status,result,engine_snapshot) SELECT md5('provider-'||n)::uuid,$1,'analysis',CASE WHEN n=10000 THEN 2 ELSE 4 END,'completed','{}'::jsonb,CASE WHEN n=10000 THEN '{\"engine_id\":\"bgsage\"}'::jsonb END FROM generate_series(1,10000) n")
         .bind(position).execute(&pool).await.unwrap();
     sqlx::query("ANALYZE jobs").execute(&pool).await.unwrap();
-    let plan:Value=sqlx::query_scalar("EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) SELECT id,result FROM selected_engine_jobs WHERE position_uuid=$1 AND kind='analysis' AND status='completed' AND result IS NOT NULL ORDER BY plies DESC,created_at DESC,id DESC LIMIT 1")
+    let plan:Value=sqlx::query_scalar("EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) SELECT id,result FROM jobs WHERE coalesce(engine_snapshot->>'engine_id','gnubg')='bgsage' AND position_uuid=$1 AND kind='analysis' AND status='completed' AND result IS NOT NULL ORDER BY plies DESC,created_at DESC,id DESC LIMIT 1")
         .bind(position).fetch_one(&pool).await.unwrap();
     assert!(
         plan.to_string().contains("jobs_engine_position_ready"),

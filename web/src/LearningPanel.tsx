@@ -3,7 +3,9 @@ import { useOptionalConfiguration } from './ConfigurationProvider';
 import ActionButton from './ActionButton';
 import AnkiAutoSync from './AnkiAutoSync';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { request, type Job } from './api';
+import { request } from './api';
+import type { components } from './generated-api';
+import { useAnalysisCatalogText } from './analysis-catalog-messages';
 import { AppError } from './i18n-core';
 import { useI18n } from './i18n';
 import { useLearningText } from './learning-messages';
@@ -149,6 +151,7 @@ export function useDecks(revision: number) {
 export function AddCardsPanel({
   positionId,
   matchId,
+  analysisId,
   gameNo,
   revision,
   onChanged,
@@ -159,6 +162,7 @@ export function AddCardsPanel({
 }: {
   positionId: string | undefined;
   matchId: string;
+  analysisId?: string;
   gameNo?: number;
   revision: number;
   onChanged: () => void;
@@ -168,6 +172,7 @@ export function AddCardsPanel({
   theme: Theme;
 }) {
   const profile = useOptionalConfiguration();
+  const catalogText = useAnalysisCatalogText();
   const t = useLearningText();
   const practiceT = useCardPracticeText();
   const [newTags, setNewTags] = useState('');
@@ -217,7 +222,7 @@ export function AddCardsPanel({
     setNeedsAnalysis(false);
     setError(null);
     setBusy(false);
-  }, [positionId, matchId, gameNo, allowBatch]);
+  }, [positionId, matchId, gameNo, allowBatch, analysisId]);
   useEffect(() => {
     if (!ready || profile) return;
     if (!decks.some((d) => d.id === deckId)) setDeckId(decks[0]?.id || '');
@@ -232,49 +237,41 @@ export function AddCardsPanel({
     Number(minLoss) >= 0;
   async function add(kind: 'position' | 'match') {
     if (!hasDeck || (kind === 'match' && !allowBatch)) return;
+    if (!analysisId) {
+      setNeedsAnalysis(true);
+      return;
+    }
     const version = ++generation.current;
     setBusy(true);
     setError(null);
     setProcessed(null);
     try {
-      let body: Record<string, unknown>;
+      let body: components['schemas']['AddCards'];
       if (kind === 'position') {
         body = { position_id: positionId };
       } else {
-        let job = gameNo
-          ? await request<Job | null>(
-              `/matches/${matchId}/analysis?game_no=${gameNo}`,
-            )
-          : null;
-        if (!job || job.status !== 'completed')
-          job = await request<Job | null>(`/matches/${matchId}/analysis`);
-        if (version !== generation.current) return;
-        if (!job || job.status !== 'completed') {
-          setNeedsAnalysis(true);
-          return;
-        }
         body = {
-          job_id: job.id,
           game_no: gameNo,
           min_loss: Number(minLoss),
           player: player === '' ? null : Number(player),
         };
       }
-      const result = await request<{
-        added: number;
-        updated: number;
-        total: number;
-      }>(`/decks/${deckId}/cards`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...body,
-          tags: newTags
-            .split(',')
-            .map((tag) => tag.trim())
-            .filter(Boolean),
-        }),
-      });
+      const result = await request<components['schemas']['AddCardsResult']>(
+        `/decks/${deckId}/cards`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...body,
+            analysis_id: analysisId,
+            match_id: matchId,
+            tags: newTags
+              .split(',')
+              .map((tag) => tag.trim())
+              .filter(Boolean),
+          } satisfies components['schemas']['AddCards']),
+        },
+      );
       if (version === generation.current) {
         setProcessed(result.added + result.updated);
         onChanged();
@@ -398,7 +395,7 @@ export function AddCardsPanel({
           onChanged={onChanged}
         />
       )}
-      {allowBatch && needsAnalysis && <p role="alert">{t('addHint')}</p>}
+      {needsAnalysis && <p role="alert">{catalogText('chooseAnother')}</p>}
       {busy && <p role="status">{t('adding')}</p>}
       {processed !== null && (
         <p role="status">{t('added', { count: processed })}</p>

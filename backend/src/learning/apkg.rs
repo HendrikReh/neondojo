@@ -73,7 +73,9 @@ pub(super) fn prepare(
             portable.position.match_uuid = Uuid::nil();
             portable.source = CardSource {
                 kind: "anki".into(),
-                job_id: Uuid::nil(),
+                job_id: None,
+                analysis_id: None,
+                imported_analysis_id: None,
                 match_id: Uuid::nil(),
                 position_id: None,
                 game_no: 1,
@@ -397,10 +399,25 @@ fn answer_html(c: &CardContent, a: &CardAnswer, l: &Labels) -> String {
         "<p class=\"context\">{}: {} · {} {} · {} · {}</p>",
         l.engine,
         html(&solution.engine),
-        solution.plies,
-        l.ply,
+        html(
+            &solution
+                .imported
+                .as_ref()
+                .and_then(|record| record.depth.clone())
+                .or_else(|| solution.plies.map(|plies| plies.to_string()))
+                .unwrap_or_default()
+        ),
+        if solution.imported.is_some() {
+            ""
+        } else {
+            l.ply
+        },
         html(&c.source.kind),
-        c.source.job_id
+        c.source
+            .imported_analysis_id
+            .or(c.source.job_id)
+            .map(|id| id.to_string())
+            .unwrap_or_default()
     );
     out
 }
@@ -523,7 +540,9 @@ mod tests {
             prompt: String::new(),
             source: CardSource {
                 kind: "match".into(),
-                job_id: id,
+                job_id: Some(id),
+                analysis_id: None,
+                imported_analysis_id: None,
                 match_id: id,
                 position_id: Some(id),
                 game_no: 1,
@@ -531,7 +550,8 @@ mod tests {
             },
             solution: CardSolution {
                 engine: "GNUbg".into(),
-                plies: 0,
+                plies: Some(0),
+                imported: None,
                 candidates: vec![],
                 decision: None,
             },
@@ -601,7 +621,9 @@ mod tests {
             prompt: "What is the best checker play?".into(),
             source: CardSource {
                 kind: "analysis".into(),
-                job_id: id,
+                job_id: Some(id),
+                analysis_id: None,
+                imported_analysis_id: None,
                 match_id: deck,
                 position_id: Some(id),
                 game_no: 1,
@@ -609,7 +631,8 @@ mod tests {
             },
             solution: CardSolution {
                 engine: "GNUbg".into(),
-                plies: 0,
+                plies: Some(0),
+                imported: None,
                 candidates: vec![Candidate {
                     rank: 1,
                     notation: "8/5 6/5".into(),

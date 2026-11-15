@@ -1,14 +1,6 @@
 import { useI18n } from './i18n';
 import { interpolate, type Locale, type TranslationParams } from './i18n-core';
 const rows = {
-  sources: [
-    'Analysis sources',
-    'Analysequellen',
-    'Fuentes de análisis',
-    'Sources d’analyse',
-    'Źródła analizy',
-    'Fonti di analisi',
-  ],
   imported: [
     'Imported analysis',
     'Importierte Analyse',
@@ -26,12 +18,12 @@ const rows = {
     'Libro delle aperture',
   ],
   engine: [
-    'Local engine',
-    'Lokale Engine',
-    'Motor local',
-    'Moteur local',
-    'Silnik lokalny',
-    'Motore locale',
+    'Calculated analysis',
+    'Berechnete Analyse',
+    'Análisis calculado',
+    'Analyse calculée',
+    'Obliczona analiza',
+    'Analisi calcolata',
   ],
   books: [
     'Opening books',
@@ -99,12 +91,12 @@ const rows = {
     '{count} contesti di punteggio',
   ],
   configurationHelp: [
-    'Choose the default lookup source here; compare file, book and engine results in the analysis inspector. A book miss leaves engine analysis available.',
-    'Hier wählst du die Standardquelle für Buchabfragen; Datei-, Buch- und Engineergebnisse vergleichst du im Analyseinspektor. Bei einem Buchmiss bleibt die Engineanalyse verfügbar.',
-    'Elige la fuente predeterminada; compara archivo, libro y motor en el inspector. Si no hay entrada, el motor sigue disponible.',
-    'Choisissez la source par défaut ; comparez fichier, bibliothèque et moteur dans l’inspecteur. Sans entrée, l’analyse moteur reste disponible.',
-    'Wybierz domyślne źródło; porównuj plik, książkę i silnik w inspektorze. Brak wpisu nie blokuje analizy silnika.',
-    'Scegli la fonte predefinita; confronta file, libro e motore nell’ispettore. Se manca una voce, il motore resta disponibile.',
+    'Choose the default opening book here. Book answers appear as an optional reference alongside the selected match analysis.',
+    'Hier wählst du das Standard-Eröffnungsbuch. Buchantworten erscheinen als optionale Referenz neben der ausgewählten Partieanalyse.',
+    'Elige aquí el libro de aperturas predeterminado. Sus respuestas aparecen como referencia opcional junto al análisis seleccionado de la partida.',
+    'Choisissez ici la bibliothèque d’ouvertures par défaut. Ses réponses apparaissent comme référence facultative à côté de l’analyse sélectionnée du match.',
+    'Wybierz domyślną książkę otwarć. Jej odpowiedzi pojawiają się jako opcjonalne odniesienie obok wybranej analizy meczu.',
+    'Scegli qui il libro delle aperture predefinito. Le risposte appaiono come riferimento facoltativo accanto all’analisi selezionata del match.',
   ],
   versionHelp: [
     'Book answers retain their own engine version and depth. Different engine versions are separate analyses.',

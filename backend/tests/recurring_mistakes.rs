@@ -317,7 +317,7 @@ async fn active_practice_scores_all_three_decisions_without_writing_learning_sta
 }
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
-async fn selects_deepest_per_game_before_filters_and_uses_actual_decision_player(pool: PgPool) {
+async fn selects_persisted_game_before_filters_without_mixing_other_game_sources(pool: PgPool) {
     let id = source(&pool).await;
     let deep = job(&pool, id, 3, Some(1), &game1(0.1)).await;
     job(&pool, id, 0, None, &game1(0.9)).await;
@@ -332,6 +332,12 @@ async fn selects_deepest_per_game_before_filters_and_uses_actual_decision_player
         ],
     )
     .await;
+    sqlx::query("INSERT INTO analysis_selections(match_id,analysis_id) VALUES($1,$2)")
+        .bind(id)
+        .bind(format!("job:{deep}"))
+        .execute(&pool)
+        .await
+        .unwrap();
     let router = app(&pool);
     let (status, all) = call(&router, "GET", "/api/study/mistakes", Value::Null).await;
     assert_eq!(status, 200, "{all}");
@@ -345,12 +351,12 @@ async fn selects_deepest_per_game_before_filters_and_uses_actual_decision_player
     )
     .await;
     assert_eq!(status, 200, "{a}");
-    assert_eq!(a["analyzed_decisions"], 3);
+    assert_eq!(a["analyzed_decisions"], 2);
     assert_eq!(a["analyzed_matches"], 1);
     let groups = a["groups"].as_array().unwrap();
-    assert_eq!(groups.len(), 3, "{a}");
+    assert_eq!(groups.len(), 2, "{a}");
     assert!(groups.iter().any(|g| g["mistake_kind"] == "wrong_take"));
-    assert!(groups.iter().any(|g| g["mistake_kind"] == "wrong_pass"));
+    assert!(!groups.iter().any(|g| g["mistake_kind"] == "wrong_pass"));
     assert!(groups.iter().any(|g| g["mistake_kind"] == "checker"));
     let (_, b) = call(
         &router,
@@ -359,9 +365,11 @@ async fn selects_deepest_per_game_before_filters_and_uses_actual_decision_player
         Value::Null,
     )
     .await;
-    assert_eq!(b["groups"].as_array().unwrap().len(), 1, "{b}");
-    assert_eq!(b["groups"][0]["total_loss"], 0.2);
-    assert_eq!(b["groups"][0]["mistake_kind"], "premature_double");
+    assert_eq!(
+        b["groups"],
+        json!([]),
+        "unselected game-2 decisions must not fill selected game-1 scope"
+    );
     let group = groups
         .iter()
         .find(|g| g["mistake_kind"] == "wrong_take")
@@ -923,7 +931,7 @@ async fn equal_depth_ties_use_timestamp_then_uuid_and_invalid_winner_never_falls
 ) {
     let id = source(&pool).await;
     let first = job(&pool, id, 2, None, &game1(0.1)).await;
-    let second = job(&pool, id, 2, Some(1), &game1(0.2)).await;
+    let second = job(&pool, id, 2, None, &game1(0.2)).await;
     sqlx::query("UPDATE jobs SET created_at=CASE WHEN id=$1 THEN '2026-01-01'::timestamptz ELSE '2026-01-02'::timestamptz END WHERE id=ANY($2)").bind(first).bind(vec![first,second]).execute(&pool).await.unwrap();
     let router = app(&pool);
     let (_, newest) = call(
@@ -1157,18 +1165,12 @@ async fn card_suggestions_span_games_and_save_only_selected_decisions(pool: PgPo
     .r#match
     .id;
     job(&pool, history, 1, Some(1), &game1(0.08)).await;
-    let first = job(&pool, match_id, 1, Some(1), &game1(0.12)).await;
-    let second = job(
-        &pool,
-        match_id,
-        1,
-        Some(2),
-        &[
-            (2, decision(1, 1, "double", "no double", 0.25)),
-            (2, decision(2, 0, "drop", "take", 0.35)),
-        ],
-    )
-    .await;
+    let mut selected_decisions = game1(0.12);
+    selected_decisions.extend([
+        (2, decision(1, 1, "double", "no double", 0.25)),
+        (2, decision(2, 0, "drop", "take", 0.35)),
+    ]);
+    let first = job(&pool, match_id, 1, None, &selected_decisions).await;
     let router = app(&pool);
     let (status, deck) = call(&router, "POST", "/api/decks", json!({"name":"Suggestions"})).await;
     assert_eq!(status, 201, "{deck}");
@@ -1205,7 +1207,7 @@ async fn card_suggestions_span_games_and_save_only_selected_decisions(pool: PgPo
     );
     let picked = items
         .iter()
-        .find(|item| item["reference"]["job_id"] == json!(second))
+        .find(|item| item["reference"]["game_no"] == 2)
         .unwrap();
     let body = json!({"match_id": match_id, "decisions": [picked["reference"]]});
     let (status, result) = call(&router, "POST", &url, body.clone()).await;
@@ -1236,7 +1238,7 @@ async fn card_suggestions_span_games_and_save_only_selected_decisions(pool: PgPo
             .unwrap(),
         4
     );
-    job(
+    let replacement = job(
         &pool,
         match_id,
         2,
@@ -1247,5 +1249,11 @@ async fn card_suggestions_span_games_and_save_only_selected_decisions(pool: PgPo
         ],
     )
     .await;
+    sqlx::query("INSERT INTO analysis_selections(match_id,analysis_id) VALUES($1,$2)")
+        .bind(match_id)
+        .bind(format!("job:{replacement}"))
+        .execute(&pool)
+        .await
+        .unwrap();
     assert_eq!(call(&router, "POST", &url, body).await.0, 409);
 }

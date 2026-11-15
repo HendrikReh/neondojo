@@ -13,8 +13,8 @@ use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 const MAX_LEGACY_SOURCES: usize = 16;
-const FOREIGN: &str = "FROM eligible m JOIN match_games g ON g.match_uuid=m.id WHERE m.format IN ('xg','bgf') AND NOT EXISTS(SELECT 1 FROM chosen c WHERE c.match_id=m.id AND c.game_no=g.game_no)";
-const LEGACY_FOREIGN: &str = "FROM eligible m LEFT JOIN match_games g ON g.match_uuid=m.id WHERE m.format IN ('xg','bgf') AND NOT EXISTS(SELECT 1 FROM chosen c WHERE c.match_id=m.id AND c.game_no=g.game_no)";
+const FOREIGN: &str = "FROM eligible m JOIN match_games g ON g.match_uuid=m.id WHERE m.format IN ('xg','bgf','sgf') AND EXISTS(SELECT 1 FROM effective_analysis_selections selected WHERE selected.match_id=m.id AND selected.source='imported')";
+const LEGACY_FOREIGN: &str = "FROM eligible m LEFT JOIN match_games g ON g.match_uuid=m.id WHERE m.format IN ('xg','bgf','sgf')";
 
 /// Player choices use metadata only. Catalog legacy sources only once their
 /// participant/match is selected, and reject oversized requests before parsing.
@@ -94,12 +94,12 @@ pub(super) async fn load(
     }
     let games=sqlx::query_as(&format!("{CHOSEN} SELECT m.id AS match_id,g.game_no,m.format,m.white,m.black {FOREIGN} ORDER BY m.id,g.game_no"))
         .bind(database).bind(match_id).bind(player.map(str::to_lowercase)).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
-    let events:Vec<ImportedEvent>=sqlx::query_as(&format!("{CHOSEN} SELECT e.*,p.ply AS checker_ply FROM eligible m JOIN match_moves e ON e.match_uuid=m.id LEFT JOIN positions p ON p.id=e.position_uuid AND p.match_uuid=e.match_uuid AND p.game_no=e.game_no WHERE m.format IN ('xg','bgf') AND NOT EXISTS(SELECT 1 FROM chosen c WHERE c.match_id=m.id AND c.game_no=e.game_no) ORDER BY m.id,e.game_no,e.move_no LIMIT {}",MAX_DECISIONS+1))
+    let events:Vec<ImportedEvent>=sqlx::query_as(&format!("{CHOSEN} SELECT e.*,p.ply AS checker_ply FROM eligible m JOIN match_moves e ON e.match_uuid=m.id LEFT JOIN positions p ON p.id=e.position_uuid AND p.match_uuid=e.match_uuid AND p.game_no=e.game_no WHERE m.format IN ('xg','bgf','sgf') AND EXISTS(SELECT 1 FROM effective_analysis_selections selected WHERE selected.match_id=m.id AND selected.source='imported') ORDER BY m.id,e.game_no,e.move_no LIMIT {}",MAX_DECISIONS+1))
         .bind(database).bind(match_id).bind(player.map(str::to_lowercase)).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
     if events.len() > MAX_DECISIONS {
         return Err(ApiError::invalid(TOO_BROAD));
     }
-    let rows:Vec<ImportedRow>=sqlx::query_as(&format!("{CHOSEN} SELECT a.id,a.match_uuid AS match_id,a.position_uuid,a.game_no,a.source_move_no,a.kind,a.data FROM eligible m JOIN imported_analyses a ON a.match_uuid=m.id WHERE m.format IN ('xg','bgf') AND a.kind IN ('checker','cube') AND NOT EXISTS(SELECT 1 FROM chosen c WHERE c.match_id=m.id AND c.game_no=a.game_no) ORDER BY m.id,a.game_no,a.source_move_no,a.source_ordinal LIMIT {}",MAX_DECISIONS+1))
+    let rows:Vec<ImportedRow>=sqlx::query_as(&format!("{CHOSEN} SELECT a.id,a.match_uuid AS match_id,a.position_uuid,a.game_no,a.source_move_no,a.kind,a.data FROM eligible m JOIN primary_imported_analyses a ON a.match_uuid=m.id WHERE m.format IN ('xg','bgf','sgf') AND a.kind IN ('checker','cube') AND EXISTS(SELECT 1 FROM effective_analysis_selections selected WHERE selected.match_id=m.id AND selected.source='imported') ORDER BY m.id,a.game_no,a.source_move_no,a.source_ordinal LIMIT {}",MAX_DECISIONS+1))
         .bind(database).bind(match_id).bind(player.map(str::to_lowercase)).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
     if rows.len() + native_decisions > MAX_DECISIONS {
         return Err(ApiError::invalid(TOO_BROAD));
@@ -221,8 +221,10 @@ pub(super) fn reconstruct(imported: Imported) -> Vec<SourceDecision> {
                     method: Some(method),
                     source: Some(if game.format == "xg" {
                         MistakeSource::Xg
-                    } else {
+                    } else if game.format == "bgf" {
                         MistakeSource::Bgblitz
+                    } else {
+                        MistakeSource::Sgf
                     }),
                 },
             });

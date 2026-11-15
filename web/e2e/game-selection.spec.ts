@@ -96,6 +96,7 @@ test('one game owns its move list, board boundaries and native analysis; full ma
   await expect(page.getByLabel('Analyseumfang', { exact: true })).toHaveValue(
     'game',
   );
+  await expect(page.getByLabel('Angezeigte Analyse', { exact: true })).toBeVisible();
   const depth = page.getByLabel('Partie-Analysetiefe', { exact: true });
   await depth.selectOption('0');
   const scoped = page.waitForResponse(
@@ -307,9 +308,12 @@ test('returning to an analysis filter starts at its first page', async ({
   await expect(analysis.locator('tbody tr').first()).toHaveText(first);
 });
 
-test('a delayed game catalog never displays a whole-match job as a game job', async ({
+test('a saved whole-match result stays identified while game navigation loads', async ({
   page,
 }) => {
+  const match = await openReference(page);
+  const fullJob = await completedFullJob(page, match.id);
+  expect(fullJob?.status).toBe('completed');
   let release = () => {};
   let requested = () => {};
   const gate = new Promise<void>((resolve) => {
@@ -323,18 +327,7 @@ test('a delayed game catalog never displays a whole-match job as a game job', as
     await gate;
     await route.continue();
   });
-  await page.goto('/');
-  const imported = page.waitForResponse(
-    (r) =>
-      r.request().method() === 'POST' &&
-      new URL(r.url()).pathname === '/api/imports',
-  );
-  await page
-    .getByLabel('Partiedatei')
-    .setInputFiles('../backend/tests/fixtures/WC2014.mat');
-  const match = (await (await imported).json()).match;
-  const fullJob = await completedFullJob(page, match.id);
-  expect(fullJob?.status).toBe('completed');
+  await page.reload();
   await started;
   await page.getByRole('tab', { name: 'Fehler', exact: true }).click();
   const analysis = page.locator('.match-analysis');
@@ -343,24 +336,14 @@ test('a delayed game catalog never displays a whole-match job as a game job', as
     await expect(
       page.getByRole('button', { name: 'Spiel analysieren', exact: true }),
     ).toBeDisabled();
-    await expect(analysis).not.toHaveAttribute('data-job-id', fullJob.id);
-    await expect(page.locator('.match-analysis-progress:visible')).toHaveCount(
-      0,
-    );
-    await expect(analysis.locator('tbody tr')).toHaveCount(0);
-    await page
-      .getByLabel('Analyseumfang', { exact: true })
-      .selectOption('match');
     await expect(analysis).toHaveAttribute('data-job-id', fullJob.id);
-    await page
-      .getByLabel('Analyseumfang', { exact: true })
-      .selectOption('game');
-    await expect(page.locator('.match-analysis-progress:visible')).toHaveCount(
-      0,
-    );
+    await expect(analysis).toHaveAttribute('aria-label', 'Vollständige Partieanalyse');
+    await expect(page.getByLabel('Angezeigte Analyse').locator('option:checked')).toContainText('Ganze Partie');
+    await expect(page.locator('.match-analysis-progress:visible')).toHaveCount(0);
   } finally {
     release();
   }
   await page.unrouteAll({ behavior: 'wait' });
   await expect(page.locator('.board-heading')).toContainText('Spiel 1');
+  await expect(page.getByRole('button', { name: 'Spiel analysieren', exact: true })).toBeEnabled();
 });

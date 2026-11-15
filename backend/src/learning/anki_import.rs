@@ -131,8 +131,17 @@ pub(super) fn read_package(bytes: &[u8]) -> anyhow::Result<Vec<(CardContent, BTr
         let position = &mut content.position;
         anyhow::ensure!(
             matches!(position.player, 0 | 1)
-                && content.solution.plies >= 0
-                && content.solution.plies <= 4
+                && if content.solution.imported.is_some() {
+                    content
+                        .solution
+                        .plies
+                        .is_none_or(|plies| (0..=64).contains(&plies))
+                } else {
+                    content
+                        .solution
+                        .plies
+                        .is_some_and(|plies| (0..=4).contains(&plies))
+                }
                 && !content.solution.engine.trim().is_empty(),
             "Invalid decision metadata"
         );
@@ -187,7 +196,9 @@ pub(super) fn read_package(bytes: &[u8]) -> anyhow::Result<Vec<(CardContent, BTr
         position.match_uuid = Uuid::nil();
         content.source = CardSource {
             kind: "anki".into(),
-            job_id: Uuid::nil(),
+            job_id: None,
+            analysis_id: None,
+            imported_analysis_id: None,
             match_id: Uuid::nil(),
             position_id: None,
             game_no: 1,

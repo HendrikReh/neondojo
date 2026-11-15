@@ -63,11 +63,13 @@ export function statisticsRevision(job: Job) {
 }
 /** Only display a supplied, current native PR; never derive one from move losses. */
 export function nativePerformanceRating(
-  summary: MatchAnalysisSummary,
+  summary:
+    MatchAnalysisSummary | components['schemas']['CatalogAnalysisSummary'],
   player: number,
 ): number | undefined {
   const rating = summary.performance_rating;
   if (
+    summary.plies == null ||
     !rating ||
     rating.method !== 'gnubg_emg_500_v1' ||
     rating.profile !==
