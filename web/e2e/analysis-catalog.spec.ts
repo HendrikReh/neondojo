@@ -2,6 +2,10 @@ import { expect, test } from './test';
 import { profileBackend } from './profile-backend';
 import { openFullMatchAnalysis } from './analysis-controls';
 
+// The catalog assertions use persisted jobs and wait for the native engine.
+test.describe.configure({ timeout: 240_000 });
+const analysisTimeout = 100_000;
+
 test('a selected analysis can be deleted while a deeper result remains available', async ({
   page,
 }, info) => {
@@ -34,7 +38,7 @@ test('a selected analysis can be deleted while a deeper result remains available
           const job = await (await page.request.get(`/api/jobs/${id}`)).json();
           return job.error ?? job.status;
         },
-        { timeout: 40_000 },
+        { timeout: analysisTimeout },
       )
       .toBe('completed');
     saved.push(id);
@@ -111,6 +115,7 @@ test('one saved choice drives every view and remains strict across games and rel
       .poll(
         async () =>
           (await (await page.request.get(`/api/jobs/${job.id}`)).json()).status,
+        { timeout: analysisTimeout },
       )
       .toBe('completed');
     return job;

@@ -259,7 +259,7 @@ test('real XG review opens checker and cube decisions with original source and r
   );
   await expect(
     page.getByLabel('Angezeigte Analyse', { exact: true }),
-  ).toContainText('Importiert');
+  ).toHaveAttribute('title', /eXtreme Gammon · Importiert/);
   await expect(
     page.locator(
       '.analysis-panel > .source-analysis .candidate-comparison-table .candidate-marker-played',
