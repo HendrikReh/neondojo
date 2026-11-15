@@ -15,6 +15,7 @@ import {
   type ColumnWidths,
 } from './column-widths';
 import './resizable-columns.css';
+import { useWorkspaceLayout } from './useWorkspaceSession';
 
 type Drag<Id extends string> = {
   column: Id;
@@ -29,9 +30,7 @@ export type ResizableColumnsOptions<Id extends string> = {
   visible: boolean;
   activeColumns?: readonly Id[];
   resizeLabel: (label: string) => string;
-  widths?: Partial<ColumnWidths<Id>> | null;
-  onWidthsChange?: (widths: ColumnWidths<Id> | undefined) => void;
-  configurationGeneration?: number;
+  legacyWidths?: Record<string, number> | null;
 };
 
 export function useResizableColumns<Id extends string>(
@@ -39,21 +38,36 @@ export function useResizableColumns<Id extends string>(
   options: ResizableColumnsOptions<Id>,
 ) {
   const tableRef = useRef<HTMLTableElement>(null);
-  const [localWidths, setWidths] = useState(layout.read);
+  const [legacyLocalWidths] = useState(layout.read);
+  const fillWidths = (values: Record<string, number>) =>
+    captureColumnWidths(
+      layout,
+      (id) =>
+        values[id] ??
+        layout.columns.find((column) => column.id === id)?.defaultWidth ??
+        layout.minimum(id),
+    );
+  const [savedWidths, saveWidths] = useWorkspaceLayout<ColumnWidths<Id> | null>(
+    layout.storageKey.replace(/^bgtutor\./, ''),
+    options.legacyWidths === undefined
+      ? undefined
+      : options.legacyWidths && fillWidths(options.legacyWidths),
+    legacyLocalWidths ?? null,
+    (value) => {
+      if (value === null) return null;
+      if (!value || typeof value !== 'object' || Array.isArray(value))
+        return undefined;
+      const widths = value as Record<string, unknown>;
+      return captureColumnWidths(layout, (id) =>
+        typeof widths[id] === 'number' ? widths[id] : undefined,
+      );
+    },
+  );
+  const [dragWidths, setWidths] = useState<ColumnWidths<Id>>();
   const [measured, setMeasured] = useState<ColumnWidths<Id>>();
   const [dragging, setDragging] = useState(false);
   const active = useRef<Drag<Id> | undefined>(undefined);
-  const widths =
-    options.onWidthsChange && !dragging
-      ? options.widths
-        ? (Object.fromEntries(
-            layout.columns.map((column) => [
-              column.id,
-              options.widths?.[column.id] ?? column.defaultWidth ?? column.min,
-            ]),
-          ) as ColumnWidths<Id>)
-        : undefined
-      : localWidths;
+  const widths = dragging ? dragWidths : (savedWidths ?? undefined);
   const current = useRef({ layout, options, widths });
   current.current = { layout, options, widths };
   const activeKey = JSON.stringify(
@@ -112,13 +126,7 @@ export function useResizableColumns<Id extends string>(
   }, [updateWidths]);
   useEffect(() => {
     cancel();
-  }, [
-    options.visible,
-    activeKey,
-    layout.storageKey,
-    options.configurationGeneration,
-    cancel,
-  ]);
+  }, [options.visible, activeKey, layout.storageKey, cancel]);
   useEffect(
     () => () => {
       const drag = active.current;
@@ -229,9 +237,7 @@ export function useResizableColumns<Id extends string>(
     );
   }
   function persist(value: ColumnWidths<Id> | undefined) {
-    if (current.current.options.onWidthsChange)
-      current.current.options.onWidthsChange(value);
-    else layout.save(value);
+    saveWidths(value ?? null);
   }
   function reset() {
     cancel();

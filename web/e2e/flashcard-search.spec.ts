@@ -115,7 +115,12 @@ async function setup(page: Page, singleDeck = false) {
   await page.route(/\/api\/(?:cards|decks\/[^/]+\/cards)(?:\?.*)?$/, respond);
   await page.route('**/api/decks/*/anki-auto-sync', (route) =>
     route.fulfill({
-      json: { profile: null, last_synced_at: null, last_received_at: null, last_outcome: null },
+      json: {
+        profile: null,
+        last_synced_at: null,
+        last_received_at: null,
+        last_outcome: null,
+      },
     }),
   );
   page.on('request', (req) => {
@@ -255,7 +260,10 @@ test('Send to Anki targets the selected deck and reports the import outcome', as
     expect(route.request().method()).toBe('POST');
     expect(route.request().postDataJSON()).toEqual({ locale: 'en' });
     if (++attempts === 1) {
-      await route.fulfill({ status: 503, json: { error: 'Connection refused' } });
+      await route.fulfill({
+        status: 503,
+        json: { error: 'Connection refused' },
+      });
     } else {
       await route.fulfill({ status: 204 });
     }
@@ -296,21 +304,401 @@ test('Sync Anki reviews reports both directions for the selected deck', async ({
   );
 });
 
-test('Automatic Anki sync is enabled and disabled for the selected deck', async ({ page }) => {
+test('Anki sync overview shows linked decks, transfer counts and the pause reason', async ({
+  page,
+}) => {
+  const { study } = await setup(page);
+  let paused = false;
+  let received = 2;
+  let retryFailed = false;
+  let retried = false;
+  let lastResolved = false;
+  const actions: string[] = [];
+  const failedRun = {
+    id: 'failed-run',
+    profile: 'Test profile',
+    finished_at: '2026-11-13T12:01:00Z',
+    received_reviews: 2,
+    sent_reviews: 3,
+    outcome: 'failed',
+    problem: 'timeout',
+    error_detail: 'AnkiConnect did not confirm the review import in time',
+  };
+  await page.route(`**/api/decks/${deckB}/anki-auto-sync/history`, (route) =>
+    route.fulfill({
+      json: [
+        ...(retried
+          ? [
+              {
+                ...failedRun,
+                id: 'retry-success',
+                finished_at: '2026-11-13T12:04:00Z',
+                received_reviews: 0,
+                sent_reviews: 0,
+                outcome: 'synced',
+                problem: null,
+                error_detail: null,
+              },
+            ]
+          : []),
+        ...(retryFailed
+          ? [
+              {
+                ...failedRun,
+                id: 'retry-failure',
+                finished_at: '2026-11-13T12:03:00Z',
+                received_reviews: 0,
+                sent_reviews: 0,
+                problem: 'conflict',
+                error_detail: 'Open the linked Anki profile',
+                resolved_at: lastResolved ? '2026-11-13T12:05:00Z' : null,
+              },
+            ]
+          : []),
+        ...(received === 2
+          ? [failedRun]
+          : [
+              {
+                ...failedRun,
+                id: 'successful-run',
+                finished_at: '2026-11-13T12:02:00Z',
+                received_reviews: 1,
+                sent_reviews: 0,
+                outcome: 'synced',
+                problem: null,
+                error_detail: null,
+              },
+              {
+                ...failedRun,
+                resolved_at: retried ? '2026-11-13T12:04:00Z' : null,
+              },
+            ]),
+      ],
+    }),
+  );
+  await page.route('**/api/study/anki-auto-sync', (route) =>
+    route.fulfill({
+      json: [
+        {
+          deck_id: deckB,
+          deck_name: 'Mochy studies',
+          profile: 'Test profile',
+          last_synced_at: '2026-11-13T12:00:00Z',
+          received_reviews: received,
+          sent_reviews: 3,
+          open_errors: lastResolved ? 0 : retryFailed && !retried ? 2 : 1,
+          paused,
+          status: paused ? 'paused' : 'other_profile',
+        },
+        {
+          deck_id: deckA,
+          deck_name: 'Prime',
+          profile: 'Test profile',
+          last_synced_at: null,
+          received_reviews: 0,
+          sent_reviews: 0,
+          open_errors: 0,
+          paused: false,
+          status: 'waiting',
+        },
+      ],
+    }),
+  );
+  await page.route(
+    `**/api/decks/${deckB}/anki-auto-sync/action`,
+    async (route) => {
+      expect(route.request().method()).toBe('POST');
+      const { action, retry_of } = route.request().postDataJSON();
+      actions.push(action);
+      if (action === 'sync_now') {
+        if (received === 2) {
+          expect(retry_of).toBeUndefined();
+          received++;
+        } else if (!retryFailed) {
+          expect(retry_of).toBe(failedRun.id);
+          retryFailed = true;
+          await route.fulfill({
+            status: 409,
+            json: { error: 'Open the linked Anki profile' },
+          });
+          return;
+        } else if (!retried) {
+          expect(retry_of).toBe(failedRun.id);
+          retried = true;
+        } else {
+          expect(retry_of).toBe('retry-failure');
+          lastResolved = true;
+        }
+      } else paused = action === 'pause';
+      await route.fulfill({ status: 204 });
+    },
+  );
+  await page.route(`**/api/decks/${deckA}/anki-auto-sync/history`, (route) =>
+    route.fulfill({ json: [] }),
+  );
+  const trigger = study.getByRole('button', { name: 'Anki sync', exact: true });
+  await trigger.click();
+  const dialog = page.getByRole('dialog', { name: 'Anki sync' });
+  const openDecks = dialog.getByRole('checkbox', {
+    name: 'Decks with open errors only',
+  });
+  const row = dialog.getByRole('row').filter({ hasText: 'Mochy studies' });
+  await expect(row.getByRole('rowheader')).toContainText(
+    'Anki profile Test profile',
+  );
+  await expect(row.getByRole('cell').nth(0)).toContainText(/11\/13\/26/);
+  await expect(row.getByRole('cell').nth(1)).toHaveText('2');
+  await expect(row.getByRole('cell').nth(2)).toHaveText('3');
+  await expect(row.getByRole('cell').nth(3)).toHaveText(
+    'Paused. Open the linked Anki profile.',
+  );
+  const toggle = row.getByRole('button', { name: 'History', exact: true });
+  const count = (open: number) =>
+    row.getByRole('button', {
+      name: `Open errors for Mochy studies (${open})`,
+    });
+  const filter = dialog.getByRole('combobox', { name: 'Filter runs' });
+  const zero = dialog.getByRole('button', {
+    name: 'Open errors for Prime (0)',
+  });
+  await expect(zero).toHaveText('0');
+  await zero.click();
+  await expect(filter).toHaveValue('open');
+  await expect(
+    dialog.getByText('No open errors.', { exact: true }),
+  ).toBeVisible();
+  await expect(openDecks).not.toBeChecked();
+  await openDecks.check();
+  await expect(zero).toHaveCount(0);
+  await expect(count(1)).toHaveText('1');
+  await count(1).click();
+  await expect(filter).toHaveValue('open');
+  const history = dialog.getByRole('table', {
+    name: 'History · Mochy studies',
+  });
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(history.getByText(failedRun.error_detail)).toBeVisible();
+  await filter.selectOption({ label: 'All runs' });
+  await row.getByRole('button', { name: 'Pause', exact: true }).click();
+  await expect(row.getByRole('cell').nth(3)).toHaveText('Paused manually');
+  await row.getByRole('button', { name: 'Sync now' }).click();
+  await expect(row.getByRole('cell').nth(1)).toHaveText('3');
+  await expect(row.getByRole('cell').nth(3)).toHaveText('Paused manually');
+  const newRun = history.getByRole('row').filter({ hasText: 'Successful' });
+  await expect(newRun.locator('time')).toHaveAttribute(
+    'datetime',
+    '2026-11-13T12:02:00Z',
+  );
+  await expect(newRun.getByRole('cell').nth(0)).toHaveText('1');
+  await expect(newRun.getByRole('cell').nth(1)).toHaveText('0');
+  await count(1).click();
+  await expect(filter).toHaveValue('open');
+  await expect(newRun).toHaveCount(0);
+  const failedRow = history
+    .getByRole('row')
+    .filter({ hasText: failedRun.error_detail });
+  const retry = failedRow.getByRole('button', { name: 'Retry sync' });
+  await retry.click();
+  await expect(dialog.getByRole('alert')).toContainText(
+    'Open the linked Anki profile',
+  );
+  await expect(count(2)).toHaveText('2');
+  await expect(
+    history.getByText('Open the linked Anki profile', { exact: true }),
+  ).toBeVisible();
+  await retry.click();
+  await expect(
+    dialog.getByRole('status').filter({ hasText: 'Retry completed.' }),
+  ).toBeVisible();
+  await expect(filter).toHaveValue('open');
+  await expect(newRun).toHaveCount(0);
+  await expect(failedRow).toHaveCount(0);
+  await expect(count(1)).toHaveText('1');
+  await expect(
+    history.getByText('Open the linked Anki profile', { exact: true }),
+  ).toBeVisible();
+  await expect(row.getByRole('cell').nth(1)).toHaveText('3');
+  await expect(row.getByRole('cell').nth(3)).toHaveText('Paused manually');
+  await filter.selectOption({ label: 'Failed runs only' });
+  await expect(failedRow).toContainText('Resolved');
+  await expect(failedRow.locator('time').last()).toHaveAttribute(
+    'datetime',
+    '2026-11-13T12:04:00Z',
+  );
+  await expect(retry).toHaveCount(0);
+  await filter.selectOption({ label: 'All runs' });
+  const retryRun = history
+    .getByRole('row')
+    .filter({ has: page.locator('time[datetime="2026-11-13T12:04:00Z"]') });
+  await expect(retryRun.getByRole('cell').nth(0)).toHaveText('0');
+  await expect(retryRun.getByRole('cell').nth(1)).toHaveText('0');
+  await expect(
+    retryRun.getByRole('button', { name: 'Retry sync' }),
+  ).toHaveCount(0);
+  for (const viewport of [
+    { width: 1800, height: 1169 },
+    { width: 2560, height: 1440 },
+    { width: 3840, height: 2160 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await dialog.screenshot({
+      path: test.info().outputPath(`anki-overview-${viewport.width}.png`),
+    });
+  }
+  await history
+    .getByRole('row')
+    .filter({ hasText: 'Open the linked Anki profile' })
+    .getByRole('button', { name: 'Retry sync' })
+    .click();
+  await expect(row).toHaveCount(0);
+  await expect(history).toHaveCount(0);
+  await expect(dialog.getByText('No decks have open errors.')).toBeVisible();
+  await expect(openDecks).toBeChecked();
+  await openDecks.uncheck();
+  await expect(zero).toBeVisible();
+  await expect(count(0)).toBeVisible();
+  await row.getByRole('button', { name: 'Resume', exact: true }).click();
+  await expect(row.getByRole('cell').nth(3)).toHaveText(
+    'Paused. Open the linked Anki profile.',
+  );
+  expect(actions).toEqual([
+    'pause',
+    'sync_now',
+    'sync_now',
+    'sync_now',
+    'sync_now',
+    'resume',
+  ]);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+});
+
+test('Retry all open errors runs each affected deck once and continues after a failure', async ({
+  page,
+}) => {
+  const { study } = await setup(page);
+  const attempts: string[] = [];
+  const affected = [
+    { deck_id: deckA, deck_name: 'Prime', open_errors: 2 },
+    { deck_id: deckB, deck_name: 'Mochy studies', open_errors: 3 },
+    { deck_id: 'clean', deck_name: 'Clean', open_errors: 0 },
+  ];
+  await page.route('**/api/study/anki-auto-sync', (route) =>
+    route.fulfill({
+      json: affected.map((deck) => ({
+        profile: 'Test profile',
+        last_synced_at: null,
+        received_reviews: 0,
+        sent_reviews: 0,
+        paused: true,
+        status: 'paused',
+        ...deck,
+      })),
+    }),
+  );
+  await page.route('**/api/decks/*/anki-auto-sync/action', async (route) => {
+    const id = new URL(route.request().url()).pathname.split('/')[3];
+    expect(route.request().postDataJSON()).toEqual({
+      action: 'retry_open_errors',
+      include_result: true,
+    });
+    attempts.push(id);
+    if (id === deckA) {
+      await route.fulfill({
+        json: {
+          outcome: 'failed',
+          sent_reviews: 0,
+          received_reviews: 1,
+          open_errors: 2,
+          error_detail: 'Anki did not confirm the transfer',
+        },
+      });
+      return;
+    }
+    expect(attempts).toEqual([deckA, deckB]);
+    affected[1].open_errors = 0;
+    await route.fulfill({
+      json: {
+        outcome: 'synced',
+        sent_reviews: 3,
+        received_reviews: 4,
+        open_errors: 0,
+      },
+    });
+  });
+  await study.getByRole('button', { name: 'Anki sync', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Anki sync' });
+  await dialog
+    .getByRole('checkbox', { name: 'Decks with open errors only' })
+    .check();
+  const bulk = dialog.getByRole('button', { name: 'Retry all open errors' });
+  await bulk.click();
+  await expect(dialog.getByRole('status')).toContainText(
+    '1 successful, 1 failed.',
+  );
+  const results = dialog.getByRole('table', { name: 'Retry results by deck' });
+  const result = (deck: string) =>
+    results.getByRole('row').filter({ hasText: deck });
+  await expect(result('Prime').getByRole('cell')).toHaveText([
+    /Failed.*Anki did not confirm the transfer/s,
+    '0',
+    '1',
+    '2',
+  ]);
+  await expect(result('Mochy studies').getByRole('cell')).toHaveText([
+    'Successful',
+    '3',
+    '4',
+    '0',
+  ]);
+  await expect(result('Clean')).toHaveCount(0);
+  const overview = dialog.getByRole('table', {
+    name: 'Reviews transferred through this link',
+  });
+  await expect(
+    overview.getByRole('rowheader', { name: /Mochy studies|Clean/ }),
+  ).toHaveCount(0);
+  await expect(
+    overview.getByRole('rowheader', { name: /Prime/ }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole('button', { name: 'Open errors for Prime (2)' }),
+  ).toBeVisible();
+  expect(attempts).toEqual([deckA, deckB]);
+  for (const viewport of [
+    { width: 1800, height: 1169 },
+    { width: 2560, height: 1440 },
+    { width: 3840, height: 2160 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await dialog.screenshot({
+      path: test.info().outputPath(`anki-retry-results-${viewport.width}.png`),
+    });
+  }
+});
+
+test('Automatic Anki sync is enabled and disabled for the selected deck', async ({
+  page,
+}) => {
   const { study } = await setup(page);
   let linked = false;
   await page.route(`**/api/decks/${deckB}/anki-auto-sync`, async (route) => {
     if (route.request().method() === 'PUT') {
       linked = route.request().postDataJSON().enabled;
     }
-    await route.fulfill({ json: {
-      profile: linked ? 'Test profile' : null,
-      last_synced_at: null,
-      last_received_at: null,
-      last_outcome: null,
-    } });
+    await route.fulfill({
+      json: {
+        profile: linked ? 'Test profile' : null,
+        last_synced_at: null,
+        last_received_at: null,
+        last_outcome: null,
+      },
+    });
   });
-  const toggle = study.getByRole('checkbox', { name: 'Sync reviews automatically' });
+  const toggle = study.getByRole('checkbox', {
+    name: 'Sync reviews automatically',
+  });
   await expect(toggle).toHaveCount(0);
   await study.getByLabel('Choose deck', { exact: true }).selectOption(deckB);
   await expect(toggle).toBeEnabled();

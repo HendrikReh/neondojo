@@ -121,18 +121,21 @@ export default function BgBlitzBoard({
         ? '64_r'
         : String(cubeValue)
     ] || theme.cubes[String(cubeValue)];
+  const cubeWidth = cubeImage?.width ?? 64;
+  const cubeHeight = cubeImage?.height ?? 64;
   const barX = theme.columns[7] + theme.checkers.white[0].width / 2;
   const configuredCubeX = cubeOwner === 0 ? theme.cubeRightX : theme.cubeLeftX;
   // XML positions are image origins; only the centered/default cube is centered on the bar.
   const cubeX =
     cubeOwner === null || configuredCubeX === 0
-      ? barX - (cubeImage?.width ?? 64) / 2
+      ? barX - cubeWidth / 2
       : configuredCubeX;
   const cubeY =
     height / 2 +
     (cubeOwner === null
       ? theme.cubeCenteredY
       : (cubeOwner === 0 ? -1 : 1) * theme.cubeOffsetY);
+  const cubeTop = cubeY - cubeHeight / 2;
   return (
     <svg
       className="board bgblitz-board"
@@ -159,24 +162,24 @@ export default function BgBlitzBoard({
       )}
       <PlayCube
         label={cubeLabel}
+        bounds={{
+          x: cubeX,
+          y: cubeTop,
+          width: cubeWidth,
+          height: cubeHeight,
+        }}
+        interaction={interaction?.cube}
         value={displayedCube}
         pending={cubePending}
         owner={cubeOwner}
-        interaction={interaction?.cube}
-        hitArea={{
-          x: cubeX - Math.max(0, (44 - (cubeImage?.width ?? 64)) / 2),
-          y: cubeY - Math.max(44, cubeImage?.height ?? 64) / 2,
-          width: Math.max(44, cubeImage?.width ?? 64),
-          height: Math.max(44, cubeImage?.height ?? 64),
-        }}
       >
         {cubeImage ? (
-          artwork(cubeImage, cubeX, cubeY - cubeImage.height / 2)
+          artwork(cubeImage, cubeX, cubeTop)
         ) : (
-          <g transform={`translate(${cubeX},${cubeY - 32})`}>
+          <g transform={`translate(${cubeX},${cubeTop})`}>
             <rect
-              width="64"
-              height="64"
+              width={cubeWidth}
+              height={cubeHeight}
               rx="8"
               fill="#fffbed"
               stroke="#172b22"

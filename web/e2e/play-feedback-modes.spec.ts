@@ -303,7 +303,7 @@ test('completed review identifies the original and corrected choices with help s
   await expect(review.locator('ol')).toContainText('With help');
 });
 
-test('Playing settings persist a separate threshold and captured mode defaults', async ({
+test('Analysis thresholds and the default play mode apply to new matches', async ({
   page,
 }) => {
   const settings = {
@@ -331,26 +331,30 @@ test('Playing settings persist a separate threshold and captured mode defaults',
   await dialog
     .getByLabel('Default play mode', { exact: true })
     .selectOption('tutor');
-  await dialog
-    .getByLabel('Tutor warning threshold', { exact: true })
-    .fill('0.02');
+  await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
+  const threshold = dialog.getByLabel('Error', { exact: true });
+  await expect(threshold).toHaveValue('0.020');
+  await threshold.fill('0.005');
+  await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(dialog.getByRole('alert')).toContainText('strictly increasing');
+  await threshold.fill('0,025');
   await applyAndCloseSettings(dialog);
   const configuration = await page.evaluate(async () => {
     const response = await fetch('/api/configuration');
     return response.json();
   });
-  expect(configuration.current_configuration.play.tutor_threshold).toBe(0.02);
+  expect(configuration.current_configuration.analysis.error_thresholds.error).toBe(0.025);
   expect(configuration.current_configuration.analysis.plies).toBe(2);
   expect(configuration.current_configuration.play.plies).toBe(0);
-  expect(configuration.active_profile.configuration.play.tutor_threshold).toBe(
-    0.04,
+  expect(configuration.active_profile.configuration.analysis.error_thresholds.error).toBe(
+    0.02,
   );
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();
   await expect(
     page.locator('.play-setup').getByLabel('Play mode', { exact: true }),
   ).toHaveValue('tutor');
   await expect(
-    page.getByText('Tutor warning threshold: 0.020', { exact: true }),
+    page.getByText('Tutor warning threshold · 0.025', { exact: true }),
   ).toBeVisible();
 });
 test('Training displays complete equities and probabilities', async ({
@@ -386,7 +390,7 @@ test('Training displays complete equities and probabilities', async ({
     fullPage: true,
   });
 });
-test('Play move sends the saved decision identity and plays only after acknowledgment', async ({
+test('the dice resume a saved Coach move with its decision identity', async ({
   page,
 }) => {
   const state = saved('coach', {
@@ -420,10 +424,8 @@ test('Play move sends the saved decision identity and plays only after acknowled
     });
   });
   expect(submitted).toBe(false);
-  await page
-    .getByTestId('play-feedback')
-    .getByRole('button', { name: 'Play move', exact: true })
-    .click();
+  await expect(page.getByRole('button', { name: 'Play move' })).toHaveCount(0);
+  await page.locator('[data-dice-action="confirm"]').click();
   await expect(page.getByTestId('play-feedback')).toHaveCount(0);
   expect(submitted).toBe(true);
 });

@@ -1,5 +1,11 @@
 import { applyAndCloseSettings } from './settings-actions';
-import { openMatchCalculation, openPositionCalculation } from './analysis-controls';
+import {
+  calculateDiceEquity,
+  openFullMatchAnalysis,
+  openPositionCalculation,
+  submitFullMatchAnalysis,
+} from './analysis-controls';
+import { profileBackend } from './profile-backend';
 import { test, expect } from './test';
 
 test.beforeEach(async ({ page }) => {
@@ -26,17 +32,13 @@ test('real import, search, GNUbg analysis, distribution, themes and mobile layou
   await expect(
     page.getByRole('img', { name: /Backgammon-Position/ }),
   ).toBeVisible();
-  await (
-    await openPositionCalculation(page)
-  )
-    .getByRole('button', { name: 'Position analysieren' })
-    .click();
+  await (await openPositionCalculation(page)).getByRole('button', { name: 'Position analysieren' }).click();
   const bestCandidate = page.locator(
     '.analysis-panel .candidates tbody tr[data-candidate-best="true"]',
   );
   await expect(bestCandidate).toBeVisible({ timeout: 30_000 });
   await expect(bestCandidate).toContainText('8/5 6/5');
-  await page.getByRole('tab', { name: 'Würfel-Equity', exact: true }).click();
+  await calculateDiceEquity(page);
   await expect(page.locator('.dice-grid button')).toHaveCount(36, {
     timeout: 45_000,
   });
@@ -60,13 +62,13 @@ test('real import, search, GNUbg analysis, distribution, themes and mobile layou
   ).toHaveText('12');
   await page.getByRole('button', { name: 'Vorheriger Zug' }).click();
   await page.getByRole('tab', { name: 'Matchdatenbank', exact: true }).click();
-  await page.locator('.position-search summary').click();
+  await page.getByRole('button', { name: 'Positions-ID', exact: true }).click();
   await page
     .getByRole('button', { name: 'Aktuelle Position übernehmen' })
     .click();
   await page.getByRole('button', { name: 'Exakt suchen' }).click();
   await expect(page.locator('.database-table tbody tr').first()).toBeVisible();
-  await expect(page.locator('.library-position-filter')).toBeVisible();
+  await expect(page.locator('.applied-filter-chips').getByRole('button', { name: 'Positionsfilter entfernen' })).toBeVisible();
   await expect(page.locator('.position-results')).toHaveCount(0);
   await page.getByRole('tab', { name: 'Analyse', exact: true }).click();
   await page.getByRole('tab', { name: 'Spielwürfe' }).click();
@@ -146,9 +148,7 @@ test('full match analysis, errors, board navigation and persisted results', asyn
       '7 point match\n\n Game 1\n Match Review Demo : 0             Opponent Review : 0\n 1) 31: 24/21 6/5                  42: 8/4 6/4\n\n Game 2\n Match Review Demo : 1             Opponent Review : 0\n 1) 31: 8/5 6/5                    42: 8/4 6/4\n',
     ),
   });
-  await openMatchCalculation(page);
-  await page.getByLabel('Analyseumfang', { exact: true }).selectOption('match');
-  await page.getByRole('tab', { name: 'Fehler', exact: true }).click();
+  await page.getByRole('tab', { name: 'Cube', exact: true }).click();
   const panel = page.getByRole('region', {
     name: 'Vollständige Partieanalyse',
     exact: true,
@@ -162,15 +162,10 @@ test('full match analysis, errors, board navigation and persisted results', asyn
       response.request().method() === 'POST' &&
       /\/api\/matches\/[^/]+\/analysis$/.test(new URL(response.url()).pathname),
   );
-  await page
-    .getByRole('button', {
-      name: /Gesamte Partie analysieren|Partie erneut analysieren/,
-    })
-    .click();
+  await submitFullMatchAnalysis(page, await openFullMatchAnalysis(page));
   const submitted = await analysisResponse;
   expect(submitted.status()).toBe(202);
   const created = await submitted.json();
-  await expect(panel).toHaveAttribute('data-job-id', created.id);
   await expect(
     progress.getByText('Partieanalyse abgeschlossen', { exact: true }),
   ).toBeVisible({ timeout: 45_000 });
@@ -179,7 +174,6 @@ test('full match analysis, errors, board navigation and persisted results', asyn
     '100',
   );
   await expect(progress).toContainText('2 / 2 Spiele');
-  await page.getByRole('tab', { name: 'Statistik', exact: true }).click();
   const statistics = page.getByRole('tabpanel', {
     name: 'Statistik',
     exact: true,
@@ -187,20 +181,12 @@ test('full match analysis, errors, board navigation and persisted results', asyn
   await expect(statistics).toBeVisible();
   await expect(statistics).toHaveAttribute('data-job-id', created.id);
   await expect(statistics).toContainText('4 von 4 Checkerzügen analysiert');
-  await page.getByRole('tab', { name: 'Fehler', exact: true }).click();
-  await panel.getByLabel('Nur Auffälligkeiten').check();
-  await expect(panel.locator('tbody tr').first()).toContainText('24/21 6/5');
-  await expect(panel.locator('tbody tr').first()).toContainText('8/5 6/5');
-  await panel
-    .getByRole('button', { name: 'Spiel 1, Zug 1 auf dem Brett öffnen' })
-    .click();
-  await expect(page.locator('.board-navigation')).toContainText('24/21 6/5');
-  await panel
-    .getByLabel('Analyse nach Entscheidung filtern')
-    .selectOption('cube');
-  await expect(panel.locator('tbody tr')).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Cube', exact: true }).click();
+  await expect(panel).toHaveAttribute('data-job-id', created.id);
+  await expect(panel.getByRole('checkbox', { name: /Nur Auffälligkeiten/ })).toBeChecked();
   await panel.getByLabel('Nur Auffälligkeiten').uncheck();
-  await expect(panel.locator('tbody tr').first()).toContainText('Cube');
+  await page.getByRole('button', { name: 'Nächste Entscheidung', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Cube-Bewertung', exact: true })).toBeVisible();
   await page.reload();
   await page.getByRole('tab', { name: 'Matchdatenbank', exact: true }).click();
   await page.getByLabel('Partien durchsuchen').fill('Match Review Demo');
@@ -209,11 +195,11 @@ test('full match analysis, errors, board navigation and persisted results', asyn
     .filter({ hasText: 'Match Review Demo' })
     .first()
     .click();
-  await page.getByRole('tab', { name: 'Fehler', exact: true }).click();
+  await page.getByRole('tab', { name: 'Cube', exact: true }).click();
   await expect(
     progress.getByText('Partieanalyse abgeschlossen', { exact: true }),
   ).toBeVisible();
-  await expect(panel.locator('tbody tr').first()).toBeVisible();
+  await expect(page.locator('.board-error-count')).toContainText('Entscheidungen:');
   await panel.scrollIntoViewIfNeeded();
   await page.screenshot({
     path: 'test-results/match-analysis-desktop.png',
@@ -232,95 +218,102 @@ test('full match analysis, errors, board navigation and persisted results', asyn
   expect(errors).toEqual([]);
 });
 
-test('the latest clicked analysis row wins during a delayed position request', async ({
+test('full match analysis starts and preserves conflicting local settings', async ({
   page,
 }) => {
+  const profile = await profileBackend(page);
+  const local = structuredClone(profile.state.current_configuration);
+  local.general.locale = 'de';
+  local.general.player_name = 'Unsaved local name';
+  const pending = {
+    base_revision: profile.state.revision,
+    configuration: local,
+  };
+  profile.updateRemote({
+    ...profile.state.current_configuration,
+    general: { ...local.general, player_name: 'Confirmed name' },
+  });
+  await page.addInitScript((draft) => {
+    localStorage.setItem(
+      'bgtutor.configuration-pending.v1',
+      JSON.stringify(draft),
+    );
+  }, pending);
+
   await page.goto('/');
-  await page
-    .getByLabel('Partiedatei')
-    .setInputFiles('../backend/tests/fixtures/WC2014.mat');
-  await openMatchCalculation(page);
-  await page.getByLabel('Analyseumfang', { exact: true }).selectOption('match');
-  await page
+  await page.getByLabel('Partiedatei').setInputFiles({
+    name: 'analysis-profile-conflict.mat',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.from(
+      '7 point match\n\n Game 1\n Profile Conflict Demo : 0       Opponent : 0\n 1) 31: 8/5 6/5                  42: 8/4 6/4\n',
+    ),
+  });
+  const dialog = await openFullMatchAnalysis(page);
+  await dialog
     .getByLabel('Partie-Analysetiefe', { exact: true })
     .selectOption('0');
-  await openMatchCalculation(page);
-  await page.getByLabel('Analyseumfang', { exact: true }).selectOption('match');
-  await page.getByRole('tab', { name: 'Fehler', exact: true }).click();
-  const panel = page.getByRole('region', {
-    name: 'Vollständige Partieanalyse',
-    exact: true,
-  });
-  const progress = page
-    .getByRole('tabpanel', { name: 'Analyse', exact: true })
-    .locator('.match-analysis-progress');
-  const analysisResponse = page.waitForResponse(
+  const submitted = page.waitForResponse(
     (response) =>
       response.request().method() === 'POST' &&
       /\/api\/matches\/[^/]+\/analysis$/.test(new URL(response.url()).pathname),
+    { timeout: 10_000 },
   );
-  await page
-    .getByRole('button', {
-      name: /Gesamte Partie analysieren|Partie erneut analysieren/,
-    })
-    .click();
-  const submitted = await analysisResponse;
-  expect(submitted.status()).toBe(202);
-  const created = await submitted.json();
-  await expect
-    .poll(
-      async () => (await (await page.request.get(`/api/jobs/${created.id}`)).json()).status,
-      { timeout: 45_000 },
-    )
-    .toBe('completed');
-  await page
-    .getByLabel('Angezeigte Analyse', { exact: true })
-    .selectOption(`job:${created.id}`);
-  await expect(panel).toHaveAttribute('data-job-id', created.id);
-  await expect(
-    progress.getByText('Partieanalyse abgeschlossen', { exact: true }),
-  ).toBeVisible({ timeout: 45_000 });
-  await panel.getByLabel('Nur Auffälligkeiten').uncheck();
-  await panel
-    .getByLabel('Analyse nach Entscheidung filtern')
-    .selectOption('checker');
-  await expect(panel.locator('tbody tr')).toHaveCount(50);
-  await panel.getByRole('button', { name: 'Nächste Seite' }).click();
-  await expect(
-    panel.getByRole('button', { name: 'Seite 2', exact: true }),
-  ).toHaveAttribute('aria-current', 'page');
-  await expect(panel.locator('tbody tr')).toHaveCount(50);
-  await panel.getByRole('button', { name: 'Nächste Seite' }).click();
-  await expect(
-    panel.getByRole('button', { name: 'Seite 3', exact: true }),
-  ).toHaveAttribute('aria-current', 'page');
-  await expect(panel.locator('tbody tr')).toHaveCount(50);
-  let release = () => {}, requested = () => {}, finished = () => {};
+  const [response] = await Promise.all([
+    submitted,
+    dialog
+      .getByRole('button', { name: 'Gesamtes Match analysieren', exact: true })
+      .click(),
+  ]);
+  expect(response.status()).toBe(202);
+  expect(response.request().postDataJSON()).toMatchObject({
+    engine_id: 'gnubg',
+    plies: 0,
+  });
+  await expect(page.getByRole('tabpanel', { name: 'Statistik', exact: true }))
+    .toHaveAttribute('data-job-id', (await response.json()).id, { timeout: 30_000 });
+  expect(profile.calls.filter(({ method }) => method !== 'GET')).toEqual([]);
+  expect(
+    await page.evaluate(() =>
+      JSON.parse(localStorage.getItem('bgtutor.configuration-pending.v1')!),
+    ),
+  ).toEqual(pending);
+});
+
+test('manual checker selection wins during a delayed review response', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('Partiedatei').setInputFiles('../backend/tests/fixtures/WC2014.mat');
+  const dialog = await openFullMatchAnalysis(page);
+  await dialog.getByLabel('Partie-Analysetiefe', { exact: true }).selectOption('0');
+  await submitFullMatchAnalysis(page, dialog);
+  await expect(page.locator('.match-analysis-progress')).toContainText('Partieanalyse abgeschlossen');
+  await page.getByRole('tab', { name: 'Statistik', exact: true }).click();
+  await page.locator('.statistics-summary [data-statistics-metric="checker"]').first().click();
+  const next = page.getByRole('button', { name: 'Nächste Entscheidung', exact: true });
+  await expect(next).toBeEnabled();
+
+  let release = () => {};
+  let requested = () => {};
+  let finished = () => {};
   const gate = new Promise<void>((resolve) => { release = resolve; });
   const started = new Promise<void>((resolve) => { requested = resolve; });
   const completed = new Promise<void>((resolve) => { finished = resolve; });
-  await page.route(/\/api\/positions\/[^/?]+$/, async (route) => {
+  await page.route('**/api/positions/*', async (route) => {
+    if (!new URL(route.request().url()).pathname.match(/^\/api\/positions\/[^/]+$/))
+      return route.continue();
     const response = await route.fetch();
     requested();
     await gate;
     await route.fulfill({ response }).catch(() => {});
     finished();
   }, { times: 1 });
-
   try {
-    await panel.locator('tbody tr').last().getByRole('button').click();
+    await next.click();
     await started;
-    await panel.getByRole('button', { name: 'Anfang', exact: true }).click();
-    await expect(
-      panel.getByRole('button', { name: 'Seite 1', exact: true }),
-    ).toHaveAttribute('aria-current', 'page');
-    await panel.locator('tbody tr').first().getByRole('button').click();
-    await expect(page.locator('.board-navigation')).toContainText('1 / 8');
+    await page.locator('.analysis-workspace .move-history-row').first().click();
   } finally {
     release();
   }
   await completed;
-  await page.evaluate(() => new Promise<void>((resolve) =>
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
-  await expect(page.locator('.board-navigation')).toContainText('1 / 8');
+  await expect(page.locator('.board-heading')).toContainText('Spiel 1');
+  await expect(page.locator('.board-heading')).toContainText('Zug 1');
 });

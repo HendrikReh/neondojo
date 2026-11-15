@@ -947,8 +947,10 @@ fn parse_checker(payload: serde_json::Value, key: &str, plies: Option<i32>) -> R
         candidates.push(Candidate {
             rank: index as i32 + 1,
             notation: notation.join(" "),
+            path: None,
             equity: play.cubeful_equity,
             probabilities: play.probabilities.vector()?,
+            plies,
         });
     }
     Ok(BookChecker { candidates, plies })

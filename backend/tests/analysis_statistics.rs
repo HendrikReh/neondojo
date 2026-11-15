@@ -6,6 +6,8 @@ use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
 
+mod profile_support;
+
 const SOURCE: &str = "(;GM[6]FF[4]PW[Alice]PB[Bob]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])\n(;GM[6]FF[4]MI[length:7][ws:1][bs:0];W[double];B[drop])\n(;GM[6]FF[4]MI[length:7][ws:6][bs:0]RU[CrawfordGame])";
 
 async fn get(app: axum::Router, uri: &str) -> (u16, Value) {
@@ -247,18 +249,20 @@ async fn severity_filters_intersect_and_cursor_is_bound_to_severity(pool: PgPool
         .await
         .unwrap();
     let none = decision(&pool, &job, 1, 1, 0, "checker", "none", 0.0).await;
-    let doubtful = decision(&pool, &job, 1, 2, 0, "checker", "doubtful", 0.04).await;
-    let bad = decision(&pool, &job, 1, 3, 0, "checker", "bad", 0.08).await;
+    let doubtful = decision(&pool, &job, 1, 2, 0, "checker", "doubtful", 0.005).await;
+    let bad = decision(&pool, &job, 1, 3, 0, "checker", "bad", 0.02).await;
+    let blunder = decision(&pool, &job, 1, 8, 0, "checker", "none", 0.08).await;
     let very_bad = decision(&pool, &job, 1, 4, 0, "checker", "very_bad", 0.16).await;
-    decision(&pool, &job, 1, 5, 1, "checker", "bad", 0.08).await;
-    decision(&pool, &job, 1, 6, 0, "cube", "bad", 0.08).await;
-    decision(&pool, &job, 2, 1, 0, "checker", "bad", 0.08).await;
-    let second_bad = decision(&pool, &job, 1, 7, 0, "checker", "bad", 0.09).await;
+    decision(&pool, &job, 1, 5, 1, "checker", "bad", 0.02).await;
+    decision(&pool, &job, 1, 6, 0, "cube", "bad", 0.02).await;
+    decision(&pool, &job, 2, 1, 0, "checker", "bad", 0.02).await;
+    let second_bad = decision(&pool, &job, 1, 7, 0, "checker", "bad", 0.03).await;
     let base = format!("/api/jobs/{}/moves", job.id);
     for (severity, id) in [
         ("none", none),
         ("doubtful", doubtful),
         ("bad", bad),
+        ("blunder", blunder),
         ("very_bad", very_bad),
     ] {
         let (status, data) = get(
@@ -339,7 +343,7 @@ fn openapi_documents_statistics_and_severity_values() {
     );
     assert_eq!(
         doc["components"]["schemas"]["MoveSeverity"]["enum"],
-        json!(["none", "doubtful", "bad", "very_bad"])
+        json!(["none", "doubtful", "bad", "blunder", "very_bad"])
     );
     assert!(
         doc["components"]["schemas"]["GameAnalysisStatistics"]["properties"]["analyzed"]
@@ -391,14 +395,15 @@ async fn statistics_read_legacy_source_catalog_without_writes(pool: PgPool) {
     assert_eq!(count, 0, "statistics reads do not mutate legacy catalogs");
 }
 
-fn breakdown(checker: [i32; 3], cube: [i32; 3], player: i32) -> Value {
-    json!({"player":player,"checker":{"doubtful":checker[0],"bad":checker[1],"very_bad":checker[2]},"cube":{"doubtful":cube[0],"bad":cube[1],"very_bad":cube[2]}})
+fn breakdown(checker: [i32; 4], cube: [i32; 4], player: i32) -> Value {
+    json!({"player":player,"checker":{"doubtful":checker[0],"bad":checker[1],"blunder":checker[2],"very_bad":checker[3]},"cube":{"doubtful":cube[0],"bad":cube[1],"blunder":cube[2],"very_bad":cube[3]}})
 }
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
 async fn typed_errors_use_all_checkpointed_games_and_preserve_legacy_json(pool: PgPool) {
-    let (_, app, match_id) = setup(&pool).await;
+    let (_, _, match_id) = setup(&pool).await;
+    let (app, profile) = profile_support::initialized(&pool, false).await;
     let job = store::create_match_job(&pool, match_id, 0, 3)
         .await
         .unwrap();
@@ -462,22 +467,22 @@ async fn typed_errors_use_all_checkpointed_games_and_preserve_legacy_json(pool: 
     assert_eq!(
         data["error_breakdown"],
         json!([
-            breakdown([1, 0, 0], [0, 1, 0], 0),
-            breakdown([0, 0, 0], [0, 0, 1], 1)
+            breakdown([0, 1, 0, 0], [0, 0, 1, 0], 0),
+            breakdown([0, 0, 0, 0], [0, 0, 0, 1], 1)
         ])
     );
     assert_eq!(
         data["games"][0]["error_breakdown"],
         json!([
-            breakdown([1, 0, 0], [0, 1, 0], 0),
-            breakdown([0, 0, 0], [0, 0, 0], 1)
+            breakdown([0, 1, 0, 0], [0, 0, 1, 0], 0),
+            breakdown([0, 0, 0, 0], [0, 0, 0, 0], 1)
         ])
     );
     assert_eq!(
         data["games"][1]["error_breakdown"],
         json!([
-            breakdown([0, 0, 0], [0, 0, 0], 0),
-            breakdown([0, 0, 0], [0, 0, 1], 1)
+            breakdown([0, 0, 0, 0], [0, 0, 0, 0], 0),
+            breakdown([0, 0, 0, 0], [0, 0, 0, 1], 1)
         ])
     );
     assert!(data["games"][2]["error_breakdown"].is_null());
@@ -518,6 +523,34 @@ async fn typed_errors_use_all_checkpointed_games_and_preserve_legacy_json(pool: 
     }
     let (_, history) = get(app.clone(), &format!("{base}?errors_only=false&game_no=2")).await;
     assert_eq!(history["items"].as_array().unwrap().len(), 5);
+    let mut configuration = profile["current_configuration"].clone();
+    configuration["analysis"]["error_thresholds"] =
+        json!({"questionable":0.04,"error":0.06,"blunder":0.09,"large_blunder":0.25});
+    let (status, updated) = profile_support::call(
+        app.clone(),
+        "PUT",
+        "/api/configuration",
+        json!({"expected_revision":profile["revision"],"configuration":configuration}),
+    )
+    .await;
+    assert_eq!(status, 200, "{updated}");
+    let (_, reclassified) = get(app.clone(), &uri).await;
+    assert_eq!(reclassified["summary"], saved);
+    assert_eq!(
+        reclassified["error_breakdown"],
+        json!([
+            breakdown([1, 0, 0, 0], [0, 1, 0, 0], 0),
+            breakdown([0, 0, 0, 0], [0, 0, 1, 0], 1),
+        ])
+    );
+    let (_, rows) = get(
+        app.clone(),
+        &format!("{base}?severity=doubtful&errors_only=true"),
+    )
+    .await;
+    assert_eq!(rows["items"].as_array().unwrap().len(), 1);
+    assert_eq!(rows["items"][0]["equity_loss"], 0.04);
+
     // Missing durable coverage makes a typed value unavailable, rather than zero.
     sqlx::query("DELETE FROM move_analyses WHERE id=$1")
         .bind(good)
@@ -563,7 +596,10 @@ async fn legacy_cube_only_checkpoint_needs_declared_durable_coverage(pool: PgPoo
         .unwrap();
     let uri = format!("/api/jobs/{}/statistics", job.id);
     let (_, before) = get(app.clone(), &uri).await;
-    assert_eq!(before["games"][0]["error_breakdown"][1]["cube"]["bad"], 1);
+    assert_eq!(
+        before["games"][0]["error_breakdown"][1]["cube"]["blunder"],
+        1
+    );
     sqlx::query("DELETE FROM move_analyses WHERE id=$1")
         .bind(cube)
         .execute(&pool)

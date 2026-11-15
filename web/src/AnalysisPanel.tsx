@@ -1,11 +1,12 @@
-import { useOptionalConfiguration } from './ConfigurationProvider';
+import type { MatchAnalysisEngine } from './useMatchAnalysis';
 import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
 import Tooltip from './Tooltip';
 import EngineLabel from './EngineLabel';
 import ActionButton from './ActionButton';
 import LibraryDialog from './LibraryDialog';
 import { useLibraryText } from './library-messages';
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   type Distribution,
   type DiceStats,
@@ -17,8 +18,11 @@ import { useI18n } from './i18n';
 import { useOpeningBook } from './useOpeningBook';
 import { useSourceText } from './analysis-source-messages';
 import SourceAnalysisView from './SourceAnalysisView';
-import type { PreviewCandidate, PreviewComparison } from './candidate-preview';
+import type { PreviewCandidate } from './candidate-preview';
+import type { BoardView } from './move-preview';
 import CandidateTable from './CandidateTable';
+import PositionComparison from './PositionComparison';
+import { nativeCheckerCandidates } from './candidate-comparison';
 import { BoardDecisionComparison } from './BoardDecisionReview';
 import { useAnalysisResult, type AnalysisCatalog } from './useAnalysisCatalog';
 import type { PositionAnalysisResult } from './analysis-catalog-api';
@@ -37,14 +41,16 @@ export default function AnalysisPanel({
   gameNo,
   disabled,
   active = true,
+  calculationTarget,
+  onShowResults,
   restoring = false,
   onAnalyze,
   defaultPlies = DEFAULT_ANALYSIS_PLIES,
+  configuredEngine = 'gnubg',
   positionId,
   sourceRevision = 0,
   onPreview,
   selectedPreview,
-  onComparison,
   position,
   playerName,
   players,
@@ -56,14 +62,16 @@ export default function AnalysisPanel({
   gameNo?: number;
   disabled: boolean;
   active?: boolean;
+  calculationTarget?: HTMLElement | null;
+  onShowResults?: () => void;
   restoring?: boolean;
   onAnalyze: (kind: 'analysis' | 'dice', plies: number) => void;
   defaultPlies?: number;
+  configuredEngine?: MatchAnalysisEngine;
   positionId?: string;
   sourceRevision?: number;
-  onPreview?: (candidate: PreviewCandidate | null) => void;
+  onPreview?: (candidate: PreviewCandidate | null, view?: BoardView) => void;
   selectedPreview?: PreviewCandidate;
-  onComparison?: (value: PreviewComparison) => void;
   position?: Position;
   playerName?: string;
   players?: Pick<Match, 'white' | 'black'>;
@@ -77,12 +85,11 @@ export default function AnalysisPanel({
     formatDecision,
     formatError,
   } = useI18n();
-  const configuredEngine =
-    useOptionalConfiguration()?.current?.analysis.engine ?? 'gnubg';
   const engineName = configuredEngine === 'bgsage' ? 'Open Sage' : 'GNUbg';
   const supportedPlies =
     configurationOptions.engine_profiles[configuredEngine].analysis;
   const l = useSourceText();
+  const candidateText = useCandidateText();
   const catalogText = useAnalysisCatalogText();
   const library = useLibraryText();
   const book = useOpeningBook(positionId, sourceRevision);
@@ -92,7 +99,6 @@ export default function AnalysisPanel({
     analysisRevision,
   );
   const resetPreview = useEffectEvent(() => onPreview?.(null));
-  useEffect(() => resetPreview(), [catalog.analysisId, positionId]);
   const [bookOpen, setBookOpen] = useState(false);
   const [dicePlies, setDicePlies] = useState(defaultPlies);
   const [checkerPlies, setCheckerPlies] = useState(defaultPlies);
@@ -100,10 +106,10 @@ export default function AnalysisPanel({
     setDicePlies(defaultPlies);
     setCheckerPlies(defaultPlies);
   }, [defaultPlies, configuredEngine]);
-  const [view, setView] = useState<'analysis' | 'dice' | 'observed'>(
-    'analysis',
-  );
-  const calculationRef = useRef<HTMLButtonElement>(null);
+  const [view, setView] = useState<
+    'analysis' | 'comparison' | 'dice' | 'observed'
+  >('analysis');
+  useEffect(() => resetPreview(), [catalog.analysisId, positionId, view]);
   const [calculation, setCalculation] = useState<{
     positionId: string;
     engine: string;
@@ -120,73 +126,31 @@ export default function AnalysisPanel({
     setCalculation(undefined);
   }, [active, positionId, configuredEngine]);
   const [selectedRoll, setSelectedRoll] = useState('1-1');
-  const diceJob = jobs.dice?.plies === dicePlies ? jobs.dice : undefined;
+  const diceJob = jobs.dice;
   const latestJob = view === 'dice' ? diceJob : jobs.analysis;
   const pending = Object.values(jobs).some(
     (job) => job.status === 'queued' || job.status === 'running',
   );
   const distribution =
     diceJob?.status === 'completed' ? (diceJob.result as Distribution) : null;
-  const requestedDice = useRef<string | undefined>(undefined);
-  const [diceSelection, setDiceSelection] = useState(0);
-  useEffect(() => {
-    if (
-      view !== 'dice' ||
-      !active ||
-      !positionId ||
-      disabled ||
-      restoring ||
-      pending ||
-      distribution
-    )
-      return;
-    const key = JSON.stringify([positionId, configuredEngine, dicePlies]);
-    if (requestedDice.current === key) return;
-    requestedDice.current = key;
-    onAnalyze('dice', dicePlies);
-  }, [
-    view,
-    active,
-    positionId,
-    disabled,
-    restoring,
-    pending,
-    distribution,
-    configuredEngine,
-    dicePlies,
-    onAnalyze,
-    diceSelection,
-  ]);
   const chooseDice = () => {
     setView('dice');
     onPreview?.(null);
-    if (!disabled && !restoring && !pending) {
-      requestedDice.current = undefined;
-      setDiceSelection((selection) => selection + 1);
-    }
   };
-  const closeCalculation = () => {
-    setCalculation(undefined);
-    requestAnimationFrame(() => calculationRef.current?.focus());
-  };
+  const closeCalculation = () => setCalculation(undefined);
   const startCalculation = () => {
     if (!settings || disabled || restoring || pending) return;
     closeCalculation();
+    onShowResults?.();
     if (settings.kind === 'dice') {
+      chooseDice();
       setDicePlies(settings.plies);
-      requestedDice.current = JSON.stringify([
-        positionId,
-        configuredEngine,
-        settings.plies,
-      ]);
     } else {
+      setView('analysis');
       setCheckerPlies(settings.plies);
     }
     onAnalyze(settings.kind, settings.plies);
   };
-  const calculationTitle = t(
-    view === 'dice' ? 'analysis.recalculateDice' : 'analysis.recalculate',
-  );
   const best = distribution?.rolls.find(
     (r) => r.dice.join('-') === selectedRoll,
   );
@@ -207,6 +171,17 @@ export default function AnalysisPanel({
           </button>
           <button
             role="tab"
+            aria-selected={view === 'comparison'}
+            disabled={!position}
+            onClick={() => {
+              onPreview?.(null);
+              setView('comparison');
+            }}
+          >
+            {candidateText('compareMoves')}
+          </button>
+          <button
+            role="tab"
             aria-selected={view === 'dice'}
             onClick={chooseDice}
           >
@@ -220,27 +195,6 @@ export default function AnalysisPanel({
             {t(gameNo ? 'analysis.observedGame' : 'analysis.observed')}
           </button>
         </div>
-        {view !== 'observed' && (
-          <div className="position-calculation-action">
-            <ActionButton
-              ref={calculationRef}
-              type="button"
-              icon="analysis"
-              label={`${calculationTitle} …`}
-              aria-haspopup="dialog"
-              aria-disabled={disabled || pending || restoring || undefined}
-              onClick={() => {
-                if (positionId && !disabled && !pending && !restoring)
-                  setCalculation({
-                    positionId,
-                    plies: view === 'dice' ? dicePlies : checkerPlies,
-                    engine: configuredEngine,
-                    kind: view === 'dice' ? 'dice' : 'analysis',
-                  });
-              }}
-            />
-          </div>
-        )}
       </div>
       {view === 'analysis' && (
         <>
@@ -271,7 +225,6 @@ export default function AnalysisPanel({
               )}
               onPreview={onPreview}
               selectedPreview={selectedPreview}
-              onComparison={onComparison}
               position={position}
               playerName={playerName}
               players={players}
@@ -301,6 +254,19 @@ export default function AnalysisPanel({
             )}
           </details>
         </>
+      )}
+      {view === 'comparison' && position && (
+        <PositionComparison
+          key={position.match_uuid}
+          position={position}
+          catalog={catalog}
+          active={active}
+          revision={analysisRevision}
+          onPreview={
+            onPreview && ((candidate) => onPreview(candidate, 'arrows'))
+          }
+          selectedPreview={selectedPreview}
+        />
       )}
       {view === 'dice' &&
         (distribution ? (
@@ -410,42 +376,72 @@ export default function AnalysisPanel({
           {latestJob.error && t('error.engine', { details: latestJob.error })}
         </p>
       )}
-      {settings && (
-        <LibraryDialog
-          title={t(
-            settings.kind === 'dice'
-              ? 'analysis.recalculateDice'
-              : 'analysis.recalculate',
-          )}
-          native
-          initialFocus="dialog"
-          onClose={closeCalculation}
-        >
-          <p className="fineprint">{engineName}</p>
-          <div className="analysis-controls">
-            <PositionAnalysisDepth
-              plies={settings.plies}
-              supportedPlies={supportedPlies}
-              onChange={(plies) => setCalculation({ ...settings, plies })}
-            />
-            <ActionButton
-              type="button"
-              icon="analysis"
-              label={t(
-                settings.kind === 'dice'
-                  ? 'analysis.diceEquity'
-                  : 'analysis.analyze',
-              )}
-              className="primary"
-              disabled={disabled || pending || restoring}
-              onClick={startCalculation}
-            />
-            <button type="button" onClick={closeCalculation}>
-              {library('cancel')}
-            </button>
-          </div>
-        </LibraryDialog>
-      )}
+      {active &&
+        calculationTarget &&
+        createPortal(
+          <>
+            {(['analysis', 'dice'] as const).map((kind) => (
+              <ActionButton
+                key={kind}
+                type="button"
+                icon="analysis"
+                label={`${t(kind === 'dice' ? 'analysis.recalculateDice' : 'analysis.recalculate')} …`}
+                aria-haspopup="dialog"
+                disabled={!positionId || disabled || pending || restoring}
+                onClick={(event) => {
+                  if (!positionId) return;
+                  event.currentTarget.focus();
+                  setCalculation({
+                    positionId,
+                    plies:
+                      kind === 'dice'
+                        ? (diceJob?.plies ?? dicePlies)
+                        : checkerPlies,
+                    engine: configuredEngine,
+                    kind,
+                  });
+                }}
+              />
+            ))}
+            {settings && (
+              <LibraryDialog
+                title={t(
+                  settings.kind === 'dice'
+                    ? 'analysis.recalculateDice'
+                    : 'analysis.recalculate',
+                )}
+                native
+                initialFocus="dialog"
+                onClose={closeCalculation}
+              >
+                <p className="fineprint">{engineName}</p>
+                <div className="analysis-controls">
+                  <PositionAnalysisDepth
+                    plies={settings.plies}
+                    supportedPlies={supportedPlies}
+                    onChange={(plies) => setCalculation({ ...settings, plies })}
+                  />
+                  <ActionButton
+                    type="button"
+                    icon="analysis"
+                    label={t(
+                      settings.kind === 'dice'
+                        ? 'analysis.diceEquity'
+                        : 'analysis.analyze',
+                    )}
+                    className="primary"
+                    disabled={disabled || pending || restoring}
+                    onClick={startCalculation}
+                  />
+                  <button type="button" onClick={closeCalculation}>
+                    {library('cancel')}
+                  </button>
+                </div>
+              </LibraryDialog>
+            )}
+          </>,
+          calculationTarget,
+        )}
     </section>
   );
 }
@@ -456,7 +452,6 @@ export function SelectedAnalysisResult({
   alternatives,
   onPreview,
   selectedPreview,
-  onComparison,
   position,
   playerName,
   players,
@@ -466,7 +461,6 @@ export function SelectedAnalysisResult({
   alternatives: boolean;
   onPreview?: (candidate: PreviewCandidate | null) => void;
   selectedPreview?: PreviewCandidate;
-  onComparison?: (value: PreviewComparison) => void;
   position?: Position;
   playerName?: string;
   players?: Pick<Match, 'white' | 'black'>;
@@ -475,18 +469,17 @@ export function SelectedAnalysisResult({
   const candidateText = useCandidateText();
   const analysis = result?.analysis;
   const decision = result?.decision;
-  const candidates = analysis?.candidates;
+  const candidates = nativeCheckerCandidates(result);
   const depth = analysis ? `${analysis.plies}-ply` : result?.depth;
   const source = [analysis?.engine ?? result?.engine, depth]
     .filter(Boolean)
     .join(' · ');
-  if (candidates?.length)
+  if (candidates.length)
     return (
       <CandidateTable
         candidates={candidates.map((candidate) => ({
           ...candidate,
-          equity_kind: 'cubeful',
-          depth,
+          depth: candidate.depth ?? depth,
         }))}
         source={source}
         depth={depth}
@@ -495,7 +488,6 @@ export function SelectedAnalysisResult({
         playerName={playerName}
         onPreview={onPreview}
         selectedPreview={selectedPreview}
-        onComparison={onComparison}
       />
     );
   if (result?.records.length)
@@ -505,7 +497,6 @@ export function SelectedAnalysisResult({
         source="file"
         onPreview={onPreview}
         selectedPreview={selectedPreview}
-        onComparison={onComparison}
         position={position}
         playerName={playerName}
         players={players}
@@ -516,6 +507,10 @@ export function SelectedAnalysisResult({
       <BoardDecisionComparison
         played={decision.played}
         best={decision.best}
+        equities={{
+          played: decision.played_equity,
+          best: decision.best_equity,
+        }}
         loss={
           decision.evaluation_status === 'evaluated'
             ? decision.equity_loss

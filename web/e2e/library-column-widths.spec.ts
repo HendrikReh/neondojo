@@ -1,11 +1,8 @@
 import { expect, test, type Page } from './test';
 
-const profileWidths = async (page: Page) =>
-  (
-    await page.evaluate(() =>
-      fetch('/api/configuration').then((response) => response.json()),
-    )
-  ).current_configuration.library.column_widths;
+const localWidths = (page: Page) =>
+  page.evaluate(() => JSON.parse(localStorage.getItem('bgtutor.layout.library.columns.v1') ?? 'null'));
+
 async function openLibrary(page: Page, width = 1800, height = 1169) {
   await page.setViewportSize({ width, height });
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
@@ -72,7 +69,7 @@ test('drag resizes only one column without sorting and persists across reload', 
   await openLibrary(page);
   await expect(column(page, 'white').getByRole('separator')).toBeVisible();
   await column(page, 'white').getByRole('separator').click();
-  await expect.poll(() => profileWidths(page)).toBeNull();
+  await expect.poll(() => localWidths(page)).toBeNull();
   const initial = await widthOf(page, 'white'),
     black = await widthOf(page, 'black');
   await drag(page, 'white', 100);
@@ -91,7 +88,7 @@ test('drag resizes only one column without sorting and persists across reload', 
     'aria-pressed',
     'false',
   );
-  await expect.poll(() => profileWidths(page)).not.toBeNull();
+  await expect.poll(() => localWidths(page)).not.toBeNull();
   await page.reload();
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();
   await expect
@@ -101,14 +98,14 @@ test('drag resizes only one column without sorting and persists across reload', 
     .getByRole('button', { name: 'Reset column widths', exact: true })
     .click();
   await expect.poll(() => widthOf(page, 'white')).toBeCloseTo(initial, 0);
-  await expect.poll(() => profileWidths(page)).toBeNull();
+  await expect.poll(() => localWidths(page)).toBeNull();
   await drag(page, 'white', 80);
   await column(page, 'white')
     .getByRole('separator')
     .dispatchEvent('pointercancel', { pointerId: 1 });
   await page.mouse.up();
   await expect.poll(() => widthOf(page, 'white')).toBeCloseTo(initial, 0);
-  await expect.poll(() => profileWidths(page)).toBeNull();
+  await expect.poll(() => localWidths(page)).toBeNull();
   await expect(page.locator('.library-table-resizing')).toHaveCount(0);
   await page.locator('button[data-sort="white"]').click();
   await expect(column(page, 'white')).toHaveAttribute('aria-sort', 'ascending');
@@ -147,7 +144,7 @@ test('keyboard bounds, cancellation and controls remain usable', async ({
   await page.keyboard.press('Escape');
   await page.mouse.up();
   await expect.poll(() => widthOf(page, 'white')).toBeCloseTo(initial, 0);
-  await expect.poll(() => profileWidths(page)).toBeNull();
+  await expect.poll(() => localWidths(page)).toBeNull();
   await expect(page.locator('.database-table tbody tr')).toContainText(
     'Resize Alice',
   );
@@ -195,8 +192,8 @@ test('captured defaults on an extra-wide display stay reloadable within width bo
   const initial = await widthOf(page, 'white');
   await drag(page, 'white', 70);
   await page.mouse.up();
-  await expect.poll(() => profileWidths(page)).not.toBeNull();
-  const saved = await profileWidths(page);
+  await expect.poll(() => localWidths(page)).not.toBeNull();
+  const saved = await localWidths(page);
   expect(saved.tags).toBeLessThanOrEqual(2400);
   expect(saved.comment).toBe(220);
   await page.reload();

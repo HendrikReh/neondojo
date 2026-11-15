@@ -71,12 +71,9 @@ for (const config of [
     });
     const coach = page.getByTestId('play-board-toolbar');
     const details = coach.getByRole('button', { name: 'Details', exact: true });
-    const playMove = coach.getByRole('button', {
-      name: 'Play move',
-      exact: true,
-    });
+    const confirmDice = page.locator('[data-dice-action="confirm"]');
     if (config.mode === 'coach') {
-      await expect(playMove).toBeVisible();
+      await expect(confirmDice).toBeVisible();
       await expect(coach).toContainText('13/10 6/5');
       await expect(coach).toContainText('0.030');
       await expect(page.locator('dialog[open]')).toHaveCount(0);
@@ -133,7 +130,7 @@ for (const config of [
     } else await expect(dialog).toBeVisible();
     await (
       config.mode === 'coach'
-        ? playMove
+        ? confirmDice
         : dialog.getByRole('button', { name: 'Play anyway', exact: true })
     ).click();
     await expect(dialog).toHaveCount(0);

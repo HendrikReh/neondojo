@@ -8,7 +8,7 @@ const decision: ReviewDecision = {
   decision_no: 1,
   checker_no: 1,
   player: 0,
-  kind: 'checker',
+  kind: 'cube',
   played: '8/5 6/5',
   best: '8/5 6/5',
   equity_loss: 0,
@@ -20,7 +20,7 @@ const decision: ReviewDecision = {
 };
 
 for (const scenario of ['missing', 'filtered', 'clean'] as const) {
-  test(`the empty error list explains the ${scenario} state and offers an action`, async ({
+  test(`empty error navigation explains the ${scenario} state`, async ({
     page,
   }) => {
     await page.addInitScript(() =>
@@ -41,14 +41,14 @@ for (const scenario of ['missing', 'filtered', 'clean'] as const) {
       const query = new URL(route.request().url()).searchParams;
       const errorsOnly = query.get('errors_only') === 'true';
       const numbered = query.has('page');
-      const cube = query.get('kind') === 'cube';
+      const filtered = query.get('player') === '1';
       const items = errorsOnly
-        ? scenario === 'filtered' && !cube
+        ? scenario === 'filtered' && !filtered
           ? [evaluated]
           : []
         : scenario === 'missing'
           ? [forced]
-          : cube || (scenario === 'clean' && !numbered && !query.has('after'))
+          : filtered || (scenario === 'clean' && !numbered && !query.has('after'))
             ? []
             : [evaluated];
       const next_cursor =
@@ -73,7 +73,7 @@ for (const scenario of ['missing', 'filtered', 'clean'] as const) {
         ),
       ),
     });
-    await page.getByRole('tab', { name: 'Errors', exact: true }).click();
+    await page.getByRole('tab', { name: 'Cube', exact: true }).click();
     const panel = page.locator('.match-analysis');
     const empty = panel.locator('.analysis-empty');
     const board = page.getByRole('group', { name: 'Review errors' });
@@ -81,7 +81,12 @@ for (const scenario of ['missing', 'filtered', 'clean'] as const) {
 
     if (scenario === 'missing') {
       const selection = page.getByLabel('Displayed analysis', { exact: true });
+      const start = page.getByRole('button', {
+        name: 'Analyze game',
+        exact: true,
+      });
       await expect(selection).toBeVisible();
+      await expect(start).toBeEnabled();
       await expect(empty).toContainText('No evaluated decisions are available');
       await expect(boardEmpty).toHaveText(await empty.innerText(), {
         useInnerText: true,
@@ -89,10 +94,10 @@ for (const scenario of ['missing', 'filtered', 'clean'] as const) {
       await expect(empty.getByRole('button')).toHaveCount(0);
       await expect(boardEmpty.getByRole('button')).toHaveCount(0);
     } else if (scenario === 'filtered') {
-      const kind = panel.getByLabel('Filter analysis by decision', {
+      const player = panel.getByLabel('Filter analysis by player', {
         exact: true,
       });
-      await kind.selectOption('cube');
+      await player.selectOption('1');
       await expect(empty).toContainText('No decisions match these filters');
       await expect(boardEmpty).toHaveText(await empty.innerText(), {
         useInnerText: true,
@@ -100,17 +105,17 @@ for (const scenario of ['missing', 'filtered', 'clean'] as const) {
       await boardEmpty
         .getByRole('button', { name: 'Reset selection filters' })
         .click();
-      await expect(kind).toHaveValue('');
-      await expect(panel.locator('tbody tr')).toHaveCount(1);
+      await expect(player).toHaveValue('');
+      await expect(board.locator('.board-error-count')).toHaveText('Errors: 1');
       const errorsOnly = panel.getByRole('checkbox');
       await errorsOnly.uncheck();
-      await kind.selectOption('cube');
+      await player.selectOption('1');
       await expect(empty).toContainText('No decisions match these filters');
       await empty
         .getByRole('button', { name: 'Reset selection filters' })
         .click();
       await expect(errorsOnly).not.toBeChecked();
-      await expect(panel.locator('tbody tr')).toHaveCount(1);
+      await expect(board.locator('.board-error-count')).toHaveText('Decisions: 1');
     } else {
       await expect(empty).toContainText(
         'No inaccuracies in the evaluated decisions',
@@ -133,10 +138,7 @@ for (const scenario of ['missing', 'filtered', 'clean'] as const) {
       await boardEmpty
         .getByRole('button', { name: 'Show all decisions' })
         .click();
-      await expect(panel.locator('.match-move-overview > summary')).toHaveText(
-        'Decisions by move',
-      );
-      await expect(panel.locator('tbody tr')).toHaveCount(1);
+      await expect(board.locator('.board-error-count')).toHaveText('Decisions: 1');
     }
   });
 }

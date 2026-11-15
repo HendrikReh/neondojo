@@ -201,11 +201,23 @@ pub(crate) fn hint_decision(position: &Position, analysis: &Analysis) -> Option<
 /// Resolve reordered, grouped and combined checker notation to the same legal
 /// final board. Mere absence of the played move in a top-N hint stays unknown.
 pub(crate) fn after_play(position: &Position, notation: &str) -> Option<[i32; 26]> {
+    after_checker_play(
+        position.board.as_slice().try_into().ok()?,
+        position.player,
+        position.dice.as_slice().try_into().ok()?,
+        notation,
+    )
+}
+
+pub(crate) fn after_checker_play(
+    mut board: [i32; 26],
+    player: i32,
+    dice: [i32; 2],
+    notation: &str,
+) -> Option<[i32; 26]> {
     if notation.trim().is_empty() || notation.len() > 160 {
         return None;
     }
-    let mut board: [i32; 26] = position.board.as_slice().try_into().ok()?;
-    let dice: [i32; 2] = position.dice.as_slice().try_into().ok()?;
     let mut runs = Vec::new();
     if !matches!(
         notation.trim().to_lowercase().as_str(),
@@ -251,7 +263,7 @@ pub(crate) fn after_play(position: &Position, notation: &str) -> Option<[i32; 26
             }
         }
     }
-    crate::import::sgf::expand_xg_play(&mut board, position.player, dice, &runs).ok()?;
+    crate::import::sgf::expand_xg_play(&mut board, player, dice, &runs).ok()?;
     Some(board)
 }
 

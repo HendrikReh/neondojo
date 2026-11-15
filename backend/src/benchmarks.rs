@@ -1,6 +1,6 @@
 //! Reproducible, append-only engine timing; independent of the match library.
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
-use crate::engine::resolve_binary;
+use crate::engine::{GnubgMoveFilter, resolve_binary};
 use axum::{
     Json, Router,
     extract::{Path, State},
@@ -57,20 +57,23 @@ fn protocol() -> BenchmarkProtocol {
         move_filter: "gnubg-startup-defaults".into(),
     }
 }
-fn protocol_for(engine: &str, plies: i32) -> BenchmarkProtocol {
-    let mut value = protocol();
+fn reference_for(
+    engine: &str,
+    plies: i32,
+    move_filter: Option<GnubgMoveFilter>,
+) -> BenchmarkReference {
+    let mut reference = reference();
+    let value = &mut reference.protocol;
     if engine == "bgsage" {
         value.id = format!("bgsage-match-v3-{plies}ply-4threads");
         value.process_strategy = "persistent-worker-atomic-game-verified-at-both-boundaries".into();
         value.timing_scope = "cold-worker-startup-once-plus-full-game-pipeline".into();
         value.move_filter = format!("all-cubeful-{plies}ply-candidates-played-board-included");
+    } else if let Some(GnubgMoveFilter::Top14) = move_filter {
+        value.id = format!("gnubg-match-v3-{plies}ply-top14");
+        value.move_filter = format!("gnubg-{plies}ply-top14");
     }
-    value
-}
-fn reference_for(engine: &str, plies: i32) -> BenchmarkReference {
-    let mut value = reference();
-    value.protocol = protocol_for(engine, plies);
-    value
+    reference
 }
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct PlayBenchmarkRequest {
@@ -304,13 +307,18 @@ async fn enqueue(
     };
     let mut prepared = Vec::new();
     for depth in depths {
-        let analysis = (!is_play).then(|| reference_for(engine_id, depth));
+        let move_filter = if is_play {
+            None
+        } else {
+            GnubgMoveFilter::for_analysis(engine_id, depth)
+        };
+        let analysis = (!is_play).then(|| reference_for(engine_id, depth, move_filter));
         let play = if is_play {
             Some(play_latency::reference_for(engine_id, depth)?)
         } else {
             None
         };
-        let snapshot = crate::settings::snapshot_for(
+        let mut snapshot = crate::settings::snapshot_for(
             state,
             engine_id,
             &settings.gnubg_path,
@@ -324,6 +332,7 @@ async fn enqueue(
         )
         .await
         .map_err(|e| ApiError::invalid(format!("Engine unavailable: {e:#}")))?;
+        snapshot.gnubg_move_filter = move_filter;
         let engine = snapshot.engine()?;
         let path = if engine_id == "bgsage" {
             engine.binary().to_owned()

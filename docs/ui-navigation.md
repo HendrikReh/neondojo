@@ -22,15 +22,6 @@ The main header retains its 20 px gap; other horizontal groups use 16 px.
 The header orders its workspaces as Analysis, Positions, Study, Play,
 Match database, Player database, and Extras. The arrow keys follow this order.
 
-In the **Match database**, select matches with the checkboxes and choose
-**Analyze selected matches …** above the list. The dialog uses the same engine
-and depth for each available match and adds their jobs to the background queue.
-It reports rejected submissions and allows you to retry them from the dialog.
-The toolbar above the match list shows how many accepted matches have been
-analyzed and counts failed jobs separately, including after the dialog closes.
-Reloading the Match database during a bulk analysis reopens the list and
-refreshes the progress from the saved jobs.
-
 The shared rules live in `web/src/text-navigation.css`, imported after the other
 styles. Local CSS manages surrounding layout and should not reintroduce filled
 navigation states or competing padding/gap rules.
@@ -53,9 +44,10 @@ page 1. Match, saved position and flashcard selections can span pages.
 In Positions, moving to another page previews its first result as soon as the
 page loads. Checkbox selections carry across pages.
 
-The match database keeps the action icons visible above the results. They
-start disabled and become available when the current selection supports the
-action.
+The match database keeps its action icons visible above the results. They
+start disabled and become available for the current selection. Opening,
+editing, and resuming apply to one match. Resume requires a paused or unfinished
+play session. Batch actions are available when the selected matches support them.
 
 The player database uses the Positions layout with a result table on the left
 and the selected profile on the right. Click a row or use the arrow keys to
@@ -66,61 +58,123 @@ The merge search has its own page controls.
 
 ## Match analysis
 
-**Overview** places the position analysis beside the board, with the error list
-below both. Its analysis views are **Candidates**, **Dice equity**, and **Game
-rolls**. Saved analysis statistics are available in **Statistics**.
-
+**Checker** places the position analysis beside the board. Its analysis views
+are **Candidates**, **Dice equity**, and **Game rolls**. Move history defaults to
+**All moves**. Filter by **All errors** or by a specific grade without changing
+the board selection. Unrated moves remain visible under **All moves**.
+**Cube** reviews cube decisions on the board. Native match and
+game statistics are available in **Statistics**.
 **Displayed analysis** in the header chooses one saved result for checker and
-cube review, move marks, statistics and new learning cards. Entries identify
-their engine, depth, scope and date; details include origin and coverage.
+cube review, move marks, statistics and new learning cards. The list starts
+with engine and evaluation depth, followed by scope and date. The selected
+entry's details include origin and coverage.
 The choice persists per match and is independent of calculation preferences.
 Missing results remain explicitly unavailable. Older results are paginated;
-**Load more analyses** includes them in the same selector. Imported and standalone
-position results show their saved candidates. Native match and game decisions
-show the played and best actions. **Opening book** is an expandable reference
-beneath the selected result.
+**Load more analyses** includes them in the same selector. The **Candidates**
+table shows rank, equity, outcome probabilities, and evaluation depth for
+imported and local analyses. Imported XG checker moves are ranked by descending
+equity and show the original depth on every row. Older game and match results may
+only show the played and best moves. Recalculate the game or match to save its
+candidates.
+Open **Compare moves** beside **Candidates** to see eXtreme Gammon, GNU Backgammon,
+and Open Sage for the current position. The table aligns moves by their ending
+boards and shows rank, equity, and actual depth per candidate. The XG column
+shows the rank by equity when the saved values are comparable. Choose a
+different saved analysis in a column when available. The
+comparison starts with the deepest loaded result per engine and prefers the
+latest result at that depth. The local columns show their equity minus XG
+equity for candidates with comparable saved values. Rank arrows compare each
+local rank with the XG rank by equity. A dash indicates a missing value. Select
+**|Δ|** in a local engine’s Equity column to sort by the largest absolute
+differences to XG, with missing differences at the bottom. Select the active
+sort button again to restore the original order.
+Select a move row or activate its move button to show the route on the board
+in **Arrows** view. Up and Down move the preview to the adjacent row.
+Select a cell in an engine column to preview that engine's move. Each engine's
+rank button also works with Enter or Space.
+Use **Delete analysis** beside the selector to permanently remove the chosen
+result after confirming its details. The selector returns to **Automatic** if
+the explicitly selected result is deleted. Deleting imported analysis values
+preserves the original match file.
+**Opening book** is an expandable reference beneath the selected result.
+Opening **Dice equity** also displays the saved calculation.
+**Analysis options** in the header includes **Recalculate position …** and
+**Recalculate dice equity …** for explicit calculations at a selected depth.
 
-**Recalculate position …** opens the search depth and start action in a dialog.
-The dice view has its own **Recalculate dice equity …** dialog. **Analyze game
-or match …** reveals the scope, engine, depth and time estimate in the command
-bar. The latest job for those calculation settings and other running jobs
-tracked in the session appear above the analysis tabs. Job monitoring does not
-change **Displayed analysis**. **Compare saved analyses** lets the user choose
-any two catalog entries side by side without changing the displayed result.
-The table shows saved checker and cube counts and equity losses; native GNUbg
-PR appears only where it was recorded.
-Above the board, **Previous error** and **Next error** follow the list filters
-and show the current result's index and the total. When all games are selected,
-the buttons cycle across game boundaries. Turning off **Inaccuracies only**
-switches the buttons to **Previous decision** and **Next decision**.
-A checker error keeps the move preview controls available.
-A cube error shows the original decision context with its played and best cube
-actions. **Played move** and **Best move** switch the checker preview while
-preserving the selected board view.
-Candidate columns size to their contents so notation and evaluation values
-stay close on wide displays.
+**Analyze game** in the Analysis header always starts the selected game. Its
+options show the engine, depth and estimated time. In the **Match database**,
+select matches with the checkboxes and use **Analyze selected matches …** in
+the toolbar above the list. **Open match**, **Resume match** and **Edit match
+details** are disabled for multiple selected matches. For a single match, the
+analysis dialog shows the engine, depth and estimated time. When the analysis
+finishes with the dialog open, BG Tutor opens **Statistics** for the whole match and
+selects the completed analysis. If you close the dialog during the
+run, the analysis continues in the background. Open the dialog again and
+choose **Show results** to view a saved analysis.
+For multiple matches, the dialog uses the same engine and depth for each
+available match and adds their jobs to the background queue. It reports
+rejected submissions and allows you to retry them from the dialog.
+The toolbar above the match list shows how many accepted matches have been
+analyzed and counts failed jobs separately, including after the dialog closes.
+Reloading the Match database during a bulk analysis reopens the list and
+refreshes the progress from the saved jobs.
+Analysis jobs use the selected engine and depth. A profile conflict
+does not block these jobs; pending changes
+remain available for recovery in **Profiles**. Progress and job controls monitor
+calculations without choosing a displayed source. **Compare saved analyses**
+lets the user select any two catalog entries side by side without changing the
+match's displayed analysis.
+
+The checker candidate table grows with its pane, with room to expand beyond
+1280 logical pixels on wide displays. Its text and row spacing increase as
+more space becomes available.
 Engine labels show the name and the recorded version when available. Hover
 over the label or focus it with Tab to see the recorded details, such as search
 depth, evaluation method, build, model, and thread count. The same labels are
 used for local and imported analyses, in Playing, and in Study.
-The board and an empty error list explain whether evaluations are missing, the current
-filters hide all matches, or the evaluated decisions have no inaccuracies.
-The actions open analysis settings, clear the selection filters while keeping
-the current error threshold, or show all decisions in the selected scope.
-Switching tabs keeps the selected game and move. Selecting a statistics metric
-opens **Errors** with the matching filters. Selecting a metric for a different
-game opens that game.
+Selecting a checker or cube metric opens the corresponding tab with the
+matching filters and scope. Combined metrics offer both tabs as destinations.
+**Checker** shows review controls alongside the candidate analysis until you
+close the statistics selection. Selecting a metric for a different game opens
+that game.
+
+The board and the filter pane explain whether evaluations are missing, the
+current filters hide all matches, or the evaluated decisions have no inaccuracies.
+The actions lead to the analysis start button, clear the selection filters
+while keeping the current error threshold, or show all decisions in the
+selected scope.
 
 In every desktop analysis tab, a focusable separator resizes the board. Left/Right
-changes its width, Shift uses larger steps, Home/End select the available limits,
-and Enter or double-click restores the default for the current view. Escape
-cancels a drag. The profile stores separate widths for **Overview** and for the
-four detail tabs as a group. Overview caps the board to leave space for the error
-list below. The other tabs can use the full available height. The default
-board grows gradually on windows wider than 1800 logical pixels. A saved
-manual width takes precedence and is limited by the space in the current window.
+changes its width, Shift uses larger steps, and Home/End select the available
+limits. A double-click sets the maximum width for the current window and
+saves it in the profile. Enter restores the default. Escape cancels a drag.
+The profile stores a separate board width for each tab. On wide screens the
+board and move history grow. The move history filter stays visible while the
+rows scroll. **Statistics** places the player summaries side by side when
+their pane is wide enough. The comment field in **Notes** grows with the
+available height. On wide screens, **Study cards** gives deck controls more
+room and enlarges the board previews in the suggestions list. The board scales
+to the available height above the
+move navigation and position ID in every analysis tab. The default width grows
+with the window and leaves room for the analysis pane. A saved manual width
+controls the board column within the current window's limits.
+
+## Playing
+
+On large desktop windows, the board grows and the move history uses the height
+of the playing area. The history scrolls independently and follows the latest
+move. The layout leaves room for the action panel beside the board.
 
 ## Study areas
+
+**Reports → Open report** opens a saved point match in a dedicated view.
+**AI assessment** and **Decisions and attempts** use the same underlined
+navigation. Left/Right switches tabs, Home/End selects the first/last tab,
+and Escape returns to the archive. Focus returns to the report opener.
+The match-end action in **Playing** opens **AI assessment** directly.
+The assessment can continue while you switch views. Select a decision
+reference to open its original position next to the report and continue
+with the same board controls used for learning review.
 
 Study opens on Overview, followed by Flashcards & Anki, Reports, My recurring
 mistakes, and Practice history. Left/Right wrap between all five tabs. Home
@@ -151,6 +205,22 @@ many reviews each application received.
 Enable **Sync reviews automatically** to run the same exchange in the
 background when the linked Anki profile is open. The deck shows the linked
 profile and the last successful sync. Enable it again after restoring a backup.
+Open **Anki sync** above the card filters to see each linked deck's last
+successful sync, transfers in both directions, and pause or error reasons.
+**Sync now** runs once with the linked profile. **Pause** stops future
+background runs, and **Resume** returns the deck to the next background check.
+Open **History** in a deck row to see the last 100 attempts with their time,
+sent and received reviews, and any error details.
+Use **Failed runs only** for all failures and **Open errors only** for unresolved
+ones. **Retry sync** starts a fresh exchange and adds a history entry. A successful
+retry marks the selected error as **Resolved** and keeps its details available.
+Select the **Open errors** count in a deck row to open its history with
+**Open errors only** already selected.
+**Decks with open errors only** filters the overview. Decks disappear from that
+view when their last error is resolved.
+**Retry all open errors** runs one exchange per affected deck and resolves its
+open errors on success. Its results show each deck's status, sent and received
+reviews for the attempt, and remaining open errors.
 On wide windows, drag the divider between the card list and the preview. The
 Left and Right arrow keys move the focused divider. Double-click it or press
 Enter to restore the default width. The browser remembers the chosen width.
@@ -212,8 +282,11 @@ chosen board has a strong outline and a **✓ Selected** label on its thumbnail.
 Both previews update as you select options and apply to the rest of the app
 when you choose **Apply**.
 
-Analysis shows the engine and default depth side by side and lists the
-configured opening-book source. Expand **Engines on this computer** for paths,
+Analysis shows the engine and default depth side by side, followed by four
+editable error thresholds and the configured opening-book source. The thresholds
+classify normalized equity loss in error review, move history and statistics.
+The Error threshold starts Tutor warnings and Coach missed-double feedback
+in new matches. Expand **Engines on this computer** for paths,
 installation checks, and thread limits. The collapsed section shows the
 availability of GNUbg and Open Sage.
 
@@ -221,8 +294,7 @@ Closing **Opening books** returns to **Analysis** in Settings and restores focus
 to **Manage opening books**.
 
 **Playing** puts the engine and strength for new matches side by side.
-The next group contains the default play mode, Tutor warning threshold, and
-automatic training analysis. Game sounds and bear-off direction are grouped
+The next group contains the default play mode and automatic training analysis. Game sounds and bear-off direction are grouped
 below them.
 
 Closing Settings or opening Profiles, Opening books, or Benchmark with an
@@ -240,19 +312,21 @@ the Open Sage Python path on the BG Tutor computer.
 
 Die globale Kopfzeile enthält die Profilauswahl mit aktivem Namen, Änderungsmarkierung und Sicherungsstatus. „Profile verwalten“ öffnet direkt die Kategorie „Profile“ im Einstellungsdialog.
 
+Datenbankauswahl, Suchfilter, Ergebnissortierung, aktives Lernkartendeck, Kartenerzeugung und Analysefilter gehören zur Sitzung des Browser-Tabs. Spalten, Spaltenbreiten und das Layout des Analysebretts speichert der Browser lokal. Profilwechsel und Neuladen erhalten diese Ansichten.
+
 Die Profilkategorie zeigt oben das aktive Profil und die Zahl der Abweichungen vom Profilstand. Die Profilauswahl bestimmt den Vergleich mit der aktuellen Konfiguration. Die vollständige gespeicherte Konfiguration lässt sich darunter aufklappen. Die Zeitstempel in der Profilliste folgen der App-Sprache.
 
 „Im Profil speichern“ zeigt das gewählte Zielprofil. „Als neues Profil speichern“ steht daneben. „Profilaktionen“ enthält „Umbenennen“ und „Löschen“. Mit „Profilstand wiederherstellen“ werden nach Bestätigung die gespeicherten Werte des aktiven Profils übernommen. Im Vergleich behalten die Spalten ihre Breite, und lange Werte brechen in ihrer Zelle um.
 
 Bei einem Profilkonflikt steht der Hinweis in der App-Sprache direkt unter „Aktives Profil“, vor der Profilliste und den Speicheraktionen. Dort kannst du den Serverstand laden oder lokale Änderungen als neues Profil sichern.
 
-Normale Einstellungsänderungen werden mit „Anwenden“ übernommen. Die Profilsicherung bleibt eine eigene Aktion. Suchansichten übernehmen beim Profilwechsel die gespeicherten Kriterien, während Notizentwürfe, laufende Aufträge und bereits aktive Lernkarten ihren Arbeitsstand behalten.
+„Anwenden“ übernimmt die aktuellen Vorgaben. Benannte Profile werden in der Kategorie „Profile“ gespeichert. Schlägt das Laden fehl, bieten die Profilsteuerung und die Profilverwaltung „Wiederholen“ an. Spiel und Analyse verwenden die zuletzt bestätigten Einstellungen oder die eingebauten Standardwerte. Laufende Aufträge behalten die beim Start erfassten Einstellungen.
 
 ## Extras
 
-**Extras** contains **Benchmark**, **Engine duels**, **Database backup**,
-and **Versions**. Use Left/Right or Home/End to switch tabs. BG Tutor remembers
-the selected tool. The link in Settings opens **Benchmark**.
+**Extras** contains **Benchmark**, **Engine duels**, **Database backup**, and
+**Versions**. Use Left/Right or Home/End to switch tabs. BG Tutor remembers the
+last chosen tab on this browser. The link in Settings opens **Benchmark**.
 
 Benchmark uses one engine selector for **Match analysis** and **Play-turn
 latency**. Each engine keeps its own depth selections while the app is open.
@@ -261,14 +335,21 @@ comparison. Active runs remain visible across both measurement types.
 Reference methodology and per-run technical data can be expanded on demand.
 
 Engine duels lists series beside the selected result on wide desktop windows.
-**New series** opens setup with the optional seed under **Advanced**. Series
-continue when leaving the tool.
+**New series** opens setup, with the optional seed under **Advanced**. Series
+continue when leaving the tool. Results show progress, match win rates by
+engine, and the confidence interval when the sample supports it.
 
 Database backup shows the scope of a restore before file selection. BG Tutor
 automatically checks each selected archive and compares its schema with the
 destination. The preview shows the creation time and counts for matches, saved
-positions, and flashcards. Older archives can lack a creation time. Only a
-compatible archive enables **Review database replacement**.
+positions, and flashcards. For older archives without a stored creation time,
+a valid BG Tutor filename supplies the time, marked **from filename**. Only
+a compatible archive enables **Review database replacement**.
+The confirmation dialog shows the creation time and compares the backup counts
+with the destination counts fetched when the dialog opens.
+The **Difference** column shows the expected change in each count after
+replacement. Increases are green with a plus sign, decreases are red with a
+minus sign, and zero uses the regular text color.
 After **Replace database**, the backend checks the archive again and validates
 the rows during the restore transaction. Reload BG Tutor after success.
 

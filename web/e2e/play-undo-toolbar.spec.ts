@@ -48,7 +48,7 @@ for (const config of [
     await point(6).click();
     await expect(undo).toBeEnabled();
     await expect(
-      toolbar.getByRole('button', { name: 'Confirm turn', exact: true }),
+      page.locator('.play-board [data-dice-action="confirm"]'),
     ).toBeEnabled();
     expect(await undoOffset()).toBeCloseTo(undoBeforeConfirm, 0);
     await undo.click();

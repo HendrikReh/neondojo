@@ -1715,6 +1715,46 @@
         }
       }
     },
+    "/api/database-backup/target-counts": {
+      "get": {
+        "tags": [
+          "Database backup"
+        ],
+        "operationId": "database_backup_target_counts",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupTargetCounts"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/databases": {
       "get": {
         "tags": [
@@ -2342,6 +2382,164 @@
             }
           },
           "504": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decks/{id}/anki-auto-sync/action": {
+      "post": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "act",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncAttemptResult"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decks/{id}/anki-auto-sync/history": {
+      "get": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "history",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AnkiSyncHistoryEntry"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -4149,7 +4347,7 @@
           {
             "name": "errors_only",
             "in": "query",
-            "description": "Exclude forced/unavailable decisions and require at least 0.04 normalized equity loss.",
+            "description": "Exclude forced/unavailable decisions and apply the configured Questionable threshold.",
             "required": false,
             "schema": {
               "type": "boolean"
@@ -4878,6 +5076,79 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/matches/{id}/analyses/{analysis_id}": {
+      "delete": {
+        "tags": [
+          "Analysis catalog"
+        ],
+        "operationId": "delete_analysis",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "analysis_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "source_revision",
+            "in": "query",
+            "description": "The match source revision shown when the deletion was confirmed.",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Saved analysis deleted"
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -8905,6 +9176,29 @@
         }
       }
     },
+    "/api/study/anki-auto-sync": {
+      "get": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "overview",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LinkedAnkiDeck"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/study/anki-imports": {
       "post": {
         "tags": [
@@ -9999,6 +10293,142 @@
         }
       }
     },
+    "/api/study/reports/{id}/assessment": {
+      "get": {
+        "tags": [
+          "Study"
+        ],
+        "operationId": "get_assessment",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ConfigurationLocale"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssessmentState"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Study"
+        ],
+        "operationId": "start_assessment",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ConfigurationLocale"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartAssessment"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssessmentState"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/study/reports/{id}/history": {
       "get": {
         "tags": [
@@ -10944,6 +11374,64 @@
           }
         }
       },
+      "AnkiSyncHistoryEntry": {
+        "type": "object",
+        "required": [
+          "id",
+          "profile",
+          "finished_at",
+          "received_reviews",
+          "sent_reviews",
+          "outcome"
+        ],
+        "properties": {
+          "error_detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "finished_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/SyncOutcome"
+          },
+          "problem": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SyncProblem"
+              }
+            ]
+          },
+          "profile": {
+            "type": "string"
+          },
+          "received_reviews": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "resolved_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "sent_reviews": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "AnkiUpload": {
         "type": "object",
         "required": [
@@ -11209,11 +11697,124 @@
           }
         }
       },
+      "Assessment": {
+        "type": "object",
+        "required": [
+          "summary",
+          "next_match_focus",
+          "topics",
+          "key_decisions",
+          "training",
+          "limitations"
+        ],
+        "properties": {
+          "key_decisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KeyDecision"
+            }
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "next_match_focus": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "topics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Topic"
+            }
+          },
+          "training": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Training"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "AssessmentJob": {
+        "type": "object",
+        "required": [
+          "status",
+          "model"
+        ],
+        "properties": {
+          "error": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Failure"
+              }
+            ]
+          },
+          "model": {
+            "type": "string"
+          },
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Assessment"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/AssessmentStatus"
+          }
+        }
+      },
       "AssessmentSource": {
         "type": "string",
         "enum": [
           "native",
           "imported"
+        ]
+      },
+      "AssessmentState": {
+        "type": "object",
+        "required": [
+          "availability",
+          "abbreviated_match"
+        ],
+        "properties": {
+          "abbreviated_match": {
+            "type": "boolean"
+          },
+          "availability": {
+            "$ref": "#/components/schemas/Availability"
+          },
+          "job": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AssessmentJob"
+              }
+            ]
+          }
+        }
+      },
+      "AssessmentStatus": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "running",
+          "completed",
+          "failed"
         ]
       },
       "AttemptedCard": {
@@ -11269,6 +11870,15 @@
             ]
           }
         }
+      },
+      "Availability": {
+        "type": "string",
+        "enum": [
+          "ready",
+          "missing_analysis",
+          "unsupported",
+          "not_configured"
+        ]
       },
       "BackupCheck": {
         "type": "object",
@@ -11327,6 +11937,28 @@
             "type": "integer",
             "format": "int64",
             "minimum": 0
+          }
+        }
+      },
+      "BackupTargetCounts": {
+        "type": "object",
+        "required": [
+          "matches",
+          "saved_positions",
+          "learning_cards"
+        ],
+        "properties": {
+          "learning_cards": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "matches": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "saved_positions": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -12023,6 +12655,21 @@
           },
           "notation": {
             "type": "string"
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Ordered checker steps supplied by the engine, when available."
+          },
+          "plies": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Depth actually used for this candidate, when recorded by the engine."
           },
           "probabilities": {
             "type": "array",
@@ -12818,6 +13465,9 @@
           "engine": {
             "$ref": "#/components/schemas/ConfigurationEngine"
           },
+          "error_thresholds": {
+            "$ref": "#/components/schemas/ErrorThresholds"
+          },
           "plies": {
             "type": "integer",
             "format": "int32"
@@ -12889,7 +13539,23 @@
               "null"
             ],
             "format": "int32",
-            "description": "Preferred board pane width in analysis detail tabs; null uses the responsive default."
+            "description": "Preferred board pane width in Study cards; null uses the responsive default."
+          },
+          "analysis_errors_board_width": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Preferred board pane width in the Errors tab; null uses the responsive default."
+          },
+          "analysis_notes_board_width": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Preferred board pane width in the Notes tab; null uses the responsive default."
           },
           "analysis_overview_board_width": {
             "type": [
@@ -12898,6 +13564,14 @@
             ],
             "format": "int32",
             "description": "Preferred board pane width in the analysis overview; null uses the responsive default."
+          },
+          "analysis_statistics_board_width": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Preferred board pane width in the Statistics tab; null uses the responsive default."
           },
           "bearoff_direction": {
             "$ref": "#/components/schemas/ConfigurationDirection"
@@ -13645,6 +14319,40 @@
           }
         }
       },
+      "CubeEquityUnit": {
+        "type": "string",
+        "enum": [
+          "cubeful",
+          "mwc"
+        ]
+      },
+      "CubeEvaluation": {
+        "type": "object",
+        "description": "Recorded cube outcomes, from the player making the decision.",
+        "required": [
+          "unit",
+          "no_double",
+          "double_take",
+          "double_pass"
+        ],
+        "properties": {
+          "double_pass": {
+            "type": "number",
+            "format": "double"
+          },
+          "double_take": {
+            "type": "number",
+            "format": "double"
+          },
+          "no_double": {
+            "type": "number",
+            "format": "double"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/CubeEquityUnit"
+          }
+        }
+      },
       "CubeOfferAction": {
         "type": "string",
         "enum": [
@@ -13974,6 +14682,13 @@
             "format": "double",
             "description": "Best normalized cubeful equity from this player's perspective, in the same units."
           },
+          "checker_candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Candidate"
+            },
+            "description": "Ranked alternatives saved by local game and match analyses."
+          },
           "checker_no": {
             "type": [
               "integer",
@@ -13981,6 +14696,17 @@
             ],
             "format": "int32",
             "description": "One-based imported checker position; also links its preceding no-double decision.\nActual double/take/drop decisions have no checker number."
+          },
+          "cube_evaluation": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CubeEvaluation",
+                "description": "Saved outcomes. Older checkpoints may only contain played and best equity."
+              }
+            ]
           },
           "decision_no": {
             "type": "integer",
@@ -14030,7 +14756,7 @@
           },
           "severity": {
             "type": "string",
-            "description": "\"none\", \"doubtful\" (>= 0.04), \"bad\" (>= 0.08), or \"very_bad\" (>= 0.16)."
+            "description": "Saved decision severity. Analysis views can reclassify the stored equity loss."
           }
         }
       },
@@ -14498,6 +15224,17 @@
               "null"
             ]
           },
+          "gnubg_move_filter": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GnubgMoveFilter",
+                "description": "Saved checker move filter. Older snapshots use GNUbg startup defaults."
+              }
+            ]
+          },
           "gnubg_path": {
             "type": "string"
           },
@@ -14544,6 +15281,10 @@
             "type": "integer",
             "format": "int32"
           },
+          "blunder": {
+            "type": "integer",
+            "format": "int32"
+          },
           "doubtful": {
             "type": "integer",
             "format": "int32"
@@ -14553,6 +15294,35 @@
             "format": "int32"
           }
         }
+      },
+      "ErrorThresholds": {
+        "type": "object",
+        "description": "Inclusive lower bounds of the four grades, measured in normalized equity.",
+        "required": [
+          "questionable",
+          "error",
+          "blunder",
+          "large_blunder"
+        ],
+        "properties": {
+          "blunder": {
+            "type": "number",
+            "format": "double"
+          },
+          "error": {
+            "type": "number",
+            "format": "double"
+          },
+          "large_blunder": {
+            "type": "number",
+            "format": "double"
+          },
+          "questionable": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
       },
       "EstimateBenchmark": {
         "type": "object",
@@ -14621,6 +15391,16 @@
             }
           }
         }
+      },
+      "Failure": {
+        "type": "string",
+        "enum": [
+          "provider",
+          "invalid_report",
+          "interrupted",
+          "source_unavailable",
+          "not_configured"
+        ]
       },
       "FeedbackOperation": {
         "type": "string",
@@ -14854,6 +15634,12 @@
           "drop",
           "resignation",
           "recorded"
+        ]
+      },
+      "GnubgMoveFilter": {
+        "type": "string",
+        "enum": [
+          "top14"
         ]
       },
       "Health": {
@@ -15439,9 +16225,20 @@
           "kind"
         ],
         "properties": {
+          "engine_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MatchAnalysisEngine",
+                "description": "Provider for this job; omitted uses the saved analysis engine."
+              }
+            ]
+          },
           "kind": {
             "$ref": "#/components/schemas/PositionJobKind",
-            "description": "analysis: five candidate moves; dice: 21 weighted rolls."
+            "description": "A ranked candidate analysis or a distribution over 21 weighted rolls."
           },
           "plies": {
             "type": [
@@ -15481,6 +16278,26 @@
           "completed",
           "failed"
         ]
+      },
+      "KeyDecision": {
+        "type": "object",
+        "required": [
+          "evidence_ref",
+          "explanation",
+          "next_question"
+        ],
+        "properties": {
+          "evidence_ref": {
+            "type": "string"
+          },
+          "explanation": {
+            "type": "string"
+          },
+          "next_question": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       },
       "LearningSummary": {
         "type": "object",
@@ -15613,6 +16430,56 @@
             ],
             "format": "int64",
             "description": "Total matching rows when `page` is supplied."
+          }
+        }
+      },
+      "LinkedAnkiDeck": {
+        "type": "object",
+        "required": [
+          "deck_id",
+          "deck_name",
+          "profile",
+          "received_reviews",
+          "sent_reviews",
+          "open_errors",
+          "paused",
+          "status"
+        ],
+        "properties": {
+          "deck_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "deck_name": {
+            "type": "string"
+          },
+          "last_synced_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "open_errors": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "profile": {
+            "type": "string"
+          },
+          "received_reviews": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sent_reviews": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OverviewStatus"
           }
         }
       },
@@ -16502,11 +17369,12 @@
       },
       "MoveSeverity": {
         "type": "string",
-        "description": "Native decision severity, using the saved GNUbg normalized loss categories.",
+        "description": "Decision severity for normalized equity loss. Existing category identifiers are retained.",
         "enum": [
           "none",
           "doubtful",
           "bad",
+          "blunder",
           "very_bad"
         ]
       },
@@ -16607,6 +17475,24 @@
           }
         }
       },
+      "OverviewStatus": {
+        "type": "string",
+        "enum": [
+          "checking",
+          "paused",
+          "unreachable",
+          "other_profile",
+          "waiting",
+          "synced",
+          "no_matches",
+          "invalid_deck",
+          "conflict",
+          "timeout",
+          "anki_error",
+          "internal_error",
+          "failed"
+        ]
+      },
       "PerformanceRatingSummary": {
         "type": "object",
         "required": [
@@ -16699,6 +17585,7 @@
           "take",
           "drop",
           "resign",
+          "forfeit_match",
           "next_game",
           "end_session",
           "pause",
@@ -17387,6 +18274,9 @@
               }
             ]
           },
+          "error_thresholds": {
+            "$ref": "#/components/schemas/ErrorThresholds"
+          },
           "game_learning_used": {
             "type": "boolean"
           },
@@ -17436,6 +18326,10 @@
             ],
             "format": "uuid",
             "description": "Current linked library entry; projected from the relational session link."
+          },
+          "match_forfeited": {
+            "type": "boolean",
+            "description": "The human conceded the entire point match."
           },
           "match_length": {
             "type": "integer",
@@ -17604,6 +18498,10 @@
         ],
         "properties": {
           "bad": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "blunder": {
             "type": "integer",
             "format": "int32"
           },
@@ -19960,6 +20858,19 @@
           }
         }
       },
+      "StartAssessment": {
+        "type": "object",
+        "required": [
+          "report_version"
+        ],
+        "properties": {
+          "report_version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
       "StoredMove": {
         "type": "object",
         "required": [
@@ -20197,12 +21108,86 @@
         },
         "additionalProperties": false
       },
+      "SyncAction": {
+        "type": "string",
+        "enum": [
+          "sync_now",
+          "retry_open_errors",
+          "pause",
+          "resume"
+        ]
+      },
+      "SyncActionRequest": {
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/SyncAction"
+          },
+          "include_result": {
+            "type": "boolean"
+          },
+          "retry_of": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SyncAttemptResult": {
+        "type": "object",
+        "required": [
+          "outcome",
+          "received_reviews",
+          "sent_reviews",
+          "open_errors"
+        ],
+        "properties": {
+          "error_detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "open_errors": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/SyncOutcome"
+          },
+          "received_reviews": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sent_reviews": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "SyncOutcome": {
         "type": "string",
         "enum": [
           "synced",
           "no_matches",
           "failed"
+        ]
+      },
+      "SyncProblem": {
+        "type": "string",
+        "enum": [
+          "unreachable",
+          "invalid_deck",
+          "conflict",
+          "timeout",
+          "anki_error",
+          "internal_error"
         ]
       },
       "SyncRequest": {
@@ -20254,6 +21239,71 @@
           "tags_version": {
             "type": "integer",
             "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Topic": {
+        "type": "object",
+        "required": [
+          "topic",
+          "observation",
+          "evidence_refs"
+        ],
+        "properties": {
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "observation": {
+            "type": "string"
+          },
+          "topic": {
+            "$ref": "#/components/schemas/TopicName"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TopicName": {
+        "type": "string",
+        "enum": [
+          "cube",
+          "checker",
+          "opening",
+          "bear_off",
+          "hit",
+          "backgame",
+          "race",
+          "prime",
+          "contact",
+          "anchor"
+        ]
+      },
+      "Training": {
+        "type": "object",
+        "required": [
+          "focus",
+          "exercise",
+          "success_criterion",
+          "evidence_refs"
+        ],
+        "properties": {
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "exercise": {
+            "type": "string"
+          },
+          "focus": {
+            "type": "string"
+          },
+          "success_criterion": {
+            "type": "string"
           }
         },
         "additionalProperties": false

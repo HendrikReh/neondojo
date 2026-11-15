@@ -1,10 +1,9 @@
 //! Native GNUbg game analysis, preserving the complete match context.
-use crate::engine::Engine;
+use crate::engine::{Candidate, Engine, parse_checker_candidates};
 use crate::import::{
-    parse_sgf,
+    ImportedPosition, parse_sgf,
     sgf::{Node, parse_trees, write_property},
 };
-use crate::model::MoveSeverity;
 use anyhow::{Context, Result, ensure};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -86,6 +85,22 @@ pub struct NativePlayerStatistics {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum CubeEquityUnit {
+    Cubeful,
+    Mwc,
+}
+
+/// Recorded cube outcomes, from the player making the decision.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CubeEvaluation {
+    pub unit: CubeEquityUnit,
+    pub no_double: f64,
+    pub double_take: f64,
+    pub double_pass: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct Decision {
     /// One-based sequence of all checker and cube decisions within this game.
     pub decision_no: i32,
@@ -107,13 +122,19 @@ pub struct Decision {
     pub best_equity: Option<f64>,
     /// Nonnegative best-minus-played equity, rounded to GNUbg's six exported decimals.
     pub equity_loss: f64,
-    /// "none", "doubtful" (>= 0.04), "bad" (>= 0.08), or "very_bad" (>= 0.16).
+    /// Saved decision severity. Analysis views can reclassify the stored equity loss.
     pub severity: String,
     /// The original imported dice for checker decisions; absent for cube decisions.
     pub dice: Option<[i32; 2]>,
     /// "evaluated" or "forced". A forced dance has null equities and zero loss;
     /// missing analysis for any evaluable decision fails the game analysis.
     pub evaluation_status: String,
+    /// Ranked alternatives saved by local game and match analyses.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub checker_candidates: Vec<Candidate>,
+    /// Saved outcomes. Older checkpoints may only contain played and best equity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cube_evaluation: Option<CubeEvaluation>,
 }
 
 pub fn game_count(sgf: &str) -> Result<i32> {
@@ -161,6 +182,7 @@ impl Engine {
         for kind in ["chequerplay", "cubedecision"] {
             commands.push_str(&format!("set analysis {kind} type evaluation\nset analysis {kind} evaluation plies {plies}\nset analysis {kind} evaluation cubeful on\nset analysis {kind} evaluation deterministic on\nset analysis {kind} evaluation noise 0\n"));
         }
+        self.append_move_filter(&mut commands, "analysis", plies);
         for mark in ["verybad", "bad", "doubtful", "unmarked"] {
             commands.push_str(&format!(
                 "set export moves display {mark} on\nset export cube display {mark} on\n"
@@ -306,6 +328,73 @@ async fn read_analysis_artifact(path: &std::path::Path) -> Result<String> {
     Ok(text)
 }
 
+fn retain_checker_paths<'a>(
+    candidates: impl Iterator<Item = &'a mut Candidate>,
+    position: &ImportedPosition,
+    analysis: &[String],
+) {
+    let Ok(before) = <[i32; 26]>::try_from(position.board.as_slice()) else {
+        return;
+    };
+    let [first, second] = position.dice;
+    for candidate in candidates {
+        // A[played-index][rank-1 move and evaluation][rank-2 ...].
+        let Some(coordinates) = usize::try_from(candidate.rank)
+            .ok()
+            .and_then(|rank| analysis.get(rank))
+            .and_then(|value| value.split_whitespace().next())
+            .filter(|value| value.len() <= 8)
+        else {
+            continue;
+        };
+        let mut after = before;
+        if let Ok((_, path)) = crate::import::sgf::play(
+            &mut after,
+            position.player,
+            &format!("{first}{second}{coordinates}"),
+        ) && crate::move_assessments::after_checker_play(
+            before,
+            position.player,
+            position.dice,
+            &candidate.notation,
+        ) == Some(after)
+        {
+            candidate.path = Some(path);
+        }
+    }
+}
+
+pub(crate) async fn retain_hint_paths(
+    directory: &std::path::Path,
+    position_id: &str,
+    candidates: &mut [Candidate],
+) {
+    // Some GNUbg builds and decisions only expose textual hints.
+    let Ok(sgf) = read_analysis_artifact(&directory.join("hint.sgf")).await else {
+        return;
+    };
+    let Ok((matched, _)) = crate::import::sgf::parse_native_sgf_with_context(&sgf) else {
+        return;
+    };
+    let Some(position) = matched
+        .positions
+        .last()
+        .filter(|p| p.position_id == position_id)
+    else {
+        return;
+    };
+    let Ok(trees) = parse_trees(&sgf) else {
+        return;
+    };
+    if let Some(analysis) = trees
+        .last()
+        .and_then(|nodes| nodes.last())
+        .and_then(|node| node.get("A"))
+    {
+        retain_checker_paths(candidates.iter_mut(), position, analysis);
+    }
+}
+
 /// Keep all game state, but exclude imported analysis and arbitrary annotations.
 /// Fixed names also prevent player-name newlines from resembling export headers.
 fn analysis_input(sgf: &str) -> Result<String> {
@@ -436,7 +525,10 @@ pub(crate) fn decision(
         played_equity: equities.map(|e| e.0),
         best_equity: equities.map(|e| e.1),
         equity_loss: loss,
-        severity: MoveSeverity::from_normalized_loss(loss).as_str().into(),
+        severity: crate::configuration::ErrorThresholds::default()
+            .classify(loss)
+            .as_str()
+            .into(),
         dice: None,
         evaluation_status: if equities.is_some() {
             "evaluated"
@@ -444,13 +536,9 @@ pub(crate) fn decision(
             "forced"
         }
         .into(),
+        checker_candidates: vec![],
+        cube_evaluation: None,
     }
-}
-
-fn number(value: &str) -> Result<f64> {
-    let value: f64 = value.parse().context("Invalid native analysis equity")?;
-    ensure!(value.is_finite(), "Non-finite native analysis equity");
-    Ok(value)
 }
 
 /// The response values are already in the responder's perspective here.
@@ -480,25 +568,37 @@ pub(crate) fn cube_options(
 
 fn cube_decision(block: &str, player: i32, played: &str) -> Result<Decision> {
     let crate::engine::CubeEquities {
-        no_double,
+        mut no_double,
         mut take,
         mut pass,
     } = crate::engine::parse_cube_equities(block)?;
     // A pass loses one pre-offer cube unit for the responder. Older
     // GNUbg exports use the doubler's perspective, where it is positive.
     if matches!(played, "take" | "drop") && pass > 0.0 {
+        no_double = -no_double;
         take = -take;
         pass = -pass;
     }
-    let (label, actual, best) =
-        cube_options(played, no_double, take, pass).context("Unsupported native cube decision")?;
-    Ok(decision(
-        player,
-        "cube",
-        played,
-        label,
-        Some((actual, best)),
-    ))
+    evaluated_cube_decision(player, played, no_double, take, pass)
+}
+
+pub(crate) fn evaluated_cube_decision(
+    player: i32,
+    played: &str,
+    no_double: f64,
+    double_take: f64,
+    double_pass: f64,
+) -> Result<Decision> {
+    let (best, actual, optimal) = cube_options(played, no_double, double_take, double_pass)
+        .context("Unsupported native cube decision")?;
+    let mut result = decision(player, "cube", played, best, Some((actual, optimal)));
+    result.cube_evaluation = Some(CubeEvaluation {
+        unit: CubeEquityUnit::Cubeful,
+        no_double,
+        double_take,
+        double_pass,
+    });
+    Ok(result)
 }
 
 /// GNUbg skips the standard opening board. Custom positions can require cube
@@ -580,13 +680,6 @@ fn parse_game(sgf: &str, game_no: i32, native: &str, text: &str) -> Result<Vec<D
         starts.len() == source_moves.len(),
         "GNUbg text export has incomplete move coverage"
     );
-    static CANDIDATES: OnceLock<Regex> = OnceLock::new();
-    let candidates = CANDIDATES.get_or_init(|| {
-        Regex::new(
-            r"(?m)^\s*(\*)?\s*(\d+)\.\s+Cubeful\s+\d+-ply\s+(.+?)\s+Eq\.:\s*([+-]?[0-9]+\.[0-9]+)",
-        )
-        .unwrap()
-    });
     let mut decisions = Vec::new();
     let mut checker_no = 0usize;
     for (index, (player, played, node)) in native_moves.into_iter().enumerate() {
@@ -618,7 +711,7 @@ fn parse_game(sgf: &str, game_no: i32, native: &str, text: &str) -> Result<Vec<D
                 "Native cube analysis is inconsistent with SGF"
             );
         }
-        let rows: Vec<_> = candidates.captures_iter(block).collect();
+        let mut rows = parse_checker_candidates(block)?;
         let mut checker = if rows.is_empty() {
             ensure!(
                 played.len() == 2 && block.lines().any(|l| l.trim() == "*    Cannot move"),
@@ -626,30 +719,44 @@ fn parse_game(sgf: &str, game_no: i32, native: &str, text: &str) -> Result<Vec<D
             );
             decision(player, "checker", "Cannot move", "Cannot move", None)
         } else {
-            let best = &rows[0];
-            ensure!(&best[2] == "1", "Native checker best candidate missing");
-            let actual: Vec<_> = rows.iter().filter(|row| row.get(1).is_some()).collect();
+            let best = &rows[0].0;
             ensure!(
-                actual.len() == 1,
-                "Native export must identify exactly one actual checker play"
+                rows.iter()
+                    .enumerate()
+                    .all(|(index, (candidate, _))| candidate.rank as usize == index + 1),
+                "Native export has incomplete checker candidate ranks"
             );
-            let actual = actual[0];
-            let selected: usize = node
-                .get("A")
-                .and_then(|a| a.first())
+            let mut played_rows = rows.iter().filter(|(_, played)| *played);
+            let (actual, _) = played_rows
+                .next()
+                .context("Native export omitted the played checker move")?;
+            ensure!(
+                played_rows.next().is_none(),
+                "Native export marked multiple played checker moves"
+            );
+            let analysis = node.get("A").context("Native checker analysis missing")?;
+            let selected: usize = analysis
+                .first()
                 .context("Native checker analysis missing")?
                 .parse()?;
             ensure!(
-                actual[2].parse::<usize>()? == selected + 1,
+                actual.rank as usize == selected + 1,
                 "Native actual checker candidate mismatch"
             );
-            decision(
+            let mut checker = decision(
                 player,
                 "checker",
-                actual[3].trim(),
-                best[3].trim(),
-                Some((number(&actual[4])?, number(&best[4])?)),
-            )
+                &actual.notation,
+                &best.notation,
+                Some((actual.equity, best.equity)),
+            );
+            retain_checker_paths(
+                rows.iter_mut().map(|(candidate, _)| candidate),
+                position,
+                analysis,
+            );
+            checker.checker_candidates = rows.into_iter().map(|(candidate, _)| candidate).collect();
+            checker
         };
         checker.checker_no = Some(checker_no as i32);
         checker.dice = Some(position.dice);
@@ -693,6 +800,7 @@ pub(crate) fn accumulate_decision(
     match decision.severity.as_str() {
         "doubtful" => player.doubtful += 1,
         "bad" => player.bad += 1,
+        "blunder" => player.blunder += 1,
         "very_bad" => player.very_bad += 1,
         "none" => {}
         _ => anyhow::bail!("Unknown analysis error severity"),
@@ -761,8 +869,24 @@ mod tests {
                 assert_eq!(drop.best_equity, take.best_equity, "{block}");
                 assert_eq!(take.equity_loss, take_loss, "{block}");
                 assert_eq!(drop.equity_loss, drop_loss, "{block}");
+                let outcomes = take.cube_evaluation.unwrap();
+                assert_eq!(outcomes.double_take, take_equity, "{block}");
+                assert_eq!(outcomes.double_pass, -1.0, "{block}");
+                assert_eq!(outcomes.no_double, -0.75, "{block}");
             }
         }
+    }
+
+    #[test]
+    fn legacy_cube_checkpoint_keeps_known_equities_without_outcomes() {
+        let mut data =
+            serde_json::to_value(evaluated_cube_decision(0, "no double", 0.4, 0.6, 1.0).unwrap())
+                .unwrap();
+        data.as_object_mut().unwrap().remove("cube_evaluation");
+        let decision: Decision = serde_json::from_value(data).unwrap();
+        assert_eq!(decision.played_equity, Some(0.4));
+        assert_eq!(decision.best_equity, Some(0.6));
+        assert!(decision.cube_evaluation.is_none());
     }
 
     #[tokio::test]
@@ -873,6 +997,38 @@ mod tests {
     const EXPORT: &str = include_str!("../tests/fixtures/analysis-game1.txt");
 
     #[test]
+    fn native_export_retains_ranked_checker_candidates_and_outcomes() {
+        let decisions = parse_game(MATCH, 1, NATIVE, EXPORT).unwrap();
+        let opening = serde_json::to_value(&decisions[0]).unwrap();
+        let candidates = opening["checker_candidates"].as_array().unwrap();
+        assert_eq!(candidates.len(), 14);
+        assert_eq!(
+            candidates[0],
+            serde_json::json!({
+                "rank": 1,
+                "notation": "24/18 13/11",
+                "path": "24/18 13/11",
+                "equity": 0.013766,
+                "probabilities": [0.507359, 0.133160, 0.006572, 0.492641, 0.140604, 0.005944],
+                "plies": 0
+            })
+        );
+        assert_eq!(candidates[1]["notation"], "24/16");
+        assert_eq!(candidates[1]["path"], "24/18 18/16");
+        assert_eq!(candidates[9]["notation"], "13/7 6/4");
+        assert_eq!(candidates[9]["rank"], 10);
+    }
+
+    #[test]
+    fn native_export_keeps_the_text_candidate_when_the_sgf_path_leads_elsewhere() {
+        let native = NATIVE.replacen("[xrrp E", "[xrxv E", 1);
+        let decisions = parse_game(MATCH, 1, &native, EXPORT).unwrap();
+        let candidate = &decisions[0].checker_candidates[1];
+        assert_eq!(candidate.notation, "24/16");
+        assert!(candidate.path.is_none());
+    }
+
+    #[test]
     fn native_export_covers_checker_cube_and_forced_decisions() {
         let decisions = parse_game(MATCH, 1, NATIVE, EXPORT).unwrap();
         assert_eq!(decisions.len(), 17);
@@ -887,7 +1043,7 @@ mod tests {
         let double = decisions.iter().find(|d| d.played == "double").unwrap();
         assert!((double.equity_loss - 0.049585).abs() < 0.000002);
         assert_eq!(double.best, "no double");
-        assert_eq!(double.severity, "doubtful");
+        assert_eq!(double.severity, "bad");
         let drop = decisions.last().unwrap();
         assert_eq!(drop.played, "drop");
         assert_eq!(drop.player, 1);
@@ -990,9 +1146,12 @@ mod tests {
     #[test]
     fn native_precision_preserves_exact_severity_thresholds() {
         for (played, best, loss, severity) in [
-            (0.08, 0.12, 0.04, "doubtful"),
-            (0.16, 0.24, 0.08, "bad"),
-            (0.32, 0.48, 0.16, "very_bad"),
+            (0.08, 0.084999, 0.004999, "none"),
+            (0.08, 0.085, 0.005, "doubtful"),
+            (0.16, 0.18, 0.02, "bad"),
+            (0.32, 0.399999, 0.079999, "bad"),
+            (0.32, 0.40, 0.08, "blunder"),
+            (0.32, 0.44, 0.12, "very_bad"),
         ] {
             let d = decision(0, "checker", "played", "best", Some((played, best)));
             assert_eq!(d.equity_loss, loss);

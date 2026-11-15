@@ -3,10 +3,10 @@ import type { BearoffDirection } from './play-state';
 import type { PlayMode } from './play-mode-messages';
 type Schema = import('./generated-api').components['schemas'];
 export type PlaySeverity = Schema['MoveSeverity'];
+import { errorGrades } from './move-severity';
+
 export const playSeverity = (value: string | null | undefined): PlaySeverity =>
-  value === 'doubtful' || value === 'bad' || value === 'very_bad'
-    ? value
-    : 'none';
+  errorGrades.find((grade) => grade === value) ?? 'none';
 export type PlayAlternative = Schema['PlayAlternative'];
 export type PlayDecision = Schema['PlayDecision'];
 // Legacy saved sessions and older cached snapshots have no feedback profile.
@@ -52,11 +52,10 @@ export const loadPlaySession = (id: string, signal?: AbortSignal) =>
 export const createPlaySession = (
   human_player: number,
   match_length: number,
-  preferences?: {
-    play_mode: PlayMode;
-    tutor_threshold: number;
-    training_auto_analysis: boolean;
-  },
+  preferences?: Pick<
+    Schema['CreatePlaySession'],
+    'play_mode' | 'tutor_threshold' | 'training_auto_analysis'
+  >,
 ) =>
   request<PlaySession>(
     '/play/sessions',

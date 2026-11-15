@@ -118,6 +118,37 @@ async fn defaults_use_injected_engine_and_survive_new_app_states(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires isolated PostgreSQL and GNUbg with weights"]
+async fn explicit_position_engine_does_not_depend_on_the_saved_default(pool: PgPool) {
+    let imported = imported(&pool).await;
+    let app = api::router(AppState::new(pool.clone(), Engine::new(binary())));
+    let (status, settings) = call(app.clone(), "GET", "/api/settings", Value::Null).await;
+    assert_eq!(status, 200, "{settings}");
+    sqlx::query("UPDATE app_settings SET analysis_engine = 'bgsage' WHERE singleton")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let position = store::positions(&pool, Some(imported.r#match.id), None, None, 10)
+        .await
+        .unwrap()
+        .items
+        .remove(0);
+
+    for kind in ["analysis", "dice"] {
+        let (status, job) = call(
+            app.clone(),
+            "POST",
+            "/api/jobs",
+            json!({"position_id": position.id, "kind": kind, "engine_id": "gnubg", "plies": 0}),
+        )
+        .await;
+        assert_eq!(status, 202, "{job}");
+        assert_eq!(job["engine_snapshot"]["engine_id"], "gnubg");
+        assert_eq!(job["plies"], 0);
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires isolated PostgreSQL and GNUbg with weights"]
 async fn thread_settings_are_validated_and_pinned_in_new_jobs(pool: PgPool) {
     let imported = imported(&pool).await;
     let app = api::router(AppState::new(pool.clone(), Engine::new(binary())));
@@ -1123,6 +1154,7 @@ async fn snapshot_rejects_output_if_the_version_changes_during_evaluation() {
     let (_temp, engine) = versioned_fixture_engine(true);
     let snapshot = bgtutor::settings::EngineSnapshot {
         gnubg_threads: None,
+        gnubg_move_filter: None,
         open_sage: None,
         engine_id: "gnubg".into(),
         gnubg_path: engine.binary().into(),

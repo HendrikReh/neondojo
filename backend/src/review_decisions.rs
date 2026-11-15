@@ -1,6 +1,7 @@
 //! Read-only, bounded review of pinned native checkpoints and validated source evaluations.
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
+    configuration::ErrorThresholds,
     imported_analysis::ImportedAnalysisData,
     match_analysis::Decision,
     model::{Job, MoveSeverity},
@@ -219,9 +220,9 @@ async fn load_review_bounded(
     {
         return Err(ApiError::missing());
     }
-    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
-    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
-        .execute(&mut *tx)
+    let mut tx = state
+        .pool
+        .begin_with("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
         .await
         .map_err(anyhow::Error::from)?;
     let (format, revision): (String, i64) =
@@ -286,6 +287,7 @@ async fn load_review_bounded(
             .fetch_one(&mut *tx)
             .await
             .map_err(anyhow::Error::from)?;
+    let thresholds = crate::configuration::store::error_thresholds(&mut *tx).await?;
     let scope = serde_json::to_string(&(
         id,
         revision,
@@ -295,6 +297,7 @@ async fn load_review_bounded(
         &query.kind,
         query.severity,
         query.errors_only,
+        thresholds,
         checkpoints,
         "cube-before-checker",
     ))
@@ -337,17 +340,15 @@ async fn load_review_bounded(
             && let Some(mut decision) = crate::move_assessments::hint_decision(&position, &analysis)
         {
             let severity = if decision.evaluation_status == "evaluated" {
-                MoveSeverity::from_normalized_loss(decision.equity_loss)
+                thresholds.classify(decision.equity_loss)
             } else {
                 MoveSeverity::None
             };
             decision.severity = severity.as_str().into();
             if query.player.is_none_or(|p| p == position.player)
                 && query.kind.as_deref().is_none_or(|k| k == "checker")
-                && (!query.errors_only || !matches!(severity, MoveSeverity::None))
-                && query
-                    .severity
-                    .is_none_or(|s| s.as_str() == severity.as_str())
+                && (!query.errors_only || severity != MoveSeverity::None)
+                && query.severity.is_none_or(|s| s == severity)
             {
                 items.push(ReviewDecision {
                     id: format!("hint:{}", job.id),
@@ -418,9 +419,15 @@ async fn load_review_bounded(
                     kind: row.kind.clone(),
                     id: row.id.clone(),
                 });
-                let Some(result) =
-                    filtered_decision(row, id, &format, job.as_deref(), errors_only, severity)
-                else {
+                let Some(result) = filtered_decision(
+                    row,
+                    id,
+                    &format,
+                    job.as_deref(),
+                    errors_only,
+                    severity,
+                    thresholds,
+                ) else {
                     continue;
                 };
                 let index = matched + matched_in_batch;
@@ -458,13 +465,16 @@ fn filtered_decision(
     job: Option<&Job>,
     errors_only: bool,
     filter: Option<MoveSeverity>,
+    thresholds: ErrorThresholds,
 ) -> Option<ReviewDecision> {
     let mut result = project(row, id, format, job)?;
-    let severity = MoveSeverity::from_normalized_loss(result.decision.equity_loss);
-    if errors_only
-        && (result.decision.evaluation_status != "evaluated"
-            || result.decision.equity_loss < MoveSeverity::DOUBTFUL_MIN_LOSS)
-        || filter.is_some_and(|s| s.as_str() != severity.as_str())
+    let severity = if result.decision.evaluation_status == "evaluated" {
+        thresholds.classify(result.decision.equity_loss)
+    } else {
+        MoveSeverity::None
+    };
+    if (errors_only && severity == MoveSeverity::None)
+        || filter.is_some_and(|grade| grade != severity)
     {
         return None;
     }

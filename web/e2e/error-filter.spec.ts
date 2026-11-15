@@ -1,7 +1,11 @@
-import { openMatchCalculation } from './analysis-controls';
+import {
+  openFullMatchAnalysis,
+  openMatchAnalysisOptions,
+  submitFullMatchAnalysis,
+} from './analysis-controls';
 import { expect, test } from './test';
 
-test('error lists exclude good zero-loss decisions after reset and label explicit decision drilldowns', async ({
+test('error review restores the configured threshold and navigates all decisions on request', async ({
   page,
 }) => {
   test.setTimeout(45000);
@@ -15,58 +19,81 @@ test('error lists exclude good zero-loss decisions after reset and label explici
       `(;GM[6]PW[Errors ${crypto.randomUUID()}]PB[Opponent]MI[length:7][ws:0][bs:0];W[31xufe];B[42qusu])(;GM[6]MI[length:7][ws:1][bs:0];W[31hefe];B[42qusu])`,
     ),
   });
-  await openMatchCalculation(page);
-  await page
-    .getByLabel('Analysis scope', { exact: true })
-    .selectOption('match');
-  await page
+  await openMatchAnalysisOptions(page);
+  const dialog = await openFullMatchAnalysis(page);
+  await dialog
     .getByLabel('Match analysis depth', { exact: true })
     .selectOption('0');
-  await page
-    .getByRole('button', { name: 'Analyze entire match', exact: true })
-    .click();
+  await submitFullMatchAnalysis(page, dialog);
   await expect(page.locator('.match-analysis-progress')).toContainText(
     'Match analysis complete',
   );
-  const panel = page.locator('.match-analysis');
-  const toggle = panel.locator('.match-analysis-filters input[type=checkbox]');
-  const heading = panel.locator('.match-move-overview > summary');
-  const rows = panel.locator('.match-moves-table tbody tr');
-  const assertErrors = async () => {
-    await expect(toggle).toBeChecked();
-    await expect(heading).toHaveText('Errors by move');
-    await expect(rows.first()).toBeVisible();
-    await expect(panel.locator('.severity-none')).toHaveCount(0);
-    for (const loss of await panel.locator('.equity-loss').allTextContents())
-      expect(Number(loss)).toBeGreaterThanOrEqual(0.04);
-  };
-  await assertErrors();
-  await panel
-    .getByRole('button', { name: 'Reset filters', exact: true })
-    .click();
-  await assertErrors();
+  await page.getByRole('tab', { name: 'Checker', exact: true }).click();
+  const pending = (errorsOnly: string, kind: string) =>
+    page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return (
+        url.pathname.endsWith('/review-decisions') &&
+        url.searchParams.has('page') &&
+        url.searchParams.get('errors_only') === errorsOnly &&
+        url.searchParams.get('kind') === kind
+      );
+    });
+
+  const errors = pending('true', 'cube');
+  await page.getByRole('tab', { name: 'Cube', exact: true }).click();
+  expect((await errors).ok()).toBe(true);
+  const panel = page.getByRole('tabpanel', { name: 'Cube', exact: true });
+  const toggle = panel.getByRole('checkbox', { name: /Inaccuracies only/ });
+  await expect(toggle).toBeChecked();
+  await expect(panel.getByLabel('Filter analysis by decision')).toHaveCount(0);
+  const all = pending('false', 'cube');
   await toggle.uncheck();
-  await expect(heading).toHaveText('Decisions by move');
-  await expect(panel.locator('.severity-none').first()).toBeVisible();
-  expect(await panel.locator('.equity-loss').allTextContents()).toContain(
-    '0.000',
-  );
-  await panel
-    .getByRole('button', { name: 'Reset filters', exact: true })
+  const results = await (await all).json();
+  expect(results.items.length).toBeGreaterThan(0);
+  expect(
+    results.items.every((row: { kind: string }) => row.kind === 'cube'),
+  ).toBe(true);
+  await page
+    .getByRole('button', { name: 'Next decision', exact: true })
     .click();
-  await assertErrors();
-  await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
+  await expect(
+    page.getByRole('region', { name: 'Cube evaluation', exact: true }),
+  ).toBeVisible();
+
+  const statistics = page.getByRole('tab', { name: 'Statistics', exact: true });
+  await statistics.click();
+  const checker = pending('false', 'checker');
   await page
     .locator(
       '.match-statistics .statistics-summary [data-statistics-metric="checker"]',
     )
     .first()
     .click();
-  await expect(heading).toHaveText('Decisions by move');
+  const checked = await checker;
+  expect(new URL(checked.url()).searchParams.get('game_no')).toBeNull();
+  await expect(
+    page.getByRole('tab', { name: 'Checker', exact: true }),
+  ).toHaveAttribute('aria-selected', 'true');
+  await expect(
+    page.getByRole('group', { name: 'Review errors' }),
+  ).toContainText('All games in this analysis');
+
+  await statistics.click();
+  const cube = pending('false', 'cube');
+  await page
+    .locator(
+      '.match-statistics .statistics-summary [data-statistics-metric="cube"]',
+    )
+    .first()
+    .click();
+  expect((await cube).ok()).toBe(true);
+  await expect(
+    page.getByRole('tab', { name: 'Cube', exact: true }),
+  ).toHaveAttribute('aria-selected', 'true');
   await expect(toggle).not.toBeChecked();
-  await expect(panel.locator('.severity-none').first()).toBeVisible();
   await panel
     .getByRole('button', { name: 'Reset filters', exact: true })
     .click();
-  await assertErrors();
+  await expect(toggle).toBeChecked();
 });

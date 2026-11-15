@@ -162,6 +162,12 @@ async fn retire_source_work(connection: &mut PgConnection) -> Result<()> {
     .execute(&mut *connection)
     .await?;
     sqlx::query(
+        "UPDATE public.match_assessments SET status='failed',error_code='interrupted',
+            lease_token=NULL,lease_until=NULL WHERE status IN ('queued','running')",
+    )
+    .execute(&mut *connection)
+    .await?;
+    sqlx::query(
         "UPDATE public.benchmark_runs SET status='failed',finished_at=now(),
              error='Interrupted by database restore',worker_token=NULL,lease_until=NULL
          WHERE status IN ('queued','running')",

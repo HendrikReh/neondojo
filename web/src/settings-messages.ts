@@ -36,6 +36,11 @@ const en = {
   fast: 'Quick — GNUbg 0-ply',
   deep: 'Deeper — GNUbg 1-ply',
   thorough: 'Thorough — GNUbg 2-ply',
+  errorThresholds: 'Error thresholds',
+  errorThresholdsHelp:
+    'Minimum normalized equity loss for each grade. Error is the default warning threshold for Tutor and for missed doubles in Coach.',
+  invalidErrorThresholds:
+    'Enter four strictly increasing thresholds greater than zero and at most one.',
   analysisHelp:
     'Applies to new analysis jobs. Existing results and running jobs retain their engine and profile.',
   path: 'GNUbg executable path',
@@ -125,6 +130,11 @@ export const settingsMessages: Record<Locale, Messages> = {
     fast: 'Schnell — GNUbg 0-ply',
     deep: 'Vertieft — GNUbg 1-ply',
     thorough: 'Gründlich — GNUbg 2-ply',
+    errorThresholds: 'Fehlergrenzen',
+    errorThresholdsHelp:
+      'Mindestverlust an normalisierter Equity je Stufe. „Fehler“ ist die Standardwarnschwelle im Tutor und für ausgelassene Doppler im Coach.',
+    invalidErrorThresholds:
+      'Gib vier aufsteigende Grenzwerte ein. Jeder Wert muss größer als null und höchstens eins sein.',
     analysisHelp:
       'Gilt für neue Analyseaufträge. Vorhandene Ergebnisse und laufende Aufträge behalten ihre Engine und ihr Profil.',
     path: 'GNUbg-Programmpfad',
@@ -212,6 +222,11 @@ export const settingsMessages: Record<Locale, Messages> = {
     fast: 'Rápido — GNUbg 0-ply',
     deep: 'Profundo — GNUbg 1-ply',
     thorough: 'Exhaustivo — GNUbg 2-ply',
+    errorThresholds: 'Umbrales de error',
+    errorThresholdsHelp:
+      'Pérdida mínima de equidad normalizada para cada nivel. «Error» es el umbral de aviso inicial del tutor y de los dobles omitidos en el entrenador.',
+    invalidErrorThresholds:
+      'Introduce cuatro umbrales estrictamente crecientes, mayores que cero y como máximo uno.',
     analysisHelp:
       'Se aplica a nuevos análisis. Los resultados existentes y los trabajos en curso conservan su motor y perfil.',
     path: 'Ruta del ejecutable GNUbg',
@@ -298,6 +313,11 @@ export const settingsMessages: Record<Locale, Messages> = {
     fast: 'Rapide — GNUbg 0-ply',
     deep: 'Approfondi — GNUbg 1-ply',
     thorough: 'Détaillé — GNUbg 2-ply',
+    errorThresholds: 'Seuils d’erreur',
+    errorThresholdsHelp:
+      'Perte minimale d’équité normalisée par niveau. « Erreur » est le seuil d’alerte par défaut pour le tuteur et les doubles manqués en mode Coach.',
+    invalidErrorThresholds:
+      'Saisissez quatre seuils strictement croissants, supérieurs à zéro et inférieurs ou égaux à un.',
     analysisHelp:
       'S’applique aux nouvelles analyses. Les résultats existants et les tâches en cours conservent leur moteur et leur profil.',
     path: 'Chemin de l’exécutable GNUbg',
@@ -385,6 +405,11 @@ export const settingsMessages: Record<Locale, Messages> = {
     fast: 'Rapido — GNUbg 0-ply',
     deep: 'Approfondito — GNUbg 1-ply',
     thorough: 'Accurato — GNUbg 2-ply',
+    errorThresholds: 'Soglie di errore',
+    errorThresholdsHelp:
+      'Perdita minima di equità normalizzata per ogni livello. «Errore» è la soglia di avviso predefinita per Tutor e per i raddoppi mancati in Coach.',
+    invalidErrorThresholds:
+      'Inserisci quattro soglie strettamente crescenti, maggiori di zero e al massimo pari a uno.',
     analysisHelp:
       'Si applica alle nuove analisi. I risultati esistenti e i lavori in corso conservano il proprio motore e profilo.',
     path: 'Percorso dell’eseguibile GNUbg',
@@ -469,6 +494,11 @@ export const settingsMessages: Record<Locale, Messages> = {
     fast: 'Szybki — GNUbg 0-ply',
     deep: 'Pogłębiony — GNUbg 1-ply',
     thorough: 'Dokładny — GNUbg 2-ply',
+    errorThresholds: 'Progi błędów',
+    errorThresholdsHelp:
+      'Minimalna strata znormalizowanej equity dla każdego poziomu. „Błąd” jest domyślnym progiem ostrzeżeń tutora i pominiętych podwojeń w trybie trenera.',
+    invalidErrorThresholds:
+      'Wpisz cztery ściśle rosnące progi większe od zera i nieprzekraczające jedności.',
     analysisHelp:
       'Dotyczy nowych analiz. Istniejące wyniki i trwające zadania zachowują swój silnik i profil.',
     path: 'Ścieżka do programu GNUbg',

@@ -1,30 +1,34 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Theme } from './themes';
 import ActionButton from './ActionButton';
+import StudyMatchReport from './StudyMatchReport';
 import LearningReviewDialog from './LearningReviewDialog';
+import type { AssessmentEntry } from './match-assessment-api';
 import { useI18n } from './i18n';
 import StudyReportTable from './StudyReportTable';
 import { groupStudyReports } from './study-report-groups';
-import type { PlaySession } from './play-api';
 import {
-  loadStudyReport,
   loadStudyReports,
+  loadStudyReport,
   type StudyReportPage,
-  type StudyReportSummary,
 } from './study-api';
+import type { PlaySession } from './play-api';
 import { usePlayText } from './play-messages';
 import { useStudyText } from './study-messages';
 export default function StudyReports({
   visible,
   theme,
+  requestedAssessment,
 }: {
   visible: boolean;
   theme: Theme;
+  requestedAssessment?: AssessmentEntry;
 }) {
   const gameText = usePlayText();
   const t = useStudyText();
   const { locale, formatError } = useI18n();
   const reportTrigger = useRef<HTMLButtonElement | null>(null);
+  const returnReport = useRef<string | undefined>(undefined);
   const [page, setPage] = useState<StudyReportPage>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<unknown>();
@@ -33,11 +37,61 @@ export default function StudyReports({
   const [moreError, setMoreError] = useState<unknown>();
   const listAbort = useRef<AbortController | null>(null),
     moreLocked = useRef(false);
-  const [selected, setSelected] = useState<StudyReportSummary>();
-  const [detail, setDetail] = useState<PlaySession>();
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState<unknown>();
-  const [detailRevision, setDetailRevision] = useState(0);
+  const [selected, setSelected] = useState<{
+    id: string;
+    title?: string;
+    start: boolean;
+    token?: number;
+    money?: boolean;
+  }>();
+  const consumedRequest = useRef<number | undefined>(undefined);
+  const restoreFocus = useRef(false);
+  const archiveHeading = useRef<HTMLHeadingElement>(null);
+  const [moneyReport, setMoneyReport] = useState<PlaySession>();
+  const [moneyError, setMoneyError] = useState<unknown>();
+  const [moneyRevision, setMoneyRevision] = useState(0);
+  const moneyId = selected?.money ? selected.id : undefined;
+  useEffect(() => {
+    if (!visible || !moneyId) return;
+    const abort = new AbortController();
+    setMoneyError(undefined);
+    setMoneyReport(undefined);
+    void loadStudyReport(moneyId, abort.signal)
+      .then((report) => {
+        if (!abort.signal.aborted) setMoneyReport(report);
+      })
+      .catch((error: unknown) => {
+        if (!abort.signal.aborted) setMoneyError(error);
+      });
+    return () => abort.abort();
+  }, [visible, moneyId, moneyRevision]);
+  useEffect(() => {
+    if (
+      !visible ||
+      !requestedAssessment ||
+      consumedRequest.current === requestedAssessment.token
+    )
+      return;
+    consumedRequest.current = requestedAssessment.token;
+    reportTrigger.current = null;
+    returnReport.current = undefined;
+    setSelected({
+      id: requestedAssessment.id,
+      start: true,
+      token: requestedAssessment.token,
+    });
+  }, [visible, requestedAssessment]);
+  useEffect(() => {
+    if (!selected && restoreFocus.current) {
+      const button = returnReport.current
+        ? document.getElementById(`open-study-report-${returnReport.current}`)
+        : undefined;
+      if (button || !loading) {
+        (button ?? archiveHeading.current)?.focus();
+        restoreFocus.current = false;
+      }
+    }
+  }, [selected, loading]);
   useEffect(() => {
     if (!visible) return;
     const abort = new AbortController();
@@ -61,24 +115,6 @@ export default function StudyReports({
       abort.abort();
     };
   }, [visible, revision]);
-  useEffect(() => {
-    if (!visible || !selected) return;
-    const abort = new AbortController();
-    setDetailLoading(true);
-    setDetailError(undefined);
-    setDetail(undefined);
-    void loadStudyReport(selected.id, abort.signal)
-      .then((result) => {
-        if (!abort.signal.aborted) setDetail(result);
-      })
-      .catch((failure) => {
-        if (!abort.signal.aborted) setDetailError(failure);
-      })
-      .finally(() => {
-        if (!abort.signal.aborted) setDetailLoading(false);
-      });
-    return () => abort.abort();
-  }, [visible, selected?.id, detailRevision]);
   useEffect(() => {
     if (!visible) setSelected(undefined);
   }, [visible]);
@@ -105,11 +141,27 @@ export default function StudyReports({
       }
     }
   }
+  if (selected && !selected.money && visible)
+    return (
+      <StudyMatchReport
+        key={`${selected.id}:${selected.token ?? 'archive'}`}
+        reportId={selected.id}
+        title={selected.title}
+        start={selected.start}
+        theme={theme}
+        onClose={() => {
+          restoreFocus.current = true;
+          setSelected(undefined);
+        }}
+      />
+    );
   return (
     <section className="study-reports" aria-label={t('archive')}>
       <div className="study-reports-heading">
         <div>
-          <h1>{t('reports')}</h1>
+          <h1 ref={archiveHeading} tabIndex={-1}>
+            {t('reports')}
+          </h1>
           <p>{t('description')}</p>
         </div>
         <ActionButton
@@ -152,7 +204,16 @@ export default function StudyReports({
                   selectedId={selected?.id}
                   onOpen={(report, trigger) => {
                     reportTrigger.current = trigger;
-                    setSelected(report);
+                    returnReport.current = report.id;
+                    setSelected({
+                      id: report.id,
+                      title:
+                        report.game_no == null
+                          ? report.name
+                          : `${report.name} · ${gameText('game')} ${report.game_no}`,
+                      start: false,
+                      money: report.match_length === 0,
+                    });
                   }}
                 />
               );
@@ -215,19 +276,20 @@ export default function StudyReports({
           {!!moreError && <p role="alert">{formatError(moreError)}</p>}
         </>
       )}
-      {visible && selected && (
+      {visible && selected?.money && (
         <LearningReviewDialog
+          key={selected.id}
           returnFocus={reportTrigger}
           theme={theme}
-          context={`${selected.name}${selected.game_no != null ? ` · ${gameText('game')} ${selected.game_no}` : ''}`}
+          context={selected.title}
           session={
-            (detail?.study_report_id ?? detail?.id) === selected.id
-              ? detail
+            (moneyReport?.study_report_id ?? moneyReport?.id) === selected.id
+              ? moneyReport
               : undefined
           }
-          busy={detailLoading}
-          error={detailError}
-          onRetry={() => setDetailRevision((value) => value + 1)}
+          busy={!moneyError && !moneyReport}
+          error={moneyError}
+          onRetry={() => setMoneyRevision((value) => value + 1)}
           onClose={() => setSelected(undefined)}
         />
       )}

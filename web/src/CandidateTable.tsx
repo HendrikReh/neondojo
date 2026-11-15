@@ -1,14 +1,18 @@
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import EngineLabel from './EngineLabel';
 import { useI18n } from './i18n';
 import { useSourceText } from './analysis-source-messages';
 import { useBoardReviewText } from './board-review-messages';
-import { useCandidateLossText, useCandidateText } from './candidate-messages';
 import {
+  useCandidateEquityText,
+  useCandidateLossText,
+  useCandidateText,
+} from './candidate-messages';
+import {
+  candidatePreviewNotation,
   focusCandidateRow,
   navigateCandidatePreview,
   type PreviewCandidate,
-  type PreviewComparison,
 } from './candidate-preview';
 import {
   candidateLoss,
@@ -26,25 +30,24 @@ export default function CandidateTable({
   candidates,
   source,
   depth,
+  showCandidateDepth = false,
   played,
   position,
   playerName,
   onPreview,
   selectedPreview,
-  onComparison,
 }: {
   candidates: ComparisonCandidate[];
   source: string;
   depth?: string | null;
+  showCandidateDepth?: boolean;
   played?: string;
   position?: CandidatePosition;
   playerName?: string;
   onPreview?: (candidate: PreviewCandidate | null) => void;
   selectedPreview?: PreviewCandidate;
-  onComparison?: (value: PreviewComparison) => void;
 }) {
-  const { t, formatNumber, formatEquity, formatPercent, formatDecision } =
-    useI18n();
+  const { t, formatNumber, formatPercent, formatDecision } = useI18n();
   const l = useCandidateText();
   const lossText = useCandidateLossText();
   const sourceText = useSourceText();
@@ -53,41 +56,24 @@ export default function CandidateTable({
   const units = [
     ...new Set(candidates.map((candidate) => candidate.equity_kind)),
   ];
-  const unit = (kind: string) =>
-    ({
-      cubeful: 'Cubeful',
-      cubeless: 'Cubeless',
-      normalized_cubeful: l('normalizedCubeful'),
-      mwc: 'MWC',
-    })[kind] ?? l('unknownUnit');
-  const equity = (value: number | null | undefined, kind: string) =>
-    typeof value === 'number' && Number.isFinite(value)
-      ? kind === 'mwc'
-        ? formatPercent(value, 3)
-        : formatEquity(value)
-      : '—';
+  const { unit, equity } = useCandidateEquityText();
   const playedRows = useMemo(
     () =>
       candidates.map((candidate) =>
-        isPlayedCandidate(candidate.notation, played, position),
+        isPlayedCandidate(
+          candidatePreviewNotation(candidate),
+          played,
+          position,
+        ),
       ),
     [candidates, played, position],
   );
-  const playedRow = candidates.find((_, index) => playedRows[index]);
-  const loss = playedRow ? candidateLoss(playedRow, best) : null;
-  const bestNotation = best?.notation;
-  const lossUnit = best?.equity_kind === 'mwc' ? 'mwc' : undefined;
-  useEffect(() => {
-    onComparison?.({
-      best: bestNotation
-        ? { notation: bestNotation, rank: 1, source }
-        : undefined,
-      loss,
-      lossUnit,
-    });
-  }, [onComparison, bestNotation, source, loss, lossUnit]);
   const preview = (candidate: ComparisonCandidate) =>
-    onPreview?.({ notation: candidate.notation, rank: candidate.rank, source });
+    onPreview?.({
+      notation: candidatePreviewNotation(candidate),
+      rank: candidate.rank,
+      source,
+    });
   return (
     <div className="candidate-comparison">
       <p className="candidate-metadata">
@@ -175,10 +161,12 @@ export default function CandidateTable({
               }
             >
               {candidates.map((candidate, index) => {
+                const notation = formatDecision(candidate.notation, position);
                 const selected =
                   !!onPreview &&
                   (selectedPreview
-                    ? selectedPreview.notation === candidate.notation &&
+                    ? selectedPreview.notation ===
+                        candidatePreviewNotation(candidate) &&
                       selectedPreview.source === source
                     : playedRows[index]);
                 const loss = candidateLoss(candidate, best);
@@ -207,14 +195,14 @@ export default function CandidateTable({
                           className="candidate-preview-button"
                           aria-label={review('previewMove', {
                             rank: candidate.rank,
-                            move: formatDecision(candidate.notation),
+                            move: notation,
                           })}
                           aria-pressed={selected}
                         >
-                          {formatDecision(candidate.notation)}
+                          {notation}
                         </button>
                       ) : (
-                        formatDecision(candidate.notation)
+                        notation
                       )}
                       <span className="candidate-markers">
                         {candidate.rank === 1 && (
@@ -233,7 +221,8 @@ export default function CandidateTable({
                           </span>
                         )}
                       </span>
-                      {(candidate.depth ?? null) !== (depth ?? null) && (
+                      {(showCandidateDepth ||
+                        (candidate.depth ?? null) !== (depth ?? null)) && (
                         <small className="candidate-depth">
                           {candidate.depth ?? sourceText('unknownDepth')}
                         </small>

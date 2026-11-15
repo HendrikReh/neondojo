@@ -8,6 +8,7 @@ import type { Locale } from '../src/i18n-core';
 import { learningMessages } from '../src/learning-messages';
 import { settingsText } from '../src/settings-messages';
 import { workspaceText } from '../src/workspace-messages';
+import { openPositionCalculation } from './analysis-controls';
 
 const themes = JSON.parse(
   readFileSync(
@@ -35,8 +36,9 @@ const currentLocale = async (page: Page) =>
 
 async function upload(page: Page) {
   await page.goto('/');
+  const locale = await currentLocale(page);
   await page
-    .locator('input[type=file]')
+    .getByLabel(catalogs[locale]['app.matchFile'], { exact: true })
     .setInputFiles('../backend/tests/fixtures/tutorial.mat');
   await expect(analysis(page).locator('.board')).toBeVisible();
 }
@@ -227,13 +229,15 @@ test('bar, borne-off checkers and owned cube retain their position data in archi
   const theme = themes.find((t) => t.id === 'bgblitz:cl_green');
   test.skip(!theme, 'optional local Rain artwork');
   await page.goto('/');
-  await page.locator('input[type=file]').setInputFiles({
-    name: 'theme-position.sgf',
-    mimeType: 'application/octet-stream',
-    buffer: Buffer.from(
-      '(;GM[6]PW[Theme White]PB[Theme Black]MI[length:7][ws:2][bs:3]AE[a:y]AW[y][f]AB[y][s]PL[W]CV[4]CO[b];W[61ysfe])',
-    ),
-  });
+  await page
+    .getByLabel(catalogs.de['app.matchFile'], { exact: true })
+    .setInputFiles({
+      name: 'theme-position.sgf',
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.from(
+        '(;GM[6]PW[Theme White]PB[Theme Black]MI[length:7][ws:2][bs:3]AE[a:y]AW[y][f]AB[y][s]PL[W]CV[4]CO[b];W[61ysfe])',
+      ),
+    });
   await expect(analysis(page).locator('.board')).toBeVisible();
   await applyTheme(page, theme!);
   const board = analysis(page).locator('.bgblitz-board');
@@ -301,15 +305,17 @@ test('all six languages switch complete views on save and persist with the theme
     );
     await expect(
       analysis(page).getByRole('button', {
-        name: catalogs[locale]['analysis.analyze'],
+        name: `${catalogs[locale]['analysis.recalculate']} …`,
         exact: true,
       }),
     ).toBeVisible();
-    await expect(
-      analysis(page).getByLabel(catalogs[locale]['gameAnalysis.scope'], {
+    const matchOptions = analysis(page)
+      .locator('.workspace-analysis-command')
+      .getByRole('button', {
+        name: catalogs[locale]['analysis.matchOptions'],
         exact: true,
-      }),
-    ).toBeVisible();
+      });
+    await expect(matchOptions).toBeVisible();
     await expect(
       analysis(page).getByRole('img', {
         name: new RegExp(
@@ -328,7 +334,9 @@ test('all six languages switch complete views on save and persist with the theme
     await page.setViewportSize({ width: 1440, height: 1100 });
   }
   await applyLanguage(page, 'en');
-  await analysis(page)
+  await (
+    await openPositionCalculation(page)
+  )
     .getByRole('button', { name: catalogs.en['analysis.analyze'], exact: true })
     .click();
   const bestMarker = analysis(page).locator(

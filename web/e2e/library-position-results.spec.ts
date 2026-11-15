@@ -52,8 +52,10 @@ async function fixture(page: Page, count = 2, repeatWithinGame = false) {
 }
 async function search(page: Page, id: string) {
   const form = page.locator('.position-search');
-  if (!(await form.evaluate((el) => (el as HTMLDetailsElement).open)))
-    await form.locator('summary').click();
+  if (!(await form.isVisible()))
+    await page
+      .getByRole('button', { name: 'Position ID', exact: true })
+      .click();
   await form.getByRole('textbox').fill(id);
   await form
     .getByRole('button', { name: 'Find exact match', exact: true })
@@ -329,6 +331,15 @@ test('position-filtered matches paginate in the selected database and show an em
     .fill('No such player needle');
   await expect(rows(page)).toHaveCount(0);
   await expect(page.locator('.library-empty')).toBeVisible();
+  const empty = page.locator('.library-empty');
+  await expect(
+    empty.getByRole('button', { name: 'Search all databases' }),
+  ).toBeVisible();
+  await empty.getByRole('button', { name: 'Clear filters' }).click();
+  await expect(page.getByLabel('Search matches', { exact: true })).toHaveValue(
+    '',
+  );
+  await expect(rows(page)).toHaveCount(50);
   await expect(page.locator('.position-results')).toHaveCount(0);
 });
 
@@ -338,7 +349,7 @@ test('a failed exact occurrence lookup is visible with the search form closed an
   const f = await fixture(page);
   await search(page, f.needle);
   await expect(rows(page)).toHaveCount(3);
-  await page.locator('.position-search summary').click();
+  await page.getByRole('button', { name: 'Position ID', exact: true }).click();
   await page.route('**/api/positions/*', (route) =>
     route.fulfill({
       status: 503,
@@ -370,6 +381,15 @@ test('each repeated occurrence has database, game and move and opens its own loc
   const repeated = page.locator(`tr[data-match-id="${f.entries[0].match.id}"]`);
   await expect(repeated).toHaveCount(3);
   await repeated.first().getByRole('checkbox').check();
+  await expect(page.locator('.library-batch-bar')).toContainText(
+    '1 match selected',
+  );
+  await expect(repeated.first().getByRole('checkbox')).toHaveAccessibleName(
+    `Select match ${f.entries[0].metadata.display_name}`,
+  );
+  await expect(
+    page.getByRole('checkbox', { name: 'Select all loaded matches' }),
+  ).toHaveJSProperty('indeterminate', true);
   await expect(repeated.nth(1).getByRole('checkbox')).toBeChecked();
   await expect(repeated.nth(2).getByRole('checkbox')).toBeChecked();
   const secondInGame = repeated
@@ -379,7 +399,9 @@ test('each repeated occurrence has database, game and move and opens its own loc
     .filter({
       has: page.locator('[data-column="occurrence_move"]', { hasText: /^4$/ }),
     });
-  await secondInGame.locator('.match-card').click();
+  await secondInGame
+    .getByRole('button', { name: 'Open position in game 1, move 4' })
+    .click();
   await expect(page.locator('.board-heading')).toContainText('Move 4');
   await expect(page.locator('.game-selector select')).toHaveValue('1');
   await expect(page.locator('.position-code code')).toHaveText(f.needle);
@@ -498,7 +520,7 @@ test('database, game and move headings sort occurrences in both directions', asy
   ).toHaveAttribute('aria-sort', 'descending');
 });
 
-test('position-search column widths resize and persist in the profile', async ({
+test('position-search column widths resize and persist in the browser', async ({
   page,
 }) => {
   const f = await fixture(page, 2, true);
@@ -506,6 +528,9 @@ test('position-search column widths resize and persist in the profile', async ({
   await expect(rows(page)).toHaveCount(4);
   const header = (id: string) => page.locator(`th[data-column="${id}"]`);
   const width = async (id: string) => (await header(id).boundingBox())!.width;
+  const localWidths = () => page.evaluate(() =>
+    JSON.parse(localStorage.getItem('bgtutor.layout.library.columns.v1') ?? 'null'),
+  );
   const saved: Record<string, number> = {};
   for (const [id, delta] of [
     ['occurrence_database', 60],
@@ -539,13 +564,11 @@ test('position-search column widths resize and persist in the profile', async ({
   await expect(header('created_at')).toHaveAttribute('aria-sort', 'descending');
   await expect
     .poll(async () => {
-      const state = await page.evaluate(() =>
-        fetch('/api/configuration').then((r) => r.json()),
-      );
+      const widths = await localWidths();
       return Object.fromEntries(
         Object.keys(saved).map((id) => [
           id,
-          state.current_configuration.library.column_widths?.[id],
+          widths?.[id],
         ]),
       );
     })
@@ -579,15 +602,6 @@ test('position-search column widths resize and persist in the profile', async ({
   await page
     .getByRole('button', { name: 'Reset column widths', exact: true })
     .click();
-  await expect
-    .poll(
-      async () =>
-        (
-          await page.evaluate(() =>
-            fetch('/api/configuration').then((r) => r.json()),
-          )
-        ).current_configuration.library.column_widths,
-    )
-    .toBeNull();
+  await expect.poll(localWidths).toBeNull();
   await expect(page.locator('.library-table-resizing')).toHaveCount(0);
 });

@@ -13,7 +13,6 @@ const en = {
     'No further double is offered: the current cube already covers the points you need to win the match.',
 
   dragDialog: 'Drag the title to move this dialog',
-  nextRoll: 'Next roll',
   backToBoard: 'Back to board',
   pauseMatch: 'Pause match',
   matchPaused: 'Match paused',
@@ -33,28 +32,16 @@ const en = {
   sounds: 'Game sounds',
   soundsHelp:
     'Quiet sounds for moves, dice, hits, bearing off and cube offers. This setting is saved in the current configuration and also applies to games in progress.',
-  openingTitle: 'Opening roll',
   openingRolling: 'Both sides are rolling one die…',
   openingPreparing: 'Preparing the first move…',
-  openingRule:
-    'Each player rolls one die. Ties are rerolled for both players. The higher roll starts using these same two dice.',
   openingNotRolled: 'Not rolled yet',
-  openingAttempts: 'Opening-roll ties',
   openingTie: 'Tie \u2014 both rolled again',
-  openingWins: 'goes first with',
-  openingAnd: 'and',
-  openingSameDice: 'There is no new roll before the first checker move.',
-  openingThrow: 'Roll one die each',
-  openingContinue: 'Begin the first move',
   opening_roll: 'Opening roll',
   opening_result: 'Opening-roll result',
 
   swapDice: 'Swap dice order',
-  swapFirstDie:
-    'The first die cannot lead a complete legal turn. Click the dice to swap their order.',
   cube: 'Cube',
   cubeUnavailable: 'Doubling is not allowed in this position.',
-  closeTurnChoice: 'View board',
 
   title: 'Playing',
   newMatch: 'New match',
@@ -76,6 +63,7 @@ const en = {
   undo: 'Undo step',
   reset: 'Reset turn',
   pass: 'No legal move — pass',
+  passReady: 'Click the dice pair to pass.',
   double: 'Double',
   take: 'Take double',
   drop: 'Pass double',
@@ -85,8 +73,8 @@ const en = {
   you: 'You',
   bot: 'Bot',
   select:
-    'Hover over a checker to see its destination for the first available die. Click its point to move one checker there.',
-  ready: 'Confirm your turn with the button or by clicking either die.',
+    'Hover over a checker to preview its destination. Click to move it. If both dice can be used, the first die takes priority.',
+  ready: 'Click the dice pair to confirm your turn.',
   retry: 'Reload saved state',
   export: 'Download SGF',
   engine: 'Engine',
@@ -102,7 +90,6 @@ const en = {
   bar: 'Bar',
   off: 'Bear off',
   newConfirm: 'Your current match remains saved. Start another match?',
-  opening: 'The opening roll determines who starts.',
   settings: 'Settings',
   refresh: 'Refresh matches',
   unknownError:
@@ -124,7 +111,6 @@ const de: Record<Key, string> = {
     'Keine weitere Verdopplung: Der aktuelle Cube deckt deine fehlenden Matchpunkte bereits ab.',
 
   dragDialog: 'Zum Verschieben an der Titelleiste ziehen',
-  nextRoll: 'Nächster Wurf',
   backToBoard: 'Zurück zum Brett',
   pauseMatch: 'Match pausieren',
   matchPaused: 'Match pausiert',
@@ -145,28 +131,16 @@ const de: Record<Key, string> = {
   sounds: 'Spielgeräusche',
   soundsHelp:
     'Dezente Geräusche für Ziehen, Würfeln, Schlagen, Bear-off und Dopplerangebote. Die Einstellung wird in der aktuellen Konfiguration gespeichert und gilt auch für laufende Partien.',
-  openingTitle: 'Eröffnungswurf',
   openingRolling: 'Beide Seiten werfen je einen Würfel…',
   openingPreparing: 'Der erste Zug wird vorbereitet…',
-  openingRule:
-    'Jede Seite wirft einen Würfel. Bei Gleichstand werfen beide erneut. Die höhere Zahl beginnt mit genau diesen beiden Würfeln.',
   openingNotRolled: 'Noch nicht gewürfelt',
-  openingAttempts: 'Gleichstände beim Eröffnungswurf',
   openingTie: 'Gleichstand — beide erneut gewürfelt',
-  openingWins: 'beginnt mit',
-  openingAnd: 'und',
-  openingSameDice: 'Vor dem ersten Zug wird nicht erneut gewürfelt.',
-  openingThrow: 'Je einen Würfel werfen',
-  openingContinue: 'Ersten Zug beginnen',
   opening_roll: 'Eröffnungswurf',
   opening_result: 'Ergebnis des Eröffnungswurfs',
 
   swapDice: 'Würfelreihenfolge tauschen',
-  swapFirstDie:
-    'Mit dem ersten Würfel ist kein vollständiger legaler Zug möglich. Klicke auf die Würfel, um die Reihenfolge zu tauschen.',
   cube: 'Cube',
   cubeUnavailable: 'Doppeln ist in dieser Spielsituation nicht erlaubt.',
-  closeTurnChoice: 'Brett ansehen',
 
   title: 'Spielen',
   newMatch: 'Neues Match',
@@ -188,6 +162,7 @@ const de: Record<Key, string> = {
   undo: 'Schritt zurück',
   reset: 'Zug zurücksetzen',
   pass: 'Kein legaler Zug — aussetzen',
+  passReady: 'Klicke auf das Würfelpaar, um auszusetzen.',
   double: 'Doppeln',
   take: 'Doppel annehmen',
   drop: 'Doppel ablehnen',
@@ -197,9 +172,8 @@ const de: Record<Key, string> = {
   you: 'Du',
   bot: 'Bot',
   select:
-    'Bewege den Mauszeiger auf einen Stein, um sein Ziel für den ersten verfügbaren Würfel zu sehen. Klicke auf seinen Punkt, um einen Stein dorthin zu ziehen.',
-  ready:
-    'Bestätige deinen Zug mit der Schaltfläche oder per Klick auf einen Würfel.',
+    'Zeige auf einen Stein, um sein Ziel zu sehen. Klicke, um ihn zu ziehen. Sind beide Würfel spielbar, hat der erste Vorrang.',
+  ready: 'Klicke auf das Würfelpaar, um deinen Zug zu bestätigen.',
   retry: 'Gespeicherten Stand laden',
   export: 'SGF herunterladen',
   engine: 'Engine',
@@ -215,7 +189,6 @@ const de: Record<Key, string> = {
   bar: 'Bar',
   off: 'Auswürfeln',
   newConfirm: 'Dein laufendes Match bleibt gespeichert. Ein weiteres starten?',
-  opening: 'Der Eröffnungswurf bestimmt, wer beginnt.',
   settings: 'Einstellungen',
   refresh: 'Matches aktualisieren',
   unknownError:
@@ -236,7 +209,6 @@ const extra: Record<string, Partial<Record<Key, string>>> = {
       'No se ofrece otro doble: el cubo ya cubre los puntos que necesitas para ganar el match.',
 
     dragDialog: 'Arrastra el título para mover el diálogo',
-    nextRoll: 'Siguiente tirada',
     backToBoard: 'Volver al tablero',
     cubeDecision: 'Decisión del cubo',
     cubeDecisionRequired: 'Acepta o rechaza el doble para continuar.',
@@ -291,7 +263,6 @@ const extra: Record<string, Partial<Record<Key, string>>> = {
       'Aucun autre double proposé : le videau couvre déjà les points nécessaires pour gagner le match.',
 
     dragDialog: 'Faites glisser le titre pour déplacer la boîte de dialogue',
-    nextRoll: 'Prochain lancer',
     backToBoard: 'Retour au plateau',
     cubeDecision: 'Décision du videau',
     cubeDecisionRequired: 'Acceptez ou refusez le double pour continuer.',
@@ -346,7 +317,6 @@ const extra: Record<string, Partial<Record<Key, string>>> = {
       'Nessun altro raddoppio proposto: il cubo copre già i punti necessari per vincere il match.',
 
     dragDialog: 'Trascina il titolo per spostare la finestra',
-    nextRoll: 'Prossimo lancio',
     backToBoard: 'Torna al tabellone',
     cubeDecision: 'Decisione sul cubo',
     cubeDecisionRequired: 'Accetta o rifiuta il raddoppio per continuare.',
@@ -401,7 +371,6 @@ const extra: Record<string, Partial<Record<Key, string>>> = {
       'Kolejne podwojenie nie jest oferowane: kostka pokrywa już punkty potrzebne do wygrania meczu.',
 
     dragDialog: 'Przeciągnij tytuł, aby przesunąć okno',
-    nextRoll: 'Następny rzut',
     backToBoard: 'Wróć do planszy',
     cubeDecision: 'Decyzja o kostce',
     cubeDecisionRequired: 'Przyjmij lub odrzuć podwojenie, aby kontynuować.',
@@ -450,10 +419,10 @@ Object.assign(extra.es, {
   game_over: 'Juego terminado',
   match_over: 'Partida terminada',
   pass: 'Sin movimientos legales — pasar',
+  passReady: 'Haz clic en los dados para pasar el turno.',
   select:
-    'Pasa el cursor sobre una ficha para ver su destino con el primer dado disponible. Haz clic en su punto para mover una ficha.',
-  ready:
-    'Confirma tu jugada con el botón o haciendo clic en cualquiera de los dados.',
+    'Pasa el cursor sobre una ficha para ver su destino. Haz clic para moverla. Si puedes usar ambos dados, tiene prioridad el primero.',
+  ready: 'Haz clic en los dados para confirmar tu jugada.',
   retry: 'Cargar estado guardado',
   export: 'Descargar SGF',
   engine: 'Motor',
@@ -463,7 +432,6 @@ Object.assign(extra.es, {
   playHelp:
     'El motor y la fuerza se toman de estos ajustes al iniciar la partida.',
   newConfirm: 'La partida actual seguirá guardada. ¿Iniciar otra?',
-  opening: 'La tirada inicial determina quién empieza.',
   settings: 'Ajustes',
   refresh: 'Actualizar partidas',
   unknownError:
@@ -477,9 +445,10 @@ Object.assign(extra.fr, {
   game_over: 'Partie terminée',
   match_over: 'Match terminé',
   pass: 'Aucun coup légal — passer',
+  passReady: 'Cliquez sur les dés pour passer votre tour.',
   select:
-    'Survolez un pion pour voir sa destination avec le premier dé disponible. Cliquez sur son point pour déplacer un pion.',
-  ready: 'Confirmez votre coup avec le bouton ou en cliquant sur l’un des dés.',
+    'Survolez un pion pour voir sa destination. Cliquez pour le déplacer. Si les deux dés sont jouables, le premier est prioritaire.',
+  ready: 'Cliquez sur les dés pour confirmer votre coup.',
   retry: 'Recharger la position enregistrée',
   export: 'Télécharger le SGF',
   engine: 'Moteur',
@@ -490,7 +459,6 @@ Object.assign(extra.fr, {
   playHelp:
     'Le moteur et la force sont repris de ces réglages au début du match.',
   newConfirm: 'Le match actuel reste enregistré. En commencer un autre ?',
-  opening: 'Le lancer initial détermine qui commence.',
   settings: 'Réglages',
   refresh: 'Actualiser les matchs',
   unknownError:
@@ -504,9 +472,10 @@ Object.assign(extra.it, {
   game_over: 'Partita terminata',
   match_over: 'Match terminato',
   pass: 'Nessuna mossa legale — passa',
+  passReady: 'Fai clic sui dadi per passare il turno.',
   select:
-    'Passa sopra una pedina per vedere la destinazione del primo dado disponibile. Clicca sul suo punto per muovere una pedina.',
-  ready: 'Conferma la mossa con il pulsante o cliccando su uno dei dadi.',
+    'Passa il puntatore su una pedina per vedere la destinazione. Fai clic per muoverla. Se entrambi i dadi sono giocabili, ha la precedenza il primo.',
+  ready: 'Fai clic sui dadi per confermare la mossa.',
   retry: 'Carica lo stato salvato',
   export: 'Scarica SGF',
   engine: 'Motore',
@@ -516,7 +485,6 @@ Object.assign(extra.it, {
   playHelp:
     'Motore e forza vengono acquisiti da queste impostazioni all’inizio del match.',
   newConfirm: 'Il match attuale rimane salvato. Iniziarne un altro?',
-  opening: 'Il lancio iniziale determina chi comincia.',
   settings: 'Impostazioni',
   refresh: 'Aggiorna match',
   unknownError:
@@ -530,9 +498,10 @@ Object.assign(extra.pl, {
   game_over: 'Gra zakończona',
   match_over: 'Mecz zakończony',
   pass: 'Brak legalnego ruchu — pasuj',
+  passReady: 'Kliknij parę kości, aby spasować.',
   select:
-    'Najedź na pionek, aby zobaczyć cel dla pierwszej dostępnej kości. Kliknij jego pole, aby przesunąć jeden pionek.',
-  ready: 'Zatwierdź ruch przyciskiem lub kliknij dowolną kość.',
+    'Najedź na pionek, aby zobaczyć jego cel. Kliknij, aby go przesunąć. Jeśli można użyć obu kości, pierwsza ma pierwszeństwo.',
+  ready: 'Kliknij parę kości, aby zatwierdzić ruch.',
   retry: 'Wczytaj zapisany stan',
   export: 'Pobierz SGF',
   engine: 'Silnik',
@@ -542,7 +511,6 @@ Object.assign(extra.pl, {
   playHelp:
     'Silnik i siła są pobierane z tych ustawień przy rozpoczęciu meczu.',
   newConfirm: 'Obecny mecz pozostanie zapisany. Rozpocząć kolejny?',
-  opening: 'Pierwszy rzut decyduje, kto zaczyna.',
   settings: 'Ustawienia',
   refresh: 'Odśwież mecze',
   unknownError:
@@ -550,99 +518,51 @@ Object.assign(extra.pl, {
 });
 Object.assign(extra.es, {
   swapDice: 'Cambiar el orden de los dados',
-  swapFirstDie:
-    'El primer dado no permite una jugada completa. Haz clic en los dados para cambiar el orden.',
   cube: 'Cube',
   cubeUnavailable: 'No se puede doblar en esta posición.',
-  closeTurnChoice: 'Ver tablero',
 });
 Object.assign(extra.fr, {
   swapDice: 'Inverser les dés',
-  swapFirstDie:
-    'Le premier dé ne permet pas un coup complet. Cliquez sur les dés pour inverser leur ordre.',
   cube: 'Cube',
   cubeUnavailable: 'Le double est interdit dans cette position.',
-  closeTurnChoice: 'Voir le plateau',
 });
 Object.assign(extra.it, {
   swapDice: 'Inverti i dadi',
-  swapFirstDie:
-    'Il primo dado non permette una mossa completa. Fai clic sui dadi per invertirli.',
   cube: 'Cube',
   cubeUnavailable: 'Non puoi raddoppiare in questa posizione.',
-  closeTurnChoice: 'Vedi la tavola',
 });
 Object.assign(extra.pl, {
   swapDice: 'Zamień kolejność kości',
-  swapFirstDie:
-    'Pierwsza kość nie pozwala na pełny ruch. Kliknij kości, aby zamienić ich kolejność.',
   cube: 'Cube',
   cubeUnavailable: 'Podwojenie nie jest dozwolone w tej pozycji.',
-  closeTurnChoice: 'Pokaż planszę',
 });
 Object.assign(extra.es, {
-  openingTitle: 'Tirada inicial',
-  openingRule:
-    'Cada jugador tira un dado. Si empatan, ambos repiten. Quien saque más empieza con esos mismos dos dados.',
   openingNotRolled: 'Aún sin tirar',
-  openingAttempts: 'Empates iniciales',
   openingTie: 'Empate — ambos repitieron',
-  openingWins: 'empieza con',
-  openingAnd: 'y',
-  openingSameDice: 'No se vuelve a tirar antes del primer movimiento.',
-  openingThrow: 'Tirar un dado cada uno',
-  openingContinue: 'Comenzar el primer movimiento',
   opening_roll: 'Tirada inicial',
   opening_result: 'Resultado inicial',
   openingRolling: 'Ambos jugadores tiran un dado…',
   openingPreparing: 'Preparando el primer movimiento…',
 });
 Object.assign(extra.fr, {
-  openingTitle: 'Lancer initial',
-  openingRule:
-    'Chaque joueur lance un dé. En cas d’égalité, les deux relancent. Le plus grand résultat commence avec ces deux dés.',
   openingNotRolled: 'Pas encore lancé',
-  openingAttempts: 'Égalités initiales',
   openingTie: 'Égalité — les deux ont relancé',
-  openingWins: 'commence avec',
-  openingAnd: 'et',
-  openingSameDice: 'Aucun nouveau lancer avant le premier coup.',
-  openingThrow: 'Lancer un dé chacun',
-  openingContinue: 'Commencer le premier coup',
   opening_roll: 'Lancer initial',
   opening_result: 'Résultat initial',
   openingRolling: 'Chaque joueur lance un dé…',
   openingPreparing: 'Préparation du premier coup…',
 });
 Object.assign(extra.it, {
-  openingTitle: 'Lancio iniziale',
-  openingRule:
-    'Ogni giocatore lancia un dado. In caso di parità rilanciano entrambi. Chi ottiene il numero più alto inizia con quegli stessi due dadi.',
   openingNotRolled: 'Non ancora lanciato',
-  openingAttempts: 'Parità iniziali',
   openingTie: 'Parità — entrambi hanno rilanciato',
-  openingWins: 'inizia con',
-  openingAnd: 'e',
-  openingSameDice: 'Nessun nuovo lancio prima della prima mossa.',
-  openingThrow: 'Lanciare un dado ciascuno',
-  openingContinue: 'Inizia la prima mossa',
   opening_roll: 'Lancio iniziale',
   opening_result: 'Risultato iniziale',
   openingRolling: 'Entrambi lanciano un dado…',
   openingPreparing: 'Preparazione della prima mossa…',
 });
 Object.assign(extra.pl, {
-  openingTitle: 'Rzut otwierający',
-  openingRule:
-    'Każdy gracz rzuca jedną kością. Przy remisie obaj rzucają ponownie. Wyższy wynik zaczyna, używając tych samych dwóch kości.',
   openingNotRolled: 'Jeszcze bez rzutu',
-  openingAttempts: 'Remisy otwierające',
   openingTie: 'Remis — obaj rzucili ponownie',
-  openingWins: 'zaczyna z',
-  openingAnd: 'i',
-  openingSameDice: 'Przed pierwszym ruchem nie rzuca się ponownie.',
-  openingThrow: 'Rzuć po jednej kości',
-  openingContinue: 'Rozpocznij pierwszy ruch',
   opening_roll: 'Rzut otwierający',
   opening_result: 'Wynik otwarcia',
   openingRolling: 'Obaj gracze rzucają jedną kością…',

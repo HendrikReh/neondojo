@@ -127,7 +127,7 @@ for (const human of [0, 1])
     ).toBeFocused();
     await expect(page.locator('.play-selected-steps')).toHaveText('13/10');
     await point(6).click();
-    await expect(page.locator('[data-dice-action="confirm"]')).toHaveCount(2);
+    await expect(page.locator('[data-dice-action="confirm"]')).toHaveCount(1);
     expect(writes).toEqual([]);
     expect(feedbackWrites).toEqual([{ version: 7, operation: 'hint' }]);
   });

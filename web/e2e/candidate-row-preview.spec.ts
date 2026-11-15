@@ -13,7 +13,7 @@ const candidates = [
   },
   {
     rank: 2,
-    notation: '13/10 6/5',
+    notation: '13/9',
     equity: 0.1,
     probabilities: [0.52, 0.1, 0.01, 0.48, 0.08, 0.01],
   },
@@ -141,6 +141,7 @@ for (const source of ['engine', 'file', 'book'] as const)
         raw: null,
         candidates: candidates.map((candidate) => ({
           ...candidate,
+          notation: candidate.rank === 2 ? '13/10 10/9' : candidate.notation,
           probabilities: {
             win: candidate.probabilities[0],
             win_gammon: candidate.probabilities[1],
@@ -222,7 +223,7 @@ for (const source of ['engine', 'file', 'book'] as const)
     await page.goto('/');
     await expect(page.locator('.analysis-workspace .board')).toBeVisible();
     await expect(
-      page.locator('.position-calculation-action .action-label'),
+      page.getByRole('button', { name: 'Analysis options', exact: true }),
     ).toBeVisible();
     await expect(
       page.locator('.analysis-workspace .board-focus-toggle'),
@@ -304,7 +305,7 @@ for (const source of ['engine', 'file', 'book'] as const)
     );
     const second = rows
       .last()
-      .getByRole('button', { name: /^Preview move 2:/ });
+      .getByRole('button', { name: 'Preview move 2: 13/9', exact: true });
     await second.focus();
     await page.keyboard.press(' ');
     await expect(rows.last().locator('.candidate-marker-preview')).toHaveText(
@@ -320,6 +321,13 @@ for (const source of ['engine', 'file', 'book'] as const)
     await expect(page.locator('.board-review-selection')).toContainText(
       'Candidate 2',
     );
+    await expect(page.locator('.board-review-selection')).toContainText('13/9');
+    await expect(
+      page.locator('.board-shell .move-arrows [data-from="13"][data-to="10"]'),
+    ).toBeVisible();
+    await expect(
+      page.locator('.board-shell .move-arrows [data-from="10"][data-to="9"]'),
+    ).toBeVisible();
     await rows.first().locator('td').first().click();
     await first.focus();
     await page.keyboard.press('ArrowDown');

@@ -329,3 +329,62 @@ async fn money_report_groups_page_complete_sessions_with_authoritative_totals(po
         422
     );
 }
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL and a dummy OPENAI_API_KEY; no provider call"]
+async fn assessment_start_is_versioned_deduplicated_and_language_scoped(pool: PgPool) {
+    let router = app(pool.clone());
+    let id = Uuid::new_v4();
+    let mut state = snapshot(id);
+    state["review"]["games"] = json!([{
+        "engine": "test",
+        "game_no": 1,
+        "decisions": [{
+            "decision_no": 1, "checker_no": 1, "player": 0, "kind": "checker",
+            "played": "8/5 6/5", "best": "8/5 6/5", "played_equity": 0.1,
+            "best_equity": 0.1, "equity_loss": 0.0, "severity": "none",
+            "dice": [3,1], "evaluation_status": "evaluated"
+        }]
+    }]);
+    insert(&pool, &state, 0).await;
+    let uri = format!("/api/study/reports/{id}/assessment?language=de");
+    let post = |version: i64| {
+        let request = Request::post(&uri)
+            .header("content-type", "application/json")
+            .body(Body::from(json!({"report_version":version}).to_string()))
+            .unwrap();
+        router.clone().oneshot(request)
+    };
+    let (status, empty) = get(&router, &uri).await;
+    assert_eq!(status, 200);
+    assert_eq!(empty["availability"], "ready");
+    assert!(empty["job"].is_null());
+    assert_eq!(post(2).await.unwrap().status(), 409);
+    let (first, second) = tokio::join!(post(3), post(3));
+    for response in [first, second] {
+        let response = response.unwrap();
+        assert_eq!(response.status(), 200);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let response: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(response["job"]["status"], "queued");
+    }
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM match_assessments")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 1);
+    let (_, english) = get(&router, &uri.replace("language=de", "language=en")).await;
+    assert!(english["job"].is_null());
+    sqlx::query("UPDATE match_assessments SET status='completed',result=$1")
+        .bind(
+            json!({"summary":"Saved","next_match_focus":"Focus","topics":[],
+                     "key_decisions":[],"training":[],"limitations":[]}),
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(post(3).await.unwrap().status(), 200);
+    let (_, saved) = get(&router, &uri).await;
+    assert_eq!(saved["job"]["status"], "completed");
+    assert_eq!(saved["job"]["result"]["summary"], "Saved");
+}

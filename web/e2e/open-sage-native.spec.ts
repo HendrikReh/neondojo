@@ -1,5 +1,9 @@
 import { applyAndCloseSettings } from './settings-actions';
-import { openMatchCalculation } from './analysis-controls';
+import {
+  openFullMatchAnalysis,
+  openMatchAnalysisOptions,
+  submitFullMatchAnalysis,
+} from './analysis-controls';
 import { test, expect } from '@playwright/test';
 import type { components } from '../src/generated-api';
 test.skip(
@@ -140,28 +144,31 @@ test('completes Open Sage 4-ply for one game and the entire match', async ({
     ),
   });
   const { match } = await (await imported).json();
-  await openMatchCalculation(page);
+  await openMatchAnalysisOptions(page);
   const engine = page.getByLabel('Analysis engine', { exact: true });
   const depth = page.getByLabel('Match analysis depth', { exact: true });
   await engine.selectOption('bgsage');
   await expect(depth.locator('option[value="4"]')).toBeEnabled();
   await depth.selectOption('4');
-  for (const [scope, gameNo, button, games] of [
-    ['game', 1, 'Analyze game', 1],
-    ['match', null, 'Analyze entire match', 2],
+  for (const [scope, gameNo, games] of [
+    ['game', 1, 1],
+    ['match', null, 2],
   ] as const) {
-    await openMatchCalculation(page);
-    if (scope === 'match')
-      await page
-        .getByLabel('Analysis scope', { exact: true })
-        .selectOption(scope);
+    await openMatchAnalysisOptions(page);
     const accepted = page.waitForResponse(
       (response) =>
         new URL(response.url()).pathname ===
           `/api/matches/${match.id}/analysis` &&
         response.request().method() === 'POST',
     );
-    await page.getByRole('button', { name: button, exact: true }).click();
+    if (scope === 'match') {
+      const dialog = await openFullMatchAnalysis(page);
+      await dialog.getByLabel('Analysis engine', { exact: true }).selectOption('bgsage');
+      await dialog.getByLabel('Match analysis depth', { exact: true }).selectOption('4');
+      await submitFullMatchAnalysis(page, dialog);
+    } else {
+      await page.getByRole('button', { name: 'Analyze game', exact: true }).click();
+    }
     const response = await accepted;
     expect(response.status(), await response.text()).toBe(202);
     const job = await response.json();

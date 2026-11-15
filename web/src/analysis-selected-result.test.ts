@@ -23,7 +23,7 @@ it('explains missing coverage in the chosen analysis instead of showing another 
   expect(render(null)).toContain('Other saved analyses can be selected above.');
 });
 
-it('shows the played and best decisions from the selected game analysis', () => {
+it('shows the ranked candidates from the selected game analysis', () => {
   const decision = {
     decision_no: 1,
     checker_no: 1,
@@ -37,6 +37,29 @@ it('shows the played and best decisions from the selected game analysis', () => 
     severity: 'very_bad',
     dice: [6, 3] as [number, number],
     evaluation_status: 'evaluated',
+    checker_candidates: [
+      {
+        rank: 1,
+        notation: '24/18 13/10',
+        equity: 0.2,
+        probabilities: [0.6, 0.2, 0, 0.4, 0.1, 0],
+        plies: 2,
+      },
+      {
+        rank: 2,
+        notation: '24/15',
+        equity: 0.1,
+        probabilities: [0.55, 0.2, 0, 0.45, 0.1, 0],
+        plies: 0,
+      },
+      {
+        rank: 3,
+        notation: '13/7 6/3',
+        equity: -0.1,
+        probabilities: [0.45, 0.1, 0, 0.55, 0.1, 0],
+        plies: 2,
+      },
+    ],
   };
   const result: PositionAnalysisResult = {
     analysis_id: 'job:game',
@@ -47,10 +70,13 @@ it('shows the played and best decisions from the selected game analysis', () => 
     decision,
   };
   const html = render(result);
-  expect(html).toContain('Best decision');
-  expect(html).toContain('24/18 13/10');
-  expect(html).toContain('13/7 6/3');
-  expect(html).toContain('0.300');
+  expect(html).toContain('candidate-comparison-table');
+  expect(html).toContain('24/15');
+  expect(html).toContain('0-ply');
+  expect(html).toContain('data-candidate-played="true"');
+
+  const { checker_candidates: _, ...legacy } = decision;
+  expect(render({ ...result, decision: legacy })).toContain('Best decision');
 });
 
 it('offers an explicit action for a completed calculation while keeping the selected source', async () => {

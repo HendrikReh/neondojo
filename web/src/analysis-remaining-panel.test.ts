@@ -38,7 +38,6 @@ const render = () =>
           position_count: 100,
         } as Match,
         gameNo: 1,
-        onPosition: () => {},
         catalog: catalogFixture(
           entryForJob(
             {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { catalogs } from './i18n-catalogs';
+import { projectMove } from './move-preview';
 import {
   AppError,
   formatLocalizedError,
@@ -111,6 +112,50 @@ describe('language selection and translation', () => {
       en: { ...catalogs.en, 'board.points': '{amount} points' },
     };
     expect(() => validateCatalogs(broken)).toThrow('board.points');
+  });
+
+  it('displays the 6–3 run in the same notation while previewing the recorded path', () => {
+    const position = {
+      board: [
+        0, -2, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, -5, 5, 0, 0, 0, -3, 0, -5, 0, 0, 0,
+        0, 2, 0,
+      ],
+      player: 0,
+      dice: [6, 3],
+      notation: '24/21 21/15',
+    };
+    expect(localizeDecision('de', position.notation, position)).toBe('24/15');
+    expect(localizeDecision('de', '24/15', position)).toBe('24/15');
+    expect(projectMove(position)).toMatchObject({
+      ok: true,
+      steps: [
+        { from: 24, to: 21, die: 3 },
+        { from: 21, to: 15, die: 6 },
+      ],
+    });
+  });
+
+  it.each([
+    ['24/21/15', '24/15'],
+    ['24/21* 21/15', '24/21*/15'],
+    ['24/21 21/15*', '24/15*'],
+    ['bar/24 24/22', 'bar/22'],
+    ['7/4 4/off', '7/off'],
+    ['13/10(2) 10/7(2)', '13/7(2)'],
+    ['13/10 8/5 10/7 5/2', '13/7 8/2'],
+    ['24/21 24/18', '24/21 24/18'],
+    ['24/21 21/15?', '24/21 21/15?'],
+  ])('formats checker notation %s as %s', (original, expected) => {
+    expect(localizeDecision('en', original)).toBe(expected);
+  });
+
+  it('retains a hit on an intermediate point even if the source omitted its star', () => {
+    const board = Array<number>(26).fill(0);
+    board[24] = 1;
+    board[21] = -1;
+    expect(
+      localizeDecision('de', '24/21 21/15', { board, player: 0, dice: [6, 3] }),
+    ).toBe('24/21*/15');
   });
 
   it('localizes errors at render time while preserving native diagnostic text', () => {

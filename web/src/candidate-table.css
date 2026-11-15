@@ -60,12 +60,15 @@
   margin-left: 5px;
   font-size: var(--font-size-micro);
 }
+.candidate-markers :is(.candidate-marker-best, .candidate-marker-played) {
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+}
 .candidate-marker-best {
   color: var(--ui-success-text);
 }
 .candidate-marker-played {
   color: var(--ui-text);
-  font-weight: var(--font-weight-semibold);
 }
 .candidate-marker-preview {
   color: var(--ui-accent);

@@ -17,6 +17,10 @@ import {
 } from './configuration-settings';
 import {
   defaultConfiguration,
+  defaultErrorThresholds,
+  errorThresholdFields,
+  validErrorThresholds,
+  type ErrorThresholds,
   type ProfileConfiguration,
 } from './configuration-model';
 import { useBenchmarkText } from './benchmark-messages';
@@ -53,6 +57,7 @@ import {
   type EngineInfo,
 } from './settings-api';
 import { useSettingsText, type SettingsMessageKey } from './settings-messages';
+import { errorThresholdLabels } from './review-statistics-messages';
 import { saveTheme } from './ui-preferences';
 import './settings.css';
 import {
@@ -121,6 +126,13 @@ function profilePreferences(current: ProfileConfiguration) {
   };
 }
 
+function parseThreshold(value: string): number {
+  const decimal = value.trim().replace(',', '.');
+  return /^(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)$/.test(decimal)
+    ? Number(decimal)
+    : NaN;
+}
+
 export default function SettingsDialog({
   open,
   onClose,
@@ -135,7 +147,7 @@ export default function SettingsDialog({
   const configurationRef = useRef(configuration);
   configurationRef.current = configuration;
   const profileT = useProfileText();
-  const { locale } = useI18n();
+  const { locale, t: appT } = useI18n();
   const [destination, setDestination] = useState<GuardedDestination | null>(
     null,
   );
@@ -172,6 +184,21 @@ export default function SettingsDialog({
   const [draftTheme, setDraftTheme] = useState(theme);
   const [draftLocale, setDraftLocale] = useState(locale);
   const [draftAppearance, setDraftAppearance] = useState(appearance);
+  const initialThresholds = useRef(defaultErrorThresholds);
+  const [thresholdFields, setThresholdFields] = useState<
+    Record<keyof ErrorThresholds, string>
+  >({
+    questionable: '',
+    error: '',
+    blunder: '',
+    large_blunder: '',
+  });
+  const errorThresholds: ErrorThresholds = {
+    questionable: parseThreshold(thresholdFields.questionable),
+    error: parseThreshold(thresholdFields.error),
+    blunder: parseThreshold(thresholdFields.blunder),
+    large_blunder: parseThreshold(thresholdFields.large_blunder),
+  };
   const [draft, setDraft] = useState<AppSettings | null>(null);
   const [initial, setInitial] = useState<AppSettings | null>(null);
   const [engines, setEngines] = useState<EngineInfo[]>([]);
@@ -264,13 +291,22 @@ export default function SettingsDialog({
     ...initialPreferences.current,
     sounds: initialSounds,
     settings: initial,
+    errorThresholds: initialThresholds.current,
   };
-  const settingsDraft = draft && { ...draftPreferences, settings: draft };
-  const configurationChanged = Boolean(
+  const settingsDraft = draft && {
+    ...draftPreferences,
+    settings: draft,
+    errorThresholds,
+  };
+  const baseline =
+    initialDraft && applySettingsDraft(defaultConfiguration, initialDraft);
+  const configurationChanged = !!(
+    baseline &&
     settingsDraft &&
     initialDraft &&
-    JSON.stringify(applySettingsDraft(defaultConfiguration, settingsDraft)) !==
-      JSON.stringify(applySettingsDraft(defaultConfiguration, initialDraft)),
+    JSON.stringify(
+      applySettingsDraft(baseline, settingsDraft, initialDraft),
+    ) !== JSON.stringify(baseline)
   );
   const installationChanged =
     sage.dirty ||
@@ -336,6 +372,21 @@ export default function SettingsDialog({
     : [];
   const rememberedDepths = useRef<Record<string, number>>({});
 
+  function resetThresholds(values: ErrorThresholds, language: Locale) {
+    initialThresholds.current = values;
+    const formatter = new Intl.NumberFormat(language, {
+      minimumFractionDigits: 3,
+      maximumFractionDigits: 20,
+      useGrouping: false,
+    });
+    setThresholdFields({
+      questionable: formatter.format(values.questionable),
+      error: formatter.format(values.error),
+      blunder: formatter.format(values.blunder),
+      large_blunder: formatter.format(values.large_blunder),
+    });
+  }
+
   function resetPreferences(current?: ProfileConfiguration | null) {
     const { sounds, ...values } = current
       ? profilePreferences(current)
@@ -346,6 +397,10 @@ export default function SettingsDialog({
     setDraftAppearance(values.appearance);
     setDraftSounds(sounds);
     setInitialSounds(sounds);
+    resetThresholds(
+      current?.analysis.error_thresholds ?? defaultErrorThresholds,
+      values.locale,
+    );
   }
 
   function rebaseFromProfile(current: ProfileConfiguration) {
@@ -414,13 +469,8 @@ export default function SettingsDialog({
     if (!settingsDraft || !initialDraft || !canApply || savingRef.current)
       return false;
     const { settings: draft } = settingsDraft;
-    if (
-      draft.tutor_threshold !== undefined &&
-      (!Number.isFinite(draft.tutor_threshold) ||
-        draft.tutor_threshold <= 0 ||
-        draft.tutor_threshold > 1)
-    ) {
-      setSaveError(new Error(modeT('thresholdHelp')));
+    if (!validErrorThresholds(errorThresholds)) {
+      setSaveError(new Error(t('invalidErrorThresholds')));
       return false;
     }
     savingRef.current = true;
@@ -431,6 +481,7 @@ export default function SettingsDialog({
     const currentSession = session.current;
     let settings: AppSettings;
     let savedPreferences = draftPreferences;
+    let savedThresholds = initialThresholds.current;
     try {
       if (sage.dirty) {
         await sage.verify();
@@ -465,11 +516,13 @@ export default function SettingsDialog({
           );
           settings = settingsFromConfiguration(saved, settings);
           savedPreferences = profilePreferences(saved);
+          savedThresholds = saved.analysis.error_thresholds;
         } else {
           const current = configurationRef.current?.current;
           if (current) {
             settings = settingsFromConfiguration(current, settings);
             savedPreferences = profilePreferences(current);
+            savedThresholds = current.analysis.error_thresholds;
           }
         }
       } else settings = await saveSettings(draft, abort.signal);
@@ -493,6 +546,7 @@ export default function SettingsDialog({
     setDraftSounds(sounds);
     setInitialSounds(sounds);
     initialPreferences.current = savedPreferences;
+    resetThresholds(savedThresholds, locale);
     setInitial(settings);
     setDraft(settings);
     setSaving(false);
@@ -920,6 +974,37 @@ export default function SettingsDialog({
                     </label>
                   </div>
                   <p className="settings-help">{t('analysisHelp')}</p>
+                  {configuration && (
+                    <div
+                      className="settings-thresholds"
+                      role="group"
+                      aria-labelledby={`${id}-thresholds`}
+                    >
+                      <h3 id={`${id}-thresholds`}>{t('errorThresholds')}</h3>
+                      <div className="settings-field-pair">
+                        {errorThresholdFields.map((field) => (
+                          <label className="settings-field" key={field}>
+                            <span>{appT(errorThresholdLabels[field])}</span>
+                            <input
+                              inputMode="decimal"
+                              aria-describedby={`${id}-thresholds-help`}
+                              value={thresholdFields[field]}
+                              onChange={(event) => {
+                                setThresholdFields({
+                                  ...thresholdFields,
+                                  [field]: event.target.value,
+                                });
+                                setSaveError(null);
+                              }}
+                            />
+                          </label>
+                        ))}
+                      </div>
+                      <p className="settings-help" id={`${id}-thresholds-help`}>
+                        {t('errorThresholdsHelp')}
+                      </p>
+                    </div>
+                  )}
                   <div className="settings-analysis-row">
                     <div>
                       <h3>{sourceT('books')}</h3>
@@ -1225,30 +1310,6 @@ export default function SettingsDialog({
                           id={`${id}-play-mode-help`}
                         >
                           {modeT(`${draft.default_play_mode ?? 'coach'}Help`)}
-                        </p>
-                      </div>
-                      <div>
-                        <label className="settings-field">
-                          <span>{modeT('threshold')}</span>
-                          <input
-                            type="number"
-                            aria-describedby={`${id}-play-threshold-help`}
-                            min="0.001"
-                            max="1"
-                            step="0.001"
-                            value={draft.tutor_threshold ?? 0.04}
-                            onChange={(event) =>
-                              update({
-                                tutor_threshold: event.target.valueAsNumber,
-                              })
-                            }
-                          />
-                        </label>
-                        <p
-                          className="settings-help"
-                          id={`${id}-play-threshold-help`}
-                        >
-                          {modeT('thresholdHelp')}
                         </p>
                       </div>
                       <div className="settings-play-wide">

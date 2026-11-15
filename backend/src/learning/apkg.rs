@@ -201,6 +201,7 @@ struct Labels {
     score: &'static str,
     cube: &'static str,
     ply: &'static str,
+    german_cube_actions: bool,
 }
 impl Labels {
     fn new(locale: &str) -> Self {
@@ -289,6 +290,17 @@ impl Labels {
             score: words[7],
             cube: words[8],
             ply: words[9],
+            german_cube_actions: locale == "de",
+        }
+    }
+
+    fn action<'a>(&self, kind: &str, notation: &'a str) -> &'a str {
+        match (self.german_cube_actions, kind, notation) {
+            (true, "cube_offer", "double") => "Doppeln",
+            (true, "cube_offer", "no double") => "Nicht doppeln",
+            (true, "cube_response", "take") => "Annehmen",
+            (true, "cube_response", "drop") => "Passen",
+            _ => notation,
         }
     }
 }
@@ -366,9 +378,9 @@ fn answer_html(c: &CardContent, a: &CardAnswer, l: &Labels) -> String {
     let mut out = format!(
         "<p class=\"best\">{}: {}</p><p>{}: {}</p>",
         l.best,
-        html(best),
+        html(l.action(&c.kind, best)),
         l.played,
-        html(&a.played)
+        html(l.action(&c.kind, &a.played))
     );
     if let Some(d) = &solution.decision {
         let _ = write!(out, "<p>Δ equity: {:.6}</p>", d.equity_loss);
@@ -636,8 +648,10 @@ mod tests {
                 candidates: vec![Candidate {
                     rank: 1,
                     notation: "8/5 6/5".into(),
+                    path: None,
                     equity: 0.2,
                     probabilities: vec![],
+                    plies: Some(0),
                 }],
                 decision: None,
             },
@@ -689,6 +703,57 @@ mod tests {
                 .contains("Jacoby ✓")
         );
         assert!(!fields.split('\x1f').nth(1).unwrap().contains("8/5 6/5"));
+        for (kind, best, played, expected_best, expected_played) in [
+            (
+                "cube_offer",
+                "double",
+                "no double",
+                "Doppeln",
+                "Nicht doppeln",
+            ),
+            (
+                "cube_offer",
+                "no double",
+                "double",
+                "Nicht doppeln",
+                "Doppeln",
+            ),
+            ("cube_response", "take", "drop", "Annehmen", "Passen"),
+            ("cube_response", "drop", "take", "Passen", "Annehmen"),
+        ] {
+            let mut cube = content.clone();
+            cube.kind = kind.into();
+            cube.played = played.into();
+            cube.solution.candidates.clear();
+            cube.solution.decision = Some(crate::match_analysis::decision(
+                cube.position.player,
+                "cube",
+                played,
+                best,
+                Some((0.0, 0.1)),
+            ));
+            let answer = CardAnswer {
+                solution: Some(cube.solution.clone()),
+                played: cube.played.clone(),
+                notes: String::new(),
+                tags: vec![],
+            };
+            let cards = vec![(id, cube, answer)];
+            let german = prepare(cards.clone(), "de").unwrap().remove(0);
+            let english = prepare(cards, "en").unwrap().remove(0);
+            assert!(
+                german.fields.contains(&format!(
+                    "<p class=\"best\">Bester Zug: {expected_best}</p><p>Gespielt: {expected_played}</p>"
+                )),
+                "{}",
+                german.fields
+            );
+            assert!(english.fields.contains(&format!(
+                "<p class=\"best\">Best play: {best}</p><p>Played: {played}</p>"
+            )));
+            assert_eq!(german.guid, english.guid);
+            assert_eq!(german.structured, english.structured);
+        }
         let mut media = String::new();
         zip.by_name("media")
             .unwrap()

@@ -1,11 +1,19 @@
 import type { Job, MatchAnalysisSummary } from './api';
 
 import type { components } from './generated-api';
+import { errorGrades } from './move-severity';
 
 type Schema = components['schemas'];
+export type DecisionKind = 'checker' | 'cube';
 export type PlayerErrorBreakdown = Schema['PlayerErrorBreakdown'];
 export type GameAnalysisStatistics = Schema['GameAnalysisStatistics'];
 export type JobAnalysisStatistics = Schema['JobAnalysisStatistics'];
+export type MatchAnalysisRun = Schema['AnalysisComparisonRun'];
+
+export function matchAnalysisRunsPath(matchId: string, gameNo?: number) {
+  return `/matches/${matchId}/analysis/jobs${gameNo === undefined ? '' : `?game_no=${gameNo}`}`;
+}
+
 export interface MatchDecisionFilter {
   player: string;
   kind: string;
@@ -19,13 +27,11 @@ export type StatisticsMetric =
   | 'cube'
   | 'loss'
   | 'inaccuracies'
-  | 'doubtful'
-  | 'bad'
-  | 'very_bad'
+  | (typeof errorGrades)[number]
   | 'pr';
 export interface StatisticsAction {
   metric: StatisticsMetric;
-  kind?: 'checker' | 'cube';
+  kind?: DecisionKind;
   player: number;
   gameNo?: number;
 }
@@ -33,9 +39,7 @@ export interface StatisticsAction {
 export function buildStatisticsFilter(
   action: StatisticsAction,
 ): MatchDecisionFilter {
-  const severity = ['doubtful', 'bad', 'very_bad'].includes(action.metric)
-    ? action.metric
-    : '';
+  const severity = errorGrades.find((grade) => grade === action.metric) ?? '';
   return {
     player: String(action.player),
     kind:

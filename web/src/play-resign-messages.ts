@@ -1,5 +1,9 @@
 import { useI18n, type Locale } from './i18n';
 const en = {
+  forfeitMatch: 'Forfeit match',
+  forfeitHelp:
+    'The match ends immediately and is recorded as a loss. Unconfirmed moves are discarded.',
+  matchForfeited: 'Match forfeited. You lost.',
   resign: 'Resign',
   heading: 'Resign this game',
   help: 'Offer to resign the current game. The bot may decline the offer. Your unconfirmed moves are kept if you cancel.',
@@ -19,6 +23,10 @@ type Key = keyof typeof en;
 const messages: Record<Locale, Record<Key, string>> = {
   en,
   de: {
+    forfeitMatch: 'Match aufgeben',
+    forfeitHelp:
+      'Das Match endet sofort und wird als Niederlage gewertet. Unbestätigte Züge werden verworfen.',
+    matchForfeited: 'Match durch Aufgabe verloren.',
     resign: 'Aufgeben',
     heading: 'Diese Partie aufgeben',
     help: 'Biete die Aufgabe der aktuellen Partie an. Der Bot kann ablehnen. Beim Abbrechen bleiben deine unbestätigten Züge erhalten.',
@@ -35,6 +43,10 @@ const messages: Record<Locale, Record<Key, string>> = {
       'Der Bot hat die Aufgabe abgelehnt. Biete eine höhere Wertung an oder spiele weiter. Dein Spielstand bleibt unverändert.',
   },
   es: {
+    forfeitMatch: 'Abandonar el match',
+    forfeitHelp:
+      'El match termina de inmediato y se registra como derrota. Se descartan los movimientos sin confirmar.',
+    matchForfeited: 'Match perdido por abandono.',
     resign: 'Abandonar',
     heading: 'Abandonar esta partida',
     help: 'Ofrece abandonar la partida actual. El bot puede rechazarlo. Al cancelar se conservan los movimientos sin confirmar.',
@@ -51,6 +63,10 @@ const messages: Record<Locale, Record<Key, string>> = {
       'El bot ha rechazado el abandono. Ofrece un valor superior o sigue jugando. La partida no ha cambiado.',
   },
   fr: {
+    forfeitMatch: 'Abandonner le match',
+    forfeitHelp:
+      'Le match se termine immédiatement et compte comme une défaite. Les déplacements non confirmés sont annulés.',
+    matchForfeited: 'Match perdu par abandon.',
     resign: 'Abandonner',
     heading: 'Abandonner cette partie',
     help: 'Proposez d’abandonner la partie en cours. Le bot peut refuser. En annulant, vos déplacements non confirmés sont conservés.',
@@ -67,6 +83,10 @@ const messages: Record<Locale, Record<Key, string>> = {
       'Le bot a refusé l’abandon. Proposez une valeur supérieure ou continuez à jouer. La partie reste inchangée.',
   },
   it: {
+    forfeitMatch: 'Abbandona il match',
+    forfeitHelp:
+      'Il match termina subito e viene registrato come sconfitta. Le mosse non confermate vengono scartate.',
+    matchForfeited: 'Match perso per abbandono.',
     resign: 'Abbandona',
     heading: 'Abbandona questa partita',
     help: 'Proponi di abbandonare la partita attuale. Il bot può rifiutare. Annullando si conservano le mosse non confermate.',
@@ -83,6 +103,10 @@ const messages: Record<Locale, Record<Key, string>> = {
       'Il bot ha rifiutato l’abbandono. Offri un valore superiore o continua a giocare. La partita è invariata.',
   },
   pl: {
+    forfeitMatch: 'Poddaj mecz',
+    forfeitHelp:
+      'Mecz kończy się od razu i zostaje zapisany jako przegrana. Niezatwierdzone ruchy zostaną odrzucone.',
+    matchForfeited: 'Mecz przegrany przez poddanie.',
     resign: 'Poddaj',
     heading: 'Poddaj tę partię',
     help: 'Zaproponuj poddanie bieżącej partii. Bot może odmówić. Anulowanie zachowuje niezatwierdzone ruchy.',

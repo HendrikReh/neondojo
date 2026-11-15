@@ -91,6 +91,7 @@ export default function StudyReportTable({
               <td>
                 <ActionButton
                   icon="open"
+                  id={`open-study-report-${report.id}`}
                   label={t('open')}
                   compact
                   aria-pressed={selectedId === report.id}

@@ -1,5 +1,24 @@
 import { expect, test } from 'vitest';
-import { candidateLoss, isPlayedCandidate } from './candidate-comparison';
+import {
+  candidateEquityDifference,
+  candidateLoss,
+  isPlayedCandidate,
+} from './candidate-comparison';
+
+test('compares finite equity values in compatible units and reports signed differences', () => {
+  const imported = { equity: -0.08, equity_kind: 'cubeful' };
+  const local = { equity: -0.085, equity_kind: 'normalized_cubeful' };
+  expect(candidateEquityDifference(local, imported)).toBeCloseTo(-0.005);
+  expect(candidateEquityDifference(imported, local)).toBeCloseTo(0.005);
+  expect(candidateEquityDifference(imported, imported)).toBe(0);
+  expect(candidateEquityDifference(local, undefined)).toBeNull();
+  expect(
+    candidateEquityDifference({ ...local, equity: Number.NaN }, imported),
+  ).toBeNull();
+  expect(
+    candidateEquityDifference({ ...local, equity_kind: 'mwc' }, imported),
+  ).toBeNull();
+});
 
 test('loss uses the ranked best and preserves missing, unknown or incompatible values', () => {
   const best = { rank: 1, equity: 0.15, equity_kind: 'cubeful' };

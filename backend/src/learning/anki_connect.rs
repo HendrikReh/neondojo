@@ -53,6 +53,21 @@ impl Client {
             ));
         }
         if let Some(error) = reply["error"]["message"].as_str() {
+            match reply["error"]["data"]["type"].as_str() {
+                Some("collectionUnavailable") => {
+                    return Err(ApiError(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "Open an Anki profile".into(),
+                    ));
+                }
+                Some("staleSession" | "editorConflict" | "conflict" | "busy") => {
+                    return Err(ApiError(
+                        StatusCode::CONFLICT,
+                        sanitize(error, self.key.as_deref()),
+                    ));
+                }
+                _ => {}
+            }
             return Err(self.error(error));
         }
         serde_json::from_value(reply["result"].clone())

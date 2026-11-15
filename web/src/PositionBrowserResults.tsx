@@ -1,5 +1,5 @@
-import { useOptionalConfiguration } from './ConfigurationProvider';
-import { useProfileValue } from './useProfileValue';
+import { useWorkspaceDefaults } from './ConfigurationProvider';
+import { layoutColumns, useWorkspaceLayout } from './useWorkspaceSession';
 import ActionButton from './ActionButton';
 import EngineLabel from './EngineLabel';
 import { useMemo, type Ref } from 'react';
@@ -131,17 +131,15 @@ export function PositionBrowserResults({
   onSort,
   sortDisabled = false,
 }: PositionResultsProps) {
-  const profile = useOptionalConfiguration();
+  const legacy = useWorkspaceDefaults();
   const p = usePositionText(),
     l = useLibraryText(),
     { formatNumber, formatDecision, locale } = useI18n();
-  const [shown, setShown] = useProfileValue<PositionDataColumn[]>(
-    (c) => c.positions.visible_columns,
-    (c, visible_columns) => ({
-      ...c,
-      positions: { ...c.positions, visible_columns },
-    }),
-    () => [...DEFAULT_POSITION_COLUMNS],
+  const [shown, setShown] = useWorkspaceLayout<PositionDataColumn[]>(
+    'positions.visibleColumns',
+    legacy?.positions.visible_columns,
+    [...DEFAULT_POSITION_COLUMNS],
+    (value) => layoutColumns(value, POSITION_DATA_COLUMNS),
   );
   const activeColumns = useMemo(
     () =>
@@ -156,20 +154,7 @@ export function PositionBrowserResults({
   const columns = useResizableColumns(POSITION_COLUMN_LAYOUT, {
     visible,
     activeColumns: activeColumns.map(({ id }) => id),
-    ...(profile?.current
-      ? {
-          widths: profile.current.positions.column_widths,
-          configurationGeneration: profile.generation,
-          onWidthsChange: (column_widths: Record<string, number> | undefined) =>
-            profile.updateCurrent((c) => ({
-              ...c,
-              positions: {
-                ...c.positions,
-                column_widths: column_widths ?? null,
-              },
-            })),
-        }
-      : {}),
+    legacyWidths: legacy?.positions.column_widths,
     resizeLabel: (column) => l('resizeColumn', { column }),
   });
   const summaries = useMemo(() => {
@@ -481,6 +466,7 @@ export function PositionBrowserPreview({
   hit,
   theme,
   onOpen,
+  onFindSimilar,
   showPlayed = false,
   visible = true,
 }: {
@@ -489,6 +475,10 @@ export function PositionBrowserPreview({
   showPlayed?: boolean;
   theme: Theme;
   onOpen: (id: string) => void;
+  onFindSimilar?: (
+    position: PositionBrowserHit['position'],
+    matchName: string,
+  ) => void;
 }) {
   const p = usePositionText(),
     { formatNumber, formatDecision } = useI18n(),
@@ -516,6 +506,13 @@ export function PositionBrowserPreview({
               onClick={() => onOpen(hit.position.id)}
             />
           </div>
+          {onFindSimilar && (
+            <ActionButton
+              icon="similar"
+              label={p('findSimilar')}
+              onClick={() => onFindSimilar(hit.position, hit.display_name)}
+            />
+          )}
           <SearchPreviewBoard
             position={hit.position}
             white={hit.match_info.white}

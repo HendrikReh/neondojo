@@ -1,4 +1,7 @@
-import { openPositionCalculation } from './analysis-controls';
+import {
+  calculateDiceEquity,
+  openPositionCalculation,
+} from './analysis-controls';
 import { profileBackend } from './profile-backend';
 import { defaultConfiguration } from '../src/configuration-model';
 import { expect, test, type Page } from './test';
@@ -9,6 +12,9 @@ async function openPosition(page: Page) {
   const profile = await profileBackend(page, { configuration });
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
   await page.goto('/');
+  await expect(
+    page.getByText('GNUbg connected', { exact: true }),
+  ).toBeVisible();
   await page.getByLabel('Match file', { exact: true }).setInputFiles({
     name: 'dice-equity.mat',
     mimeType: 'application/octet-stream',
@@ -20,10 +26,9 @@ async function openPosition(page: Page) {
   return profile;
 }
 
-test('dice equity calculates on selection and reuses results across tabs, positions and reloads', async ({
+test('dice equity starts from the header and reuses results across tabs, positions and reloads', async ({
   page,
 }) => {
-  test.setTimeout(150_000);
   const submissions: { position_id: string; kind: string; plies: number }[] =
     [];
   page.on('request', (request) => {
@@ -40,6 +45,11 @@ test('dice equity calculates on selection and reuses results across tabs, positi
   ).toHaveCount(0);
   const dice = page.getByRole('tab', { name: 'Dice equity', exact: true });
   await dice.click();
+  await expect(page.locator('.analysis-panel')).toContainText(
+    'No dice equity is saved',
+  );
+  expect(submissions).toHaveLength(0);
+  await calculateDiceEquity(page);
   await expect(page.locator('.dice-grid button')).toHaveCount(36, {
     timeout: 45_000,
   });
@@ -61,6 +71,11 @@ test('dice equity calculates on selection and reuses results across tabs, positi
     });
   }
   await page.getByRole('button', { name: 'Next move', exact: true }).click();
+  await expect(page.locator('.analysis-panel')).toContainText(
+    'No dice equity is saved',
+  );
+  expect(submissions).toHaveLength(1);
+  await calculateDiceEquity(page);
   await expect.poll(() => submissions.length).toBe(2);
   await expect(page.locator('.dice-grid button')).toHaveCount(36, {
     timeout: 45_000,
@@ -115,7 +130,7 @@ test('dice equity calculates on selection and reuses results across tabs, positi
     .click();
   await expect.poll(() => submissions.length).toBe(3);
   await expect(page.locator('.dice-grid button')).toHaveCount(36, {
-    timeout: 90_000,
+    timeout: 45_000,
   });
   expect(submissions[2]).toMatchObject({
     position_id: submissions[0].position_id,
@@ -130,9 +145,7 @@ test('dice equity calculates on selection and reuses results across tabs, positi
   expect(submissions).toHaveLength(3);
 });
 
-test('failed dice submission does not loop and selecting the tab again retries', async ({
-  page,
-}) => {
+test('failed dice submissions retry only from the header', async ({ page }) => {
   await openPosition(page);
   let attempts = 0;
   await page.route('**/api/jobs', async (route) => {
@@ -141,12 +154,14 @@ test('failed dice submission does not loop and selecting the tab again retries',
     await route.fulfill({ status: 503, json: { error: 'Engine unavailable' } });
   });
   const dice = page.getByRole('tab', { name: 'Dice equity', exact: true });
-  await dice.click();
+  await calculateDiceEquity(page);
   await expect(
     page.locator('.position-inspector [role="alert"]').first(),
   ).toBeVisible();
   expect(attempts).toBe(1);
   await dice.click();
+  expect(attempts).toBe(1);
+  await calculateDiceEquity(page);
   await expect.poll(() => attempts).toBe(2);
   await page.getByRole('tab', { name: 'Candidate moves', exact: true }).click();
   expect(attempts).toBe(2);
@@ -168,7 +183,7 @@ test('repeated selection while submission is delayed creates only one job', asyn
     await route.continue();
   });
   const dice = page.getByRole('tab', { name: 'Dice equity', exact: true });
-  await dice.click();
+  await calculateDiceEquity(page);
   await expect.poll(() => attempts).toBe(1);
   await dice.click();
   await page.getByRole('tab', { name: 'Candidate moves', exact: true }).click();
@@ -181,10 +196,9 @@ test('repeated selection while submission is delayed creates only one job', asyn
   expect(attempts).toBe(1);
 });
 
-test('a hidden dice view waits until the overview becomes visible', async ({
+test('changing position in a hidden dice view does not submit a job', async ({
   page,
 }) => {
-  test.setTimeout(150_000);
   await openPosition(page);
   let attempts = 0;
   page.on('request', (request) => {
@@ -194,22 +208,22 @@ test('a hidden dice view waits until the overview becomes visible', async ({
     )
       attempts++;
   });
-  await page.getByRole('tab', { name: 'Dice equity', exact: true }).click();
+  await calculateDiceEquity(page);
   await expect(page.locator('.dice-grid button')).toHaveCount(36, {
-    timeout: 65_000,
+    timeout: 45_000,
   });
   await page.getByRole('tab', { name: 'Notes', exact: true }).click();
   await page.getByRole('button', { name: 'Next move', exact: true }).click();
   await expect(page.locator('.board-navigation')).toContainText('8/4 6/4');
   expect(attempts).toBe(1);
-  await page.getByRole('tab', { name: 'Overview', exact: true }).click();
-  await expect.poll(() => attempts).toBe(2);
-  await expect(page.locator('.dice-grid button')).toHaveCount(36, {
-    timeout: 65_000,
-  });
+  await page.getByRole('tab', { name: 'Checker', exact: true }).click();
+  await expect(page.locator('.analysis-panel')).toContainText(
+    'No dice equity is saved',
+  );
+  expect(attempts).toBe(1);
 });
 
-test('a failed engine job stays failed until dice equity is explicitly selected again', async ({
+test('an engine failure stays visible until a new explicit dice calculation', async ({
   page,
 }) => {
   await openPosition(page);
@@ -238,17 +252,16 @@ test('a failed engine job stays failed until dice equity is explicitly selected 
       });
     } else await route.fulfill({ response });
   });
-  const dice = page.getByRole('tab', { name: 'Dice equity', exact: true });
-  await dice.click();
+  await calculateDiceEquity(page);
   await expect(page.locator('.analysis-panel [role="alert"]')).toContainText(
     'Analysis failed',
   );
   await page.getByRole('tab', { name: 'Notes', exact: true }).click();
-  await page.getByRole('tab', { name: 'Overview', exact: true }).click();
+  await page.getByRole('tab', { name: 'Checker', exact: true }).click();
   await expect(page.locator('.analysis-panel [role="alert"]')).toBeVisible();
   expect(attempts).toBe(1);
   failed = false;
-  await dice.click();
+  await calculateDiceEquity(page);
   await expect(page.locator('.dice-grid button')).toHaveCount(36, {
     timeout: 45_000,
   });

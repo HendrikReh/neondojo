@@ -30,6 +30,8 @@ it('exposes independent sort controls for every match data field, including nume
         onPosition: noop,
         onAnnotation: noop,
         onImport: noop,
+        onAnalyzeMatches: noop,
+        uploading: false,
         onChanged: noop,
       }),
     }),

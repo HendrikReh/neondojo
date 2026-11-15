@@ -140,9 +140,7 @@ test('checker steps sound immediately; bot dice/hits use native history; reload 
   await step(page, 6, 4);
   await step(page, 6, 5);
   expect(await heard(page)).toEqual([0.41, 0.41]);
-  await page
-    .locator('[data-play-die-index="0"][data-dice-action="confirm"]')
-    .click();
+  await page.locator('[data-dice-action="confirm"]').click();
   await expect.poll(() => heard(page)).toEqual([0.41, 0.41, 0.28, 0.05, 0.05]);
   await expect
     .poll(() =>
@@ -189,7 +187,7 @@ for (const human of [0, 1])
     expect(await heard(page)).toEqual([0.05, 0.41]);
   });
 for (const opening of [false, true])
-  test(`${opening ? 'opening' : 'normal'} dice sound once; acknowledgment is silent`, async ({
+  test(`${opening ? 'opening' : 'normal'} dice sound once per roll`, async ({
     page,
   }) => {
     const before = fixture();
@@ -218,11 +216,11 @@ for (const opening of [false, true])
         ? { ...result, version: 2, phase: 'move' }
         : result,
     );
-    await (
-      opening
-        ? page.getByRole('button', { name: 'Roll one die each', exact: true })
-        : rollDice(page)
-    ).click();
+    if (!opening) await rollDice(page).click();
+    await expect(page.locator('.play-board')).toHaveAttribute(
+      'data-play-phase',
+      'move',
+    );
     await expect(page.locator('.play-board')).toHaveAttribute(
       'data-play-animation',
       'idle',
@@ -230,13 +228,6 @@ for (const opening of [false, true])
     await expect
       .poll(() => heard(page))
       .toEqual(opening ? [0.28, 0.28] : [0.28]);
-    if (opening) {
-      await page
-        .getByRole('button', { name: 'Begin the first move', exact: true })
-        .click();
-      await expect(page.locator('.play-opening')).toHaveCount(0);
-      expect(await heard(page)).toEqual([0.28, 0.28]);
-    }
   });
 test('sound setting cancels, saves, survives reload and applies to ongoing games', async ({
   page,
@@ -320,12 +311,8 @@ test('unavailable audio never blocks legal play or engine error handling', async
   await install(page, fixture());
   await step(page, 6, 4);
   await step(page, 6, 5);
-  await expect(
-    page.locator('[data-play-die-index="0"][data-dice-action="confirm"]'),
-  ).toBeEnabled();
-  await page
-    .locator('[data-play-die-index="0"][data-dice-action="confirm"]')
-    .click();
+  await expect(page.locator('[data-dice-action="confirm"]')).toBeEnabled();
+  await page.locator('[data-dice-action="confirm"]').click();
   await expect(page.getByRole('alert')).toBeVisible();
   expect(await heard(page)).toEqual([]);
 });
@@ -449,9 +436,7 @@ for (const muted of [false, true])
     await install(page, before, () => after);
     await step(page, 6, 4);
     await step(page, 6, 5);
-    await page
-      .locator('[data-play-die-index="0"][data-dice-action="confirm"]')
-      .click();
+    await page.locator('[data-dice-action="confirm"]').click();
     await expect(
       page.getByRole('alertdialog', { name: 'Cube decision', exact: true }),
     ).toBeVisible();

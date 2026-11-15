@@ -219,6 +219,18 @@ pub(super) async fn sync_deck(
             }
         }
         write_reviews(client, &collection.session, batch).await?;
+        if let Some(link) = auto_link {
+            sqlx::query(
+                "UPDATE anki_auto_sync SET sent_reviews=sent_reviews+$3
+                 WHERE deck_id=$1 AND link_id=$2",
+            )
+            .bind(id)
+            .bind(link)
+            .bind(batch.len() as i64)
+            .execute(pool)
+            .await
+            .map_err(anyhow::Error::from)?;
+        }
     }
     Ok(SyncResult {
         profile: collection.profile.clone(),
@@ -535,11 +547,15 @@ async fn reconcile(
     }
     let received = save_incoming(&mut tx, &incoming).await?;
     if received > 0 && auto_link.is_some() {
-        sqlx::query("UPDATE anki_auto_sync SET last_received_at=now() WHERE deck_id=$1")
-            .bind(deck_id)
-            .execute(&mut *tx)
-            .await
-            .map_err(anyhow::Error::from)?;
+        sqlx::query(
+            "UPDATE anki_auto_sync SET last_received_at=now(),
+                received_reviews=received_reviews+$2 WHERE deck_id=$1",
+        )
+        .bind(deck_id)
+        .bind(received as i64)
+        .execute(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?;
     }
     tx.commit().await.map_err(anyhow::Error::from)?;
     Ok((received, outgoing))

@@ -1,10 +1,8 @@
 //! Read-only scope estimates calibrated by complete local native measurements.
-use super::{
-    BenchmarkRun, Machine, machine, protocol_for, reference, reference_for, running_engine_version,
-};
+use super::{BenchmarkRun, Machine, machine, reference, reference_for, running_engine_version};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
-    engine::{Engine, resolve_binary},
+    engine::{Engine, GnubgMoveFilter, resolve_binary},
     store,
 };
 use axum::{
@@ -71,14 +69,14 @@ fn same_hardware(a: &Machine, b: &Machine) -> bool {
         && a.logical_cpus == b.logical_cpus
         && a.memory_bytes == b.memory_bytes
 }
-fn compatible(run: &BenchmarkRun, machine: &Machine) -> bool {
-    let expected = reference_for(&run.engine_id, run.plies);
+fn compatible(run: &BenchmarkRun, machine: &Machine, move_filter: Option<GnubgMoveFilter>) -> bool {
+    let expected = reference_for(&run.engine_id, run.plies, move_filter);
     let (Some(saved_reference), Some(protocol_snapshot)) = (&run.reference, &run.protocol) else {
         return false;
     };
     let mut normalized = protocol_snapshot.clone();
     if normalized.id != expected.protocol.id
-        && !(run.engine_id == "gnubg" && normalized.id == "gnubg-match-v1")
+        && !(run.engine_id == "gnubg" && move_filter.is_none() && normalized.id == "gnubg-match-v1")
     {
         return false;
     }
@@ -88,7 +86,7 @@ fn compatible(run: &BenchmarkRun, machine: &Machine) -> bool {
     let average = run.average_move_ms.unwrap_or(f64::NAN);
     let expected_average = total / f64::from(expected.total_moves);
     same_hardware(&run.machine, machine)
-        && normalized == protocol_for(&run.engine_id, run.plies)
+        && normalized == expected.protocol
         && saved_reference.id == expected.id
         && saved_reference.version == expected.version
         && saved_reference.sha256 == expected.sha256
@@ -224,8 +222,16 @@ async fn estimate(
     if result.engine_id == "gnubg" && gnubg_threads.unwrap_or(1) != 1 {
         return Ok(result.unavailable(EstimateUnavailableReason::NoMatchingBenchmark));
     }
-    if let Some(benchmark) =
-        matching_benchmark(&state.pool, &result.engine_id, &path, &version, plies).await?
+    let move_filter = GnubgMoveFilter::for_analysis(&result.engine_id, plies);
+    if let Some(benchmark) = matching_benchmark(
+        &state.pool,
+        &result.engine_id,
+        &path,
+        &version,
+        plies,
+        move_filter,
+    )
+    .await?
     {
         let elapsed = benchmark.average_move_ms * count as f64;
         if elapsed.is_finite() && elapsed > 0.0 {
@@ -244,6 +250,7 @@ pub(crate) async fn matching_benchmark(
     path: &str,
     version: &str,
     plies: i32,
+    move_filter: Option<GnubgMoveFilter>,
 ) -> anyhow::Result<Option<EstimateBenchmark>> {
     let Some(machine) = machine::current(pool).await? else {
         return Ok(None);
@@ -252,7 +259,7 @@ pub(crate) async fn matching_benchmark(
     let mut rows=sqlx::query_as::<_,BenchmarkRun>("SELECT * FROM benchmark_runs WHERE status='completed' AND play_reference IS NULL AND engine_id=$1 AND engine_path=$2 AND engine_version=$3 AND plies=$4 AND machine->>'id'=$5 AND reference->>'sha256'=$6 ORDER BY finished_at DESC,created_at DESC,queue_no DESC")
         .bind(engine_id).bind(path).bind(version).bind(plies).bind(machine.id.to_string()).bind(expected.sha256).fetch(pool);
     while let Some(run) = rows.try_next().await? {
-        if compatible(&run, &machine) {
+        if compatible(&run, &machine, move_filter) {
             return Ok(Some(EstimateBenchmark {
                 id: run.id,
                 finished_at: run.finished_at.expect("compatible measurement is finished"),

@@ -226,6 +226,26 @@
       ]
     },
     {
+      "name": "custom analysis error thresholds",
+      "changes": [
+        {
+          "path": "analysis.error_thresholds",
+          "value": {
+            "questionable": 0.01,
+            "error": 0.03,
+            "blunder": 0.06,
+            "large_blunder": 0.15
+          }
+        }
+      ],
+      "expected_paths": [
+        "analysis.error_thresholds.blunder",
+        "analysis.error_thresholds.error",
+        "analysis.error_thresholds.large_blunder",
+        "analysis.error_thresholds.questionable"
+      ]
+    },
+    {
       "name": "changed_depth",
       "changes": [
         {
@@ -278,12 +298,27 @@
         },
         {
           "path": "appearance.analysis_overview_board_width",
-          "value": 360
+          "value": 1500
+        },
+        {
+          "path": "appearance.analysis_errors_board_width",
+          "value": 1400
+        },
+        {
+          "path": "appearance.analysis_statistics_board_width",
+          "value": 1350
+        },
+        {
+          "path": "appearance.analysis_notes_board_width",
+          "value": 1450
         }
       ],
       "expected_paths": [
         "appearance.analysis_board_width",
-        "appearance.analysis_overview_board_width"
+        "appearance.analysis_errors_board_width",
+        "appearance.analysis_notes_board_width",
+        "appearance.analysis_overview_board_width",
+        "appearance.analysis_statistics_board_width"
       ]
     }
   ]

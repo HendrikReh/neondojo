@@ -1,6 +1,6 @@
 import ActionButton from './ActionButton';
 import EngineLabel from './EngineLabel';
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import type { components } from './generated-api';
 import type {
   AnalysisCatalogEntry,
@@ -11,11 +11,16 @@ type MatchAnalysisSummary = components['schemas']['CatalogAnalysisSummary'];
 import { useI18n } from './i18n';
 import {
   nativePerformanceRating,
+  type DecisionKind,
   type PlayerErrorBreakdown,
   type StatisticsAction,
   type StatisticsMetric,
 } from './match-statistics-api';
-import { useStatisticsText } from './review-statistics-messages';
+import { errorGrades } from './move-severity';
+import {
+  severityLabels,
+  useStatisticsText,
+} from './review-statistics-messages';
 import './match-statistics.css';
 
 type PlayerStats = MatchAnalysisSummary['players'][number];
@@ -39,14 +44,15 @@ function PlayerStatisticsCard({
   errorBreakdown?: PlayerErrorBreakdown;
 }) {
   const text = useStatisticsText();
-  const { formatNumber } = useI18n();
+  const { formatNumber, t } = useI18n();
+  const metricId = useId();
   const decimal = (value: number) =>
     formatNumber(value, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
   const metric = (
     key: StatisticsMetric,
     label: string,
     value: string | number | undefined,
-    kind?: 'checker' | 'cube',
+    kind?: DecisionKind,
     cell = false,
   ) => {
     const actionLabel = kind ? `${text(kind)} · ${label}` : label;
@@ -69,21 +75,19 @@ function PlayerStatisticsCard({
           —
         </span>
       );
-    return (
+    const decisionKind = key === 'checker' || key === 'cube' ? key : kind;
+    const select = (kind: DecisionKind) =>
+      onSelect({ player: stats.player, metric: key, gameNo, kind });
+    const popoverId = decisionKind ? undefined : `${metricId}-${key}`;
+    const button = (
       <button
         type="button"
         className="statistics-metric"
         data-statistics-metric={key}
         data-statistics-kind={kind}
         aria-label={accessibleLabel}
-        onClick={() =>
-          onSelect({
-            player: stats.player,
-            metric: key,
-            gameNo,
-            ...(kind ? { kind } : {}),
-          })
-        }
+        popoverTarget={popoverId}
+        onClick={decisionKind ? () => select(decisionKind) : undefined}
       >
         {!cell && <span>{label}</span>}
         <strong>
@@ -91,17 +95,41 @@ function PlayerStatisticsCard({
         </strong>
       </button>
     );
+    return popoverId ? (
+      <div className="statistics-metric-choice">
+        {button}
+        <div
+          id={popoverId}
+          popover="auto"
+          className="statistics-destinations"
+          role="group"
+          aria-label={accessibleLabel}
+        >
+          {(['checker', 'cube'] as const).map((destination) => (
+            <button
+              key={destination}
+              type="button"
+              popoverTarget={popoverId}
+              popoverTargetAction="hide"
+              onClick={() => select(destination)}
+            >
+              {t(destination === 'cube' ? 'common.cube' : 'common.checker')}
+            </button>
+          ))}
+        </div>
+      </div>
+    ) : (
+      button
+    );
   };
   const rating = nativePerformanceRating(summary, stats.player);
-  const errorTotals = errorBreakdown
-    ? {
-        doubtful:
-          errorBreakdown.checker.doubtful + errorBreakdown.cube.doubtful,
-        bad: errorBreakdown.checker.bad + errorBreakdown.cube.bad,
-        very_bad:
-          errorBreakdown.checker.very_bad + errorBreakdown.cube.very_bad,
-      }
-    : stats;
+  const gradeTotal = (grade: (typeof errorGrades)[number]) =>
+    errorBreakdown
+      ? (errorBreakdown.checker[grade] ?? 0) + (errorBreakdown.cube[grade] ?? 0)
+      : undefined;
+  const errorTotal = errorBreakdown
+    ? errorGrades.reduce((sum, grade) => sum + (gradeTotal(grade) ?? 0), 0)
+    : undefined;
   return (
     <article
       className={`statistics-player${compact ? ' statistics-player-compact' : ''}`}
@@ -145,14 +173,11 @@ function PlayerStatisticsCard({
         <div role="rowgroup">
           {(
             [
-              [
-                'inaccuracies',
-                text('inaccuracies'),
-                errorTotals.doubtful + errorTotals.bad + errorTotals.very_bad,
-              ],
-              ['doubtful', text('doubtful'), errorTotals.doubtful],
-              ['bad', text('bad'), errorTotals.bad],
-              ['very_bad', text('veryBad'), errorTotals.very_bad],
+              ['inaccuracies', text('inaccuracies'), errorTotal],
+              ...errorGrades.map(
+                (grade) =>
+                  [grade, t(severityLabels[grade]), gradeTotal(grade)] as const,
+              ),
             ] as const
           ).map(([key, label, count]) => (
             <div role="row" key={key}>
@@ -165,8 +190,11 @@ function PlayerStatisticsCard({
                 const value =
                   counts &&
                   (key === 'inaccuracies'
-                    ? counts.doubtful + counts.bad + counts.very_bad
-                    : counts[key]);
+                    ? errorGrades.reduce(
+                        (sum, grade) => sum + (counts[grade] ?? 0),
+                        0,
+                      )
+                    : (counts[key] ?? 0));
                 return (
                   <div role="cell" key={kind}>
                     {metric(key, label, value, kind, true)}

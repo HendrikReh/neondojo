@@ -2,7 +2,7 @@ import { expect, test } from './test';
 
 test('match suggestions preview boards and add only the checked cards', async ({
   page,
-}) => {
+}, testInfo) => {
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
   await page.goto('/');
   const importing = page.waitForResponse(
@@ -49,6 +49,8 @@ test('match suggestions preview boards and add only the checked cards', async ({
   await expect(items.first()).toBeChecked();
   const previews = panel.locator('.card-suggestion-board').getByRole('img');
   await expect(previews).toHaveCount(10);
+  const board = page.locator('.board-panel .board');
+  const deck = panel.getByLabel('Deck auswählen', { exact: true });
 
   for (const [width, height] of [
     [1800, 1169],
@@ -57,15 +59,22 @@ test('match suggestions preview boards and add only the checked cards', async ({
   ]) {
     await page.setViewportSize({ width, height });
     await expect(suggest).toBeVisible();
+    await expect(board).toBeInViewport({ ratio: 0.99 });
     expect(
       await panel
         .locator('.card-suggestions')
         .evaluate((element) => element.scrollWidth <= element.clientWidth + 1),
     ).toBe(true);
     await page.screenshot({
-      path: `test-results/card-suggestions-${width}.png`,
+      path: testInfo.outputPath(`card-suggestions-${width}.png`),
     });
   }
+
+  expect((await board.boundingBox())!.width).toBeGreaterThan(1300);
+  expect((await deck.boundingBox())!.width).toBeGreaterThan(600);
+  expect((await previews.first().boundingBox())!.width).toBeGreaterThan(220);
+  expect((await panel.locator('.card-suggestion-list').boundingBox())!.height)
+    .toBeGreaterThan(750);
 
   for (const item of (await items.all()).slice(1)) await item.uncheck();
   const write = page.waitForResponse(

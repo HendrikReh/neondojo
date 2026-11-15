@@ -52,7 +52,17 @@ export function profileChangeRows(
     const group = fieldGroups.find((entry) =>
       entry.fields.includes(difference.path),
     );
-    if (!group) rows.push(difference);
+    if (difference.path.startsWith('analysis.error_thresholds.')) {
+      const path = 'analysis.error_thresholds';
+      if (!included.has(path)) {
+        included.add(path);
+        rows.push({
+          path,
+          saved: source.analysis.error_thresholds,
+          current: target.analysis.error_thresholds,
+        });
+      }
+    } else if (!group) rows.push(difference);
     else if (!included.has(group.path)) {
       included.add(group.path);
       rows.push({

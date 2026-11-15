@@ -949,7 +949,7 @@ async fn catalog_consumers_keep_open_sage_checkpoint_provenance_without_job_summ
         .execute(&pool)
         .await
         .unwrap();
-    let decision = json!({"decision_no":1,"checker_no":1,"player":position.player,"kind":"checker","played":position.notation,"best":"24/21 6/5","played_equity":0.0,"best_equity":0.2,"equity_loss":0.2,"severity":"very_bad","dice":position.dice,"evaluation_status":"evaluated"});
+    let decision = json!({"decision_no":1,"checker_no":1,"player":position.player,"kind":"checker","played":position.notation,"best":"24/21 6/5","played_equity":0.0,"best_equity":0.2,"equity_loss":0.2,"severity":"blunder","dice":position.dice,"evaluation_status":"evaluated"});
     sqlx::query("INSERT INTO move_analyses(job_id,position_uuid,game_no,decision_no,player,kind,equity_loss,data) VALUES($1,$2,1,1,$3,'checker',0.2,$4)").bind(job).bind(position.id).bind(position.player).bind(decision).execute(&pool).await.unwrap();
     let app = app(&pool);
     let deck = create_deck(&app).await;

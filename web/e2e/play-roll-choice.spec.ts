@@ -1,4 +1,5 @@
 import { test, expect } from './test';
+import { botDice } from './play-board-actions';
 import type { PlaySession } from '../src/play-api';
 const id = 'e10e2afb-bde6-486e-a041-ae982f6d1363';
 for (const config of [
@@ -6,9 +7,8 @@ for (const config of [
     human: 0,
     direction: 'right',
     theme: 'forest',
-    width: 1440,
+    width: 1800,
     action: 'roll',
-    index: 0,
     keyboard: false,
     canDouble: true,
   },
@@ -16,9 +16,8 @@ for (const config of [
     human: 1,
     direction: 'left',
     theme: 'bgblitz:bg-earth',
-    width: 1440,
+    width: 2560,
     action: 'roll',
-    index: 1,
     keyboard: true,
     canDouble: true,
   },
@@ -28,7 +27,6 @@ for (const config of [
     theme: 'forest',
     width: 390,
     action: 'double',
-    index: 0,
     keyboard: false,
     canDouble: true,
   },
@@ -36,9 +34,8 @@ for (const config of [
     human: 1,
     direction: 'right',
     theme: 'bgblitz:bg-earth',
-    width: 1440,
+    width: 3840,
     action: 'double',
-    index: 0,
     keyboard: true,
     canDouble: true,
   },
@@ -48,7 +45,6 @@ for (const config of [
     theme: 'forest',
     width: 390,
     action: 'roll',
-    index: 1,
     keyboard: false,
     canDouble: false,
   },
@@ -56,7 +52,13 @@ for (const config of [
   test(`board ${config.action}/${config.human}/${config.direction}/${config.width}/${config.keyboard}`, async ({
     page,
   }) => {
-    await page.setViewportSize({ width: config.width, height: 1100 });
+    await page.setViewportSize({
+      width: config.width,
+      height:
+        ({ 1800: 1169, 2560: 1440, 3840: 2160 } as Record<number, number>)[
+          config.width
+        ] ?? 900,
+    });
     let saved: PlaySession = {
       id,
       version: 0,
@@ -84,7 +86,9 @@ for (const config of [
       phase: 'roll',
       can_double: config.canDouble,
       legal_moves: [],
-      history: [],
+      history: [
+        { player: 1 - config.human, dice: [6, 2], notation: '13/7 6/4' },
+      ],
       scores: [0, 0],
       game_no: 1,
       winner: null,
@@ -129,38 +133,129 @@ for (const config of [
     });
     await page.goto('/');
     await page.getByRole('tab', { name: 'Playing', exact: true }).click();
-    const dice = page.locator('[data-dice-action="roll"]');
     const cube = page.locator('.play-board [data-cube]');
     try {
+      const dice = page.locator(
+        '.play-board [data-dice="6-2"] [data-play-die-index]',
+      );
       await expect(dice).toHaveCount(2);
-      const toolbar = page.getByTestId('play-board-toolbar');
-      await expect(toolbar).toBeVisible();
-      await expect(page.getByRole('alertdialog')).toHaveCount(0);
+      await expect(dice.first()).toHaveAttribute('data-used', 'true');
+      await expect(dice.nth(1)).toHaveAttribute('data-used', 'true');
+      await expect(dice.first().locator('.play-die-artwork')).toHaveCSS(
+        'opacity',
+        '0.28',
+      );
+      await expect(
+        page.locator(`[data-die-owner="${1 - config.human}"]`),
+      ).toHaveCount(2);
+      await expect(page.locator('.play-board [data-dice="6-2"]')).toBeVisible();
+      await expect(page.locator('dialog:modal')).toHaveCount(0);
+      await expect(
+        page.getByRole('button', { name: 'Next roll', exact: true }),
+      ).toHaveCount(0);
       await expect(cube).toHaveAttribute(
         'aria-disabled',
         String(!config.canDouble),
       );
-      await expect(toolbar.locator('[data-play-action="double"]')).toHaveCount(
-        1,
-      );
-      if (config.canDouble)
-        await expect(
-          toolbar.getByRole('button', { name: 'Double', exact: true }),
-        ).toBeEnabled();
-      else {
-        const double = toolbar.getByRole('button', {
-          name: 'Double',
-          exact: true,
-        });
-        await expect(double).toBeDisabled();
-        await expect(toolbar.locator('.play-double-unavailable')).toBeVisible();
-        await double.dispatchEvent('click');
-        expect(writes).toEqual([]);
+      const artwork = dice.locator('.play-die-artwork');
+      for (const die of await dice.all()) {
+        await die.hover();
+        await expect(artwork.first()).toHaveCSS('opacity', '0.55');
+        await expect(artwork.last()).toHaveCSS('opacity', '0.55');
       }
-      const target = toolbar.locator(`[data-play-action="${config.action}"]`);
+      async function diceGap() {
+        const first = (await artwork.first().boundingBox())!;
+        const last = (await artwork.last().boundingBox())!;
+        const [left, right] = [first, last].sort((a, b) => a.x - b.x);
+        expect(left.x + left.width).toBeLessThan(right.x);
+        return {
+          x: (left.x + left.width + right.x) / 2,
+          y: left.y + left.height / 2,
+        };
+      }
+      const gap = await diceGap();
+      await page.mouse.move(gap.x, gap.y);
+      await expect(artwork.first()).toHaveCSS('opacity', '0.55');
+      await expect(artwork.last()).toHaveCSS('opacity', '0.55');
+      await expect(botDice(page)).toHaveCount(1);
+      await expect(botDice(page)).toHaveCSS('outline-style', 'none');
+      for (const face of await artwork.all()) {
+        await expect(face).toHaveCSS('filter', /drop-shadow\(/);
+        await expect(face).toHaveCSS('transform', /matrix\(/);
+      }
+      await expect(botDice(page)).toHaveRole('button');
+      await expect(botDice(page)).toHaveAttribute('tabindex', '0');
+      const faces = await artwork.all();
+      const liftedDice = await Promise.all(
+        faces.map((face) => face.boundingBox()),
+      );
+      await page.mouse.down();
+      for (const [index, face] of faces.entries()) {
+        await expect
+          .poll(async () => (await face.boundingBox())!.y)
+          .toBeGreaterThan(liftedDice[index]!.y + 0.5);
+      }
+      await page.mouse.move(0, 0);
+      await page.mouse.up();
+      expect(writes).toEqual([]);
+      const cubeArt = cube.locator('image, rect:not([aria-hidden])').first();
+      const restingCube = (await cubeArt.boundingBox())!;
+      if (config.canDouble) {
+        await cube.hover();
+        await expect(cube).toHaveCSS('outline-style', 'none');
+        await expect
+          .poll(async () => (await cubeArt.boundingBox())!.y)
+          .toBeLessThan(restingCube.y - 0.5);
+        await expect(cube.locator('.play-cube-artwork')).toHaveCSS(
+          'filter',
+          /drop-shadow\(/,
+        );
+        const liftedCube = (await cubeArt.boundingBox())!;
+        await page.mouse.down();
+        await expect
+          .poll(async () => (await cubeArt.boundingBox())!.y)
+          .toBeGreaterThan(liftedCube.y + 0.5);
+        await page.mouse.move(0, 0);
+        await page.mouse.up();
+        expect(writes).toEqual([]);
+        await cube.hover();
+        await page.screenshot({
+          path: test.info().outputPath('cube-hover.png'),
+        });
+      } else {
+        const bounds = (await cube.boundingBox())!;
+        await page.mouse.move(
+          bounds.x + bounds.width / 2,
+          bounds.y + bounds.height / 2,
+        );
+        await expect(cube).toHaveCSS('outline-style', 'none');
+        await expect(cube.locator('.play-cube-artwork')).toHaveCSS(
+          'filter',
+          'none',
+        );
+        expect((await cubeArt.boundingBox())!.y).toBeCloseTo(restingCube.y, 1);
+      }
+      await expect(artwork.first()).toHaveCSS('opacity', '0.28');
+      await expect(artwork.last()).toHaveCSS('opacity', '0.28');
+      for (const face of await artwork.all()) {
+        await expect(face).toHaveCSS('transform', 'none');
+      }
+      expect(writes).toEqual([]);
+      const target = config.action === 'roll' ? botDice(page) : cube;
+      if (config.action === 'roll') {
+        await target.scrollIntoViewIfNeeded();
+        const gap = await diceGap();
+        await page.mouse.move(gap.x, gap.y);
+      } else await target.hover();
+      await page.screenshot({
+        path: test.info().outputPath('roll-choice.png'),
+      });
       if (config.keyboard) {
         await target.focus();
         await page.keyboard.press(config.action === 'roll' ? 'Enter' : ' ');
+      } else if (config.action === 'roll') {
+        const gap = await diceGap();
+        await page.mouse.click(gap.x, gap.y);
       } else await target.click();
       await expect.poll(() => writes.length).toBe(1);
       expect(writes).toEqual([{ version: 0, action: config.action }]);
@@ -168,8 +263,8 @@ for (const config of [
         'aria-busy',
         'true',
       );
-      await expect(page.locator('[data-dice-action="roll"]')).toHaveCount(0);
-      await expect(cube).toHaveAttribute('aria-disabled', 'true');
+      await expect(page.locator('dialog:modal')).toHaveCount(0);
+      await expect(cube).toHaveCSS('pointer-events', 'none');
       release();
       await expect(page.locator('.play-workspace')).toHaveAttribute(
         'aria-busy',
@@ -225,13 +320,92 @@ for (const reason of [
     saved.position.gnubg_match_id = bytes.toString('base64');
     await page.reload();
     await page.locator('#workspace-tab-play').click();
-    const toolbar = page.getByTestId('play-board-toolbar');
-    const double = toolbar.getByRole('button', { name: 'Double', exact: true });
-    await expect(double).toBeVisible();
-    await expect(double).toBeDisabled();
-    await expect(double).toHaveAccessibleDescription(reason.text);
-    await expect(toolbar.locator('.play-double-unavailable')).toHaveText(
-      reason.text,
-    );
+    const cube = page.locator('.play-board [data-cube]');
+    await expect(cube).toHaveAttribute('aria-disabled', 'true');
+    await cube.dispatchEvent('click');
+    await expect(cube).toHaveAccessibleDescription(reason.text);
+    await expect(
+      page
+        .getByTestId('play-board-toolbar')
+        .locator('.play-double-unavailable'),
+    ).toHaveText(reason.text);
     expect(writes).toEqual([]);
   });
+
+for (const action of ['roll', 'double'] as const) {
+  test(`Tutor can intercept a direct board ${action} before it is played`, async ({
+    page,
+  }) => {
+    const { historyFixture, historySessionId } =
+      await import('./play-history-review-helpers');
+    const { saved, writes } = await historyFixture(page);
+    Object.assign(saved, {
+      phase: 'roll',
+      play_mode: 'tutor',
+      can_double: true,
+    });
+    saved.position.dice = [];
+    const decisionId = '7216ea44-6ad0-4e8c-a543-f809a63de1d1';
+    await page.route(
+      `**/api/play/sessions/${historySessionId}/actions`,
+      (route) => {
+        const choice = route.request().postDataJSON();
+        writes.push(choice);
+        if (choice.decision_id) {
+          Object.assign(saved, {
+            version: 9,
+            phase: 'move',
+            can_double: false,
+            pending_decision: null,
+            position: { ...saved.position, dice: [5, 2] },
+          });
+        } else {
+          Object.assign(saved, {
+            version: 8,
+            pending_decision: {
+              id: decisionId,
+              action,
+              original_action: action,
+              warning: true,
+              revealed: false,
+              assisted: false,
+              retry_count: 0,
+              alternatives: [],
+              attempts: [],
+              committed: false,
+            },
+          });
+        }
+        return route.fulfill({ json: saved });
+      },
+    );
+    await page.reload();
+    await page.locator('#workspace-tab-play').click();
+    const cube = page.locator('.play-board [data-cube]');
+    await (action === 'roll' ? botDice(page).last() : cube).click();
+    const warning = page.getByRole('alertdialog', {
+      name: 'Tutor',
+      exact: true,
+    });
+    await expect(warning).toBeVisible();
+    await expect(page.locator('.play-board')).toHaveAttribute(
+      'data-play-phase',
+      'roll',
+    );
+    await expect(page.locator('.play-die-rolling')).toHaveCount(0);
+    await expect(botDice(page)).toHaveCount(0);
+    await expect(cube).toHaveCSS('pointer-events', 'none');
+    expect(writes).toEqual([{ version: 7, action }]);
+    await warning
+      .getByRole('button', { name: 'Play anyway', exact: true })
+      .click();
+    await expect(page.locator('.play-board')).toHaveAttribute(
+      'data-play-phase',
+      'move',
+    );
+    expect(writes).toEqual([
+      { version: 7, action },
+      { version: 8, action, decision_id: decisionId },
+    ]);
+  });
+}

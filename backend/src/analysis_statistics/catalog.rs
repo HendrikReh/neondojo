@@ -306,6 +306,7 @@ fn accumulate_errors(errors: &mut [PlayerErrorBreakdown; 2], d: &crate::match_an
         "doubtful" => c.doubtful += 1,
         "bad" => c.bad += 1,
         "very_bad" => c.very_bad += 1,
+        "blunder" => c.blunder += 1,
         _ => {}
     }
 }

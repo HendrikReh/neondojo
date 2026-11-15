@@ -1,19 +1,16 @@
 import { expect, test } from './test';
 
-test('all-games review follows the listed checker and cube errors across games', async ({
-  page,
-}) => {
-  test.setTimeout(120_000);
+test('all-games Cube review wraps across games', async ({ page }) => {
+  test.setTimeout(90_000);
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
   await page.goto('/');
   await page
     .getByLabel('Match file', { exact: true })
     .setInputFiles('../backend/tests/fixtures/WC2014.xg');
-  await page.getByRole('tab', { name: 'Errors', exact: true }).click();
+  await page.getByRole('tab', { name: 'Cube', exact: true }).click();
   await page
     .getByLabel('Filter analysis by player', { exact: true })
     .selectOption('0');
-  const table = page.locator('.match-moves-table');
   const board = page.getByRole('group', { name: 'Review errors' });
   const heading = page.locator('.board-heading');
   const next = board.getByRole('button', { name: 'Next error', exact: true });
@@ -24,28 +21,36 @@ test('all-games review follows the listed checker and cube errors across games',
   await expect(page.getByLabel('Filter by game', { exact: true })).toHaveValue(
     '',
   );
-  const first = table.locator('tbody tr').first();
-  const second = table.locator('tbody tr').nth(1);
-  await expect(first).toContainText('Checker');
-  await expect(second).toContainText('Cube');
   await expect(heading).toContainText('Game 1');
-  await next.click();
-  await expect(page.getByLabel('Select game', { exact: true })).toHaveValue(
-    '2',
+  await expect(board).toContainText(
+    'All games in this analysis · Akiko Yazawa',
   );
-  await expect(board).toContainText(/Error 1 of \d+/);
-  await expect(first).toHaveAttribute('aria-current', 'true');
+  await expect(board.locator('.board-error-count')).toHaveText(
+    /^Errors: [1-9]/,
+  );
   await next.click();
   await expect(page.getByLabel('Select game', { exact: true })).toHaveValue(
     '3',
   );
-  await expect(board).toContainText(/Error 2 of \d+/);
-  await expect(second).toHaveAttribute('aria-current', 'true');
-  await previous.click();
-  await expect(page.getByLabel('Select game', { exact: true })).toHaveValue(
-    '2',
-  );
   await expect(board).toContainText(/Error 1 of \d+/);
+  const responseOptions = page.getByRole('region', { name: 'Cube evaluation' });
+  await expect(responseOptions).toContainText(
+    'Values from Akiko Yazawa’s perspective',
+  );
+  await expect(
+    responseOptions.getByRole('row', { name: /Take.*-0\.942/ }),
+  ).toBeVisible();
+  await expect(
+    responseOptions.getByRole('row', { name: /Pass.*-1\.000/ }),
+  ).toBeVisible();
+  await previous.click();
+  await expect(page.getByLabel('Select game', { exact: true })).not.toHaveValue(
+    '3',
+  );
+  await next.click();
+  await expect(page.getByLabel('Select game', { exact: true })).toHaveValue(
+    '3',
+  );
   await page.getByLabel('Filter by game', { exact: true }).selectOption('3');
   await expect(board).toContainText('Game 3');
   await next.click();
@@ -53,33 +58,9 @@ test('all-games review follows the listed checker and cube errors across games',
     '3',
   );
   await expect(board).toContainText('Error 1 of 1');
-
-  await page.getByLabel('Filter by game', { exact: true }).selectOption('');
-  await page
-    .getByLabel('Filter analysis by player', { exact: true })
-    .selectOption('');
-  await page.locator('.match-analysis-filters input[type=checkbox]').uncheck();
-  await table.locator('tbody tr').nth(49).getByRole('button').click();
-  await expect(board).toContainText(/Decision 50 of [\d,]+/, { timeout: 25_000 });
-  await board
-    .getByRole('button', { name: 'Next decision', exact: true })
-    .click();
-  await expect(board).toContainText(/Decision 51 of [\d,]+/, { timeout: 25_000 });
-  await expect(table.locator('tbody tr').first()).toHaveAttribute(
-    'aria-current',
-    'true',
-  );
-  await board
-    .getByRole('button', { name: 'Previous decision', exact: true })
-    .click();
-  await expect(board).toContainText(/Decision 50 of [\d,]+/, { timeout: 25_000 });
-  await expect(table.locator('tbody tr').nth(49)).toHaveAttribute(
-    'aria-current',
-    'true',
-  );
 });
 
-test('imported decisions work in the error list and next-error navigation without a local job', async ({
+test('imported decisions work in error navigation without a local job', async ({
   page,
 }) => {
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
@@ -192,27 +173,17 @@ test('imported decisions work in the error list and next-error navigation withou
     match.id,
   );
   await page.goto('/');
+  await page.getByRole('tab', { name: 'Cube', exact: true }).click();
   const next = page.getByRole('button', { name: 'Next error', exact: true });
   const counter = page.getByRole('group', { name: 'Review errors' });
   await expect(next).toBeEnabled();
-  await expect(page.locator('.match-moves-table tbody tr')).toHaveCount(2);
-  await expect(
-    page.locator('.match-moves-table tbody tr').first(),
-  ).toContainText('eXtreme Gammon');
-  await expect(
-    page.locator('.match-moves-table .equity-loss').first(),
-  ).toHaveText('0.235');
+  await expect(counter).toContainText('Errors: 2');
   await next.click();
   await expect(page.locator('.board-heading')).toContainText('Move 2');
   await expect(counter).toContainText('Error 1 of 2');
-  await next.click();
-  await expect(page.locator('.board-heading')).toContainText('Move 4');
-  await expect(counter).toContainText('Error 2 of 2');
-  await next.click();
-  await expect(page.locator('.board-heading')).toContainText('Move 2');
-  await page
-    .getByLabel('Filter analysis by decision', { exact: true })
-    .selectOption('cube');
+  const comparison = page.locator('.board-panel .board-decision-comparison');
+  await expect(comparison).toContainText('eXtreme Gammon');
+  await expect(comparison).toContainText('Loss 0.235');
   const board = page.locator('.board-panel');
   await expect(
     board.getByRole('group', { name: 'Review errors' }),
@@ -235,19 +206,19 @@ test('imported decisions work in the error list and next-error navigation withou
     .getByRole('combobox')
     .first()
     .selectOption('0');
-  await expect(page.locator('.match-moves-table tbody tr')).toHaveCount(0);
   await expect(next).toBeDisabled();
   await expect(counter).toContainText('No decisions match these filters');
   await counter
     .getByRole('button', { name: 'Reset selection filters' })
     .click();
-  await expect(page.locator('.match-moves-table tbody tr')).toHaveCount(2);
+  await expect(next).toBeEnabled();
+  await expect(counter).toContainText(/Errors: 2|Error [12] of 2/);
   await expect(page.locator('.board-heading')).toContainText('Move 4');
 });
 
-test('real XG review opens checker and cube decisions with original source and compact desktop comparisons', async ({
+test('real XG review opens checker and cube decisions with original source and responsive desktop comparisons', async ({
   page,
-}) => {
+}, testInfo) => {
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
   const { readFileSync } = await import('node:fs');
   const response = await page.request.post('/api/imports', {
@@ -277,21 +248,17 @@ test('real XG review opens checker and cube decisions with original source and c
   const checker = items.find((row: { kind: string }) => row.kind === 'checker');
   expect(checker).toBeTruthy();
   await page.goto('/');
-  await page.locator('.match-analysis-filters input[type=checkbox]').uncheck();
-  const table = page.locator('.match-moves-table');
-  await expect(table.locator('tbody tr').first()).toBeVisible();
-  const checkerRow = table
-    .locator('tbody tr')
-    .filter({ hasText: checker.played })
-    .filter({ hasText: 'eXtreme Gammon' })
-    .first();
-  await checkerRow.getByRole('button').click();
+  await page
+    .locator(
+      `.analysis-workspace .move-history-row[data-position-id="${checker.position_uuid}"]`,
+    )
+    .click();
   await expect(page.locator('.board-heading')).toContainText(
     `Zug ${checker.checker_no}`,
   );
   await expect(
-    page.getByLabel('Angezeigte Analyse', { exact: true }).locator('option[value^="imported:"]'),
-  ).toHaveCount(1);
+    page.getByLabel('Angezeigte Analyse', { exact: true }),
+  ).toContainText('Importiert');
   await expect(
     page.locator(
       '.analysis-panel > .source-analysis .candidate-comparison-table .candidate-marker-played',
@@ -310,8 +277,10 @@ test('real XG review opens checker and cube decisions with original source and c
   await expect(
     page.locator('.board-shell a[href*="bgblitz.com/themes.html"]'),
   ).toHaveCount(0);
-  const comparison = page.locator('.candidate-comparison-table');
-  let overviewTableWidth: number | undefined;
+  const comparison = page.locator(
+    '.analysis-panel > .source-analysis .candidate-comparison-table',
+  );
+  let previousTableWidth: number | undefined;
   let previousBoardWidth: number | undefined;
   const boardWidth = () =>
     page
@@ -325,7 +294,6 @@ test('real XG review opens checker and cube decisions with original source and c
     await page.setViewportSize(viewport);
     if (previousBoardWidth !== undefined) {
       await expect.poll(boardWidth).toBeGreaterThan(previousBoardWidth + 50);
-      expect(await boardWidth()).toBeLessThan(previousBoardWidth + 140);
     }
     previousBoardWidth = await boardWidth();
     expect(
@@ -347,28 +315,55 @@ test('real XG review opens checker and cube decisions with original source and c
       `candidate table at ${viewport.width}px`,
     ).toBeLessThanOrEqual(candidateWidth.available);
     const width = (await comparison.boundingBox())!.width;
-    overviewTableWidth ??= width;
-    expect(width, `candidate table at ${viewport.width}px`).toBeCloseTo(
-      overviewTableWidth,
-      0,
-    );
+    if (previousTableWidth !== undefined)
+      expect(width).toBeGreaterThanOrEqual(previousTableWidth - 1);
+    previousTableWidth = width;
   }
   const cubeReviews = await page.request.get(
     `/api/matches/${match.id}/review-decisions?game_no=1&kind=cube&errors_only=false&limit=100`,
   );
   const { items: cubes } = await cubeReviews.json();
   expect(cubes.length).toBeGreaterThan(0);
+  await page.getByRole('tab', { name: 'Cube', exact: true }).click();
+  const nextDecision = page.getByRole('button', {
+    name: 'Nächste Entscheidung',
+    exact: true,
+  });
   await page.locator('.match-analysis-filters input[type=checkbox]').uncheck();
-  await page
-    .getByLabel('Analyse nach Entscheidung filtern', { exact: true })
-    .selectOption('cube');
-  await expect(table.locator('tbody tr').first()).toBeVisible();
-  await table.locator('tbody tr').first().getByRole('button').click();
+  await expect(nextDecision).toBeEnabled();
+  await nextDecision.click();
   await expect(page.locator('.board-panel [data-dice]')).toHaveAttribute(
     'data-dice',
     '0-0',
   );
   await expect(page.getByRole('dialog')).toHaveCount(0);
+  const options = page.getByRole('region', { name: 'Cube-Bewertung' });
+  await expect(
+    options.getByRole('row', { name: /Nicht doppeln/ }),
+  ).toBeVisible();
+  await expect(
+    options.getByRole('row', { name: /Doppeln \/ annehmen/ }),
+  ).toBeVisible();
+  await expect(
+    options.getByRole('row', { name: /Doppeln \/ passen/ }),
+  ).toBeVisible();
+  await expect(options).toContainText(
+    `Werte aus Sicht von ${cubes[0].player === 0 ? match.white : match.black}`,
+  );
+  for (const [width, height] of [
+    [1800, 1169],
+    [2560, 1440],
+    [3840, 2160],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await expect(options).toBeInViewport();
+    const pane = (await options.boundingBox())!;
+    const board = (await page.locator('.board-panel').boundingBox())!;
+    expect(pane.x).toBeGreaterThanOrEqual(board.x + board.width);
+    await page.screenshot({
+      path: testInfo.outputPath(`cube-evaluation-${width}.png`),
+    });
+  }
   await page.getByRole('button', { name: 'Cube-Details', exact: true }).click();
   await expect(
     page.getByRole('dialog').locator('.imported-move-analysis'),
@@ -391,33 +386,83 @@ test('real XG review opens checker and cube decisions with original source and c
   ).toHaveCount(0);
 });
 
-test('a late review page jumps straight to its neighboring page', async ({ page }) => {
-  test.setTimeout(120_000);
+test('the board crosses a late review page without scanning the earlier pages again', async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  const source = await page.request.post('/api/imports', {
+    multipart: {
+      file: {
+        name: 'page-boundary.xg',
+        mimeType: 'application/octet-stream',
+        buffer: (await import('node:fs')).readFileSync(
+          '../backend/tests/fixtures/WC2014.xg',
+        ),
+      },
+    },
+  });
+  expect(source.ok(), await source.text()).toBe(true);
+  const { match } = await source.json();
+  const pageSize = 50;
+  const startPage = 3;
+  const reviews = await page.request.get(
+    `/api/matches/${match.id}/review-decisions?kind=cube&errors_only=false&page=${startPage}&limit=${pageSize}`,
+  );
+  expect(reviews.ok(), await reviews.text()).toBe(true);
+  const { items } =
+    (await reviews.json()) as import('../src/review-decisions-api').ReviewDecisionPage;
+  expect(items).toHaveLength(pageSize);
+  const anchorIndex = pageSize - 3;
+  const anchor = items[anchorIndex];
+  const game = await (
+    await page.request.get(
+      `/api/positions?match_id=${match.id}&game_no=${anchor.game_no}&limit=100`,
+    )
+  ).json();
+  const ply = anchor.next_checker_no ?? anchor.checker_no;
+  expect(ply).toBeTruthy();
+  const position = game.items.find((move: { ply: number }) => move.ply === ply);
+  expect(position).toBeTruthy();
+  await page.addInitScript(
+    ({ matchId, gameNo }) => {
+      localStorage.setItem(
+        'bgtutor.workspace',
+        JSON.stringify({ matchId, gameNo }),
+      );
+    },
+    { matchId: match.id, gameNo: anchor.game_no },
+  );
   await page.goto('/');
-  await page.getByLabel('Match file', { exact: true })
-    .setInputFiles('../backend/tests/fixtures/WC2014.xg');
-  const setup = page.getByRole('button', { name: 'Analyze game or match …' });
-  await setup.click();
-  await page.getByLabel('Analysis scope', { exact: true }).selectOption('match');
-  await setup.click();
+  await page
+    .locator(
+      `.analysis-workspace .move-history-row[data-position-id="${position.id}"]`,
+    )
+    .click();
+  await page.getByRole('tab', { name: 'Cube', exact: true }).click();
   await page.locator('.match-analysis-filters input[type=checkbox]').uncheck();
-  const table = page.locator('.match-moves-table');
   const board = page.getByRole('group', { name: 'Review errors' });
-  const panel = page.locator('.match-analysis');
-  const pagination = panel.locator('.search-pagination');
-  const last = pagination.getByRole('button', { name: 'Last', exact: true });
-  await last.click();
-  await expect(last).toBeDisabled({ timeout: 30_000 });
-  await pagination.getByRole('button', { name: 'Previous page' }).click();
-  await expect(last).toBeEnabled({ timeout: 30_000 });
-  const rows = table.locator('tbody tr');
-  await expect(rows).toHaveCount(50);
-  await rows.last().getByRole('button').first().click();
-  await expect(board).toContainText(/Decision [\d,]+ of [\d,]+/);
-  const previous = (await board.locator('.board-error-count').innerText()).match(/Decision ([\d,]+) of/);
-  const ordinal = Number(previous?.[1].replaceAll(',', ''));
-  expect(ordinal).toBeGreaterThan(200);
+  const next = board.getByRole('button', {
+    name: 'Next decision',
+    exact: true,
+  });
+  const previous = board.getByRole('button', {
+    name: 'Previous decision',
+    exact: true,
+  });
+  const ordinal = startPage * pageSize;
+  await next.click();
+  const count = board.locator('.board-error-count');
+  await expect(count).toHaveText(/^Decision \d+ of /);
+  const current = Number(
+    (await count.innerText()).match(/^Decision (\d+) of /)?.[1],
+  );
+  expect(current).toBeGreaterThanOrEqual(ordinal - 3);
+  expect(current).toBeLessThanOrEqual(ordinal);
+  for (let step = current + 1; step <= ordinal; step++) {
+    await next.click();
+    await expect(count).toContainText(`Decision ${step} of`);
+  }
 
   const queries: URLSearchParams[] = [];
   const collect = (request: import('@playwright/test').Request) => {
@@ -426,10 +471,19 @@ test('a late review page jumps straight to its neighboring page', async ({ page 
       queries.push(url.searchParams);
   };
   page.on('request', collect);
-  await board.getByRole('button', { name: 'Next decision', exact: true }).click();
-  await expect(board).toContainText(`Decision ${ordinal + 1} of`, { timeout: 30_000 });
+  await next.click();
+  await expect(board).toContainText(`Decision ${ordinal + 1} of`);
+  await previous.click();
+  await expect(board).toContainText(`Decision ${ordinal} of`);
   page.off('request', collect);
-  expect(queries.length).toBeGreaterThan(0);
-  expect(queries.length).toBeLessThanOrEqual(2);
-  expect(queries.every((query) => query.get('page') === String(ordinal / 50 + 1))).toBe(true);
+  expect(queries.map((query) => query.get('page'))).toContain(
+    String(startPage + 1),
+  );
+  expect(
+    queries.every((query) =>
+      [String(startPage), String(startPage + 1)].includes(
+        query.get('page') ?? '',
+      ),
+    ),
+  ).toBe(true);
 });

@@ -51,7 +51,8 @@ for (const config of [
       winner: null,
       opening: null,
     };
-    let writes = 0;
+    let finishOpening = () => {};
+    const continued = new Promise<void>((resolve) => (finishOpening = resolve));
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.addInitScript(
       ({ id, theme }) => {
@@ -66,8 +67,18 @@ for (const config of [
     await page.route(`**/api/play/sessions/${id}`, (route) =>
       route.fulfill({ json: state }),
     );
-    await page.route(`**/api/play/sessions/${id}/actions`, (route) => {
-      ++writes;
+    await page.route(`**/api/play/sessions/${id}/actions`, async (route) => {
+      if (route.request().postDataJSON().action === 'start_opening_move') {
+        await continued;
+        return route.fulfill({
+          json: {
+            ...state,
+            version: 2,
+            phase: 'move',
+            position: { ...state.position, player: config.human },
+          },
+        });
+      }
       state = {
         ...state,
         version: 1,
@@ -88,15 +99,11 @@ for (const config of [
     await page.goto('/');
     await page.getByRole('tab', { name: 'Playing', exact: true }).click();
     const board = page.locator('.play-board svg.board');
-    await expect(board.locator('[data-opening-die="pending"]')).toHaveCount(2);
-    await expect(page.locator('.play-opening [data-opening-die]')).toHaveCount(
-      0,
-    );
-    await page
-      .getByRole('button', { name: 'Roll one die each', exact: true })
-      .click();
     await expect(board.locator('.play-die-rolling')).toHaveCount(2);
-    await expect(page.locator('.play-opening-winner')).toBeVisible();
+    await expect(page.locator('dialog:modal')).toHaveCount(0);
+    await expect(
+      board.locator('[data-opening-die="6"] [data-rolling="false"]'),
+    ).toBeVisible();
     await expect(
       board.locator('[data-opening-player="0"] [data-opening-die]'),
     ).toHaveAttribute('data-opening-die', '6');
@@ -132,16 +139,10 @@ for (const config of [
     expect(
       config.direction === 'right' ? white!.x > black!.x : white!.x < black!.x,
     ).toBe(true);
-    await expect(page.locator('.play-opening-ties li')).toHaveCount(1);
     await page.screenshot({
       path: test.info().outputPath('opening-on-board.png'),
       fullPage: true,
     });
-    await page.reload();
-    await page.getByRole('tab', { name: 'Playing', exact: true }).click();
-    await expect(
-      board.locator('[data-opening-player="0"] [data-opening-die]'),
-    ).toHaveAttribute('data-opening-die', '6');
-    await expect(board.locator('.play-die-rolling')).toHaveCount(0);
-    expect(writes).toBe(1);
+    finishOpening();
+    await expect(board.locator('[data-opening-die]')).toHaveCount(0);
   });

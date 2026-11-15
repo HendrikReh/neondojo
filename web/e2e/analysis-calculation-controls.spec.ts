@@ -1,6 +1,14 @@
+import {
+  openFullMatchAnalysis,
+  openMatchAnalysisOptions,
+  openPositionCalculation,
+  submitFullMatchAnalysis,
+} from './analysis-controls';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import type { Job } from '../src/api';
+import { defaultConfiguration } from '../src/configuration-model';
+import { profileBackend } from './profile-backend';
 import { expect, test } from './test';
 
 test('imported candidates come first and position progress stays in the workspace header', async ({
@@ -32,7 +40,11 @@ test('imported candidates come first and position progress stays in the workspac
     page.getByLabel('Displayed analysis', { exact: true }),
   ).toBeVisible();
 
-  const recalculate = panel.getByRole('button', {
+  await expect(panel.getByRole('button', { name: /Recalculate/ })).toHaveCount(
+    0,
+  );
+  await openMatchAnalysisOptions(page);
+  const recalculate = header.getByRole('button', {
     name: 'Recalculate position …',
     exact: true,
   });
@@ -117,10 +129,7 @@ test('the previous engine result survives a pending rerun and position restorati
       `(;GM[6]PW[Rerun ${crypto.randomUUID()}]PB[Opponent]MI[length:7];W[31hefe];B[42qusu])`,
     ),
   });
-  const open = () =>
-    page
-      .getByRole('button', { name: 'Recalculate position …', exact: true })
-      .click();
+  const open = () => openPositionCalculation(page);
   const dialog = page.getByRole('dialog', {
     name: 'Recalculate position',
     exact: true,
@@ -176,10 +185,9 @@ test('the previous engine result survives a pending rerun and position restorati
   await expect(result).toHaveAttribute('aria-description', /0-ply/);
 });
 
-test('game and match settings close on start and progress stays in the command bar', async ({
+test('only the header starts the selected game and the library starts the entire match', async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
   await page.goto('/');
   await page.getByLabel('Match file', { exact: true }).setInputFiles({
@@ -190,49 +198,42 @@ test('game and match settings close on start and progress stays in the command b
     ),
   });
   const header = page.locator('.analysis-commandbar');
-  const settings = header.getByRole('button', {
-    name: 'Analyze game or match …',
+  const startGame = header.getByRole('button', {
+    name: 'Analyze game',
     exact: true,
   });
-  const scope = header.getByLabel('Analysis scope', { exact: true });
-  const engine = header.getByLabel('Analysis engine', { exact: true });
-  const depth = header.getByLabel('Match analysis depth', { exact: true });
-  await expect(settings).toHaveAttribute('aria-expanded', 'false');
-  await expect(scope).toBeHidden();
+  await expect(startGame).toBeEnabled();
+  await expect(
+    header.getByRole('button', { name: /Analyze entire match/ }),
+  ).toHaveCount(0);
+  const gameRequest = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST' &&
+      /^\/api\/matches\/[^/]+\/analysis$/.test(
+        new URL(response.url()).pathname,
+      ),
+  );
+  await startGame.click();
+  const gameResponse = await gameRequest;
+  expect(gameResponse.ok()).toBe(true);
+  expect(gameResponse.request().postDataJSON().game_no).toBe(1);
 
-  for (const [width, height] of [
-    [1800, 1169],
-    [2560, 1440],
-    [3840, 2160],
-  ]) {
-    await page.setViewportSize({ width, height });
-    await expect(settings).toBeInViewport();
-    await settings.click();
-    await expect(scope).toBeInViewport();
-    await expect(engine).toBeInViewport();
-    await expect(depth).toBeInViewport();
-    expect(
-      await page.evaluate(() => document.documentElement.scrollWidth),
-    ).toBeLessThanOrEqual(width);
-    await settings.click();
-  }
-  await page.setViewportSize({ width: 1800, height: 1169 });
-  const progress = header.locator('.match-analysis-progress');
-  for (const [value, label, completed] of [
-    ['game', 'Analyze game', 'Game analysis completed'],
-    ['match', 'Analyze entire match', 'Match analysis complete'],
-  ]) {
-    await settings.click();
-    await scope.selectOption(value);
-    await depth.selectOption('0');
-    await header.getByRole('button', { name: label, exact: true }).click();
-    await expect(settings).toBeFocused();
-    await expect(settings).toHaveAttribute('aria-expanded', 'false');
-    await expect(scope).toBeHidden();
-    await expect(progress).toContainText(completed, { timeout: 25_000 });
-  }
+  const dialog = await openFullMatchAnalysis(page);
+  await expect(dialog.getByLabel('Match analysis depth')).toBeVisible();
+  await expect(
+    dialog.getByRole('status', { name: 'Analysis time estimate' }),
+  ).toBeVisible();
+  const response = await submitFullMatchAnalysis(page, dialog);
+  expect(response.ok()).toBe(true);
+  expect(response.request().postDataJSON().game_no).toBeUndefined();
+  await expect(header.locator('.match-analysis-progress')).toContainText(
+    'Match analysis complete',
+    { timeout: 30_000 },
+  );
   await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
-  await expect(progress).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Analysis statistics', exact: true }),
+  ).toBeVisible();
 });
 
 test('reload resumes native bulk match analysis without submitting new jobs', async ({
@@ -386,4 +387,62 @@ test('reload resumes native bulk match analysis without submitting new jobs', as
   ).toBe(0);
   const persistedIds = persisted.stdout.trim().split('\n');
   expect(persistedIds.sort()).toEqual(jobs.map((job) => job.id).sort());
+});
+
+test('automatically opens match statistics with the engine that produced them', async ({
+  page,
+}) => {
+  const configuration = structuredClone(defaultConfiguration);
+  configuration.analysis.engine = 'bgsage';
+  await profileBackend(page, { configuration });
+  await page.goto('/');
+  await page.getByLabel('Match file', { exact: true }).setInputFiles({
+    name: 'show-match-results.sgf',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.from(
+      `(;GM[6]PW[Show results ${crypto.randomUUID()}]PB[Opponent]MI[length:7];W[31hefe];B[42qusu])`,
+    ),
+  });
+  const selection = page.getByLabel('Displayed analysis', { exact: true });
+  await expect(selection).toHaveValue('');
+  const matchId = await page.locator('.analysis-heading').getAttribute('data-match-id');
+  const gameResponse = await page.request.post(`/api/matches/${matchId}/analysis`, {
+    data: { engine_id: 'gnubg', plies: 0, game_no: 1 },
+  });
+  expect(gameResponse.ok()).toBe(true);
+  const gameJob = await gameResponse.json();
+  await expect.poll(async () =>
+    (await (await page.request.get(`/api/jobs/${gameJob.id}`)).json()).status,
+  ).toBe('completed');
+  const dialog = await openFullMatchAnalysis(page);
+  const engine = dialog.getByLabel('Analysis engine', { exact: true });
+  await expect(engine).toHaveValue('bgsage');
+  await engine.selectOption('gnubg');
+  await dialog.getByLabel('Match analysis depth', { exact: true }).selectOption('0');
+  const [response] = await Promise.all([
+    page.waitForResponse((response) =>
+      response.request().method() === 'POST' &&
+      /^\/api\/matches\/[^/]+\/analysis$/.test(new URL(response.url()).pathname),
+    ),
+    dialog.getByRole('button', { name: 'Analyze entire match', exact: true }).click(),
+  ]);
+  expect(response.status()).toBe(202);
+  const job = await response.json();
+  await expect(dialog).toBeHidden({ timeout: 12_000 });
+  const statistics = page.getByRole('tabpanel', { name: 'Statistics', exact: true });
+  await expect(statistics).toBeVisible();
+  await expect(statistics).toHaveAttribute('data-job-id', job.id);
+  await expect(statistics).toContainText('2 of 2 checker moves analyzed');
+  await expect(selection).toHaveValue(`job:${job.id}`);
+
+  // Reopening the analysis dialog defaults to Open Sage again, but the GNUbg
+  // result must still be accessible there without restarting the calculation.
+  await selection.selectOption(`job:${gameJob.id}`);
+  await expect(statistics).not.toHaveAttribute('data-job-id', job.id);
+  await openFullMatchAnalysis(page);
+  await expect(engine).toHaveValue('bgsage');
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Show results', exact: true }).click();
+  await expect(selection).toHaveValue(`job:${job.id}`);
+  await expect(statistics).toHaveAttribute('data-job-id', job.id);
 });

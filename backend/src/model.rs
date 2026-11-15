@@ -206,9 +206,15 @@ pub struct PlayerAnalysisSummary {
     pub doubtful: i32,
     pub bad: i32,
     pub very_bad: i32,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub blunder: i32,
     /// Sum of normalized equity losses, not a performance rating (PR).
     pub checker_equity_loss: f64,
     pub cube_equity_loss: f64,
+}
+
+fn is_zero(value: &i32) -> bool {
+    *value == 0
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -263,36 +269,24 @@ pub struct MoveAnalysisPage {
     pub next_cursor: Option<i64>,
 }
 
-/// Native decision severity, using the saved GNUbg normalized loss categories.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema)]
+/// Decision severity for normalized equity loss. Existing category identifiers are retained.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum MoveSeverity {
     None,
     Doubtful,
     Bad,
+    Blunder,
     VeryBad,
 }
 
 impl MoveSeverity {
-    pub(crate) const DOUBTFUL_MIN_LOSS: f64 = 0.04;
-
-    pub(crate) fn from_normalized_loss(loss: f64) -> Self {
-        if loss >= 0.16 {
-            Self::VeryBad
-        } else if loss >= 0.08 {
-            Self::Bad
-        } else if loss >= Self::DOUBTFUL_MIN_LOSS {
-            Self::Doubtful
-        } else {
-            Self::None
-        }
-    }
-
     pub fn as_str(self) -> &'static str {
         match self {
             Self::None => "none",
             Self::Doubtful => "doubtful",
             Self::Bad => "bad",
+            Self::Blunder => "blunder",
             Self::VeryBad => "very_bad",
         }
     }

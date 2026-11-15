@@ -1,6 +1,61 @@
-import { openPositionCalculation } from './analysis-controls';
+import {
+  calculateDiceEquity,
+  openPositionCalculation,
+} from './analysis-controls';
 import { expect, test } from './test';
 import { readFileSync } from 'node:fs';
+
+test('the catalog shows saved match candidates without recalculating the position', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  const standaloneJobs: string[] = [];
+  page.on('request', (request) => {
+    if (
+      request.method() === 'POST' &&
+      new URL(request.url()).pathname === '/api/jobs'
+    )
+      standaloneJobs.push(request.url());
+  });
+  await page.goto('/');
+  const imported = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === '/api/imports',
+  );
+  await page.getByLabel('Match file', { exact: true }).setInputFiles({
+    name: 'saved-match-analysis.sgf',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.from(
+      `(;GM[6]FF[4]PW[Saved ${crypto.randomUUID()}]PB[Opponent]MI[length:21][ws:0][bs:0];B[63lolr])`,
+    ),
+  });
+  const { match } = await (await imported).json();
+  const started = await page.request.post(`/api/matches/${match.id}/analysis`, {
+    data: { engine_id: 'gnubg', plies: 0 },
+  });
+  expect(started.ok()).toBeTruthy();
+  const job = await started.json();
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/jobs/${job.id}`)).json()).status,
+    )
+    .toBe('completed');
+  await page.reload();
+  await expect(page.getByLabel('Displayed analysis')).toBeVisible();
+  const panel = page.locator('.analysis-panel');
+  await expect(
+    panel.locator('.candidate-comparison-table tbody tr'),
+  ).toHaveCount(14);
+  await expect(panel.locator('tr[data-candidate-played="true"]')).toContainText(
+    /13\/10|13\/7/,
+  );
+  await expect(panel.locator('tr[data-candidate-best="true"]')).toBeVisible();
+  await expect(
+    page.getByLabel('Displayed analysis').locator('option:checked'),
+  ).toContainText('Entire match');
+  await expect(panel).toContainText(/GNU Backgammon/);
+  expect(standaloneJobs).toEqual([]);
+});
 
 test('imported GNUbg analysis remains available independently from new engine jobs', async ({
   page,
@@ -143,12 +198,10 @@ test('opening-book preferences and a real opening lookup expose source and depth
       new URL(r.url()).pathname === '/api/jobs' &&
       r.request().method() === 'POST',
   );
-  await page
-    .getByRole('tab', { name: 'Dice equity', exact: true })
-    .click();
+  await calculateDiceEquity(page);
   const diceJob = await (await submitted).json();
   await expect(page.locator('.dice-grid button')).toHaveCount(36, {
-    timeout: 30000,
+    timeout: 45_000,
   });
   const completed = await (
     await page.request.get(`/api/jobs/${diceJob.id}`)

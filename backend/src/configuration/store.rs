@@ -2,6 +2,24 @@ use super::validation::{enum_string, normalize, resources, upgrade_columns};
 use super::*;
 use sqlx::{PgPool, Postgres, Row, Transaction};
 
+pub(crate) async fn error_thresholds<'e>(
+    executor: impl sqlx::PgExecutor<'e>,
+) -> anyhow::Result<ErrorThresholds> {
+    let saved: Option<sqlx::types::Json<Value>> = sqlx::query_scalar(
+        "SELECT current_configuration #> '{analysis,error_thresholds}' FROM configuration_state WHERE singleton",
+    )
+    .fetch_optional(executor)
+    .await?
+    .flatten();
+    if let Some(sqlx::types::Json(value)) = saved {
+        match serde_json::from_value::<ErrorThresholds>(value) {
+            Ok(thresholds) if thresholds.valid() => return Ok(thresholds),
+            _ => tracing::warn!("Invalid saved error thresholds; using defaults"),
+        }
+    }
+    Ok(ErrorThresholds::default())
+}
+
 pub(crate) const LOCK_ID: i64 = 0x424754_50524f4649;
 pub(crate) async fn lock(
     tx: &mut Transaction<'_, Postgres>,
@@ -240,7 +258,7 @@ pub(crate) async fn update(
             || config.analysis.plies != old.analysis.plies
             || config.play.plies != old.play.plies;
         let book = value(&config)["opening_book"] != value(old)["opening_book"];
-        let issues = resources(state_ref, &mut tx, &config, engine, book, Some(old)).await?;
+        let issues = resources(state_ref, &mut tx, &config, engine, book).await?;
         if !issues.is_empty() {
             return Err(ConfigurationError::resources(issues));
         }
@@ -262,7 +280,7 @@ pub(crate) async fn restore(
         before.active_profile.revision,
     )?;
     let config = normalize(before.active_profile.configuration.clone())?;
-    let issues = resources(state_ref, &mut tx, &config, true, true, None).await?;
+    let issues = resources(state_ref, &mut tx, &config, true, true).await?;
     if !issues.is_empty() {
         return Err(ConfigurationError::resources(issues));
     }

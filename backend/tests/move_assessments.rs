@@ -177,7 +177,7 @@ async fn imported_assessments_match_replayed_actual_moves_and_never_cross_games(
     assert_eq!(data["items"][0]["depth_plies"], 2);
     let (_, game2) = get(&app, &uri(id, 2, None)).await;
     assert_eq!(game2["items"][0]["position_id"], p[2].to_string());
-    assert_eq!(game2["items"][0]["severity"], "bad");
+    assert_eq!(game2["items"][0]["severity"], "blunder");
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -202,10 +202,12 @@ async fn selected_native_checkpoint_wins_and_recomputes_documented_thresholds(po
         .unwrap();
     for (loss, severity) in [
         (0.0, "none"),
-        (0.039999, "none"),
-        (0.04, "doubtful"),
-        (0.08, "bad"),
-        (0.16, "very_bad"),
+        (0.004999, "none"),
+        (0.005, "doubtful"),
+        (0.02, "bad"),
+        (0.079999, "bad"),
+        (0.08, "blunder"),
+        (0.12, "very_bad"),
     ] {
         sqlx::query("UPDATE move_analyses SET equity_loss=$2,data=jsonb_set(jsonb_set(jsonb_set(data,'{equity_loss}',to_jsonb($2::float8)),'{played_equity}',to_jsonb(0.5-$2::float8)),'{severity}','\"none\"'::jsonb) WHERE job_id=$1")
             .bind(job.id).bind(loss).execute(&pool).await.unwrap();

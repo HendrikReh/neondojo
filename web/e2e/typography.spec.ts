@@ -1,4 +1,9 @@
-import { openMatchCalculation } from './analysis-controls';
+import { closeSettings } from './settings-actions';
+import {
+  openFullMatchAnalysis,
+  openMatchAnalysisOptions,
+  submitFullMatchAnalysis,
+} from './analysis-controls';
 import { expect, test, type Page } from './test';
 
 test.use({ viewport: { width: 1800, height: 1169 }, actionTimeout: 10000 });
@@ -216,7 +221,7 @@ test('comment editors, modal titles and study questions follow their roles while
     .click();
   await page
     .locator('.settings-dialog')
-    .getByRole('button', { name: 'Opening books', exact: true })
+    .getByRole('button', { name: 'Manage opening books', exact: true })
     .click();
   await expect(page.locator('.library-dialog h2')).toHaveCSS(
     'font-size',
@@ -248,7 +253,7 @@ test('comment editors, modal titles and study questions follow their roles while
     'font-size',
     '14px',
   );
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
   await page
     .getByRole('tab', { name: 'Flashcards & Anki', exact: true })
@@ -297,20 +302,17 @@ test('comment editors, modal titles and study questions follow their roles while
   expect(boardFont).toBe('Arial, sans-serif');
 });
 
-test('analysis statistics and move errors use the shared table roles', async ({
+test('analysis statistics and the move history use shared typography', async ({
   page,
 }) => {
   await fixture(page);
-  await openMatchCalculation(page);
+  await openMatchAnalysisOptions(page);
   await page
-    .getByLabel('Analysis scope', { exact: true })
+    .getByLabel('Result scope', { exact: true })
     .selectOption('match');
-  await page
-    .getByLabel('Match analysis depth', { exact: true })
-    .selectOption('0');
-  await page
-    .getByRole('button', { name: 'Analyze entire match', exact: true })
-    .click();
+  const dialog = await openFullMatchAnalysis(page);
+  await dialog.getByLabel('Match analysis depth', { exact: true }).selectOption('0');
+  await submitFullMatchAnalysis(page, dialog);
   await expect(page.locator('.match-analysis-progress')).toContainText(
     'Match analysis complete',
   );
@@ -328,32 +330,28 @@ test('analysis statistics and move errors use the shared table roles', async ({
     'font-size',
     '11px',
   );
-  await page.getByRole('tab', { name: 'Overview', exact: true }).click();
-  await page
-    .locator('.overview-errors .match-analysis-filters input[type="checkbox"]')
-    .uncheck();
-  const errors = page.locator('.overview-errors .match-moves-table');
-  await expect(errors.locator('tbody td').first()).toHaveCSS(
-    'font-size',
-    '12px',
+  await page.getByRole('tab', { name: 'Cube', exact: true }).click();
+  const errorsPanel = page.getByRole('tabpanel', { name: 'Cube', exact: true });
+  const history = page.locator('.analysis-workspace .moves-panel');
+  await expect(history.locator('.move-history-details > strong').first()).toHaveCSS(
+    'font-size', '12px',
   );
-  await expect(errors.locator('thead th').first()).toHaveCSS(
-    'font-size',
-    '11px',
+  await expect(history.getByRole('combobox', { name: 'Filter moves by severity' })).toHaveCSS(
+    'font-size', '13px',
   );
-  await expect(page.locator('.overview-errors .statistics-reset')).toHaveCSS(
+  await expect(errorsPanel.locator('.statistics-reset')).toHaveCSS(
     'font-size',
     '13px',
   );
   await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
-  for (const locale of ['en', 'de', 'es', 'fr', 'pl', 'it']) {
+  for (const locale of ['en', 'de', 'es', 'fr', 'pl', 'it'] as const) {
     if (locale !== 'en') {
       await page.locator('.settings-trigger').click();
       const settings = page.locator('.settings-dialog');
       await settings.locator('select[id$="-language"]').selectOption(locale);
       await settings.locator('button[type="submit"]').click();
-      await expect(settings).not.toBeVisible();
       await expect(page.locator('html')).toHaveAttribute('lang', locale);
+      await closeSettings(settings, locale);
     }
     for (const viewport of [
       { width: 1800, height: 1169 },

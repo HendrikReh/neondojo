@@ -44,13 +44,10 @@ export default function ProfileSelector({
     // The native modal must leave the top layer before its trigger can focus.
     requestAnimationFrame(() => button.current?.focus());
   };
-  const perform = async (
-    profile: ConfigurationProfile,
-    save: 'keep' | 'save_current',
-  ) => {
+  const perform = async (profile: ConfigurationProfile) => {
     setActionError(undefined);
     try {
-      await config.activateProfile(profile, save);
+      await config.activateProfile(profile, 'keep');
       setPending(undefined);
     } catch (error) {
       setActionError(error);
@@ -62,7 +59,7 @@ export default function ProfileSelector({
     if (config.dirty) {
       setPending(profile);
       setActionError(undefined);
-    } else void perform(profile, 'keep');
+    } else void perform(profile);
   };
   const key = (event: KeyboardEvent) => {
     if (event.key === 'Escape') {
@@ -99,6 +96,7 @@ export default function ProfileSelector({
             <button type="button" onClick={() => void config.refresh()}>
               {t('retry')}
             </button>
+            <button type="button" onClick={onManage}>{t('manage')}</button>
           </>
         ) : (
           <span role="status">{t('loading')}</span>
@@ -221,12 +219,15 @@ export default function ProfileSelector({
           onCancel={() => setPending(undefined)}
           choices={[
             {
-              label: t('saveSwitch'),
-              action: () => void perform(pending, 'save_current'),
+              label: t('manage'),
+              action: () => {
+                setPending(undefined);
+                onManage();
+              },
             },
             {
               label: t('discardSwitch'),
-              action: () => void perform(pending, 'keep'),
+              action: () => void perform(pending),
             },
           ]}
         />

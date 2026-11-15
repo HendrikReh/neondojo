@@ -1,28 +1,31 @@
 import { useI18n, type TranslationKey } from './i18n';
 import { interpolate, type Locale, type TranslationParams } from './i18n-core';
+export const errorThresholdLabels = {
+  questionable: 'severity.doubtful',
+  error: 'severity.bad',
+  blunder: 'severity.blunder',
+  large_blunder: 'severity.very_bad',
+} as const satisfies Record<
+  keyof import('./configuration-model').ErrorThresholds,
+  TranslationKey
+>;
+
 export const severityLabels: Record<string, TranslationKey> = {
   none: 'severity.none',
-  doubtful: 'severity.doubtful',
-  bad: 'severity.bad',
-  very_bad: 'severity.very_bad',
+  doubtful: errorThresholdLabels.questionable,
+  bad: errorThresholdLabels.error,
+  blunder: errorThresholdLabels.blunder,
+  very_bad: errorThresholdLabels.large_blunder,
 };
 
 const rows = {
-  reviewSources: [
-    'Available evaluations · source and depth per decision',
-    'Verfügbare Bewertungen · Quelle und Tiefe je Entscheidung',
-    'Evaluaciones disponibles · fuente y profundidad por decisión',
-    'Évaluations disponibles · source et profondeur par décision',
-    'Dostępne oceny · źródło i głębokość przy każdej decyzji',
-    'Valutazioni disponibili · fonte e profondità per decisione',
-  ],
-  decisionsByMove: [
-    'Decisions by move',
-    'Entscheidungen pro Zug',
-    'Decisiones por jugada',
-    'Décisions par coup',
-    'Decyzje według ruchów',
-    'Decisioni per mossa',
+  closeCheckerReview: [
+    'Close statistics selection',
+    'Statistikauswahl schließen',
+    'Cerrar selección de estadísticas',
+    'Fermer la sélection statistique',
+    'Zamknij wybór ze statystyk',
+    'Chiudi selezione statistica',
   ],
   tab: [
     'Statistics',

@@ -1,3 +1,4 @@
+import { errorGrades } from './move-severity';
 import { useEffect, useRef, useState } from 'react';
 import { request, type Job } from './api';
 import type { components } from './generated-api';
@@ -71,7 +72,7 @@ export function assessmentItems(
           item &&
           typeof item.position_id === 'string' &&
           item.position_id.length > 0 &&
-          ['none', 'doubtful', 'bad', 'very_bad'].includes(item.severity) &&
+          (item.severity === 'none' || errorGrades.includes(item.severity)) &&
           Number.isFinite(item.equity_loss) &&
           item.equity_loss >= 0 &&
           ['native', 'imported'].includes(item.source) &&

@@ -44,25 +44,29 @@ export type OccurrenceSort =
   'occurrence_database' | 'occurrence_game' | 'occurrence_move';
 export const isOccurrenceSort = (sort: LibrarySort): sort is OccurrenceSort =>
   ['occurrence_database', 'occurrence_game', 'occurrence_move'].includes(sort);
-export type LibrarySort =
-  | OccurrenceSort
-  | 'id'
-  | 'name'
-  | 'white'
-  | 'white_pr'
-  | 'black'
-  | 'black_pr'
-  | 'match_length'
-  | 'result'
-  | 'score'
-  | 'played_at'
-  | 'created_at'
-  | 'tournament'
-  | 'format'
-  | 'position_count'
-  | 'analysis_status'
-  | 'tags'
-  | 'comment';
+export const librarySorts = [
+  'occurrence_database',
+  'occurrence_game',
+  'occurrence_move',
+  'id',
+  'name',
+  'white',
+  'white_pr',
+  'black',
+  'black_pr',
+  'match_length',
+  'result',
+  'score',
+  'played_at',
+  'created_at',
+  'tournament',
+  'format',
+  'position_count',
+  'analysis_status',
+  'tags',
+  'comment',
+] as const;
+export type LibrarySort = (typeof librarySorts)[number];
 export type StoredMove = Schema['StoredMove'];
 export type GameDecisions = Schema['GameDecisions'];
 export const movePosition = (move: StoredMove): Position => ({
@@ -113,6 +117,15 @@ export const emptyFilters = (): LibraryFilters => ({
   match_points_min: '',
   match_points_max: '',
 });
+export function normalizeLibraryFilters(
+  filters: LibraryFilters,
+): LibraryFilters {
+  const normalized = { ...filters };
+  for (const key of Object.keys(normalized) as (keyof LibraryFilters)[])
+    normalized[key] = normalized[key].trim();
+  normalized.tag = normalized.tag.replace(/\s+/gu, ' ').toLowerCase();
+  return normalized;
+}
 export function libraryParams(
   databaseId: string,
   filters: LibraryFilters,
@@ -168,12 +181,5 @@ export function readDatabase() {
     return value && /^[a-f0-9-]{36}$/i.test(value) ? value : '';
   } catch {
     return '';
-  }
-}
-export function saveDatabase(id: string) {
-  try {
-    localStorage.setItem('bgtutor.database', id);
-  } catch {
-    /* Read-only storage. */
   }
 }

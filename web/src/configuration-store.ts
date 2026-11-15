@@ -587,24 +587,6 @@ export class ConfigurationStore {
         true,
       );
     });
-  runWithConfiguration = <T>(
-    work: (current: ProfileConfiguration) => Promise<T>,
-  ): Promise<T> =>
-    this.operation(async () => {
-      await this.flushNow();
-      const engineIssues = this.snapshot.availabilityIssues.filter(
-        (issue) =>
-          issue.path.includes('engine') || issue.path.endsWith('.plies'),
-      );
-      if (engineIssues.length)
-        throw new ConfigurationApiError(
-          422,
-          'Configured engine is unavailable',
-          'unavailable_resources',
-          engineIssues,
-        );
-      return work(structuredClone(this.snapshot.current!));
-    });
   refresh = () => {
     if (!this.snapshot.ready) return this.load();
     return this.enqueue(async () => {

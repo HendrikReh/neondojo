@@ -659,17 +659,48 @@ pub async fn move_analyses_filtered(
     game_no: Option<i32>,
     severity: Option<&str>,
 ) -> Result<MoveAnalysisPage> {
+    let thresholds = crate::configuration::store::error_thresholds(pool).await?;
+    move_analyses_with_thresholds(
+        pool,
+        job_id,
+        after,
+        limit,
+        errors_only,
+        player,
+        kind,
+        game_no,
+        severity,
+        thresholds,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn move_analyses_with_thresholds(
+    pool: &PgPool,
+    job_id: Uuid,
+    after: i64,
+    limit: i64,
+    errors_only: bool,
+    player: Option<i32>,
+    kind: Option<&str>,
+    game_no: Option<i32>,
+    severity: Option<&str>,
+    thresholds: crate::configuration::ErrorThresholds,
+) -> Result<MoveAnalysisPage> {
     let mut q = QueryBuilder::<Postgres>::new(
-        "SELECT id,position_uuid,game_no,data FROM move_analyses WHERE job_id=",
+        "SELECT id,position_uuid,game_no,data,grade FROM (SELECT id,position_uuid,game_no,data,",
     );
+    thresholds.push_classification(&mut q, "equity_loss", "data->>'evaluation_status'");
+    q.push(" AS grade FROM move_analyses WHERE job_id=");
+
     q.push_bind(job_id).push(" AND id>").push_bind(after);
     if let Some(game_no) = game_no {
         q.push(" AND game_no=").push_bind(game_no);
     }
     if errors_only {
-        q.push(" AND equity_loss>=")
-            .push(crate::model::MoveSeverity::DOUBTFUL_MIN_LOSS)
-            .push(" AND COALESCE(data->>'evaluation_status','') NOT IN ('forced','unavailable')");
+        q.push(" AND equity_loss >= ")
+            .push_bind(thresholds.questionable);
     }
     if let Some(player) = player {
         q.push(" AND player=").push_bind(player);
@@ -677,22 +708,28 @@ pub async fn move_analyses_filtered(
     if let Some(kind) = kind {
         q.push(" AND kind=").push_bind(kind);
     }
+    q.push(") AS moves WHERE TRUE");
+    if errors_only {
+        q.push(" AND grade <> 'none'");
+    }
     if let Some(severity) = severity {
-        q.push(" AND data->>'severity'=").push_bind(severity);
+        q.push(" AND grade=").push_bind(severity);
     }
     q.push(" ORDER BY id LIMIT ").push_bind(limit + 1);
     let rows = q
-        .build_query_as::<(i64, Option<Uuid>, i32, serde_json::Value)>()
+        .build_query_as::<(i64, Option<Uuid>, i32, serde_json::Value, String)>()
         .fetch_all(pool)
         .await?;
     let mut items: Vec<MoveAnalysis> = rows
         .into_iter()
-        .map(|(id, position_uuid, game_no, data)| {
+        .map(|(id, position_uuid, game_no, data, severity)| {
+            let mut decision: crate::match_analysis::Decision = serde_json::from_value(data)?;
+            decision.severity = severity;
             Ok(MoveAnalysis {
                 id,
                 position_uuid,
                 game_no,
-                decision: serde_json::from_value(data)?,
+                decision,
             })
         })
         .collect::<Result<_>>()?;

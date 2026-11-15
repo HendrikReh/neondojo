@@ -1,12 +1,13 @@
 import Tooltip from './Tooltip';
-import { useOptionalConfiguration } from './ConfigurationProvider';
+import { useWorkspaceDefaults } from './ConfigurationProvider';
 import { Children, type HTMLAttributes, type ReactNode } from 'react';
-import { useProfileValue } from './useProfileValue';
+import { sessionFields, useWorkspaceSession } from './useWorkspaceSession';
 import ActionButton from './ActionButton';
 import ActionIcon from './action-icons';
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -27,11 +28,12 @@ import {
   type LibraryMessageKey,
 } from './library-messages';
 import {
-  acceptsLibraryMatches,
   emptyFilters,
   loadLibrary,
   libraryRowKey,
   isOccurrenceSort,
+  librarySorts,
+  normalizeLibraryFilters,
   type Database,
   type LibraryMatch,
   type LibrarySort,
@@ -54,7 +56,11 @@ import {
 } from './library-columns';
 import { type LibraryDataColumn } from './library-column-preferences';
 import LibraryColumnPicker from './LibraryColumnPicker';
-import LibraryFilters from './LibraryFilters';
+import LibraryImport from './LibraryImport';
+import LibraryFilters, {
+  LibraryFilterChips,
+  type LibraryFilterKey,
+} from './LibraryFilters';
 import LibraryDialogs, { type LibraryDialogState } from './LibraryDialogs';
 import './library.css';
 
@@ -62,6 +68,9 @@ export interface PositionSearchRequest {
   positionId: string;
   token: number;
 }
+
+type SearchPanel = 'filters' | 'notes' | 'position';
+const defaultLibraryFilters = emptyFilters();
 
 const resultKey: Record<string, LibraryMessageKey> = {
   copied: 'copied',
@@ -89,6 +98,7 @@ export default function MatchDatabase({
   onPosition,
   onAnnotation,
   onImport,
+  uploading,
   onOpenPlay,
   onChanged,
   visible,
@@ -111,9 +121,9 @@ export default function MatchDatabase({
   };
   onAnalyzeMatches?: (matches: LibraryMatch[], unavailableCount: number) => void;
   onPosition: (p: Position) => void;
-
   onAnnotation: (hit: AnnotationHit) => void;
-  onImport: () => void;
+  onImport: (databaseId: string) => void;
+  uploading: boolean;
   onOpenPlay?: (id: string, resume?: boolean) => void;
   onChanged: (deletedIds?: string[], validateSelection?: boolean) => void;
 }) {
@@ -138,45 +148,65 @@ export default function MatchDatabase({
     tags: l('tags'),
     comment: l('comment'),
   };
-  const showColumn = (id: LibraryColumn) => columns.activeColumns.some((column) => column === id);
+  const showColumn = (id: LibraryColumn) =>
+    columns.activeColumns.some((column) => column === id);
   const [databases, setDatabases] = useState<Database[]>([]),
     [localRevision, setRevision] = useState(0),
-    [expanded, setExpanded] = useState(false),
+    [searchPanel, setSearchPanel] = useState<SearchPanel>(),
     [databaseError, setDatabaseError] = useState<unknown>(),
     [selectedRows, setSelectedRows] = useState<LibraryMatch[]>([]),
     [dialog, setDialog] = useState<LibraryDialogState>(),
     [result, setResult] = useState<ActionResponse>();
-  const profile = useOptionalConfiguration();
-  const [filters, setAppliedFilters] = useProfileValue<Filters>(
-    (c) => c.library.filters,
-    (c, filters) => ({ ...c, library: { ...c.library, filters } }),
-    emptyFilters,
+  const legacy = useWorkspaceDefaults();
+  const [filters, setAppliedFilters] = useWorkspaceSession(
+    'library.filters',
+    legacy?.library.filters,
+    defaultLibraryFilters,
+    (value) => sessionFields(value, defaultLibraryFilters),
   );
   const columns = useLibraryColumns(visible, !!filters.position_id);
-  const [draftFilters, setDraftFilters] = useState<Filters>(filters);
+  const [filterInput, setFilterInput] = useState<Filters>();
+  const draftFilters = filterInput ?? filters;
   const filterDraft = useRef(draftFilters);
+  const filterToggle = useRef<HTMLButtonElement>(null);
+  const notesToggle = useRef<HTMLButtonElement>(null);
+  const positionToggle = useRef<HTMLButtonElement>(null);
+  const searchId = useId();
+  const selectionHintId = `${searchId}-selection`;
+  const searchPanels = [
+    {
+      id: 'filters',
+      label: l('filters'),
+      icon: 'filter',
+      trigger: filterToggle,
+    },
+    { id: 'notes', label: w('notes'), icon: 'notes', trigger: notesToggle },
+    {
+      id: 'position',
+      label: l('positionSearch'),
+      icon: 'similar',
+      trigger: positionToggle,
+    },
+  ] as const;
   filterDraft.current = draftFilters;
-  // Preserve editable whitespace while canonical filters drive persisted queries.
-  // Only a profile replacement rebases a user's still-editable filter inputs.
-  useEffect(() => {
-    if (!profile?.current) return;
-    filterDraft.current = profile.current.library.filters;
-    setDraftFilters(profile.current.library.filters);
-  }, [profile?.generation, profile?.ready]);
   const setFilters = (next: SetStateAction<Filters>) => {
     const value = typeof next === 'function' ? next(filterDraft.current) : next;
     filterDraft.current = value;
-    setDraftFilters(value);
-    try {
-      setAppliedFilters(value);
-    } catch {
-      // A partially edited invalid field remains a draft until it is valid.
-    }
+    setFilterInput(value);
+    setAppliedFilters(normalizeLibraryFilters(value));
   };
-  const [preferredSort, setSort] = useProfileValue<LibrarySort>(
-    (c) => c.library.sort,
-    (c, sort) => ({ ...c, library: { ...c.library, sort } }),
+  function removeFilter(key: LibraryFilterKey) {
+    (key === 'position_id' ? positionToggle : filterToggle).current?.focus();
+    setAppliedFilters((previous) => ({ ...previous, [key]: '' }));
+    const draft = { ...filterDraft.current, [key]: '' };
+    filterDraft.current = draft;
+    setFilterInput(draft);
+  }
+  const [preferredSort, setSort] = useWorkspaceSession<LibrarySort>(
+    'library.sort',
+    legacy?.library.sort,
     'created_at',
+    (value) => librarySorts.find((sort) => sort === value),
   );
   // Keep the remembered result sort, but use a match sort while its context
   // columns are absent. The API requires a position filter for occurrence keys.
@@ -184,16 +214,16 @@ export default function MatchDatabase({
     !filters.position_id && isOccurrenceSort(preferredSort)
       ? 'created_at'
       : preferredSort;
-  const [direction, setDirection] = useProfileValue<'asc' | 'desc'>(
-    (c) => c.library.direction,
-    (c, direction) => ({ ...c, library: { ...c.library, direction } }),
+  const [direction, setDirection] = useWorkspaceSession<'asc' | 'desc'>(
+    'library.direction',
+    legacy?.library.direction,
     'desc',
+    (value) => (value === 'asc' || value === 'desc' ? value : undefined),
   );
   const resultNames = useRef<Record<string, string>>({});
   const selected = new Set(selectedRows.map((row) => row.id));
   const [exact, setExact] = useState(''),
     [positionInputError, setPositionInputError] = useState(false);
-  const positionSearchForm = useRef<HTMLDetailsElement>(null);
   const consumedPositionSearch = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (
@@ -212,7 +242,7 @@ export default function MatchDatabase({
       ...emptyFilters(),
       position_id: requestedPositionSearch.positionId,
     });
-    if (positionSearchForm.current) positionSearchForm.current.open = true;
+    setSearchPanel('position');
   }, [requestedPositionSearch]);
   const matchScope = JSON.stringify([
     databaseId,
@@ -436,7 +466,12 @@ export default function MatchDatabase({
     return () => clearInterval(timer);
   }, [visible, matches]);
   const active = databases.find((d) => d.id === databaseId);
-  const importTarget = acceptsLibraryMatches(databaseId) ? active : undefined;
+  const hasFilters = Object.entries(filters).some(
+    ([key, value]) => key !== 'date_field' && value.trim(),
+  );
+  const allOnPageSelected =
+    matches.length > 0 && matches.every((match) => selected.has(match.id));
+  const someOnPageSelected = matches.some((match) => selected.has(match.id));
   const visibleRows = new Map(
     matches.map((match) => [libraryRowKey(match), match]),
   );
@@ -484,22 +519,12 @@ export default function MatchDatabase({
           <h1>{w('databaseTitle')}</h1>
           <p>{w('databaseDescription')}</p>
         </div>
-        <div>
-          <small>
-            {l('importTarget', {
-              name:
-                importTarget?.name ??
-                databases.find((d) => d.is_default)?.name ??
-                '…',
-            })}
-          </small>
-          <ActionButton
-            icon="import"
-            label={t('app.import')}
-            className="primary"
-            onClick={onImport}
-          />
-        </div>
+        <LibraryImport
+          databases={databases}
+          databaseId={databaseId}
+          uploading={uploading}
+          onImport={onImport}
+        />
       </div>
       <div className="library-layout">
         <DatabaseSidebar
@@ -520,49 +545,60 @@ export default function MatchDatabase({
                 aria-label={t('app.searchMatches')}
                 placeholder={t('app.searchPlaceholder')}
                 value={draftFilters.q}
-                disabled={!!profile && !profile.ready}
                 onChange={(e) =>
                   setFilters((f) => ({ ...f, q: e.target.value }))
                 }
               />
             </label>
-            <ActionButton
-              icon="filter"
-              label={l('filters')}
-              compact
-              onClick={() => setExpanded((v) => !v)}
-              aria-expanded={expanded}
-            />
+            {searchPanels.map(({ id, label, icon, trigger }) => (
+              <ActionButton
+                key={id}
+                ref={trigger}
+                icon={icon}
+                label={label}
+                type="button"
+                onClick={() =>
+                  setSearchPanel((current) => (current === id ? undefined : id))
+                }
+                aria-controls={`${searchId}-${id}`}
+                aria-expanded={searchPanel === id}
+              />
+            ))}
           </div>
-          {expanded && (
+          <div
+            onKeyDown={(event) => {
+              if (
+                event.key !== 'Escape' ||
+                !searchPanel ||
+                event.defaultPrevented
+              )
+                return;
+              event.preventDefault();
+              searchPanels
+                .find(({ id }) => id === searchPanel)
+                ?.trigger.current?.focus();
+              setSearchPanel(undefined);
+            }}
+          >
             <LibraryFilters
               filters={draftFilters}
               onChange={setFilters}
               onClear={() => setFilters(emptyFilters())}
-              currentPosition={currentPosition}
+              panelId={`${searchId}-filters`}
+              open={searchPanel === 'filters'}
             />
-          )}
-          {!!error && (
-            <p className="error" role="alert">
-              {formatError(error)}
-            </p>
-          )}
-          {!!matchOpening.error && (
-            <p className="error" role="alert">
-              {formatError(matchOpening.error)}
-            </p>
-          )}
-          <div className="database-searches">
             <AnnotationSearch
               revision={annotationRevision}
               databaseId={databaseId}
               onOpen={onAnnotation}
+              panelId={`${searchId}-notes`}
+              open={searchPanel === 'notes'}
             />
-            <details ref={positionSearchForm} className="position-search">
-              <summary>
-                <ActionIcon name="search" size={16} /> {t('app.findPosition')}{' '}
-                <span>{t('app.positionId')}</span>
-              </summary>
+            <div
+              className="position-search"
+              id={`${searchId}-position`}
+              hidden={searchPanel !== 'position'}
+            >
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -579,14 +615,13 @@ export default function MatchDatabase({
                 <ActionButton
                   icon="search"
                   label={t('app.exactSearch')}
-                  compact
+                  type="submit"
                   disabled={loading || !exact.trim()}
                 />
                 {currentPosition && (
                   <ActionButton
                     icon="view"
                     label={t('app.usePosition')}
-                    compact
                     type="button"
                     onClick={() =>
                       setPositionQuery(currentPosition.position_id)
@@ -597,8 +632,19 @@ export default function MatchDatabase({
               {positionInputError && (
                 <p role="alert">{l('invalidPositionId')}</p>
               )}
-            </details>
+            </div>
           </div>
+          <LibraryFilterChips filters={filters} onRemove={removeFilter} />
+          {!!error && (
+            <p className="error" role="alert">
+              {formatError(error)}
+            </p>
+          )}
+          {!!matchOpening.error && (
+            <p className="error" role="alert">
+              {formatError(matchOpening.error)}
+            </p>
+          )}
           <div className="library-table-toolbar">
             <div className="database-count">
               {loading ? t('app.searching') : `${formatNumber(total)}`}{' '}
@@ -622,23 +668,6 @@ export default function MatchDatabase({
                   </>
                 )}
               </p>
-            )}
-            {filters.position_id.trim() && (
-              <span className="library-position-filter">
-                <span>
-                  {t('app.positionId')}:{' '}
-                  <code>{filters.position_id.trim()}</code>
-                </span>
-                <ActionButton
-                  icon="clear"
-                  label={l('clearPositionFilter')}
-                  compact
-                  type="button"
-                  onClick={() =>
-                    setFilters((previous) => ({ ...previous, position_id: '' }))
-                  }
-                />
-              </span>
             )}
             {!showColumn(sort as LibraryColumn) && (
               <span className="library-hidden-sort">
@@ -671,14 +700,21 @@ export default function MatchDatabase({
               disabled={!columns.custom}
             />
           </div>
+          {filters.position_id && matches.length > 0 && (
+            <p id={selectionHintId} className="library-occurrence-selection">
+              {l('occurrenceSelection')}
+            </p>
+          )}
           <div
             className="library-batch-bar"
+            data-has-selection={hasSelection}
             role="group"
             aria-label={l('actions')}
-            data-has-selection={hasSelection}
           >
             <strong role="status">
-              {l('selected', { count: formatNumber(selected.size) })}
+              {l(selected.size === 1 ? 'selectedMatch' : 'selectedMatches', {
+                count: formatNumber(selected.size),
+              })}
             </strong>
             <ActionButton
               type="button"
@@ -745,8 +781,8 @@ export default function MatchDatabase({
                   compact
                   key={action}
                   disabled={
-                    !selectionIsCurrent ||
                     !hasSelection ||
+                    !selectionIsCurrent ||
                     (action === 'export' && selected.size > 50) ||
                     (pausedSelected &&
                       ['copy', 'move', 'delete'].includes(action))
@@ -836,21 +872,9 @@ export default function MatchDatabase({
                           }}
                         />
                       ))}
-                    {columns.activeColumns
-                      .map((id) =>
-                        LIBRARY_COLUMNS.find((column) => column.id === id)!,
-                      )
-                      .map((column) => (
-                        <col
-                          key={column.id}
-                          className={column.className}
-                          style={
-                            columns.widths
-                              ? { width: columns.widths[column.id] }
-                              : undefined
-                          }
-                        />
-                      ))}
+                    {columns.tableColumns.map(({ id, className, width }) => (
+                      <col key={id} className={className} style={{ width }} />
+                    ))}
                   </colgroup>
                   <thead>
                     <OrderedLibraryRow
@@ -914,12 +938,17 @@ export default function MatchDatabase({
                         <input
                           type="checkbox"
                           aria-label={l('selectAll')}
-                          checked={
-                            matches.length > 0 &&
-                            matches
-                              .slice(0, 100)
-                              .every((m) => selected.has(m.id))
+                          aria-describedby={
+                            filters.position_id && matches.length
+                              ? selectionHintId
+                              : undefined
                           }
+                          checked={allOnPageSelected}
+                          ref={(checkbox) => {
+                            if (checkbox)
+                              checkbox.indeterminate =
+                                someOnPageSelected && !allOnPageSelected;
+                          }}
                           disabled={loading || !matches.length}
                           onChange={(e) =>
                             changeSelection(matches, e.target.checked)
@@ -987,9 +1016,25 @@ export default function MatchDatabase({
                                   : '—'}
                               </td>
                               <td data-column="occurrence_move">
-                                {m.occurrence
-                                  ? formatNumber(m.occurrence.move_no)
-                                  : '—'}
+                                {m.occurrence ? (
+                                  <button
+                                    type="button"
+                                    className="library-occurrence-link"
+                                    aria-label={l('openOccurrence', {
+                                      game: formatNumber(m.occurrence.game_no),
+                                      move: formatNumber(m.occurrence.move_no),
+                                    })}
+                                    disabled={rowOpeningDisabled(m)}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      openMatchRow(m);
+                                    }}
+                                  >
+                                    {formatNumber(m.occurrence.move_no)}
+                                  </button>
+                                ) : (
+                                  '—'
+                                )}
                               </td>
                             </>
                           )
@@ -998,11 +1043,10 @@ export default function MatchDatabase({
                         <td onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
-                            aria-label={l('select', {
-                              name: m.occurrence
-                                ? `${m.display_name} · ${l('occurrenceGame')} ${m.occurrence.game_no} · ${l('occurrenceMove')} ${m.occurrence.move_no}`
-                                : m.display_name,
-                            })}
+                            aria-label={l(
+                              m.occurrence ? 'selectMatch' : 'select',
+                              { name: m.display_name },
+                            )}
                             checked={selected.has(m.id)}
                             onChange={(e) =>
                               changeSelection([m], e.target.checked)
@@ -1027,9 +1071,13 @@ export default function MatchDatabase({
                         )}
                         {showColumn('black') && (
                           <td>
-                            {showColumn('white')
-                              ? m.black
-                              : matchName(m, 'black')}
+                            {showColumn('white') ? (
+                              <span className="library-player-name">
+                                {m.black}
+                              </span>
+                            ) : (
+                              matchName(m, 'black')
+                            )}
                           </td>
                         )}
                         {showColumn('black_pr') && (
@@ -1106,8 +1154,32 @@ export default function MatchDatabase({
                   </tbody>
                 </table>
               </div>
-              {!matches.length && !loading && (
-                <p className="library-empty">{l('noMatches')}</p>
+              {!matches.length && !loading && !searchError && (
+                <div className="library-empty">
+                  <p role="status">{l('noMatches')}</p>
+                  {hasFilters && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        filterToggle.current?.focus();
+                        setFilters(emptyFilters());
+                      }}
+                    >
+                      {l('clearFilters')}
+                    </button>
+                  )}
+                  {databaseId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        filterToggle.current?.focus();
+                        changeDatabase('');
+                      }}
+                    >
+                      {l('searchAllDatabases')}
+                    </button>
+                  )}
+                </div>
               )}
               <SearchPagination
                 page={page}

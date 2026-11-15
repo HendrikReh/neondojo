@@ -38,7 +38,6 @@ it('defaults game/match analysis to two plies and offers three and four plies', 
       children: createElement(MatchAnalysisPanel, {
         match: { id: 'match', white: 'Alice', black: 'Bob' } as Match,
         gameNo: 1,
-        onPosition: () => {},
         catalog: catalogFixture(),
       }),
     }),

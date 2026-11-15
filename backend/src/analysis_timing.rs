@@ -206,8 +206,17 @@ pub(crate) async fn initialize(
             None
         }
         (_, Ok(path)) => {
+            let move_filter = match engine {
+                crate::engines::AnalysisEngine::Gnubg(engine) => engine.move_filter(),
+                crate::engines::AnalysisEngine::OpenSage(_) => None,
+            };
             crate::benchmarks::estimate::matching_benchmark(
-                pool, engine_id, &path, version, job.plies,
+                pool,
+                engine_id,
+                &path,
+                version,
+                job.plies,
+                move_filter,
             )
             .await?
         }

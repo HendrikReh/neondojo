@@ -2,8 +2,8 @@
 use crate::{
     import::sgf::SourceMove,
     imported_analysis::ImportedAnalysisData,
-    match_analysis::{Decision, cube_options},
-    model::{MoveSeverity, Position},
+    match_analysis::{CubeEquityUnit, CubeEvaluation, Decision, cube_options},
+    model::Position,
 };
 use uuid::Uuid;
 
@@ -145,6 +145,7 @@ pub(crate) fn project(
         return None;
     }
     let response = !virtual_cube && matches!(played_action, Some("take" | "drop"));
+    let mut cube_evaluation = None;
     let (played, best, played_equity, best_equity, equity_loss, depth, depth_plies) = if checker {
         let mut bests = record.candidates.iter().filter(|c| c.rank == 1);
         let best = bests.next()?;
@@ -198,27 +199,36 @@ pub(crate) fn project(
         if action(&record.played) != Some(played) {
             return None;
         }
-        let (best, played_eq, best_eq, loss) = if source_format == "xg" {
-            let c = record.cube.as_ref()?;
-            if c["equity_kind"] != "cubeful" || c["perspective"] != "doubler" {
-                return None;
-            }
-            let nd = number(&c["no_double"])?;
-            let dt = number(&c["double_take"])?;
-            let dp = number(&c["double_pass"])?;
-            if [nd, dt, dp].contains(&-99.0) {
-                return None;
-            }
-            let (best, pe, be) = cube_options(
-                played,
-                nd,
-                if response { -dt } else { dt },
-                if response { -dp } else { dp },
-            )?;
-            (best, Some(pe), Some(be), loss(be, pe)?)
-        } else {
-            bgblitz_cube(record, played)?
-        };
+        let (best, played_eq, best_eq, loss, evaluation): ImportedCubeEvaluation =
+            if source_format == "xg" {
+                let c = record.cube.as_ref()?;
+                if c["equity_kind"] != "cubeful" || c["perspective"] != "doubler" {
+                    return None;
+                }
+                let nd = number(&c["no_double"])?;
+                let dt = number(&c["double_take"])?;
+                let dp = number(&c["double_pass"])?;
+                if [nd, dt, dp].contains(&-99.0) {
+                    return None;
+                }
+                let sign = if response { -1.0 } else { 1.0 };
+                let evaluation = CubeEvaluation {
+                    unit: CubeEquityUnit::Cubeful,
+                    no_double: sign * nd,
+                    double_take: sign * dt,
+                    double_pass: sign * dp,
+                };
+                let (best, pe, be) = cube_options(
+                    played,
+                    evaluation.no_double,
+                    evaluation.double_take,
+                    evaluation.double_pass,
+                )?;
+                (best, Some(pe), Some(be), loss(be, pe)?, evaluation)
+            } else {
+                bgblitz_cube(record, played)?
+            };
+        cube_evaluation = Some(evaluation);
         (
             played.to_owned(),
             best.to_owned(),
@@ -240,11 +250,14 @@ pub(crate) fn project(
             played_equity,
             best_equity,
             equity_loss,
-            severity: MoveSeverity::from_normalized_loss(equity_loss)
+            severity: crate::configuration::ErrorThresholds::default()
+                .classify(equity_loss)
                 .as_str()
                 .into(),
             dice: checker.then_some(source.dice),
             evaluation_status: "evaluated".into(),
+            checker_candidates: vec![],
+            cube_evaluation,
         },
         position,
         depth,
@@ -284,10 +297,9 @@ fn loss(best: f64, played: f64) -> Option<f64> {
     let difference = best - played;
     (difference.is_finite() && difference >= -0.000001).then_some(difference.max(0.0))
 }
-fn bgblitz_cube(
-    record: &ImportedAnalysisData,
-    played: &str,
-) -> Option<(&'static str, Option<f64>, Option<f64>, f64)> {
+type ImportedCubeEvaluation = (&'static str, Option<f64>, Option<f64>, f64, CubeEvaluation);
+
+fn bgblitz_cube(record: &ImportedAnalysisData, played: &str) -> Option<ImportedCubeEvaluation> {
     let equity = &record.raw["equity"];
     let mwc = equity["useMatchEquity"].as_bool()?;
     let c = &equity["cubeDecision"];
@@ -300,6 +312,16 @@ fn bgblitz_cube(
     }
     let (best, pe, be) = cube_options(played, nd, dt, dp)?;
     let option_loss = loss(be, pe)?;
+    let evaluation = CubeEvaluation {
+        unit: if mwc {
+            CubeEquityUnit::Mwc
+        } else {
+            CubeEquityUnit::Cubeful
+        },
+        no_double: nd,
+        double_take: dt,
+        double_pass: dp,
+    };
     let error = number(&record.raw["pr"]["cubeError"])?;
     if error > 0.0 || error == -99.0 {
         return None;
@@ -316,12 +338,12 @@ fn bgblitz_cube(
                 return None;
             }
         }
-        Some((best, None, None, normalized_loss))
+        Some((best, None, None, normalized_loss, evaluation))
     } else {
         if (option_loss - normalized_loss).abs() > 0.000001 {
             return None;
         }
-        Some((best, Some(pe), Some(be), normalized_loss))
+        Some((best, Some(pe), Some(be), normalized_loss, evaluation))
     }
 }
 
@@ -399,7 +421,7 @@ mod tests {
         let (s, r) = checker();
         let p = projection(&r, &s, "xg").unwrap();
         assert!((p.decision.equity_loss - 0.1).abs() < 1e-9);
-        assert_eq!(p.decision.severity, "bad");
+        assert_eq!(p.decision.severity, "blunder");
         assert_eq!(p.decision.played, s.notation);
         assert_eq!(p.decision.dice, Some(s.dice));
         assert_eq!(p.depth.as_deref(), Some("XGRoller++"));
@@ -503,6 +525,9 @@ mod tests {
                 if s.notation == "Take" {
                     assert_eq!(p.decision.best, "drop");
                     assert!((p.decision.equity_loss - 0.2).abs() < 1e-9);
+                    let evaluation = p.decision.cube_evaluation.unwrap();
+                    assert_eq!(evaluation.double_take, -1.2);
+                    assert_eq!(evaluation.double_pass, -1.0);
                 } else {
                     assert_eq!(p.decision.best, "double");
                     assert_eq!(p.decision.equity_loss, 0.0);
@@ -521,6 +546,10 @@ mod tests {
         assert!((p.decision.equity_loss - 0.08841271).abs() < 1e-9);
         assert_eq!(p.decision.best_equity, None);
         assert_eq!(p.decision.played_equity, None);
+        let evaluation = p.decision.cube_evaluation.unwrap();
+        assert!(matches!(evaluation.unit, CubeEquityUnit::Mwc));
+        assert_eq!(evaluation.double_take, 0.41401069);
+        assert_eq!(evaluation.double_pass, 0.41765104);
         for bad in ["-99.00000000", "0.08841271", "NaN"] {
             r.raw["pr"]["cubeError"] = json!(bad);
             assert!(projection(&r, &s, "bgf").is_none());

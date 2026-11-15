@@ -142,10 +142,7 @@ test('late report response cannot replace newer selection and details support re
   await page.keyboard.press('Escape');
   await buttons.nth(1).focus();
   await buttons.nth(1).press('Enter');
-  const panel = page.getByRole('dialog', {
-    name: 'Learning review',
-    exact: true,
-  });
+  const panel = page.getByRole('region', { name: 'Other report', exact: true });
   await expect(panel.getByRole('alert')).toBeVisible();
   fail = false;
   await panel.getByRole('button', { name: 'Try again', exact: true }).click();
@@ -171,9 +168,7 @@ test('opening a report below a long archive moves keyboard focus to its visible 
     .getByRole('button', { name: 'Open report', exact: true })
     .first()
     .click();
-  const heading = page.locator(
-    '.learning-review-dialog .play-dialog-drag-handle',
-  );
+  const heading = page.getByRole('heading', { name: 'Match 1', exact: true });
   await expect(heading).toBeFocused();
   await expect(heading).toBeInViewport();
 });

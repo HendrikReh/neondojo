@@ -388,6 +388,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/database-backup/target-counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["database_backup_target_counts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/databases": {
         parameters: {
             query?: never;
@@ -493,6 +509,38 @@ export interface paths {
         };
         get: operations["settings"];
         put: operations["set_settings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/decks/{id}/anki-auto-sync/action": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["act"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/decks/{id}/anki-auto-sync/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["history"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1023,6 +1071,22 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matches/{id}/analyses/{analysis_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["delete_analysis"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1908,6 +1972,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/study/anki-auto-sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["overview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/study/anki-imports": {
         parameters: {
             query?: never;
@@ -2180,6 +2260,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/study/reports/{id}/assessment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_assessment"];
+        put?: never;
+        post: operations["start_assessment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/study/reports/{id}/history": {
         parameters: {
             query?: never;
@@ -2438,6 +2534,22 @@ export interface components {
             /** @description Authoritative native statistics. Absent if the export cannot prove full coverage. */
             statistics?: components["schemas"]["NativePlayerStatistics"][] | null;
         };
+        AnkiSyncHistoryEntry: {
+            error_detail?: string | null;
+            /** Format: date-time */
+            finished_at: string;
+            /** Format: uuid */
+            id: string;
+            outcome: components["schemas"]["SyncOutcome"];
+            problem?: null | components["schemas"]["SyncProblem"];
+            profile: string;
+            /** Format: int64 */
+            received_reviews: number;
+            /** Format: date-time */
+            resolved_at?: string | null;
+            /** Format: int64 */
+            sent_reviews: number;
+        };
         AnkiUpload: {
             /** Format: binary */
             file: string;
@@ -2533,8 +2645,29 @@ export interface components {
              */
             version: number;
         };
+        Assessment: {
+            key_decisions: components["schemas"]["KeyDecision"][];
+            limitations: string[];
+            next_match_focus: string;
+            summary: string;
+            topics: components["schemas"]["Topic"][];
+            training: components["schemas"]["Training"][];
+        };
+        AssessmentJob: {
+            error?: null | components["schemas"]["Failure"];
+            model: string;
+            result?: null | components["schemas"]["Assessment"];
+            status: components["schemas"]["AssessmentStatus"];
+        };
         /** @enum {string} */
         AssessmentSource: "native" | "imported";
+        AssessmentState: {
+            abbreviated_match: boolean;
+            availability: components["schemas"]["Availability"];
+            job?: null | components["schemas"]["AssessmentJob"];
+        };
+        /** @enum {string} */
+        AssessmentStatus: "queued" | "running" | "completed" | "failed";
         AttemptedCard: {
             evaluation: components["schemas"]["PracticeEvaluation"];
             revealed: components["schemas"]["RevealedCard"];
@@ -2548,6 +2681,8 @@ export interface components {
             last_synced_at?: string | null;
             profile?: string | null;
         };
+        /** @enum {string} */
+        Availability: "ready" | "missing_analysis" | "unsupported" | "not_configured";
         BackupCheck: {
             contents?: null | components["schemas"]["BackupContents"];
             status: components["schemas"]["BackupCompatibility"];
@@ -2557,6 +2692,14 @@ export interface components {
         BackupContents: {
             /** Format: date-time */
             created_at?: string | null;
+            /** Format: int64 */
+            learning_cards: number;
+            /** Format: int64 */
+            matches: number;
+            /** Format: int64 */
+            saved_positions: number;
+        };
+        BackupTargetCounts: {
             /** Format: int64 */
             learning_cards: number;
             /** Format: int64 */
@@ -2741,6 +2884,13 @@ export interface components {
             /** Format: double */
             equity: number;
             notation: string;
+            /** @description Ordered checker steps supplied by the engine, when available. */
+            path?: string | null;
+            /**
+             * Format: int32
+             * @description Depth actually used for this candidate, when recorded by the engine.
+             */
+            plies?: number | null;
             /**
              * @description Win, win gammon (including backgammon), win backgammon,
              *     loss, lose gammon (including backgammon), lose backgammon.
@@ -2954,6 +3104,7 @@ export interface components {
         };
         ConfigurationAnalysis: {
             engine: components["schemas"]["ConfigurationEngine"];
+            error_thresholds?: components["schemas"]["ErrorThresholds"];
             /** Format: int32 */
             plies: number;
             scope: components["schemas"]["ConfigurationScope"];
@@ -2971,14 +3122,29 @@ export interface components {
         ConfigurationAppearance: {
             /**
              * Format: int32
-             * @description Preferred board pane width in analysis detail tabs; null uses the responsive default.
+             * @description Preferred board pane width in Study cards; null uses the responsive default.
              */
             analysis_board_width?: number | null;
+            /**
+             * Format: int32
+             * @description Preferred board pane width in the Errors tab; null uses the responsive default.
+             */
+            analysis_errors_board_width?: number | null;
+            /**
+             * Format: int32
+             * @description Preferred board pane width in the Notes tab; null uses the responsive default.
+             */
+            analysis_notes_board_width?: number | null;
             /**
              * Format: int32
              * @description Preferred board pane width in the analysis overview; null uses the responsive default.
              */
             analysis_overview_board_width?: number | null;
+            /**
+             * Format: int32
+             * @description Preferred board pane width in the Statistics tab; null uses the responsive default.
+             */
+            analysis_statistics_board_width?: number | null;
             bearoff_direction: components["schemas"]["ConfigurationDirection"];
             board_theme: string;
             board_view: components["schemas"]["ConfigurationBoardView"];
@@ -3176,6 +3342,18 @@ export interface components {
             seed?: string | null;
         };
         /** @enum {string} */
+        CubeEquityUnit: "cubeful" | "mwc";
+        /** @description Recorded cube outcomes, from the player making the decision. */
+        CubeEvaluation: {
+            /** Format: double */
+            double_pass: number;
+            /** Format: double */
+            double_take: number;
+            /** Format: double */
+            no_double: number;
+            unit: components["schemas"]["CubeEquityUnit"];
+        };
+        /** @enum {string} */
         CubeOfferAction: "no_double" | "double";
         /** @enum {string} */
         CubeResponseAction: "take" | "drop";
@@ -3274,12 +3452,15 @@ export interface components {
              * @description Best normalized cubeful equity from this player's perspective, in the same units.
              */
             best_equity?: number | null;
+            /** @description Ranked alternatives saved by local game and match analyses. */
+            checker_candidates?: components["schemas"]["Candidate"][];
             /**
              * Format: int32
              * @description One-based imported checker position; also links its preceding no-double decision.
              *     Actual double/take/drop decisions have no checker number.
              */
             checker_no?: number | null;
+            cube_evaluation?: null | components["schemas"]["CubeEvaluation"];
             /**
              * Format: int32
              * @description One-based sequence of all checker and cube decisions within this game.
@@ -3312,7 +3493,7 @@ export interface components {
              * @description Absolute color: 0 is White, 1 is Black.
              */
             player: number;
-            /** @description "none", "doubtful" (>= 0.04), "bad" (>= 0.08), or "very_bad" (>= 0.16). */
+            /** @description Saved decision severity. Analysis views can reclassify the stored equity loss. */
             severity: string;
         };
         Deck: {
@@ -3443,6 +3624,7 @@ export interface components {
         EngineSnapshot: {
             engine_id: string;
             engine_version?: string | null;
+            gnubg_move_filter?: null | components["schemas"]["GnubgMoveFilter"];
             gnubg_path: string;
             /** Format: int32 */
             gnubg_threads?: number | null;
@@ -3455,9 +3637,22 @@ export interface components {
             /** Format: int32 */
             bad: number;
             /** Format: int32 */
+            blunder?: number;
+            /** Format: int32 */
             doubtful: number;
             /** Format: int32 */
             very_bad: number;
+        };
+        /** @description Inclusive lower bounds of the four grades, measured in normalized equity. */
+        ErrorThresholds: {
+            /** Format: double */
+            blunder: number;
+            /** Format: double */
+            error: number;
+            /** Format: double */
+            large_blunder: number;
+            /** Format: double */
+            questionable: number;
         };
         EstimateBenchmark: {
             /** Format: double */
@@ -3478,6 +3673,8 @@ export interface components {
             format: string;
             match_ids: string[];
         };
+        /** @enum {string} */
+        Failure: "provider" | "invalid_report" | "interrupted" | "source_unavailable" | "not_configured";
         /** @enum {string} */
         FeedbackOperation: "hint" | "reveal" | "retry";
         GameAnalysisStatistics: {
@@ -3556,6 +3753,8 @@ export interface components {
         };
         /** @enum {string} */
         GameResultReason: "single" | "gammon" | "backgammon" | "drop" | "resignation" | "recorded";
+        /** @enum {string} */
+        GnubgMoveFilter: "top14";
         Health: {
             database: boolean;
             gnubg?: string | null;
@@ -3715,7 +3914,8 @@ export interface components {
             total_games?: number | null;
         };
         JobRequest: {
-            /** @description analysis: five candidate moves; dice: 21 weighted rolls. */
+            engine_id?: null | components["schemas"]["MatchAnalysisEngine"];
+            /** @description A ranked candidate analysis or a distribution over 21 weighted rolls. */
             kind: components["schemas"]["PositionJobKind"];
             /**
              * Format: int32
@@ -3731,6 +3931,11 @@ export interface components {
         JobResult: components["schemas"]["Analysis"] | components["schemas"]["Distribution"] | components["schemas"]["MatchAnalysisSummary"];
         /** @enum {string} */
         JobStatus: "queued" | "running" | "completed" | "failed";
+        KeyDecision: {
+            evidence_ref: string;
+            explanation: string;
+            next_question: string;
+        };
         LearningSummary: {
             /** Format: int64 */
             card_count: number;
@@ -3768,6 +3973,22 @@ export interface components {
              * @description Total matching rows when `page` is supplied.
              */
             total?: number | null;
+        };
+        LinkedAnkiDeck: {
+            /** Format: uuid */
+            deck_id: string;
+            deck_name: string;
+            /** Format: date-time */
+            last_synced_at?: string | null;
+            /** Format: int64 */
+            open_errors: number;
+            paused: boolean;
+            profile: string;
+            /** Format: int64 */
+            received_reviews: number;
+            /** Format: int64 */
+            sent_reviews: number;
+            status: components["schemas"]["OverviewStatus"];
         };
         Machine: {
             architecture: string;
@@ -4015,10 +4236,10 @@ export interface components {
             moved: number;
         };
         /**
-         * @description Native decision severity, using the saved GNUbg normalized loss categories.
+         * @description Decision severity for normalized equity loss. Existing category identifiers are retained.
          * @enum {string}
          */
-        MoveSeverity: "none" | "doubtful" | "bad" | "very_bad";
+        MoveSeverity: "none" | "doubtful" | "bad" | "blunder" | "very_bad";
         NativePlayerStatistics: {
             /** Format: int32 */
             close_cube_decisions: number;
@@ -4048,6 +4269,8 @@ export interface components {
             /** Format: int32 */
             winner: number;
         };
+        /** @enum {string} */
+        OverviewStatus: "checking" | "paused" | "unreachable" | "other_profile" | "waiting" | "synced" | "no_matches" | "invalid_deck" | "conflict" | "timeout" | "anki_error" | "internal_error" | "failed";
         PerformanceRatingSummary: {
             /**
              * Format: int32
@@ -4073,7 +4296,7 @@ export interface components {
             counts: number[];
         };
         /** @enum {string} */
-        PlayAction: "opening_roll" | "start_opening_move" | "roll" | "move" | "pass" | "double" | "take" | "drop" | "resign" | "next_game" | "end_session" | "pause" | "resume";
+        PlayAction: "opening_roll" | "start_opening_move" | "roll" | "move" | "pass" | "double" | "take" | "drop" | "resign" | "forfeit_match" | "next_game" | "end_session" | "pause" | "resume";
         PlayActionRequest: {
             action: components["schemas"]["PlayAction"];
             /** Format: uuid */
@@ -4263,6 +4486,7 @@ export interface components {
             decisions?: components["schemas"]["PlayDecision"][];
             engine: components["schemas"]["PlayEngine"];
             engine_snapshots?: null | components["schemas"]["PlayEngineSnapshots"];
+            error_thresholds?: components["schemas"]["ErrorThresholds"];
             game_learning_used?: boolean;
             /** Format: int32 */
             game_no: number;
@@ -4280,6 +4504,8 @@ export interface components {
              * @description Current linked library entry; projected from the relational session link.
              */
             library_match_id?: string | null;
+            /** @description The human conceded the entire point match. */
+            match_forfeited?: boolean;
             /** Format: int32 */
             match_length: number;
             /** @description An explicitly closed money session cannot start another game. */
@@ -4326,6 +4552,8 @@ export interface components {
         PlayerAnalysisSummary: {
             /** Format: int32 */
             bad: number;
+            /** Format: int32 */
+            blunder?: number;
             /** Format: int32 */
             checker_decisions: number;
             /**
@@ -5017,6 +5245,10 @@ export interface components {
             /** Format: int32 */
             total_positions: number;
         };
+        StartAssessment: {
+            /** Format: int64 */
+            report_version: number;
+        };
         StoredMove: {
             board: number[];
             dice: number[];
@@ -5096,7 +5328,27 @@ export interface components {
             job_id: string;
         };
         /** @enum {string} */
+        SyncAction: "sync_now" | "retry_open_errors" | "pause" | "resume";
+        SyncActionRequest: {
+            action: components["schemas"]["SyncAction"];
+            include_result?: boolean;
+            /** Format: uuid */
+            retry_of?: string | null;
+        };
+        SyncAttemptResult: {
+            error_detail?: string | null;
+            /** Format: int64 */
+            open_errors: number;
+            outcome: components["schemas"]["SyncOutcome"];
+            /** Format: int64 */
+            received_reviews: number;
+            /** Format: int64 */
+            sent_reviews: number;
+        };
+        /** @enum {string} */
         SyncOutcome: "synced" | "no_matches" | "failed";
+        /** @enum {string} */
+        SyncProblem: "unreachable" | "invalid_deck" | "conflict" | "timeout" | "anki_error" | "internal_error";
         SyncRequest: Record<string, never>;
         SyncResult: {
             matched_cards: number;
@@ -5110,6 +5362,19 @@ export interface components {
             id: string;
             /** Format: int64 */
             tags_version: number;
+        };
+        Topic: {
+            evidence_refs: string[];
+            observation: string;
+            topic: components["schemas"]["TopicName"];
+        };
+        /** @enum {string} */
+        TopicName: "cube" | "checker" | "opening" | "bear_off" | "hit" | "backgame" | "race" | "prime" | "contact" | "anchor";
+        Training: {
+            evidence_refs: string[];
+            exercise: string;
+            focus: string;
+            success_criterion: string;
         };
         TransferRequest: {
             /** Format: uuid */
@@ -6399,6 +6664,41 @@ export interface operations {
             };
         };
     };
+    database_backup_target_counts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupTargetCounts"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     list_databases: {
         parameters: {
             query?: never;
@@ -6852,6 +7152,122 @@ export interface operations {
                 };
             };
             504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    act: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SyncActionRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncAttemptResult"];
+                };
+            };
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    history: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnkiSyncHistoryEntry"][];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8045,7 +8461,7 @@ export interface operations {
                 after?: number;
                 /** @description Page size 1–100, defaults to 50. */
                 limit?: number;
-                /** @description Exclude forced/unavailable decisions and require at least 0.04 normalized equity loss. */
+                /** @description Exclude forced/unavailable decisions and apply the configured Questionable threshold. */
                 errors_only?: boolean;
                 /** @description 0 = White, 1 = Black. */
                 player?: number;
@@ -8401,6 +8817,54 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_analysis: {
+        parameters: {
+            query: {
+                /** @description The match source revision shown when the deletion was confirmed. */
+                source_revision: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+                analysis_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Saved analysis deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11077,6 +11541,25 @@ export interface operations {
             };
         };
     };
+    overview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkedAnkiDeck"][];
+                };
+            };
+        };
+    };
     upload: {
         parameters: {
             query?: never;
@@ -11782,6 +12265,96 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_assessment: {
+        parameters: {
+            query: {
+                language: components["schemas"]["ConfigurationLocale"];
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssessmentState"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    start_assessment: {
+        parameters: {
+            query: {
+                language: components["schemas"]["ConfigurationLocale"];
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartAssessment"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssessmentState"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -1,3 +1,4 @@
+import { severityLabels } from './review-statistics-messages';
 import ActionButton from './ActionButton';
 import { useEffect, useRef } from 'react';
 import { playSeverity, type PlayDecision, type PlaySession } from './play-api';
@@ -52,15 +53,15 @@ const equityPrecision = { minimumFractionDigits: 3, maximumFractionDigits: 3 };
 
 export function DecisionEvaluation({ decision }: { decision: PlayDecision }) {
   const t = usePlayModeText();
-  const { formatNumber } = useI18n();
+  const { formatNumber, t: appT } = useI18n();
   if (decision.loss == null) return null;
   return (
     <p
       className="play-feedback-result"
       data-severity={decision.severity ?? 'none'}
     >
-      <strong>{t(playSeverity(decision.severity))}</strong> · {t('loss')}:{' '}
-      {formatNumber(decision.loss, equityPrecision)}
+      <strong>{appT(severityLabels[playSeverity(decision.severity)])}</strong> ·{' '}
+      {t('loss')}: {formatNumber(decision.loss, equityPrecision)}
     </p>
   );
 }
@@ -88,17 +89,22 @@ export function DecisionDetails({
     action: string | null | undefined,
     index: number | null | undefined,
   ) =>
-    index != null
-      ? (session.legal_moves[index]?.notation ?? formatDecision(action ?? ''))
-      : formatDecision(action === 'roll' ? 'no double' : (action ?? ''));
+    formatDecision(
+      index != null
+        ? (session.legal_moves[index]?.notation ?? action ?? '')
+        : action === 'roll'
+          ? 'no double'
+          : (action ?? ''),
+    );
   return (
     <>
       <DecisionEvaluation decision={decision} />
       {decision.original_action && (
         <p>
           {t('first')}:{' '}
-          {decision.original_notation ??
-            choice(decision.original_action, decision.original_move_index)}
+          {decision.original_notation != null
+            ? formatDecision(decision.original_notation)
+            : choice(decision.original_action, decision.original_move_index)}
           {decision.first_loss != null && (
             <> · Δ {number(decision.first_loss)}</>
           )}

@@ -17,9 +17,3 @@
   flex-basis: 100%;
   font-size: 0.75rem;
 }
-
-.analysis-workspace
-  .workspace-analysis-command
-  .match-analysis-controls:has(> .analysis-time-estimate) {
-  flex-wrap: wrap;
-}

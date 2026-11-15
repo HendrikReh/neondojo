@@ -231,6 +231,23 @@ async fn restores_data_and_keeps_target_installation_settings(pool: PgPool) {
     .execute(&pool)
     .await
     .unwrap();
+    let target_counts = app
+        .clone()
+        .oneshot(
+            Request::get("/api/database-backup/target-counts")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(target_counts.status(), StatusCode::OK);
+    let body = to_bytes(target_counts.into_body(), 16 * 1024)
+        .await
+        .unwrap();
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&body).unwrap(),
+        serde_json::json!({"matches":1,"saved_positions":1,"learning_cards":2})
+    );
     let before_export = chrono::Utc::now();
 
     let exported = app
@@ -654,6 +671,14 @@ async fn restored_deck_requires_new_opt_in_for_automatic_anki_sync(pool: PgPool)
     .await
     .unwrap();
 
+    sqlx::query(
+        "INSERT INTO anki_sync_history(deck_id,profile,received_reviews,sent_reviews,outcome)
+         VALUES($1,'Source profile',2,3,'synced')",
+    )
+    .bind(deck)
+    .execute(&pool)
+    .await
+    .unwrap();
     let response = app
         .clone()
         .oneshot(Request::get(BACKUP).body(Body::empty()).unwrap())
@@ -696,5 +721,15 @@ async fn restored_deck_requires_new_opt_in_for_automatic_anki_sync(pool: PgPool)
             .await
             .unwrap(),
         0,
+    );
+    assert_eq!(
+        sqlx::query_as::<_, (String, i64, i64)>(
+            "SELECT profile,received_reviews,sent_reviews FROM anki_sync_history WHERE deck_id=$1",
+        )
+        .bind(deck)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        ("Source profile".into(), 2, 3),
     );
 }

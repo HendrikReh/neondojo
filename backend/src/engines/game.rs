@@ -2,7 +2,7 @@ use super::SageEngine;
 use crate::{
     import::sgf::parse_sgf_source_moves,
     match_analysis::{
-        AnalyzedGame, Decision, cube_options, decision, game_count, requires_cube_analysis,
+        AnalyzedGame, decision, evaluated_cube_decision, game_count, requires_cube_analysis,
     },
 };
 use anyhow::{Context, Result, ensure};
@@ -75,7 +75,7 @@ impl SageEngine {
                     let cube = self
                         .cube_with_batch(&event.position_id, &event.match_id, batch.as_deref_mut())
                         .await?;
-                    let mut result = cube_decision(
+                    let mut result = evaluated_cube_decision(
                         event.player,
                         "no double",
                         cube.no_double,
@@ -117,6 +117,9 @@ impl SageEngine {
                 );
                 result.checker_no = event.checker_ply;
                 result.dice = Some(event.dice);
+                if !forced {
+                    result.checker_candidates = self.ranked_candidates(candidates);
+                }
                 decisions.push(result);
                 analyzed_checkers += 1;
             } else {
@@ -126,7 +129,7 @@ impl SageEngine {
                     .await?;
                 let response = matches!(played.as_str(), "take" | "drop");
                 let sign = if response { -1.0 } else { 1.0 };
-                decisions.push(cube_decision(
+                decisions.push(evaluated_cube_decision(
                     event.player,
                     &played,
                     sign * cube.no_double,
@@ -151,29 +154,49 @@ impl SageEngine {
     }
 }
 
-fn cube_decision(player: i32, played: &str, nd: f64, dt: f64, dp: f64) -> Result<Decision> {
-    let (best, actual, optimal) =
-        cube_options(played, nd, dt, dp).context("Unknown cube action")?;
-    Ok(decision(
-        player,
-        "cube",
-        played,
-        best,
-        Some((actual, optimal)),
-    ))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
     fn response_uses_negated_original_offer_units() {
-        let take = cube_decision(1, "take", -1.0, -2.0, -1.0).unwrap();
+        let take = evaluated_cube_decision(1, "take", -1.0, -2.0, -1.0).unwrap();
         assert_eq!(take.best, "drop");
         assert_eq!(take.played_equity, Some(-2.0));
         assert_eq!(take.equity_loss, 1.0);
-        let drop = cube_decision(1, "drop", -1.0, -2.0, -1.0).unwrap();
+        let drop = evaluated_cube_decision(1, "drop", -1.0, -2.0, -1.0).unwrap();
         assert_eq!(drop.equity_loss, 0.0);
+    }
+
+    #[tokio::test]
+    #[ignore = "requires locked native Open Sage; no database"]
+    async fn native_opening_analysis_retains_all_ranked_checker_candidates() {
+        let python = std::env::var("BGTUTOR_SAGE_PYTHON").unwrap();
+        for plies in [2, 4] {
+            let profile = SageEngine::probe_profile(python.clone(), plies, 4)
+                .await
+                .unwrap();
+            let engine = SageEngine::new(profile).unwrap();
+            let game = engine
+                .analyze_game("(;GM[6]MI[length:21];B[63lolr])", 1, plies)
+                .await
+                .unwrap();
+            let decision = &game.decisions[0];
+            let candidates = &decision.checker_candidates;
+            assert_eq!(candidates.len(), 14);
+            assert_eq!(candidates[0].notation, decision.best);
+            assert_eq!(Some(candidates[0].equity), decision.best_equity);
+            assert!(
+                candidates
+                    .iter()
+                    .any(|candidate| Some(candidate.equity) == decision.played_equity)
+            );
+            assert!(
+                candidates
+                    .iter()
+                    .all(|candidate| candidate.plies == Some(plies)
+                        && candidate.probabilities.len() == 6)
+            );
+        }
     }
 
     #[tokio::test]

@@ -7,6 +7,7 @@ import {
 } from './play-state';
 
 export type BoardView = 'before' | 'arrows' | 'after';
+export type CheckerPosition = Pick<Position, 'board' | 'player' | 'dice'>;
 export interface MovePreviewStep {
   from: number | 'bar';
   to: number | 'off';
@@ -19,7 +20,7 @@ export type MovePreview =
 
 /** Restore the submitted path from the stored absolute checker steps. */
 export function projectPracticeSteps(
-  position: Pick<Position, 'board' | 'player' | 'dice'>,
+  position: CheckerPosition,
   steps: CheckerStep[],
 ): MovePreview {
   const { player } = position;
@@ -154,6 +155,66 @@ function parseRuns(notation: string): Run[] | null {
   return runs;
 }
 
+function joinRuns(runs: Run[]): Run[] {
+  const joined: Run[] = [];
+  for (const run of runs) {
+    const previous = joined.find(
+      (path) => path.points.at(-1) === run.points[0],
+    );
+    if (previous) {
+      previous.points.push(...run.points.slice(1));
+      previous.hits.push(...run.hits);
+    } else {
+      joined.push({ points: [...run.points], hits: [...run.hits] });
+    }
+  }
+  return joined;
+}
+
+/** Shorten the display of a checker path, keeping every point where it hits. */
+export function compactCheckerNotation(
+  notation: string,
+  position?: CheckerPosition,
+) {
+  const runs = parseRuns(notation.trim());
+  if (!runs) return notation;
+  let paths = joinRuns(runs);
+  if (paths.every(({ points }) => points.length === 2)) return notation;
+
+  if (position) {
+    // Some sources store individual steps without hit markers.
+    const preview = projectMove({ ...position, notation });
+    if (!preview.ok) return notation;
+    const relative = (point: number) =>
+      position.player === 0 ? point : 25 - point;
+    paths = joinRuns(
+      preview.steps.map(({ from, to, hit }) => ({
+        points: [
+          from === 'bar' ? 25 : relative(from),
+          to === 'off' ? 0 : relative(to),
+        ],
+        hits: [hit],
+      })),
+    );
+  }
+
+  const counts = new Map<string, number>();
+  for (const { points, hits } of paths) {
+    const path = points
+      .flatMap((point, index) => {
+        const hit = hits[index - 1];
+        if (index > 0 && index < points.length - 1 && !hit) return [];
+        const name = point === 25 ? 'bar' : point === 0 ? 'off' : String(point);
+        return hit ? `${name}*` : name;
+      })
+      .join('/');
+    counts.set(path, (counts.get(path) ?? 0) + 1);
+  }
+  return [...counts]
+    .map(([path, count]) => (count > 1 ? `${path}(${count})` : path))
+    .join(' ');
+}
+
 function expandRuns(
   board: number[],
   dice: number[],
@@ -206,7 +267,7 @@ function expandRuns(
 
 /** Project a complete legal roll without modifying a stored position or its IDs. */
 export function projectMove(
-  position: Pick<Position, 'board' | 'player' | 'dice' | 'notation'>,
+  position: CheckerPosition & Pick<Position, 'notation'>,
   notation = position.notation,
 ): MovePreview {
   const invalid = (reason: string): MovePreview => ({ ok: false, reason });

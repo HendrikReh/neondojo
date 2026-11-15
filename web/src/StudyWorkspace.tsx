@@ -8,6 +8,7 @@ import {
 import LearningWorkspace from './LearningPanel';
 import StudyOverview from './StudyOverview';
 import StudyReports from './StudyReports';
+import type { AssessmentEntry } from './match-assessment-api';
 import RecurringMistakes from './RecurringMistakes';
 import SimilarPracticeHistory from './SimilarPracticeHistory';
 import { usePositionText } from './position-browser-messages';
@@ -17,9 +18,11 @@ type Area = 'overview' | 'cards' | 'reports' | 'mistakes' | 'practice';
 const areas: Area[] = ['overview', 'cards', 'reports', 'mistakes', 'practice'];
 export default function StudyWorkspace({
   onStudyDeck,
+  requestedAssessment,
   ...props
 }: ComponentProps<typeof LearningWorkspace> & {
   onStudyDeck: (id: string) => void;
+  requestedAssessment?: AssessmentEntry;
 }) {
   const t = useStudyText();
   const overviewText = useStudyOverviewText();
@@ -30,6 +33,9 @@ export default function StudyWorkspace({
   useEffect(() => {
     if (token !== undefined) setArea('cards');
   }, [token]);
+  useEffect(() => {
+    if (requestedAssessment) setArea('reports');
+  }, [requestedAssessment]);
   function openArea(next: Area) {
     setArea(next);
     tabs.current[next]?.focus();
@@ -116,6 +122,7 @@ export default function StudyWorkspace({
         <StudyReports
           visible={visible && area === 'reports'}
           theme={props.theme}
+          requestedAssessment={requestedAssessment}
         />
       </div>
       <div

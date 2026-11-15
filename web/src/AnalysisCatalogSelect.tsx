@@ -1,10 +1,14 @@
+import { useEffect, useRef, useState } from 'react';
+import ActionButton from './ActionButton';
+import LibraryDialog from './LibraryDialog';
 import type { AnalysisCatalogEntry } from './analysis-catalog-api';
 import type { AnalysisCatalog } from './useAnalysisCatalog';
 import { useAnalysisCatalogText } from './analysis-catalog-messages';
 import { useI18n } from './i18n';
 import { shortEngineLabel } from './engine-version';
+import { useLibraryText } from './library-messages';
 
-export function useAnalysisEntryLabel() {
+export function useAnalysisEntryLabel(includeEngine = true) {
   const text = useAnalysisCatalogText();
   const { locale } = useI18n();
   const date = new Intl.DateTimeFormat(locale, {
@@ -13,7 +17,8 @@ export function useAnalysisEntryLabel() {
   });
   return (entry: AnalysisCatalogEntry) =>
     [
-      entry.job ? shortEngineLabel(entry.engine) : entry.engine,
+      includeEngine &&
+        (entry.job ? shortEngineLabel(entry.engine) : entry.engine),
       entry.depth,
       entry.scope === 'game'
         ? text('game', { number: entry.game_no ?? '—' })
@@ -31,13 +36,45 @@ export function useAnalysisEntryLabel() {
 
 export default function AnalysisCatalogSelect({
   catalog,
+  onDeleted,
 }: {
   catalog: AnalysisCatalog;
+  onDeleted?: (entry: AnalysisCatalogEntry) => void;
 }) {
   const text = useAnalysisCatalogText();
   const label = useAnalysisEntryLabel();
   const { formatError, formatNumber } = useI18n();
+  const libraryText = useLibraryText();
+  const [target, setTarget] = useState<{
+    entry: AnalysisCatalogEntry;
+    sourceRevision: number;
+  }>();
+  const selector = useRef<HTMLSelectElement>(null);
+  const focusAfterDelete = useRef(false);
   const selected = catalog.selected;
+  const sourceRevision = catalog.sourceRevision;
+  const canDelete =
+    selected &&
+    sourceRevision !== undefined &&
+    (selected.status === 'completed' || selected.status === 'failed');
+  useEffect(() => {
+    if (focusAfterDelete.current && !catalog.loading && !catalog.saving) {
+      focusAfterDelete.current = false;
+      selector.current?.focus();
+    }
+  }, [catalog.loading, catalog.saving]);
+
+  async function confirmDelete() {
+    if (
+      !target ||
+      !(await catalog.remove(target.entry.id, target.sourceRevision))
+    )
+      return;
+    focusAfterDelete.current = true;
+    setTarget(undefined);
+    onDeleted?.(target.entry);
+  }
+
   const entries =
     catalog.selected &&
     !catalog.entries.some((entry) => entry.id === catalog.selected?.id)
@@ -51,12 +88,16 @@ export default function AnalysisCatalogSelect({
       <label>
         <span>{text('analysis')}</span>
         <select
+          ref={selector}
           aria-label={text('analysis')}
           title={
             selected &&
             [
               selected.engine,
               text(selected.source),
+              selected.job?.engine_snapshot?.gnubg_move_filter === 'top14'
+                ? text('top14')
+                : undefined,
               text('coverage', {
                 checker: formatNumber(selected.checker_count),
                 cube: formatNumber(selected.cube_count),
@@ -83,8 +124,18 @@ export default function AnalysisCatalogSelect({
           ))}
         </select>
       </label>
+      {canDelete && (
+        <ActionButton
+          icon="delete"
+          label={text('deleteAnalysis')}
+          compact
+          type="button"
+          disabled={catalog.loading || catalog.saving}
+          onClick={() => setTarget({ entry: selected, sourceRevision })}
+        />
+      )}
       {unavailable && <p role="status">{text('chooseAnother')}</p>}
-      {(catalog.loading || catalog.saving) && (
+      {!target && (catalog.loading || catalog.saving) && (
         <span role="status">{text(catalog.saving ? 'saving' : 'loading')}</span>
       )}
       {catalog.nextCursor && (
@@ -96,7 +147,7 @@ export default function AnalysisCatalogSelect({
           {text('more')}
         </button>
       )}
-      {!!catalog.error && (
+      {!target && !!catalog.error && (
         <>
           <p className="error" role="alert">
             {formatError(catalog.error)}
@@ -105,6 +156,42 @@ export default function AnalysisCatalogSelect({
             {text('retry')}
           </button>
         </>
+      )}
+      {target && (
+        <LibraryDialog
+          title={text('deleteAnalysis')}
+          onClose={() => setTarget(undefined)}
+          busy={catalog.saving}
+          native
+        >
+          <p>{text('deleteAnalysisPrompt')}</p>
+          <p>
+            <strong>{label(target.entry)}</strong>
+          </p>
+          {!!catalog.error && (
+            <p className="error" role="alert">
+              {formatError(catalog.error)}
+            </p>
+          )}
+          {catalog.saving && <p role="status">{text('deleting')}</p>}
+          <div className="library-dialog-actions">
+            <ActionButton
+              icon="cancel"
+              label={libraryText('cancel')}
+              type="button"
+              disabled={catalog.saving}
+              onClick={() => setTarget(undefined)}
+            />
+            <ActionButton
+              icon="delete"
+              className="danger"
+              label={text('deleteAnalysis')}
+              type="button"
+              disabled={catalog.saving}
+              onClick={() => void confirmDelete()}
+            />
+          </div>
+        </LibraryDialog>
       )}
     </div>
   );

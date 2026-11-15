@@ -11,20 +11,18 @@ export function useMatchAnalysisOptions({
   defaultPlies,
   configured,
   analysisInstallationKey,
-  resetKey,
 }: {
   defaultEngine: MatchAnalysisEngine;
   defaultPlies: number;
   configured: boolean;
   analysisInstallationKey?: string;
-  resetKey?: string;
 }) {
   const [engineId, setEngineId] = useState(defaultEngine);
   const [requestedPlies, setPlies] = useState(defaultPlies);
   useEffect(() => {
     setEngineId(defaultEngine);
     setPlies(defaultPlies);
-  }, [defaultEngine, defaultPlies, resetKey]);
+  }, [defaultEngine, defaultPlies]);
   const [engineCatalog, setEngineCatalog] = useState<{
     key?: string;
     engines: EngineInfo[];
@@ -77,11 +75,9 @@ export function useMatchAnalysisOptions({
 export function MatchAnalysisFields({
   options,
   disabled,
-  depthDisabled = disabled || !options.analysisConfigured,
 }: {
   options: ReturnType<typeof useMatchAnalysisOptions>;
   disabled: boolean;
-  depthDisabled?: boolean;
 }) {
   const { t } = useI18n();
   const settingsText = useSettingsText();
@@ -90,6 +86,7 @@ export function MatchAnalysisFields({
     plies,
     supportedPlies,
     catalog,
+    analysisConfigured,
     onEngine,
     onPlies,
   } = options;
@@ -126,7 +123,7 @@ export function MatchAnalysisFields({
         <select
           aria-label={t('matchAnalysis.depthLabel')}
           value={plies}
-          disabled={depthDisabled}
+          disabled={disabled || !analysisConfigured}
           onChange={(event) => onPlies(Number(event.target.value))}
         >
           <option value={0} disabled={!supportedPlies.includes(0)}>

@@ -123,6 +123,9 @@ pub struct EngineSnapshot {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(minimum = 1)]
     pub gnubg_threads: Option<i32>,
+    /// Saved checker move filter. Older snapshots use GNUbg startup defaults.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gnubg_move_filter: Option<crate::engine::GnubgMoveFilter>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub open_sage: Option<SageSnapshot>,
 }
@@ -136,6 +139,7 @@ impl EngineSnapshot {
             "gnubg" => Ok(AnalysisEngine::Gnubg(
                 Engine::new(self.gnubg_path.clone())
                     .with_threads(self.gnubg_threads)
+                    .with_move_filter(self.gnubg_move_filter)
                     .with_expected_version(self.engine_version.clone()),
             )),
             "bgsage" => Ok(AnalysisEngine::OpenSage(SageEngine::new(
@@ -156,9 +160,14 @@ pub(crate) fn routes() -> Router<AppState> {
         .route("/api/engines/gnubg/check", post(check_engine))
 }
 
-async fn load_row(state: &AppState) -> anyhow::Result<SavedSettings> {
+async fn ensure_settings(state: &AppState) -> anyhow::Result<()> {
     sqlx::query("INSERT INTO app_settings(singleton,gnubg_path) VALUES(true,$1) ON CONFLICT(singleton) DO NOTHING")
         .bind(state.engine.binary()).execute(&state.pool).await?;
+    Ok(())
+}
+
+async fn load_row(state: &AppState) -> anyhow::Result<SavedSettings> {
+    ensure_settings(state).await?;
     Ok(
         sqlx::query_as("SELECT * FROM app_settings WHERE singleton=true")
             .fetch_one(&state.pool)
@@ -168,11 +177,21 @@ async fn load_row(state: &AppState) -> anyhow::Result<SavedSettings> {
 pub(crate) async fn load(state: &AppState) -> anyhow::Result<AppSettings> {
     Ok(load_row(state).await?.settings)
 }
-pub(crate) async fn snapshot(
+
+pub(crate) async fn load_play_settings(
     state: &AppState,
-    requested_plies: Option<i32>,
-) -> anyhow::Result<(AppSettings, EngineSnapshot)> {
-    snapshot_for_analysis(state, requested_plies, None).await
+) -> anyhow::Result<(AppSettings, crate::configuration::ErrorThresholds)> {
+    ensure_settings(state).await?;
+    let mut tx = state.pool.begin().await?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        .execute(&mut *tx)
+        .await?;
+    let settings = sqlx::query_as("SELECT * FROM app_settings WHERE singleton=true")
+        .fetch_one(&mut *tx)
+        .await?;
+    let thresholds = crate::configuration::store::error_thresholds(&mut *tx).await?;
+    tx.commit().await?;
+    Ok((settings, thresholds))
 }
 
 pub(crate) async fn snapshot_for_analysis(
@@ -182,7 +201,9 @@ pub(crate) async fn snapshot_for_analysis(
 ) -> anyhow::Result<(AppSettings, EngineSnapshot)> {
     let saved = load_row(state).await?;
     let plies = requested_plies.unwrap_or(saved.settings.analysis_plies);
-    let snapshot = analysis_snapshot(state, &saved.settings, requested_engine, plies).await?;
+    let mut snapshot = analysis_snapshot(state, &saved.settings, requested_engine, plies).await?;
+    snapshot.gnubg_move_filter =
+        crate::engine::GnubgMoveFilter::for_analysis(&snapshot.engine_id, plies);
     Ok((saved.settings, snapshot))
 }
 
@@ -249,6 +270,7 @@ pub(crate) async fn snapshot_for(
         gnubg_path: gnubg_path.into(),
         engine_version,
         gnubg_threads: gnubg_threads.filter(|&threads| id == "gnubg" && threads != 1),
+        gnubg_move_filter: None,
         open_sage,
     })
 }

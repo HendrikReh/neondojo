@@ -121,7 +121,7 @@ async fn create_profile(
     let before = store::state(&mut tx).await?;
     store::revision(input.expected_state_revision, before.revision)?;
     let (name, key) = store::name(&mut tx, &input.name).await?;
-    let issues = resources(&app, &mut tx, &config, true, true, None).await?;
+    let issues = resources(&app, &mut tx, &config, true, true).await?;
     if !issues.is_empty() {
         return Err(ConfigurationError::resources(issues));
     }
@@ -190,7 +190,6 @@ async fn save_profile(
                 || old["play"]["engine"] != new["play"]["engine"]
                 || old["play"]["plies"] != new["play"]["plies"],
             old["opening_book"] != new["opening_book"],
-            Some(&before.current_configuration),
         )
         .await?;
         if !issues.is_empty() {
@@ -249,7 +248,7 @@ async fn validate_profile(
     let target = store::profile(&mut tx, id).await?;
     store::revision(input.expected_profile_revision, target.revision)?;
     let config = normalize(target.configuration)?;
-    let issues = resources(&app, &mut tx, &config, true, true, None).await?;
+    let issues = resources(&app, &mut tx, &config, true, true).await?;
     tx.commit().await?;
     Ok(Json(ConfigurationValidation {
         valid: issues.is_empty(),
@@ -278,7 +277,7 @@ async fn activate_profile(
         return Ok(Json(before));
     }
     let config = normalize(target.configuration)?;
-    let issues = resources(&app, &mut tx, &config, true, true, None).await?;
+    let issues = resources(&app, &mut tx, &config, true, true).await?;
     if !issues.is_empty() {
         return Err(ConfigurationError::resources(issues));
     }

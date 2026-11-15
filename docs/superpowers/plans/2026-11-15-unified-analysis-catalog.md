@@ -1,6 +1,6 @@
 # Unified Analysis Catalog Implementation Plan
 
-> **For agentic workers:** Use superpowers:subagent-driven-development for bounded tasks and requesting-code-review for final review. Preserve unrelated uncommitted work. The implementation and verification phases did not authorize commits; the subsequent user request authorizes a selective catalog commit.
+> **For agentic workers:** Use superpowers:subagent-driven-development for bounded tasks and requesting-code-review for final review. Preserve the existing uncommitted working tree; no commits or resets are authorized.
 
 **Goal:** One persisted analysis selection per match drives checker/cube review, move coloring, statistics and card creation independently of calculation defaults. Preserve every saved evaluation.
 
@@ -59,8 +59,6 @@ Files: new catalog hook/selector/messages, `AnalysisWorkspace.tsx`, `AnalysisPan
 
 ## Verification record
 
-These results describe the integrated working tree before selective commit preparation; unrelated work was present during those runs.
-
 - Catalog, shared review/statistics/marks, position/card creation, library, recurring mistakes, copying and retention were exercised against isolated PostgreSQL databases; affected native paths also ran with GNUbg.
 - All 570 frontend tests and the production build passed. The 30 affected browser cases passed across targeted runs; the catalog was visually checked at 1800×1169, 2560×1440 and 3840×2160.
 - Rust formatting and Clippy passed. The default workspace run finished successfully: 260 passed, 402 ignored; selected ignored PostgreSQL/GNUbg targets were run separately as described above. The final workspace run uses an exclusive test server after another concurrent test process collided on SQLx test-database names. Optional integration suites outside the affected targets were not all executed.
@@ -88,25 +86,3 @@ The wider browser coverage exposed two UI defects: the analysis submission error
 Browser fixtures now use the shared catalog selection, real checkpoint/import values, server-side position-job discovery and current labels. The full-match helper locates the exact match UUID across library pages, including older deduplicated imports; it does not substitute a match by player name. Backup-browser checks account for the test data already present before export.
 
 Final Rust formatting and Clippy passed; the default workspace suite passed 260 tests (404 ignored by default, with the catalog-related cases exercised separately above). All 570 frontend tests and the production build passed after both UI fixes. The combined 154-case browser run passed with no failures or skipped cases, including both native Open Sage flows. Desktop checks cover 1800×1169, 2560×1440 and 3840×2160; the narrow-window regression uses 390px. The one earlier statistics-browser case using the modified pagination helper also passed separately, for 155 distinct browser cases in this follow-up. The final review found no blocking issues or weakened domain assertions. No user database was used for these tests, and the dedicated test servers were stopped afterward.
-
-## Selective commit verification — 2026-11-15
-
-The catalog changes were reconstructed over `8ea7157` in an isolated tree to
-exclude unrelated open profile, playing, engine, analysis-deletion and Anki work.
-Migration 0068 remains byte-for-byte unchanged; the unrelated migrations 0063–0067
-are outside this commit. Existing working-tree files were not rewritten.
-
-The isolated candidate passed Rust formatting, Clippy and the workspace suite
-(243 tests; 394 ignored by default), plus 177 targeted PostgreSQL/GNUbg/Open Sage
-integration tests on a dedicated test server. API contracts were regenerated
-from this candidate. All 572 frontend tests and the production build passed.
-Across the targeted browser runs, all 49 distinct cases passed after corrections;
-the complete optional integration/browser suites were not rerun in this isolated
-step. The catalog case checks 1800×1169, 2560×1440 and 3840×2160 layouts.
-
-The isolation checks retained a review filter while catalog data reloads for
-another position. Browser assertions now check engine provenance in its tooltip,
-explicitly select a newly completed result, and delay the position request used
-by navigation to verify that the latest click wins. The duplicate-alert and
-narrow-heading regression cases also passed. A final bounded review found no
-blocking issues or weakened domain assertions.

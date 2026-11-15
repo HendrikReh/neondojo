@@ -27,6 +27,13 @@ export const emptyCardFilters = (): CardFilters => ({
   kind: '',
   status: '',
 });
+export function normalizeCardFilters(filters: CardFilters): CardFilters {
+  const normalized = { ...filters };
+  for (const key of Object.keys(normalized) as (keyof CardFilters)[])
+    normalized[key] = normalized[key]?.trim() as never;
+  normalized.tag = normalized.tag.toLowerCase();
+  return normalized;
+}
 export function cardListPath(
   deck: string,
   filters: CardFilters,

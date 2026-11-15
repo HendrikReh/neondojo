@@ -1,6 +1,11 @@
 import { applyAndCloseSettings } from './settings-actions';
-import { openMatchCalculation, openPositionCalculation } from './analysis-controls';
+import {
+  openFullMatchAnalysis,
+  openPositionCalculation,
+  submitFullMatchAnalysis,
+} from './analysis-controls';
 import { test, expect } from './test';
+import type { Job } from '../src/api';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -15,7 +20,7 @@ async function importStudy(
   metadata = 'MI[length:7][ws:0][bs:0]',
 ) {
   await page.goto('/');
-  await page.locator('input[type=file]').setInputFiles({
+  await page.getByLabel('Partiedatei', { exact: true }).setInputFiles({
     name: `study-${suffix}.sgf`,
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(
@@ -73,7 +78,7 @@ test('match and position notes persist, search jumps to the exact move, and conf
   );
   await page.getByRole('tab', { name: 'Matchdatenbank', exact: true }).click();
   const search = page.locator('.annotation-search');
-  await search.locator('summary').click();
+  await page.locator('.library-search-toolbar').getByRole('button', { name: 'Notizen', exact: true }).click();
   await search
     .getByLabel('Text', { exact: true })
     .fill(`position-comment-${suffix}`);
@@ -190,15 +195,34 @@ test('an analyzed annotated position becomes a shared study card and a downloada
   await expect(
     position.getByText('Notizen gespeichert.', { exact: true }),
   ).toBeVisible();
-  await page.getByRole('tab', { name: 'Übersicht', exact: true }).click();
+  await page.getByRole('tab', { name: 'Checker', exact: true }).click();
+  const submitted = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST' &&
+      new URL(response.url()).pathname === '/api/jobs',
+  );
   await (
     await openPositionCalculation(page)
   )
     .getByRole('button', { name: 'Position analysieren', exact: true })
     .click();
-  await expect(page.getByText('Bester', { exact: true })).toBeVisible({
-    timeout: 30_000,
-  });
+  const analysisResponse = await submitted;
+  expect(analysisResponse.ok(), await analysisResponse.text()).toBe(true);
+  const analysisJob: Job = await analysisResponse.json();
+  await expect
+    .poll(
+      async () => {
+        const response = await page.request.get(`/api/jobs/${analysisJob.id}`);
+        await expect(response).toBeOK();
+        const job: Job = await response.json();
+        return job.status;
+      },
+      { timeout: 30_000 },
+    )
+    .toBe('completed');
+  await expect(
+    page.locator('.analysis-panel .candidate-marker-best'),
+  ).toBeVisible();
   await page.getByRole('tab', { name: 'Lernkarten', exact: true }).click();
   const add = page.getByRole('region', {
     name: 'Positionen als Lernkarten',
@@ -258,10 +282,10 @@ test('an analyzed annotated position becomes a shared study card and a downloada
   await revealStarted;
   try {
     await expect(
-      study.getByRole('button', { name: 'Jetzt lernen', exact: true }),
+      study.getByRole('button', { name: 'Antwort aufdecken', exact: true }),
     ).toBeDisabled();
     await study
-      .getByRole('button', { name: 'Zurück zu den Decks', exact: true })
+      .getByRole('button', { name: 'Zurück zur Kartensuche', exact: true })
       .click();
     await study
       .getByRole('button', { name: 'Jetzt lernen', exact: true })
@@ -289,6 +313,9 @@ test('an analyzed annotated position becomes a shared study card and a downloada
   await expect(study.locator('.learning-review-result')).toContainText(
     'Nächste Wiederholung',
   );
+  await study
+    .getByRole('button', { name: 'Zurück zur Kartensuche', exact: true })
+    .click();
   let releaseExport: () => void = () => {};
   let signalExport: () => void = () => {};
   const exportGate = new Promise<void>((resolve) => {
@@ -343,7 +370,7 @@ test('an annotation jump supersedes a delayed game load and switching views pres
 }) => {
   await page.goto('/');
   await page
-    .locator('input[type=file]')
+    .getByLabel('Partiedatei', { exact: true })
     .setInputFiles('../backend/tests/fixtures/WC2014.mat');
   await expect(page.locator('.moves-list button')).toHaveCount(8);
   const id = await page
@@ -366,7 +393,7 @@ test('an annotation jump supersedes a delayed game load and switching views pres
   ).toBe(200);
   await page.getByRole('tab', { name: 'Matchdatenbank', exact: true }).click();
   const search = page.locator('.annotation-search');
-  await search.locator('summary').click();
+  await page.locator('.library-search-toolbar').getByRole('button', { name: 'Notizen', exact: true }).click();
   await search.getByLabel('Text', { exact: true }).fill(marker);
   await search
     .getByRole('button', { name: 'Notizen suchen', exact: true })
@@ -467,7 +494,7 @@ test('a whole-match deck trains checker, double and response cards with the sele
   const suffix = crypto.randomUUID();
   const metadata = await unusedLearningScores(page);
   await page.goto('/');
-  await page.locator('input[type=file]').setInputFiles({
+  await page.getByLabel('Partiedatei', { exact: true }).setInputFiles({
     name: `bulk-${suffix}.sgf`,
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(
@@ -475,8 +502,6 @@ test('a whole-match deck trains checker, double and response cards with the sele
     ),
   });
   await expect(page.locator('.board')).toBeVisible();
-  await openMatchCalculation(page);
-  await page.getByLabel('Analyseumfang', { exact: true }).selectOption('match');
   const panel = page.getByRole('region', {
     name: 'Vollständige Partieanalyse',
     exact: true,
@@ -486,14 +511,9 @@ test('a whole-match deck trains checker, double and response cards with the sele
       r.request().method() === 'POST' &&
       /\/api\/matches\/[^/]+\/analysis$/.test(new URL(r.url()).pathname),
   );
-  await page
-    .locator('.workspace-analysis-command')
-    .getByRole('button', {
-      name: /Gesamte Partie analysieren|Partie erneut analysieren/,
-    })
-    .click();
+  await submitFullMatchAnalysis(page, await openFullMatchAnalysis(page));
   const job = await (await started).json();
-  await page.getByRole('tab', { name: 'Fehler', exact: true }).click();
+  await page.getByRole('tab', { name: 'Cube', exact: true }).click();
   await expect(panel).toHaveAttribute('data-job-id', job.id);
   await expect
     .poll(

@@ -23,7 +23,7 @@ export function useBoardReviewShortcuts(
       if (
         document.querySelector('dialog[open]') ||
         target?.closest(
-          'input,textarea,select,a,[contenteditable="true"],[contenteditable=""],[role="tablist"],[role="dialog"]',
+          'input,textarea,select,a,[contenteditable="true"],[contenteditable=""],[role="tablist"],[role="dialog"],[role="separator"]',
         )
       )
         return;

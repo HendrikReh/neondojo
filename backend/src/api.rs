@@ -30,9 +30,11 @@ pub struct AppState {
     pub pool: PgPool,
     pub engine: Engine,
     pub wake: Arc<Notify>,
+    pub(crate) assessment_wake: Arc<Notify>,
     pub shutdown: CancellationToken,
     imports: Arc<Semaphore>,
     pub(crate) backup: Arc<crate::database_backup::Access>,
+    pub(crate) anki_connection: Arc<crate::learning::AnkiConnection>,
 }
 
 impl AppState {
@@ -41,9 +43,11 @@ impl AppState {
             pool,
             engine,
             wake: Arc::new(Notify::new()),
+            assessment_wake: Arc::new(Notify::new()),
             shutdown: CancellationToken::new(),
             imports: Arc::new(Semaphore::new(2)),
             backup: Arc::default(),
+            anki_connection: Arc::default(),
         }
     }
 }
@@ -86,6 +90,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::engine_matches::routes())
         .merge(crate::play::routes())
         .merge(crate::study::routes())
+        .merge(crate::match_assessment::routes())
         .merge(crate::recurring_mistakes::routes())
         .merge(crate::opening_book::routes())
         .merge(crate::imported_analysis::routes())
@@ -123,6 +128,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/jobs/{id}/events", get(events))
         .route("/api/jobs/{id}/moves", get(move_analyses))
         .route("/api/openapi.json", get(openapi))
+        .route(
+            "/api/database-backup/target-counts",
+            get(crate::database_backup::target_counts),
+        )
         .fallback(|| async { ApiError::missing() })
         .layer(middleware::from_fn_with_state(
             state.clone(),
@@ -566,8 +575,10 @@ enum PositionJobKind {
 struct JobRequest {
     /// Database UUID of the imported position, not its GNUbg ID.
     position_id: Uuid,
-    /// analysis: five candidate moves; dice: 21 weighted rolls.
+    /// A ranked candidate analysis or a distribution over 21 weighted rolls.
     kind: PositionJobKind,
+    /// Provider for this job; omitted uses the saved analysis engine.
+    engine_id: Option<MatchAnalysisEngine>,
     /// Verified search depth of the selected engine. Omitted uses saved analysis depth.
     #[serde(default)]
     #[schema(minimum = 0, maximum = 4)]
@@ -581,9 +592,11 @@ async fn create_job(
 ) -> ApiResult<(StatusCode, Json<Job>)> {
     let Json(request) = payload.map_err(|e| ApiError::invalid(e.body_text()))?;
     crate::play::require_position_review_available(&state.pool, request.position_id).await?;
-    let (settings, snapshot) = crate::settings::snapshot(&state, request.plies)
-        .await
-        .map_err(|e| ApiError::invalid(format!("Engine unavailable: {e:#}")))?;
+    let engine_id = request.engine_id.as_ref().map(MatchAnalysisEngine::id);
+    let (settings, snapshot) =
+        crate::settings::snapshot_for_analysis(&state, request.plies, engine_id)
+            .await
+            .map_err(|e| ApiError::invalid(format!("Engine unavailable: {e:#}")))?;
     let plies = request.plies.unwrap_or(settings.analysis_plies);
     if !crate::configuration::engine_depths(&snapshot.engine_id, "analysis").contains(&plies) {
         return Err(ApiError::invalid(
@@ -762,7 +775,7 @@ struct MoveAnalysisQuery {
     after: Option<i64>,
     /// Page size 1–100, defaults to 50.
     limit: Option<i64>,
-    /// Exclude forced/unavailable decisions and require at least 0.04 normalized equity loss.
+    /// Exclude forced/unavailable decisions and apply the configured Questionable threshold.
     #[serde(default)]
     errors_only: bool,
     /// 0 = White, 1 = Black.
@@ -807,31 +820,35 @@ async fn move_analyses(
         )
         .await?;
     }
+    let thresholds = crate::configuration::store::error_thresholds(&state.pool).await?;
     if let Some(after) = query.after.filter(|n| *n > 0) {
-        let row: Option<(Uuid, i32, i32, String, f64, String, String)> = sqlx::query_as(
-            "SELECT job_id,game_no,player,kind,equity_loss,data->>'severity',COALESCE(data->>'evaluation_status','') FROM move_analyses WHERE id=$1",
+        let row: Option<(Uuid, i32, i32, String, f64, String)> = sqlx::query_as(
+            "SELECT job_id,game_no,player,kind,equity_loss,COALESCE(data->>'evaluation_status','') FROM move_analyses WHERE id=$1",
         )
         .bind(after)
         .fetch_optional(&state.pool)
         .await
         .map_err(anyhow::Error::from)?;
-        let Some((job_id, game_no, player, kind, loss, severity, evaluation_status)) = row else {
+        let Some((job_id, game_no, player, kind, loss, evaluation_status)) = row else {
             return Err(ApiError::invalid("Unknown cursor"));
+        };
+        let severity = if matches!(evaluation_status.as_str(), "forced" | "unavailable") {
+            MoveSeverity::None
+        } else {
+            thresholds.classify(loss)
         };
         if job_id != id
             || query.game_no.is_some_and(|n| n != game_no)
             || query.player.is_some_and(|n| n != player)
             || query.kind.as_ref().is_some_and(|k| *k != kind)
-            || (query.errors_only
-                && (loss < MoveSeverity::DOUBTFUL_MIN_LOSS
-                    || matches!(evaluation_status.as_str(), "forced" | "unavailable")))
-            || query.severity.is_some_and(|s| s.as_str() != severity)
+            || (query.errors_only && severity == MoveSeverity::None)
+            || query.severity.is_some_and(|grade| grade != severity)
         {
             return Err(ApiError::invalid("Cursor does not match the filters"));
         }
     }
     Ok(Json(
-        store::move_analyses_filtered(
+        store::move_analyses_with_thresholds(
             &state.pool,
             id,
             query.after.unwrap_or(0),
@@ -841,6 +858,7 @@ async fn move_analyses(
             query.kind.as_deref(),
             query.game_no,
             query.severity.map(MoveSeverity::as_str),
+            thresholds,
         )
         .await?,
     ))
@@ -979,6 +997,7 @@ impl OpenApi for ApiDoc {
         doc.merge(crate::analysis_timing::TimingDoc::openapi());
         doc.merge(crate::play::PlayDoc::openapi());
         doc.merge(crate::study::StudyDoc::openapi());
+        doc.merge(crate::match_assessment::AssessmentDoc::openapi());
         doc.merge(crate::recurring_mistakes::RecurringMistakesDoc::openapi());
         doc.merge(crate::opening_book::OpeningBookDoc::openapi());
         doc.merge(crate::imported_analysis::ImportedAnalysisDoc::openapi());

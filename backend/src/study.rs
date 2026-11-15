@@ -195,7 +195,10 @@ async fn get_report(
     let (session, _) = report_checkpoint(&state.pool, id).await?;
     Ok(Json(session))
 }
-async fn report_checkpoint(pool: &sqlx::PgPool, id: Uuid) -> ApiResult<(PlaySession, String)> {
+pub(crate) async fn report_checkpoint(
+    pool: &sqlx::PgPool,
+    id: Uuid,
+) -> ApiResult<(PlaySession, String)> {
     let sql=format!("{REPORT_SOURCES} SELECT
       CASE WHEN archived THEN
         jsonb_set(jsonb_set(jsonb_set(jsonb_set(state,'{{library_match_id}}',coalesce(to_jsonb(library_match_id),'null'::jsonb)),

@@ -8,11 +8,24 @@ import {
 import vectors from '../../tests/fixtures/configuration-normalization.json';
 
 describe('configuration comparison', () => {
+  it('defaults legacy profiles to the four analysis thresholds', () => {
+    expect(
+      normalizeConfiguration(vectors.base).analysis.error_thresholds,
+    ).toEqual({
+      questionable: 0.005,
+      error: 0.02,
+      blunder: 0.08,
+      large_blunder: 0.12,
+    });
+  });
   it('normalizes legacy and independently saved board widths', () => {
     const legacy = structuredClone(vectors.base);
     expect(normalizeConfiguration(legacy).appearance).toMatchObject({
       analysis_board_width: null,
       analysis_overview_board_width: null,
+      analysis_errors_board_width: null,
+      analysis_statistics_board_width: null,
+      analysis_notes_board_width: null,
     });
     const appearance = { ...legacy.appearance, analysis_board_width: 540 };
     expect(
@@ -20,21 +33,27 @@ describe('configuration comparison', () => {
     ).toMatchObject({
       analysis_board_width: 540,
       analysis_overview_board_width: null,
+      analysis_errors_board_width: null,
+      analysis_statistics_board_width: null,
+      analysis_notes_board_width: null,
     });
     expect(
       normalizeConfiguration({
         ...legacy,
-        appearance: { ...appearance, analysis_overview_board_width: 360 },
+        appearance: { ...appearance, analysis_overview_board_width: 1680 },
       }).appearance,
     ).toMatchObject({
       analysis_board_width: 540,
-      analysis_overview_board_width: 360,
+      analysis_overview_board_width: 1680,
     });
-    for (const field of [
-      'analysis_board_width',
-      'analysis_overview_board_width',
-    ])
-      for (const width of [0, 319, 961, 400.5, Number.NaN])
+    for (const [field, max] of [
+      ['analysis_board_width', 1680],
+      ['analysis_overview_board_width', 1680],
+      ['analysis_errors_board_width', 1680],
+      ['analysis_statistics_board_width', 1680],
+      ['analysis_notes_board_width', 1680],
+    ] as const)
+      for (const width of [0, 319, max + 1, 400.5, Number.NaN])
         expect(() =>
           normalizeConfiguration({
             ...legacy,

@@ -4,6 +4,14 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { I18nProvider } from './i18n';
 import SourceAnalysisView from './SourceAnalysisView';
 import type { BookLookup } from './source-analysis-api';
+import { candidatePreviewNotation } from './candidate-preview';
+
+test('uses the recorded steps in preference to compact notation', () => {
+  expect(
+    candidatePreviewNotation({ notation: '24/15', path: '24/21 21/15' }),
+  ).toBe('24/21 21/15');
+  expect(candidatePreviewNotation({ notation: '24/15' })).toBe('24/15');
+});
 
 beforeEach(() => vi.stubGlobal('localStorage', { getItem: () => 'en' }));
 afterEach(() => vi.unstubAllGlobals());

@@ -1,5 +1,5 @@
-import { useProfileValue } from './useProfileValue';
-import { useOptionalConfiguration } from './ConfigurationProvider';
+import { useConfirmedConfiguration, useWorkspaceDefaults } from './ConfigurationProvider';
+import { useWorkspaceLayout, useWorkspaceSession } from './useWorkspaceSession';
 import ActionButton from './ActionButton';
 import SearchPagination from './SearchPagination';
 import { SearchResultList } from './SearchResultList';
@@ -20,7 +20,6 @@ import type { Database } from './library-api';
 import type { Theme } from './themes';
 import {
   readPositionPlayed,
-  savePositionPlayed,
 } from './position-table-columns';
 import PositionBrowserControls from './PositionBrowserControls';
 import PositionBrowserDecks from './PositionBrowserDecks';
@@ -46,6 +45,11 @@ import {
 import { usePositionText } from './position-browser-messages';
 import './position-browser.css';
 
+const defaultPositionDefinition: PositionFilterDefinition = {
+  schema_version: 1,
+  sort: 'match',
+};
+
 export default function PositionBrowser({
   visible,
   revision,
@@ -55,6 +59,7 @@ export default function PositionBrowser({
   deckRevision,
   theme,
   onOpenPosition,
+  onFindSimilar,
   onDeckChanged,
   onStudy,
 }: {
@@ -66,26 +71,42 @@ export default function PositionBrowser({
   deckRevision: number;
   theme: Theme;
   onOpenPosition: (id: string) => void;
+  onFindSimilar: (
+    position: PositionBrowserHit['position'],
+    matchName: string,
+  ) => void;
   onDeckChanged: () => void;
   onStudy: (deckId: string) => void;
 }) {
-  const profile = useOptionalConfiguration();
+  const confirmed = useConfirmedConfiguration();
+  const legacy = useWorkspaceDefaults();
   const p = usePositionText(),
     { formatError } = useI18n();
-  const [definition, setDefinition] = useProfileValue<PositionFilterDefinition>(
-    (c) => c.positions.definition,
-    (c, definition) => ({ ...c, positions: { ...c.positions, definition } }),
-    () => positionDefinition(emptyPositionFilters()),
-  );
-  const [draft, setDraft] = useState<PositionFilterDraft>(() =>
-    positionDraft(definition),
-  );
-  useEffect(() => {
-    if (profile?.current) {
-      setDraft(positionDraft(profile.current.positions.definition));
-      setInvalid(false);
-    }
-  }, [profile?.generation, profile?.ready]);
+  const [definition, setDefinition] =
+    useWorkspaceSession<PositionFilterDefinition>(
+      'positions.filters',
+      legacy?.positions.definition,
+      defaultPositionDefinition,
+      (value) => {
+        if (
+          !value ||
+          typeof value !== 'object' ||
+          !('schema_version' in value) ||
+          value.schema_version !== 1
+        )
+          return undefined;
+        return positionDefinition(
+          positionDraft(value as PositionFilterDefinition),
+        );
+      },
+    );
+  const [editedDraft, setEditedDraft] = useState<PositionFilterDraft>();
+  const draft = editedDraft ?? positionDraft(definition);
+  function setDraft(next: React.SetStateAction<PositionFilterDraft>) {
+    setEditedDraft((previous) =>
+      typeof next === 'function' ? next(previous ?? draft) : next,
+    );
+  }
   const [databases, setDatabases] = useState<Database[]>([]),
     [preview, setPreview] = useState<{ page: number; id: string }>(),
     [selectedHits, setSelectedHits] = useState<PositionBrowserHit[]>([]),
@@ -96,13 +117,11 @@ export default function PositionBrowser({
     [databaseError, setDatabaseError] = useState<unknown>(),
     [invalid, setInvalid] = useState(false),
     [refresh, setRefresh] = useState(0),
-    [showPlayed, setShowPlayed] = useProfileValue<boolean>(
-      (c) => c.positions.show_played,
-      (c, show_played) => ({
-        ...c,
-        positions: { ...c.positions, show_played },
-      }),
-      readPositionPlayed,
+    [showPlayed, setShowPlayed] = useWorkspaceLayout(
+      'positions.showPlayed',
+      legacy?.positions.show_played,
+      readPositionPlayed(),
+      (value) => typeof value === 'boolean' ? value : undefined,
     );
   const scope = JSON.stringify(definition);
   useEffect(() => {
@@ -137,6 +156,7 @@ export default function PositionBrowser({
       annotationRevision,
       bookmarkRevision,
       deckRevision,
+      confirmed?.analysis.error_thresholds,
       refresh,
     ]),
     enabled: visible,
@@ -334,6 +354,7 @@ export default function PositionBrowser({
             hit={activePreview}
             theme={theme}
             onOpen={onOpenPosition}
+            onFindSimilar={onFindSimilar}
             showPlayed={showPlayed}
             visible={visible}
           />
@@ -427,10 +448,7 @@ export default function PositionBrowser({
             busy={busy}
             visible={visible}
             showPlayed={showPlayed}
-            onShowPlayed={(value) => {
-              setShowPlayed(value);
-              if (!profile) savePositionPlayed(value);
-            }}
+            onShowPlayed={setShowPlayed}
             sort={definition.sort ?? 'match'}
             direction={
               definition.direction ??

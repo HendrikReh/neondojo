@@ -1,4 +1,4 @@
-import { openMatchCalculation } from './analysis-controls';
+import { openFullMatchAnalysis, openMatchAnalysisOptions } from './analysis-controls';
 import { expect, test } from '@playwright/test';
 import type { AnalysisTimeEstimateResult } from '../src/analysis-time-estimate-api';
 import { formatAnalysisDuration } from '../src/analysis-time-estimate-messages';
@@ -113,18 +113,16 @@ test('uses native benchmarks at every depth for both analysis scopes without sta
     );
   }, matchId);
   await page.goto('/');
-  await openMatchCalculation(page);
-  const depth = page.getByLabel('Match analysis depth', { exact: true });
-  await expect(depth).toBeEnabled();
+  await openMatchAnalysisOptions(page);
 
   const estimate = page.locator('.analysis-time-estimate');
-  const scope = page.getByLabel('Analysis scope', { exact: true });
   for (const [gameNo, moveCount] of [
     [1, 2],
     [null, 3],
   ] as const) {
-    await openMatchCalculation(page);
-    await scope.selectOption(gameNo === null ? 'match' : 'game');
+    const controls = gameNo === null ? await openFullMatchAnalysis(page) : page;
+    const depth = controls.getByLabel('Match analysis depth', { exact: true });
+    await expect(depth).toBeEnabled();
     const initialDepth = Number(await depth.inputValue());
     expect(depths).toContain(initialDepth);
     // Changing the control must trigger a request even for its initial value.
@@ -178,7 +176,7 @@ test('uses native benchmarks at every depth for both analysis scopes without sta
           `${moveCount} checker moves · ${plies} Ply`,
         );
         await expect(
-          page.getByRole('button', {
+          controls.getByRole('button', {
             name: gameNo === null ? 'Analyze entire match' : 'Analyze game',
             exact: true,
           }),

@@ -171,6 +171,85 @@ async fn match_analysis_history_includes_both_providers_for_the_current_full_mat
 }
 
 #[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires isolated PostgreSQL and native GNUbg"]
+async fn gnubg_game_jobs_evaluate_all_fourteen_opening_candidates_at_depth(pool: PgPool) {
+    let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()));
+    let sgf = "(;GM[6]FF[4]MI[length:21][ws:0][bs:0];B[63lolr])";
+    let imported = store::import_match(
+        &pool,
+        "opening.sgf",
+        "sgf",
+        sgf.as_bytes(),
+        sgf,
+        &import::parse_sgf(sgf).unwrap(),
+    )
+    .await
+    .unwrap();
+    let state = api::AppState::new(pool.clone(), engine);
+    let app = api::router(state.clone());
+    for plies in [2, 4] {
+        let (status, submitted) = call(
+            app.clone(),
+            "POST",
+            &format!("/api/matches/{}/analysis", imported.r#match.id),
+            json!({"engine_id":"gnubg","plies":plies,"game_no":1}),
+        )
+        .await;
+        assert_eq!(status, 202, "{submitted}");
+        let job_id = submitted["id"].as_str().unwrap();
+        assert!(jobs::run_one(&state).await.unwrap());
+        let (_, done) = call(
+            app.clone(),
+            "GET",
+            &format!("/api/jobs/{job_id}"),
+            Value::Null,
+        )
+        .await;
+        assert_eq!(done["status"], "completed", "{done}");
+        let stored: Value = sqlx::query_scalar(
+            "SELECT data FROM move_analyses WHERE job_id=$1::uuid AND kind='checker'",
+        )
+        .bind(job_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert!(stored["checker_candidates"].is_array(), "{stored}");
+        let (status, result) = call(
+            app.clone(),
+            "GET",
+            &format!("/api/jobs/{job_id}/moves?kind=checker&limit=1"),
+            Value::Null,
+        )
+        .await;
+        assert_eq!(status, 200, "{result}");
+        let position_id = result["items"][0]["position_uuid"].as_str().unwrap();
+        let (status, position_result) = call(
+            app.clone(),
+            "GET",
+            &format!("/api/positions/{position_id}/analysis-result?analysis_id=job:{job_id}"),
+            Value::Null,
+        )
+        .await;
+        assert_eq!(status, 200, "{position_result}");
+        let candidates = position_result["decision"]["checker_candidates"]
+            .as_array()
+            .unwrap_or_else(|| panic!("Missing checker candidates: {position_result}"));
+        assert_eq!(candidates.len(), 14);
+        let running_play = candidates
+            .iter()
+            .find(|row| row["notation"] == "24/15")
+            .unwrap();
+        assert_eq!(running_play["path"], "24/18 18/15");
+        let depths: Vec<_> = candidates
+            .iter()
+            .map(|candidate| candidate["plies"].as_i64().unwrap())
+            .collect();
+        assert_eq!(depths, vec![plies; 14]);
+        assert_eq!(submitted["engine_snapshot"]["gnubg_move_filter"], "top14");
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL and GNUbg"]
 async fn full_match_analysis_is_persisted_paginated_and_replayable(pool: PgPool) {
     let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()));

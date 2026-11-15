@@ -1,4 +1,5 @@
 import { test, expect } from './test';
+import { botDice, doubleCube } from './play-board-actions';
 import {
   historyFixture,
   historySessionId as id,
@@ -132,7 +133,7 @@ test('a declined offer keeps the selected level, error and unconfirmed turn unti
   expect(writes).toEqual([{ version: 7, action: 'resign', resign_level: 1 }]);
 });
 
-test('cancelling resignation restores Roll and Double in the toolbar', async ({
+test('cancelling resignation restores the board controls before the roll', async ({
   page,
 }) => {
   const { saved, writes } = await historyFixture(page);
@@ -154,12 +155,8 @@ test('cancelling resignation restores Roll and Double in the toolbar', async ({
   await dialog
     .getByRole('button', { name: 'Continue playing', exact: true })
     .click();
-  await expect(
-    roll.getByRole('button', { name: 'Roll dice', exact: true }),
-  ).toBeVisible();
-  await expect(
-    roll.getByRole('button', { name: 'Double', exact: true }),
-  ).toBeEnabled();
+  await expect(botDice(page).first()).toBeEnabled();
+  await expect(doubleCube(page)).toBeEnabled();
   await expect(
     roll.getByRole('button', { name: 'Resign', exact: true }),
   ).toBeFocused();

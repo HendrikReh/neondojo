@@ -31,6 +31,75 @@ static OPTIONS: std::sync::LazyLock<Value> = std::sync::LazyLock::new(|| {
         .expect("valid embedded configuration options")
 });
 
+/// Inclusive lower bounds of the four grades, measured in normalized equity.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ErrorThresholds {
+    pub questionable: f64,
+    pub error: f64,
+    pub blunder: f64,
+    pub large_blunder: f64,
+}
+
+impl Default for ErrorThresholds {
+    fn default() -> Self {
+        static DEFAULTS: std::sync::LazyLock<ErrorThresholds> = std::sync::LazyLock::new(|| {
+            serde_json::from_value(OPTIONS["analysis_error_thresholds"].clone())
+                .expect("valid embedded analysis error thresholds")
+        });
+        *DEFAULTS
+    }
+}
+
+impl ErrorThresholds {
+    pub(crate) fn valid(self) -> bool {
+        0.0 < self.questionable
+            && self.questionable < self.error
+            && self.error < self.blunder
+            && self.blunder < self.large_blunder
+            && self.large_blunder <= 1.0
+    }
+
+    pub(crate) fn bands(self) -> [(crate::model::MoveSeverity, f64); 4] {
+        use crate::model::MoveSeverity::*;
+        [
+            (VeryBad, self.large_blunder),
+            (Blunder, self.blunder),
+            (Bad, self.error),
+            (Doubtful, self.questionable),
+        ]
+    }
+
+    /// Classify a stored move row with the same bounds as live feedback.
+    /// The caller supplies the loss and availability expressions from its query.
+    pub(crate) fn push_classification<'a>(
+        self,
+        sql: &mut sqlx::QueryBuilder<'a, sqlx::Postgres>,
+        loss: &str,
+        status: &str,
+    ) {
+        sql.push("CASE WHEN COALESCE(")
+            .push(status)
+            .push(", '') NOT IN ('forced','unavailable') THEN CASE");
+        for (grade, minimum) in self.bands() {
+            sql.push(" WHEN ")
+                .push(loss)
+                .push(" >= ")
+                .push_bind(minimum)
+                .push(" THEN ")
+                .push_bind(grade.as_str());
+        }
+        sql.push(" ELSE 'none' END ELSE 'none' END");
+    }
+
+    pub(crate) fn classify(self, loss: f64) -> crate::model::MoveSeverity {
+        self.bands()
+            .into_iter()
+            .find(|&(_, minimum)| loss >= minimum)
+            .map_or(crate::model::MoveSeverity::None, |(grade, _)| grade)
+    }
+}
+
 pub(crate) fn available_cpu_threads() -> Option<i32> {
     std::thread::available_parallelism()
         .ok()
@@ -94,6 +163,8 @@ pub struct ConfigurationAnalysis {
     pub plies: i32,
     pub scope: ConfigurationScope,
     pub search_filter: ConfigurationSearchFilter,
+    #[serde(default)]
+    pub error_thresholds: ErrorThresholds,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
@@ -114,12 +185,21 @@ pub struct ConfigurationAppearance {
     pub board_theme: String,
     pub bearoff_direction: ConfigurationDirection,
     pub board_view: ConfigurationBoardView,
-    /// Preferred board pane width in analysis detail tabs; null uses the responsive default.
+    /// Preferred board pane width in Study cards; null uses the responsive default.
     #[serde(default)]
     pub analysis_board_width: Option<i32>,
     /// Preferred board pane width in the analysis overview; null uses the responsive default.
     #[serde(default)]
     pub analysis_overview_board_width: Option<i32>,
+    /// Preferred board pane width in the Errors tab; null uses the responsive default.
+    #[serde(default)]
+    pub analysis_errors_board_width: Option<i32>,
+    /// Preferred board pane width in the Statistics tab; null uses the responsive default.
+    #[serde(default)]
+    pub analysis_statistics_board_width: Option<i32>,
+    /// Preferred board pane width in the Notes tab; null uses the responsive default.
+    #[serde(default)]
+    pub analysis_notes_board_width: Option<i32>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
@@ -416,15 +496,8 @@ async fn configuration_availability(
 ) -> Result<Json<ConfigurationAvailability>> {
     let mut tx = store::begin(&app).await?;
     let current = store::state(&mut tx).await?;
-    let issues = validation::resources(
-        &app,
-        &mut tx,
-        &current.current_configuration,
-        true,
-        true,
-        None,
-    )
-    .await?;
+    let issues =
+        validation::resources(&app, &mut tx, &current.current_configuration, true, true).await?;
     tx.commit().await?;
     Ok(Json(ConfigurationAvailability {
         revision: current.revision,
@@ -506,6 +579,7 @@ pub fn differences(
     ),
     components(schemas(
         ProfileConfiguration,
+        ErrorThresholds,
         ConfigurationState,
         ConfigurationProfile,
         ConfigurationDifference,
@@ -533,15 +607,21 @@ mod tests {
             validation::normalize(legacy).unwrap_or_else(|error| panic!("{}", error.1.error)),
         )
         .unwrap();
-        for field in ["analysis_board_width", "analysis_overview_board_width"] {
+        for (field, max) in [
+            ("analysis_board_width", 1680),
+            ("analysis_overview_board_width", 1680),
+            ("analysis_errors_board_width", 1680),
+            ("analysis_statistics_board_width", 1680),
+            ("analysis_notes_board_width", 1680),
+        ] {
             assert_eq!(legacy["appearance"].get(field), Some(&Value::Null));
-            for width in [320, 540, 960] {
+            for width in [320, 540, max] {
                 let mut value = fixture["base"].clone();
                 value["appearance"][field] = serde_json::json!(width);
                 let decoded = serde_json::from_value(value).unwrap();
                 assert!(validation::normalize(decoded).is_ok());
             }
-            for width in [0, 319, 961] {
+            for width in [0, 319, max + 1] {
                 let mut value = fixture["base"].clone();
                 value["appearance"][field] = serde_json::json!(width);
                 let decoded = serde_json::from_value(value).unwrap();

@@ -1,5 +1,5 @@
-import { rollDice, doubleCube } from './play-board-actions';
-import { finishOpening } from './play-opening-helpers';
+import { rollDice, doubleCube, passDice } from './play-board-actions';
+import { finishNextGame, watchOpening } from './play-opening-helpers';
 import { test, expect, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, chmodSync, rmSync } from 'node:fs';
@@ -65,15 +65,29 @@ async function getSession(page: Page, id: string) {
   expect(response.status()).toBe(200);
   return (await response.json()) as PlaySession;
 }
+async function waitForAutomaticRoll(page: Page, state: PlaySession) {
+  const last = state.history.at(-1);
+  if (
+    state.phase !== 'roll' ||
+    last?.notation !== 'pass' ||
+    last.player === state.human_player
+  )
+    return state;
+  await expect(page.locator('.play-board')).toHaveAttribute(
+    'data-play-phase',
+    'move',
+    { timeout: 200_000 },
+  );
+  return getSession(page, state.id);
+}
 async function action(page: Page, label: string) {
   const waiting = page.waitForResponse(
     (r) => r.url().endsWith('/actions') && r.request().method() === 'POST',
     { timeout: 200_000 },
   );
   if (label === 'Confirm turn')
-    await page
-      .locator('[data-play-die-index="0"][data-dice-action="confirm"]')
-      .click();
+    await page.locator('[data-dice-action="confirm"]').click();
+  else if (label === 'No legal move — pass') await passDice(page).click();
   else if (label === 'Roll dice') await rollDice(page).click();
   else if (label === 'Cube') await doubleCube(page).click();
   else await page.getByRole('button', { name: label, exact: true }).click();
@@ -109,7 +123,8 @@ async function create(
   direction: string,
   plies: number,
   length = 3,
-  advanceOpening = true,
+  openingSeed?: { rolls?: number[][] },
+  fromApi = false,
 ) {
   const settings = await (await page.request.get('/api/settings')).json();
   const response = await page.request.put('/api/settings', {
@@ -121,6 +136,17 @@ async function create(
     },
   });
   expect(response.status()).toBe(200);
+  if (fromApi) {
+    const response = await page.request.post('/api/play/sessions', {
+      data: {
+        human_player: human,
+        match_length: length,
+        play_mode: 'competition',
+      },
+    });
+    expect(response.status(), await response.text()).toBe(201);
+    return (await response.json()) as PlaySession;
+  }
   await page.goto('/');
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();
   await page.getByLabel('Your checkers').selectOption(String(human));
@@ -136,6 +162,7 @@ async function create(
       r.url().endsWith('/api/play/sessions') && r.request().method() === 'POST',
     { timeout: 200_000 },
   );
+  const opening = openingSeed ? watchOpening(page) : undefined;
   await page.getByRole('button', { name: 'Start match', exact: true }).click();
   const created = await waiting;
   expect(created.status(), await created.text()).toBe(201);
@@ -146,7 +173,7 @@ async function create(
   const entry = await archivedMatch(page, session);
   expect(entry.position_count).toBe(0);
   archivedMatches.set(session.id, entry.id);
-  return advanceOpening ? await finishOpening(page, session, true) : session;
+  return opening ? await opening(openingSeed?.rolls) : session;
 }
 async function checkerTurn(page: Page, state: PlaySession, swap: boolean) {
   let dice = [...state.position.dice];
@@ -241,9 +268,7 @@ async function checkerTurn(page: Page, state: PlaySession, swap: boolean) {
       `Human ${state.human_player}, dice${dice}, native${state.position.position_id}:${state.position.gnubg_match_id}, chosen${JSON.stringify(chosen.steps)}`,
     ).toHaveText(selected);
   }
-  await expect(
-    page.locator('[data-play-die-index="0"][data-dice-action="confirm"]'),
-  ).toBeEnabled();
+  await expect(page.locator('[data-dice-action="confirm"]')).toBeEnabled();
   return await action(page, 'Confirm turn');
 }
 async function playToEnd(page: Page, initial: PlaySession) {
@@ -253,6 +278,7 @@ async function playToEnd(page: Page, initial: PlaySession) {
     reloads = 0;
   const phases = new Set<string>();
   while (state.phase !== 'match_over' && decisions < 1200) {
+    state = await waitForAutomaticRoll(page, state);
     phases.add(state.phase);
     if (
       decisions % 13 === 0 ||
@@ -275,7 +301,7 @@ async function playToEnd(page: Page, initial: PlaySession) {
     else if (state.phase === 'double_response')
       state = await action(page, 'Take double');
     else if (state.phase === 'game_over') {
-      state = await finishOpening(page, await action(page, 'Next game'), true);
+      state = await finishNextGame(page, () => action(page, 'Next game'));
       games++;
     } else throw new Error(`Unexpected phase ${state.phase}`);
     decisions++;
@@ -420,47 +446,9 @@ for (const config of [
     page,
   }) => {
     test.setTimeout(200_000);
-    let state = await create(page, config.human, 'right', 0, 7, false);
-    expect(state.phase).toBe('opening_roll');
-    expect(state.position.dice).toEqual([]);
-    expect(state.history).toEqual([]);
-    if (config.seed === 3) {
-      const entry = await archivedMatch(page, state);
-      // Reload into the library before resuming; the mandatory opening dialog
-      // correctly prevents clicking background navigation while Playing is open.
-      await page.reload();
-      await page
-        .getByRole('tab', { name: 'Match database', exact: true })
-        .click();
-      await page
-        .locator('.database-sidebar')
-        .getByRole('button', { name: /Bot Matches/ })
-        .click();
-      await page.locator(`#library-row-${entry.id}`).getByRole('checkbox').check();
-      await page
-        .locator('.library-batch-bar')
-        .getByRole('button', { name: 'Resume match', exact: true })
-        .click();
-      await expect(
-        page.getByRole('tab', { name: 'Playing', exact: true }),
-      ).toHaveAttribute('aria-selected', 'true');
-      await expect(page.locator('.play-board')).toBeVisible();
-      expect(await getSession(page, state.id)).toEqual(state);
-    }
-    await reloadUnchanged(page, state);
-    await expect(page.locator('[data-opening-die="pending"]')).toHaveCount(2);
     writeFileSync(counter, String(config.seed));
-    state = await action(page, 'Roll one die each');
-    expect(state.phase).toBe('opening_result');
-    expect(state.opening?.rolls).toEqual(config.rolls);
-    await expect(page.locator('.play-opening-ties li')).toHaveCount(
-      config.rolls.length - 1,
-    );
-    await page.screenshot({
-      path: test.info().outputPath('native-opening.png'),
-      fullPage: true,
-    });
-    state = await finishOpening(page, state, true);
+    const state = await create(page, config.human, 'right', 0, 7, config);
+    await reloadUnchanged(page, state);
     expect(['move', 'roll', 'double_response']).toContain(state.phase);
   });
 }
@@ -492,6 +480,8 @@ for (const config of [
       config.human,
       config.direction,
       config.plies,
+      3,
+      {},
     );
     await expect(page.locator('.play-board .board-shell')).toHaveClass(
       config.theme.startsWith('bgblitz:') ? /theme-bgblitz/ : /theme-forest/,
@@ -572,9 +562,11 @@ for (const config of [
       config.direction,
       config.plies,
       5,
-      false,
+      undefined,
+      true,
     );
     seedCubeRace(created);
+    await page.goto('/');
     await show(page, created.id);
     let state = await getSession(page, created.id);
     state = await checkerTurn(page, state, false);
@@ -590,7 +582,8 @@ for (const config of [
     expect(state.winner).toBe(1 - config.human);
     await reloadUnchanged(page, state);
     writeFileSync(counter, '1');
-    state = await finishOpening(page, await action(page, 'Next game'), true);
+    state = await finishNextGame(page, () => action(page, 'Next game'));
+    state = await waitForAutomaticRoll(page, state);
     expect(state.game_no).toBe(2);
     expect(state.engine.plies).toBe(config.plies);
     await reloadUnchanged(page, state);
@@ -599,6 +592,7 @@ for (const config of [
       await page.request.get(`/api/play/sessions/${state.id}/sgf`)
     ).text();
     for (let i = 0; i < 10 && !sgf.split('(;').at(-1)!.includes(marker); i++) {
+      state = await waitForAutomaticRoll(page, state);
       if (state.phase === 'roll') state = await action(page, 'Roll dice');
       else if (state.phase === 'move')
         state = await checkerTurn(page, state, i % 2 === 0);

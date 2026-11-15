@@ -1,4 +1,4 @@
-import { rollDice } from './play-board-actions';
+import { botDice, rollDice } from './play-board-actions';
 import { test, expect, type Page } from './test';
 import type { PlaySession } from '../src/play-api';
 import { applySteps } from '../src/play-state';
@@ -126,7 +126,7 @@ async function install(
         time: performance.now(),
         phase: board?.getAttribute('data-play-animation') ?? null,
         dice: board?.getAttribute('data-animation-dice') ?? null,
-        dialog: Boolean(document.querySelector('.play-roll-dialog[open]')),
+        dialog: Boolean(document.querySelector('.play-workspace dialog:modal')),
         moves,
       });
       requestAnimationFrame(sample);
@@ -147,16 +147,20 @@ for (const config of [
       after = played(before),
       bot = 1 - config.human;
     await install(page, before, () => after, config.theme);
-    await page
-      .getByRole('button', { name: 'Begin the first move', exact: true })
-      .click();
     const board = page.locator('.play-board');
     await expect(board).toHaveAttribute('data-play-animation', 'dice');
     await expect(board).toHaveAttribute('data-animation-player', String(bot));
     await expect(board).toHaveAttribute('data-animation-dice', '6-1');
     await expect(page.locator('.play-die-rolling')).toHaveCount(0);
     await expect(rollDice(page)).not.toBeVisible();
-    await expect(rollDice(page)).toBeVisible();
+    await expect(page.locator('.play-board [data-cube]')).toHaveCSS(
+      'pointer-events',
+      'none',
+    );
+    await expect(botDice(page)).toHaveCount(1);
+    await expect(botDice(page).locator('[data-used="true"]')).toHaveCount(2);
+    await expect(board.locator('[data-dice="6-1"]')).toBeVisible();
+    await expect(page.locator('dialog:modal')).toHaveCount(0);
     await expect(board).toHaveAttribute('data-play-animation', 'idle');
     const samples = await page.evaluate(() => window.__animationSamples);
     const firstPoint = String(bot === 0 ? 13 : 12),
@@ -201,6 +205,38 @@ for (const config of [
       ).position.board,
     ).toEqual(after.position.board);
   });
+test('a blocked bot shows its dice before the human rolls automatically', async ({
+  page,
+}) => {
+  const before = opening();
+  const blocked: PlaySession = {
+    ...played(before),
+    position: { ...played(before).position, board: before.position.board },
+    history: [{ player: 1, dice: [6, 1], notation: 'pass' }],
+  };
+  const rolled: PlaySession = {
+    ...blocked,
+    version: 2,
+    phase: 'move',
+    position: { ...blocked.position, dice: [3, 1] },
+  };
+  const writes: unknown[] = [];
+  await install(page, before, (request) => {
+    writes.push(request);
+    return request.action === 'start_opening_move' ? blocked : rolled;
+  });
+  const board = page.locator('.play-board');
+  await expect(board).toHaveAttribute('data-animation-player', '1');
+  expect(writes).toEqual([{ version: 0, action: 'start_opening_move' }]);
+  await expect(board).toHaveAttribute('data-animation-player', '0');
+  await expect(board).toHaveAttribute('data-play-phase', 'move');
+  await expect(board.locator('[data-dice="3-1"]')).toBeVisible();
+  expect(writes).toEqual([
+    { version: 0, action: 'start_opening_move' },
+    { version: 1, action: 'roll' },
+  ]);
+});
+
 test('human roll starts moving immediately, settles on native dice, and animates source-click placement', async ({
   page,
 }) => {
@@ -246,9 +282,7 @@ test('human roll starts moving immediately, settles on native dice, and animates
   await expect(
     page.locator('[data-animated-checker="0"][data-from="8"][data-to="5"]'),
   ).toBeVisible();
-  await expect(
-    page.locator('[data-play-die-index="0"][data-dice-action="confirm"]'),
-  ).not.toBeVisible();
+  await expect(page.locator('[data-dice-action="confirm"]')).not.toBeVisible();
   await expect(page.locator('.play-board')).toHaveAttribute(
     'data-play-animation',
     'idle',
@@ -266,9 +300,6 @@ for (const cancel of ['reload', 'workspace'])
       ++actions;
       return after;
     });
-    await page
-      .getByRole('button', { name: 'Begin the first move', exact: true })
-      .click();
     await expect(page.locator('.play-board')).toHaveAttribute(
       'data-play-animation',
       'dice',

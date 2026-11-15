@@ -1,0 +1,97 @@
+.position-comparison-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.position-comparison-table {
+  min-width: 42rem;
+  table-layout: fixed;
+}
+
+.position-comparison-move {
+  width: 16%;
+}
+.position-comparison-rank {
+  width: 8%;
+}
+.position-comparison-equity,
+.position-comparison-depth {
+  width: 10%;
+}
+
+.position-comparison-table :is(th, td) {
+  padding-inline: 6px;
+  text-align: left;
+}
+
+.position-comparison-table thead tr:first-child th {
+  text-align: left;
+  vertical-align: top;
+}
+
+.position-comparison-table tbody th {
+  color: var(--ui-text);
+  border-top: 1px solid var(--ui-border);
+  font-size: var(--font-size-table);
+}
+
+.position-comparison-table tbody tr[data-candidate-played='true'] {
+  background: var(--ui-selected);
+}
+
+.position-comparison-table .position-comparison-group {
+  border-left: 1px solid var(--ui-border);
+}
+
+.position-comparison-table
+  :is(.position-comparison-number, .position-comparison-rank-value) {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.position-comparison-table small {
+  display: block;
+  color: var(--ui-muted);
+  overflow-wrap: anywhere;
+}
+
+.position-comparison-table [data-xg-rank-difference='true'] {
+  color: var(--ui-accent);
+  font-weight: var(--font-weight-semibold);
+}
+
+.position-comparison-table [data-engine-preview-selected='true'] {
+  box-shadow: inset 0 -2px var(--ui-accent);
+}
+
+.position-comparison-table .position-comparison-unavailable {
+  cursor: default;
+}
+
+.position-comparison-rank-arrow {
+  margin-inline-start: 0.25em;
+}
+
+.position-comparison-table .position-comparison-delta {
+  white-space: nowrap;
+}
+
+.position-comparison-sort {
+  margin-inline-start: 0.25em;
+  min-width: 2.5em;
+  padding: 0 0.2em;
+  font-size: inherit;
+  white-space: nowrap;
+}
+
+.position-comparison-sort[aria-pressed='true'] {
+  color: var(--ui-accent);
+  border-color: var(--ui-accent);
+}
+
+.position-comparison-table select {
+  display: block;
+  width: 100%;
+  margin-block: 4px;
+  font-size: var(--font-size-micro);
+}

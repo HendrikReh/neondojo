@@ -66,6 +66,7 @@ const TABLES: &[&str] = &[
     "anki_received_reviews",
     "anki_review_exports",
     "anki_auto_sync",
+    "anki_sync_history",
     "card_practice_rounds",
     "card_practice_items",
     "card_topics",
@@ -78,6 +79,7 @@ const TABLES: &[&str] = &[
     "match_analysis_timing",
     "play_sessions",
     "study_report_snapshots",
+    "match_assessments",
     "similar_practice_summaries",
     "engine_match_runs",
     "engine_match_results",
@@ -313,6 +315,32 @@ struct BackupContents {
     learning_cards: u64,
 }
 
+#[derive(Serialize, ToSchema, sqlx::FromRow)]
+struct BackupTargetCounts {
+    matches: i64,
+    saved_positions: i64,
+    learning_cards: i64,
+}
+
+#[utoipa::path(get, path="/api/database-backup/target-counts", operation_id="database_backup_target_counts",
+    responses((status=200, body=BackupTargetCounts), (status=503, body=ErrorBody),
+              (status=500, body=ErrorBody)),
+    tag="Database backup"
+)]
+pub(crate) async fn target_counts(State(state): State<AppState>) -> ApiResult<impl IntoResponse> {
+    // One statement keeps all three counts on the same PostgreSQL snapshot.
+    let counts: BackupTargetCounts = sqlx::query_as(
+        "SELECT
+            (SELECT count(*) FROM matches WHERE NOT collection_only) AS matches,
+            (SELECT count(*) FROM saved_positions) AS saved_positions,
+            (SELECT count(*) FROM learning_cards) AS learning_cards",
+    )
+    .fetch_one(&state.pool)
+    .await
+    .context("Counting backup destination contents")?;
+    Ok(([(header::CACHE_CONTROL, "no-store")], Json(counts)))
+}
+
 #[utoipa::path(post, path="/api/database-backup/check", operation_id="check_database_backup",
     request_body(content=inline(BackupFile), content_type="application/vnd.bgtutor.backup"),
     responses((status=200, body=BackupCheck), (status=408, body=ErrorBody), (status=409, body=ErrorBody),
@@ -399,7 +427,7 @@ async fn import(
 }
 
 #[derive(OpenApi)]
-#[openapi(paths(export, check, import))]
+#[openapi(paths(export, check, import, target_counts))]
 pub(crate) struct BackupDoc;
 
 #[cfg(test)]

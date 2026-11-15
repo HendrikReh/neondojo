@@ -1,4 +1,8 @@
-import { openMatchCalculation } from './analysis-controls';
+import {
+  openFullMatchAnalysis,
+  openMatchAnalysisOptions,
+  submitFullMatchAnalysis,
+} from './analysis-controls';
 import { expect, test } from './test';
 
 test.use({ actionTimeout: 10000, viewport: { width: 1800, height: 1169 } });
@@ -20,19 +24,15 @@ for (const scope of ['match', 'game'] as const) {
     });
     if (scope === 'game')
       await page.getByLabel('Select game', { exact: true }).selectOption('2');
-    await openMatchCalculation(page);
-    await page
-      .getByLabel('Analysis scope', { exact: true })
-      .selectOption(scope);
-    await page
-      .getByLabel('Match analysis depth', { exact: true })
-      .selectOption('0');
-    await page
-      .getByRole('button', {
-        name: scope === 'game' ? 'Analyze game' : 'Analyze entire match',
-        exact: true,
-      })
-      .click();
+    await openMatchAnalysisOptions(page);
+    if (scope === 'match') {
+      const dialog = await openFullMatchAnalysis(page);
+      await dialog.getByLabel('Match analysis depth', { exact: true }).selectOption('0');
+      await submitFullMatchAnalysis(page, dialog);
+    } else {
+      await page.getByLabel('Match analysis depth', { exact: true }).selectOption('0');
+      await page.getByRole('button', { name: 'Analyze game', exact: true }).click();
+    }
     await expect(page.locator('.match-analysis-progress')).toContainText(
       scope === 'game' ? 'Game analysis complete' : 'Match analysis complete',
       { timeout: 30000 },
@@ -71,8 +71,8 @@ for (const scope of ['match', 'game'] as const) {
       expect(query.get('game_no')).toBe(scope === 'game' ? '2' : null);
       expect((await result.json()).items).toHaveLength(expected);
       await expect(
-        page.getByLabel('Filter analysis by decision', { exact: true }),
-      ).toHaveValue(kind);
+        page.getByRole('tab', { name: kind === 'cube' ? 'Cube' : 'Checker', exact: true }),
+      ).toHaveAttribute('aria-selected', 'true');
       await expect(
         page.getByLabel('Filter by severity', { exact: true }),
       ).toHaveValue('very_bad');
@@ -107,9 +107,8 @@ for (const scope of ['match', 'game'] as const) {
         )
         .first()
         .click();
-      await expect(
-        page.getByLabel('Filter analysis by decision', { exact: true }),
-      ).toHaveValue('');
+      await stats.locator('.statistics-destinations:popover-open').getByRole('button', { name: 'Checker', exact: true }).click();
+      await expect(page.getByRole('tab', { name: 'Checker', exact: true })).toHaveAttribute('aria-selected', 'true');
       await expect(
         page.getByLabel('Filter by game', { exact: true }),
       ).toHaveValue('');

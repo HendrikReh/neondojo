@@ -1,5 +1,8 @@
-import { openMatchCalculation } from './analysis-controls';
+import {
+  openMatchAnalysisOptions,
+} from './analysis-controls';
 import { test, expect, type Page } from './test';
+import type { BookLookup } from '../src/source-analysis-api';
 async function fixture(
   page: Page,
   locale = 'en',
@@ -47,14 +50,60 @@ async function fixture(
   await expect(page.locator('.analysis-workspace .board')).toBeVisible();
   return position;
 }
-for (const [width, locale] of [
-  [1800, 'en'],
-  [390, 'de'],
+for (const [width, height, locale] of [
+  [1800, 1169, 'en'],
+  [2560, 1440, 'en'],
+  [3840, 2160, 'en'],
+  [390, 1100, 'de'],
 ] as const)
   test(`position actions are adjacent above the board at ${width}px in ${locale}`, async ({
     page,
   }) => {
-    await page.setViewportSize({ width, height: 1100 });
+    await page.setViewportSize({ width, height });
+    await page.route('**/api/matches/*/analysis/estimate?*', (route) => {
+      const { pathname, searchParams } = new URL(route.request().url());
+      const game = searchParams.get('game_no');
+      return route.fulfill({
+        json: {
+          match_id: pathname.split('/')[3],
+          game_no: game === null ? null : Number(game),
+          engine_id: searchParams.get('engine_id'),
+          engine_version: null,
+          plies: Number(searchParams.get('plies')),
+          position_count: 2,
+          estimated_ms: null,
+          unavailable_reason: 'no_matching_benchmark',
+          benchmark: null,
+        },
+      });
+    });
+    const opening: BookLookup = {
+      hit: true,
+      provider: 'backgammondb',
+      provenance: {
+        provider: 'backgammondb',
+        engine: 'GNUbg',
+        evaluation_kind: 'evaluation',
+        equity_kind: 'normalized_cubeful',
+        context: 'Opening position',
+      },
+      checker: {
+        plies: 3,
+        candidates: [
+          {
+            rank: 1,
+            notation: '8/5 6/5',
+            equity: 0.233,
+            probabilities: [0.55, 0.11, 0.007, 0.45, 0.053, 0.005],
+          },
+        ],
+      },
+    };
+    const bookReply = Promise.withResolvers<void>();
+    await page.route('**/api/positions/*/opening-book', async (route) => {
+      await bookReply.promise;
+      await route.fulfill({ json: opening });
+    });
     await fixture(page, locale);
     const toolbar = page.locator('.board-review-toolbar');
     const bookmark = toolbar.getByRole('button', {
@@ -71,14 +120,50 @@ for (const [width, locale] of [
       'aria-busy',
       'false',
     );
-    // The estimate above the toolbar wraps onto multiple lines on mobile.
-    await openMatchCalculation(page);
-    await expect(
-      page.locator('.analysis-time-estimate small').first(),
-    ).toBeVisible();
+    await openMatchAnalysisOptions(page);
+    // Wait for the estimate above the toolbar to finish loading and wrap.
+    const estimate = page.getByRole('status', {
+      name:
+        locale === 'de' ? 'Geschätzte Analysezeit' : 'Analysis time estimate',
+    });
+    await expect(estimate.locator('small')).toBeVisible();
+    await expect(estimate).toContainText(
+      locale === 'de'
+        ? 'Kein abgeschlossener Benchmark'
+        : 'No completed benchmark',
+    );
     await expect(page.locator('.position-code button')).toHaveCount(0);
-    // The analysis header may grow as metadata arrives. Read all rectangles
-    // in one layout snapshot so a change between reads cannot skew the test.
+    const artwork = page.locator('.board-panel .board');
+    const comparison = page.locator('.board-panel .board-decision-comparison');
+    await page.locator('.analysis-book-reference summary').click();
+    const bestCandidate = page.locator('.analysis-book-reference .candidate-marker-best');
+    const tooltip = page.getByRole('tooltip');
+    const searchLabel =
+      locale === 'de' ? 'Diese Stellung suchen' : 'Search this position';
+    try {
+      await expect(bestCandidate).toHaveCount(0);
+      await search.hover();
+      await expect(tooltip).toHaveText(searchLabel);
+      const before = (await search.boundingBox())!;
+      await expect(artwork).toBeVisible();
+      const boardBefore = (await artwork.boundingBox())!;
+      bookReply.resolve();
+      await expect(bestCandidate).toBeVisible();
+      await expect(comparison).toHaveCount(0);
+      expect(await artwork.boundingBox()).toEqual(boardBefore);
+      expect(await search.boundingBox()).toEqual(before);
+      expect(
+        await search.evaluate(
+          (button, point) =>
+            button.contains(document.elementFromPoint(point.x, point.y)),
+          { x: before.x + before.width / 2, y: before.y + before.height / 2 },
+        ),
+      ).toBe(true);
+      await expect(tooltip).toHaveText(searchLabel);
+    } finally {
+      bookReply.resolve();
+    }
+    // Read all rectangles from the same layout snapshot.
     const { b, s, board } = await toolbar.evaluate((element) => ({
       b: element
         .querySelector('.position-bookmark-control button')!
@@ -97,10 +182,18 @@ for (const [width, locale] of [
     expect(s.x).toBeGreaterThanOrEqual(b.x + b.width + 4);
     expect(s.x - b.x - b.width).toBeLessThanOrEqual(12);
     expect(s.y).toBeCloseTo(b.y, 0);
-    expect(s.width).toBeGreaterThanOrEqual(44);
-    expect(s.height).toBeGreaterThanOrEqual(44);
+    const buttonSize = width >= 961 ? 32 : 44;
+    expect(b.width).toBe(buttonSize);
+    expect(b.height).toBe(buttonSize);
+    expect(s.width).toBe(buttonSize);
+    expect(s.height).toBe(buttonSize);
+    await expect(search.locator('.action-icon')).toHaveCSS('width', '16px');
+    await expect(bookmark.locator('.action-icon')).toHaveCSS('width', '16px');
+    await expect(toolbar.locator('[data-action-icon="similar"]')).toHaveCount(0);
     expect(s.y + s.height).toBeLessThanOrEqual(board.y);
     expect(s.x + s.width).toBeLessThanOrEqual(width);
+    await page.mouse.move(1, 1);
+    await expect(tooltip).toHaveCount(0);
     await search.focus();
     await expect(page.getByRole('tooltip')).toHaveText(
       locale === 'de' ? 'Diese Stellung suchen' : 'Search this position',
@@ -108,7 +201,6 @@ for (const [width, locale] of [
     await page.keyboard.press('Escape');
     await expect(page.getByRole('tooltip')).toHaveCount(0);
     await search.blur();
-    await page.mouse.move(1, 1);
     await search.hover();
     await expect(page.getByRole('tooltip')).toHaveText(
       locale === 'de' ? 'Diese Stellung suchen' : 'Search this position',
@@ -144,7 +236,20 @@ test('one click opens the database and runs the current source-position search',
   expect((await response).ok()).toBe(true);
 });
 
-test('similar search opens from the analysis board with the current match excluded', async ({
+async function openSimilarSearch(page: Page, positionId: string) {
+  expect(
+    (await page.request.put(`/api/positions/${positionId}/bookmark`)).ok(),
+  ).toBe(true);
+  await page.getByRole('tab', { name: 'Positions', exact: true }).click();
+  const pane = page.getByRole('tabpanel', { name: 'Positions', exact: true });
+  await pane.getByRole('button', { name: 'Search positions', exact: true }).click();
+  await pane.locator(`tr[data-position-id="${positionId}"]`).click();
+  await pane
+    .getByRole('button', { name: 'Find similar positions', exact: true })
+    .click();
+}
+
+test('similar search opens from a saved position with the current match excluded', async ({
   page,
 }) => {
   const position = await fixture(page);
@@ -175,9 +280,7 @@ test('similar search opens from the analysis board with the current match exclud
       },
     });
   });
-  await page
-    .getByRole('button', { name: 'Find similar positions', exact: true })
-    .click();
+  await openSimilarSearch(page, position.id);
   const results = page.getByRole('region', {
     name: 'Similar positions',
     exact: true,
@@ -222,9 +325,11 @@ test('similar search opens from the analysis board with the current match exclud
   await expect(page.locator('.position-code code')).toHaveText(
     neighbor.position_id,
   );
-  await page
-    .getByRole('button', { name: 'Find similar positions', exact: true })
+  await page.getByRole('tab', { name: 'Positions', exact: true }).click();
+  await results
+    .getByRole('button', { name: 'Back to saved positions', exact: true })
     .click();
+  await openSimilarSearch(page, neighbor.id);
   await expect(include).not.toBeChecked();
   for (const name of labels)
     await expect(
@@ -275,7 +380,7 @@ test('practice uses the latest filtered similar positions in result order', asyn
       json: { best: '8/5 6/5', engine: 'GNU Backgammon', depth: '2-ply' },
     });
   });
-  await page.getByRole('button', { name: 'Find similar positions' }).click();
+  await openSimilarSearch(page, position.id);
   await expect(
     page.getByRole('button', { name: unfiltered.match_name }),
   ).toBeVisible();
@@ -358,7 +463,7 @@ test('practice scores the move played on the board', async ({ page }) => {
       });
     },
   );
-  await page.getByRole('button', { name: 'Find similar positions' }).click();
+  await openSimilarSearch(page, position.id);
   await page
     .getByRole('button', { name: 'Practice results', exact: true })
     .click();
@@ -459,7 +564,7 @@ test('practice summarizes scored moves and retries only missed positions', async
       },
     });
   });
-  await page.getByRole('button', { name: 'Find similar positions' }).click();
+  await openSimilarSearch(page, source.id);
   await page
     .getByRole('button', { name: 'Practice results', exact: true })
     .click();
@@ -656,7 +761,9 @@ test('explicit searches clear prior scope and filters, rerun the position and do
   await cleared;
   await page.getByRole('tab', { name: 'Analysis', exact: true }).click();
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();
-  await expect(page.locator('.library-position-filter')).toHaveCount(0);
+  await expect(
+    page.getByRole('button', { name: 'Clear position filter', exact: true }),
+  ).toHaveCount(0);
   await expect(page.locator('.position-search input')).toHaveValue('');
 });
 
@@ -814,9 +921,14 @@ test('analysis search finds occurrences in different databases and clears every 
   expect(
     [...params.keys()].filter(
       (key) =>
-        !['position_id', 'sort', 'direction', 'limit', 'date_field'].includes(
-          key,
-        ),
+        ![
+          'position_id',
+          'sort',
+          'direction',
+          'limit',
+          'page',
+          'date_field',
+        ].includes(key),
     ),
   ).toEqual([]);
   await expect(
@@ -835,7 +947,10 @@ test('analysis search finds occurrences in different databases and clears every 
           .map((input) => (input as HTMLInputElement).value)
           .filter(Boolean),
       ),
-  ).toEqual([position.position_id]);
+  ).toEqual([]);
+  await expect(page.locator('.position-search input')).toHaveValue(
+    position.position_id,
+  );
   await expect(
     page.locator(`tr[data-match-id="${position.match_uuid}"]`),
   ).toBeVisible();
@@ -843,12 +958,10 @@ test('analysis search finds occurrences in different databases and clears every 
     page.locator(`tr[data-match-id="${other.match.id}"]`),
   ).toBeVisible();
   await expect(page.locator('.database-table')).toContainText(otherName);
-  await expect
-    .poll(() =>
-      page.evaluate(async () => {
-        const state = await (await fetch('/api/configuration')).json();
-        return state.current_configuration.library.database_id;
-      }),
-    )
-    .toBe('');
+  expect(
+    await page.evaluate(async () => {
+      const state = await (await fetch('/api/configuration')).json();
+      return state.current_configuration.library.database_id;
+    }),
+  ).toBe(db1.id);
 });

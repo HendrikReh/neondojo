@@ -67,7 +67,7 @@ fn source(session: &PlaySession, sgf: &str) -> String {
     if let Some(root) = source.find(';') {
         source.insert_str(root + 1, &format!("BTSESSION[{}]", session.id));
     }
-    source
+    super::forfeit::annotate(session, source)
 }
 
 // GNUbg 1.05.002 loses SETBOARD's fPlayer on export and writes PL[W]

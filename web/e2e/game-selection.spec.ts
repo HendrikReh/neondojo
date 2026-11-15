@@ -1,4 +1,8 @@
-import { openMatchCalculation } from './analysis-controls';
+import {
+  openFullMatchAnalysis,
+  openMatchAnalysisOptions,
+  submitFullMatchAnalysis,
+} from './analysis-controls';
 import { test, expect, type Page } from './test';
 
 test.beforeEach(async ({ page }) => {
@@ -90,12 +94,9 @@ test('one game owns its move list, board boundaries and native analysis; full ma
   ).toBeDisabled();
   await picker.selectOption('2');
   await expect(page.locator('.board-heading')).toContainText('Spiel 2');
-  await page.getByRole('tab', { name: 'Fehler', exact: true }).click();
+  await page.getByRole('tab', { name: 'Cube', exact: true }).click();
   const analysis = page.locator('.match-analysis');
-  await openMatchCalculation(page);
-  await expect(page.getByLabel('Analyseumfang', { exact: true })).toHaveValue(
-    'game',
-  );
+  await openMatchAnalysisOptions(page);
   await expect(page.getByLabel('Angezeigte Analyse', { exact: true })).toBeVisible();
   const depth = page.getByLabel('Partie-Analysetiefe', { exact: true });
   await depth.selectOption('0');
@@ -145,19 +146,15 @@ test('one game owns its move list, board boundaries and native analysis; full ma
     fullPage: true,
   });
   await page.setViewportSize({ width: 1440, height: 1100 });
-  await openMatchCalculation(page);
-  await page.getByLabel('Analyseumfang', { exact: true }).selectOption('match');
-  await depth.selectOption('0');
+  await openMatchAnalysisOptions(page);
   const full = page.waitForResponse(
     (r) =>
       r.request().method() === 'POST' &&
       new URL(r.url()).pathname === `/api/matches/${match.id}/analysis`,
   );
-  await page
-    .getByRole('button', {
-      name: /^(Gesamte Partie analysieren|Partie erneut analysieren)$/,
-    })
-    .click();
+  const dialog = await openFullMatchAnalysis(page);
+  await dialog.getByLabel('Partie-Analysetiefe', { exact: true }).selectOption('0');
+  await submitFullMatchAnalysis(page, dialog);
   const fullResponse = await full;
   expect(fullResponse.request().postDataJSON()).toEqual({
     engine_id: 'gnubg',
@@ -202,7 +199,7 @@ test('a note result jumps directly to its game without loading earlier games', a
   ).toBe(200);
   await page.getByRole('tab', { name: 'Matchdatenbank', exact: true }).click();
   const search = page.locator('.annotation-search');
-  await search.locator('summary').click();
+  await page.locator('.library-search-toolbar').getByRole('button', { name: 'Notizen', exact: true }).click();
   await search.getByLabel('Text', { exact: true }).fill(marker);
   await search
     .getByRole('button', { name: 'Notizen suchen', exact: true })
@@ -273,39 +270,21 @@ test('a long individual game transparently loads all pages within that game', as
   ).toBeDisabled();
 });
 
-test('returning to an analysis filter starts at its first page', async ({
-  page,
-}) => {
+test('changing Cube filters resets the decision count', async ({ page }) => {
   const match = await openReference(page);
   await completedFullJob(page, match.id);
-  await page.getByRole('tab', { name: 'Fehler', exact: true }).click();
-  const analysis = page.locator('.match-analysis');
-  await openMatchCalculation(page);
-  await page.getByLabel('Analyseumfang', { exact: true }).selectOption('match');
-  await expect(
-    page
-      .locator('.workspace-analysis-command')
-      .getByText('Partieanalyse abgeschlossen', { exact: true }),
-  ).toBeVisible();
-  await analysis.getByLabel('Nur Auffälligkeiten').uncheck();
-  await expect(analysis.locator('tbody tr')).toHaveCount(50);
-  const first = await analysis.locator('tbody tr').first().textContent();
-  await analysis
-    .getByRole('button', { name: 'Nächste Seite', exact: true })
-    .click();
-  await expect(
-    analysis.getByRole('button', { name: 'Seite 2', exact: true }),
-  ).toHaveAttribute('aria-current', 'page');
-  await expect(analysis.locator('tbody tr')).toHaveCount(50);
-  await analysis
-    .getByLabel('Analyse nach Entscheidung filtern')
-    .selectOption('cube');
-  await expect(analysis.locator('tbody tr')).toHaveCount(50);
-  await analysis
-    .getByLabel('Analyse nach Entscheidung filtern')
-    .selectOption('');
-  await expect(analysis.locator('tbody tr')).toHaveCount(50);
-  await expect(analysis.locator('tbody tr').first()).toHaveText(first);
+  await page.getByRole('tab', { name: 'Cube', exact: true }).click();
+  await expect(page.locator('.workspace-analysis-command').getByText('Partieanalyse abgeschlossen', { exact: true })).toBeVisible();
+  const panel = page.getByRole('tabpanel', { name: 'Cube', exact: true });
+  await panel.getByLabel('Nur Auffälligkeiten').uncheck();
+  const count = page.locator('.board-error-count');
+  await expect(count).toHaveText(/^Entscheidungen: /);
+  const total = await count.innerText();
+  const player = panel.getByLabel('Analyse nach Spieler filtern');
+  await player.selectOption('0');
+  await expect(count).not.toHaveText(total);
+  await player.selectOption('');
+  await expect(count).toHaveText(total);
 });
 
 test('a saved whole-match result stays identified while game navigation loads', async ({
@@ -329,10 +308,9 @@ test('a saved whole-match result stays identified while game navigation loads', 
   });
   await page.reload();
   await started;
-  await page.getByRole('tab', { name: 'Fehler', exact: true }).click();
+  await page.getByRole('tab', { name: 'Cube', exact: true }).click();
   const analysis = page.locator('.match-analysis');
   try {
-    await openMatchCalculation(page);
     await expect(
       page.getByRole('button', { name: 'Spiel analysieren', exact: true }),
     ).toBeDisabled();

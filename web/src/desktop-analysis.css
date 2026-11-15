@@ -13,7 +13,7 @@
     --analysis-gap: 10px;
     --analysis-pane-border: var(--ui-border);
     --analysis-available-height: calc(100dvh - 300px);
-    --analysis-board-height-limit: max(440px, var(--analysis-available-height));
+    --analysis-grid-height: max(680px, var(--analysis-available-height));
     font-size: var(--font-size-body);
   }
 
@@ -75,18 +75,11 @@
     flex: 2 1 540px;
   }
 
-  .analysis-workspace .workspace-analysis-command .match-analysis-controls {
-    gap: 10px;
-    flex-wrap: nowrap;
-  }
-
   .analysis-workspace
     .workspace-analysis-command
     .match-analysis-controls
     label {
     gap: 3px;
-    flex: 1 1 140px;
-    min-width: 0;
   }
 
   .analysis-workspace .workspace-analysis-command .match-analysis-progress {
@@ -126,15 +119,6 @@
   }
 
   /* An explicit grid gives each view a stable area without remounting it. */
-  .analysis-workspace.analysis-overview {
-    --analysis-overview-height: max(680px, var(--analysis-available-height));
-    --analysis-board-height-limit: clamp(
-      440px,
-      calc(var(--analysis-available-height) * 0.7),
-      1040px
-    );
-  }
-
   .analysis-workspace .analysis-grid {
     grid-template-columns:
       var(--analysis-moves-width, clamp(200px, 15vw, 320px))
@@ -144,20 +128,26 @@
     grid-template-areas: 'moves board splitter inspector';
     gap: var(--analysis-gap);
     min-width: 0;
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+    height: var(--analysis-viewport-space, var(--analysis-grid-height));
   }
 
   .analysis-workspace.analysis-overview .analysis-grid {
-    grid-template-rows: var(--analysis-board-height-limit) minmax(220px, 1fr);
-    grid-template-areas:
-      'moves board splitter evaluation'
-      'moves errors errors errors';
-    align-items: stretch;
-    height: var(--analysis-overview-height);
+    grid-template-areas: 'moves board splitter evaluation';
   }
 
-  /* These wrappers retain state and semantics while their panes join the grid. */
-  .analysis-workspace.analysis-overview .position-inspector,
-  .analysis-workspace.analysis-overview .workspace-match-results {
+  .analysis-workspace.analysis-notes .annotation-panel textarea {
+    min-height: clamp(
+      160px,
+      calc(var(--analysis-viewport-space, var(--analysis-grid-height)) - 380px),
+      1050px
+    );
+    line-height: 1.55;
+  }
+
+  /* Keep the inspector mounted while its evaluation pane joins the grid. */
+  .analysis-workspace.analysis-overview .position-inspector {
     display: contents;
   }
 
@@ -167,19 +157,22 @@
 
   .analysis-workspace .position-inspector {
     grid-area: inspector;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
   }
 
   .analysis-board-resizer:not([hidden]) {
     display: block;
     grid-area: splitter;
     align-self: stretch;
-    max-height: var(--analysis-board-height-limit);
     position: relative;
     cursor: col-resize;
     touch-action: none;
     user-select: none;
     outline-offset: 2px;
   }
+
   .analysis-board-resizer::before {
     content: '';
     position: absolute;
@@ -199,14 +192,6 @@
 
   .analysis-workspace.analysis-overview .overview-evaluation {
     grid-area: evaluation;
-  }
-
-  .analysis-workspace.analysis-overview .overview-errors {
-    grid-area: errors;
-  }
-
-  .analysis-workspace.analysis-overview .overview-evaluation,
-  .analysis-workspace.analysis-overview .overview-errors {
     min-width: 0;
     min-height: 0;
     max-height: none;
@@ -219,7 +204,7 @@
     scrollbar-gutter: stable;
   }
 
-  .analysis-workspace.analysis-overview .moves-panel {
+  .analysis-workspace .moves-panel {
     min-height: 0;
     max-height: none;
     padding: 10px 7px;
@@ -234,7 +219,7 @@
     font-size: var(--font-size-panel);
   }
 
-  .analysis-workspace.analysis-overview .moves-list {
+  .analysis-workspace .moves-list {
     min-height: 0;
     max-height: none;
     overflow: auto;
@@ -285,7 +270,7 @@
     box-shadow: inset 3px 0 var(--ui-bad-text);
   }
 
-  .analysis-workspace .moves-list button.move-assessment-very_bad {
+  .analysis-workspace .moves-list button:is(.move-assessment-blunder, .move-assessment-very_bad) {
     background: var(--ui-danger-bg);
     box-shadow: inset 3px 0 var(--ui-danger-text);
   }
@@ -317,17 +302,17 @@
     color: var(--ui-success-text);
   }
 
-  .analysis-workspace .move-assessment-very_bad .move-assessment-marker {
+  .analysis-workspace :is(.move-assessment-blunder, .move-assessment-very_bad) .move-assessment-marker {
     color: var(--ui-danger-text);
   }
 
   .analysis-workspace .board-panel {
     grid-area: board;
-    max-height: var(--analysis-board-height-limit);
     padding: 8px 10px 0;
     min-height: 0;
     overflow: auto;
     overscroll-behavior: contain;
+    scrollbar-gutter: stable;
   }
 
   .analysis-workspace .board-panel .board-heading {
@@ -366,15 +351,32 @@
     font-size: 10px;
   }
 
-  /* Leave height for navigation and an optional candidate provenance row. */
   .analysis-workspace .board-shell {
     width: 100%;
-    max-width: min(100%, calc((var(--analysis-board-height-limit) - 220px) * 1.4));
+    max-width: 100%;
+    min-height: 0;
     margin: 6px auto 0;
   }
 
   .analysis-workspace .board-panel .board {
     margin: 5px 0;
+  }
+
+  .analysis-workspace .board-panel,
+  .analysis-workspace .board-panel > .board-shell {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .analysis-workspace .board-panel > :not(.board-shell),
+  .analysis-workspace .board-shell > :not(.board) {
+    flex: none;
+  }
+
+  /* Keep the controls at their natural height and scale the SVG into the
+     remaining space. Its viewBox preserves the aspect ratio for each theme. */
+  .analysis-workspace .board-shell > .board {
+    min-height: 0;
   }
 
   .analysis-workspace .board-panel .player-bar {
@@ -391,13 +393,14 @@
 
   .analysis-workspace .board-panel .board-navigation {
     gap: 8px;
-    margin-top: 4px;
-    padding: 5px 0;
+    margin-top: 2px;
+    padding: 0;
   }
 
-  .analysis-workspace .board-panel .board-navigation button {
-    padding: 3px 10px;
-    font-size: 14px;
+  .analysis-workspace .board-panel .board-navigation .action-button {
+    height: 26px;
+    min-height: 26px;
+    padding: 0;
   }
 
   .analysis-workspace .board-panel .board-navigation > span {
@@ -469,11 +472,29 @@
     letter-spacing: normal;
   }
 
+  .analysis-workspace.analysis-overview .candidate-comparison {
+    max-width: max(1280px, 55vw);
+  }
+
+  .analysis-workspace.analysis-overview
+    .position-inspector
+    .candidate-comparison-table {
+    width: 100%;
+  }
+
   .analysis-workspace.analysis-overview
     .position-inspector
     .candidate-comparison-table
-    .candidate-number {
-    padding-inline: clamp(3px, 1cqi, 9px);
+    :is(th, td) {
+    padding: clamp(7px, 1cqi, 13px) clamp(5px, 1cqi, 13px);
+    font-size: clamp(var(--font-size-body), 1.4cqi, 16px);
+  }
+
+  .analysis-workspace.analysis-overview
+    .position-inspector
+    .candidate-comparison-table
+    th {
+    font-size: clamp(var(--font-size-table), 1.25cqi, 14px);
   }
 
   .analysis-workspace.analysis-overview
@@ -504,112 +525,6 @@
     font-size: var(--font-size-meta);
     line-height: 1.5;
   }
-
-  .analysis-workspace.analysis-overview .overview-errors .match-analysis {
-    padding: 0;
-    margin: 0;
-    border: 0;
-  }
-
-  .analysis-workspace.analysis-overview .match-move-overview {
-    margin-top: 0;
-  }
-
-  .analysis-workspace.analysis-overview .match-move-overview > summary {
-    padding: 3px 0;
-    font-size: var(--font-size-table);
-  }
-
-  .analysis-workspace.analysis-overview
-    .position-inspector
-    .match-analysis-filters {
-    gap: 6px;
-    margin: 6px 0 9px;
-    align-items: center;
-    font-size: var(--font-size-meta);
-  }
-
-  .analysis-workspace.analysis-overview
-    .position-inspector
-    .match-analysis-filters
-    label {
-    width: auto;
-    gap: 5px;
-    flex-shrink: 0;
-  }
-
-  .analysis-workspace.analysis-overview
-    .position-inspector
-    .match-analysis-filters
-    select {
-    flex: 1 1 100px;
-    min-width: 0;
-    padding: 5px 7px;
-    font-size: var(--font-size-control);
-    border-radius: 5px;
-  }
-
-  .analysis-workspace.analysis-overview
-    .match-analysis-filters
-    .statistics-reset {
-    padding: 5px 7px;
-    font-size: var(--font-size-control);
-  }
-
-  /* The pane itself scrolls, keeping a single scrollbar per long result list. */
-  .analysis-workspace.analysis-overview
-    .position-inspector
-    .match-moves-scroll {
-    max-height: none;
-    overflow: visible;
-    border-radius: 5px;
-  }
-
-  .analysis-workspace.analysis-overview
-    .position-inspector
-    .match-moves-table
-    th,
-  .analysis-workspace.analysis-overview
-    .position-inspector
-    .match-moves-table
-    td {
-    padding: 6px 8px;
-    font-size: var(--font-size-table);
-    line-height: 1.4;
-  }
-
-  .analysis-workspace.analysis-overview
-    .position-inspector
-    .match-moves-table
-    th {
-    font-size: var(--font-size-table-heading);
-  }
-
-  .analysis-workspace.analysis-overview .match-moves-table td:nth-child(3),
-  .analysis-workspace.analysis-overview .match-moves-table td:nth-child(4) {
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
-
-  .analysis-workspace.analysis-overview .match-moves-table small {
-    margin-top: 2px;
-    font-size: var(--font-size-micro);
-  }
-
-  .analysis-workspace.analysis-overview .match-moves-table .position-link {
-    padding: 3px 6px;
-    font-size: var(--font-size-table);
-  }
-
-  .analysis-workspace.analysis-overview
-    .match-moves-table
-    tr[aria-current='true']
-    td {
-    background: var(--ui-selected);
-    box-shadow:
-      inset 0 1px var(--ui-accent),
-      inset 0 -1px var(--ui-accent);
-  }
 }
 
 @media (min-width: 2400px) {
@@ -617,17 +532,128 @@
     --analysis-gap: 12px;
   }
 
-  .analysis-workspace.analysis-overview .overview-evaluation,
-  .analysis-workspace.analysis-overview .overview-errors {
+  .analysis-workspace.analysis-overview .overview-evaluation {
     padding: 12px 14px;
   }
 
-  .analysis-workspace.analysis-overview .position-inspector .candidates td,
-  .analysis-workspace.analysis-overview
-    .position-inspector
-    .match-moves-table
-    td {
-    font-size: var(--font-size-table);
+}
+
+@media (min-width: 3000px) {
+  .analysis-workspace.analysis-statistics .position-inspector {
+    container: analysis-statistics / inline-size;
   }
 
+  .analysis-workspace.analysis-notes .annotation-panel textarea {
+    font-size: var(--font-size-subject);
+  }
+
+  .analysis-statistics .statistics-comparison-scroll {
+    max-width: none;
+  }
+
+  .analysis-statistics .statistics-games-table {
+    font-size: var(--font-size-subject);
+  }
+
+  .analysis-statistics .statistics-games-table :is(th, td) {
+    padding: 13px 14px;
+  }
+
+  .analysis-statistics .statistics-games-table thead th,
+  .analysis-statistics .statistics-games-table .position-link,
+  .analysis-statistics .statistics-error-matrix,
+  .analysis-statistics .statistics-error-matrix [role='columnheader'] {
+    font-size: var(--font-size-panel);
+  }
+
+  .analysis-statistics .match-statistics .statistics-error-matrix .statistics-metric {
+    min-height: 34px;
+  }
+
+  .analysis-statistics .match-statistics .statistics-error-matrix strong {
+    font-size: var(--font-size-subject);
+  }
+}
+
+@container analysis-statistics (min-width: 1050px) {
+  .analysis-statistics .position-inspector .statistics-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+}
+
+@media (min-width: 3000px) {
+  .analysis-cards .add-cards {
+    margin: 0;
+    padding: 24px 28px;
+  }
+
+  .analysis-cards .add-cards h3 {
+    font-size: var(--font-size-question);
+  }
+
+  .analysis-cards .add-cards > p {
+    font-size: var(--font-size-subject);
+  }
+
+  .analysis-cards .add-cards :is(.learning-controls, .create-deck) {
+    align-items: end;
+    gap: 12px 16px;
+    margin-block: 18px;
+  }
+
+  .analysis-cards .add-cards > :is(.learning-controls, .create-deck, label) {
+    max-inline-size: 960px;
+  }
+
+  .analysis-cards .add-cards > label {
+    display: grid;
+    gap: 6px;
+    margin-block: 18px;
+  }
+
+  .analysis-cards .add-cards :is(.learning-controls > label, .create-deck > input) {
+    flex: 1 1 220px;
+    min-inline-size: 0;
+  }
+
+  .analysis-cards .add-cards .learning-controls :is(select, input) {
+    inline-size: 100%;
+    min-inline-size: 0;
+    max-inline-size: none;
+  }
+
+  .analysis-cards .add-cards :is(label, input, select, .action-button) {
+    font-size: var(--font-size-panel);
+  }
+
+  .analysis-cards .add-cards :is(select, input:not([type='checkbox']), .action-button) {
+    min-block-size: 44px;
+  }
+
+  .analysis-cards .card-suggestion-list {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 680px), 1fr));
+    gap: 14px;
+    max-block-size: min(
+      62dvh,
+      max(560px, calc(var(--analysis-viewport-space, 100dvh) - 550px))
+    );
+  }
+
+  .analysis-cards .card-suggestion-list li {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    gap: 18px;
+    padding: 14px;
+  }
+
+  .analysis-cards .card-suggestion-detail {
+    gap: 5px;
+    font-size: var(--font-size-body);
+  }
+
+  .analysis-cards .card-suggestion-detail input {
+    inline-size: 18px;
+    block-size: 18px;
+    flex: none;
+  }
 }

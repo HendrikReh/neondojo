@@ -170,7 +170,8 @@ export default async function setup() {
         // Vite injects its dev client in middleware mode. Serve its WebSocket
         // on the same loopback listener as the browser tests.
         hmr: { server: http },
-        watch: null,
+        // Vite discards null options when merging the project's config.
+        watch: { ignored: () => true },
         proxy: { '/api': backendUrl },
       },
     });

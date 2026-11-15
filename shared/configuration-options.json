@@ -28,7 +28,13 @@
   ],
   "analysis_board_width": {
     "min": 320,
-    "max": 960
+    "max": 1680
+  },
+  "analysis_error_thresholds": {
+    "questionable": 0.005,
+    "error": 0.02,
+    "blunder": 0.08,
+    "large_blunder": 0.12
   },
   "engine_threads": {
     "gnubg": {

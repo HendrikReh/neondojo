@@ -1,4 +1,5 @@
-import type { Position } from './api';
+import type { Candidate, Position } from './api';
+import type { PositionAnalysisResult } from './analysis-catalog-api';
 import type { SourceCandidate } from './source-analysis-api';
 import { projectMove } from './move-preview';
 
@@ -9,7 +10,8 @@ export type CandidatePosition = Pick<
 export type ComparisonCandidate = Pick<
   SourceCandidate,
   'rank' | 'notation' | 'equity' | 'equity_kind' | 'probabilities' | 'depth'
->;
+> &
+  Pick<Candidate, 'path'>;
 type EquityValue = Pick<SourceCandidate, 'equity' | 'equity_kind'>;
 const knownUnits = new Set([
   'cubeful',
@@ -17,6 +19,57 @@ const knownUnits = new Set([
   'normalized_cubeful',
   'mwc',
 ]);
+
+export function candidateEquityDifference(
+  candidate?: EquityValue,
+  reference?: EquityValue,
+): number | null {
+  const unit = (kind: string) =>
+    kind === 'normalized_cubeful' ? 'cubeful' : kind;
+  if (
+    typeof candidate?.equity !== 'number' ||
+    typeof reference?.equity !== 'number' ||
+    !knownUnits.has(reference.equity_kind) ||
+    unit(candidate.equity_kind) !== unit(reference.equity_kind)
+  )
+    return null;
+  const difference = candidate.equity - reference.equity;
+  return Number.isFinite(difference) ? difference : null;
+}
+
+export function nativeCheckerCandidates(
+  result?: PositionAnalysisResult | null,
+) {
+  const candidates =
+    result?.analysis?.candidates ?? result?.decision?.checker_candidates ?? [];
+  return candidates.map((candidate) => ({
+    ...candidate,
+    equity_kind: result?.decision ? 'normalized_cubeful' : 'cubeful',
+    depth: candidate.plies == null ? null : `${candidate.plies}-ply`,
+  }));
+}
+
+export function candidateEquityRanks(candidates: ComparisonCandidate[]) {
+  const unit = candidates[0]?.equity_kind;
+  if (!unit || !knownUnits.has(unit))
+    return new Map<ComparisonCandidate, number>();
+  const evaluated = candidates.flatMap((candidate) =>
+    candidate.equity_kind === unit &&
+    typeof candidate.equity === 'number' &&
+    Number.isFinite(candidate.equity)
+      ? [{ candidate, equity: candidate.equity }]
+      : [],
+  );
+  if (evaluated.length !== candidates.length)
+    return new Map<ComparisonCandidate, number>();
+  return new Map(
+    evaluated
+      .sort(
+        (a, b) => b.equity - a.equity || a.candidate.rank - b.candidate.rank,
+      )
+      .map(({ candidate }, index) => [candidate, index + 1]),
+  );
+}
 
 function probability(value: unknown): number | null {
   return typeof value === 'number' && value >= 0 && value <= 1 ? value : null;
@@ -84,18 +137,9 @@ export function candidateLoss(
   candidate: EquityValue,
   best?: EquityValue,
 ): number | null {
-  if (
-    !best ||
-    !knownUnits.has(best.equity_kind) ||
-    candidate.equity_kind !== best.equity_kind ||
-    typeof best.equity !== 'number' ||
-    !Number.isFinite(best.equity) ||
-    typeof candidate.equity !== 'number' ||
-    !Number.isFinite(candidate.equity)
-  )
-    return null;
-  const loss = best.equity - candidate.equity;
-  return loss >= 0 ? loss : null;
+  if (candidate.equity_kind !== best?.equity_kind) return null;
+  const loss = candidateEquityDifference(best, candidate);
+  return loss !== null && loss >= 0 ? loss : null;
 }
 
 /** Reuse the board preview rules to recognize alternative notation for the recorded move. */

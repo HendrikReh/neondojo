@@ -12,11 +12,15 @@ import {
   type ConfigurationSnapshot,
 } from './configuration-store';
 import { cacheConfiguration } from './configuration-legacy';
+import {
+  defaultConfiguration,
+  normalizeConfiguration,
+  type ProfileConfiguration,
+} from './configuration-model';
 
 export type ConfigurationContextValue = ConfigurationSnapshot &
   Pick<
     ConfigurationStore,
-    | 'updateCurrent'
     | 'applyCurrent'
     | 'flush'
     | 'refresh'
@@ -29,11 +33,45 @@ export type ConfigurationContextValue = ConfigurationSnapshot &
     | 'restoreProfileField'
     | 'reloadServer'
     | 'saveConflictAsNewProfile'
-    | 'runWithConfiguration'
   >;
 const ConfigurationContext = createContext<ConfigurationContextValue | null>(
   null,
 );
+const ConfirmedConfigurationContext = createContext<
+  ProfileConfiguration | undefined
+>(undefined);
+const WorkspaceDefaultsContext = createContext<
+  ProfileConfiguration | undefined
+>(undefined);
+const confirmedKey = 'bgtutor.configuration-confirmed.v1';
+const workspaceDefaultsKey = 'bgtutor.workspace-defaults.v1';
+
+function readCachedConfiguration(key: string) {
+  try {
+    const value = localStorage.getItem(key);
+    return value ? normalizeConfiguration(JSON.parse(value)) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeCachedConfiguration(key: string, value: ProfileConfiguration) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // The current tab can still use the in-memory settings.
+  }
+}
+
+/** Read-only settings for workspaces. Drafts and profile errors stay in management. */
+export function useConfirmedConfiguration() {
+  return useContext(ConfirmedConfigurationContext);
+}
+
+/** One-time seed from older installations, shared across tabs in this browser. */
+export function useWorkspaceDefaults() {
+  return useContext(WorkspaceDefaultsContext);
+}
 export function ConfigurationProvider({
   children,
   store: provided,
@@ -47,6 +85,12 @@ export function ConfigurationProvider({
     store.getSnapshot,
     store.getSnapshot,
   );
+  const [cached] = useState(() => readCachedConfiguration(confirmedKey));
+  const [workspaceDefaults, setWorkspaceDefaults] = useState(() =>
+    readCachedConfiguration(workspaceDefaultsKey),
+  );
+  const confirmed = state.confirmed?.current_configuration;
+  const effective = confirmed ?? cached;
   useEffect(() => {
     void store.load();
     const focus = () => {
@@ -67,8 +111,27 @@ export function ConfigurationProvider({
     };
   }, [store]);
   useEffect(() => {
-    if (state.current) cacheConfiguration(state.current);
-  }, [state.current]);
+    if (!confirmed) return;
+    cacheConfiguration(confirmed);
+    writeCachedConfiguration(confirmedKey, confirmed);
+  }, [confirmed]);
+  useEffect(() => {
+    if (workspaceDefaults || !effective) return;
+    const initial = readCachedConfiguration(workspaceDefaultsKey) ?? {
+      ...defaultConfiguration,
+      analysis: {
+        ...defaultConfiguration.analysis,
+        scope: effective.analysis.scope,
+      },
+      appearance: effective.appearance,
+      library: effective.library,
+      positions: effective.positions,
+      learning: effective.learning,
+      annotations: effective.annotations,
+    };
+    setWorkspaceDefaults(initial);
+    writeCachedConfiguration(workspaceDefaultsKey, initial);
+  }, [effective, workspaceDefaults]);
   useEffect(() => {
     if (!state.confirmed) return;
     const channel =
@@ -81,7 +144,6 @@ export function ConfigurationProvider({
   const value = useMemo(
     () => ({
       ...state,
-      updateCurrent: store.updateCurrent,
       applyCurrent: store.applyCurrent,
       flush: store.flush,
       refresh: store.refresh,
@@ -94,13 +156,18 @@ export function ConfigurationProvider({
       restoreProfileField: store.restoreProfileField,
       reloadServer: store.reloadServer,
       saveConflictAsNewProfile: store.saveConflictAsNewProfile,
-      runWithConfiguration: store.runWithConfiguration,
     }),
     [state, store],
   );
   return (
     <ConfigurationContext.Provider value={value}>
-      {children}
+      <ConfirmedConfigurationContext.Provider value={effective}>
+        <WorkspaceDefaultsContext.Provider
+          value={workspaceDefaults ?? effective}
+        >
+          {children}
+        </WorkspaceDefaultsContext.Provider>
+      </ConfirmedConfigurationContext.Provider>
     </ConfigurationContext.Provider>
   );
 }

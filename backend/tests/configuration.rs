@@ -36,6 +36,30 @@ async fn configuration_requires_explicit_initialization(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires isolated PostgreSQL and native GNUbg"]
+async fn play_uses_default_thresholds_when_configuration_cannot_be_loaded(pool: PgPool) {
+    let (app, _) = profile_support::initialized(&pool, true).await;
+    sqlx::query("UPDATE configuration_state SET current_configuration = jsonb_set(current_configuration, '{analysis,error_thresholds}', '[]')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (status, _) = call(app.clone(), "GET", "/api/configuration", Value::Null).await;
+    assert_eq!(status, 422);
+    let (status, session) = call(
+        app,
+        "POST",
+        "/api/play/sessions",
+        json!({"human_player": 0, "match_length": 5}),
+    )
+    .await;
+    assert_eq!(status, 201, "{session}");
+    assert_eq!(
+        session["tutor_threshold"],
+        bgtutor::configuration::ErrorThresholds::default().error,
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
 async fn initialization_imports_browser_values_and_keeps_backend_authority(pool: PgPool) {
     let (app, state) = profile_support::initialized(&pool, false).await;
@@ -315,7 +339,7 @@ async fn position_column_choices_persist_without_changing_widths(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
-async fn unchanged_missing_references_do_not_block_unrelated_configuration_updates(pool: PgPool) {
+async fn legacy_deck_references_do_not_block_configuration_updates(pool: PgPool) {
     let (app, state) = profile_support::initialized(&pool, false).await;
     let deck = uuid::Uuid::new_v4();
     sqlx::query("INSERT INTO decks(id,name) VALUES($1,'Selected deck')")
@@ -349,16 +373,20 @@ async fn unchanged_missing_references_do_not_block_unrelated_configuration_updat
     .await;
     assert_eq!(code, 200, "{changed}");
     let mut config = changed["current_configuration"].clone();
-    config["learning"]["deck_id"] = json!(uuid::Uuid::new_v4());
-    let (code, error) = call(
+    let missing_deck = uuid::Uuid::new_v4();
+    config["learning"]["deck_id"] = json!(missing_deck);
+    let (code, updated) = call(
         app,
         "PUT",
         "/api/configuration",
         json!({"expected_revision":changed["revision"],"configuration":config}),
     )
     .await;
-    assert_eq!(code, 422, "{error}");
-    assert_eq!(error["issues"][0]["path"], "learning.deck_id");
+    assert_eq!(code, 200, "{updated}");
+    assert_eq!(
+        updated["current_configuration"]["learning"]["deck_id"],
+        json!(missing_deck)
+    );
 }
 
 #[sqlx::test(migrations = "./migrations")]

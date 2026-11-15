@@ -1,5 +1,12 @@
+import { watchOpening } from './play-opening-helpers';
 import { test, expect } from '@playwright/test';
 import type { PlaySession } from '../src/play-api';
+import {
+  matchingCheckerTurns,
+  nativeLegalTurns,
+  nextCheckerSteps,
+  type CheckerStepWithDie,
+} from '../src/play-state';
 test.skip(
   !process.env.BGTUTOR_FEEDBACK_NATIVE_TEST,
   'Requires isolated native feedback backend',
@@ -61,7 +68,61 @@ for (const mode of ['competition', 'training', 'coach', 'tutor'] as const) {
     expect(state.legal_moves.length).toBeGreaterThan(1);
     const checkpoint = JSON.stringify(state.position);
     const history = state.history.length;
-    await action('move', state.legal_moves.length - 1);
+    const moveIndex = state.legal_moves.length - 1;
+    if (mode === 'coach') {
+      const turns = nativeLegalTurns(
+        state.position.board,
+        state.human_player,
+        state.position.dice,
+        state.legal_moves,
+      );
+      await page.addInitScript((id) => {
+        localStorage.setItem('bgtutor.play-session', id);
+        localStorage.setItem('bgtutor.play-sounds', 'off');
+      }, state.id);
+      await page.goto('/');
+      await page.getByRole('tab', { name: 'Playing', exact: true }).click();
+      const steps: CheckerStepWithDie[] = [];
+      const length = turns[0].steps.length;
+      for (let index = 0; index < length; index++) {
+        const step = nextCheckerSteps(
+          matchingCheckerTurns(turns, steps),
+          index,
+          state.position.dice[index],
+        )
+          .values()
+          .next().value!;
+        await page
+          .locator(`[data-play-point="${step.from}"] .play-point`)
+          .click();
+        steps.push(step);
+      }
+      const playedMove = matchingCheckerTurns(turns, steps)[0].moveIndex;
+      const saved = page.waitForResponse(
+        (r) =>
+          r.url().endsWith(`${uri}/actions`) && r.request().method() === 'POST',
+      );
+      await page.locator('[data-dice-action="confirm"]').click();
+      const result = await saved;
+      expect(result.status(), await result.text()).toBe(200);
+      const after = (await result.json()) as PlaySession;
+      expect(after.pending_decision).toBeNull();
+      expect(after.history.length).toBeGreaterThan(history);
+      expect(after.decisions?.at(-1)).toMatchObject({
+        original_move_index: playedMove,
+        committed: true,
+        revealed: true,
+        loss: expect.any(Number),
+      });
+      await expect(page.getByRole('button', { name: 'Play move' })).toHaveCount(
+        0,
+      );
+      await expect(
+        page.locator(`[data-play-history-index="${history}"]`),
+      ).toBeVisible();
+      return;
+    }
+    await action('move', moveIndex);
     await page.addInitScript((id) => {
       localStorage.setItem('bgtutor.play-session', id);
       localStorage.setItem('bgtutor.play-sounds', 'off');
@@ -82,10 +143,6 @@ for (const mode of ['competition', 'training', 'coach', 'tutor'] as const) {
     expect(pending.action).toBe('move');
     const panel = page.getByTestId('play-feedback');
     await expect(panel).toBeVisible();
-    if (mode === 'coach')
-      await expect(
-        panel.getByRole('columnheader', { name: 'Equity', exact: true }),
-      ).toHaveCount(0);
     if (mode === 'training')
       await expect(
         panel.getByRole('columnheader', { name: 'Equity', exact: true }),
@@ -132,12 +189,7 @@ for (const mode of ['competition', 'training', 'coach', 'tutor'] as const) {
     );
     await panel
       .getByRole('button', {
-        name:
-          mode === 'tutor'
-            ? 'Play anyway'
-            : mode === 'coach'
-              ? 'Play move'
-              : 'Continue',
+        name: mode === 'tutor' ? 'Play anyway' : 'Continue',
         exact: true,
       })
       .click();
@@ -185,11 +237,17 @@ test('native Competition startup and live modes preserve the running position', 
   page.on('response', (response) => {
     if (response.status() === 422) restrictedReads.push(response.url());
   });
+  const opened = watchOpening(page);
   await page.goto('/');
   await expect(
     page.getByRole('tab', { name: 'Playing', exact: true }),
   ).toHaveAttribute('aria-selected', 'true');
-  await page.locator('.play-dialog-preferences > summary').click();
+  const afterOpening = await opened();
+  async function showModeControl() {
+    if (afterOpening.phase === 'double_response')
+      await page.locator('.play-dialog-preferences > summary').click();
+  }
+  await showModeControl();
   const selector = page.getByRole('combobox', {
     name: 'Change play mode',
     exact: true,
@@ -203,9 +261,9 @@ test('native Competition startup and live modes preserve the running position', 
     const result = await changed;
     expect(result.status(), await result.text()).toBe(200);
     const next = (await result.json()) as PlaySession;
-    expect(next.position).toEqual(state.position);
-    expect(next.history).toEqual(state.history);
-    expect(next.phase).toEqual(state.phase);
+    expect(next.position).toEqual(afterOpening.position);
+    expect(next.history).toEqual(afterOpening.history);
+    expect(next.phase).toEqual(afterOpening.phase);
     await expect(selector).toHaveValue(mode);
     await expect(
       page.getByRole('spinbutton', {
@@ -215,12 +273,10 @@ test('native Competition startup and live modes preserve the running position', 
     ).toHaveCount(mode === 'tutor' ? 1 : 0);
   }
   await page.reload();
-  // Restoring the selected live library match already opens Playing. Its
-  // mandatory opening dialog correctly prevents clicking background tabs.
   await expect(
     page.getByRole('tab', { name: 'Playing', exact: true }),
   ).toHaveAttribute('aria-selected', 'true');
-  await page.locator('.play-dialog-preferences > summary').click();
+  await showModeControl();
   await expect(selector).toHaveValue('competition');
   await expect(page.getByRole('alert')).toHaveCount(0);
   expect(restrictedReads).toEqual([]);

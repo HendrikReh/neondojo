@@ -713,6 +713,7 @@ async fn search(
     rows.truncate(limit as usize);
     let mut items = Vec::with_capacity(rows.len());
     let mut next_cursor = None;
+    let thresholds = crate::configuration::store::error_thresholds(&s.pool).await?;
     for row in rows {
         let position: Position =
             serde_json::from_value(row.get("position")).map_err(anyhow::Error::from)?;
@@ -751,7 +752,7 @@ async fn search(
                     plies: row.get("plies"),
                     depth: row.get("depth"),
                     equity_loss: loss,
-                    severity: MoveSeverity::from_normalized_loss(loss),
+                    severity: thresholds.classify(loss),
                 });
         let context: serde_json::Value = row.get("position");
         let notes=sqlx::query(&format!("SELECT a.target_kind,a.tags,left(a.comment,280) AS comment_excerpt FROM positions p LEFT JOIN match_games g ON g.match_uuid=p.match_uuid AND g.game_no=p.game_no JOIN annotations a ON {NOTE_SCOPE} WHERE p.id=$1 ORDER BY a.target_kind,a.id"))

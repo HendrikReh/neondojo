@@ -15,6 +15,7 @@ import {
 } from './PlayMovePreview';
 import type { PlayDecision, PlaySession } from './play-api';
 import { usePlayModeText } from './play-mode-messages';
+import { usePlayText } from './play-messages';
 
 export default function PlayCoachFeedback({
   anchor,
@@ -37,10 +38,12 @@ export default function PlayCoachFeedback({
   onReveal: () => void;
 }) {
   const t = usePlayModeText();
+  const playT = usePlayText();
   const choice = useDecisionChoice(session);
   const panel = useRef<HTMLElement>(null);
   const detailsTrigger = useRef<HTMLButtonElement>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const checkerTurn = decision.action === 'move' || decision.action === 'pass';
   useEffect(() => {
     panel.current?.focus({ preventScroll: true });
   }, []);
@@ -62,13 +65,17 @@ export default function PlayCoachFeedback({
           <h3>{t('coach')}</h3>
           <p className="play-coach-choice">{choice}</p>
           {decision.revealed && <DecisionEvaluation decision={decision} />}
-          <ActionButton
-            className="primary play-main-action"
-            disabled={busy}
-            onClick={onContinue}
-            icon="confirm"
-            label={decision.action === 'move' ? t('playMove') : t('continue')}
-          />
+          {checkerTurn ? (
+            <p>{playT(decision.action === 'pass' ? 'passReady' : 'ready')}</p>
+          ) : (
+            <ActionButton
+              className="primary play-main-action"
+              disabled={busy}
+              onClick={onContinue}
+              icon="confirm"
+              label={t('continue')}
+            />
+          )}
           <ActionButton
             ref={detailsTrigger}
             disabled={busy}

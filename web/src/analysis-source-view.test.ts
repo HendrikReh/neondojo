@@ -54,6 +54,10 @@ test('automatic mode displays an available XG-only reference with its original a
   expect(html).toContain('Original Author');
   expect(html).toContain('before the roll');
   expect(html).toContain('XG Opening Book');
+  expect(html).toContain('>eXtreme Gammon 2.10</span>');
+  expect(html).toContain(
+    'aria-description="eXtreme Gammon 2.10 · Rollout · rollout"',
+  );
   expect(html).not.toContain('class="candidates"');
 });
 test('explicit BackgammonDB mode disables the XG option that was not requested', () => {
@@ -137,11 +141,49 @@ function renderRecords(
     }),
   );
 }
+
+test('ranks imported XG moves by equity and shows each original depth', () => {
+  const candidates = [
+    { rank: 1, notation: '24/18 13/10', equity: 0.012226, depth: 'XGRoller+' },
+    { rank: 2, notation: '13/10 13/7', equity: -0.079705, depth: 'XGRoller+' },
+    { rank: 3, notation: '24/21 21/15', equity: -0.005202, depth: '4-ply' },
+  ].map((candidate) => ({
+    ...candidate,
+    equity_kind: 'cubeful',
+    probabilities: null,
+    raw: null,
+  }));
+  const html = renderRecords([
+    {
+      ...emptyRecord,
+      source_format: 'xg',
+      engine: 'eXtreme Gammon',
+      depth: 'XGRoller+',
+      played: '13/10 13/7',
+      candidates,
+    },
+  ]);
+  const rows = html.split('<tbody>')[1].match(/<tr\b.*?<\/tr>/g) ?? [];
+  expect(rows).toHaveLength(3);
+  expect(rows[0]).toContain('<td>1</td>');
+  expect(rows[0]).toContain('24/18 13/10');
+  expect(rows[0]).toContain('class="candidate-depth">XGRoller+</small>');
+  expect(rows[1]).toContain('<td>2</td>');
+  expect(rows[1]).toContain('24/15');
+  expect(rows[1]).toContain('class="candidate-depth">4-ply</small>');
+  expect(rows[2]).toContain('<td>3</td>');
+  expect(rows[2]).toContain('13/10 13/7');
+  expect(rows[2]).toContain('data-candidate-played="true"');
+  expect(rows[2]).toContain('class="candidate-depth">XGRoller+</small>');
+  expect(candidates.map(({ rank }) => rank)).toEqual([1, 2, 3]);
+});
+
 test('an empty checker record keeps provenance and explicitly reports unavailable candidates', () => {
   const html = renderRecords([emptyRecord]);
-  expect(html).toContain('GNUbg 1.08.003');
-  expect(html).toContain('2-ply');
-  expect(html).toContain('evaluation');
+  expect(html).toContain('>GNUbg 1.08.003</span>');
+  expect(html).toContain(
+    'aria-description="GNUbg 1.08.003 · 2-ply · evaluation · SGF"',
+  );
   expect(html).toContain('No candidate values recorded.');
   expect(html).not.toContain('<table');
 });

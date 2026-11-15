@@ -14,6 +14,7 @@ const render = (selected?: PreviewCandidate) =>
       children: createElement(BoardReviewControls, {
         view: 'arrows',
         preview: { ok: true, board: [], steps: [], forced: false },
+        position: { board: [], player: 0, dice: [3, 2] },
         selected,
         onView: () => {},
         onPlayed: () => {},

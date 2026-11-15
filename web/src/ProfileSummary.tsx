@@ -1,4 +1,5 @@
 import { useI18n } from './i18n';
+import { errorThresholdLabels } from './review-statistics-messages';
 import {
   normalizeConfiguration,
   type ProfileConfiguration,
@@ -12,6 +13,7 @@ import { themes } from './themes';
 import { languages } from './i18n-core';
 import { ALL_CARDS, CARDS_WITHOUT_DECK } from './card-search-api';
 import { useCardSearchText } from './card-search-messages';
+import { useSettingsText } from './settings-messages';
 import { LIBRARY_COLUMNS } from './library-columns';
 import { useEffect, useId, useState } from 'react';
 import { request } from './api';
@@ -44,9 +46,10 @@ export default function ProfileSummary({
   resetDisabled?: boolean;
 }) {
   const t = useProfileText(),
-    { locale } = useI18n();
+    { locale, t: appT } = useI18n();
   const differencesHeading = useId();
   const searchText = useCardSearchText();
+  const settingsText = useSettingsText();
   const [resourceNames, setResourceNames] = useState<Record<string, string>>(
     {},
   );
@@ -71,6 +74,17 @@ export default function ProfileSummary({
     return () => controller.abort();
   }, [configuration.library.database_id, configuration.learning.deck_id]);
   const label = (path: string) => {
+    if (
+      path.startsWith('analysis.error_thresholds.') ||
+      path === 'analysis.error_thresholds'
+    ) {
+      if (path === 'analysis.error_thresholds')
+        return settingsText('errorThresholds');
+      const threshold = Object.entries(errorThresholdLabels).find(
+        ([key]) => path.split('.').at(-1) === key,
+      );
+      if (threshold) return appT(threshold[1]);
+    }
     const key = profileFieldKey(path);
     if (key) return t(key);
     const leaf = path.split('.').at(-1)!;
@@ -120,6 +134,13 @@ export default function ProfileSummary({
     }
     if (Array.isArray(value))
       return value.map((v) => label(String(v))).join(', ');
+    if (path === 'analysis.error_thresholds')
+      return Object.entries(value)
+        .map(([key, entry]) => {
+          const field = `${path}.${key}`;
+          return `${label(field)} ${format(entry, field)}`;
+        })
+        .join(' · ');
     if (typeof value === 'object')
       return Object.entries(value)
         .map(

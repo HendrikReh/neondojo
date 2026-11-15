@@ -1,5 +1,5 @@
 import { rollDice } from './play-board-actions';
-import { finishOpening } from './play-opening-helpers';
+import { watchOpening } from './play-opening-helpers';
 import { test, expect } from '@playwright/test';
 import type { PlaySession } from '../src/play-api';
 declare global {
@@ -54,6 +54,7 @@ for (const config of [
       .getByRole('tabpanel', { name: 'Playing', exact: true })
       .getByLabel('Play mode', { exact: true })
       .selectOption('competition');
+    const opening = watchOpening(page);
     const create = page.waitForResponse(
       (response) =>
         response.url().endsWith('/api/play/sessions') &&
@@ -64,13 +65,26 @@ for (const config of [
       .click();
     const response = await create;
     expect(response.status()).toBe(201);
-    let state = (await response.json()) as PlaySession;
-    state = await finishOpening(page, state, true);
+    let state = await opening();
     expect(state.engine.version).toContain('1.08.003');
     expect(state.engine.plies).toBe(config.plies);
     expect(state.bearoff_direction).toBe(config.direction);
     expect(state.human_player).toBe(config.human);
+    async function takeDouble() {
+      const taken = page.waitForResponse(
+        (r) =>
+          r.url().endsWith('/actions') &&
+          r.request().postDataJSON()?.action === 'take',
+      );
+      await page
+        .getByRole('button', { name: 'Take double', exact: true })
+        .click();
+      const response = await taken;
+      expect(response.status(), await response.text()).toBe(200);
+      return (await response.json()) as PlaySession;
+    }
     for (let turn = 0; turn < 2; turn++) {
+      if (state.phase === 'double_response') state = await takeDouble();
       if (state.phase === 'roll') {
         await expect(rollDice(page)).toBeVisible();
         const rolling = page.waitForResponse(
@@ -127,28 +141,13 @@ for (const config of [
       const played = page.waitForResponse(
         (r) => r.url().endsWith('/actions') && r.request().method() === 'POST',
       );
-      await page
-        .locator('[data-play-die-index="0"][data-dice-action="confirm"]')
-        .click();
+      await page.locator('[data-dice-action="confirm"]').click();
       const next = await played;
       expect(next.status()).toBe(200);
       state = await next.json();
       expect(state.history.length).toBeGreaterThanOrEqual((turn + 1) * 2);
       expect(state.engine.version).toContain('1.08.003');
-      if (state.phase === 'double_response') {
-        // A native bot may offer the cube before rolling; only its subsequent
-        // dice/checker play should produce move sounds.
-        const taken = page.waitForResponse(
-          (r) =>
-            r.url().endsWith('/actions') && r.request().method() === 'POST',
-        );
-        await page
-          .getByRole('button', { name: 'Take double', exact: true })
-          .click();
-        const response = await taken;
-        expect(response.status()).toBe(200);
-        state = await response.json();
-      }
+      if (state.phase === 'double_response') state = await takeDouble();
       await expect(page.locator('.play-workspace')).toHaveAttribute(
         'aria-busy',
         'false',
@@ -159,7 +158,7 @@ for (const config of [
       expect(await page.evaluate(() => window.__nativeAudio)).toContain(0.28);
     }
     // Resolve the mandatory pre-roll decision before entering history review.
-    // This is a real dice click, and the ensuing unplayed human turn becomes
+    // The ensuing unplayed human turn becomes
     // the checkpoint against which read-only review/reload is checked.
     if (state.phase === 'roll') {
       const rolling = page.waitForResponse(
@@ -170,6 +169,7 @@ for (const config of [
       expect(rolled.status(), await rolled.text()).toBe(200);
       state = await rolled.json();
     }
+    if (state.phase === 'double_response') state = await takeDouble();
     expect(state.phase).toBe('move');
     const before = state;
     await page.reload();

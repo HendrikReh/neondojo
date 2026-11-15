@@ -1,18 +1,16 @@
 import { test, expect } from './test';
 test.use({ actionTimeout: 10000 });
+import { profileBackend } from './profile-backend';
 import { historyFixture } from './play-history-review-helpers';
-test('New match offers a money game, persists it and sends a zero point target', async ({
+test('Money game selection applies to the new session and leaves the profile defaults intact', async ({
   page,
 }) => {
+  const profile = await profileBackend(page);
   const { saved } = await historyFixture(page);
   let payload: unknown;
   const money = {
     ...saved,
     match_length: 0,
-    phase: 'opening_roll',
-    history: [],
-    scores: [0, 0],
-    opening: null,
   };
   await page.route('**/api/play/sessions', (r) => {
     payload = r.request().postDataJSON();
@@ -22,22 +20,6 @@ test('New match offers a money game, persists it and sends a zero point target',
   await page
     .getByRole('combobox', { name: 'Match length', exact: true })
     .selectOption({ label: 'Money game' });
-  await expect
-    .poll(
-      async () =>
-        (
-          await page.evaluate(() =>
-            fetch('/api/configuration').then((r) => r.json()),
-          )
-        ).current_configuration.play.match_length,
-    )
-    .toBe(0);
-  await page.reload();
-  await page.getByRole('tab', { name: 'Playing', exact: true }).click();
-  await page.getByRole('button', { name: 'New match', exact: true }).click();
-  await expect(
-    page.getByRole('combobox', { name: 'Match length', exact: true }),
-  ).toHaveValue('0');
   await page
     .locator('.play-setup')
     .getByRole('button', { name: 'Start match', exact: true })
@@ -47,6 +29,80 @@ test('New match offers a money game, persists it and sends a zero point target',
   await expect(page.locator('.play-match-heading')).not.toContainText(
     '0 points',
   );
+  expect(profile.calls.filter(({ method }) => method !== 'GET')).toEqual([]);
+  await page.getByRole('button', { name: 'New match', exact: true }).click();
+  await expect(
+    page.getByRole('combobox', { name: 'Match length', exact: true }),
+  ).toHaveValue('7');
+});
+
+test('starts a match while preserving conflicting profile changes for recovery', async ({
+  page,
+}) => {
+  const profile = await profileBackend(page);
+  const local = structuredClone(profile.state.current_configuration);
+  local.general.player_name = 'Unsaved local name';
+  local.play.match_length = 5;
+  const pending = {
+    base_revision: profile.state.revision,
+    configuration: local,
+  };
+  profile.updateRemote({
+    ...profile.state.current_configuration,
+    general: { ...local.general, player_name: 'Confirmed name' },
+  });
+  await page.addInitScript((draft) => {
+    localStorage.setItem(
+      'bgtutor.configuration-pending.v1',
+      JSON.stringify(draft),
+    );
+  }, pending);
+  const { saved } = await historyFixture(page);
+  let payload: unknown;
+  await page.route('**/api/play/sessions', (route) => {
+    payload = route.request().postDataJSON();
+    return route.fulfill({
+      status: 201,
+      json: {
+        ...saved,
+        human_player: 1,
+        match_length: 3,
+        play_mode: 'training',
+      },
+    });
+  });
+
+  await page.getByRole('button', { name: 'New match', exact: true }).click();
+  const setup = page.locator('.play-setup');
+  await setup
+    .getByRole('combobox', { name: 'Your checkers', exact: true })
+    .selectOption('1');
+  await setup
+    .getByRole('combobox', { name: 'Match length', exact: true })
+    .selectOption('3');
+  await setup
+    .getByRole('combobox', { name: 'Play mode', exact: true })
+    .selectOption('training');
+  await setup.getByLabel('Open training analysis automatically').uncheck();
+  await setup.getByRole('button', { name: 'Start match', exact: true }).click();
+
+  await expect(page.locator('.play-match-heading')).toContainText('3 points');
+  expect(payload).toMatchObject({
+    human_player: 1,
+    match_length: 3,
+    play_mode: 'training',
+    training_auto_analysis: false,
+  });
+  expect(profile.calls.filter(({ method }) => method !== 'GET')).toEqual([]);
+  expect(
+    await page.evaluate(() =>
+      JSON.parse(localStorage.getItem('bgtutor.configuration-pending.v1')!),
+    ),
+  ).toEqual(pending);
+  await page.getByRole('button', { name: 'New match', exact: true }).click();
+  await expect(
+    setup.getByRole('combobox', { name: 'Match length', exact: true }),
+  ).toHaveValue('7');
 });
 
 test('money games continue with the score and keep each saved game report', async ({
@@ -81,16 +137,27 @@ test('money games continue with the score and keep each saved game report', asyn
   await page.route(
     `**/api/play/sessions/${saved.id}/actions`,
     async (route) => {
-      expect(route.request().postDataJSON().action).toBe('next_game');
-      Object.assign(saved, {
-        version: saved.version + 1,
-        phase: 'opening_roll',
-        game_no: saved.game_no + 1,
-        review: null,
-        study_report_id: null,
-        study_report_version: null,
-        winner: null,
-      });
+      const { action } = route.request().postDataJSON();
+      if (action === 'opening_roll')
+        Object.assign(saved, {
+          version: saved.version + 1,
+          phase: 'opening_result',
+          opening: { white_die: 3, black_die: 1, winner: 0, rolls: [[3, 1]] },
+        });
+      else if (action === 'start_opening_move')
+        Object.assign(saved, { version: saved.version + 1, phase: 'roll' });
+      else {
+        expect(action).toBe('next_game');
+        Object.assign(saved, {
+          version: saved.version + 1,
+          phase: 'opening_roll',
+          game_no: saved.game_no + 1,
+          review: null,
+          study_report_id: null,
+          study_report_version: null,
+          winner: null,
+        });
+      }
       await route.fulfill({ json: saved });
     },
   );

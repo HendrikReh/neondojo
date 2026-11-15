@@ -2,6 +2,7 @@
 //! optimistic revisions fence concurrent requests without holding DB locks.
 pub(crate) mod engine_match;
 mod feedback;
+mod forfeit;
 mod library;
 mod open_sage;
 mod pause;
@@ -11,7 +12,9 @@ pub use feedback::{
     FeedbackOperation, PlayAlternative, PlayAttempt, PlayDecision, PlayFeedbackRequest, PlayMode,
     PlayReview, PlayReviewRequest,
 };
-use feedback::{analyze_decision, default_analysis_plies, present, stage_choice};
+use feedback::{
+    analyze_decision, default_analysis_plies, present, should_pause_for_feedback, stage_choice,
+};
 pub(crate) use feedback::{default_auto_analysis, default_play_mode, default_threshold};
 pub use library::{
     BOT_DATABASE_ID, PAUSED_MATCHES_DATABASE_ID, backfill as backfill_library_matches,
@@ -122,6 +125,9 @@ pub struct PlaySession {
     /// An explicitly closed money session cannot start another game.
     #[serde(default)]
     pub money_session_ended: bool,
+    /// The human conceded the entire point match.
+    #[serde(default)]
+    pub match_forfeited: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub study_report_id: Option<Uuid>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -134,6 +140,8 @@ pub struct PlaySession {
     pub play_mode: PlayMode,
     #[serde(default = "default_threshold")]
     pub tutor_threshold: f64,
+    #[serde(default)]
+    pub error_thresholds: crate::configuration::ErrorThresholds,
     #[serde(default = "default_auto_analysis")]
     pub training_auto_analysis: bool,
     #[serde(default = "default_analysis_plies")]
@@ -230,6 +238,7 @@ pub enum PlayAction {
     Take,
     Drop,
     Resign,
+    ForfeitMatch,
     NextGame,
     EndSession,
     Pause,
@@ -572,7 +581,7 @@ async fn create_session(
             "human_player must be 0 or 1 and match_length must be 0 (money game) or 1..25",
         ));
     }
-    let settings = crate::settings::load(&state).await?;
+    let (settings, error_thresholds) = crate::settings::load_play_settings(&state).await?;
     if request
         .tutor_threshold
         .is_some_and(|v| !v.is_finite() || v <= 0.0 || v > 1.0)
@@ -591,6 +600,7 @@ async fn create_session(
         gnubg_threads: settings
             .gnubg_threads
             .filter(|_| settings.play_engine == "gnubg"),
+        gnubg_move_filter: None,
         open_sage: None,
     };
     let bot = crate::settings::snapshot_for(
@@ -633,6 +643,7 @@ async fn create_session(
             analysis,
         }),
         money_session_ended: false,
+        match_forfeited: false,
         game_results: None,
         study_report_id: None,
         study_report_version: None,
@@ -643,7 +654,8 @@ async fn create_session(
         learning_used: request.play_mode.unwrap_or(settings.default_play_mode)
             != PlayMode::Competition,
         play_mode: request.play_mode.unwrap_or(settings.default_play_mode),
-        tutor_threshold: request.tutor_threshold.unwrap_or(settings.tutor_threshold),
+        tutor_threshold: request.tutor_threshold.unwrap_or(error_thresholds.error),
+        error_thresholds,
         training_auto_analysis: request
             .training_auto_analysis
             .unwrap_or(settings.training_auto_analysis),
@@ -989,6 +1001,9 @@ async fn act(
         )
         .await;
     }
+    if matches!(request.action, PlayAction::ForfeitMatch) {
+        return forfeit::finish(&state, previous, &request).await;
+    }
     let (action, notation) = validate_action(&previous.state, &request)?;
     let mut working = previous.state.0.clone();
     working.learning_used |= working.play_mode != PlayMode::Competition;
@@ -1048,10 +1063,7 @@ async fn act(
                 .map_err(native_error)?
         };
         stage_choice(&mut working, action, request.move_index, alternatives)?;
-        let should_pause = working.play_mode == PlayMode::Coach
-            || (working.play_mode == PlayMode::Training && working.training_auto_analysis)
-            || working.pending_decision.as_ref().is_some_and(|d| d.warning);
-        if should_pause {
+        if should_pause_for_feedback(&working, &request.action) {
             working.version += 1;
             return persist_session(
                 &state,
@@ -1337,18 +1349,21 @@ async fn export_sgf(
                 format!("attachment; filename=\"bgtutor-{id}.sgf\""),
             ),
         ],
-        named_export(
-            &if row.sgf.is_empty() {
-                format!(
-                    "(;FF[4]GM[6]MI[length:{}][game:0][ws:0][bs:0]PW[White]PB[Black]RU[Crawford])\n",
-                    row.state.match_length
-                )
-            } else {
-                row.sgf
-            },
-            &row.state.human_name,
-            row.state.human_player,
-            row.state.bot_name(),
+        forfeit::annotate(
+            &row.state,
+            named_export(
+                &if row.sgf.is_empty() {
+                    format!(
+                        "(;FF[4]GM[6]MI[length:{}][game:0][ws:0][bs:0]PW[White]PB[Black]RU[Crawford])\n",
+                        row.state.match_length
+                    )
+                } else {
+                    row.sgf
+                },
+                &row.state.human_name,
+                row.state.human_player,
+                row.state.bot_name(),
+            ),
         ),
     ))
 }

@@ -7,6 +7,8 @@ use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
+mod profile_support;
+
 async fn call(app: axum::Router, method: &str, uri: &str, body: Value) -> (u16, Value) {
     let response = app
         .oneshot(
@@ -1920,14 +1922,19 @@ async fn native_play_history_snapshots_follow_checkpoint_and_survive_library_del
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL and native GNUbg"]
-async fn coach_checkpoints_feedback_before_dice_and_resumes_after_reload(pool: PgPool) {
-    let app = api::router(AppState::new(pool.clone(), engine()));
-    // Keep native integration bounded while proving bot and feedback depths differ.
-    let _ = call(app.clone(), "GET", "/api/settings", Value::Null).await;
-    sqlx::query("UPDATE app_settings SET analysis_plies=2,play_plies=0")
-        .execute(&pool)
-        .await
-        .unwrap();
+async fn coach_commits_checker_feedback_and_restores_it_after_reload(pool: PgPool) {
+    let (app, profile) = profile_support::initialized(&pool, true).await;
+    let mut config = profile["current_configuration"].clone();
+    let thresholds = json!({"questionable":0.01,"error":0.03,"blunder":0.06,"large_blunder":0.15});
+    config["analysis"]["error_thresholds"] = thresholds.clone();
+    let (status, saved) = call(
+        app.clone(),
+        "PUT",
+        "/api/configuration",
+        json!({"expected_revision":profile["revision"],"configuration":config}),
+    )
+    .await;
+    assert_eq!(status, 200, "{saved}");
     let (status, initial) = call(
         app.clone(),
         "POST",
@@ -1937,6 +1944,8 @@ async fn coach_checkpoints_feedback_before_dice_and_resumes_after_reload(pool: P
     .await;
     assert_eq!(status, 201, "{initial}");
     assert_eq!(initial["play_mode"], "coach");
+    assert_eq!(initial["tutor_threshold"], 0.03);
+    assert_eq!(initial["error_thresholds"], thresholds);
     assert_eq!(initial["analysis_plies"], 2);
     assert_eq!(initial["engine"]["plies"], 0);
     let mut session = ready(app.clone(), initial).await;
@@ -1973,79 +1982,40 @@ async fn coach_checkpoints_feedback_before_dice_and_resumes_after_reload(pool: P
     if action == "move" {
         request["move"] = json!(0);
     }
-    let (status, staged) = call(
+    let (status, committed) = call(
         app.clone(),
         "POST",
         &format!("{uri}/actions"),
         request.clone(),
     )
     .await;
-    assert_eq!(status, 200, "{staged}");
-    assert_eq!(staged["position"], checkpoint["position"]);
-    assert_eq!(staged["history"], checkpoint["history"]);
-    let pending = &staged["pending_decision"];
-    assert!(pending["revealed"].as_bool().unwrap());
-    assert!(!pending["attempts"][0]["assisted"].as_bool().unwrap());
-    assert!(
-        pending["alternatives"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|a| a["equity"].is_null() && a["probabilities"].is_null())
-    );
-    assert_eq!(call(app.clone(), "GET", &uri, Value::Null).await.1, staged);
-    assert_eq!(
-        call(
-            app.clone(),
-            "POST",
-            &format!("{uri}/actions"),
-            request.clone()
-        )
-        .await
-        .0,
-        409
-    );
-    request["version"] = staged["version"].clone();
-    assert_eq!(
-        call(
-            app.clone(),
-            "POST",
-            &format!("{uri}/actions"),
-            request.clone()
-        )
-        .await
-        .0,
-        422
-    );
-    let (status, paused) = call(
-        app.clone(),
-        "POST",
-        &format!("{uri}/actions"),
-        json!({"version":staged["version"],"action":"pause"}),
-    )
-    .await;
-    assert_eq!(status, 200, "{paused}");
-    let (status, resumed) = call(
-        app.clone(),
-        "POST",
-        &format!("{uri}/actions"),
-        json!({"version":paused["version"],"action":"resume"}),
-    )
-    .await;
-    assert_eq!(status, 200, "{resumed}");
-    assert_eq!(resumed["pending_decision"], *pending);
-    request["version"] = resumed["version"].clone();
-    request["decision_id"] = pending["id"].clone();
-    let (status, committed) = call(app, "POST", &format!("{uri}/actions"), request).await;
     assert_eq!(status, 200, "{committed}");
     assert!(committed["pending_decision"].is_null());
     assert!(
         committed["history"].as_array().unwrap().len()
             > checkpoint["history"].as_array().unwrap().len()
     );
+    let decision = committed["decisions"].as_array().unwrap().last().unwrap();
+    assert_eq!(decision["action"], action);
+    assert_eq!(decision["committed"], true);
+    assert_eq!(decision["revealed"], true);
+    assert_eq!(decision["attempts"][0]["assisted"], false);
+    assert!(
+        decision["alternatives"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|a| a["equity"].is_null() && a["probabilities"].is_null())
+    );
     assert_eq!(
-        committed["decisions"].as_array().unwrap().len(),
-        staged["decisions"].as_array().unwrap().len() + 1
+        call(app.clone(), "GET", &uri, Value::Null).await.1,
+        committed
+    );
+    assert_eq!(
+        call(app, "POST", &format!("{uri}/actions"), request)
+            .await
+            .0,
+        409
     );
     let match_id: uuid::Uuid =
         sqlx::query_scalar("SELECT library_match_id FROM play_sessions WHERE id=$1")
@@ -2076,6 +2046,53 @@ async fn coach_checkpoints_feedback_before_dice_and_resumes_after_reload(pool: P
     .await;
     assert_eq!(metadata["play_mode"], "coach");
     assert_eq!(metadata["play_assisted"], true);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL and native GNUbg"]
+async fn routine_no_double_rolls_without_acknowledgment(pool: PgPool) {
+    let app = api::router(AppState::new(pool.clone(), engine()));
+    for mode in ["coach", "training", "tutor"] {
+        let native_id = "4P8PAAABAAAAAA:MAGgAAAAAAAE";
+        let mut session = seed(
+            &pool,
+            &app,
+            0,
+            &"[s]".repeat(15),
+            "00",
+            native_id,
+            "roll",
+            json!([]),
+        )
+        .await;
+        session["play_mode"] = json!(mode);
+        session["analysis_plies"] = json!(0);
+        session["position"]["position_id"] = json!("4P8PAAABAAAAAA");
+        session["position"]["gnubg_match_id"] = json!("MAGgAAAAAAAE");
+        replace_native(
+            &pool,
+            &session,
+            &format!("(;FF[4]GM[6]MI[length:5][game:0][ws:0][bs:0]PW[Human]PB[GNUbg]RU[Crawford];PL[W];PL[W]AE[a:y]AW[a]AB{})", "[s]".repeat(15)),
+            native_id,
+        ).await;
+        let uri = format!(
+            "/api/play/sessions/{}/actions",
+            session["id"].as_str().unwrap()
+        );
+        let (status, rolled) = call(
+            app.clone(),
+            "POST",
+            &uri,
+            json!({"version":0,"action":"roll"}),
+        )
+        .await;
+        assert_eq!(status, 200, "{mode}: {rolled}");
+        assert_eq!(rolled["phase"], "move", "{mode}: {rolled}");
+        assert!(rolled["pending_decision"].is_null());
+        assert_eq!(rolled["position"]["dice"].as_array().unwrap().len(), 2);
+        assert_eq!(rolled["decisions"][0]["action"], "roll");
+        assert_eq!(rolled["decisions"][0]["committed"], true);
+    }
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -2211,13 +2228,10 @@ async fn tutor_warns_neutrally_retries_first_attempt_and_native_failure_preserve
         .find(|a| a["loss"] == 0.0)
         .unwrap()["move_index"]
         .clone();
-    let path: String = sqlx::query_scalar("SELECT gnubg_path FROM play_sessions WHERE id=$1")
+    let snapshot = &raw["engine_snapshots"]["rules"];
+    sqlx::query("UPDATE play_sessions SET state=jsonb_set(state,'{engine_snapshots,rules,gnubg_path}',to_jsonb($2::text)) WHERE id=$1")
         .bind(id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-    sqlx::query("UPDATE play_sessions SET gnubg_path='/missing/native-feedback' WHERE id=$1")
-        .bind(id)
+        .bind("/missing/native-feedback")
         .execute(&pool)
         .await
         .unwrap();
@@ -2232,13 +2246,22 @@ async fn tutor_warns_neutrally_retries_first_attempt_and_native_failure_preserve
         .0,
         503
     );
-    assert_eq!(call(app.clone(), "GET", &uri, Value::Null).await.1, staged);
-    sqlx::query("UPDATE play_sessions SET gnubg_path=$2 WHERE id=$1")
+    let after_failure: Value = sqlx::query_scalar("SELECT state FROM play_sessions WHERE id=$1")
         .bind(id)
-        .bind(path)
-        .execute(&pool)
+        .fetch_one(&pool)
         .await
         .unwrap();
+    assert_eq!(after_failure["pending_decision"], raw["pending_decision"]);
+    assert_eq!(after_failure["version"], raw["version"]);
+    sqlx::query(
+        "UPDATE play_sessions SET state=jsonb_set(state,'{engine_snapshots,rules}',$2) WHERE id=$1",
+    )
+    .bind(id)
+    .bind(snapshot)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(call(app.clone(), "GET", &uri, Value::Null).await.1, staged);
     let (status, retry) = call(
         app.clone(),
         "POST",
@@ -2887,19 +2910,19 @@ async fn completed_mixed_mode_review_keeps_competition_play_and_original_learnin
     assert!(competition_checker_played);
     assert_eq!(session["phase"], "move");
     assert!(session["legal_moves"].as_array().unwrap().len() > 1);
-    let (_, coach) = call(
+    let (_, training) = call(
         app.clone(),
         "POST",
         &format!("{uri}/mode"),
-        json!({"version":session["version"],"play_mode":"coach"}),
+        json!({"version":session["version"],"play_mode":"training"}),
     )
     .await;
-    let last = coach["legal_moves"].as_array().unwrap().len() - 1;
+    let last = training["legal_moves"].as_array().unwrap().len() - 1;
     let (status, pending) = call(
         app.clone(),
         "POST",
         &format!("{uri}/actions"),
-        json!({"version":coach["version"],"action":"move","move":last}),
+        json!({"version":training["version"],"action":"move","move":last}),
     )
     .await;
     assert_eq!(status, 200, "{pending}");
@@ -3480,24 +3503,24 @@ async fn native_resign_cannot_bypass_explicit_learning_checkpoint(pool: PgPool) 
     }
     assert_eq!(session["phase"], "move");
     let uri = format!("/api/play/sessions/{}", session["id"].as_str().unwrap());
-    let (status, coach) = call(
+    let (status, training) = call(
         app.clone(),
         "POST",
         &format!("{uri}/mode"),
-        json!({"version":session["version"],"play_mode":"coach"}),
+        json!({"version":session["version"],"play_mode":"training"}),
     )
     .await;
-    assert_eq!(status, 200, "{coach}");
+    assert_eq!(status, 200, "{training}");
     let (status, mut pending) = call(
         app.clone(),
         "POST",
         &format!("{uri}/actions"),
-        json!({"version":coach["version"],"action":"move","move":0}),
+        json!({"version":training["version"],"action":"move","move":0}),
     )
     .await;
     assert_eq!(status, 200, "{pending}");
     assert_eq!(pending["pending_decision"]["action"], "move");
-    for mode in ["coach", "tutor"] {
+    for mode in ["training", "tutor"] {
         if mode == "tutor" {
             let (status, changed) = call(
                 app.clone(),
@@ -3756,13 +3779,20 @@ async fn money_game_coach_evaluates_and_commits_decisions_without_ending_early(p
         if action == "move" {
             request["move"] = json!(0);
         }
-        let (status, staged) = call(app.clone(), "POST", &uri, request.clone()).await;
-        assert_eq!(status, 200, "{staged}");
-        assert!(staged["pending_decision"]["first_loss"].is_number());
-        request["version"] = staged["version"].clone();
-        request["decision_id"] = staged["pending_decision"]["id"].clone();
-        let (status, committed) = call(app.clone(), "POST", &uri, request).await;
+        let (status, mut committed) = call(app.clone(), "POST", &uri, request.clone()).await;
         assert_eq!(status, 200, "{committed}");
+        if !committed["pending_decision"].is_null() {
+            assert!(!matches!(action, "move" | "pass"));
+            assert!(committed["pending_decision"]["first_loss"].is_number());
+            request["version"] = committed["version"].clone();
+            request["decision_id"] = committed["pending_decision"]["id"].clone();
+            let (status, next) = call(app.clone(), "POST", &uri, request).await;
+            assert_eq!(status, 200, "{next}");
+            committed = next;
+        }
+        assert!(
+            committed["decisions"].as_array().unwrap().last().unwrap()["first_loss"].is_number()
+        );
         assert_eq!(committed["match_length"], 0);
         assert_ne!(committed["phase"], "match_over");
         state = committed;
@@ -4323,4 +4353,92 @@ async fn money_end_session_keeps_final_score_sgf_and_all_game_reports(pool: PgPo
         );
     }
     assert_eq!(call(app.clone(), "GET", &uri, Value::Null).await.1, ended);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL and native GNUbg"]
+async fn native_match_forfeit_archives_a_loss_and_fences_competing_actions(pool: PgPool) {
+    let app = api::router(AppState::new(pool.clone(), engine()));
+    let (status, session) = call(
+        app.clone(),
+        "POST",
+        "/api/play/sessions",
+        json!({"play_mode":"competition","human_player":1,"match_length":7}),
+    )
+    .await;
+    assert_eq!(status, 201, "{session}");
+    let mut opening = ready(app.clone(), session).await;
+    let id = opening["id"].as_str().unwrap();
+    let uri = format!("/api/play/sessions/{id}");
+    let action_uri = format!("{uri}/actions");
+    if opening["phase"] == "roll" {
+        let (status, rolled) = call(
+            app.clone(),
+            "POST",
+            &action_uri,
+            json!({"version":opening["version"], "action":"roll"}),
+        )
+        .await;
+        assert_eq!(status, 200, "{rolled}");
+        opening = rolled;
+    }
+    assert_eq!(opening["phase"], "move", "{opening}");
+    let action = if opening["legal_moves"].as_array().unwrap().is_empty() {
+        json!({"version":opening["version"], "action":"pass"})
+    } else {
+        json!({"version":opening["version"], "action":"move", "move":0})
+    };
+    let (status, session) = call(app.clone(), "POST", &action_uri, action).await;
+    assert_eq!(status, 200, "{session}");
+    assert!(!session["history"].as_array().unwrap().is_empty());
+
+    let version = session["version"].as_i64().unwrap();
+    let request = json!({"version":version, "action":"forfeit_match"});
+    let (a, b) = tokio::join!(
+        call(app.clone(), "POST", &action_uri, request.clone()),
+        call(app.clone(), "POST", &action_uri, request),
+    );
+    let ((status, finished), (conflict, _)) = if a.0 == 200 { (a, b) } else { (b, a) };
+    assert_eq!(status, 200, "{finished}");
+    assert_eq!(conflict, 409);
+    assert_eq!(finished["version"], version + 1);
+    assert_eq!(finished["phase"], "match_over");
+    assert_eq!(finished["match_forfeited"], true);
+    assert_eq!(finished["winner"], 0);
+    assert_eq!(finished["scores"], json!([7, 0]));
+    assert_eq!(finished["history"], session["history"]);
+    assert_eq!(finished["game_results"], session["game_results"]);
+    assert_library_checkpoint(&pool, &app, &finished).await;
+    assert_eq!(
+        call(app.clone(), "GET", &uri, Value::Null).await.1,
+        finished
+    );
+    let (status, history) = call(
+        app.clone(),
+        "GET",
+        &format!("{uri}/history?version={}", version + 1),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{history}");
+    assert_eq!(
+        history["items"].as_array().unwrap().len(),
+        session["history"].as_array().unwrap().len()
+    );
+    let (status, sgf) = call(app.clone(), "GET", &format!("{uri}/sgf"), Value::Null).await;
+    assert_eq!(status, 200, "{sgf}");
+    let metadata = bgtutor::databases::source_metadata(sgf.as_str().unwrap());
+    assert_eq!(metadata.result_state, "completed");
+    assert_eq!(
+        (metadata.white_score, metadata.black_score),
+        (Some(7), Some(0))
+    );
+    let (status, _) = call(
+        app,
+        "POST",
+        &action_uri,
+        json!({"version":version + 1,"action":"next_game"}),
+    )
+    .await;
+    assert_eq!(status, 422);
 }

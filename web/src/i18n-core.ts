@@ -1,4 +1,5 @@
 import { catalogs, type Catalog, type TranslationKey } from './i18n-catalogs';
+import { compactCheckerNotation, type CheckerPosition } from './move-preview';
 
 export type Locale = keyof typeof catalogs;
 export type TranslationParams = Record<string, string | number>;
@@ -123,7 +124,13 @@ const decisionKeys: Record<string, TranslationKey> = {
   dance: 'decision.cannotMove',
 };
 
-export function localizeDecision(locale: Locale, notation: string) {
+export function localizeDecision(
+  locale: Locale,
+  notation: string,
+  position?: CheckerPosition,
+) {
   const key = decisionKeys[notation.trim().toLowerCase()];
-  return key ? translate(locale, key) : notation;
+  return key
+    ? translate(locale, key)
+    : compactCheckerNotation(notation, position);
 }

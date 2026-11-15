@@ -1,4 +1,4 @@
-import { openMatchCalculation } from './analysis-controls';
+import { openMatchAnalysisOptions } from './analysis-controls';
 import { expect, test } from './test';
 
 test.use({ actionTimeout: 10000 });
@@ -16,7 +16,7 @@ test('single-game statistics pin errors to their source game across views, reset
   });
   await page.getByLabel('Select game', { exact: true }).selectOption('2');
   await expect(page.locator('.board-heading')).toContainText('Game 2');
-  await openMatchCalculation(page);
+  await openMatchAnalysisOptions(page);
   await page
     .getByLabel('Match analysis depth', { exact: true })
     .selectOption('0');
@@ -34,7 +34,7 @@ test('single-game statistics pin errors to their source game across views, reset
   );
   const veryBad = page
     .locator(
-      '.match-statistics .statistics-summary [data-statistics-metric="very_bad"]',
+      '.match-statistics .statistics-summary [data-statistics-kind="checker"][data-statistics-metric="very_bad"]',
     )
     .first();
   const expected = Number(await veryBad.locator('strong').textContent());
@@ -72,17 +72,14 @@ test('single-game statistics pin errors to their source game across views, reset
     .first()
     .click();
   await expect(
-    page.getByRole('tab', { name: 'Errors', exact: true }),
+    page.getByRole('tab', { name: 'Checker', exact: true }),
   ).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByLabel('Filter by game', { exact: true })).toHaveValue(
     '2',
   );
-  await expect(
-    page.getByLabel('Filter analysis by decision', { exact: true }),
-  ).toHaveValue('checker');
   await expect(page.locator('.position-code code')).toHaveText(before!);
   await page.getByLabel('Select game', { exact: true }).selectOption('1');
-  await expect(page.locator('.match-moves-table tbody tr')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Next decision', exact: true })).toBeDisabled();
   await page.getByLabel('Select game', { exact: true }).selectOption('2');
   await expect(page.getByLabel('Filter by game', { exact: true })).toHaveValue(
     '2',
@@ -90,17 +87,13 @@ test('single-game statistics pin errors to their source game across views, reset
   await expect(
     page.getByLabel('Filter analysis by player', { exact: true }),
   ).toHaveValue('0');
-  // Review preferences belong to the current configuration; only the concrete
-  // game context is reset by navigation.
-  await expect
-    .poll(() =>
-      page.evaluate(
-        async () =>
-          (await (await fetch('/api/configuration')).json())
-            .current_configuration.review.player,
-      ),
-    )
-    .toBe('0');
+  expect(
+    await page.evaluate(
+      async () =>
+        (await (await fetch('/api/configuration')).json()).current_configuration
+          .review.player,
+    ),
+  ).toBe('');
   await expect(page.locator('.board-heading')).toContainText('Game 2');
   await expect
     .poll(() =>
@@ -114,7 +107,8 @@ test('single-game statistics pin errors to their source game across views, reset
   await expect(page.getByLabel('Select game', { exact: true })).toHaveValue(
     '2',
   );
-  await expect(page.getByLabel('Filter by game', { exact: true })).toHaveValue(
-    '2',
-  );
+  await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
+  await page.locator('.match-statistics .statistics-summary [data-statistics-metric="checker"]').first().click();
+  await expect(page.getByLabel('Filter by game', { exact: true })).toHaveValue('2');
+  await expect(page.getByLabel('Filter analysis by player', { exact: true })).toHaveValue('0');
 });

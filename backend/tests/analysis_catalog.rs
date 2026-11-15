@@ -136,6 +136,103 @@ async fn position_job(pool: &PgPool, position: Uuid, plies: i32) -> Job {
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
+async fn deleting_a_saved_analysis_removes_only_that_result_and_clears_its_selection(pool: PgPool) {
+    let (app, id, p) = setup(&pool).await;
+    imported(&pool, id, p[0]).await;
+    let old = match_job(&pool, id, p[0], None, "GNU Backgammon", 2, "completed").await;
+    let deeper = match_job(&pool, id, p[0], None, "GNU Backgammon", 4, "completed").await;
+    let running = match_job(&pool, id, p[0], Some(1), "GNU Backgammon", 3, "running").await;
+    let key = format!("job:{}", old.id);
+    assert_eq!(select(&app, id, Some(&key)).await.0, 200);
+    let delete_path = |key: &str, revision| {
+        format!("/api/matches/{id}/analyses/{key}?source_revision={revision}")
+    };
+    assert_eq!(
+        request(&app, "DELETE", &delete_path(&key, 99), Value::Null)
+            .await
+            .0,
+        409
+    );
+    let running_key = format!("job:{}", running.id);
+    assert_eq!(
+        request(&app, "DELETE", &delete_path(&running_key, 0), Value::Null)
+            .await
+            .0,
+        409
+    );
+    let (status, response) = request(&app, "DELETE", &delete_path(&key, 0), Value::Null).await;
+    assert_eq!(status, 204, "{response}");
+    assert_eq!(get(&app, &format!("/api/jobs/{}", old.id)).await.0, 404);
+    let (_, catalog) = get(&app, &format!("/api/matches/{id}/analyses")).await;
+    assert_eq!(catalog["source_revision"], 0);
+    assert!(catalog["selected_id"].is_null());
+    assert_eq!(catalog["selected"]["id"], format!("job:{}", deeper.id));
+    assert_eq!(catalog["items"].as_array().unwrap().len(), 3);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM positions WHERE match_uuid=$1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        4
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM move_analyses WHERE job_id=$1")
+            .bind(old.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn deleting_imported_analysis_does_not_modify_the_match_source_or_restore_removed_values(
+    pool: PgPool,
+) {
+    let source = include_str!("fixtures/analysis-game1.sgf");
+    let id = store::import_match(
+        &pool,
+        "analyzed.sgf",
+        "sgf",
+        source.as_bytes(),
+        source,
+        &import::parse_sgf(source).unwrap(),
+    )
+    .await
+    .unwrap()
+    .r#match
+    .id;
+    let app = api::router(api::AppState::new(
+        pool.clone(),
+        Engine::new("gnubg".into()),
+    ));
+    let key = format!("imported:{id}");
+    assert_eq!(select(&app, id, Some(&key)).await.0, 200);
+    let (status, response) = request(
+        &app,
+        "DELETE",
+        &format!("/api/matches/{id}/analyses/{key}?source_revision=0"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 204, "{response}");
+    let (_, catalog) = get(&app, &format!("/api/matches/{id}/analyses")).await;
+    assert_eq!(catalog["items"], json!([]));
+    assert!(catalog["selected_id"].is_null());
+    let (original, sgf): (Vec<u8>, String) =
+        sqlx::query_as("SELECT original,sgf FROM matches WHERE id=$1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(original, source.as_bytes());
+    assert_eq!(sgf, source);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
 async fn catalog_preserves_history_and_selected_entry_across_pages(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
     imported(&pool, id, p[0]).await;

@@ -143,32 +143,13 @@
   flex: 2 1 440px;
   min-width: 0;
 }
-.workspace-analysis-command .match-analysis-heading > div:first-child {
-  display: none;
-}
 .workspace-analysis-command .match-analysis-heading {
   display: block;
 }
-.workspace-analysis-command .match-analysis-settings {
-  margin-top: 8px;
-}
-
-.workspace-analysis-command .match-analysis-controls {
-  gap: 12px;
-  align-items: flex-end;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-}
-.workspace-analysis-command .match-analysis-controls label {
-  font-size: var(--font-size-label);
-  flex: 1 1 130px;
-}
-.workspace-analysis-command select {
+.workspace-analysis-command .match-analysis-controls select {
   width: 100%;
+  min-width: 0;
   font-size: var(--font-size-control);
-}
-.workspace-analysis-command button {
-  white-space: nowrap;
 }
 .workspace-analysis-command .analysis-error {
   color: var(--ui-danger-text);
@@ -334,17 +315,6 @@
   min-width: 0;
   flex: 1;
 }
-.position-inspector .match-moves-scroll {
-  max-height: 410px;
-}
-.position-inspector .match-moves-table th,
-.position-inspector .match-moves-table td {
-  font-size: var(--font-size-table);
-  padding: 9px 7px;
-}
-.position-inspector .match-moves-table th {
-  font-size: var(--font-size-table-heading);
-}
 .position-inspector .notes-panel {
   margin: 0;
 }
@@ -422,17 +392,6 @@
 }
 .match-database .search-box input {
   padding: 11px;
-}
-.database-searches {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 15px;
-  align-items: start;
-}
-.database-searches .annotation-search,
-.database-searches .position-search {
-  min-width: 0;
-  margin-top: 0;
 }
 .database-count {
   font-size: var(--font-size-table);
@@ -571,10 +530,6 @@
   .position-inspector .match-analysis-summary {
     grid-template-columns: 1fr 1fr;
   }
-  .database-searches {
-    grid-template-columns: 1fr;
-    gap: 0;
-  }
   .analysis-workspace .moves-list {
     max-height: 500px;
   }
@@ -631,15 +586,6 @@
   }
   .workspace-analysis-command {
     flex-basis: 100%;
-  }
-  .workspace-analysis-command .match-analysis-controls {
-    gap: 9px;
-  }
-  .workspace-analysis-command .match-analysis-controls label {
-    flex: 1 1 90px;
-  }
-  .workspace-analysis-command .match-analysis-controls button {
-    width: 100%;
   }
   .analysis-grid {
     display: flex;
@@ -831,6 +777,12 @@
   border-bottom: 0;
   flex: 1 1 auto;
 }
-.position-calculation-action {
-  margin-block: 4px;
+.position-analysis-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.match-analysis-options .position-analysis-actions {
+  flex-basis: 100%;
 }

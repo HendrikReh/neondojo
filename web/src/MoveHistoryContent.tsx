@@ -25,7 +25,8 @@ export default function MoveHistoryContent({
   players,
   moveNumber,
 }: {
-  position: Pick<Position, 'player' | 'dice' | 'notation'>;
+  position: Pick<Position, 'player' | 'dice' | 'notation'> &
+    Partial<Pick<Position, 'board'>>;
   assessment?: Pick<
     MoveAssessment,
     'equity_loss' | 'severity' | 'source' | 'engine' | 'depth'
@@ -36,7 +37,11 @@ export default function MoveHistoryContent({
   const { t, formatNumber, formatEquity, formatDecision } = useI18n();
   const source = useSourceText();
   const player = players[position.player];
-  const notation = formatDecision(position.notation);
+  const { board, dice } = position;
+  const notation = formatDecision(
+    position.notation,
+    board ? { board, dice, player: position.player } : undefined,
+  );
   const loss = assessment
     ? formatNumber(assessment.equity_loss, {
         minimumFractionDigits: 3,

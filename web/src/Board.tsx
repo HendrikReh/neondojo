@@ -257,12 +257,12 @@ export default function Board({
           {interaction && <BoardPlayTargets interaction={interaction} />}
           <PlayCube
             transform={`translate(328,${cubeOwner === null ? 223 : cubeOwner === 0 ? 365 : 81})`}
+            bounds={{ x: 0, y: 0, width: 24, height: 24 }}
             label={cubeLabel}
+            interaction={interaction?.cube}
             value={displayedCube}
             owner={cubeOwner}
             pending={cubePending}
-            interaction={interaction?.cube}
-            hitArea={{ x: -10, y: -10, width: 44, height: 44 }}
           >
             <rect
               width="24"

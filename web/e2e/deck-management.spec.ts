@@ -247,7 +247,7 @@ test('deleting the selected deck clears study and late next-card replies, then p
             .current_configuration.learning.deck_id,
       ),
     )
-    .toBe('22222222-2222-4222-8222-222222222222');
+    .toBe('11111111-1111-4111-8111-111111111111');
   await deckAction(page, study, 'Cube practice', 'Delete deck');
   const last = page.getByRole('dialog', { name: 'Delete deck', exact: true });
   await last.getByRole('checkbox').check();
@@ -266,7 +266,7 @@ test('deleting the selected deck clears study and late next-card replies, then p
             .current_configuration.learning.deck_id,
       ),
     )
-    .toBe('__all__');
+    .toBe('11111111-1111-4111-8111-111111111111');
 });
 
 const question = (id: string) => ({
@@ -308,16 +308,21 @@ test('rename keeps a later-page preview and a pending study answer, and modal ke
     '**/api/decks/11111111-1111-4111-8111-111111111111/cards?*',
     (route) =>
       route.fulfill({
-        json: new URL(route.request().url()).searchParams.has('after')
-          ? { items: [question('card-50')], next_cursor: null }
-          : { items: firstPage, next_cursor: 'later' },
+        json: {
+          items:
+            new URL(route.request().url()).searchParams.get('page') === '2'
+              ? [question('card-50')]
+              : firstPage,
+          total: 51,
+          next_cursor: null,
+        },
       }),
   );
   const chooser = study.getByLabel('Choose deck', { exact: true });
   await chooser.selectOption('22222222-2222-4222-8222-222222222222');
   await chooser.selectOption('11111111-1111-4111-8111-111111111111');
   await expect(study.locator('.learning-card-list tbody tr')).toHaveCount(50);
-  await study.getByRole('button', { name: 'More cards', exact: true }).click();
+  await study.getByRole('button', { name: 'Next page', exact: true }).click();
   await expect(study.locator('.learning-card-list tbody tr')).toHaveCount(1);
   await study
     .getByRole('button', { name: 'Preview card 51', exact: true })
@@ -567,7 +572,6 @@ test('real renamed decks update position membership and Anki; deleting one share
     .getByRole('button', { name: 'Search positions', exact: true })
     .click();
   await expect(positions.locator('.position-table tbody tr')).toHaveCount(1);
-  await expect(positions.locator('.position-row-decks')).toContainText(renamed);
   await expect(positions.locator('.position-preview-decks')).toContainText(
     renamed,
   );

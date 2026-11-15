@@ -35,7 +35,7 @@ export default memo(function PlayHistory({
 }) {
   const t = usePlayText();
   const modeT = usePlayModeText();
-  const { formatNumber } = useI18n();
+  const { formatNumber, formatDecision } = useI18n();
   const list = useRef<HTMLOListElement>(null);
   const current = selectedIndex ?? history.length - 1;
   const results = useMemo(
@@ -72,7 +72,7 @@ export default memo(function PlayHistory({
                 d.original_action === 'move' || d.original_action === 'pass',
             ) ?? relevant?.[0];
           const firstAttempt = decision
-            ? `${modeT('first')}: ${decision.original_notation ?? ''} · ${modeT((decision.attempts[0]?.assisted ?? decision.assisted) ? 'assisted' : 'independent')}`
+            ? `${modeT('first')}: ${formatDecision(decision.original_notation ?? '')} · ${modeT((decision.attempts[0]?.assisted ?? decision.assisted) ? 'assisted' : 'independent')}`
             : undefined;
           return (
             <li key={index}>

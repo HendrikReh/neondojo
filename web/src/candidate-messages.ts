@@ -1,6 +1,46 @@
 import { useI18n } from './i18n';
 import { interpolate, type Locale, type TranslationParams } from './i18n-core';
 const rows = {
+  compareMoves: [
+    'Compare moves',
+    'Zugvergleich',
+    'Comparar jugadas',
+    'Comparer les coups',
+    'Porównaj ruchy',
+    'Confronta mosse',
+  ],
+  comparisonSource: [
+    '{engine} analysis',
+    '{engine} – Analyse',
+    'Análisis de {engine}',
+    'Analyse {engine}',
+    'Analiza {engine}',
+    'Analisi {engine}',
+  ],
+  xgComparison: [
+    'Δ shows engine equity minus XG. Arrows mark a higher or lower rank than XG.',
+    'Δ zeigt Engine-Equity minus XG. Pfeile markieren einen besseren oder schlechteren Rang als bei XG.',
+    'Δ muestra la equidad del motor menos la de XG. Las flechas indican un rango mejor o peor que el de XG.',
+    'Δ indique l’équité du moteur moins celle de XG. Les flèches signalent un rang meilleur ou moins bon que celui de XG.',
+    'Δ to equity silnika minus equity XG. Strzałki oznaczają lepszą lub gorszą pozycję względem XG.',
+    'Δ indica l’equity del motore meno quella di XG. Le frecce indicano un rango migliore o peggiore di quello di XG.',
+  ],
+  sortByXgDifference: [
+    'Sort {engine} by absolute equity difference to XG',
+    'Nach Betrag der Equity-Differenz zu XG sortieren ({engine})',
+    'Ordenar {engine} por diferencia absoluta de equidad respecto a XG',
+    'Trier {engine} par écart absolu d’équité avec XG',
+    'Sortuj {engine} według wartości bezwzględnej różnicy equity względem XG',
+    'Ordina {engine} per differenza assoluta di equity rispetto a XG',
+  ],
+  xgRank: [
+    'XG equity rank {rank}',
+    'XG-Equity-Rang {rank}',
+    'Rango por equidad de XG {rank}',
+    'Rang selon l’équité de XG {rank}',
+    'Miejsce XG według equity {rank}',
+    'Rango XG per equity {rank}',
+  ],
   noCandidates: [
     'No candidate values recorded.',
     'Keine Kandidatenwerte aufgezeichnet.',
@@ -145,4 +185,23 @@ export function useCandidateLossText() {
       : unit === 'mwc'
         ? text('percentagePoints', { value: formatNumber(loss * 100, digits) })
         : formatNumber(loss, digits);
+}
+
+export function useCandidateEquityText(digits = 3) {
+  const { formatEquity, formatPercent } = useI18n();
+  const text = useCandidateText();
+  const unit = (kind: string) =>
+    ({
+      cubeful: 'Cubeful',
+      cubeless: 'Cubeless',
+      normalized_cubeful: text('normalizedCubeful'),
+      mwc: 'MWC',
+    })[kind] ?? text('unknownUnit');
+  const equity = (value: number | null | undefined, kind: string) =>
+    typeof value === 'number' && Number.isFinite(value)
+      ? kind === 'mwc'
+        ? formatPercent(value, digits)
+        : formatEquity(value, digits)
+      : '—';
+  return { unit, equity };
 }

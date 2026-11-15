@@ -1,3 +1,4 @@
+import { errorThresholdLabels } from './review-statistics-messages';
 import { describe, expect, it } from 'vitest';
 import { configurationSummaryRows } from './ProfileSummary';
 import { defaultConfiguration } from './configuration-model';
@@ -12,7 +13,12 @@ describe('profile summary', () => {
     expect(rows.some((row) => row.path === 'analysis.plies')).toBe(true);
     expect(rows.some((row) => row.path.includes('schema_version'))).toBe(false);
     for (const row of rows)
-      expect(profileFieldKey(row.path), row.path).toBeDefined();
+      expect(
+        row.path.startsWith('analysis.error_thresholds.')
+          ? Object.hasOwn(errorThresholdLabels, row.path.split('.').at(-1)!)
+          : !!profileFieldKey(row.path),
+        row.path,
+      ).toBe(true);
     expect(new Set(rows.map((row) => row.path.split('.')[0])).size).toBe(10);
   });
   it('supplies every profile message in all supported languages', () => {

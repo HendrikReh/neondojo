@@ -1,4 +1,3 @@
-import { useOptionalConfiguration } from './ConfigurationProvider';
 import { useEffect, useRef, useState } from 'react';
 import { mergeJob, request, terminal, type Job } from './api';
 import {
@@ -15,8 +14,8 @@ export function useMatchAnalysis(
   gameNo?: number,
   enabled = true,
   onAccepted?: (job: Job) => void,
+  externalRevision?: string,
 ) {
-  const configuration = useOptionalConfiguration();
   const scope = `${matchId}:${gameNo ?? 'match'}:${engineId}`;
   const [stored, setStored] = useState<{ scope: string; job: Job }>();
   const [failure, setFailure] = useState<{ scope: string; error: unknown }>();
@@ -110,7 +109,7 @@ export function useMatchAnalysis(
       stream?.close();
       clearInterval(timer);
     };
-  }, [matchId, gameNo, engineId, scope, revision, enabled]);
+  }, [matchId, gameNo, engineId, scope, revision, enabled, externalRevision]);
 
   async function run(plies: number) {
     if (!enabled) return;
@@ -118,11 +117,13 @@ export function useMatchAnalysis(
     setPending(scope);
     setFailure(undefined);
     try {
+      const incoming = await submitMatchAnalysis(
+        matchId,
+        engineId,
+        plies,
+        gameNo,
+      );
       // Accepted work survives navigation; only its local display is scoped.
-      const start = () => submitMatchAnalysis(matchId, engineId, plies, gameNo);
-      const incoming = configuration
-        ? await configuration.runWithConfiguration(start)
-        : await start();
       onAccepted?.(incoming);
       if (
         !mounted.current ||

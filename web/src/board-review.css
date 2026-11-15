@@ -171,8 +171,40 @@
   font-size: var(--font-size-table);
 }
 
-.board-decision-choices button:hover,
-.board-decision-choices button[aria-pressed='true'] {
-  border-color: var(--ui-accent);
-  background: var(--ui-selected);
+.cube-review-evaluation {
+  padding: 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  white-space: normal;
+}
+
+.cube-review-evaluation h3,
+.cube-review-evaluation p {
+  margin: 0 0 5px;
+}
+
+.position-inspector .cube-review-evaluation .candidates {
+  width: auto;
+  min-width: min(100%, 240px);
+  font-variant-numeric: tabular-nums;
+}
+
+.position-inspector .cube-review-evaluation .candidates th[scope='row'] {
+  text-align: left;
+  color: var(--ui-text);
+  font-weight: var(--font-weight-normal);
+}
+
+.position-inspector .cube-review-evaluation .candidates th:first-child {
+  text-align: left;
+}
+
+.position-inspector .cube-review-evaluation .candidates td {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.cube-review-evaluation .candidates + p {
+  margin-top: 8px;
 }

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import EngineLabel from './EngineLabel';
-import { useOptionalConfiguration } from './ConfigurationProvider';
 import { useI18n } from './i18n';
 import type { MatchAnalysisEngine } from './useMatchAnalysis';
 import {
@@ -30,32 +29,16 @@ export default function AnalysisTimeEstimate({
   configured: boolean;
   installationKey?: string;
 }) {
-  const profile = useOptionalConfiguration();
   const { locale, formatNumber } = useI18n();
   const text = (
     key: Parameters<typeof analysisEstimateText>[1],
     values?: Parameters<typeof analysisEstimateText>[2],
   ) => analysisEstimateText(locale, key, values);
-  const current = profile?.current?.analysis;
-  const confirmed = profile?.confirmed?.current_configuration.analysis;
-  // `ready` remains true during the save debounce. Compare the actual engine
-  // inputs with the server snapshot, without flushing or writing on a read.
-  const pending =
-    !!profile &&
-    (!profile.ready ||
-      profile.busy ||
-      !current ||
-      !confirmed ||
-      current.engine !== confirmed.engine ||
-      current.plies !== confirmed.plies ||
-      current.search_filter !== confirmed.search_filter);
   const unavailable = !configured
     ? 'engine_unavailable'
     : scoped && gameNo === undefined
       ? 'game'
-      : pending
-        ? 'configuration'
-        : null;
+      : null;
   const selectedGame = scoped ? gameNo : undefined;
   const key = JSON.stringify([
     matchId,
@@ -64,10 +47,6 @@ export default function AnalysisTimeEstimate({
     engineId,
     plies,
     installationKey,
-    current,
-    confirmed,
-    profile?.confirmed?.revision,
-    profile?.generation,
     unavailable,
   ]);
   const [result, setResult] = useState<{

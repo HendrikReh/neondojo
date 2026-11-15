@@ -1,4 +1,8 @@
-import { openMatchCalculation, openPositionCalculation } from './analysis-controls';
+import {
+  openFullMatchAnalysis,
+  openPositionCalculation,
+  submitFullMatchAnalysis,
+} from './analysis-controls';
 import { expect, test } from './test';
 import { readFileSync } from 'node:fs';
 test.use({ actionTimeout: 10000 });
@@ -183,6 +187,7 @@ test('played move arrows and before/after remain tied to the original decision',
   const code = await page.locator('.position-code code').innerText();
   const arrows = page.getByRole('button', { name: 'Arrows', exact: true });
   await expect(arrows).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.board-review-help')).toHaveCount(0);
   await expect(page.locator('.analysis-workspace .move-arrows')).toBeVisible();
   await page.getByRole('button', { name: 'Initial', exact: true }).click();
   await expect(page.locator('.analysis-workspace .move-arrows')).toHaveCount(0);
@@ -194,15 +199,17 @@ test('played move arrows and before/after remain tied to the original decision',
     '163 pips',
   );
   await expect(page.locator('.position-code code')).toHaveText(code);
-  await expect(page.locator('.board-review-help')).toContainText(
-    'before this move',
-  );
+  await expect(page.locator('.board-review-help')).toHaveCount(0);
   await page.getByRole('button', { name: 'Next move', exact: true }).click();
   await expect(page.locator('.board-review-selection')).toHaveCount(0);
   await expect(page.locator('.board-navigation')).toContainText('8/4 6/4');
   await expect(page.locator('.board-shell .player-bar').first()).toContainText(
     '161 pips',
   );
+  await page
+    .getByRole('button', { name: 'Previous move', exact: true })
+    .click();
+  await expect(page.locator('.position-code code')).toHaveText(code);
 });
 
 test('file, book and native candidates preview explicitly and source changes restore the played move', async ({
@@ -214,8 +221,8 @@ test('file, book and native candidates preview explicitly and source changes res
     .getByLabel('Match file', { exact: true })
     .setInputFiles(analyzedGameFile());
   await expect(
-    page.getByLabel('Displayed analysis', { exact: true }).locator('option[value^="imported:"]'),
-  ).toHaveCount(1);
+    page.getByLabel('Displayed analysis', { exact: true }),
+  ).toContainText('Imported');
   const imported = page.locator('.analysis-panel > .source-analysis');
   await imported.getByRole('button', { name: /^Preview move 2:/ }).click();
   await expect(page.locator('.board-review-selection')).toContainText(
@@ -284,8 +291,8 @@ for (const [layout, viewport] of [
     await page.getByLabel('Spiel auswählen', { exact: true }).selectOption('6');
     await expect(page.locator('.board-heading')).toContainText('Spiel 6');
     await expect(
-      page.getByLabel('Angezeigte Analyse', { exact: true }).locator('option[value^="imported:"]'),
-    ).toHaveCount(1);
+      page.getByLabel('Angezeigte Analyse', { exact: true }),
+    ).toContainText('Importiert');
     await page.getByRole('button', { name: /^Zug 2 ansehen:/ }).click();
 
     const moveList = page.locator('.analysis-workspace .moves-list');
@@ -321,13 +328,7 @@ test('native match and game metrics open the exact visible decision filters', as
       `(;GM[6]PW[Stats ${crypto.randomUUID()}]PB[Opponent]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])(;GM[6]MI[length:7][ws:1][bs:0];W[31hefe];B[42qusu])`,
     ),
   });
-  await openMatchCalculation(page);
-  await page
-    .getByLabel('Analysis scope', { exact: true })
-    .selectOption('match');
-  await page
-    .getByRole('button', { name: 'Analyze entire match', exact: true })
-    .click();
+  await submitFullMatchAnalysis(page, await openFullMatchAnalysis(page));
   await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
   const stats = page.locator('.match-statistics');
   await expect(stats.locator('.statistics-games-table tbody tr')).toHaveCount(
@@ -351,14 +352,12 @@ test('native match and game metrics open the exact visible decision filters', as
     .click();
   expect((await request).status()).toBe(200);
   await expect(
-    page.getByRole('tab', { name: 'Errors', exact: true }),
+    page.getByRole('tab', { name: 'Cube', exact: true }),
   ).toHaveAttribute('aria-selected', 'true');
   await expect(
     page.getByLabel('Filter analysis by player', { exact: true }),
   ).toHaveValue('0');
-  await expect(
-    page.getByLabel('Filter analysis by decision', { exact: true }),
-  ).toHaveValue('cube');
+
   await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
   const game2 = stats.locator('.statistics-games-table tbody tr').nth(1);
   await game2.getByRole('button', { name: 'Open game 2', exact: true }).click();
@@ -370,23 +369,28 @@ test('native match and game metrics open the exact visible decision filters', as
     '2',
   );
   await expect(
-    page.getByLabel('Filter analysis by decision', { exact: true }),
-  ).toHaveValue('checker');
-  await expect(page.locator('.match-moves-table tbody tr')).toHaveCount(1);
+    page.getByRole('tab', { name: 'Checker', exact: true }),
+  ).toHaveAttribute('aria-selected', 'true');
+  await expect(
+    page.getByRole('group', { name: 'Review errors' }),
+  ).toContainText(/Decisions: 1|Decision 1 of 1/);
   // The whole-match decision filter stays on game 2 while browsing another game.
   await page.getByLabel('Select game', { exact: true }).selectOption('1');
   await expect(page.locator('.board-heading')).toContainText('Game 1');
-  await expect(page.getByLabel('Filter by game', { exact: true })).toHaveValue('2');
   const nextError = page.waitForRequest(
     (r) =>
       new URL(r.url()).pathname.endsWith('/review-decisions') &&
       new URL(r.url()).searchParams.get('limit') === '100',
   );
-  await page.getByRole('button', { name: 'Next decision', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Next decision', exact: true })
+    .click();
   const nextQuery = new URL((await nextError).url()).searchParams;
   expect(nextQuery.get('game_no')).toBe('2');
   expect(nextQuery.get('errors_only')).toBe('false');
-  await expect(page.getByLabel('Select game', { exact: true })).toHaveValue('2');
+  await expect(page.getByLabel('Select game', { exact: true })).toHaveValue(
+    '2',
+  );
   await expect(
     page.getByRole('group', { name: 'Review errors' }),
   ).toContainText('Decision 1 of 1');
@@ -395,12 +399,17 @@ test('native match and game metrics open the exact visible decision filters', as
     .locator('.statistics-summary [data-statistics-metric="very_bad"]')
     .first()
     .click();
+  const choices = stats.locator('.statistics-destinations:popover-open');
+  await expect(
+    choices.getByRole('button', { name: 'Checker', exact: true }),
+  ).toBeVisible();
+  await choices.getByRole('button', { name: 'Cube', exact: true }).click();
+  await expect(
+    page.getByRole('tab', { name: 'Cube', exact: true }),
+  ).toHaveAttribute('aria-selected', 'true');
   await expect(
     page.getByLabel('Filter by severity', { exact: true }),
   ).toHaveValue('very_bad');
-  await expect(
-    page.getByLabel('Filter analysis by decision', { exact: true }),
-  ).toHaveValue('');
   await expect(page.getByLabel('Filter by game', { exact: true })).toHaveValue(
     '',
   );
@@ -434,12 +443,25 @@ test('a delayed next-error response cannot undo manual move navigation', async (
       `(;GM[6]PW[Error race ${crypto.randomUUID()}]PB[Opponent]MI[length:7];W[31xufe];B[42aesu])`,
     ),
   });
-  await page.getByRole('tab', { name: 'Errors', exact: true }).click();
-  await openMatchCalculation(page);
   await page.getByRole('button', { name: 'Analyze game', exact: true }).click();
   await expect(
     page.getByText('Game analysis completed', { exact: true }),
   ).toBeVisible();
+  await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
+  await page
+    .locator(
+      '.statistics-summary [data-statistics-metric="inaccuracies"][data-statistics-kind="checker"]',
+    )
+    .first()
+    .click();
+  const nextError = page.getByRole('button', { name: /^Next error/ });
+  await expect(
+    page
+      .getByRole('status')
+      .filter({ hasText: /^(Error 1 of |Errors: )/ })
+      .first(),
+  ).toBeVisible();
+  await expect(nextError).toBeEnabled();
   let release = () => {},
     started = () => {},
     finished = () => {};
@@ -452,7 +474,6 @@ test('a delayed next-error response cannot undo manual move navigation', async (
     fulfilled = new Promise<void>((resolve) => {
       finished = resolve;
     });
-  await expect(page.getByRole('button', { name: /^Next error/ })).toBeEnabled();
   await page.route(
     '**/api/matches/*/review-decisions?**',
     async (route) => {
@@ -465,7 +486,7 @@ test('a delayed next-error response cannot undo manual move navigation', async (
     { times: 1 },
   );
   try {
-    await page.getByRole('button', { name: /^Next error/ }).click();
+    await nextError.click();
     await waiting;
     await page.getByRole('button', { name: 'Next move', exact: true }).click();
     await expect(page.locator('.board-heading')).toContainText('Move 2');
@@ -532,6 +553,8 @@ test('all board themes render the same arrows and projected checker counts', asy
       if (!response.ok) throw new Error(await response.text());
     }, theme);
     await page.reload();
+    // The workspace retains its last board view independently of calculation/profile defaults.
+    await page.getByRole('button', { name: 'Arrows', exact: true }).click();
     const board = page.locator('.analysis-workspace .board-shell');
     await expect(board).toHaveAttribute('data-preview-mode', 'arrows');
     await expect(board.locator('.move-arrows > g')).toHaveCount(2);

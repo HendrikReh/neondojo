@@ -1,5 +1,8 @@
-import { useWorkspaceSession } from './useWorkspaceSession';
-import { useOptionalConfiguration } from './ConfigurationProvider';
+import {
+  useConfirmedConfiguration,
+  useWorkspaceDefaults,
+} from './ConfigurationProvider';
+import { sessionString, useWorkspaceSession } from './useWorkspaceSession';
 import ProfileSelector from './ProfileSelector';
 import { settingsFromConfiguration } from './configuration-settings';
 import { loadBenchmarkStatus } from './benchmark-api';
@@ -20,13 +23,15 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from 'react';
-import { request, terminal, type Match, type Position } from './api';
+import { request, terminal, type Job, type Match, type Position } from './api';
 import AnalysisWorkspace, { type AnalysisDetail } from './AnalysisWorkspace';
 import PlayerDirectory from './PlayerDirectory';
 import { usePlayerText } from './player-directory-messages';
 import MatchDatabase, { type PositionSearchRequest } from './MatchDatabase';
+import MatchAnalysisDialog from './MatchAnalysisDialog';
 import BulkMatchAnalysisDialog from './BulkMatchAnalysisDialog';
 import StudyWorkspace from './StudyWorkspace';
+import type { AssessmentEntry } from './match-assessment-api';
 import PositionBrowser from './PositionBrowser';
 import SimilarPositions from './SimilarPositions';
 import { usePositionText } from './position-browser-messages';
@@ -53,7 +58,6 @@ import {
   acceptsLibraryMatches,
   PAUSED_MATCHES_DATABASE_ID,
   readDatabase,
-  saveDatabase,
   type StoredMove,
   type LibraryMatch,
 } from './library-api';
@@ -82,7 +86,8 @@ const views: View[] = [
   'extras',
 ];
 export default function App() {
-  const configuration = useOptionalConfiguration();
+  const confirmed = useConfirmedConfiguration();
+  const legacy = useWorkspaceDefaults();
   const [settingsCategory, setSettingsCategory] = useState<
     'general' | 'profiles'
   >('general');
@@ -124,6 +129,8 @@ export default function App() {
   const [playersOpened, setPlayersOpened] = useState(false);
   const positionText = usePositionText();
   const { appearance, applyAppearance } = useUiAppearance();
+  const [requestedAssessment, setRequestedAssessment] =
+    useState<AssessmentEntry>();
   const [requestedDeck, setRequestedDeck] = useState<{
     id: string;
     token: number;
@@ -135,18 +142,12 @@ export default function App() {
     matchName: string;
     token: number;
   }>();
-  const [databaseId, setDatabaseId] = useState(readDatabase);
-  useEffect(() => {
-    if (configuration?.current)
-      setDatabaseId(configuration.current.library.database_id);
-  }, [configuration?.current?.library.database_id]);
-  const changeDatabase = (id: string) => {
-    setDatabaseId(id);
-    configuration?.updateCurrent((c) => ({
-      ...c,
-      library: { ...c.library, database_id: id },
-    }));
-  };
+  const [databaseId, setDatabaseId] = useWorkspaceSession(
+    'library.database',
+    legacy?.library.database_id,
+    readDatabase(),
+    sessionString,
+  );
   const [moveNotes, setMoveNotes] = useState<MoveNotesTarget>();
   const [importResults, setImportResults] = useState<
     {
@@ -156,9 +157,6 @@ export default function App() {
     }[]
   >([]);
   const annotationNavigation = useRef<AbortController | undefined>(undefined);
-  useEffect(() => {
-    if (!configuration) saveDatabase(databaseId);
-  }, [databaseId, !!configuration]);
   useEffect(() => () => annotationNavigation.current?.abort(), []);
   const [bulkAnalysis, setBulkAnalysis] = useWorkspaceSession(
     'library.bulkAnalysis',
@@ -176,12 +174,18 @@ export default function App() {
   }, [view]);
   const [detail, setDetail] = useState<AnalysisDetail>('overview');
   const [localTheme, setTheme] = useState<Theme>(readTheme);
-  const theme = configuration?.current?.appearance.board_theme ?? localTheme;
+  const theme = confirmed?.appearance.board_theme ?? localTheme;
   const [installedSettings, setInstalledSettings] = useState<AppSettings>();
   const settings =
-    configuration?.current && installedSettings
-      ? settingsFromConfiguration(configuration.current, installedSettings)
+    confirmed && installedSettings
+      ? settingsFromConfiguration(confirmed, installedSettings)
       : installedSettings;
+  const analysisEngine =
+    confirmed?.analysis.engine ?? settings?.analysis_engine ?? 'gnubg';
+  const analysisPlies =
+    confirmed?.analysis.plies ??
+    settings?.analysis_plies ??
+    DEFAULT_ANALYSIS_PLIES;
   const [settingsError, setSettingsError] = useState<unknown>();
   const [settingsRevision, setSettingsRevision] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -196,10 +200,11 @@ export default function App() {
   const [annotationRevision, setAnnotationRevision] = useState(0);
   const [deckRevision, setDeckRevision] = useState(0);
   const [bookmarkRevision, setBookmarkRevision] = useState(0);
-  const [analysisSelection, setAnalysisSelection] = useState<{
-    matches: LibraryMatch[];
-    unavailableCount: number;
-  }>();
+  const [analysisSelection, setAnalysisSelection] = useState<
+    | { kind: 'single'; match: LibraryMatch }
+    | { kind: 'bulk'; matches: LibraryMatch[]; unavailableCount: number }
+  >();
+  const [requestedAnalysis, setRequestedAnalysis] = useState<Job>();
   const [scopeRequest, setScopeRequest] = useState<{
     kind: AnnotationKind;
     token: number;
@@ -247,24 +252,33 @@ export default function App() {
     installedSettings?.analysis_engine,
     settingsRevision,
   ]);
-  const jobs = useJobs(navigation.position?.id, track);
+  const jobs = useJobs(navigation.position?.id, analysisEngine, track);
   const settingsLoad = useRef<AbortController | undefined>(undefined);
   const input = useRef<HTMLInputElement>(null);
+  const importDestination = useRef<string | undefined>(undefined);
   const tabs = useRef<Partial<Record<View, HTMLButtonElement | null>>>({});
   useEffect(() => {
-    if (!configuration) saveTheme(theme);
-  }, [theme, !!configuration]);
+    const chooser = input.current;
+    const clearDestination = () => {
+      importDestination.current = undefined;
+    };
+    chooser?.addEventListener('cancel', clearDestination);
+    return () => chooser?.removeEventListener('cancel', clearDestination);
+  }, []);
   useEffect(() => {
-    const current = configuration?.current;
+    if (!confirmed) saveTheme(theme);
+  }, [theme, !!confirmed]);
+  useEffect(() => {
+    const current = confirmed;
     if (!current) return;
     setLocale(current.general.locale);
-  }, [configuration?.current?.general.locale, setLocale]);
+  }, [confirmed?.general.locale, setLocale]);
   useEffect(() => {
-    if (configuration?.current) setBookRevision((n) => n + 1);
+    if (confirmed) setBookRevision((n) => n + 1);
   }, [
-    configuration?.current?.opening_book.provider,
-    configuration?.current?.opening_book.path,
-    configuration?.current?.opening_book.xg_path,
+    confirmed?.opening_book.provider,
+    confirmed?.opening_book.path,
+    confirmed?.opening_book.xg_path,
   ]);
   useEffect(() => {
     Object.values(jobs.jobs).forEach(track);
@@ -424,7 +438,14 @@ export default function App() {
     setView(views[next]);
     tabs.current[views[next]]?.focus();
   }
-  async function upload(files: File[] | FileList | undefined) {
+  function chooseImportFiles(destination?: string) {
+    importDestination.current = destination;
+    input.current?.click();
+  }
+  async function upload(
+    files: File[] | FileList | undefined,
+    destination = databaseId,
+  ) {
     const selected = Array.from(files ?? []);
     if (!selected.length || uploading) return;
     cancelRestoration();
@@ -433,8 +454,8 @@ export default function App() {
     setNotice(undefined);
     setImportResults([]);
     const target =
-      databaseId && acceptsLibraryMatches(databaseId)
-        ? `?database_id=${encodeURIComponent(databaseId)}`
+      destination && acceptsLibraryMatches(destination)
+        ? `?database_id=${encodeURIComponent(destination)}`
         : '';
     const navigationIntent = navigation.intent();
     const results: {
@@ -502,11 +523,12 @@ export default function App() {
     }
     window.scrollTo(0, 0);
   }
-  function openMatch(match: Match, gameNo?: number) {
+  function openMatch(match: Match, gameNo?: number, result?: Job) {
     cancelRestoration();
     setError(undefined);
     setView('analysis');
-    setDetail('overview');
+    setDetail(result ? 'statistics' : 'overview');
+    setRequestedAnalysis(result);
     void (gameNo
       ? navigation.openMatch(match.id, gameNo)
       : navigation.selectMatch(match));
@@ -515,23 +537,19 @@ export default function App() {
     const positionId = navigation.position?.position_id;
     if (!positionId) return;
     cancelRestoration();
-    changeDatabase('');
+    setDatabaseId('');
     setRequestedPositionSearch((previous) => ({
       positionId,
       token: (previous?.token ?? 0) + 1,
     }));
     setView('database');
   }
-  function searchSimilarPositions() {
-    const { position, match } = navigation;
-    if (!position || !match) return;
-    cancelRestoration();
+  function searchSimilarPositions(source: Position, matchName: string) {
     setSimilarTarget((previous) => ({
-      source: position,
-      matchName: match.filename,
+      source,
+      matchName,
       token: (previous?.token ?? 0) + 1,
     }));
-    setView('positions');
   }
   function openPosition(position: Position | string) {
     cancelRestoration();
@@ -614,7 +632,7 @@ export default function App() {
           {w('openMatch')}
         </ActionButton>
         <ActionButton
-          onClick={() => input.current?.click()}
+          onClick={() => chooseImportFiles()}
           disabled={uploading}
           icon="import"
           label={uploading ? t('app.importRunning') : t('app.importPlain')}
@@ -705,7 +723,11 @@ export default function App() {
           aria-label={t('app.matchFile')}
           accept=".mat,.sgf,.xg,.bgf,.ogxm"
           multiple
-          onChange={(event) => void upload(event.target.files ?? undefined)}
+          onChange={(event) => {
+            const destination = importDestination.current;
+            importDestination.current = undefined;
+            void upload(event.target.files ?? undefined, destination);
+          }}
         />
       </header>
       {benchmarkActive && (
@@ -723,13 +745,22 @@ export default function App() {
         >
           <PlayWorkspace
             visible={view === 'play'}
+            settings={settings}
             theme={theme}
             requestedSession={requestedPlaySession}
             onSaved={() => setRevision((n) => n + 1)}
             onModeChanged={playModeChanged}
+            onOpenAssessment={(id) => {
+              cancelRestoration();
+              setRequestedAssessment((previous) => ({
+                id,
+                token: (previous?.token ?? 0) + 1,
+              }));
+              setView('learning');
+            }}
             onOpenPausedMatches={() => {
               cancelRestoration();
-              changeDatabase(PAUSED_MATCHES_DATABASE_ID);
+              setDatabaseId(PAUSED_MATCHES_DATABASE_ID);
               setView('database');
               tabs.current.database?.focus();
             }}
@@ -806,7 +837,20 @@ export default function App() {
         >
           <AnalysisWorkspace
             active={view === 'analysis'}
-            analysisRevision={assessmentRevision}
+            requestedAnalysis={requestedAnalysis}
+            onAnalysisRequestConsumed={(consumed) =>
+              setRequestedAnalysis((pending) =>
+                pending === consumed ? undefined : pending,
+              )
+            }
+            analysisRevision={JSON.stringify([
+              assessmentRevision,
+              runningAnalysisJobs
+                .filter((job) => job.kind === 'match' && job.game_no == null)
+                .map((job) => job.id)
+                .sort(),
+              confirmed?.analysis.error_thresholds,
+            ])}
             metadataRevision={revision}
             bookmarkRevision={bookmarkRevision}
             onBookmarkChanged={bookmarkChanged}
@@ -814,15 +858,14 @@ export default function App() {
             jobs={jobs}
             runningJobs={runningAnalysisJobs}
             theme={theme}
-            defaultEngine={settings?.analysis_engine ?? 'gnubg'}
-            defaultPlies={settings?.analysis_plies ?? DEFAULT_ANALYSIS_PLIES}
+            defaultEngine={analysisEngine}
+            defaultPlies={analysisPlies}
             analysisInstallationKey={analysisInstallationKey}
             sourceRevision={bookRevision}
-            configured={!!settings && (!configuration || configuration.ready)}
+            configured
             detail={detail}
             onDetail={setDetail}
             onOpenDatabase={searchCurrentPosition}
-            onFindSimilar={searchSimilarPositions}
             onTrackJob={track}
             onNotesSaved={notesSaved}
             notesSuspended={!!moveNotes || view !== 'analysis'}
@@ -862,7 +905,7 @@ export default function App() {
             }}
             revision={revision}
             databaseId={databaseId}
-            onDatabase={changeDatabase}
+            onDatabase={setDatabaseId}
             visible={view === 'database'}
             onChanged={(deletedIds = [], validateSelection = false) => {
               setRevision((n) => n + 1);
@@ -902,19 +945,45 @@ export default function App() {
             selectedMatchId={navigation.match?.id}
             onOpen={openMatch}
             bulkAnalysisProgress={bulkAnalysisProgress}
-            onAnalyzeMatches={(matches, unavailableCount) =>
-              setAnalysisSelection({ matches, unavailableCount })
-            }
+            onAnalyzeMatches={(matches, unavailableCount) => {
+              setAnalysisSelection(
+                matches.length === 1 && !unavailableCount
+                  ? { kind: 'single', match: matches[0] }
+                  : { kind: 'bulk', matches, unavailableCount },
+              );
+            }}
             onPosition={openPosition}
             onAnnotation={openAnnotation}
-            onImport={() => input.current?.click()}
+            uploading={uploading}
+            onImport={chooseImportFiles}
           />
-          {view === 'database' && analysisSelection && (
+          {view === 'database' && analysisSelection?.kind === 'single' && (
+            <MatchAnalysisDialog
+              key={analysisSelection.match.id}
+              match={analysisSelection.match}
+              defaultEngine={analysisEngine}
+              defaultPlies={analysisPlies}
+              configured
+              analysisInstallationKey={analysisInstallationKey}
+              trackedJobs={trackedAnalysisJobs}
+              onAccepted={(job) => {
+                track(job);
+                setRevision((value) => value + 1);
+              }}
+              onShowResults={(job) => {
+                setAnalysisSelection(undefined);
+                openMatch(analysisSelection.match, undefined, job);
+                requestAnimationFrame(() => tabs.current.analysis?.focus());
+              }}
+              onClose={() => setAnalysisSelection(undefined)}
+            />
+          )}
+          {view === 'database' && analysisSelection?.kind === 'bulk' && (
             <BulkMatchAnalysisDialog
               matches={analysisSelection.matches}
               unavailableCount={analysisSelection.unavailableCount}
-              defaultEngine={settings?.analysis_engine ?? 'gnubg'}
-              defaultPlies={settings?.analysis_plies ?? DEFAULT_ANALYSIS_PLIES}
+              defaultEngine={analysisEngine}
+              defaultPlies={analysisPlies}
               configured
               analysisInstallationKey={analysisInstallationKey}
               onAccepted={(jobs, continuesBatch) => {
@@ -974,6 +1043,7 @@ export default function App() {
               }}
               onDeckChanged={deckChanged}
               onStudy={openStudyDeck}
+              onFindSimilar={searchSimilarPositions}
             />
           </div>
           {similarTarget && (
@@ -1001,6 +1071,7 @@ export default function App() {
           <StudyWorkspace
             visible={view === 'learning'}
             requestedDeck={requestedDeck}
+            requestedAssessment={requestedAssessment}
             theme={theme}
             revision={deckRevision}
             onChanged={deckChanged}
@@ -1017,7 +1088,7 @@ export default function App() {
             visible={view === 'extras'}
             tool={extrasTool}
             setTool={setExtrasTool}
-            defaultPlies={settings?.analysis_plies ?? DEFAULT_ANALYSIS_PLIES}
+            defaultPlies={analysisPlies}
             playPlies={settings?.play_plies}
           />
         </div>

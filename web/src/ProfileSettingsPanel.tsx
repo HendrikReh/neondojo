@@ -66,7 +66,12 @@ export default function ProfileSettingsPanel() {
   const controlsDisabled = config.busy || conflict;
   const report = conflict ? undefined : (error ?? config.error);
   if (!config.current || !selected || !activeProfile)
-    return <p role="status">{t('loading')}</p>;
+    return report ? (
+      <div>
+        <p role="alert">{report instanceof Error ? report.message : t('failed')}</p>
+        <button type="button" onClick={() => void config.refresh()}>{t('retry')}</button>
+      </div>
+    ) : <p role="status">{t('loading')}</p>;
   const active = selected.id === activeProfile.id;
   const changeCount = profileChangeRows(
     activeProfile.configuration,

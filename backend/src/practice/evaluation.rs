@@ -4,7 +4,7 @@ use crate::{
     engine::{Candidate, CubeEquities},
     engines::AnalysisEngine,
     match_analysis::{Decision, cube_options, evaluated_equities, normalized_loss},
-    model::{MoveSeverity, Position},
+    model::Position,
     move_assessments::after_play,
     play::PlayStep,
     practice::{self, CubeContext},
@@ -145,10 +145,7 @@ impl PracticeEvaluation {
         }
         let verdict = if equity_loss == 0.0 {
             PracticeVerdict::Best
-        } else if matches!(
-            MoveSeverity::from_normalized_loss(equity_loss),
-            MoveSeverity::None
-        ) {
+        } else if equity_loss < 0.04 {
             PracticeVerdict::Playable
         } else {
             PracticeVerdict::Error

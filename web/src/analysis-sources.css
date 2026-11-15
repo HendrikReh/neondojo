@@ -81,9 +81,6 @@
   border-radius: 8px;
   font-size: var(--font-size-body);
 }
-.settings-book-button {
-  margin: 10px 0;
-}
 .source-analysis {
   min-width: 0;
 }

@@ -223,6 +223,7 @@ async fn create(
                     gnubg_path: path,
                     engine_version: Some(version),
                     gnubg_threads,
+                    gnubg_move_filter: None,
                     open_sage: None,
                 })
             } else {

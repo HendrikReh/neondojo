@@ -403,16 +403,13 @@ describe('configuration writing', () => {
       const h = harness();
       h.setAvailable(false);
       await h.store.load();
-      await expect(
-        h.store.runWithConfiguration(async () => true),
-      ).rejects.toThrow('Configured engine is unavailable');
+      expect(h.store.getSnapshot().availabilityIssues).toMatchObject([
+        { path: 'analysis.engine', code: 'unavailable_engine' },
+      ]);
       h.setAvailable(true);
       if (action === 'reload') await h.store.reloadServer();
       else await h.store.saveConflictAsNewProfile('Recovered');
       expect(h.store.getSnapshot().availabilityIssues).toEqual([]);
-      await expect(
-        h.store.runWithConfiguration(async () => true),
-      ).resolves.toBe(true);
     });
   it('keeps changed current configuration without overwriting the profile snapshot', async () => {
     const h = harness();

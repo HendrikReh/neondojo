@@ -5,6 +5,47 @@ use sqlx::PgPool;
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL and GNUbg"]
+async fn legacy_workspace_references_do_not_block_profile_activation(pool: PgPool) {
+    let (app, initial) = initialized(&pool, true).await;
+    let mut configuration = initial["current_configuration"].clone();
+    let missing = json!("11111111-1111-4111-8111-111111111111");
+    configuration["library"]["database_id"] = missing.clone();
+    configuration["positions"]["definition"]["database_id"] = missing.clone();
+    configuration["learning"]["deck_id"] = missing.clone();
+    configuration["annotations"]["filters"] =
+        json!({"q":"old search","tag":"","kind":"","database_id":missing});
+    configuration["appearance"]["mode"] = json!("dark");
+    let target = create(&app, &initial, "Legacy workspace", configuration.clone()).await;
+    let standard = &initial["active_profile"];
+    let (code, state) = call(
+        app.clone(),
+        "POST",
+        &format!(
+            "/api/profiles/{}/activate",
+            standard["id"].as_str().unwrap()
+        ),
+        activate(&target, standard, "keep"),
+    )
+    .await;
+    assert_eq!(code, 200, "{state}");
+    let target = &target["active_profile"];
+    let (code, state) = call(
+        app.clone(),
+        "POST",
+        &format!("/api/profiles/{}/activate", target["id"].as_str().unwrap()),
+        activate(&state, target, "keep"),
+    )
+    .await;
+    assert_eq!(code, 200, "{state}");
+    assert_eq!(state["current_configuration"], configuration);
+    let (code, availability) =
+        call(app, "GET", "/api/configuration/availability", Value::Null).await;
+    assert_eq!(code, 200, "{availability}");
+    assert_eq!(availability["issues"], json!([]));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL and GNUbg"]
 async fn profiles_create_switch_save_rename_and_delete_with_exact_snapshots(pool: PgPool) {
     let (app, initial) = initialized(&pool, true).await;
     let standard = initial["active_profile"].clone();
@@ -227,26 +268,6 @@ async fn profile_activation_preserves_queued_and_recovered_job_snapshots(pool: P
     assert_eq!(code, 200, "{restored}");
     let after:Value=sqlx::query_scalar("SELECT jsonb_build_object('engine_snapshot',engine_snapshot,'engine_config',engine_config,'plies',plies) FROM jobs WHERE id=$1").bind(old_id).fetch_one(&pool).await.unwrap();
     assert_eq!(before, after);
-}
-
-#[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL and GNUbg"]
-async fn activation_checks_deck_and_database_references_without_replacements(pool: PgPool) {
-    let (app, state) = initialized(&pool, true).await;
-    let mut config = state["current_configuration"].clone();
-    config["library"]["database_id"] = json!("11111111-1111-1111-1111-111111111111");
-    config["learning"]["deck_id"] = json!("22222222-2222-2222-2222-222222222222");
-    let(code,error)=call(app.clone(),"POST","/api/profiles",json!({"name":"Missing references","expected_state_revision":state["revision"],"configuration":config})).await;
-    assert_eq!(code, 422, "{error}");
-    let paths: Vec<_> = error["issues"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|v| v["path"].as_str().unwrap())
-        .collect();
-    assert_eq!(paths, vec!["library.database_id", "learning.deck_id"]);
-    let (_, after) = call(app, "GET", "/api/configuration", Value::Null).await;
-    assert_eq!(state, after);
 }
 
 #[sqlx::test(migrations = "./migrations")]

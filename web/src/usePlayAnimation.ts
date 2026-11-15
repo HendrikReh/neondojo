@@ -66,9 +66,9 @@ export function usePlayAnimation(visible: boolean) {
             }
             if (token !== epoch.current) return;
             setFrame({ ...next, id, rolling: false });
-            await delay(
-              next.roll ? (reduced ? 100 : 240) : reduced ? 180 : 600,
-            );
+            const settle = next.roll ? (next.opening ? 440 : 240) : 600;
+            const reducedSettle = next.roll && !next.opening ? 100 : 180;
+            await delay(reduced ? reducedSettle : settle);
           } else {
             setFrame({ ...next, id });
             await delay(reduced ? 80 : 280);

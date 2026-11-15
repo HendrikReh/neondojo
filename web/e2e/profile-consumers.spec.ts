@@ -137,7 +137,7 @@ const headers = (page: Page) =>
       cells.map((cell) => cell.getAttribute('data-column')),
     );
 
-test('profiles restore filters, sorting and column layout in already mounted workspaces', async ({
+test('filters and local column layouts survive profile switches and reload', async ({
   page,
 }) => {
   const controller = await fixture(page);
@@ -164,36 +164,44 @@ test('profiles restore filters, sorting and column layout in already mounted wor
   await expect(
     page.getByRole('textbox', { name: 'Search matches' }),
   ).toHaveValue('Alpha');
-  const firstWidth = (await page
+  await page.getByRole('button', { name: /Profile test/ }).click();
+  await page
+    .getByRole('textbox', { name: 'Search matches' })
+    .fill('Current search');
+  await expect(page.locator('.database-table tbody tr')).toContainText(
+    'Current search black',
+  );
+  const width = async () => (await page
     .locator('th[data-column="white"]')
     .boundingBox())!.width;
-  expect(firstWidth).toBeCloseTo(240, 0);
+  expect(await width()).toBeCloseTo(240, 0);
+  await page.locator('th[data-column="white"]').getByRole('separator').press('ArrowRight');
+  await expect.poll(width).toBeCloseTo(250, 0);
   await page.getByRole('tab', { name: 'Positions', exact: true }).click();
   await switchProfile(page, 'Deep analysis');
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();
   await expect(
     page.getByRole('textbox', { name: 'Search matches' }),
-  ).toHaveValue('Beta');
+  ).toHaveValue('Current search');
   await expect(page.locator('.database-table tbody tr')).toContainText(
-    'Beta black',
+    'Current search black',
   );
 
-  expect(await headers(page)).toEqual(['select', 'black', 'id']);
-  expect(
-    (await page.locator('th[data-column="black"]').boundingBox())!.width,
-  ).toBeCloseTo(310, 0);
+  expect(await headers(page)).toEqual(['select', 'white', 'id', 'black']);
+  await expect.poll(width).toBeCloseTo(250, 0);
   expect(
     queries.some(
       (url) =>
-        url.searchParams.get('q') === 'Beta' &&
-        url.searchParams.get('sort') === 'white' &&
-        url.searchParams.get('direction') === 'desc',
+        url.searchParams.get('q') === 'Current search' &&
+        url.searchParams.get('sort') === 'id' &&
+        url.searchParams.get('direction') === 'asc' &&
+        url.searchParams.get('database_id') === databaseId,
     ),
   ).toBe(true);
   await switchProfile(page, 'Standard');
   await expect(
     page.getByRole('textbox', { name: 'Search matches' }),
-  ).toHaveValue('Alpha');
+  ).toHaveValue('Current search');
   expect(await headers(page)).toEqual([
     'select',
     'white',
@@ -208,9 +216,18 @@ test('profiles restore filters, sorting and column layout in already mounted wor
     `/profiles/${secondProfileId}/activate`,
     `/profiles/${firstId}/activate`,
   ]);
+  await page.reload();
+  await page.getByRole('tab', { name: 'Match database', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: /Profile test/ }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(
+    page.getByRole('textbox', { name: 'Search matches' }),
+  ).toHaveValue('Current search');
+  await expect.poll(width).toBeCloseTo(250, 0);
 });
 
-test('a late search response cannot replace the newly activated profile results', async ({
+test('a late search response cannot replace a newer session query', async ({
   page,
 }) => {
   await fixture(page, (a) => {
@@ -241,7 +258,7 @@ test('a late search response cannot replace the newly activated profile results'
   await page.goto('/');
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();
   await waiting;
-  await switchProfile(page, 'Deep analysis');
+  await page.getByRole('textbox', { name: 'Search matches' }).fill('Beta');
   await expect(page.locator('.database-table tbody tr')).toContainText(
     'Beta black',
   );
@@ -251,7 +268,7 @@ test('a late search response cannot replace the newly activated profile results'
   );
 });
 
-test('a profile switch retains the active learning card and applies the new deck after leaving study', async ({
+test('a profile switch retains the active learning card and the selected deck', async ({
   page,
 }) => {
   const controller = await fixture(page, (a, b) => {
@@ -316,13 +333,26 @@ test('a profile switch retains the active learning card and applies the new deck
     .getByRole('button', { name: 'Back to card search', exact: true })
     .click();
   await expect(study.getByLabel('Choose deck', { exact: true })).toHaveValue(
+    deckA,
+  );
+  await study.getByLabel('Choose deck', { exact: true }).selectOption(deckB);
+  await switchProfile(page, 'Standard');
+  await page.reload();
+  await page.getByRole('tab', { name: 'Study', exact: true }).click();
+  await page
+    .getByRole('tab', { name: 'Flashcards & Anki', exact: true })
+    .click();
+  await expect(study.getByLabel('Choose deck', { exact: true })).toHaveValue(
     deckB,
   );
   expect(
     controller.calls
       .filter((call) => call.method !== 'GET')
       .map((call) => call.path),
-  ).toEqual([`/profiles/${secondProfileId}/activate`]);
+  ).toEqual([
+    `/profiles/${secondProfileId}/activate`,
+    `/profiles/${firstId}/activate`,
+  ]);
 });
 
 test('switching profiles preserves an unsaved note without submitting it', async ({
@@ -375,19 +405,15 @@ test('raw library search text retains typed spaces while the applied query is ca
   await input.pressSequentially('Alpha Beta ');
   await expect(input).toHaveValue('Alpha Beta ');
   await expect
-    .poll(() => controller.state.current_configuration.library.filters.q)
-    .toBe('Alpha Beta');
-  await expect
     .poll(() =>
       queries.some((url) => url.searchParams.get('q') === 'Alpha Beta'),
     )
     .toBe(true);
-  await page.getByRole('button', { name: /^Profile:/ }).click();
-  await page
-    .getByRole('menuitemradio', { name: 'Deep analysis', exact: true })
-    .click();
-  await page
-    .getByRole('button', { name: 'Discard and switch', exact: true })
-    .click();
-  await expect(input).toHaveValue('Beta');
+  expect(controller.state.current_configuration.library.filters.q).toBe(
+    'Alpha',
+  );
+  await page.reload();
+  await page.getByRole('tab', { name: 'Match database', exact: true }).click();
+  await expect(input).toHaveValue('Alpha Beta');
+  expect(controller.calls.filter((call) => call.method !== 'GET')).toEqual([]);
 });

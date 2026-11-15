@@ -40,7 +40,6 @@ const en = {
   retry: 'Try again',
   anyway: 'Play anyway',
   continue: 'Continue',
-  playMove: 'Play move',
   details: 'Details',
   warning:
     'This decision exceeds your warning threshold. Would you like to reconsider?',
@@ -109,7 +108,6 @@ const de: Record<Key, string> = {
   retry: 'Noch einmal versuchen',
   anyway: 'Trotzdem spielen',
   continue: 'Weiter',
-  playMove: 'Zug spielen',
   details: 'Details',
   warning:
     'Diese Entscheidung überschreitet deine Warnschwelle. Möchtest du sie noch einmal prüfen?',
@@ -155,7 +153,6 @@ const extra: Record<string, Partial<Record<Key, string>>> = {
     retry: 'Intentar de nuevo',
     anyway: 'Jugar de todos modos',
     continue: 'Continuar',
-    playMove: 'Jugar movimiento',
     details: 'Detalles',
     warning: 'Esta decisión supera tu umbral. ¿Quieres reconsiderarla?',
     feedback: 'Evaluación de la decisión',
@@ -195,7 +192,6 @@ const extra: Record<string, Partial<Record<Key, string>>> = {
     retry: 'Réessayer',
     anyway: 'Jouer quand même',
     continue: 'Continuer',
-    playMove: 'Jouer le coup',
     details: 'Détails',
     warning:
       'Cette décision dépasse votre seuil. Voulez-vous la reconsidérer ?',
@@ -236,7 +232,6 @@ const extra: Record<string, Partial<Record<Key, string>>> = {
     retry: 'Riprova',
     anyway: 'Gioca comunque',
     continue: 'Continua',
-    playMove: 'Gioca la mossa',
     details: 'Dettagli',
     warning: 'Questa decisione supera la soglia. Vuoi ripensarci?',
     feedback: 'Valutazione della decisione',
@@ -276,7 +271,6 @@ const extra: Record<string, Partial<Record<Key, string>>> = {
     retry: 'Spróbuj ponownie',
     anyway: 'Zagraj mimo to',
     continue: 'Dalej',
-    playMove: 'Zagraj ruch',
     details: 'Szczegóły',
     warning: 'Ta decyzja przekracza próg. Czy chcesz ją przemyśleć?',
     feedback: 'Ocena decyzji',

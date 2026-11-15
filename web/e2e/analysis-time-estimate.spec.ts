@@ -1,4 +1,4 @@
-import { openMatchCalculation } from './analysis-controls';
+import { openFullMatchAnalysis, openMatchAnalysisOptions } from './analysis-controls';
 import { expect, test, type Page } from './test';
 import { profileBackend } from './profile-backend';
 import { defaultConfiguration } from '../src/configuration-model';
@@ -109,7 +109,7 @@ test('starts GNUbg 4-ply for the selected game with an Open Sage profile', async
     }),
   );
   const match = await openMatch(page);
-  await openMatchCalculation(page);
+  await openMatchAnalysisOptions(page);
   const engine = page.getByLabel('Analysis engine', { exact: true });
   const depth = page.getByLabel('Match analysis depth', { exact: true });
   await expect(engine).toHaveValue('bgsage');
@@ -170,7 +170,7 @@ test('starts GNUbg 4-ply for the selected game with an Open Sage profile', async
   await expect(page.locator('.match-analysis-progress:visible')).toContainText(
     'Game analysis completed',
   );
-  await openMatchCalculation(page);
+  await openMatchAnalysisOptions(page);
   await engine.selectOption('bgsage');
   await expect(page.locator('.match-analysis-progress:visible')).toContainText(
     'Game analysis completed',
@@ -199,7 +199,7 @@ test('shows benchmark basis before any job and follows game, scope and depth', a
     return r.fulfill({ json: result(r.request().url()) });
   });
   await openMatch(page);
-  await openMatchCalculation(page);
+  await openMatchAnalysisOptions(page);
   await expect(estimate(page)).toContainText(
     'Estimated analysis time: approx. 40s',
   );
@@ -213,34 +213,30 @@ test('shows benchmark basis before any job and follows game, scope and depth', a
   await expect
     .poll(() => new URL(requests.at(-1)!).searchParams.get('game_no'))
     .toBe('2');
-  await page
-    .getByLabel('Analysis scope', { exact: true })
-    .selectOption('match');
+  expect(new URL(requests.at(-1)!).searchParams.get('game_no')).toBe('2');
+  const controls = page.locator('.workspace-analysis-command .match-analysis-controls');
+  for (const label of await controls.locator('label').all())
+    expect((await label.boundingBox())!.width).toBeGreaterThan(100);
+  await controls.getByRole('button', { name: 'Analysis options' }).click();
+  await expect(estimate(page)).toBeHidden();
+  const dialog = await openFullMatchAnalysis(page);
   await expect
     .poll(() => new URL(requests.at(-1)!).searchParams.has('game_no'))
     .toBe(false);
-  await page
-    .getByLabel('Match analysis depth', { exact: true })
-    .selectOption('4');
+  await dialog.getByLabel('Match analysis depth', { exact: true }).selectOption('4');
+  await expect(estimate(page)).toContainText('Estimated analysis time: approx. 40s');
   await expect(estimate(page)).toContainText('4 Ply');
   expect(starts).toEqual([]);
-  const controls = page.locator(
-    '.workspace-analysis-command .match-analysis-controls',
-  );
-  const labels = await controls.locator('label').all();
-  for (const label of labels)
-    expect((await label.boundingBox())!.width).toBeGreaterThan(100);
   await page.screenshot({
     path: '/tmp/bgtutor-analysis-estimate-desktop.png',
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(estimate(page)).toBeVisible();
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= innerWidth,
-    ),
-  ).toBe(true);
+  await expect(dialog).toBeInViewport({ ratio: 1 });
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+    .toBe(390);
   await page.screenshot({
     path: '/tmp/bgtutor-analysis-estimate-mobile.png',
     fullPage: true,
@@ -269,7 +265,7 @@ test('invalidates immediately and ignores late depth responses', async ({
     return r.fulfill({ json: result(r.request().url()) });
   });
   await openMatch(page);
-  await openMatchCalculation(page);
+  await openMatchAnalysisOptions(page);
   await expect(estimate(page)).toContainText('approx. 40s');
   await page
     .getByLabel('Match analysis depth', { exact: true })
@@ -315,7 +311,7 @@ for (const reason of [
           }),
     );
     await openMatch(page, 'de');
-    await openMatchCalculation(page);
+    await openMatchAnalysisOptions(page);
     await expect(estimate(page)).toContainText('Schätzung nicht verfügbar');
     const explanation = {
       no_matching_benchmark: 'Kein abgeschlossener Benchmark passt',
@@ -331,7 +327,7 @@ for (const reason of [
     ).toBeEnabled();
   });
 }
-test('rechecks confirmed profile revisions at same depth without writes', async ({
+test('retains the estimate when confirmed settings change only appearance', async ({
   page,
 }) => {
   const config = structuredClone(defaultConfiguration);
@@ -345,11 +341,13 @@ test('rechecks confirmed profile revisions at same depth without writes', async 
     });
   });
   await openMatch(page);
-  await openMatchCalculation(page);
+  await openMatchAnalysisOptions(page);
   await expect(estimate(page)).toContainText('approx. 40s');
-  backend.updateRemote(config);
+  backend.updateRemote({ ...config, appearance: { ...config.appearance, mode: 'dark' } });
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect(estimate(page)).toContainText('approx. 1m 20s');
+  await expect(page.locator('html')).toHaveAttribute('data-ui-mode', 'dark');
+  await expect(estimate(page)).toContainText('approx. 40s');
+  expect(calls).toBe(1);
   expect(backend.calls.filter((c) => c.method !== 'GET')).toEqual([]);
 });
 
@@ -364,7 +362,7 @@ async function mountEstimateHarness(page: Page) {
   await page.evaluate(async () => {
     const { React: react, createRoot } = await import('/e2e/react-fixture.ts');
     const { ConfigurationStore } = await import('/src/configuration-store.ts');
-    const { ConfigurationProvider } =
+    const { ConfigurationProvider, useConfirmedConfiguration } =
       await import('/src/ConfigurationProvider.tsx');
     const { defaultConfiguration } =
       await import('/src/configuration-model.ts');
@@ -406,13 +404,20 @@ async function mountEstimateHarness(page: Page) {
     );
     const root = document.createElement('div');
     document.body.append(root);
+    function ConfirmedMatch(props: Parameters<typeof MatchPanel>[0]) {
+      const confirmed = useConfirmedConfiguration();
+      return react.createElement(MatchPanel, {
+        ...props,
+        defaultPlies: confirmed?.analysis.plies ?? props.defaultPlies,
+      });
+    }
     function Harness() {
       const [installationKey, setInstallation] = react.useState('/old/gnubg');
       const [positionCount, setPositionCount] = react.useState(1000);
       return react.createElement(
         ConfigurationProvider,
         { store },
-        react.createElement(MatchPanel, {
+        react.createElement(ConfirmedMatch, {
           match: {
             id: 'fixture',
             white: 'Fixture',
@@ -420,7 +425,6 @@ async function mountEstimateHarness(page: Page) {
             position_count: positionCount,
           },
           catalog: catalogFixture(),
-          onPosition: () => {},
           gameNo: 1,
           defaultPlies: 2,
           configured: true,
@@ -458,7 +462,7 @@ async function mountEstimateHarness(page: Page) {
   });
 }
 
-test('suppresses old estimate during unsaved configuration debounce and delayed confirmation', async ({
+test('estimates use confirmed settings while an edit is still pending', async ({
   page,
 }) => {
   let calls = 0;
@@ -473,11 +477,7 @@ test('suppresses old estimate during unsaved configuration debounce and delayed 
   await page
     .getByRole('button', { name: 'Unsaved engine edit', exact: true })
     .click();
-  await expect(estimate(page)).toContainText(
-    'Waiting for the analysis settings',
-  );
-  await expect(estimate(page)).not.toContainText('40s');
-  // A fresh GET during the debounce would still see the old applied settings.
+  await expect(estimate(page)).toContainText('approx. 40s');
   expect(calls).toBe(1);
   await page
     .getByRole('button', { name: 'Confirm engine edit', exact: true })
@@ -512,7 +512,7 @@ test('hides pre-start estimate during submission and queued engine work', async 
     route.fulfill({ json: result(route.request().url()) }),
   );
   const match = await openMatch(page);
-  await openMatchCalculation(page);
+  await openMatchAnalysisOptions(page);
   await expect(estimate(page)).toContainText('approx. 40s');
   let release!: () => void;
   const gate = new Promise<void>((r) => {
@@ -566,7 +566,7 @@ test('hides pre-start estimate during submission and queued engine work', async 
   release();
   const background = page.locator('.analysis-commandbar .analysis-running-jobs');
   await expect(background).toContainText('Analysis queued');
-  await openMatchCalculation(page);
+  await openMatchAnalysisOptions(page);
   const engine = page.getByLabel('Analysis engine', { exact: true });
   await engine.selectOption('bgsage');
   await expect(page.locator('.match-analysis-progress:visible')).toHaveCount(0);
@@ -622,7 +622,7 @@ for (const malformed of ['date', 'reason'] as const) {
       return route.fulfill({ json: invalid });
     });
     await openMatch(page);
-    await openMatchCalculation(page);
+    await openMatchAnalysisOptions(page);
     await expect(estimate(page)).toContainText('Estimate unavailable');
     await expect(
       page.getByRole('button', { name: 'Analyze game', exact: true }),

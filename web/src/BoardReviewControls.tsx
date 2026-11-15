@@ -1,6 +1,6 @@
 import ActionButton from './ActionButton';
 import EngineLabel from './EngineLabel';
-import type { BoardView, MovePreview } from './move-preview';
+import type { BoardView, CheckerPosition, MovePreview } from './move-preview';
 import type { PreviewCandidate } from './candidate-preview';
 import { useBoardReviewText } from './board-review-messages';
 import { useI18n } from './i18n';
@@ -9,12 +9,14 @@ import './board-review.css';
 export default function BoardReviewControls({
   view,
   preview,
+  position,
   selected,
   onView,
   onPlayed,
 }: {
   view: BoardView;
   preview: MovePreview;
+  position: CheckerPosition;
   selected?: PreviewCandidate;
   onView: (view: BoardView) => void;
   onPlayed: () => void;
@@ -62,7 +64,7 @@ export default function BoardReviewControls({
           <strong>
             {l('candidate', {
               rank: selected.rank,
-              move: formatDecision(selected.notation),
+              move: formatDecision(selected.notation, position),
             })}
           </strong>
           <small>
@@ -76,12 +78,7 @@ export default function BoardReviewControls({
         </p>
       ) : preview.forced ? (
         <p className="board-review-help">{l('pass')}</p>
-      ) : view === 'arrows' ? (
-        <p className="board-review-help">{l('arrowsHelp')}</p>
       ) : null}
-      {view === 'after' && (
-        <p className="board-review-help">{l('analysisTarget')}</p>
-      )}
     </div>
   );
 }

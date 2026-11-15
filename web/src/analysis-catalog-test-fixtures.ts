@@ -33,6 +33,7 @@ export function catalogFixture(
     nextCursor: null,
     error: undefined,
     select: async () => {},
+    remove: async () => false,
     loadMore: async () => {},
     refresh: () => {},
   };

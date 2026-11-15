@@ -4,13 +4,23 @@ import type { PlaySession } from '../src/play-api';
 import { applySteps } from '../src/play-state';
 const id = 'f13dbce7-dae6-42c9-a63b-4967f82db47b';
 for (const config of [
-  { human: 0, direction: 'right' as const, theme: 'forest', die: 0, key: null },
+  {
+    human: 0,
+    direction: 'right' as const,
+    theme: 'forest',
+    die: 0,
+    key: null,
+    width: 1800,
+    height: 1169,
+  },
   {
     human: 0,
     direction: 'left' as const,
     theme: 'bgblitz:bg-earth',
     die: 1,
     key: null,
+    width: 2560,
+    height: 1440,
   },
   {
     human: 1,
@@ -18,12 +28,23 @@ for (const config of [
     theme: 'bgblitz:bg-earth',
     die: 0,
     key: 'Enter',
+    width: 3840,
+    height: 2160,
   },
-  { human: 1, direction: 'left' as const, theme: 'forest', die: 1, key: ' ' },
+  {
+    human: 1,
+    direction: 'left' as const,
+    theme: 'forest',
+    die: 1,
+    key: ' ',
+    width: 1440,
+    height: 1100,
+  },
 ])
-  test(`either die confirms exactly once after legal completion ${config.human}/${config.direction}/${config.die}/${config.key ?? 'mouse'}`, async ({
+  test(`the dice pair confirms exactly once after legal completion ${config.human}/${config.direction}/${config.die}/${config.key ?? 'mouse'}`, async ({
     page,
   }) => {
+    await page.setViewportSize({ width: config.width, height: config.height });
     const absolute = (point: number) =>
       config.human === 0 ? point : 25 - point;
     const board = Array<number>(26).fill(0);
@@ -100,11 +121,17 @@ for (const config of [
     const die = page.locator(`[data-play-die-index="${config.die}"]`),
       point = (n: number) =>
         page.locator(`[data-play-point="${absolute(n)}"] .play-point`);
-    const confirm = page.getByTestId('play-board-toolbar').getByRole('button', {
-      name: 'Confirm turn',
-      exact: true,
-    });
-    await expect(confirm).toHaveCount(0);
+    const pair = page.locator('.play-board [data-dice-action="confirm"]');
+    const artwork = page.locator(
+      '.play-board [data-play-die-index] .play-die-artwork',
+    );
+    const toolbarConfirm = page
+      .getByTestId('play-board-toolbar')
+      .getByRole('button', {
+        name: 'Confirm turn',
+        exact: true,
+      });
+    await expect(toolbarConfirm).toHaveCount(0);
     await die.click();
     await expect(die).toHaveCSS('outline-style', 'none');
     await expect(die).toHaveCSS('filter', 'none');
@@ -123,9 +150,40 @@ for (const config of [
     expect(writes).toEqual([]);
     await expect(page.locator('.play-selected-steps')).toHaveText('13/10');
     await point(10).click();
-    await expect(die).toHaveAttribute('data-dice-action', 'confirm');
-    await expect(confirm).toBeEnabled();
-    await expect(confirm).toHaveAccessibleDescription('13/10 10/8');
+    await expect(pair).toBeEnabled();
+    await expect(toolbarConfirm).toHaveCount(0);
+    await page.mouse.move(0, 0);
+    const faces = await artwork.all();
+    const resting = (
+      await Promise.all(faces.map((face) => face.boundingBox()))
+    ).map((bounds) => bounds!);
+    const [left, right] = [...resting].sort((a, b) => a.x - b.x);
+    expect(left.x + left.width).toBeLessThan(right.x);
+    const gap = {
+      x: (left.x + left.width + right.x) / 2,
+      y: left.y + left.height / 2,
+    };
+    await page.mouse.move(gap.x, gap.y);
+    await expect(artwork.first()).toHaveCSS('opacity', '0.55');
+    await expect(artwork.last()).toHaveCSS('opacity', '0.55');
+    await expect(pair).toHaveCount(1);
+    await expect(pair).toHaveRole('button');
+    await expect(pair).toHaveAttribute('tabindex', '0');
+    await expect(pair).toHaveCSS('outline-style', 'none');
+    for (const [index, face] of faces.entries()) {
+      await expect(face).toHaveCSS('filter', /drop-shadow\(/);
+      await expect
+        .poll(async () => (await face.boundingBox())!.y)
+        .toBeLessThan(resting[index].y - 0.5);
+    }
+    for (const face of faces) {
+      await face.hover();
+      await expect(artwork.first()).toHaveCSS('opacity', '0.55');
+      await expect(artwork.last()).toHaveCSS('opacity', '0.55');
+    }
+    await page.mouse.move(gap.x, gap.y);
+    await page.screenshot({ path: test.info().outputPath('confirm-dice.png') });
+    await expect(pair).toHaveAccessibleDescription(/13\/10 10\/8/);
     expect(writes).toEqual([]);
     await page.getByRole('button', { name: 'Undo step', exact: true }).click();
     await expect(page.locator('.play-workspace')).toHaveAttribute(
@@ -133,18 +191,22 @@ for (const config of [
       'false',
     );
     await expect(die).toHaveAttribute('data-dice-action', 'none');
-    await expect(confirm).toHaveCount(0);
+    await expect(toolbarConfirm).toHaveCount(0);
+    await page.mouse.click(gap.x, gap.y);
+    expect(writes).toEqual([]);
     await point(10).click();
-    await expect(die).toHaveAttribute('data-dice-action', 'confirm');
-    if (config.human === 0 && config.direction === 'right') {
-      await confirm.press('Enter');
-    } else if (config.key) {
+    await expect(pair).toBeEnabled();
+    if (config.key) {
       await page.keyboard.press('Tab');
-      await die.focus();
-      await expect(die).toHaveCSS('outline-style', 'solid');
-      await die.press(config.key);
-      await die.press(config.key);
-    } else await die.dblclick();
+      await pair.focus();
+      await page.mouse.move(gap.x, gap.y);
+      await expect(pair).toHaveCSS('outline-style', 'none');
+      for (const face of faces) {
+        await expect(face).toHaveCSS('outline-style', 'solid');
+      }
+      await pair.press(config.key);
+      await page.keyboard.press(config.key);
+    } else await page.mouse.dblclick(gap.x, gap.y);
     await expect.poll(() => writes.length).toBe(1);
     expect(writes).toEqual([{ version: 0, action: 'move', move: 0 }]);
     release();
@@ -281,7 +343,7 @@ for (const mode of ['double', 'double_archive', 'single_usable'] as const)
           0,
         );
     }
-    await expect(page.locator('[data-dice-action="confirm"]')).toHaveCount(2);
+    await expect(page.locator('[data-dice-action="confirm"]')).toHaveCount(1);
     if (!double)
       await expect(page.locator('[data-play-die-index="1"]')).toHaveAttribute(
         'data-used',
@@ -289,7 +351,7 @@ for (const mode of ['double', 'double_archive', 'single_usable'] as const)
       );
     expect(writes).toEqual([]);
     await page
-      .locator('[data-play-die-index="1"][data-dice-action="confirm"]')
+      .locator('[data-dice-action="confirm"] [data-play-die-index="1"]')
       .click();
     await expect(rollDice(page)).toBeVisible();
     expect(writes).toEqual([{ version: 0, action: 'move', move: 0 }]);

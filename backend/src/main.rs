@@ -3,8 +3,9 @@ use bgtutor::{
     engine::Engine,
     jobs,
 };
-use sqlx::postgres::PgPoolOptions;
 use tracing_subscriber::EnvFilter;
+
+mod database_pool;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -18,7 +19,7 @@ async fn main() -> anyhow::Result<()> {
         .init();
     let url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://bgtutor:bgtutor_local@127.0.0.1:54329/bgtutor".into());
-    let pool = PgPoolOptions::new()
+    let pool = database_pool::options()
         .max_connections(10)
         .acquire_timeout(std::time::Duration::from_secs(5))
         .connect(&url)
@@ -46,6 +47,7 @@ async fn main() -> anyhow::Result<()> {
     let state = AppState::new(pool, engine);
     let stop = state.shutdown.clone();
     let worker = tokio::spawn(jobs::worker(state.clone(), stop.clone()));
+    let assessment_worker = tokio::spawn(bgtutor::match_assessment::worker(state.clone()));
     let match_worker = tokio::spawn(bgtutor::engine_matches::worker(state.clone()));
     let anki_worker = tokio::spawn(bgtutor::learning::anki_sync_worker(state.clone()));
     let mut app = api::router(state);
@@ -78,6 +80,7 @@ async fn main() -> anyhow::Result<()> {
     stop.cancel();
     worker.await?;
     match_worker.await?;
+    assessment_worker.await?;
     anki_worker.await?;
     Ok(())
 }

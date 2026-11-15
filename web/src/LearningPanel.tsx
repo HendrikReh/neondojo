@@ -1,7 +1,13 @@
-import { useProfileValue } from './useProfileValue';
-import { useOptionalConfiguration } from './ConfigurationProvider';
+import { useWorkspaceDefaults } from './ConfigurationProvider';
+import { defaultConfiguration } from './configuration-model';
+import {
+  sessionFields,
+  sessionString,
+  useWorkspaceSession,
+} from './useWorkspaceSession';
 import ActionButton from './ActionButton';
 import AnkiAutoSync from './AnkiAutoSync';
+import AnkiSyncOverview from './AnkiSyncOverview';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { request } from './api';
 import type { components } from './generated-api';
@@ -25,6 +31,7 @@ import {
   cardPracticePath,
   emptyCardFilters,
   isCollectionScope,
+  normalizeCardFilters,
 } from './card-search-api';
 import { useCardSearchText } from './card-search-messages';
 import { useCardPracticeText } from './card-practice-messages';
@@ -61,6 +68,7 @@ import type {
 } from './learning-api';
 
 const practiceStorageKey = 'bgtutor.card-practice-round';
+const defaultCardFilters = emptyCardFilters();
 
 function storedPracticeRound() {
   try {
@@ -75,14 +83,6 @@ function savedDeck() {
     return localStorage.getItem('bgtutor.deck') || ALL_CARDS;
   } catch {
     return ALL_CARDS;
-  }
-}
-function rememberDeck(id: string) {
-  try {
-    if (id) localStorage.setItem('bgtutor.deck', id);
-    else localStorage.removeItem('bgtutor.deck');
-  } catch {
-    /* Selection works without storage. */
   }
 }
 export function useDecks(revision: number) {
@@ -171,46 +171,33 @@ export function AddCardsPanel({
   black: string;
   theme: Theme;
 }) {
-  const profile = useOptionalConfiguration();
   const catalogText = useAnalysisCatalogText();
+  const legacy = useWorkspaceDefaults();
   const t = useLearningText();
   const practiceT = useCardPracticeText();
   const [newTags, setNewTags] = useState('');
   const { formatError, t: baseT } = useI18n();
-  const { decks, error: deckError, addDeck, ready } = useDecks(revision);
-  const [deckId, setDeckId] = useProfileValue<string>(
-    (c) => c.learning.deck_id,
-    (c, deck_id) => ({ ...c, learning: { ...c.learning, deck_id } }),
-    savedDeck,
+  const { decks, error: deckError, addDeck, settled } = useDecks(revision);
+  const [deckId, setDeckId] = useWorkspaceSession(
+    'analysis.card-deck',
+    legacy?.learning.deck_id,
+    savedDeck(),
+    sessionString,
   );
-  const selectedDeckId = isCollectionScope(deckId) ? '' : deckId;
-  const [minLoss, setMinLossDraft] = useState('0.04');
-  const [player, setPlayer] = useProfileValue<string>(
-    (c) => c.learning.generation.player,
-    (c, player) => ({
-      ...c,
-      learning: {
-        ...c.learning,
-        generation: { ...c.learning.generation, player },
-      },
-    }),
+  const selectedDeckId = decks.some((deck) => deck.id === deckId) ? deckId : '';
+  const [minLoss, setMinLoss] = useWorkspaceSession(
+    'analysis.card-min-loss',
+    legacy ? String(legacy.learning.generation.min_loss) : undefined,
+    String(defaultConfiguration.learning.generation.min_loss),
+    sessionString,
+  );
+  const [player, setPlayer] = useWorkspaceSession(
+    'analysis.card-player',
+    legacy?.learning.generation.player,
     '',
+    (value) =>
+      value === '' || value === '0' || value === '1' ? value : undefined,
   );
-  useEffect(() => {
-    if (profile?.current)
-      setMinLossDraft(String(profile.current.learning.generation.min_loss));
-  }, [profile?.generation, profile?.ready]);
-  const setMinLoss = (value: string) => {
-    setMinLossDraft(value);
-    if (value.trim() && Number.isFinite(Number(value)) && Number(value) >= 0)
-      profile?.updateCurrent((c) => ({
-        ...c,
-        learning: {
-          ...c.learning,
-          generation: { ...c.learning.generation, min_loss: Number(value) },
-        },
-      }));
-  };
   const [busy, setBusy] = useState(false);
   const [needsAnalysis, setNeedsAnalysis] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -224,12 +211,9 @@ export function AddCardsPanel({
     setBusy(false);
   }, [positionId, matchId, gameNo, allowBatch, analysisId]);
   useEffect(() => {
-    if (!ready || profile) return;
-    if (!decks.some((d) => d.id === deckId)) setDeckId(decks[0]?.id || '');
-  }, [decks, deckId, ready]);
-  useEffect(() => {
-    if (deckId && !profile) rememberDeck(deckId);
-  }, [deckId]);
+    if (settled && deckId && !isCollectionScope(deckId) && !selectedDeckId)
+      setDeckId('');
+  }, [deckId, selectedDeckId, settled]);
   const hasDeck = decks.some((deck) => deck.id === deckId);
   const validLoss =
     minLoss.trim() !== '' &&
@@ -377,13 +361,7 @@ export function AddCardsPanel({
       </label>
       {allowBatch && (
         <CardSuggestionsPanel
-          key={JSON.stringify([
-            matchId,
-            deckId,
-            player,
-            minLoss,
-            profile?.generation,
-          ])}
+          key={JSON.stringify([matchId, deckId, player, minLoss])}
           deckId={deckId}
           matchId={matchId}
           player={player}
@@ -420,7 +398,7 @@ export default function LearningWorkspace({
   onChanged: () => void;
   requestedDeck?: { id: string; token: number };
 }) {
-  const profile = useOptionalConfiguration();
+  const legacy = useWorkspaceDefaults();
   const t = useLearningText();
   const overviewText = useStudyOverviewText();
   const searchT = useCardSearchText();
@@ -450,19 +428,26 @@ export default function LearningWorkspace({
   const practiceRequest = useRef<AbortController | null>(null);
   useEffect(() => () => practiceRequest.current?.abort(), []);
   const p = usePositionText();
-  const [draftFilters, setDraftFilters] = useState(emptyCardFilters);
+  const [editedFilters, setDraftFilters] =
+    useState<ReturnType<typeof emptyCardFilters>>();
   const [searchRun, setSearchRun] = useState(0);
   const [historyRevision, setHistoryRevision] = useState(0);
-  const [filters, setFilters] = useProfileValue(
-    (c) => c.learning.filters,
-    (c, filters) => ({ ...c, learning: { ...c.learning, filters } }),
-    emptyCardFilters,
+  const [filters, setFilters] = useWorkspaceSession(
+    'study.filters',
+    legacy?.learning.filters,
+    defaultCardFilters,
+    (value) =>
+      sessionFields(value, {
+        ...emptyCardFilters(),
+        topics: '',
+        game_plan: '',
+      }),
   );
-  useEffect(() => {
-    if (profile?.current) setDraftFilters(profile.current.learning.filters);
-  }, [profile?.generation, profile?.ready]);
+  const draftFilters = editedFilters ?? filters;
   const libraryText = useDeckLibraryText();
-  const [libraryDialog, setLibraryDialog] = useState<'decks' | 'duplicates'>();
+  const [libraryDialog, setLibraryDialog] = useState<
+    'decks' | 'duplicates' | 'anki'
+  >();
   const [cardAction, setCardAction] = useState<CardBatchAction>();
   const [cardNotice, setCardNotice] = useState<string>();
   const [cardSelection, setCardSelection] = useState<{
@@ -485,14 +470,12 @@ export default function LearningWorkspace({
     ready,
     settled,
   } = useDecks(revision);
-  const [deckId, setLocalDeckId] = useState(savedDeck);
-  const setDeckId = (deck_id: string) => {
-    setLocalDeckId(deck_id);
-    profile?.updateCurrent((c) => ({
-      ...c,
-      learning: { ...c.learning, deck_id },
-    }));
-  };
+  const [deckId, setDeckId] = useWorkspaceSession(
+    'study.deck',
+    legacy?.learning.deck_id,
+    savedDeck(),
+    sessionString,
+  );
   const [appliedDeckToken, setAppliedDeckToken] = useState<number>();
   const [missingDeckToken, setMissingDeckToken] = useState<number>();
   const [studying, setStudying] = useState(false);
@@ -502,11 +485,6 @@ export default function LearningWorkspace({
     setDeckId(id);
     setStudying(false);
   }
-  useEffect(() => {
-    // A profile changes browser defaults, not the context of an active card.
-    if (!studying && profile?.current)
-      setLocalDeckId(profile.current.learning.deck_id);
-  }, [studying, profile?.current?.learning.deck_id, profile?.generation]);
   const [next, setNext] = useState<NextCard | null>(null);
   const [revealed, setRevealed] = useState<RevealedCard | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -594,7 +572,9 @@ export default function LearningWorkspace({
     setAnkiNotice(undefined);
     setAnkiError(undefined);
 
-    const path = external ? '/study/anki-imports' : `/decks/${deckId}/import.apkg`;
+    const path = external
+      ? '/study/anki-imports'
+      : `/decks/${deckId}/import.apkg`;
     const failures: string[] = [];
     const importedDecks = new Set<string>();
     let cards = 0;
@@ -673,7 +653,8 @@ export default function LearningWorkspace({
       await sendDeckToAnki(deck.id, { locale });
       setAnkiNotice(practiceT('ankiSent', { deck: deck.name }));
     } catch (failure) {
-      const status = failure instanceof AppError ? failure.params.status : undefined;
+      const status =
+        failure instanceof AppError ? failure.params.status : undefined;
       setAnkiError(
         status === '503'
           ? practiceT('ankiUnavailable')
@@ -692,17 +673,22 @@ export default function LearningWorkspace({
     setAnkiError(undefined);
     try {
       const result = await syncAnkiReviews(deck.id);
-      setAnkiNotice(practiceT('ankiReviewsSynced', {
-        deck: deck.name,
-        profile: result.profile,
-        received: formatNumber(result.received_reviews),
-        sent: formatNumber(result.sent_reviews),
-        matched: formatNumber(result.matched_cards),
-        unmatched: formatNumber(result.unmatched_cards),
-      }));
+      setAnkiNotice(
+        practiceT('ankiReviewsSynced', {
+          deck: deck.name,
+          profile: result.profile,
+          received: formatNumber(result.received_reviews),
+          sent: formatNumber(result.sent_reviews),
+          matched: formatNumber(result.matched_cards),
+          unmatched: formatNumber(result.unmatched_cards),
+        }),
+      );
     } catch (failure) {
-      const status = failure instanceof AppError ? failure.params.status : undefined;
-      setAnkiError(status === '503' ? practiceT('ankiUnavailable') : formatError(failure));
+      const status =
+        failure instanceof AppError ? failure.params.status : undefined;
+      setAnkiError(
+        status === '503' ? practiceT('ankiUnavailable') : formatError(failure),
+      );
     } finally {
       // Anki may have stopped responding after BG Tutor saved incoming reviews.
       setHistoryRevision((value) => value + 1);
@@ -710,7 +696,8 @@ export default function LearningWorkspace({
       setSyncingAnki(false);
     }
   }
-  const selectedItems = cardSelection?.scope === listKey ? [...cardSelection.items.values()] : [];
+  const selectedItems =
+    cardSelection?.scope === listKey ? [...cardSelection.items.values()] : [];
   const selectedCards = new Set(selectedItems.map((item) => item.id));
   const sourceDeck = decks.find((deck) => deck.id === deckId);
   function toggleCards(ids: string[], checked: boolean) {
@@ -737,13 +724,16 @@ export default function LearningWorkspace({
     loadPage: loadCards,
   });
   useEffect(() => {
-    if (!ready || profile) return;
-    if (!isCollectionScope(deckId) && !decks.some((d) => d.id === deckId))
-      setDeckId(decks[0]?.id || ALL_CARDS);
-  }, [decks, deckId, ready]);
+    if (
+      settled &&
+      !studying &&
+      !isCollectionScope(deckId) &&
+      !decks.some((d) => d.id === deckId)
+    )
+      setDeckId(ALL_CARDS);
+  }, [decks, deckId, settled, studying]);
   useEffect(() => {
     generation.current++;
-    if (ready && !profile) rememberDeck(deckId);
     setRevealed(null);
     setNext(null);
     setError(null);
@@ -1053,10 +1043,10 @@ export default function LearningWorkspace({
     setCardNotice(undefined);
     if (mode === 'delete') {
       const cards = selectedItems.map((item) => ({
-          id: item.id,
-          version: item.version,
-          deck_ids: item.browse.decks.map((deck) => deck.id),
-        }));
+        id: item.id,
+        version: item.version,
+        deck_ids: item.browse.decks.map((deck) => deck.id),
+      }));
       if (cards.length === ids.length) setCardAction({ mode, cards });
     } else if (mode === 'add') {
       setCardAction({ mode, ids, source: sourceDeck });
@@ -1163,6 +1153,13 @@ export default function LearningWorkspace({
         )}
         {!studying && !practiceRound && (
           <>
+            <ActionButton
+              icon="refresh"
+              label={practiceT('ankiOverview')}
+              onClick={() => setLibraryDialog('anki')}
+            >
+              {practiceT('ankiOverview')}
+            </ActionButton>
             <input
               ref={externalAnkiInput}
               type="file"
@@ -1199,7 +1196,9 @@ export default function LearningWorkspace({
       {syncingAnki && <p role="status">{practiceT('syncingAnkiReviews')}</p>}
       {ankiNotice && <p role="status">{ankiNotice}</p>}
       {ankiError && (
-        <p className="learning-anki-error" role="alert">{ankiError}</p>
+        <p className="learning-anki-error" role="alert">
+          {ankiError}
+        </p>
       )}
       {!!workspaceError && <p role="alert">{formatError(workspaceError)}</p>}
       {missingDeckToken !== undefined &&
@@ -1300,7 +1299,7 @@ export default function LearningWorkspace({
             onChange={setDraftFilters}
             onSearch={() => {
               setCardNotice(undefined);
-              setFilters({ ...draftFilters });
+              setFilters(normalizeCardFilters(draftFilters));
               setSearchRun((value) => value + 1);
             }}
             onClear={() => {
@@ -1479,6 +1478,12 @@ export default function LearningWorkspace({
           onChanged={onChanged}
         />
       )}
+      {libraryDialog === 'anki' && visible && (
+        <AnkiSyncOverview
+          close={() => setLibraryDialog(undefined)}
+          onSynced={() => setHistoryRevision((value) => value + 1)}
+        />
+      )}
       {cardAction && (
         <CardBatchDialog
           action={cardAction}
@@ -1522,7 +1527,6 @@ export default function LearningWorkspace({
             removeDeck(id);
             const replacement =
               decks.find((deck) => deck.id !== id)?.id || ALL_CARDS;
-            if (!profile) rememberDeck(replacement);
             setDeckId(replacement);
             setStudying(false);
             setNext(null);

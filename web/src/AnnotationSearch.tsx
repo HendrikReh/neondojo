@@ -1,8 +1,8 @@
 import Tooltip from './Tooltip';
-import { useProfileValue } from './useProfileValue';
-import { useOptionalConfiguration } from './ConfigurationProvider';
+import { sessionFields, useWorkspaceSession } from './useWorkspaceSession';
+import { useWorkspaceDefaults } from './ConfigurationProvider';
 import ActionButton from './ActionButton';
-import { useCallback, useEffect, useId, useState, type FormEvent } from 'react';
+import { useCallback, useId, useState, type FormEvent } from 'react';
 import {
   normalizeAnnotationTag,
   searchAnnotations,
@@ -23,31 +23,46 @@ export default function AnnotationSearch({
   revision = 0,
   databaseId,
   onOpen,
+  panelId,
+  open,
 }: {
   revision?: number;
   databaseId?: string;
   onOpen: (hit: AnnotationHit) => void;
+  panelId: string;
+  open: boolean;
 }) {
-  const profile = useOptionalConfiguration();
+  const legacy = useWorkspaceDefaults();
   const { t, formatError } = useAnnotationI18n();
   const l = useLibraryText();
   const htmlId = useId();
-  const [q, setQuery] = useState('');
-  const [tag, setTag] = useState('');
-  const [kind, setKind] = useState<AnnotationKind | ''>('');
-  const [submitted, setSubmitted] = useProfileValue<AnnotationFilters | null>(
-    (c) => c.annotations.filters,
-    (c, filters) => ({ ...c, annotations: { ...c.annotations, filters } }),
-    null,
-  );
-  useEffect(() => {
-    if (!profile?.current) return;
-    const filters = profile.current.annotations.filters;
-    setQuery(filters?.q ?? '');
-    setTag(filters?.tag ?? '');
-    setKind(filters?.kind ?? '');
-    setValidation(null);
-  }, [profile?.generation, profile?.ready]);
+  const [submitted, setSubmitted] =
+    useWorkspaceSession<AnnotationFilters | null>(
+      'library.notes',
+      legacy?.annotations.filters,
+      null,
+      (value) => {
+        if (value === null) return null;
+        const filters = sessionFields<AnnotationFilters>(value, {
+          q: '',
+          tag: '',
+          kind: '',
+          database_id: '',
+        });
+        if (
+          !filters ||
+          !['', 'match', 'game', 'position', 'move'].includes(filters.kind)
+        )
+          return undefined;
+        return filters;
+      },
+    );
+  const [queryInput, setQuery] = useState<string>();
+  const [tagInput, setTag] = useState<string>();
+  const [kindInput, setKind] = useState<AnnotationKind | ''>();
+  const q = queryInput ?? submitted?.q ?? '';
+  const tag = tagInput ?? submitted?.tag ?? '';
+  const kind = kindInput ?? submitted?.kind ?? '';
   const [validation, setValidation] = useState<SearchValidation | null>(null);
   const [searchRun, setSearchRun] = useState(0);
   const loadPage = useCallback(
@@ -58,7 +73,7 @@ export default function AnnotationSearch({
           tag: '',
           kind: '',
           ...submitted,
-          database_id: submitted?.database_id ?? databaseId,
+          database_id: submitted?.database_id || databaseId,
         },
         page,
         signal,
@@ -102,9 +117,7 @@ export default function AnnotationSearch({
   };
 
   return (
-    <details className="annotation-search">
-      <summary>{t('searchTitle')}</summary>
-      <p className="fineprint">{t('searchDescription')}</p>
+    <div className="annotation-search" id={panelId} hidden={!open}>
       <form className="annotation-search-form" onSubmit={submit}>
         <label htmlFor={`${htmlId}-query`}>
           <span>{t('query')}</span>
@@ -240,6 +253,6 @@ export default function AnnotationSearch({
         onPageChange={results.setPage}
         label={t('searchTitle')}
       />
-    </details>
+    </div>
   );
 }

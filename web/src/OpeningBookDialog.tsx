@@ -3,6 +3,7 @@ import ProfileActionDialog from './ProfileActionDialog';
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import { useProfileText } from './profile-messages';
 import ActionButton from './ActionButton';
+import EngineLabel from './EngineLabel';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import LibraryDialog from './LibraryDialog';
 import { request } from './api';
@@ -236,7 +237,14 @@ export default function OpeningBookDialog({
               {status.available && (
                 <>
                   <p>
-                    GNU Backgammon {status.engine_version} ·{' '}
+                    <EngineLabel
+                      details={
+                        status.engine_version
+                          ? `GNU Backgammon ${status.engine_version}`
+                          : 'GNU Backgammon'
+                      }
+                    />
+                    {' · '}
                     {l('contextCount', { count: status.contexts.length })}
                   </p>
                   <p>

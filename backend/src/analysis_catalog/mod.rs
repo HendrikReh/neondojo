@@ -11,7 +11,8 @@ use crate::{
 use axum::{
     Json, Router,
     extract::{Path, Query, State},
-    routing::{get, put},
+    http::StatusCode,
+    routing::{delete, get, put},
 };
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
@@ -96,9 +97,21 @@ pub struct AnalysisSelection {
     pub analysis_id: Option<String>,
 }
 
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+struct DeleteAnalysisQuery {
+    /// The match source revision shown when the deletion was confirmed.
+    #[param(minimum = 0)]
+    source_revision: i64,
+}
+
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/matches/{id}/analyses", get(catalog))
+        .route(
+            "/api/matches/{id}/analyses/{analysis_id}",
+            delete(delete_analysis),
+        )
         .route(
             "/api/matches/{id}/analysis-selection",
             put(update_selection),
@@ -229,6 +242,72 @@ async fn catalog(
     }))
 }
 
+#[utoipa::path(delete,path="/api/matches/{id}/analyses/{analysis_id}",params(("id"=Uuid,Path),("analysis_id"=String,Path),DeleteAnalysisQuery),responses((status=204,description="Saved analysis deleted"),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Analysis catalog")]
+async fn delete_analysis(
+    State(state): State<AppState>,
+    Path((id, analysis_id)): Path<(Uuid, String)>,
+    query: Result<Query<DeleteAnalysisQuery>, axum::extract::rejection::QueryRejection>,
+) -> ApiResult<StatusCode> {
+    let Query(query) = query.map_err(|e| ApiError::invalid(e.body_text()))?;
+    if query.source_revision < 0 {
+        return Err(ApiError::invalid("Source revision must be nonnegative"));
+    }
+    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
+    let revision: i64 =
+        sqlx::query_scalar("SELECT source_revision FROM matches WHERE id=$1 FOR UPDATE")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(anyhow::Error::from)?
+            .ok_or_else(ApiError::missing)?;
+    crate::play::require_review_available_on(&mut *tx, id).await?;
+    if revision != query.source_revision {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            "The match source has changed".into(),
+        ));
+    }
+    let job_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT job_id FROM analysis_catalog_sources WHERE match_id=$1 AND analysis_id=$2",
+    )
+    .bind(id)
+    .bind(&analysis_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?
+    .ok_or_else(ApiError::missing)?;
+    if let Some(job_id) = job_id {
+        let deleted =
+            sqlx::query("DELETE FROM jobs WHERE id=$1 AND status IN ('completed','failed')")
+                .bind(job_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(anyhow::Error::from)?;
+        if deleted.rows_affected() == 0 {
+            return Err(ApiError(
+                StatusCode::CONFLICT,
+                "The analysis is no longer available for deletion".into(),
+            ));
+        }
+    } else {
+        // The original artifact and its loaded marker remain available for export.
+        // Keeping the marker prevents lazy catalog reads from restoring deleted values.
+        sqlx::query("DELETE FROM imported_analyses WHERE match_uuid=$1")
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .map_err(anyhow::Error::from)?;
+    }
+    sqlx::query("DELETE FROM analysis_selections WHERE match_id=$1 AND analysis_id=$2")
+        .bind(id)
+        .bind(&analysis_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 #[utoipa::path(put, path="/api/matches/{id}/analysis-selection", params(("id"=Uuid,Path)),request_body=AnalysisSelectionUpdate,responses((status=200,body=AnalysisSelection),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Analysis catalog")]
 async fn update_selection(
     State(state): State<AppState>,
@@ -271,6 +350,7 @@ async fn update_selection(
 #[openapi(
     paths(
         catalog,
+        delete_analysis,
         update_selection,
         results::position_result,
         results::position_jobs

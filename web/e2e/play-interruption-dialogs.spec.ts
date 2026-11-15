@@ -1,4 +1,5 @@
 import { test, expect, type Page } from './test';
+import { rollDice } from './play-board-actions';
 import {
   historyFixture,
   historySessionId as id,
@@ -51,7 +52,7 @@ async function mandatory(page: Page, title: string) {
   return dialog;
 }
 for (const width of [1440, 390])
-  test(`Rolling in the toolbar still requires Coach acknowledgment at ${width}`, async ({
+  test(`Coach intervenes after a missed double at ${width}`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 1100 });
@@ -69,7 +70,16 @@ for (const width of [1440, 390])
       Object.assign(
         saved,
         writes.length === 1
-          ? { version: 8, pending_decision: pending }
+          ? {
+              version: 8,
+              pending_decision: {
+                ...pending,
+                loss: 0.08,
+                first_loss: 0.08,
+                severity: 'bad',
+                first_severity: 'bad',
+              },
+            }
           : {
               version: 9,
               phase: 'move',
@@ -81,13 +91,7 @@ for (const width of [1440, 390])
       return r.fulfill({ json: saved });
     });
     await reload(page);
-    const next = page.getByTestId('play-board-toolbar');
-    await expect(page.getByRole('alertdialog')).toHaveCount(0);
-    await page.screenshot({
-      path: `/tmp/bgtutor-next-roll-${width}.png`,
-      fullPage: true,
-    });
-    await next.getByRole('button', { name: 'Roll dice', exact: true }).click();
+    await rollDice(page).click();
     const coach = page
       .getByTestId('play-board-toolbar')
       .getByTestId('play-feedback');
@@ -108,6 +112,39 @@ for (const width of [1440, 390])
       { version: 8, action: 'roll', decision_id: decisionId },
     ]);
   });
+test('the dice resume a saved routine Coach roll directly', async ({
+  page,
+}) => {
+  const { saved, writes } = await historyFixture(page);
+  Object.assign(saved, {
+    phase: 'roll',
+    can_double: true,
+    play_mode: 'coach',
+    pending_decision: pending,
+  });
+  saved.position.dice = [];
+  await page.route(`**/api/play/sessions/${id}/actions`, (route) => {
+    writes.push(route.request().postDataJSON());
+    Object.assign(saved, {
+      version: 8,
+      phase: 'move',
+      can_double: false,
+      pending_decision: null,
+    });
+    saved.position.dice = [3, 1];
+    return route.fulfill({ json: saved });
+  });
+  await reload(page);
+  await rollDice(page).click();
+  await expect(page.locator('.play-board')).toHaveAttribute(
+    'data-play-phase',
+    'move',
+  );
+  await expect(page.getByTestId('play-feedback')).toHaveCount(0);
+  expect(writes).toEqual([
+    { version: 7, action: 'roll', decision_id: decisionId },
+  ]);
+});
 test('closing a Hint after a Tutor retry leaves the board free of feedback', async ({
   page,
 }) => {
@@ -166,11 +203,16 @@ test('closing a Hint after a Tutor retry leaves the board free of feedback', asy
     'true',
   );
 });
-test('forced pass and game boundaries use the same modal flow', async ({
+test('a blocked turn passes from the dice gap before the game result dialog', async ({
   page,
 }) => {
   const { saved } = await historyFixture(page);
   Object.assign(saved, { legal_moves: [] });
+  const blockedBoard = Array<number>(26).fill(0);
+  blockedBoard[25] = 1;
+  blockedBoard[22] = -2;
+  blockedBoard[24] = -2;
+  saved.position.board = blockedBoard;
   const writes: unknown[] = [];
   await page.route(`**/api/play/sessions/${id}/actions`, (r) => {
     writes.push(r.request().postDataJSON());
@@ -178,25 +220,71 @@ test('forced pass and game boundaries use the same modal flow', async ({
       saved,
       writes.length === 1
         ? { version: 8, phase: 'game_over', winner: 1 }
-        : { version: 9, phase: 'opening_roll', winner: null },
+        : writes.length === 2
+          ? { version: 9, phase: 'opening_roll', winner: null }
+          : writes.length === 3
+            ? {
+                version: 10,
+                phase: 'opening_result',
+                opening: {
+                  white_die: 3,
+                  black_die: 1,
+                  winner: 0,
+                  rolls: [[3, 1]],
+                },
+              }
+            : { version: 11, phase: 'roll' },
     );
     return r.fulfill({ json: saved });
   });
   await reload(page);
-  let dialog = await mandatory(page, 'No legal move — pass');
-  await dialog
-    .getByRole('button', { name: 'No legal move — pass', exact: true })
-    .click();
-  dialog = await mandatory(page, 'Game finished');
+  const pair = page.getByRole('button', { name: /^No legal move — pass ·/ });
+  await expect(pair).toBeVisible();
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  await expect(page.getByText('Click the dice pair to pass.')).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'No legal move — pass', exact: true }),
+  ).toHaveCount(0);
+  const artwork = pair.locator('.play-die-artwork');
+  await expect(artwork).toHaveCount(2);
+  const faces = await artwork.all();
+  const [left, right] = (
+    await Promise.all(faces.map((face) => face.boundingBox()))
+  )
+    .map((bounds) => bounds!)
+    .sort((a, b) => a.x - b.x);
+  expect(left.x + left.width).toBeLessThan(right.x);
+  const gap = {
+    x: (left.x + left.width + right.x) / 2,
+    y: left.y + left.height / 2,
+  };
+  await page.mouse.move(0, 0);
+  for (const face of faces) {
+    await expect(face).toHaveCSS('filter', 'none');
+  }
+  for (const hoveredFace of faces) {
+    await hoveredFace.hover();
+    for (const face of faces) {
+      await expect(face).toHaveCSS('filter', /drop-shadow\(/);
+    }
+  }
+  await page.mouse.move(gap.x, gap.y);
+  await expect(pair).toHaveCSS('outline-style', 'none');
+  for (const face of faces) {
+    await expect(face).toHaveCSS('filter', /drop-shadow\(/);
+    await expect(face).toHaveCSS('transform', /matrix\(/);
+  }
+  await page.screenshot({ path: test.info().outputPath('pass-dice.png') });
+  await page.mouse.dblclick(gap.x, gap.y);
+  const dialog = await mandatory(page, 'Game finished');
   await expect(dialog).toContainText('Winner: Bot');
   await dialog.getByRole('button', { name: 'Next game', exact: true }).click();
-  dialog = await mandatory(page, 'Opening roll');
-  await expect(
-    dialog.getByRole('button', { name: 'Roll one die each' }),
-  ).toBeEnabled();
+  await expect(rollDice(page)).toBeVisible();
   expect(writes).toEqual([
     { version: 7, action: 'pass' },
     { version: 8, action: 'next_game' },
+    { version: 9, action: 'opening_roll' },
+    { version: 10, action: 'start_opening_move' },
   ]);
 });
 test('match result can be acknowledged to access learning review', async ({
@@ -296,21 +384,21 @@ test('pending Tutor dialog keeps live mode and threshold saving accessible', asy
   await expect(page.getByRole('alertdialog')).toHaveCount(0);
 });
 
-test('Roll failure and reload stay beside the board', async ({ page }) => {
+test('Roll failure and reload return to the board decision', async ({
+  page,
+}) => {
   const { saved } = await historyFixture(page);
   Object.assign(saved, { phase: 'roll', can_double: true });
   await page.route(`**/api/play/sessions/${id}/actions`, (r) =>
     r.fulfill({ status: 503, json: { error: 'Native roll failure' } }),
   );
   await reload(page);
-  const toolbar = page.getByTestId('play-board-toolbar');
-  await toolbar.getByRole('button', { name: 'Roll dice', exact: true }).click();
-  await expect(toolbar.getByRole('alert')).toContainText('Native roll failure');
-  await toolbar
+  await rollDice(page).click();
+  const error = page.locator('.play-workspace').getByRole('alert');
+  await expect(error).toContainText('Native roll failure');
+  await error
     .getByRole('button', { name: 'Reload saved state', exact: true })
     .click();
-  await expect(toolbar.getByRole('alert')).toHaveCount(0);
-  await expect(
-    toolbar.getByRole('button', { name: 'Roll dice', exact: true }),
-  ).toBeEnabled();
+  await expect(error).toHaveCount(0);
+  await expect(rollDice(page)).toBeEnabled();
 });

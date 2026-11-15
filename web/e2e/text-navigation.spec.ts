@@ -1,3 +1,4 @@
+import { openMatchAnalysisOptions } from './analysis-controls';
 import { expect, test, type Locator, type Page } from './test';
 
 test.use({ viewport: { width: 1800, height: 1169 }, actionTimeout: 10000 });
@@ -109,7 +110,9 @@ for (const theme of ['graphite', 'club', 'paper'])
         color,
       );
       await activeText(
-        page.locator('.analysis-panel [role="tablist"] [aria-selected="true"]'),
+        page
+          .getByRole('tablist', { name: 'Results', exact: true })
+          .getByRole('tab', { selected: true }),
         color,
       );
       const selection = page.getByLabel('Displayed analysis', { exact: true });
@@ -139,6 +142,7 @@ for (const theme of ['graphite', 'club', 'paper'])
         page.locator('.source-decision-buttons [aria-pressed="true"]'),
         color,
       );
+      await openMatchAnalysisOptions(page);
       const action = page.getByRole('button', {
         name: 'Recalculate position …',
         exact: true,
@@ -245,13 +249,13 @@ test('text tabs retain keyboard focus, selection and desktop containment', async
 }) => {
   await fixture(page);
   const color = await accent(page);
-  const overview = page.getByRole('tab', { name: 'Overview', exact: true });
+  const overview = page.getByRole('tab', { name: 'Checker', exact: true });
   const positionDetails = overview.locator('..');
   await expect(
     positionDetails.getByRole('tab', { name: 'Evaluation', exact: true }),
   ).toHaveCount(0);
   const overviewPanel = page.getByRole('tabpanel', {
-    name: 'Overview',
+    name: 'Checker',
     exact: true,
   });
   for (const name of ['Candidate moves', 'Dice equity', 'Game rolls'])
@@ -276,7 +280,7 @@ test('text tabs retain keyboard focus, selection and desktop containment', async
   await page.keyboard.press('End');
   await expect(scopes.last()).toBeFocused();
   await activeText(scopes.last(), color);
-  await page.getByRole('tab', { name: 'Overview', exact: true }).click();
+  await page.getByRole('tab', { name: 'Checker', exact: true }).click();
   for (const viewport of [
     { width: 1800, height: 1169 },
     { width: 2560, height: 1440 },

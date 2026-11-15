@@ -148,6 +148,20 @@
   margin: 0;
   max-width: none;
 }
+.settings-thresholds {
+  margin-top: 18px;
+}
+.settings-thresholds h3 {
+  margin-bottom: 8px;
+  font-size: var(--font-size-panel);
+  font-weight: var(--font-weight-semibold);
+}
+.settings-thresholds .settings-field-pair {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.settings-thresholds input {
+  font-variant-numeric: tabular-nums;
+}
 .settings-analysis-row {
   display: flex;
   justify-content: space-between;
@@ -489,4 +503,10 @@
 }
 .library-dialog:has(.settings-draft-actions) {
   max-width: 620px;
+}
+
+@media (max-width: 620px) {
+  .settings-thresholds .settings-field-pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }

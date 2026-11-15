@@ -26,13 +26,12 @@ vi.mock('./useMatchAnalysis', () => ({
 beforeEach(() => vi.stubGlobal('localStorage', { getItem: () => 'en' }));
 afterEach(() => vi.unstubAllGlobals());
 const match = { id: 'match', white: 'Alice', black: 'Bob' } as Match;
-const render = (showStatistics = false, overview = false) =>
+const render = (showStatistics = false) =>
   renderToStaticMarkup(
     createElement(I18nProvider, {
       children: createElement(MatchAnalysisPanel, {
         match,
         gameNo: 3,
-        onPosition: () => {},
         catalog: catalogFixture(
           entryForJob(
             {
@@ -49,8 +48,7 @@ const render = (showStatistics = false, overview = false) =>
           ),
         ),
         showStatistics,
-        showResults: overview || !showStatistics,
-        overview,
+        showResults: !showStatistics,
       }),
     }),
   );
@@ -64,7 +62,7 @@ it('shows explicit severity and game filters and a reset action', () => {
   expect(html).toContain('<option value="3" selected="">Game 3</option>');
   expect(html).not.toContain('All games in this analysis');
 });
-it('starts the focused error list with only actual inaccuracies and errors', () => {
+it('starts the focused error review with only actual inaccuracies and errors', () => {
   expect(render()).toMatch(/type="checkbox"[^>]*checked/);
 });
 it('keeps failed native-job progress and errors available on the statistics tab', () => {
@@ -74,9 +72,8 @@ it('keeps failed native-job progress and errors available on the statistics tab'
   expect(stats).toContain('analysis failed');
   expect(stats).toContain('role="status"');
 });
-it('shows progress and the review list in the overview with statistics hidden', () => {
-  const html = render(false, true);
-  expect(html).toContain('overview-errors');
+it('shows progress once when only the error review is visible', () => {
+  const html = render();
   expect(html).toMatch(/id="inspector-panel-statistics"[^>]* hidden=""/);
   expect(html.match(/class="match-analysis-progress"/g)).toHaveLength(1);
   expect(html.match(/native failure/g)).toHaveLength(1);
@@ -99,7 +96,6 @@ it('does not label a completed position calculation as a completed match or zero
         match,
         gameNo: 3,
         showStatistics: true,
-        onPosition: () => {},
         catalog: catalogFixture({
           ...entryForJob(positionJob),
           scope: 'position',

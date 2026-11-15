@@ -42,6 +42,7 @@ mod game_result;
 
 pub mod benchmarks;
 
+pub mod match_assessment;
 pub mod study;
 
 pub mod recurring_mistakes;

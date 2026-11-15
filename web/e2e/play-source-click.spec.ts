@@ -92,9 +92,7 @@ for (const config of [
     await expect(page.locator('.play-selected-steps')).toHaveText('13/10');
     await point(10).press('Enter');
     await expect(page.locator('.play-selected-steps')).toHaveText('13/10 10/8');
-    await expect(
-      page.locator('[data-play-die-index="0"][data-dice-action="confirm"]'),
-    ).toBeEnabled();
+    await expect(page.locator('[data-dice-action="confirm"]')).toBeEnabled();
     expect(writes).toEqual([]);
     await page.getByRole('button', { name: 'Undo step', exact: true }).click();
     await expect(page.locator('.play-selected-steps')).toHaveText('13/10');
@@ -108,9 +106,7 @@ for (const config of [
       path: test.info().outputPath('source-click.png'),
       fullPage: true,
     });
-    await page
-      .locator('[data-play-die-index="0"][data-dice-action="confirm"]')
-      .click();
+    await page.locator('[data-dice-action="confirm"]').click();
     expect(writes).toEqual([{ version: 0, action: 'move', move: 0 }]);
   });
 
@@ -224,7 +220,7 @@ for (const mode of [
       );
     } else if (owned) {
       const cube = page.locator('.play-board [data-cube]');
-      await expect(cube).toHaveAttribute('aria-disabled', 'true');
+      await expect(cube).toHaveCSS('pointer-events', 'none');
       const box = await cube.boundingBox();
       expect(box).not.toBeNull();
       await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
@@ -241,9 +237,98 @@ for (const mode of [
         'Bar/24 24/22',
       );
     }
-    await expect(
-      page.locator('[data-play-die-index="0"][data-dice-action="confirm"]'),
-    ).toBeEnabled();
+    await expect(page.locator('[data-dice-action="confirm"]')).toBeEnabled();
     await expect(page.locator('.play-checker-selected')).toHaveCount(0);
+  });
+}
+
+for (const sourceKind of ['board', 'bar'] as const) {
+  test(`a ${sourceKind} checker uses its only legal die even when it is shown second`, async ({
+    page,
+  }) => {
+    const saved: PlaySession = {
+      id,
+      version: 0,
+      human_player: 0,
+      human_name: 'Player',
+      match_length: 7,
+      bearoff_direction: 'right',
+      engine: { id: 'gnubg', version: 'GNU Backgammon 1.08.003', plies: 2 },
+      position: {
+        id,
+        match_uuid: id,
+        ordinal: 0,
+        game_no: 1,
+        ply: 0,
+        player: 0,
+        dice: [3, 2],
+        board: Array<number>(26).fill(0),
+        position_id: '4HPwATDgc/ABMA',
+        gnubg_match_id: 'cInlAAAAAAAE',
+        notation: '',
+      },
+      phase: 'move',
+      can_double: false,
+      legal_moves: [],
+      history: [],
+      scores: [0, 0],
+      game_no: 1,
+      winner: null,
+    };
+    const from = sourceKind === 'bar' ? 25 : 13;
+    const to = from - 2;
+    saved.position.board[from] = 1;
+    saved.position.board[from - 3] = -2;
+    saved.position.board[6] = 1;
+    saved.legal_moves = [
+      {
+        notation: sourceKind === 'bar' ? 'bar/23 6/3' : '13/11 6/3',
+        steps: [
+          { from, to },
+          { from: 6, to: 3 },
+        ],
+      },
+    ];
+    // In the board case the preferred die is usable on another checker.
+    if (sourceKind === 'board')
+      saved.legal_moves.push({
+        notation: '6/3/1',
+        steps: [{ from: 6, to: 1 }],
+      });
+    await page.addInitScript(
+      (id) => localStorage.setItem('bgtutor.play-session', id),
+      id,
+    );
+    await page.route(`**/api/play/sessions/${id}`, (route) =>
+      route.fulfill({ json: saved }),
+    );
+    const writes: unknown[] = [];
+    await page.route(`**/api/play/sessions/${id}/actions`, (route) => {
+      writes.push(route.request().postDataJSON());
+      return route.fulfill({
+        json: { ...saved, version: 1, phase: 'roll', legal_moves: [] },
+      });
+    });
+    await page.goto('/');
+    await page.getByRole('tab', { name: 'Playing', exact: true }).click();
+    const source = page.locator(`[data-checker-hover-point="${from}"]`);
+    await source.hover();
+    await expect(page.locator(`[data-play-destination="${to}"]`)).toBeVisible();
+    await source.click();
+    const first = page.locator('[data-play-die-index="0"]');
+    const second = page.locator('[data-play-die-index="1"]');
+    await expect(page.locator('.play-selected-steps')).toHaveText(
+      sourceKind === 'bar' ? 'Bar/23' : '13/11',
+    );
+    await expect(first).toHaveAttribute('data-used', 'false');
+    await expect(second).toHaveAttribute('data-used', 'true');
+    await page.getByRole('button', { name: 'Undo step', exact: true }).click();
+    await expect(second).toHaveAttribute('data-used', 'false');
+    await source.click();
+    await page.locator('[data-checker-hover-point="6"]').click();
+    const confirm = page.locator('[data-dice-action="confirm"]');
+    await expect(confirm).toBeEnabled();
+    await first.click();
+    expect(writes).toEqual([{ version: 0, action: 'move', move: 0 }]);
   });
 }

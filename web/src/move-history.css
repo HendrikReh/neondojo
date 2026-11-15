@@ -1,4 +1,14 @@
 /* Reference move history: notation, player/dice context, numeric loss. */
+.analysis-workspace .move-history-filter {
+  min-width: 0;
+  flex-shrink: 0;
+  margin: 6px 3px 0;
+}
+.analysis-workspace .move-history-status {
+  margin: 8px 4px;
+  color: var(--ui-muted);
+  font-size: var(--font-size-meta);
+}
 :is(.analysis-workspace, .play-workspace)
   .moves-panel
   .moves-list
@@ -142,7 +152,7 @@
   background: var(--ui-bad-bg);
 }
 :is(.analysis-workspace, .play-workspace)
-  .move-assessment-very_bad
+  :is(.move-assessment-blunder, .move-assessment-very_bad)
   .move-assessment-marker {
   color: var(--ui-danger-text);
   background: var(--ui-danger-bg);

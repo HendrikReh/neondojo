@@ -161,7 +161,7 @@ pub(super) fn stage_choice(
         .find(|a| a.action == action && a.move_index == move_index)
         .ok_or_else(|| ApiError::invalid("Analysis did not cover the selected decision"))?;
     let loss = chosen.loss;
-    let mark = crate::model::MoveSeverity::from_normalized_loss(loss).as_str();
+    let mark = session.error_thresholds.classify(loss).as_str();
     let rating_decisions = chosen.rating_decisions;
     let assisted = decision.assisted;
     if decision.original_action.is_none() {
@@ -225,6 +225,24 @@ pub(super) fn present(mut session: PlaySession) -> PlaySession {
     }
     session
 }
+
+pub(super) fn should_pause_for_feedback(session: &PlaySession, action: &PlayAction) -> bool {
+    match session.play_mode {
+        PlayMode::Competition => false,
+        PlayMode::Training => session.training_auto_analysis && !matches!(action, PlayAction::Roll),
+        PlayMode::Coach => match action {
+            PlayAction::Move | PlayAction::Pass => false,
+            PlayAction::Roll => session
+                .pending_decision
+                .as_ref()
+                .and_then(|decision| decision.loss)
+                .is_some_and(|loss| loss >= session.error_thresholds.error),
+            _ => true,
+        },
+        PlayMode::Tutor => session.pending_decision.as_ref().is_some_and(|d| d.warning),
+    }
+}
+
 /// Preserve every reached competition position in mixed-mode matches. Native
 /// actual-play statistics are the baseline; stored attempts replace only the
 /// decisions for which feedback captured both original and final choices.
@@ -727,6 +745,25 @@ mod tests {
         assert!(!pure.assisted);
     }
     #[test]
+    fn coach_roll_warning_uses_the_default_error_boundary() {
+        let mut state = session(PlayMode::Coach);
+        for (loss, pauses) in [(0.019999, false), (0.02, true)] {
+            state.pending_decision = None;
+            let roll = PlayAlternative {
+                rating_decisions: 1,
+                action: "roll".into(),
+                move_index: None,
+                notation: "No double".into(),
+                loss,
+                equity: None,
+                probabilities: None,
+            };
+            assert!(stage_choice(&mut state, "roll", None, vec![roll]).is_ok());
+            assert_eq!(should_pause_for_feedback(&state, &PlayAction::Roll), pauses);
+        }
+    }
+
+    #[test]
     fn tutor_threshold_does_not_change_severity() {
         let mut state = session(PlayMode::Tutor);
         state.tutor_threshold = 0.12;
@@ -735,6 +772,6 @@ mod tests {
             .unwrap();
         let pending = state.pending_decision.unwrap();
         assert!(!pending.warning);
-        assert_eq!(pending.severity.as_deref(), Some("bad"));
+        assert_eq!(pending.severity.as_deref(), Some("blunder"));
     }
 }

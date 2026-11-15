@@ -294,17 +294,25 @@ impl SageEngine {
         Ok(Analysis {
             engine: self.version.clone(),
             plies,
-            candidates: candidates
-                .into_iter()
-                .enumerate()
-                .map(|(index, candidate)| Candidate {
-                    rank: index as i32 + 1,
-                    notation: candidate.notation,
-                    equity: candidate.equity,
-                    probabilities: candidate.probabilities,
-                })
-                .collect(),
+            candidates: self.ranked_candidates(candidates),
         })
+    }
+
+    fn ranked_candidates(&self, candidates: Vec<SageCheckerCandidate>) -> Vec<Candidate> {
+        candidates
+            .into_iter()
+            .enumerate()
+            .map(|(index, candidate)| Candidate {
+                rank: index as i32 + 1,
+                notation: candidate.notation,
+                // MoveAnalysis contains the final board. The sidecar's notation
+                // is derived from it and does not describe a recorded engine path.
+                path: None,
+                equity: candidate.equity,
+                probabilities: candidate.probabilities,
+                plies: Some(self.snapshot.plies),
+            })
+            .collect()
     }
 
     pub async fn analyze_checker_choices(

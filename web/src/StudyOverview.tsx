@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import ActionButton from './ActionButton';
-import { useOptionalConfiguration } from './ConfigurationProvider';
+import { useConfirmedConfiguration } from './ConfigurationProvider';
 import MistakeGroupTable from './MistakeGroupTable';
 import MistakePlayerSelect from './MistakePlayerSelect';
 import RecurringMistakePractice from './RecurringMistakePractice';
@@ -39,12 +39,11 @@ type Result<T> =
 const loading = { status: 'loading' } as const;
 
 export default function StudyOverview(props: Props) {
-  const profile = useOptionalConfiguration();
+  const confirmed = useConfirmedConfiguration();
   return (
     <Overview
-      key={profile?.activeProfile?.id ?? ''}
       {...props}
-      configuredPlayer={profile?.current?.general.player_name ?? ''}
+      configuredPlayer={confirmed?.general.player_name ?? ''}
     />
   );
 }

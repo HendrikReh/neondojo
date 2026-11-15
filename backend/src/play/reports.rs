@@ -8,6 +8,10 @@ pub(super) fn money_finished(session: &PlaySession) -> bool {
     session.match_length == 0 && matches!(session.phase, PlayPhase::GameOver | PlayPhase::MatchOver)
 }
 pub(super) async fn build(session: &mut PlaySession, sgf: &str, path: &str) -> Result<()> {
+    if session.match_forfeited && sgf.is_empty() {
+        session.review = Some(feedback::build_review(session, Vec::new()));
+        return Ok(());
+    }
     let source = library::normalize_native_setup_turn(sgf.to_owned())?;
     let engine = session.analysis_engine(path)?;
     let numbers = if session.match_length == 0 {

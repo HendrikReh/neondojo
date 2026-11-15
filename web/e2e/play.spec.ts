@@ -1,5 +1,5 @@
 import { applyAndCloseSettings } from './settings-actions';
-import { rollDice, doubleCube } from './play-board-actions';
+import { rollDice, doubleCube, passDice } from './play-board-actions';
 import { test, expect } from './test';
 const initialBoard = [
   0, -2, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, -5, 5, 0, 0, 0, -3, 0, -5, 0, 0, 0, 0, 2,
@@ -84,25 +84,21 @@ for (const direction of ['right', 'left'])
       direction,
     );
     await expect(
-      page.getByText('GNU Backgammon 1.08.003 native', { exact: false }),
-    ).toBeVisible();
+      page.locator('.play-match-engine .engine-label-details'),
+    ).toHaveText('GNU Backgammon 1.08.003');
     const point = (n: number) => page.locator(`[data-play-point="${n}"]`);
     await expect(
-      page.locator('[data-play-die-index="0"][data-dice-action="confirm"]'),
+      page.locator('[data-dice-action="confirm"]'),
     ).not.toBeVisible();
     await point(8).click();
     await point(6).click();
-    await expect(
-      page.locator('[data-play-die-index="0"][data-dice-action="confirm"]'),
-    ).toBeEnabled();
+    await expect(page.locator('[data-dice-action="confirm"]')).toBeEnabled();
     await page.getByRole('button', { name: 'Undo step', exact: true }).click();
     await expect(
-      page.locator('[data-play-die-index="0"][data-dice-action="confirm"]'),
+      page.locator('[data-dice-action="confirm"]'),
     ).not.toBeVisible();
     await point(6).press('Enter');
-    await page
-      .locator('[data-play-die-index="0"][data-dice-action="confirm"]')
-      .click();
+    await page.locator('[data-dice-action="confirm"]').click();
     expect(writes).toEqual([{ version: 0, action: 'move', move: 0 }]);
     await expect(rollDice(page)).toBeVisible();
     await page.reload();
@@ -146,9 +142,7 @@ test('black perspective is stable and uses archive artwork with readable labels'
   );
   await page.locator('[data-play-point="17"]').click();
   await page.locator('[data-play-point="19"]').click();
-  await expect(
-    page.locator('[data-play-die-index="0"][data-dice-action="confirm"]'),
-  ).toBeEnabled();
+  await expect(page.locator('[data-dice-action="confirm"]')).toBeEnabled();
 });
 
 test('Playing restores its last session directly without a saved-match list', async ({
@@ -202,9 +196,7 @@ test('a bot response remains owned when switching workspaces while it is thinkin
   for (const from of [8, 6]) {
     await page.locator(`[data-play-point="${from}"]`).click();
   }
-  await page
-    .locator('[data-play-die-index="0"][data-dice-action="confirm"]')
-    .click();
+  await page.locator('[data-dice-action="confirm"]').click();
   const thinking = page
     .getByRole('tabpanel', { name: 'Playing', exact: true })
     .getByRole('status')
@@ -298,9 +290,7 @@ test('cube responses, forced pass and next game submit only the available action
   await page.getByRole('button', { name: 'Start match', exact: true }).click();
   await expect(rollDice(page)).toHaveCount(0);
   await page.getByRole('button', { name: 'Take double', exact: true }).click();
-  await page
-    .getByRole('button', { name: 'No legal move — pass', exact: true })
-    .click();
+  await passDice(page).press('Enter');
   await expect(page.getByText('Winner: Player', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Next game', exact: true }).click();
   await expect(doubleCube(page)).toBeVisible();
@@ -339,15 +329,43 @@ for (const theme of ['forest', 'bgblitz:bg-earth'])
     await expect(page.locator('[data-play-destination="8"]')).toHaveCount(0);
     await page.locator('.play-header h1').hover();
     await expect(page.locator('[data-play-destination]')).toHaveCount(0);
+    const pair = page.getByRole('button', { name: /^Swap dice order ·/ });
+    await expect(pair).toHaveCount(1);
+    const artwork = pair.locator('.play-die-artwork');
+    await expect(artwork).toHaveCount(2);
+    const faces = await artwork.all();
+    const resting = (
+      await Promise.all(faces.map((face) => face.boundingBox()))
+    ).map((bounds) => bounds!);
+    const [left, right] = [...resting].sort((a, b) => a.x - b.x);
+    expect(left.x + left.width).toBeLessThan(right.x);
+    const gap = {
+      x: (left.x + left.width + right.x) / 2,
+      y: left.y + left.height / 2,
+    };
+    for (const hovered of faces) {
+      await hovered.hover();
+      for (const face of faces) {
+        await expect(face).toHaveCSS('filter', /drop-shadow\(/);
+      }
+    }
+    await page.mouse.move(gap.x, gap.y);
+    await expect(pair).toHaveCSS('outline-style', 'none');
+    for (const face of faces) {
+      await expect(face).toHaveCSS('filter', /drop-shadow\(/);
+      await expect(face).toHaveCSS('transform', /matrix\(/);
+    }
+    await page.screenshot({ path: test.info().outputPath('swap-dice.png') });
+    await page.mouse.click(gap.x, gap.y);
+    await expect(pair).toHaveAccessibleName('Swap dice order · 2, 3');
+    await pair.press('Space');
+    await expect(pair).toHaveAccessibleName('Swap dice order · 3, 2');
     for (let corner = 0; corner < 4; corner++) {
-      const die = page.locator(`[data-play-die-index="${corner % 2}"]`);
-      const size = await die.boundingBox();
-      expect(size).not.toBeNull();
-      const position = {
-        x: corner % 2 ? size!.width - 2 : 2,
-        y: corner < 2 ? 2 : size!.height - 2,
-      };
-      await die.click({ position });
+      const size = resting[corner % 2];
+      await page.mouse.click(
+        size.x + (corner % 2 ? size.width - 2 : 2),
+        size.y + (corner < 2 ? 2 : size.height - 2),
+      );
       await hover();
       await expect(
         page.locator(`[data-play-destination="${corner % 2 ? 10 : 11}"]`),
@@ -362,18 +380,18 @@ for (const theme of ['forest', 'bgblitz:bg-earth'])
       'aria-disabled',
       'true',
     );
+    await expect(page.locator('[data-dice-action="swap"]')).toHaveCount(0);
+    await page.mouse.click(gap.x, gap.y);
     await page.locator('[data-checker-hover-point="10"]').hover();
     await expect(page.locator('[data-play-destination="8"]')).toBeVisible();
     await expect(
-      page.locator('[data-play-die-index="0"][data-dice-action="confirm"]'),
+      page.locator('[data-dice-action="confirm"]'),
     ).not.toBeVisible();
     await page.locator('[data-checker-hover-point="10"]').click();
-    await expect(
-      page.locator('[data-play-die-index="0"][data-dice-action="confirm"]'),
-    ).toBeEnabled();
+    await expect(page.locator('[data-dice-action="confirm"]')).toBeEnabled();
     await page.getByRole('button', { name: 'Undo step', exact: true }).click();
     await expect(
-      page.locator('[data-play-die-index="0"][data-dice-action="confirm"]'),
+      page.locator('[data-dice-action="confirm"]'),
     ).not.toBeVisible();
   });
 
@@ -418,7 +436,5 @@ test('a black hit after an already moved checker remains confirmable with source
     await expect(page.locator(`[data-play-destination="${to}"]`)).toBeVisible();
     await checker.click();
   }
-  await expect(
-    page.locator('[data-play-die-index="0"][data-dice-action="confirm"]'),
-  ).toBeEnabled();
+  await expect(page.locator('[data-dice-action="confirm"]')).toBeEnabled();
 });

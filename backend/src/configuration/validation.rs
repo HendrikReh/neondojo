@@ -114,6 +114,12 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
         120,
         false,
     )?;
+    if !config.analysis.error_thresholds.valid() {
+        return Err(ConfigurationError::invalid(
+            "analysis.error_thresholds",
+            "Error thresholds must increase strictly, be greater than zero, and be at most one",
+        ));
+    }
     if !engine_depths(&enum_string(&config.analysis.engine), "analysis")
         .contains(&config.analysis.plies)
     {
@@ -172,6 +178,18 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
         (
             "appearance.analysis_overview_board_width",
             config.appearance.analysis_overview_board_width,
+        ),
+        (
+            "appearance.analysis_errors_board_width",
+            config.appearance.analysis_errors_board_width,
+        ),
+        (
+            "appearance.analysis_statistics_board_width",
+            config.appearance.analysis_statistics_board_width,
+        ),
+        (
+            "appearance.analysis_notes_board_width",
+            config.appearance.analysis_notes_board_width,
         ),
     ] {
         if width.is_some_and(|width| !(min..=max).contains(&i64::from(width))) {
@@ -489,7 +507,7 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
     choice(
         "review.severity",
         &config.review.severity,
-        &["", "none", "doubtful", "bad", "very_bad"],
+        &["", "none", "doubtful", "bad", "blunder", "very_bad"],
     )?;
     for (path, value) in [
         (
@@ -522,7 +540,6 @@ pub(crate) async fn resources(
     config: &ProfileConfiguration,
     engine: bool,
     book: bool,
-    previous: Option<&ProfileConfiguration>,
 ) -> Result<Vec<ConfigurationIssue>> {
     let mut issues = vec![];
     if engine {
@@ -587,77 +604,6 @@ pub(crate) async fn resources(
             });
         }
     }
-    let mut references = vec![(
-        "library.database_id",
-        config.library.database_id.clone(),
-        "databases",
-    )];
-    if let Some(id) = config.positions.definition.database_id {
-        references.push((
-            "positions.definition.database_id",
-            id.to_string(),
-            "databases",
-        ));
-    }
-    if let Some(id) = config
-        .annotations
-        .filters
-        .as_ref()
-        .and_then(|f| f.database_id.clone())
-    {
-        references.push(("annotations.filters.database_id", id, "databases"));
-    }
-    if !config.learning.is_collection_scope() {
-        references.push(("learning.deck_id", config.learning.deck_id.clone(), "decks"));
-    }
-    for (path, id, table) in references {
-        if id.is_empty() {
-            continue;
-        }
-        // Existing unavailable selections stay readable/editable. Ordinary
-        // edits validate only references that the user actually changed;
-        // activation and availability checks pass no previous configuration.
-        if previous.is_some_and(|old| match path {
-            "library.database_id" => old.library.database_id == id,
-            "learning.deck_id" => old.learning.deck_id == id,
-            "positions.definition.database_id" => {
-                old.positions
-                    .definition
-                    .database_id
-                    .map(|value| value.to_string())
-                    .as_deref()
-                    == Some(id.as_str())
-            }
-            "annotations.filters.database_id" => {
-                old.annotations
-                    .filters
-                    .as_ref()
-                    .and_then(|filter| filter.database_id.as_deref())
-                    == Some(id.as_str())
-            }
-            _ => false,
-        }) {
-            continue;
-        }
-        let id =
-            Uuid::parse_str(&id).map_err(|_| ConfigurationError::invalid(path, "Expected UUID"))?;
-        let exists: bool =
-            sqlx::query_scalar(&format!("SELECT EXISTS(SELECT 1 FROM {table} WHERE id=$1)"))
-                .bind(id)
-                .fetch_one(&mut **tx)
-                .await?;
-        if !exists {
-            issues.push(ConfigurationIssue {
-                path: path.into(),
-                code: "reference_missing".into(),
-                message: format!(
-                    "Referenced {} no longer exists",
-                    if table == "decks" { "deck" } else { "database" }
-                ),
-            });
-        }
-    }
-    let _ = state;
     Ok(issues)
 }
 pub(crate) fn enum_string<T: Serialize>(value: &T) -> String {

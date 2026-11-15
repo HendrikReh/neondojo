@@ -1,7 +1,10 @@
 import { applyAndCloseSettings } from './settings-actions';
 import {
-  openMatchCalculation,
+  calculateDiceEquity,
+  openFullMatchAnalysis,
+  openMatchAnalysisOptions,
   openPositionCalculation,
+  submitFullMatchAnalysis,
 } from './analysis-controls';
 import { test, expect, type Page } from './test';
 import { readFileSync } from 'node:fs';
@@ -278,9 +281,6 @@ test('playing groups engine, feedback and game preferences without desktop scrol
     expect(engineBox.x + engineBox.width).toBeLessThan(strengthBox.x);
     await expect(
       feedback.getByLabel('Default play mode', { exact: true }),
-    ).toBeInViewport({ ratio: 1 });
-    await expect(
-      feedback.getByLabel('Tutor warning threshold', { exact: true }),
     ).toBeInViewport({ ratio: 1 });
     await expect(
       feedback.getByLabel('Open training analysis automatically', {
@@ -695,12 +695,12 @@ for (const plies of [3, 4]) {
         `(;GM[6]PW[Depth ${crypto.randomUUID()}]PB[Opponent]MI[length:7]AE[a:y]AW[d][e][f]AB[s][t][u]PL[W];W[31fccb])`,
       ),
     });
-    const initialCalculation = await openPositionCalculation(page);
+    const initialPositionCalculation = await openPositionCalculation(page);
     await expect(
-      initialCalculation.getByLabel('Search depth', { exact: true }),
+      initialPositionCalculation.getByLabel('Search depth', { exact: true }),
     ).toHaveValue('2');
     await page.keyboard.press('Escape');
-    await openMatchCalculation(page);
+    await openMatchAnalysisOptions(page);
     await expect(
       page.getByLabel('Match analysis depth', { exact: true }),
     ).toHaveValue('2');
@@ -713,7 +713,7 @@ for (const plies of [3, 4]) {
     await profile.selectOption(String(plies));
     await applyAndCloseSettings(dialog);
     expect(backend.writes.at(-1)?.analysis_plies).toBe(plies);
-    await openMatchCalculation(page);
+    await openMatchAnalysisOptions(page);
     await expect(
       page.getByLabel('Match analysis depth', { exact: true }),
     ).toHaveValue(String(plies));
@@ -746,9 +746,9 @@ for (const plies of [3, 4]) {
     if (plies === 4) {
       for (const scope of ['dice', 'game', 'match']) {
         if (scope !== 'dice') {
-          await openMatchCalculation(page);
+          await openMatchAnalysisOptions(page);
           await page
-            .getByLabel('Analysis scope', { exact: true })
+            .getByLabel('Result scope', { exact: true })
             .selectOption(scope);
         }
         const submitted = page.waitForResponse(
@@ -760,17 +760,11 @@ for (const plies of [3, 4]) {
                   new URL(response.url()).pathname,
                 )),
         );
-        await page
-          .getByRole(scope === 'dice' ? 'tab' : 'button', {
-            name:
-              scope === 'dice'
-                ? 'Dice equity'
-                : scope === 'game'
-                  ? 'Analyze game'
-                  : 'Analyze entire match',
-            exact: true,
-          })
-          .click();
+        if (scope === 'dice') await calculateDiceEquity(page);
+        else if (scope === 'match')
+          await submitFullMatchAnalysis(page, await openFullMatchAnalysis(page));
+        else
+          await page.getByRole('button', { name: 'Analyze game', exact: true }).click();
         const response = await submitted;
         expect(response.status()).toBe(202);
         const request = response.request().postDataJSON();

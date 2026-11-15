@@ -59,3 +59,42 @@ export function useWorkspaceSession<T>(
       ),
   ] as const;
 }
+
+export function useWorkspaceLayout<T>(
+  name: string,
+  seed: T | undefined,
+  fallback: T,
+  decode: (stored: unknown) => T | undefined,
+) {
+  return useWorkspaceSession(name, seed, fallback, decode, 'layout');
+}
+
+export function layoutColumns<Id extends string>(
+  value: unknown,
+  allowed: readonly Id[],
+) {
+  if (!Array.isArray(value) || value.length === 0) return;
+  const columns = value.filter((id): id is Id => allowed.includes(id));
+  if (
+    columns.length === value.length &&
+    new Set(columns).size === columns.length
+  )
+    return columns;
+}
+
+export const sessionString = (value: unknown) =>
+  typeof value === 'string' ? value : undefined;
+
+export function sessionFields<T extends object>(
+  value: unknown,
+  defaults: T,
+): T | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    return undefined;
+  const fields = { ...defaults };
+  for (const key of Object.keys(defaults) as (keyof T)[]) {
+    const stored = (value as T)[key];
+    if (typeof stored === typeof defaults[key]) fields[key] = stored;
+  }
+  return fields;
+}

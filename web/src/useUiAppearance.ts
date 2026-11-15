@@ -1,4 +1,4 @@
-import { useOptionalConfiguration } from './ConfigurationProvider';
+import { useConfirmedConfiguration } from './ConfigurationProvider';
 import { useLayoutEffect, useState, useSyncExternalStore } from 'react';
 import {
   applyUiAppearance,
@@ -28,12 +28,12 @@ export function useResolvedUiMode(mode: UiMode) {
 }
 
 export function useUiAppearance() {
-  const configuration = useOptionalConfiguration();
+  const confirmed = useConfirmedConfiguration();
   const [localAppearance, setAppearance] = useState(readUiAppearance);
-  const appearance = configuration?.current
+  const appearance = confirmed
     ? {
-        theme: configuration.current.appearance.ui_theme,
-        mode: configuration.current.appearance.mode,
+        theme: confirmed.appearance.ui_theme,
+        mode: confirmed.appearance.mode,
       }
     : localAppearance;
   const resolvedMode = useResolvedUiMode(appearance.mode);

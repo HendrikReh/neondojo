@@ -10,6 +10,7 @@ import './database-backup.css';
 
 const path = '/database-backup';
 const checkPath = '/database-backup/check';
+const targetCountsPath = '/database-backup/target-counts';
 type CheckResponse =
   paths['/api/database-backup/check']['post']['responses'][200]['content']['application/json'];
 type Restore = paths['/api/database-backup']['post'];
@@ -20,6 +21,26 @@ type TransferState =
   { phase: 'idle' | 'pending' | 'done' } | { phase: 'error'; error: unknown };
 
 type BackupContents = NonNullable<CheckResponse['contents']>;
+type TargetCounts =
+  paths['/api/database-backup/target-counts']['get']['responses'][200]['content']['application/json'];
+
+type TargetCountsRequest =
+  | { status: 'loading' }
+  | { status: 'ready'; counts: TargetCounts }
+  | { status: 'error'; error: unknown };
+
+const countLabels = {
+  matches: 'matches',
+  saved_positions: 'savedPositions',
+  learning_cards: 'learningCards',
+} as const;
+const countKeys = ['matches', 'saved_positions', 'learning_cards'] as const;
+
+function validCounts(counts: TargetCounts) {
+  return countKeys.every(
+    (key) => Number.isSafeInteger(counts[key]) && counts[key] >= 0,
+  );
+}
 
 type BackupCheck = { file: File } & (
   | { phase: 'pending' }
@@ -40,6 +61,8 @@ export default function DatabaseBackupWorkspace() {
     phase: 'idle',
   });
   const [restoreState, setRestoreState] = useState<TransferState>();
+  const [targetCounts, setTargetCounts] = useState<TargetCountsRequest>();
+  const activeTargetRequest = useRef<AbortController>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const restoreTrigger = useRef<HTMLButtonElement>(null);
   const restoreError = useRef<HTMLParagraphElement>(null);
@@ -49,7 +72,13 @@ export default function DatabaseBackupWorkspace() {
   const restored = restoreState?.phase === 'done';
   const busy = exporting || restoring;
 
-  useEffect(() => () => activeCheck.current?.abort(), []);
+  useEffect(
+    () => () => {
+      activeCheck.current?.abort();
+      activeTargetRequest.current?.abort();
+    },
+    [],
+  );
 
   useEffect(() => {
     if (restoreState?.phase === 'error') restoreError.current?.focus();
@@ -57,8 +86,34 @@ export default function DatabaseBackupWorkspace() {
   }, [restoreState]);
 
   function closeConfirmation() {
+    activeTargetRequest.current?.abort();
     setRestoreState(undefined);
+    setTargetCounts(undefined);
     requestAnimationFrame(() => restoreTrigger.current?.focus());
+  }
+
+  async function loadTargetCounts() {
+    activeTargetRequest.current?.abort();
+    const controller = new AbortController();
+    activeTargetRequest.current = controller;
+    setTargetCounts({ status: 'loading' });
+    try {
+      const counts = await request<TargetCounts | null>(targetCountsPath, {
+        signal: controller.signal,
+        cache: 'no-store',
+      });
+      if (!counts || !validCounts(counts)) {
+        throw new AppError('error.invalidResponse');
+      }
+      if (!controller.signal.aborted)
+        setTargetCounts({ status: 'ready', counts });
+    } catch (error) {
+      if (!controller.signal.aborted)
+        setTargetCounts({ status: 'error', error });
+    } finally {
+      if (activeTargetRequest.current === controller)
+        activeTargetRequest.current = null;
+    }
   }
 
   async function exportBackup() {
@@ -92,11 +147,7 @@ export default function DatabaseBackupWorkspace() {
       if (
         (status === 'compatible' && !contents) ||
         (contents &&
-          (![
-            contents.matches,
-            contents.saved_positions,
-            contents.learning_cards,
-          ].every((value) => Number.isSafeInteger(value) && value >= 0) ||
+          (!validCounts(contents) ||
             (contents.created_at != null &&
               (typeof contents.created_at !== 'string' ||
                 !Number.isFinite(Date.parse(contents.created_at))))))
@@ -113,7 +164,7 @@ export default function DatabaseBackupWorkspace() {
   }
 
   async function restoreBackup() {
-    if (!file || !compatible) return;
+    if (!file || !compatible || targetCounts?.status !== 'ready') return;
     setRestoreState({ phase: 'pending' });
     const query: Restore['parameters']['query'] = { replace: true };
     try {
@@ -218,7 +269,9 @@ export default function DatabaseBackupWorkspace() {
             {t.incompatible}
           </p>
         )}
-        {contents && <BackupContentsSummary contents={contents} />}
+        {contents && (
+          <BackupContentsSummary contents={contents} filename={file?.name} />
+        )}
         {check?.phase === 'error' && (
           <>
             <p className="error" role="alert">
@@ -243,7 +296,10 @@ export default function DatabaseBackupWorkspace() {
             label={t.review}
             aria-describedby="database-backup-selected-file database-backup-check-status"
             disabled={!compatible || busy}
-            onClick={() => setRestoreState({ phase: 'idle' })}
+            onClick={() => {
+              setRestoreState({ phase: 'idle' });
+              void loadTargetCounts();
+            }}
           />
         </div>
       </section>
@@ -276,6 +332,29 @@ export default function DatabaseBackupWorkspace() {
                   <dt>{t.file}</dt>
                   <dd className="database-backup-filename">{file?.name}</dd>
                 </dl>
+                {contents && (
+                  <BackupContentsSummary
+                    contents={contents}
+                    filename={file?.name}
+                    target={targetCounts}
+                  />
+                )}
+                {targetCounts?.status === 'loading' && (
+                  <p role="status">{t.targetLoading}</p>
+                )}
+                {targetCounts?.status === 'error' && (
+                  <>
+                    <p className="error" role="alert">
+                      {t.targetError} {formatError(targetCounts.error)}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void loadTargetCounts()}
+                    >
+                      {t.targetRetry}
+                    </button>
+                  </>
+                )}
                 <p
                   className="database-backup-warning"
                   id="database-backup-confirm-warning"
@@ -312,7 +391,11 @@ export default function DatabaseBackupWorkspace() {
                     icon="import"
                     label={t.replace}
                     aria-describedby="database-backup-confirm-warning database-backup-validation"
-                    disabled={!compatible || restoring}
+                    disabled={
+                      !compatible ||
+                      restoring ||
+                      targetCounts?.status !== 'ready'
+                    }
                     onClick={() => void restoreBackup()}
                   />
                 </div>
@@ -325,40 +408,121 @@ export default function DatabaseBackupWorkspace() {
   );
 }
 
-function BackupContentsSummary({ contents }: { contents: BackupContents }) {
+function backupFilenameTimestamp(filename: string): string | undefined {
+  // The backend formats its export filenames in UTC.
+  const match =
+    /^bgtutor-(\d{4}-\d{2}-\d{2})-(\d{2})(\d{2})(\d{2})\.bgtutor-backup$/.exec(
+      filename,
+    );
+  if (!match || match[0] !== filename) return undefined;
+  const [, day, hours, minutes, seconds] = match;
+  const time = `${day}T${hours}:${minutes}:${seconds}Z`;
+  const date = new Date(time);
+  // A round trip rejects normalized dates such as February 30 or 24:00.
+  if (
+    Number.isFinite(date.getTime()) &&
+    date.toISOString() === time.replace('Z', '.000Z')
+  ) {
+    return time;
+  }
+}
+
+function BackupContentsSummary({
+  contents,
+  filename,
+  target,
+}: {
+  contents: BackupContents;
+  filename?: string;
+  target?: TargetCountsRequest;
+}) {
   const { locale, formatNumber } = useI18n();
   const t = databaseBackupMessages[locale];
+  const targetCounts = target?.status === 'ready' ? target.counts : undefined;
+  const filenameTimestamp =
+    contents.created_at == null && filename
+      ? backupFilenameTimestamp(filename)
+      : undefined;
+  const createdAt = contents.created_at ?? filenameTimestamp;
+  const creationTime = createdAt ? (
+    <>
+      <time dateTime={createdAt}>
+        {new Intl.DateTimeFormat(locale, {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        }).format(new Date(createdAt))}
+      </time>
+      {filenameTimestamp && ` (${t.dateFromFilename})`}
+    </>
+  ) : (
+    t.missingDate
+  );
+
   return (
-    <section className="database-backup-contents" aria-label={t.contents}>
+    <section
+      className="database-backup-contents"
+      aria-label={target ? t.compareContents : t.contents}
+    >
       <dl>
         <div>
           <dt>{t.createdAt}</dt>
-          <dd>
-            {contents.created_at ? (
-              <time dateTime={contents.created_at}>
-                {new Intl.DateTimeFormat(locale, {
-                  dateStyle: 'medium',
-                  timeStyle: 'short',
-                }).format(new Date(contents.created_at))}
-              </time>
-            ) : (
-              t.missingDate
-            )}
-          </dd>
+          <dd>{creationTime}</dd>
         </div>
-        <div>
-          <dt>{t.matches}</dt>
-          <dd>{formatNumber(contents.matches)}</dd>
-        </div>
-        <div>
-          <dt>{t.savedPositions}</dt>
-          <dd>{formatNumber(contents.saved_positions)}</dd>
-        </div>
-        <div>
-          <dt>{t.learningCards}</dt>
-          <dd>{formatNumber(contents.learning_cards)}</dd>
-        </div>
+        {!target &&
+          countKeys.map((key) => (
+            <div key={key}>
+              <dt>{t[countLabels[key]]}</dt>
+              <dd>{formatNumber(contents[key])}</dd>
+            </div>
+          ))}
       </dl>
+      {target && (
+        <table
+          aria-label={t.compareContents}
+          className="database-backup-comparison"
+        >
+          <thead>
+            <tr>
+              <td />
+              <th scope="col">{t.backupColumn}</th>
+              <th scope="col">{t.targetColumn}</th>
+              <th scope="col">{t.differenceColumn}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {countKeys.map((key) => {
+              const backupCount = contents[key];
+              const targetCount = targetCounts?.[key];
+              const difference =
+                targetCount === undefined
+                  ? undefined
+                  : backupCount - targetCount;
+              const direction =
+                difference === undefined || difference === 0
+                  ? undefined
+                  : difference > 0
+                    ? 'increase'
+                    : 'decrease';
+              return (
+                <tr key={key}>
+                  <th scope="row">{t[countLabels[key]]}</th>
+                  <td>{formatNumber(backupCount)}</td>
+                  <td>
+                    {targetCount === undefined
+                      ? '—'
+                      : formatNumber(targetCount)}
+                  </td>
+                  <td data-difference={direction}>
+                    {difference === undefined
+                      ? '—'
+                      : formatNumber(difference, { signDisplay: 'exceptZero' })}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
     </section>
   );
 }

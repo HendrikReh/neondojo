@@ -253,7 +253,18 @@ it('single-game native summaries carry their source game in metric actions', () 
         analysisEntry: entryForJob({ ...job, game_no: 7 }, 7),
         names: ['Alice', 'Bob'],
         onSelect: () => {},
-        statistics: { analysis_id: `job:${job.id}`, summary, games: [] },
+        statistics: {
+          analysis_id: `job:${job.id}`,
+          summary,
+          games: [],
+          error_breakdown: [
+            {
+              player: 0,
+              checker: { doubtful: 0, bad: 0, blunder: 0, very_bad: 1 },
+              cube: { doubtful: 0, bad: 0, blunder: 0, very_bad: 0 },
+            },
+          ],
+        },
       }),
     }),
   );
@@ -261,13 +272,13 @@ it('single-game native summaries carry their source game in metric actions', () 
     statisticsText('en', 'metricGameAction', {
       game: 7,
       player: 'Alice',
-      metric: statisticsText('en', 'veryBad'),
+      metric: 'Large Blunder',
     }),
   );
   expect(html).not.toContain(
     statisticsText('en', 'metricAction', {
       player: 'Alice',
-      metric: statisticsText('en', 'veryBad'),
+      metric: 'Large Blunder',
     }),
   );
 });
@@ -315,8 +326,8 @@ it('renders a compact typed matrix with actionable zeros and preserves total met
           games: [],
           error_breakdown: [0, 1].map((player) => ({
             player,
-            checker: { doubtful: 1, bad: 0, very_bad: 0 },
-            cube: { doubtful: 0, bad: 1, very_bad: 0 },
+            checker: { blunder: 0, doubtful: 1, bad: 0, very_bad: 0 },
+            cube: { blunder: 0, doubtful: 0, bad: 1, very_bad: 0 },
           })),
         },
       }),
@@ -325,10 +336,10 @@ it('renders a compact typed matrix with actionable zeros and preserves total met
   expect(html).toContain('class="statistics-error-matrix"');
   expect(html).toContain('data-statistics-kind="checker"');
   expect(html).toContain('data-statistics-kind="cube"');
-  expect(html).toContain('Show Alice: Bad');
-  expect(html).toContain('Show Alice: Cube · Bad');
+  expect(html).toContain('Show Alice: Error');
+  expect(html).toContain('Show Alice: Cube · Error');
   expect(html).toMatch(
-    /data-statistics-kind="checker"[^>]*aria-label="Show Alice: Checker · Bad"[^>]*><strong>0<\/strong>/,
+    /data-statistics-kind="checker"[^>]*aria-label="Show Alice: Checker · Error"[^>]*><strong>0<\/strong>/,
   );
 });
 
@@ -348,15 +359,17 @@ it('typed totals equal checker plus cube even when legacy summary severity count
           games: [],
           error_breakdown: [0, 1].map((player) => ({
             player,
-            checker: { doubtful: 0, bad: 1, very_bad: 0 },
-            cube: { doubtful: 0, bad: 2, very_bad: 0 },
+            checker: { blunder: 0, doubtful: 0, bad: 1, very_bad: 0 },
+            cube: { blunder: 0, doubtful: 0, bad: 2, very_bad: 0 },
           })),
         },
       }),
     }),
   );
-  expect(html).toMatch(/aria-label="Show Alice: Bad"[^>]*><strong>3<\/strong>/);
+  expect(html).toMatch(
+    /aria-label="Show Alice: Error"[^>]*><strong>3<\/strong>/,
+  );
   expect(html).not.toMatch(
-    /aria-label="Show Alice: Bad"[^>]*><strong>9<\/strong>/,
+    /aria-label="Show Alice: Error"[^>]*><strong>9<\/strong>/,
   );
 });

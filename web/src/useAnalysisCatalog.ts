@@ -115,6 +115,14 @@ export function useAnalysisCatalog(
       body: JSON.stringify({ analysis_id: analysisId }),
     });
   }
+  function remove(analysisId: string, sourceRevision: number) {
+    const query = new URLSearchParams({
+      source_revision: String(sourceRevision),
+    });
+    return write(`/analyses/${encodeURIComponent(analysisId)}?${query}`, {
+      method: 'DELETE',
+    });
+  }
   async function loadMore() {
     if (!matchId || !page?.next_cursor || loadingMore === scope) return;
     const version = readVersion.current;
@@ -160,6 +168,7 @@ export function useAnalysisCatalog(
     nextCursor: page?.next_cursor,
     error: failure?.scope === scope ? failure.error : undefined,
     select,
+    remove,
     loadMore,
     refresh,
   };

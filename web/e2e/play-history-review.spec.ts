@@ -1,6 +1,47 @@
 import { test, expect } from './test';
 import { historyFixture } from './play-history-review-helpers';
 
+test('wide Playing layout enlarges the board and keeps a long history scrollable', async ({
+  page,
+}, testInfo) => {
+  const { saved, rows } = await historyFixture(page);
+  const firstMoves = [...saved.history];
+  while (saved.history.length < 80) saved.history.push(...firstMoves);
+  await page.reload();
+  await page.getByRole('tab', { name: 'Playing', exact: true }).click();
+
+  const board = page.locator('.play-live-board > .board-shell > .board');
+  const history = page.locator('.play-history');
+  const list = history.locator('.moves-list');
+  await expect(rows).toHaveCount(80);
+  for (const [width, height] of [
+    [1800, 1169],
+    [2560, 1440],
+    [3840, 2160],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await expect(board).toBeInViewport({ ratio: 0.99 });
+    await expect(history).toBeInViewport({ ratio: 0.99 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth))
+      .toBeLessThanOrEqual(width);
+    await page.screenshot({
+      path: testInfo.outputPath(`playing-${width}x${height}.png`),
+    });
+  }
+
+  expect((await board.boundingBox())!.width).toBeGreaterThan(2050);
+  expect((await history.boundingBox())!.width).toBeGreaterThan(425);
+  expect((await list.boundingBox())!.height).toBeGreaterThan(1200);
+  await expect(rows.last()).toHaveAttribute('aria-current', 'step');
+  await expect(rows.last().locator('strong')).toHaveCSS('font-size', '16px');
+  await rows.last().scrollIntoViewIfNeeded();
+  await expect(rows.last()).toBeInViewport();
+  await expect(history.locator('.play-history-actions')).toBeInViewport();
+  await rows.first().scrollIntoViewIfNeeded();
+  await expect(rows.first()).toBeInViewport();
+  await expect(board).toBeInViewport({ ratio: 0.99 });
+});
+
 test('move-history titles reveal only clipped labels', async ({ page }) => {
   const { rows } = await historyFixture(page);
   const row = rows.first();
@@ -28,21 +69,19 @@ test('board dice show their tooltip on focus without moving keyboard focus', asy
   page,
 }) => {
   const { writes } = await historyFixture(page);
-  const first = page.locator('[data-dice-action="swap"]').first();
-  await first.focus();
+  const pair = page.locator('[data-dice-action="swap"]');
+  await pair.focus();
   const tooltip = page.getByRole('tooltip');
   await expect(tooltip).toHaveText(/Swap dice/);
-  await expect(first).toHaveAttribute(
+  await expect(pair).toHaveAttribute(
     'aria-describedby',
     (await tooltip.getAttribute('id'))!,
   );
-  await page.keyboard.press('Tab');
-  const second = page.locator('[data-dice-action="swap"]').last();
-  await expect(second).toBeFocused();
-  await expect(tooltip).toHaveText(/Swap dice/);
   await page.keyboard.press('Escape');
   await expect(tooltip).toHaveCount(0);
-  await expect(second).toBeFocused();
+  await expect(pair).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(pair).not.toBeFocused();
   expect(writes).toEqual([]);
 });
 
@@ -76,9 +115,9 @@ for (const human of [0, 1])
     await expect(
       page.locator('[data-play-point][data-enabled="true"]'),
     ).toHaveCount(0);
-    await expect(page.locator('.play-board [data-cube]')).toHaveAttribute(
-      'aria-disabled',
-      'true',
+    await expect(page.locator('.play-board [data-cube]')).toHaveCSS(
+      'pointer-events',
+      'none',
     );
     await page.keyboard.press('ArrowRight');
     await expect(page.locator('.board-shell')).toHaveAttribute(
@@ -115,7 +154,7 @@ for (const human of [0, 1])
     expect(await board.boundingBox()).toEqual(liveBoard);
     await expect(page.locator('.play-selected-steps')).toHaveText('13/10');
     await point(6).click();
-    await expect(page.locator('[data-dice-action="confirm"]')).toHaveCount(2);
+    await expect(page.locator('[data-dice-action="confirm"]')).toHaveCount(1);
     await rows.last().click();
     await expect(page.locator('.play-board')).toHaveAttribute(
       'data-play-review',
@@ -126,5 +165,5 @@ for (const human of [0, 1])
     await page
       .getByRole('button', { name: 'Return to game', exact: true })
       .click();
-    await expect(page.locator('[data-dice-action="confirm"]')).toHaveCount(2);
+    await expect(page.locator('[data-dice-action="confirm"]')).toHaveCount(1);
   });

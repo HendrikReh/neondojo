@@ -1,5 +1,7 @@
 import {
   emptyFilters,
+  librarySorts,
+  normalizeLibraryFilters,
   type LibraryFilters,
   type LibrarySort,
 } from './library-api';
@@ -7,6 +9,7 @@ import {
   ALL_CARDS,
   isCollectionScope,
   emptyCardFilters,
+  normalizeCardFilters,
   type CardFilters,
 } from './card-search-api';
 import {
@@ -32,6 +35,38 @@ import { isPlayMode, type PlayMode } from './play-mode-messages';
 import { uiThemes, type UiTheme, type UiMode } from './ui-appearance';
 import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
 
+import type { components } from './generated-api';
+
+export type ErrorThresholds = components['schemas']['ErrorThresholds'];
+export const defaultErrorThresholds: ErrorThresholds =
+  configurationOptions.analysis_error_thresholds;
+
+export const errorThresholdFields = [
+  'questionable',
+  'error',
+  'blunder',
+  'large_blunder',
+] as const satisfies readonly (keyof ErrorThresholds)[];
+
+export function validErrorThresholds(value: unknown): value is ErrorThresholds {
+  if (
+    !object(value) ||
+    Object.keys(value).length !== errorThresholdFields.length
+  )
+    return false;
+  let previous = 0;
+  for (const field of errorThresholdFields) {
+    const threshold = value[field];
+    if (
+      typeof threshold !== 'number' ||
+      !(threshold > previous && threshold <= 1)
+    )
+      return false;
+    previous = threshold;
+  }
+  return true;
+}
+
 export interface ProfileConfiguration {
   schema_version: 1;
   general: { player_name: string; locale: Locale; play_sounds: boolean };
@@ -40,6 +75,7 @@ export interface ProfileConfiguration {
     plies: number;
     scope: 'game' | 'match';
     search_filter: 'engine_default';
+    error_thresholds: ErrorThresholds;
   };
   play: {
     engine: 'gnubg' | 'bgsage';
@@ -58,6 +94,9 @@ export interface ProfileConfiguration {
     board_view: 'before' | 'arrows' | 'after';
     analysis_board_width: number | null;
     analysis_overview_board_width: number | null;
+    analysis_errors_board_width: number | null;
+    analysis_statistics_board_width: number | null;
+    analysis_notes_board_width: number | null;
   };
   opening_book: {
     provider: 'off' | 'automatic' | 'backgammondb' | 'xg';
@@ -101,6 +140,7 @@ export const defaultConfiguration: ProfileConfiguration = {
     plies: 2,
     scope: 'game',
     search_filter: 'engine_default',
+    error_thresholds: defaultErrorThresholds,
   },
   play: {
     engine: 'gnubg',
@@ -119,6 +159,9 @@ export const defaultConfiguration: ProfileConfiguration = {
     board_view: 'arrows',
     analysis_board_width: null,
     analysis_overview_board_width: null,
+    analysis_errors_board_width: null,
+    analysis_statistics_board_width: null,
+    analysis_notes_board_width: null,
   },
   opening_book: { provider: 'automatic', path: '', xg_path: '' },
   library: {
@@ -207,6 +250,9 @@ function canonical(value: unknown): unknown {
 const boardWidthFields = [
   'analysis_board_width',
   'analysis_overview_board_width',
+  'analysis_errors_board_width',
+  'analysis_statistics_board_width',
+  'analysis_notes_board_width',
 ] as const;
 
 export function normalizeConfiguration(value: unknown): ProfileConfiguration {
@@ -219,7 +265,9 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
         ? boardWidthFields
         : key === 'positions'
           ? ['visible_columns']
-          : [];
+          : key === 'analysis'
+            ? ['error_thresholds']
+            : [];
     exactKeys(
       value[key],
       Object.keys(
@@ -248,6 +296,10 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
     c.analysis.search_filter !== 'engine_default'
   )
     invalid('analysis');
+  if (c.analysis.error_thresholds === undefined)
+    c.analysis.error_thresholds = { ...defaultErrorThresholds };
+  if (!validErrorThresholds(c.analysis.error_thresholds))
+    invalid('analysis.error_thresholds');
   if (
     !['gnubg', 'bgsage'].includes(c.play.engine) ||
     !Number.isInteger(c.play.plies) ||
@@ -296,35 +348,9 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
     !['asc', 'desc'].includes(c.library.direction)
   )
     invalid('library');
-  const sorts = [
-    'occurrence_database',
-    'occurrence_game',
-    'occurrence_move',
-    'id',
-    'name',
-    'white',
-    'white_pr',
-    'black',
-    'black_pr',
-    'match_length',
-    'result',
-    'score',
-    'played_at',
-    'created_at',
-    'tournament',
-    'format',
-    'position_count',
-    'analysis_status',
-    'tags',
-    'comment',
-  ];
-  if (!sorts.includes(c.library.sort)) invalid('library.sort');
+  if (!librarySorts.includes(c.library.sort)) invalid('library.sort');
   strings(c.library.filters, Object.keys(emptyFilters()), 'library.filters');
-  for (const key of Object.keys(c.library.filters) as (keyof LibraryFilters)[])
-    c.library.filters[key] = c.library.filters[key].trim();
-  c.library.filters.tag = c.library.filters.tag
-    .replace(/\s+/gu, ' ')
-    .toLowerCase();
+  c.library.filters = normalizeLibraryFilters(c.library.filters);
   const order = c.library.column_order;
   if (
     Array.isArray(order) &&
@@ -434,8 +460,7 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
     Object.values(c.learning.filters).some((value) => typeof value !== 'string')
   )
     invalid('learning.filters');
-  for (const key of Object.keys(c.learning.filters) as (keyof CardFilters)[])
-    c.learning.filters[key] = c.learning.filters[key]?.trim() as never;
+  c.learning.filters = normalizeCardFilters(c.learning.filters);
   if (
     !['', 'checker', 'cube_offer', 'cube_response'].includes(
       c.learning.filters.kind,
@@ -443,7 +468,6 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
     !['', 'new', 'due', 'reviewed'].includes(c.learning.filters.status)
   )
     invalid('learning.filters');
-  c.learning.filters.tag = c.learning.filters.tag.toLowerCase();
   if (
     !['', 'pure_race', 'racing', 'attacking', 'priming', 'anchoring'].includes(
       c.learning.filters.game_plan ?? '',

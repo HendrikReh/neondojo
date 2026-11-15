@@ -2,8 +2,9 @@ import { useEffect, useEffectEvent, useState } from 'react';
 import { useI18n } from './i18n';
 import XgPositionView from './XgPositionView';
 import EngineLabel from './EngineLabel';
-import type { PreviewCandidate, PreviewComparison } from './candidate-preview';
+import type { PreviewCandidate } from './candidate-preview';
 import CandidateTable from './CandidateTable';
+import { candidateEquityRanks } from './candidate-comparison';
 import type { Match, Position } from './api';
 import { useSourceText } from './analysis-source-messages';
 import { useCandidateText } from './candidate-messages';
@@ -77,7 +78,6 @@ export default function SourceAnalysisView({
   source,
   onPreview,
   selectedPreview,
-  onComparison,
   position,
   playerName,
   players,
@@ -88,7 +88,6 @@ export default function SourceAnalysisView({
   source: 'file' | 'book';
   onPreview?: (candidate: PreviewCandidate | null) => void;
   selectedPreview?: PreviewCandidate;
-  onComparison?: (value: PreviewComparison) => void;
   position?: Position;
   playerName?: string;
   players?: Pick<Match, 'white' | 'black'>;
@@ -110,7 +109,11 @@ export default function SourceAnalysisView({
     records.find((r) => r.id === recordId) ??
     records.find((r) => r.kind === (preferredKind ?? 'checker')) ??
     records[0];
-  const candidates =
+  const xgChecker =
+    source === 'file' &&
+    record?.source_format === 'xg' &&
+    record.kind === 'checker';
+  const sourceCandidates =
     source === 'file'
       ? (record?.candidates ?? [])
       : (book?.checker?.candidates.map((c) => ({
@@ -120,6 +123,10 @@ export default function SourceAnalysisView({
             book.checker?.plies == null ? null : `${book.checker.plies}-ply`,
           method: 'evaluation',
         })) ?? []);
+  const equityRanks = xgChecker ? candidateEquityRanks(sourceCandidates) : null;
+  const candidates = equityRanks?.size
+    ? Array.from(equityRanks, ([candidate, rank]) => ({ ...candidate, rank }))
+    : sourceCandidates;
   const rawCube =
     source === 'file'
       ? record?.cube
@@ -247,9 +254,6 @@ export default function SourceAnalysisView({
     !ogxmPlaceholder &&
     checker &&
     !!(source === 'file' ? record : book?.checker);
-  useEffect(() => {
-    if (!hasComparison) onComparison?.({ loss: null });
-  }, [hasComparison, onComparison]);
   if (source === 'book' && selectedBook === 'xg')
     return (
       <div className="source-analysis">
@@ -339,6 +343,7 @@ export default function SourceAnalysisView({
         <CandidateTable
           candidates={candidates}
           source={previewSource}
+          showCandidateDepth={xgChecker}
           depth={
             source === 'file'
               ? record?.depth
@@ -354,7 +359,6 @@ export default function SourceAnalysisView({
           playerName={playerName}
           onPreview={onPreview}
           selectedPreview={selectedPreview}
-          onComparison={onComparison}
         />
       )}
       {ogxmSummaryRecord && !ogxmPlaceholder && (

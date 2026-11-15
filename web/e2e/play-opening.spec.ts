@@ -39,7 +39,7 @@ function pending(): PlaySession {
   };
 }
 for (const tie of [false, true])
-  test(`explicit one-die-per-side opening, same dice, reload and ${tie ? 'bot' : 'human'} first`, async ({
+  test(`automatic opening animation with ${tie ? 'ties and bot' : 'human'} first`, async ({
     page,
   }) => {
     let state = pending();
@@ -106,48 +106,52 @@ for (const tie of [false, true])
         );
       await route.fulfill({ json: state });
     });
+    await page.addInitScript(() => {
+      document.addEventListener('DOMContentLoaded', () => {
+        const seen = document.createElement('meta');
+        seen.name = 'opening-animation-frames';
+        document.head.append(seen);
+        const frames: string[] = [];
+        new MutationObserver(() => {
+          const board = document.querySelector('.play-board');
+          if (!board) return;
+          const kind = board.getAttribute('data-play-animation');
+          const values = [
+            ...board.querySelectorAll(
+              '[data-opening-die]:has([data-rolling="false"])',
+            ),
+          ]
+            .map((die) => die.getAttribute('data-opening-die'))
+            .join('-');
+          const frame = values && !values.includes('pending') ? values : kind;
+          if (!frame || frames.at(-1) === frame) return;
+          frames.push(frame);
+          seen.content = frames.join(',');
+        }).observe(document.body, {
+          subtree: true,
+          attributes: true,
+          childList: true,
+        });
+      });
+    });
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.goto('/');
     await page.getByRole('tab', { name: 'Playing', exact: true }).click();
     await page
       .getByRole('button', { name: 'Start match', exact: true })
       .click();
-    await expect(page.locator('[data-opening-die="pending"]')).toHaveCount(2);
-    await expect(
-      page.locator('.play-board svg.board [data-opening-die]'),
-    ).toHaveCount(2);
-    await expect(page.locator('.play-opening [data-opening-die]')).toHaveCount(
-      0,
+    const board = page.locator('.play-board');
+    await expect(board.locator('.play-die-rolling')).toHaveCount(2);
+    await expect(page.locator('dialog:modal')).toHaveCount(0);
+    await expect(board).toHaveAttribute(
+      'data-play-phase',
+      tie ? 'roll' : 'move',
     );
-    await expect(page.locator('.play-board [data-play-die-index]')).toHaveCount(
-      2,
-    );
-    await expect(rollDice(page)).not.toBeVisible();
-    await page
-      .getByRole('button', { name: 'Roll one die each', exact: true })
-      .click();
-    await expect(
-      page.locator('[data-opening-player="0"] [data-opening-die]'),
-    ).toHaveAttribute('data-opening-die', tie ? '1' : '6');
-    await expect(
-      page.locator('[data-opening-player="1"] [data-opening-die]'),
-    ).toHaveAttribute('data-opening-die', tie ? '5' : '2');
-    await expect(page.locator('.play-opening-winner')).toContainText(
-      tie ? 'Bot goes first with 5 and 1' : 'Player goes first with 6 and 2',
-    );
-    if (tie) await expect(page.locator('.play-opening-ties li')).toHaveCount(2);
-    await expect(page.locator('.play-board [data-play-die-index]')).toHaveCount(
-      2,
-    );
-    await expect(rollDice(page)).not.toBeVisible();
-    await page.reload();
-    await page.getByRole('tab', { name: 'Playing', exact: true }).click();
-    await expect(
-      page.getByRole('button', { name: 'Begin the first move', exact: true }),
-    ).toBeVisible();
-    expect(writes).toEqual([{ version: 0, action: 'opening_roll' }]);
-    await page
-      .getByRole('button', { name: 'Begin the first move', exact: true })
-      .click();
+    const frames = await page
+      .locator('meta[name="opening-animation-frames"]')
+      .getAttribute('content');
+    expect(frames).toContain(tie ? '4-4,dice,2-2,dice,1-5' : '6-2');
+    if (tie) expect(frames).toContain('checker');
     expect(writes).toEqual([
       { version: 0, action: 'opening_roll' },
       { version: 1, action: 'start_opening_move' },
@@ -157,9 +161,73 @@ for (const tie of [false, true])
       expect(state.history[0].dice).toEqual([5, 1]);
     } else {
       await expect(rollDice(page)).not.toBeVisible();
-      await expect(page.locator('[data-play-die-index="0"]')).toHaveAttribute(
-        'aria-label',
-        'Swap dice order · 6, 2',
-      );
+      await expect(
+        board.getByRole('button', {
+          name: 'Swap dice order · 6, 2',
+          exact: true,
+        }),
+      ).toBeVisible();
     }
   });
+
+test('a lost opening-roll response resumes from the committed dice after reload', async ({
+  page,
+}) => {
+  let saved = pending();
+  const writes: unknown[] = [];
+  await page.addInitScript(
+    (id) => localStorage.setItem('bgtutor.play-session', id),
+    id,
+  );
+  await page.route(`**/api/play/sessions/${id}`, (route) =>
+    route.fulfill({ json: saved }),
+  );
+  await page.route(`**/api/play/sessions/${id}/actions`, (route) => {
+    const request = route.request().postDataJSON();
+    writes.push(request);
+    if (request.action === 'opening_roll') {
+      saved = {
+        ...saved,
+        version: 1,
+        phase: 'opening_result',
+        opening: { white_die: 6, black_die: 1, winner: 0, rolls: [[6, 1]] },
+        position: { ...saved.position, dice: [6, 1] },
+      };
+      return route.abort();
+    }
+    expect(request).toEqual({ version: 1, action: 'start_opening_move' });
+    saved = {
+      ...saved,
+      version: 2,
+      phase: 'move',
+      legal_moves: [
+        {
+          notation: '13/7 6/5',
+          steps: [
+            { from: 13, to: 7 },
+            { from: 6, to: 5 },
+          ],
+        },
+      ],
+    };
+    return route.fulfill({ json: saved });
+  });
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Playing', exact: true }).click();
+  const error = page.locator('.play-workspace').getByRole('alert');
+  await expect(error).toContainText('Reload the saved state before retrying');
+  expect(writes).toEqual([{ version: 0, action: 'opening_roll' }]);
+  await expect(page.locator('dialog:modal')).toHaveCount(0);
+  await error.getByRole('button', { name: 'Reload saved state' }).click();
+  await expect(page.locator('.play-board')).toHaveAttribute(
+    'data-play-phase',
+    'move',
+  );
+  await expect(
+    page.getByRole('button', { name: 'Swap dice order · 6, 1', exact: true }),
+  ).toBeVisible();
+  expect(writes).toEqual([
+    { version: 0, action: 'opening_roll' },
+    { version: 1, action: 'start_opening_move' },
+  ]);
+});

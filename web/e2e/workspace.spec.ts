@@ -1,5 +1,8 @@
 import { applyAndCloseSettings } from './settings-actions';
-import { openMatchCalculation, openPositionCalculation } from './analysis-controls';
+import {
+  openMatchAnalysisOptions,
+  openPositionCalculation,
+} from './analysis-controls';
 import { expect, test } from './test';
 import { profileBackend } from './profile-backend';
 import { defaultConfiguration } from '../src/configuration-model';
@@ -86,7 +89,6 @@ test('a delayed initial settings response cannot replace a newer saved profile',
     .getByLabel('Partiedatei')
     .setInputFiles('../backend/tests/fixtures/tutorial.mat');
   await expect(page.locator('.board')).toBeVisible();
-  await openMatchCalculation(page);
   await expect(
     page.locator('.workspace-analysis-command button.primary'),
   ).toBeDisabled();
@@ -100,6 +102,7 @@ test('a delayed initial settings response cannot replace a newer saved profile',
     .getByLabel('Standardprofil für Analysen', { exact: true })
     .selectOption('2');
   await applyAndCloseSettings(dialog, 'de');
+  await openMatchAnalysisOptions(page);
   await expect(
     page
       .locator('.workspace-analysis-command')
@@ -128,10 +131,10 @@ test('inspector tabs support arrow, Home and End navigation', async ({
   await notes.focus();
   await page.keyboard.press('Home');
   await expect(
-    page.getByRole('tab', { name: 'Übersicht', exact: true }),
+    page.getByRole('tab', { name: 'Checker', exact: true }),
   ).toBeFocused();
   await expect(
-    page.getByRole('tab', { name: 'Übersicht', exact: true }),
+    page.getByRole('tab', { name: 'Checker', exact: true }),
   ).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('End');
   await expect(
@@ -158,8 +161,7 @@ test('an analysis submission error appears once in the errors view', async ({
         })
       : route.continue(),
   );
-  await page.getByRole('tab', { name: 'Fehler', exact: true }).click();
-  await openMatchCalculation(page);
+  await page.getByRole('tab', { name: 'Cube', exact: true }).click();
   await page
     .locator('.workspace-analysis-command')
     .getByRole('button', { name: /^Spiel (erneut )?analysieren$/ })
@@ -201,9 +203,7 @@ test('accepted position jobs remain tracked without a duplicate banner after a p
       });
     await route.continue();
   });
-  await (
-    await openPositionCalculation(page)
-  )
+  await (await openPositionCalculation(page))
     .getByRole('button', { name: 'Position analysieren', exact: true })
     .click();
   await started;
@@ -259,7 +259,6 @@ test('accepted game jobs remain tracked when the game changes during submission'
       });
     await route.continue();
   });
-  await openMatchCalculation(page);
   await page
     .locator('.workspace-analysis-command')
     .getByRole('button', { name: /^Spiel (erneut )?analysieren$/ })
@@ -282,12 +281,10 @@ test('next position error respects the player filter', async ({ page }) => {
     name: 'filtered-errors.sgf',
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(
-      `(;GM[6]PW[Filtered ${crypto.randomUUID()}]PB[Opponent]MI[length:7][ws:0][bs:0];W[31xufe];B[42aesu])`,
+      `(;GM[6]PW[Filtered ${crypto.randomUUID()}]PB[Opponent]MI[length:7][ws:0][bs:0];W[31xufe];B[42aeac])`,
     ),
   });
   await expect(page.locator('.board')).toBeVisible();
-  await page.getByRole('tab', { name: 'Fehler', exact: true }).click();
-  await openMatchCalculation(page);
   await page
     .locator('.workspace-analysis-command')
     .getByRole('button', { name: /^Spiel (erneut )?analysieren$/ })
@@ -295,21 +292,30 @@ test('next position error respects the player filter', async ({ page }) => {
   await expect(
     page.getByText('Spielanalyse abgeschlossen', { exact: true }),
   ).toBeVisible();
-  await page
-    .getByLabel('Analyse nach Spieler filtern', { exact: true })
-    .selectOption('1');
-  await page.getByRole('button', { name: 'Nächster Zug', exact: true }).click();
-  await page
-    .getByRole('button', { name: 'Nächster Fehler', exact: false })
-    .click();
-  await expect(page.locator('.moves-panel [role=status]')).toBeVisible();
+  await page.getByRole('tab', { name: 'Statistik', exact: true }).click();
+  await page.locator('.statistics-summary [data-statistics-metric="inaccuracies"][data-statistics-kind="checker"]').first().click();
+  const player = page.getByLabel('Analyse nach Spieler filtern', {
+    exact: true,
+  });
+  const review = page.getByRole('group', {
+    name: 'Fehler durchgehen',
+    exact: true,
+  });
+  const nextError = review.getByRole('button', {
+    name: 'Nächster Fehler',
+    exact: true,
+  });
+  await expect(page.locator('.board-heading')).toContainText('Zug 1');
+  await player.selectOption('1');
+  await expect(review.getByRole('status')).toHaveText('Fehler: 1');
+  await expect(nextError).toBeEnabled();
+  await nextError.click();
   await expect(page.locator('.board-heading')).toContainText('Zug 2');
-  await page
-    .getByLabel('Analyse nach Spieler filtern', { exact: true })
-    .selectOption('0');
-  await page
-    .getByRole('button', { name: 'Nächster Fehler', exact: false })
-    .click();
+  await expect(review.getByRole('status')).toHaveText('Fehler 1 von 1');
+  await player.selectOption('0');
+  await expect(review.getByRole('status')).toHaveText('Fehler: 1');
+  await expect(nextError).toBeEnabled();
+  await nextError.click();
   await expect(page.locator('.board-heading')).toContainText('Zug 1');
 });
 

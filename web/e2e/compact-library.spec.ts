@@ -15,7 +15,7 @@ const entries = Array.from({ length: 50 }, (_, index) => ({
     index === 1
       ? 'A very long player name which still needs to be accessible'
       : `Alice ${index}`,
-  black: `Bob ${index}`,
+  black: index === 1 ? 'Longer Opponent' : `Bob ${index}`,
   match_length: 11,
   position_count: 460,
   game_count: 10,
@@ -230,13 +230,6 @@ for (const [width, height] of [
     await page.setViewportSize({ width, height });
     const requests = await library(page);
     const rows = page.locator('.database-table tbody tr');
-    const batch = page.locator('.library-batch-bar');
-    const actions = batch.getByRole('button');
-    await expect(actions).toHaveCount(10);
-    for (const action of await actions.all()) {
-      await expect(action).toBeInViewport();
-      await expect(action).toBeDisabled();
-    }
     const first = rows.first(),
       long = rows.nth(1);
     for (const row of [first, long])
@@ -290,6 +283,7 @@ for (const [width, height] of [
     ).toHaveAttribute('aria-selected', 'true');
     expect(requests).toEqual([]);
     await long.getByRole('checkbox').check();
+    const batch = page.locator('.library-batch-bar');
     const edit = batch.getByRole('button', {
       name: 'Edit match details',
       exact: true,
@@ -305,25 +299,29 @@ for (const [width, height] of [
     );
     await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
     await first.getByRole('checkbox').check();
-    await expect(
-      batch.getByRole('button', { name: 'Export', exact: true }),
-    ).toBeEnabled();
-    await expect(batch).toContainText('2');
-    for (const name of ['Open match', 'Resume match', 'Edit match details']) {
-      await expect(batch.getByRole('button', { name, exact: true })).toBeDisabled();
-    }
-    for (const name of ['Analyze selected matches …', 'Copy', 'Move', 'Tags', 'Export', 'Delete', 'Clear selection']) {
-      await expect(batch.getByRole('button', { name, exact: true })).toBeEnabled();
-    }
-    await batch
-      .getByRole('button', { name: 'Clear selection', exact: true })
-      .click();
-    for (const action of await actions.all()) await expect(action).toBeDisabled();
+    await long.getByRole('checkbox').check();
+    await expect(page.locator('.library-batch-bar')).toContainText('2');
+    for (const name of [
+      'Analyze selected matches …',
+      'Copy',
+      'Move',
+      'Tags',
+      'Export',
+      'Delete',
+    ])
+      await expect(
+        page
+          .locator('.library-batch-bar')
+          .getByRole('button', { name, exact: true }),
+      ).toBeVisible();
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     ).toBe(true);
+    await page.screenshot({
+      path: test.info().outputPath(`match-selection-${width}.png`),
+    });
     if (width === 1800) {
       await page.setViewportSize({ width: 1440, height: 1100 });
       expect(
@@ -333,3 +331,155 @@ for (const [width, height] of [
     }
   });
 }
+
+test('keeps selection actions visible with wide saved columns', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  await library(page);
+  const batch = page.locator('.library-batch-bar');
+  const actions = batch.getByRole('button');
+  await expect(actions).toHaveCount(10);
+  for (const action of await actions.all()) {
+    await expect(action).toBeInViewport();
+    await expect(action).toBeDisabled();
+  }
+  const columns = page.locator('.library-column-picker');
+  await columns.locator('summary').click();
+  await columns.getByRole('button', { name: 'Show all columns' }).click();
+  await page.keyboard.press('Escape');
+  const table = page.locator('.database-table');
+  const white = table.locator('th[data-column="white"]');
+  await white.getByRole('separator').press('End');
+  const wrapper = page.locator('.database-table-wrap');
+  await wrapper.evaluate((element) => (element.scrollLeft = 0));
+  const row = table.locator('tbody tr').first();
+  await row.getByRole('checkbox').check();
+  for (const action of [
+    batch.getByRole('button', { name: 'Open match', exact: true }),
+    batch.getByRole('button', { name: 'Edit match details', exact: true }),
+    batch.getByRole('button', { name: 'Export', exact: true }),
+  ]) {
+    await expect(action).toBeInViewport();
+    await expect(action).toBeEnabled();
+  }
+  await batch
+    .getByRole('button', { name: 'Edit match details', exact: true })
+    .click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await table.locator('tbody tr').nth(1).getByRole('checkbox').check();
+  for (const name of ['Open match', 'Resume match', 'Edit match details'])
+    await expect(batch.getByRole('button', { name, exact: true })).toBeDisabled();
+  for (const name of ['Copy', 'Move', 'Tags', 'Export', 'Delete'])
+    await expect(batch.getByRole('button', { name, exact: true })).toBeEnabled();
+  await batch.getByRole('button', { name: 'Clear selection', exact: true }).click();
+  for (const action of await actions.all()) await expect(action).toBeDisabled();
+});
+
+test('uses desktop table space for both player names', async ({ page }) => {
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  await library(page);
+  for (const column of ['white', 'black']) {
+    const header = page.locator(`.database-table th[data-column="${column}"]`);
+    expect((await header.boundingBox())!.width).toBeGreaterThanOrEqual(155);
+  }
+  expect(
+    (await page.locator('.database-table tbody tr').first().boundingBox())!
+      .height,
+  ).toBeLessThanOrEqual(44);
+});
+
+test('keeps player names readable in narrow saved columns', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  await library(page);
+  const black = page.locator('.database-table th[data-column="black"]');
+  const handle = black.getByRole('separator');
+  await handle.press('Home');
+  for (let step = 0; step < 4; step++) await handle.press('ArrowRight');
+  expect((await black.boundingBox())!.width).toBeCloseTo(100, 0);
+  const player = page.getByText('Longer Opponent', { exact: true });
+  const sizes = await player.evaluate((element) => ({
+    height: element.clientHeight,
+    contentHeight: element.scrollHeight,
+    lineHeight: Number.parseFloat(getComputedStyle(element).lineHeight),
+  }));
+  expect(sizes.height).toBeGreaterThan(sizes.lineHeight);
+  expect(sizes.contentHeight).toBe(sizes.height);
+});
+
+test('removes one applied filter by keyboard and keeps the other filters', async ({
+  page,
+}) => {
+  await library(page);
+  const search = page.getByLabel('Search matches', { exact: true });
+  const filters = page.getByRole('button', { name: 'Filters', exact: true });
+  const fields = page.locator('.library-filters');
+  const eventField = fields.getByLabel('Event', { exact: true });
+  const resultField = fields.getByLabel('Result', { exact: true });
+  await search.fill('Alice');
+  await filters.click();
+  await eventField.fill('Test Open');
+  await resultField.selectOption('white_won');
+  await filters.click();
+  const chips = page.getByRole('list', { name: 'Applied filters' });
+  const event = chips.getByRole('button', {
+    name: 'Remove filter: Event: Test Open',
+  });
+  await expect(event).toBeVisible();
+  await expect(chips).toContainText('White won');
+  const request = page.waitForRequest((req) => {
+    const url = new URL(req.url());
+    return (
+      url.pathname === '/api/library/matches' &&
+      url.searchParams.get('q') === 'Alice' &&
+      url.searchParams.get('result') === 'white_won' &&
+      !url.searchParams.get('tournament')
+    );
+  });
+  await event.press('Enter');
+  await request;
+  await expect(event).toHaveCount(0);
+  await expect(filters).toBeFocused();
+  await expect(chips).toContainText('Alice');
+  await expect(chips).toContainText('White won');
+  await filters.click();
+  await expect(eventField).toHaveValue('');
+  await expect(resultField).toHaveValue('white_won');
+});
+
+test('opens search panels from one toolbar and keeps the notes draft', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  await library(page);
+  const toolbar = page.locator('.library-search-toolbar');
+  const filters = toolbar.getByRole('button', { name: 'Filters', exact: true });
+  const notes = toolbar.getByRole('button', { name: 'Notes', exact: true });
+  const position = toolbar.getByRole('button', {
+    name: 'Position ID',
+    exact: true,
+  });
+  await expect(
+    toolbar.getByRole('textbox', { name: 'Search matches' }),
+  ).toBeVisible();
+  await filters.click();
+  await expect(filters).toHaveAttribute('aria-expanded', 'true');
+  await notes.click();
+  await expect(filters).toHaveAttribute('aria-expanded', 'false');
+  const text = page
+    .locator('.annotation-search')
+    .getByRole('searchbox', { name: 'Text' });
+  await text.fill('Remember this note search');
+  await position.click();
+  await expect(notes).toHaveAttribute('aria-expanded', 'false');
+  await expect(text).toBeHidden();
+  await expect(
+    page.locator('.position-search').getByRole('textbox'),
+  ).toBeVisible();
+  await notes.click();
+  await expect(text).toHaveValue('Remember this note search');
+});

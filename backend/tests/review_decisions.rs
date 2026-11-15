@@ -413,7 +413,7 @@ async fn native_checkpoints_preserve_values_without_imported_fallback(pool: PgPo
     assert_eq!(page["items"].as_array().unwrap().len(), 1);
     assert_eq!(page["items"][0]["source"], "native");
     assert_eq!(page["items"][0]["equity_loss"], 0.1);
-    assert_eq!(page["items"][0]["severity"], "bad");
+    assert_eq!(page["items"][0]["severity"], "blunder");
     assert_eq!(page["items"][0]["depth_plies"], 2);
     sqlx::query(
         "UPDATE move_analyses SET data=jsonb_set(data,'{player}','1'::jsonb) WHERE job_id=$1",
@@ -457,7 +457,14 @@ async fn native_cube_checkpoints_recover_exact_source_context(pool: PgPool) {
         (3, None, 1, "cube", "double", "no double"),
         (4, None, 0, "cube", "take", "drop"),
     ] {
-        let decision = json!({"decision_no":no,"checker_no":checker,"player":player,"kind":kind,"played":played,"best":best,"played_equity":0.0,"best_equity":0.2,"equity_loss":0.2,"severity":"very_bad","dice":null,"evaluation_status":"evaluated"});
+        let mut decision = json!({"decision_no":no,"checker_no":checker,"player":player,"kind":kind,"played":played,"best":best,"played_equity":0.0,"best_equity":0.2,"equity_loss":0.2,"severity":"very_bad","dice":null,"evaluation_status":"evaluated"});
+        if played == "take" {
+            decision["played_equity"] = json!(-1.2);
+            decision["best_equity"] = json!(-1.0);
+            decision["cube_evaluation"] = json!({
+                "unit": "cubeful", "no_double": -0.9, "double_take": -1.2, "double_pass": -1.0
+            });
+        }
         sqlx::query("INSERT INTO move_analyses(job_id,game_no,decision_no,player,kind,equity_loss,data) VALUES($1,1,$2,$3,$4,0.2,$5)")
             .bind(job.id).bind(no).bind(player).bind(kind).bind(decision).execute(&pool).await.unwrap();
     }
@@ -480,6 +487,7 @@ async fn native_cube_checkpoints_recover_exact_source_context(pool: PgPool) {
     let rows = page["items"].as_array().unwrap();
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[0]["played"], "no double");
+    assert!(rows[0].get("cube_evaluation").is_none());
     assert_eq!(rows[0]["review_position"]["dice"], json!([0, 0]));
     assert_eq!(rows[0]["review_position"]["ply"], 1);
     let (event, match_id): (Uuid, String) = sqlx::query_as(
@@ -492,6 +500,8 @@ async fn native_cube_checkpoints_recover_exact_source_context(pool: PgPool) {
     assert_eq!(rows[1]["move_id"], json!(event));
     assert_eq!(rows[1]["review_position"]["gnubg_match_id"], match_id);
     assert_eq!(rows[1]["review_position"]["player"], 0);
+    assert_eq!(rows[1]["cube_evaluation"]["double_take"], -1.2);
+    assert_eq!(rows[1]["cube_evaluation"]["double_pass"], -1.0);
 }
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
@@ -507,6 +517,10 @@ async fn imported_cube_uses_validated_actor_loss_and_source_event(pool: PgPool) 
     assert_eq!(row["played"], "no double");
     assert_eq!(row["best"], "double");
     assert_eq!(row["player"], 0);
+    assert_eq!(
+        row["cube_evaluation"],
+        json!({"unit":"cubeful","no_double":0.4,"double_take":0.6,"double_pass":1.0})
+    );
     assert!(row["dice"].is_null());
     assert!(row["move_id"].is_string());
     assert_eq!(row["review_position"]["dice"], json!([0, 0]));
@@ -609,7 +623,7 @@ async fn sgf_decimal_threshold_errors_are_not_lost_to_float_subtraction(pool: Pg
         .execute(&pool)
         .await
         .unwrap();
-    sqlx::query("UPDATE imported_analyses SET data=jsonb_set(jsonb_set(data,'{candidates,0,equity}','0.15'),'{candidates,1,equity}','0.11') WHERE match_uuid=$1")
+    sqlx::query("UPDATE imported_analyses SET data=jsonb_set(jsonb_set(data,'{candidates,0,equity}','0.15'),'{candidates,1,equity}','0.145') WHERE match_uuid=$1")
         .bind(id).execute(&pool).await.unwrap();
     let (_, page) = call(
         &app(&pool),
@@ -621,6 +635,6 @@ async fn sgf_decimal_threshold_errors_are_not_lost_to_float_subtraction(pool: Pg
     assert_eq!(
         page["items"].as_array().unwrap().len(),
         2,
-        "0.15 minus 0.11 is exactly the doubtful boundary: {page}"
+        "0.15 minus 0.145 is exactly the Questionable boundary: {page}"
     );
 }

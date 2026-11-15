@@ -2,6 +2,9 @@ export interface CheckerStep {
   from: number;
   to: number;
 }
+export interface CheckerStepWithDie extends CheckerStep {
+  die: number;
+}
 export interface LegalPlay {
   notation: string;
   steps: CheckerStep[];
@@ -72,11 +75,19 @@ export interface OrderedLegalTurn extends LegalPlay {
   moveIndex: number;
 }
 
-/** UI dice-step routes are accepted only when their complete result is one of
- * GNUbg's legal final boards. Native move ordering/deduplication must not force
- * the user to move a different checker or combine two dice into a single click.
- */
+/** UI routes must finish on a board from GNUbg's complete legal move list. */
 export function orderedLegalTurns(
+  board: number[],
+  player: number,
+  dice: number[],
+  nativeMoves: LegalPlay[],
+): OrderedLegalTurn[] {
+  return nativeLegalTurns(board, player, dice, nativeMoves).filter(
+    (turn) => turn.dice[0] === dice[0],
+  );
+}
+
+export function nativeLegalTurns(
   board: number[],
   player: number,
   dice: number[],
@@ -90,10 +101,9 @@ export function orderedLegalTurns(
   });
   const seen = new Set<string>();
   return legalCheckerTurns(board, player, dice).flatMap((turn) => {
-    if (turn.dice[0] !== dice[0]) return [];
     const moveIndex = nativeBoards.get(turn.board.join(','));
     if (moveIndex === undefined) return [];
-    const key = JSON.stringify(turn.steps);
+    const key = JSON.stringify([turn.steps, turn.dice]);
     if (seen.has(key)) return [];
     seen.add(key);
     return [
@@ -105,6 +115,32 @@ export function orderedLegalTurns(
       },
     ];
   });
+}
+
+export function matchingCheckerTurns(
+  turns: OrderedLegalTurn[],
+  prefix: CheckerStepWithDie[],
+) {
+  return matchingMoves(turns, prefix).filter((turn) =>
+    prefix.every((step, index) => step.die === turn.dice[index]),
+  );
+}
+
+/** Keep the preferred die where the clicked checker can legally use it. */
+export function nextCheckerSteps(
+  turns: OrderedLegalTurn[],
+  index: number,
+  preferredDie: number,
+) {
+  const choices = new Map<number, CheckerStepWithDie>();
+  for (const turn of turns) {
+    const step = turn.steps[index];
+    if (!step) continue;
+    const die = turn.dice[index];
+    if (!choices.has(step.from) || die === preferredDie)
+      choices.set(step.from, { ...step, die });
+  }
+  return choices;
 }
 
 interface CheckerTurn {

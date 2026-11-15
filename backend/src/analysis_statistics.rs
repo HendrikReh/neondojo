@@ -10,7 +10,7 @@ use axum::{
     routing::get,
 };
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
+use sqlx::{FromRow, Postgres, QueryBuilder};
 use utoipa::{OpenApi, ToSchema};
 use uuid::Uuid;
 
@@ -44,6 +44,8 @@ pub struct ErrorSeverityCounts {
     pub doubtful: i32,
     pub bad: i32,
     pub very_bad: i32,
+    #[serde(default)]
+    pub blunder: i32,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
@@ -75,10 +77,12 @@ struct DecisionTotals {
     doubtful: i32,
     bad: i32,
     very_bad: i32,
+    blunder: i32,
     loss: f64,
     errors_doubtful: i32,
     errors_bad: i32,
     errors_very_bad: i32,
+    errors_blunder: i32,
 }
 
 pub fn routes() -> Router<AppState> {
@@ -180,8 +184,49 @@ pub(crate) async fn load_statistics(
             })
             .collect();
     }
-    let totals: Vec<DecisionTotals> = sqlx::query_as("SELECT m.game_no,m.player,m.kind,count(*)::integer AS decisions,count(*) FILTER(WHERE m.data->>'evaluation_status'='forced')::integer AS forced,count(*) FILTER(WHERE m.data->>'evaluation_status'='unavailable')::integer AS unavailable,count(*) FILTER(WHERE m.data->>'severity'='doubtful')::integer AS doubtful,count(*) FILTER(WHERE m.data->>'severity'='bad')::integer AS bad,count(*) FILTER(WHERE m.data->>'severity'='very_bad')::integer AS very_bad,sum(m.equity_loss) AS loss,count(*) FILTER(WHERE m.equity_loss>0 AND COALESCE(m.data->>'evaluation_status','') NOT IN ('forced','unavailable') AND m.data->>'severity'='doubtful')::integer AS errors_doubtful,count(*) FILTER(WHERE m.equity_loss>0 AND COALESCE(m.data->>'evaluation_status','') NOT IN ('forced','unavailable') AND m.data->>'severity'='bad')::integer AS errors_bad,count(*) FILTER(WHERE m.equity_loss>0 AND COALESCE(m.data->>'evaluation_status','') NOT IN ('forced','unavailable') AND m.data->>'severity'='very_bad')::integer AS errors_very_bad FROM move_analyses m JOIN match_analysis_games c ON c.job_id=m.job_id AND c.game_no=m.game_no WHERE m.job_id=$1 AND ($2::integer IS NULL OR m.game_no=$2) GROUP BY m.game_no,m.player,m.kind")
-        .bind(id).bind(job.game_no).fetch_all(&mut *tx).await.map_err(anyhow::Error::from)?;
+    let thresholds = crate::configuration::store::error_thresholds(&mut *tx).await?;
+    let mut decision_totals = QueryBuilder::<Postgres>::new(
+        "SELECT game_no,player,kind,count(*)::integer AS decisions,
+            count(*) FILTER(WHERE status='forced')::integer AS forced,
+            count(*) FILTER(WHERE status='unavailable')::integer AS unavailable,
+            sum(equity_loss) AS loss",
+    );
+    for (grade, _) in thresholds.bands() {
+        let name = grade.as_str();
+        decision_totals
+            .push(",count(*) FILTER(WHERE saved_grade=")
+            .push_bind(name)
+            .push(")::integer AS ")
+            .push(name)
+            .push(",count(*) FILTER(WHERE grade=")
+            .push_bind(name)
+            .push(")::integer AS errors_")
+            .push(name);
+    }
+    decision_totals.push(
+        " FROM (SELECT m.game_no,m.player,m.kind,m.equity_loss,
+        m.data->>'evaluation_status' AS status,m.data->>'severity' AS saved_grade,",
+    );
+    thresholds.push_classification(
+        &mut decision_totals,
+        "m.equity_loss",
+        "m.data->>'evaluation_status'",
+    );
+    decision_totals
+        .push(
+            " AS grade FROM move_analyses m JOIN match_analysis_games c
+        ON c.job_id=m.job_id AND c.game_no=m.game_no WHERE m.job_id=",
+        )
+        .push_bind(id);
+    if let Some(game_no) = job.game_no {
+        decision_totals.push(" AND m.game_no=").push_bind(game_no);
+    }
+    decision_totals.push(") AS moves GROUP BY game_no,player,kind");
+    let totals: Vec<DecisionTotals> = decision_totals
+        .build_query_as()
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?;
     tx.commit().await.map_err(anyhow::Error::from)?;
     let all_totals: Vec<_> = totals.iter().collect();
     // Legacy checkpoints have no per-game cube declaration. Their typed data
@@ -234,6 +279,7 @@ pub(crate) async fn load_statistics(
                     player.doubtful += total.doubtful;
                     player.bad += total.bad;
                     player.very_bad += total.very_bad;
+                    player.blunder += total.blunder;
                 }
                 Some(legacy)
             };
@@ -331,6 +377,7 @@ fn typed_errors(totals: &[&DecisionTotals]) -> [PlayerErrorBreakdown; 2] {
         counts.doubtful += total.errors_doubtful;
         counts.bad += total.errors_bad;
         counts.very_bad += total.errors_very_bad;
+        counts.blunder += total.errors_blunder;
     }
     players
 }

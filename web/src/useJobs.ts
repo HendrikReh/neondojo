@@ -1,6 +1,7 @@
-import { useOptionalConfiguration } from './ConfigurationProvider';
 import { useEffect, useRef, useState } from 'react';
 import { request, terminal, mergeJob, type Job } from './api';
+import type { components } from './generated-api';
+import type { MatchAnalysisEngine } from './useMatchAnalysis';
 
 export type Jobs = Partial<Record<'analysis' | 'dice', Job>>;
 export function positionJobsPath(positionId: string) {
@@ -10,9 +11,9 @@ export function positionJobsPath(positionId: string) {
 /** Submission and progress only. Displayed checker results belong to the catalog. */
 export function useJobs(
   positionId: string | undefined,
+  engineId: MatchAnalysisEngine,
   onAccepted?: (job: Job) => void,
 ) {
-  const configuration = useOptionalConfiguration();
   const scope = JSON.stringify([positionId]);
   const current = useRef(scope);
   current.current = scope;
@@ -124,15 +125,16 @@ export function useJobs(
     if (!positionId || pending === scope) return;
     setPending(scope);
     try {
-      const start = () =>
-        request<Job>('/jobs', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ position_id: positionId, kind, plies }),
-        });
-      const job = configuration
-        ? await configuration.runWithConfiguration(start)
-        : await start();
+      const job = await request<Job>('/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          position_id: positionId,
+          kind,
+          plies,
+          engine_id: engineId,
+        } satisfies components['schemas']['JobRequest']),
+      });
       onAccepted?.(job);
       if (!mounted.current || current.current !== scope) return;
       setState((previous) => ({

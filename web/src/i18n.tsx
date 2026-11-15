@@ -33,13 +33,16 @@ const createFormatters = (locale: Locale) => ({
       minimumFractionDigits: digits,
       maximumFractionDigits: digits,
     }).format(value),
-  formatEquity: (value: number) =>
+  formatEquity: (value: number, digits = 3) =>
     new Intl.NumberFormat(locale, {
       signDisplay: 'always',
-      minimumFractionDigits: 3,
-      maximumFractionDigits: 3,
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
     }).format(value),
-  formatDecision: (notation: string) => localizeDecision(locale, notation),
+  formatDecision: (
+    notation: string,
+    position?: Parameters<typeof localizeDecision>[2],
+  ) => localizeDecision(locale, notation, position),
   formatError: (error: unknown) => formatLocalizedError(locale, error),
 });
 

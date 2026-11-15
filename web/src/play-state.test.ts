@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   orderedLegalTurns,
+  nativeLegalTurns,
+  matchingCheckerTurns,
+  nextCheckerSteps,
   applySteps,
   matchingMoves,
   nextPoints,
@@ -116,7 +119,7 @@ describe('first-die interaction paths backed by native complete legal plays', ()
       orderedLegalTurns(b, 0, [3, 1], native).every((t) => t.moveIndex === 0),
     ).toBe(true);
   });
-  it('requires swapping a blocked first die rather than silently playing the second', () => {
+  it('offers the only legal entry when the preferred die is blocked', () => {
     const b = Array(26).fill(0);
     b[25] = 1;
     b[22] = -2;
@@ -129,8 +132,19 @@ describe('first-die interaction paths backed by native complete legal plays', ()
         ],
       },
     ];
-    expect(orderedLegalTurns(b, 0, [3, 2], native)).toEqual([]);
-    expect(orderedLegalTurns(b, 0, [2, 3], native)).toHaveLength(1);
+    const turns = nativeLegalTurns(b, 0, [3, 2], native);
+    expect(nextCheckerSteps(turns, 0, 3).get(25)).toEqual({
+      from: 25,
+      to: 23,
+      die: 2,
+    });
+    const entry = { from: 25, to: 23, die: 2 };
+    const resumed = matchingCheckerTurns(turns, [entry]);
+    expect(nextCheckerSteps(resumed, 1, 2).get(23)).toEqual({
+      from: 23,
+      to: 20,
+      die: 3,
+    });
   });
   it('enforces maximum usage and the higher die when only one non-winning move can be played', () => {
     const b = Array(26).fill(0);

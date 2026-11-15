@@ -192,7 +192,10 @@ test('deleting a source match retains an independent study position, notes, anal
     rows = pane.locator('.position-table tbody tr');
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toHaveAttribute('data-position-id', f.position.id);
-  await expect(rows.first()).toContainText(f.database.name);
+  await pane.locator('.saved-position-preview-details summary').click();
+  await expect(pane.locator('.saved-position-preview-details')).toContainText(
+    f.database.name,
+  );
   await expect(rows.locator('.position-player')).toHaveText(f.match.white);
   await expect(pane.locator('.position-preview .board')).toBeVisible();
   await expect(pane.locator('.position-source-removed')).toBeVisible();
@@ -204,7 +207,7 @@ test('deleting a source match retains an independent study position, notes, anal
   await expect(page.locator('.position-code code')).toHaveText(
     f.position.position_id,
   );
-  await expect(page.getByLabel('Analysis scope', { exact: true })).toHaveCount(
+  await expect(page.getByLabel('Result scope', { exact: true })).toHaveCount(
     0,
   );
   await expect(
@@ -213,19 +216,15 @@ test('deleting a source match retains an independent study position, notes, anal
   await expect(
     page.locator('.analysis-heading [data-match-field="id"]'),
   ).toContainText(String(f.metadata.match_no));
-  const positionDepth = (await openPositionCalculation(page)).getByLabel(
-    'Search depth',
-    { exact: true },
-  );
+  const positionDepth = (await openPositionCalculation(page))
+    .getByLabel('Search depth', { exact: true });
   await positionDepth.selectOption('1');
   const accepted = page.waitForResponse(
     (r) =>
       new URL(r.url()).pathname === '/api/jobs' &&
       r.request().method() === 'POST',
   );
-  await (
-    await openPositionCalculation(page)
-  )
+  await (await openPositionCalculation(page))
     .getByRole('button', { name: 'Analyze position', exact: true })
     .click();
   const job = await (await accepted).json();
@@ -259,7 +258,7 @@ test('deleting a source match retains an independent study position, notes, anal
   await expect(page.locator('.position-code code')).toHaveText(
     f.position.position_id,
   );
-  await expect(page.getByLabel('Analysis scope', { exact: true })).toHaveCount(
+  await expect(page.getByLabel('Result scope', { exact: true })).toHaveCount(
     0,
   );
 });

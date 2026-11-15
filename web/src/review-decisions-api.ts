@@ -40,7 +40,7 @@ export type ReviewEmptyReason = 'missing' | 'filtered' | 'clean';
 
 export async function reviewEmptyReason(
   matchId: string,
-  scope: Pick<MatchDecisionFilter, 'game_no' | 'errors_only'>,
+  scope: Pick<MatchDecisionFilter, 'game_no' | 'errors_only' | 'kind'>,
   {
     jobId,
     analysisId,
@@ -68,7 +68,7 @@ export async function reviewEmptyReason(
         {
           game_no: scope.game_no,
           player: '',
-          kind: '',
+          kind: scope.kind,
           errors_only: errorsOnly,
         },
         { jobId, analysisId, after, limit: errorsOnly ? 1 : 100, signal },

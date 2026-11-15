@@ -853,7 +853,7 @@ async fn native_loss_and_readiness_use_one_latest_completed_full_match(pool: PgP
         authoritative.to_string()
     );
     assert_eq!(ready["items"][0]["native_error"]["equity_loss"], 0.09);
-    assert_eq!(ready["items"][0]["native_error"]["severity"], "bad");
+    assert_eq!(ready["items"][0]["native_error"]["severity"], "blunder");
     let (status, readiness) = call(
         app.clone(),
         "POST",

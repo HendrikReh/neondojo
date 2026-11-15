@@ -18,6 +18,12 @@ export const summary = (reportId = id, name = 'Hendrik · GNUbg') => ({
 export function detail(reportId = id) {
   return {
     id: reportId,
+    human_name: 'Hendrik',
+    engine: { id: 'gnubg', version: 'GNUbg', plies: 2 },
+    version: 1,
+    match_length: 7,
+    scores: [7, 3],
+    history: [],
     human_player: 0,
     play_mode: 'tutor',
     decisions: [

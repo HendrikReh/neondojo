@@ -161,16 +161,16 @@ test('header keyboard navigation and history navigation retain selection, focus 
   await tab.focus();
   await page.keyboard.press('ArrowRight');
   await expect(
-    page.getByRole('tab', { name: 'Match database', exact: true }),
+    page.getByRole('tab', { name: 'Positions', exact: true }),
   ).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('End');
   await expect(
     page.getByRole('tab', { name: 'Extras', exact: true }),
   ).toBeFocused();
   await page.keyboard.press('Home');
-  await expect(
-    page.getByRole('tab', { name: 'Playing', exact: true }),
-  ).toBeFocused();
+  await expect(tab).toBeFocused();
+  await page.keyboard.press('ArrowLeft');
+  await expect(page.getByRole('tab', { name: 'Extras', exact: true })).toBeFocused();
   await page.keyboard.press('ArrowRight');
   await expect(tab).toBeFocused();
   await page.locator('.moves-list button').nth(1).focus();
@@ -184,7 +184,7 @@ test('header keyboard navigation and history navigation retain selection, focus 
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page
     .getByRole('dialog', { name: 'Settings', exact: true })
-    .getByRole('button', { name: 'Cancel', exact: true })
+    .getByRole('button', { name: 'Close', exact: true })
     .click();
   await expect(
     page.getByRole('button', { name: 'Settings', exact: true }),

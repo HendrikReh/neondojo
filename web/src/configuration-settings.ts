@@ -1,5 +1,7 @@
 import {
   defaultConfiguration,
+  errorThresholdFields,
+  type ErrorThresholds,
   type ProfileConfiguration,
 } from './configuration-model';
 import type { AppSettings } from './settings-api';
@@ -71,6 +73,7 @@ export function settingsFromConfiguration(
 
 interface SettingsDraft {
   settings: AppSettings;
+  errorThresholds?: ErrorThresholds;
   locale: Locale;
   theme: string;
   appearance: UiAppearance;
@@ -127,8 +130,19 @@ export function applySettingsDraft(
 ): ProfileConfiguration {
   const values = profileSettings(draft);
   const baseline = initial && profileSettings(initial);
-  const analysis = changedValues(values.analysis, baseline?.analysis);
+  const analysis: Partial<ProfileConfiguration['analysis']> = changedValues(
+    values.analysis,
+    baseline?.analysis,
+  );
   const play = changedValues(values.play, baseline?.play);
+  const thresholds = draft.errorThresholds;
+  if (
+    thresholds &&
+    errorThresholdFields.some(
+      (field) => thresholds[field] !== initial?.errorThresholds?.[field],
+    )
+  )
+    analysis.error_thresholds = thresholds;
   // Engine and depth form one setting because supported depths depend on the engine.
   if (analysis.engine !== undefined || analysis.plies !== undefined)
     Object.assign(analysis, values.analysis);

@@ -6,16 +6,35 @@ import {
   type RefObject,
 } from 'react';
 import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
-import { useOptionalConfiguration } from './ConfigurationProvider';
-import { useProfileValue } from './useProfileValue';
+import { useWorkspaceDefaults } from './ConfigurationProvider';
+import { useWorkspaceLayout } from './useWorkspaceSession';
 import { useBoardReviewText } from './board-review-messages';
 import Tooltip from './Tooltip';
 
 const limits = configurationOptions.analysis_board_width;
 const desktopDefaultWidth = 420;
-const wideDefaultWidth = 600;
 const clamp = (value: number, max: number) =>
   Math.round(Math.max(limits.min, Math.min(max, value)));
+const boardWidthFields = {
+  overview: 'analysis_overview_board_width',
+  errors: 'analysis_errors_board_width',
+  statistics: 'analysis_statistics_board_width',
+  notes: 'analysis_notes_board_width',
+  cards: 'analysis_board_width',
+} as const;
+type BoardWidths = Record<
+  (typeof boardWidthFields)[keyof typeof boardWidthFields],
+  number | null
+>;
+
+const defaultWidths: BoardWidths = {
+  analysis_board_width: null,
+  analysis_overview_board_width: null,
+  analysis_errors_board_width: null,
+  analysis_statistics_board_width: null,
+  analysis_notes_board_width: null,
+};
+
 type Drag = {
   pointer: number;
   target: HTMLElement;
@@ -27,30 +46,40 @@ type Drag = {
 export function useAnalysisBoardResize(
   gridRef: RefObject<HTMLDivElement | null>,
   active: boolean,
-  overview: boolean,
+  layout: keyof typeof boardWidthFields,
 ) {
   const text = useBoardReviewText();
-  const profile = useOptionalConfiguration();
-  const [preferences, setPreferences] = useProfileValue(
-    ({
-      appearance: { analysis_board_width, analysis_overview_board_width },
-    }) => ({
-      analysis_board_width,
-      analysis_overview_board_width,
-    }),
-    (c, widths) => ({
-      ...c,
-      appearance: { ...c.appearance, ...widths },
-    }),
-    { analysis_board_width: null, analysis_overview_board_width: null },
+  const legacy = useWorkspaceDefaults();
+  const field = boardWidthFields[layout];
+  const [preferences, setPreferences] = useWorkspaceLayout(
+    'analysis.boardWidths',
+    legacy && {
+      analysis_board_width: legacy.appearance.analysis_board_width,
+      analysis_overview_board_width: legacy.appearance.analysis_overview_board_width,
+      analysis_errors_board_width: legacy.appearance.analysis_errors_board_width,
+      analysis_statistics_board_width: legacy.appearance.analysis_statistics_board_width,
+      analysis_notes_board_width: legacy.appearance.analysis_notes_board_width,
+    },
+    defaultWidths,
+    (value) => {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+      const widths = value as Partial<BoardWidths>;
+      const result = { ...defaultWidths };
+      for (const key of Object.values(boardWidthFields)) {
+        const width = widths[key];
+        if (typeof width === 'number' && Number.isFinite(width)) result[key] = clamp(width, limits.max);
+      }
+      return result;
+    },
   );
-  const field = overview
-    ? 'analysis_overview_board_width'
-    : 'analysis_board_width';
   const preferred = preferences[field];
   const setPreferred = (width: number | null) =>
     setPreferences((current) => ({ ...current, [field]: width }));
-  const [geometry, setGeometry] = useState({
+  const [geometry, setGeometry] = useState<{
+    max: number;
+    defaultWidth: number;
+    viewportSpace?: number;
+  }>({
     max: limits.max,
     defaultWidth: desktopDefaultWidth,
   });
@@ -70,13 +99,12 @@ export function useAnalysisBoardResize(
 
   useLayoutEffect(() => {
     cancel();
-  }, [active, overview, profile?.generation, preferred, cancel]);
+  }, [active, layout, preferred, cancel]);
 
   useLayoutEffect(() => {
     const grid = gridRef.current;
-    const board = grid?.querySelector('.board-panel');
     const moves = grid?.querySelector('.moves-panel');
-    if (!active || !grid || !board || !moves) return;
+    if (!active || !grid || !moves) return;
     const measure = () => {
       if (!window.matchMedia('(min-width: 961px)').matches) return;
       const gap = parseFloat(getComputedStyle(grid).columnGap) || 0;
@@ -86,37 +114,47 @@ export function useAnalysisBoardResize(
         3 * gap -
         8 -
         400;
-      // The board artwork must also fit above the navigation and game-plan controls.
-      const maxHeight = parseFloat(getComputedStyle(board).maxHeight);
-      const heightLimit = (maxHeight - 220) * 1.4 + 20;
-      const max = Math.max(
-        limits.min,
-        Math.min(limits.max, Math.floor(available), Math.floor(heightLimit)),
-      );
+      const max = Math.max(limits.min, Math.floor(Math.min(available, limits.max)));
       const viewportWidth = window.innerWidth;
-      const standardWidth = Math.min(desktopDefaultWidth, viewportWidth * 0.24);
-      // Grow slowly beyond the reference desktop width, within the existing
-      // limits for window height and space beside the board.
-      const wideGrowth = Math.max(0, viewportWidth - 1800) * 0.105;
+      // Page scrolling should not change the saved or automatic geometry.
+      const viewportSpace = Math.max(
+        0,
+        Math.floor(
+          window.innerHeight -
+            grid.getBoundingClientRect().top -
+            window.scrollY -
+            gap,
+        ),
+      );
+      const extraWidth = Math.max(0, viewportWidth - 2560);
       const defaultWidth = clamp(
-        Math.min(wideDefaultWidth, standardWidth + wideGrowth),
+        300 + viewportWidth * 0.22 + extraWidth * 0.23,
         max,
       );
       setGeometry((previous) =>
-        previous.max === max && previous.defaultWidth === defaultWidth
+        previous.max === max &&
+        previous.defaultWidth === defaultWidth &&
+        previous.viewportSpace === viewportSpace
           ? previous
-          : { max, defaultWidth },
+          : { max, defaultWidth, viewportSpace },
       );
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(grid);
+    for (const element of grid.parentElement?.children ?? []) {
+      if (element !== grid) observer.observe(element);
+    }
+    const shell = grid.closest('.app-shell');
+    const header = shell?.querySelector('.app-header');
+    if (header) observer.observe(header);
+    if (shell) observer.observe(shell);
     window.addEventListener('resize', measure);
     return () => {
       observer.disconnect();
       window.removeEventListener('resize', measure);
     };
-  }, [gridRef, active, overview]);
+  }, [gridRef, active, layout]);
 
   useLayoutEffect(
     () => () => {
@@ -178,7 +216,7 @@ export function useAnalysisBoardResize(
       onLostPointerCapture={cancel}
       onDoubleClick={() => {
         cancel();
-        setPreferred(null);
+        setPreferred(geometry.max);
       }}
       onKeyDown={(event) => {
         if (
@@ -215,5 +253,10 @@ export function useAnalysisBoardResize(
       }}
     />
   );
-  return { width, dragging: preview !== undefined, handle };
+  return {
+    width,
+    viewportSpace: geometry.viewportSpace,
+    dragging: preview !== undefined,
+    handle,
+  };
 }

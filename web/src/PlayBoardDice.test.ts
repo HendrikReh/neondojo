@@ -62,7 +62,7 @@ it('labels unrolled dice and reuses rolling animation for both player dice', () 
   expect(html).toContain('White · Not rolled');
   expect(html).toContain('Black · Not rolled');
 });
-it('retains normal same-color dice and controls after the opening', () => {
+it('renders same-color dice with one swap control after the opening', () => {
   for (const theme of archiveThemes) {
     const html = render(
       theme,
@@ -73,31 +73,9 @@ it('retains normal same-color dice and controls after the opening', () => {
     expect(html).toContain(`href="${theme.dice.black[5].src}"`);
     expect(html).toContain(`href="${theme.dice.black[1].src}"`);
     expect(html).not.toContain('data-opening-player');
-    expect(html.match(/aria-disabled="false"/g)).toHaveLength(2);
+    expect(html).toContain('data-dice-action="swap"');
+    expect(html.match(/role="button"/g)).toHaveLength(1);
   }
-});
-
-it('renders two unrolled clickable dice without changing canonical dice', () => {
-  const dice: number[] = [];
-  for (const theme of [undefined, ...archiveThemes]) {
-    const html = render(
-      theme,
-      {
-        ...controls,
-        opening: undefined,
-        preRoll: true,
-        canRoll: true,
-        roll: () => {},
-        label: 'Roll dice',
-      },
-      1,
-      dice,
-    );
-    expect(html.match(/data-dice-action="roll"/g)).toHaveLength(2);
-    expect(html.match(/data-pre-roll-die="true"/g)).toHaveLength(2);
-    expect(html).not.toContain('data-opening-player');
-  }
-  expect(dice).toEqual([]);
 });
 
 it('marks consumed dice as faded artwork without active status lines', () => {

@@ -2,13 +2,11 @@ import { useI18n, type Locale } from './i18n';
 import { interpolate, type TranslationParams } from './i18n-core';
 
 const en = {
-  overview: 'Overview',
   analysis: 'Analysis',
   database: 'Match database',
   settings: 'Settings',
   openMatch: 'Open match',
   evaluation: 'Evaluation',
-  errors: 'Errors',
   notes: 'Notes',
   cards: 'Study cards',
   nextError: 'Next error',
@@ -38,13 +36,11 @@ const en = {
 type Key = keyof typeof en;
 type Catalog = Record<Key, string>;
 const de: Catalog = {
-  overview: 'Übersicht',
   analysis: 'Analyse',
   database: 'Matchdatenbank',
   settings: 'Einstellungen',
   openMatch: 'Match öffnen',
   evaluation: 'Bewertung',
-  errors: 'Fehler',
   notes: 'Notizen',
   cards: 'Lernkarten',
   nextError: 'Nächster Fehler',
@@ -72,13 +68,11 @@ const de: Catalog = {
   configurationError: 'Einstellungen konnten nicht geladen werden.',
 };
 const es: Catalog = {
-  overview: 'Vista general',
   analysis: 'Análisis',
   database: 'Base de partidas',
   settings: 'Ajustes',
   openMatch: 'Abrir partida',
   evaluation: 'Evaluación',
-  errors: 'Errores',
   notes: 'Notas',
   cards: 'Tarjetas',
   nextError: 'Siguiente error',
@@ -106,13 +100,11 @@ const es: Catalog = {
   configurationError: 'No se pudieron cargar los ajustes.',
 };
 const fr: Catalog = {
-  overview: 'Vue d’ensemble',
   analysis: 'Analyse',
   database: 'Base de matchs',
   settings: 'Paramètres',
   openMatch: 'Ouvrir un match',
   evaluation: 'Évaluation',
-  errors: 'Erreurs',
   notes: 'Notes',
   cards: 'Cartes',
   nextError: 'Erreur suivante',
@@ -140,13 +132,11 @@ const fr: Catalog = {
   configurationError: 'Impossible de charger les paramètres.',
 };
 const pl: Catalog = {
-  overview: 'Przegląd',
   analysis: 'Analiza',
   database: 'Baza meczów',
   settings: 'Ustawienia',
   openMatch: 'Otwórz mecz',
   evaluation: 'Ocena',
-  errors: 'Błędy',
   notes: 'Notatki',
   cards: 'Fiszki',
   nextError: 'Następny błąd',
@@ -174,13 +164,11 @@ const pl: Catalog = {
   configurationError: 'Nie można wczytać ustawień.',
 };
 const it: Catalog = {
-  overview: 'Panoramica',
   analysis: 'Analisi',
   database: 'Archivio partite',
   settings: 'Impostazioni',
   openMatch: 'Apri partita',
   evaluation: 'Valutazione',
-  errors: 'Errori',
   notes: 'Note',
   cards: 'Schede',
   nextError: 'Errore successivo',

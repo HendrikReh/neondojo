@@ -60,21 +60,40 @@ fn reported_threads(output: &str) -> Option<i32> {
     })
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum GnubgMoveFilter {
+    Top14,
+}
+
+impl GnubgMoveFilter {
+    pub(crate) fn for_analysis(engine_id: &str, plies: i32) -> Option<Self> {
+        (engine_id == "gnubg" && matches!(plies, 2 | 4)).then_some(Self::Top14)
+    }
+}
+
 #[derive(Clone)]
 pub struct Engine {
     binary: String,
     expected_version: Option<String>,
     threads: Option<i32>,
+    move_filter: Option<GnubgMoveFilter>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct Candidate {
     pub rank: i32,
     pub notation: String,
+    /// Ordered checker steps supplied by the engine, when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
     pub equity: f64,
     /// Win, win gammon (including backgammon), win backgammon,
     /// loss, lose gammon (including backgammon), lose backgammon.
     pub probabilities: Vec<f64>,
+    /// Depth actually used for this candidate, when recorded by the engine.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plies: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -112,6 +131,7 @@ impl Engine {
             binary,
             expected_version: None,
             threads: None,
+            move_filter: None,
         }
     }
 
@@ -122,6 +142,35 @@ impl Engine {
 
     pub(crate) fn calculation_threads(&self) -> i32 {
         self.threads.unwrap_or(1)
+    }
+
+    pub(crate) fn with_move_filter(mut self, filter: Option<GnubgMoveFilter>) -> Self {
+        self.move_filter = filter;
+        self
+    }
+
+    pub(crate) fn move_filter(&self) -> Option<GnubgMoveFilter> {
+        self.move_filter
+    }
+
+    pub(crate) fn append_move_filter(
+        &self,
+        commands: &mut String,
+        scope: &str,
+        plies: i32,
+    ) -> Option<i32> {
+        let stages: &[i32] = match (plies, self.move_filter) {
+            (2, Some(GnubgMoveFilter::Top14)) => &[0],
+            (4, Some(GnubgMoveFilter::Top14)) => &[0, 2],
+            _ => return None,
+        };
+        let count = 14;
+        for stage in stages {
+            commands.push_str(&format!(
+                "set {scope} movefilter {plies} {stage} {count} 0 0\n"
+            ));
+        }
+        Some(count)
     }
 
     pub(crate) fn with_expected_version(mut self, version: Option<String>) -> Self {
@@ -370,7 +419,11 @@ impl Engine {
             ensure!((1..=6).contains(&a) && (1..=6).contains(&b), "Invalid dice");
             commands.push_str(&format!("set dice {a} {b}\n"));
         }
-        commands.push_str("hint 5\n");
+        let count = self
+            .append_move_filter(&mut commands, "evaluation", plies)
+            .unwrap_or(10);
+        let hint = format!("hint {count}\nsave game hint.sgf\n");
+        commands.push_str(&hint);
         let temp = tempfile::tempdir()?;
         let output = self.run(temp.path(), &commands).await?;
         let engine = output
@@ -381,11 +434,14 @@ impl Engine {
         let candidates = if output.contains("There are no legal moves.") {
             // A dance is still a real checker decision. GNUbg evaluates the board
             // after passing, from the opponent's perspective; invert it back.
-            let forced_commands = commands.replace("hint 5\n", "set automatic roll off\nset automatic move off\nset player 0 human\nset player 1 human\nmove\neval\n");
+            let forced_commands = commands.replace(&hint, "set automatic roll off\nset automatic move off\nset player 0 human\nset player 1 human\nmove\neval\n");
             let output = self.run(temp.path(), &forced_commands).await?;
             vec![parse_pass(&output, plies)?]
         } else {
-            parse_hints(&output)?
+            let mut candidates = parse_hints(&output)?;
+            crate::match_analysis::retain_hint_paths(temp.path(), position_id, &mut candidates)
+                .await;
+            candidates
         };
         Ok(Analysis {
             engine,
@@ -406,12 +462,15 @@ impl Engine {
         if forced_pass {
             return self.analyze(position_id, match_id, plies, None).await;
         }
-        let commands = decision_hint_commands(position_id, match_id, plies)? + "hint 10000\n";
+        let commands = decision_hint_commands(position_id, match_id, plies)?
+            + "hint 10000\nsave game hint.sgf\n";
         let directory = tempfile::tempdir()?;
         let output = self
             .run_with_timeout(directory.path(), &commands, Duration::from_secs(180))
             .await?;
-        let (candidates, evaluated_plies) = parse_full_checker_hints(&output, plies)?;
+        let (mut candidates, evaluated_plies) = parse_full_checker_hints(&output, plies)?;
+        crate::match_analysis::retain_hint_paths(directory.path(), position_id, &mut candidates)
+            .await;
         Ok(Analysis {
             engine: output
                 .lines()
@@ -577,62 +636,75 @@ pub fn valid_id(value: &str, length: usize) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == b'+' || c == b'/')
 }
 
-pub(crate) fn parse_hints(output: &str) -> Result<Vec<Candidate>> {
+/// GNUbg uses the same rows for hints and game exports, marking the played
+/// move with an asterisk in the game export.
+pub(crate) fn parse_checker_candidates(output: &str) -> Result<Vec<(Candidate, bool)>> {
     static PATTERN: OnceLock<Regex> = OnceLock::new();
     let pattern = PATTERN.get_or_init(|| {
-        Regex::new(r"^\s*(\d+)\.\s+Cubeful\s+\d+-ply\s+(.+?)\s+Eq\.:\s*([+-]?[\d.]+)").unwrap()
+        Regex::new(
+            r"^\s*(\*)?\s*(\d+)\.\s+Cubeful\s+(\d+)-ply\s+(.+?)\s+Eq\.:\s*([+-]?[0-9]+\.[0-9]+)",
+        )
+        .unwrap()
     });
-    let mut candidates: Vec<Candidate> = Vec::new();
-    for line in output.lines() {
+    let mut candidates = Vec::new();
+    let mut lines = output.lines();
+    while let Some(line) = lines.next() {
         if let Some(captures) = pattern.captures(line) {
-            candidates.push(Candidate {
-                rank: captures[1].parse()?,
-                notation: captures[2].trim().into(),
-                equity: captures[3].parse()?,
-                probabilities: vec![],
-            });
-        } else if let Some(candidate) = candidates.last_mut()
-            && candidate.probabilities.is_empty()
-        {
-            let probabilities: Vec<f64> = line
+            let probabilities = lines
+                .next()
+                .context("Missing GNUbg checker probabilities")?
                 .split_whitespace()
-                .filter_map(|s| s.parse().ok())
-                .collect();
-            if probabilities.len() == 6 {
-                candidate.probabilities = probabilities;
-            }
+                .filter(|token| *token != "-")
+                .map(str::parse::<f64>)
+                .collect::<Result<Vec<_>, _>>()?;
+            let equity: f64 = captures[5].parse()?;
+            ensure!(
+                equity.is_finite()
+                    && probabilities.len() == 6
+                    && probabilities.iter().all(|p| (0.0..=1.0).contains(p)),
+                "Incomplete GNUbg evaluation"
+            );
+            candidates.push((
+                Candidate {
+                    rank: captures[2].parse()?,
+                    notation: captures[4].trim().into(),
+                    path: None,
+                    equity,
+                    probabilities,
+                    plies: Some(captures[3].parse()?),
+                },
+                captures.get(1).is_some(),
+            ));
         }
     }
+    Ok(candidates)
+}
+
+pub(crate) fn parse_hints(output: &str) -> Result<Vec<Candidate>> {
+    let candidates = parse_checker_candidates(output)?;
     ensure!(
         !candidates.is_empty(),
         "GNUbg returned no evaluable move candidates"
     );
-    ensure!(
-        candidates.iter().all(|c| c.equity.is_finite()
-            && c.probabilities.len() == 6
-            && c.probabilities.iter().all(|p| (0.0..=1.0).contains(p))),
-        "Incomplete GNUbg evaluation"
-    );
-    Ok(candidates)
+    Ok(candidates
+        .into_iter()
+        .map(|(candidate, _)| candidate)
+        .collect())
 }
 
 pub(crate) fn parse_full_checker_hints(output: &str, plies: i32) -> Result<(Vec<Candidate>, i32)> {
-    static DEPTH: OnceLock<Regex> = OnceLock::new();
-    let depth = DEPTH.get_or_init(|| Regex::new(r"(?m)^\s*\d+\.\s+Cubeful\s+(\d+)-ply").unwrap());
     let candidates = parse_hints(output)?;
-    let depths = depth
-        .captures_iter(output)
-        .map(|row| row[1].parse::<i32>())
-        .collect::<Result<Vec<_>, _>>()?;
+    let evaluated_plies = candidates[0]
+        .plies
+        .context("Missing native checker evaluation depth")?;
     ensure!(
-        depths.len() == candidates.len(),
-        "Missing native checker evaluation depth"
-    );
-    ensure!(
-        candidates.len() == 1 || depths.iter().all(|depth| *depth == plies),
+        candidates.len() == 1
+            || candidates
+                .iter()
+                .all(|candidate| candidate.plies == Some(plies)),
         "Native feedback contains lower-depth pruned candidates"
     );
-    Ok((candidates, depths[0]))
+    Ok((candidates, evaluated_plies))
 }
 
 fn parse_pass(output: &str, plies: i32) -> Result<Candidate> {
@@ -660,6 +732,7 @@ fn parse_pass(output: &str, plies: i32) -> Result<Candidate> {
     Ok(Candidate {
         rank: 1,
         notation: "dance".into(),
+        path: None,
         equity: -values[6],
         probabilities: vec![
             1.0 - values[0],
@@ -669,6 +742,7 @@ fn parse_pass(output: &str, plies: i32) -> Result<Candidate> {
             values[1],
             values[2],
         ],
+        plies: Some(plies),
     })
 }
 
@@ -793,6 +867,22 @@ mod tests {
             .unwrap();
         assert_eq!(result.candidates[0].notation, "8/5 6/5");
         assert!(result.candidates[0].equity > 0.1);
+    }
+
+    #[tokio::test]
+    #[ignore = "requires local GNUbg with weights"]
+    async fn real_gnubg_position_hint_retains_the_native_move_path() {
+        let engine = super::Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()));
+        let result = engine
+            .analyze("4HPwATDgc/ABMA", "cAmvAgAAAAAE", 2, None)
+            .await
+            .unwrap();
+        let candidate = result
+            .candidates
+            .iter()
+            .find(|c| c.notation == "24/15")
+            .unwrap();
+        assert_eq!(candidate.path.as_deref(), Some("24/18 18/15"));
     }
 
     #[tokio::test]

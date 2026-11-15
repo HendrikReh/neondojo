@@ -1,6 +1,8 @@
+import { rollDice } from './play-board-actions';
 import { test, expect } from './test';
 import { nativeSteps } from '../src/play-sound-events';
 import { historyFixture } from './play-history-review-helpers';
+import { profileBackend } from './profile-backend';
 const id = '994b5330-bf4c-4d57-88c0-111111111111';
 const other = '994b5330-bf4c-4d57-88c0-222222222222';
 const db = '00000000-0000-0000-0000-000000000003';
@@ -231,7 +233,10 @@ for (const retry of [false, true])
       await page.locator('.database-table tbody tr').getByRole('checkbox').check();
       await page
         .locator('.library-batch-bar')
-        .getByRole('button', { name: 'Resume match', exact: true })
+        .getByRole('button', {
+          name: 'Resume match',
+          exact: true,
+        })
         .click();
       await expect(page.locator('.play-board')).toBeVisible({ timeout: 3000 });
       await expect
@@ -352,6 +357,7 @@ test('a paused match resumes from Paused Matches at its saved decision', async (
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 1800, height: 1169 });
+  const profile = await profileBackend(page);
   const { saved: session } = await historyFixture(page);
   const pausedDb = '00000000-0000-0000-0000-000000000004';
   const match = row(session.id, 'roll');
@@ -418,13 +424,8 @@ test('a paused match resumes from Paused Matches at its saved decision', async (
   await page.reload();
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();
   const toolbar = page.getByTestId('play-board-toolbar');
-  await expect(
-    toolbar.getByRole('button', { name: 'Roll dice' }),
-  ).toBeVisible();
-  await page
-    .locator('.play-header')
-    .getByRole('button', { name: 'Pause match', exact: true })
-    .click();
+  await expect(rollDice(page)).toBeVisible();
+  await page.getByRole('button', { name: 'Pause match', exact: true }).click();
   await expect(page.getByText('Match paused', { exact: true })).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'Resume match', exact: true }),
@@ -440,7 +441,11 @@ test('a paused match resumes from Paused Matches at its saved decision', async (
   await expect(
     page.getByRole('button', { name: 'Empty database', exact: true }),
   ).toHaveCount(0);
-  await expect(page.getByText('Import into: Unsorted')).toBeVisible();
+  await expect(
+    page
+      .getByRole('combobox', { name: 'Import destination' })
+      .locator('option:checked'),
+  ).toHaveText('Unsorted');
   const matchRow = page
     .getByRole('row')
     .filter({ hasText: 'Library bot match' });
@@ -456,13 +461,15 @@ test('a paused match resumes from Paused Matches at its saved decision', async (
   await matchRow.getByRole('checkbox').check();
   await page
     .locator('.library-batch-bar')
-    .getByRole('button', { name: 'Resume match', exact: true })
+    .getByRole('button', {
+      name: 'Resume match',
+      exact: true,
+    })
     .click();
   await expect(toolbar).toBeVisible();
-  await expect(
-    toolbar.getByRole('button', { name: 'Roll dice', exact: true }),
-  ).toBeEnabled();
+  await expect(rollDice(page)).toBeEnabled();
   expect(actions).toEqual(['pause', 'resume']);
+  expect(profile.calls.filter(({ method }) => method !== 'GET')).toEqual([]);
 });
 
 test('pausing from the checker board keeps the confirmed turn checkpoint', async ({
