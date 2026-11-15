@@ -325,7 +325,7 @@ test('native match and game metrics open the exact visible decision filters', as
     name: 'statistics-drilldown.sgf',
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(
-      `(;GM[6]PW[Stats ${crypto.randomUUID()}]PB[Opponent]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])(;GM[6]MI[length:7][ws:1][bs:0];W[31hefe];B[42qusu])`,
+      `(;GM[6]PW[Stats ${crypto.randomUUID()}]PB[Opponent]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])(;GM[6]MI[length:7][ws:1][bs:0];W[31xufe];B[42qusu])`,
     ),
   });
   await submitFullMatchAnalysis(page, await openFullMatchAnalysis(page));
@@ -377,6 +377,7 @@ test('native match and game metrics open the exact visible decision filters', as
   // The whole-match decision filter stays on game 2 while browsing another game.
   await page.getByLabel('Select game', { exact: true }).selectOption('1');
   await expect(page.locator('.board-heading')).toContainText('Game 1');
+  await expect(page.getByLabel('Filter by game', { exact: true })).toHaveValue('2');
   const nextError = page.waitForRequest(
     (r) =>
       new URL(r.url()).pathname.endsWith('/review-decisions') &&

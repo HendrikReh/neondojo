@@ -162,7 +162,8 @@ test('imported decisions work in error navigation without a local job', async ({
               ).id,
             }))
           : errors;
-    return route.fulfill({ json: { items, next_cursor: null } });
+    expect(query.get('analysis_id')).toBe(importedEntry.id);
+    return route.fulfill({ json: { items, next_cursor: null, total: items.length } });
   });
   await page.addInitScript(
     (id) =>

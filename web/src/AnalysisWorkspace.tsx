@@ -324,6 +324,7 @@ export default function AnalysisWorkspace({
       : undefined;
   const cube = errors && reviewRow?.kind === 'cube' ? reviewRow : undefined;
   const cubeBoard = cube?.review_position;
+  const cubeMoveId = cube?.move_id;
   const boardPosition = cubeBoard ?? position;
   const checkerReview =
     reviewingCheckers &&
@@ -614,14 +615,13 @@ export default function AnalysisWorkspace({
                     position ? () => setReviewSelection(undefined) : undefined
                   }
                   onDetails={
-                    cube.source === 'imported' && cube.move_id
+                    cubeMoveId
                       ? () =>
                           onMoveNotes({
                             gameNo: cube.game_no,
-                            moveId: cube.move_id!,
+                            moveId: cubeMoveId,
                             decisionKind: 'cube',
-                            reviewPosition: cubeBoard,
-                            reviewPlayed: cube.played,
+                            reviewDecision: cube,
                           })
                       : undefined
                   }

@@ -23,14 +23,14 @@ for (const source of ['engine', 'file', 'book'] as const)
     page,
   }) => {
     await page.addInitScript(
-      ({ matchId, positionId, jobId }) => {
+      ({ matchId }) => {
         localStorage.setItem('bgtutor.locale', 'en');
         localStorage.setItem(
           'bgtutor.workspace',
           JSON.stringify({ matchId, gameNo: 1 }),
         );
       },
-      { matchId, positionId, jobId },
+      { matchId },
     );
     await page.route('**/api/**', async (route) => {
       if (

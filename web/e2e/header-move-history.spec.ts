@@ -173,6 +173,7 @@ test('header keyboard navigation and history navigation retain selection, focus 
   await expect(page.getByRole('tab', { name: 'Extras', exact: true })).toBeFocused();
   await page.keyboard.press('ArrowRight');
   await expect(tab).toBeFocused();
+  await expect(tab).toHaveAttribute('aria-selected', 'true');
   await page.locator('.moves-list button').nth(1).focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('.board-heading')).toContainText('Move 2');

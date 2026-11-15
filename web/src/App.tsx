@@ -876,8 +876,7 @@ export default function App() {
                   gameNo: target?.gameNo ?? navigation.game.game_no,
                   moveId: target?.moveId,
                   decisionKind: target?.decisionKind,
-                  reviewPosition: target?.reviewPosition,
-                  reviewPlayed: target?.reviewPlayed,
+                  reviewDecision: target?.reviewDecision,
                 });
             }}
             deckRevision={deckRevision}

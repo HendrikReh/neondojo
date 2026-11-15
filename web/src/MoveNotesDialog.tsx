@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { type Match, type Position } from './api';
+import type { Match } from './api';
 import {
   loadDecisions,
   movePosition,
@@ -9,6 +9,8 @@ import {
 import Board from './Board';
 import AnnotationPanel from './AnnotationPanel';
 import ImportedMoveAnalysis from './ImportedMoveAnalysis';
+import AnalysisDecisionSummary from './AnalysisDecisionSummary';
+import type { ReviewDecision } from './review-decisions-api';
 import LibraryDialog from './LibraryDialog';
 import { useLibraryText } from './library-messages';
 import { useI18n } from './i18n';
@@ -18,8 +20,7 @@ export interface MoveNotesTarget {
   gameNo: number;
   moveId?: string;
   decisionKind?: 'checker' | 'cube';
-  reviewPosition?: Position;
-  reviewPlayed?: string;
+  reviewDecision?: ReviewDecision;
 }
 export default function MoveNotesDialog({
   target,
@@ -55,6 +56,7 @@ export default function MoveNotesDialog({
   );
   const kind = move?.position_uuid ? 'position' : 'move';
   const reviewingTarget = move?.id === target.moveId;
+  const decision = reviewingTarget ? target.reviewDecision : undefined;
   return (
     <LibraryDialog title={l('cubeNotes')} onClose={onClose}>
       <p>
@@ -89,23 +91,32 @@ export default function MoveNotesDialog({
         <div className="move-notes-content">
           <div>
             <Board
-              position={
-                (reviewingTarget && target.reviewPosition) || movePosition(move)
-              }
+              position={decision?.review_position ?? movePosition(move)}
               white={target.match.white}
               black={target.match.black}
               theme={theme}
             />
-            <p>
-              {formatDecision(
-                (reviewingTarget && target.reviewPlayed) || move.notation,
-              )}
-            </p>
-            <ImportedMoveAnalysis
-              moveId={move.id}
-              players={target.match}
-              decisionKind={reviewingTarget ? target.decisionKind : undefined}
-            />
+            {decision?.source === 'native' ? (
+              <AnalysisDecisionSummary
+                decision={decision}
+                source={[decision.engine, decision.depth]
+                  .filter(Boolean)
+                  .join(' · ')}
+              />
+            ) : (
+              <>
+                <p>{formatDecision(decision?.played ?? move.notation)}</p>
+                {target.reviewDecision?.source !== 'native' && (
+                  <ImportedMoveAnalysis
+                    moveId={move.id}
+                    players={target.match}
+                    decisionKind={
+                      reviewingTarget ? target.decisionKind : undefined
+                    }
+                  />
+                )}
+              </>
+            )}
           </div>
           <AnnotationPanel
             key={move.id}
