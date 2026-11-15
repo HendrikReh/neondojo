@@ -31,6 +31,30 @@ fn engine() -> Engine {
     Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()))
 }
 
+#[cfg(unix)]
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn health_allows_gnubg_version_startup_past_300_ms(pool: PgPool) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = tempfile::tempdir().unwrap();
+    let executable = directory.path().join("gnubg");
+    std::fs::write(
+        &executable,
+        "#!/bin/sh\nsleep 0.6\nprintf '%s\\n' 'GNU Backgammon test version'\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let app = api::router(AppState::new(
+        pool,
+        Engine::new(executable.to_str().unwrap().to_owned()),
+    ));
+
+    let (status, health) = call(app, "GET", "/api/health", Value::Null).await;
+    assert_eq!(status, 200, "{health}");
+    assert_eq!(health["gnubg"], "GNU Backgammon test version");
+}
+
 #[sqlx::test(migrations = false)]
 #[ignore = "requires PostgreSQL"]
 async fn play_latency_migration_preserves_existing_analysis_history(pool: PgPool) {

@@ -6,6 +6,10 @@ import { profileBackend } from './profile-backend';
 import { defaultConfiguration } from '../src/configuration-model';
 import { expect, test, type Page } from './test';
 
+// A native distribution evaluates 21 rolls. Some cases run three distributions.
+const distributionTimeout = 100_000;
+test.describe.configure({ timeout: 360_000 });
+
 async function openPosition(page: Page) {
   const configuration = structuredClone(defaultConfiguration);
   configuration.analysis.plies = 0;
@@ -51,7 +55,7 @@ test('dice equity starts from the header and reuses results across tabs, positio
   expect(submissions).toHaveLength(0);
   await calculateDiceEquity(page);
   await expect(page.locator('.dice-grid button')).toHaveCount(36, {
-    timeout: 45_000,
+    timeout: distributionTimeout,
   });
   expect(submissions).toHaveLength(1);
   expect(submissions[0]).toMatchObject({ kind: 'dice', plies: 0 });
@@ -78,7 +82,7 @@ test('dice equity starts from the header and reuses results across tabs, positio
   await calculateDiceEquity(page);
   await expect.poll(() => submissions.length).toBe(2);
   await expect(page.locator('.dice-grid button')).toHaveCount(36, {
-    timeout: 45_000,
+    timeout: distributionTimeout,
   });
   expect(submissions[1].position_id).not.toBe(submissions[0].position_id);
   let releaseRestore!: () => void;
@@ -130,7 +134,7 @@ test('dice equity starts from the header and reuses results across tabs, positio
     .click();
   await expect.poll(() => submissions.length).toBe(3);
   await expect(page.locator('.dice-grid button')).toHaveCount(36, {
-    timeout: 45_000,
+    timeout: distributionTimeout,
   });
   expect(submissions[2]).toMatchObject({
     position_id: submissions[0].position_id,
@@ -191,7 +195,7 @@ test('repeated selection while submission is delayed creates only one job', asyn
   expect(attempts).toBe(1);
   release();
   await expect(page.locator('.dice-grid button')).toHaveCount(36, {
-    timeout: 45_000,
+    timeout: distributionTimeout,
   });
   expect(attempts).toBe(1);
 });
@@ -210,7 +214,7 @@ test('changing position in a hidden dice view does not submit a job', async ({
   });
   await calculateDiceEquity(page);
   await expect(page.locator('.dice-grid button')).toHaveCount(36, {
-    timeout: 45_000,
+    timeout: distributionTimeout,
   });
   await page.getByRole('tab', { name: 'Notes', exact: true }).click();
   await page.getByRole('button', { name: 'Next move', exact: true }).click();
@@ -263,7 +267,7 @@ test('an engine failure stays visible until a new explicit dice calculation', as
   failed = false;
   await calculateDiceEquity(page);
   await expect(page.locator('.dice-grid button')).toHaveCount(36, {
-    timeout: 45_000,
+    timeout: distributionTimeout,
   });
   expect(attempts).toBe(2);
 });

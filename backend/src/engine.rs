@@ -218,6 +218,15 @@ impl Engine {
         self.version_unlocked(&resolve_binary(&self.binary)?).await
     }
 
+    /// Keep the health check responsive when a benchmark owns the engine.
+    /// A started version probe uses its normal subprocess timeout.
+    pub(crate) async fn health_version(&self) -> Result<String> {
+        let _permit = tokio::time::timeout(Duration::from_millis(300), engine_permit())
+            .await
+            .context("GNUbg is busy")?;
+        self.version_unlocked(&resolve_binary(&self.binary)?).await
+    }
+
     async fn version_unlocked(&self, binary: &str) -> Result<String> {
         let result = tokio::time::timeout(
             Duration::from_secs(5),
