@@ -98,6 +98,13 @@ for (const [width, height] of [
     await page.setViewportSize({ width, height });
     const requests = await library(page);
     const rows = page.locator('.database-table tbody tr');
+    const batch = page.locator('.library-batch-bar');
+    const actions = batch.getByRole('button');
+    await expect(actions).toHaveCount(6);
+    for (const action of await actions.all()) {
+      await expect(action).toBeInViewport();
+      await expect(action).toBeDisabled();
+    }
     const first = rows.first(),
       long = rows.nth(1);
     for (const row of [first, long])
@@ -168,14 +175,16 @@ for (const [width, height] of [
     );
     await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
     await first.getByRole('checkbox').check();
+    await expect(
+      batch.getByRole('button', { name: 'Export', exact: true }),
+    ).toBeEnabled();
     await long.getByRole('checkbox').check();
-    await expect(page.locator('.library-batch-bar')).toContainText('2');
-    for (const name of ['Copy', 'Move', 'Tags', 'Export', 'Delete'])
-      await expect(
-        page
-          .locator('.library-batch-bar')
-          .getByRole('button', { name, exact: true }),
-      ).toBeVisible();
+    await expect(batch).toContainText('2');
+    for (const action of await actions.all()) await expect(action).toBeEnabled();
+    await batch
+      .getByRole('button', { name: 'Clear selection', exact: true })
+      .click();
+    for (const action of await actions.all()) await expect(action).toBeDisabled();
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,

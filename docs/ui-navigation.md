@@ -42,6 +42,10 @@ numbered buttons show up to five nearby pages. **First** and **Last** jump
 directly to the ends of the current result set. A new filter or sort starts at
 page 1. Match, saved position and flashcard selections can span pages.
 
+The match database keeps the action icons visible above the results. They
+start disabled and become available when the current selection supports the
+action.
+
 The player database uses the Positions layout with a result table on the left
 and the selected profile on the right. Click a row or use the arrow keys to
 change the profile. The match list begins below the profile header. Its

@@ -132,7 +132,12 @@ test('numeric IDs and every data column sort through the API and reset paged sel
   await rows.first().getByRole('checkbox').check();
   await expect(page.locator('.library-batch-bar')).toBeVisible();
   await sort('id', 'desc');
-  await expect(page.locator('.library-batch-bar')).toHaveCount(0);
+  await expect(
+    page.locator('.library-batch-bar').getByRole('button', {
+      name: 'Clear selection',
+      exact: true,
+    }),
+  ).toBeDisabled();
   await page.getByRole('button', { name: 'Next page', exact: true }).click();
   await expect(rows).toHaveCount(5);
   expect(await readIds()).toEqual([...expectedIds].reverse().slice(50));

@@ -639,7 +639,12 @@ test('explicit searches clear prior scope and filters, rerun the position and do
     .check();
   await expect(page.locator('.library-batch-bar')).toBeVisible();
   await search();
-  await expect(page.locator('.library-batch-bar')).toHaveCount(0);
+  await expect(
+    page.locator('.library-batch-bar').getByRole('button', {
+      name: 'Clear selection',
+      exact: true,
+    }),
+  ).toBeDisabled();
   const cleared = page.waitForResponse(
     (r) =>
       new URL(r.url()).pathname === '/api/library/matches' &&

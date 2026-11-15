@@ -427,6 +427,7 @@ export default function MatchDatabase({
   }, [visible, matches]);
   const active = databases.find((d) => d.id === databaseId);
   const importTarget = acceptsLibraryMatches(databaseId) ? active : undefined;
+  const hasSelection = selected.size > 0;
   const pausedSelected = selectedRows.some(
     (m) => m.play_paused && selected.has(m.id),
   );
@@ -625,41 +626,41 @@ export default function MatchDatabase({
               disabled={!columns.custom}
             />
           </div>
-          {selected.size > 0 && <p className="fineprint">{l('batchLimit')}</p>}
-          {selected.size > 0 && (
-            <div className="library-batch-bar">
-              <strong>{l('selected', { count: selected.size })}</strong>
-              {(['copy', 'move', 'tags', 'export', 'delete'] as const).map(
-                (action) => (
-                  <ActionButton
-                    icon={action === 'tags' ? 'edit' : action}
-                    label={l(action)}
-                    compact
-                    key={action}
-                    disabled={
-                      pausedSelected &&
-                      ['copy', 'move', 'delete'].includes(action)
-                    }
-                    onClick={() =>
-                      setDialog({
-                        kind: 'batch',
-                        action,
-                        ids: [...selected],
-                        source: databaseId,
-                      })
-                    }
-                  />
-                ),
-              )}
-              <ActionButton
-                icon="clear"
-                label={l('clearSelection')}
-                compact
-                onClick={() => setSelectedRows([])}
-                aria-label={l('clearSelection')}
-              />
-            </div>
-          )}
+          <div className="library-batch-bar" data-has-selection={hasSelection}>
+            <strong>{l('selected', { count: selected.size })}</strong>
+            {(['copy', 'move', 'tags', 'export', 'delete'] as const).map(
+              (action) => (
+                <ActionButton
+                  icon={action === 'tags' ? 'edit' : action}
+                  label={l(action)}
+                  compact
+                  key={action}
+                  disabled={
+                    !hasSelection ||
+                    (pausedSelected &&
+                      ['copy', 'move', 'delete'].includes(action))
+                  }
+                  onClick={() =>
+                    setDialog({
+                      kind: 'batch',
+                      action,
+                      ids: [...selected],
+                      source: databaseId,
+                    })
+                  }
+                />
+              ),
+            )}
+            <ActionButton
+              icon="clear"
+              label={l('clearSelection')}
+              compact
+              disabled={!hasSelection}
+              onClick={() => setSelectedRows([])}
+              aria-label={l('clearSelection')}
+            />
+          </div>
+          {hasSelection && <p className="fineprint">{l('batchLimit')}</p>}
           {result && (
             <div className="library-action-result" role="status">
               {Object.entries(
