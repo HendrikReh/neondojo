@@ -13,7 +13,7 @@ import {
   hasPlayMovePreview,
   type PlayMovePreviewContext,
 } from './PlayMovePreview';
-import type { PlayDecision, PlaySession } from './play-api';
+import { playSeverity, type PlayDecision, type PlaySession } from './play-api';
 import { usePlayModeText } from './play-mode-messages';
 import { usePlayText } from './play-messages';
 
@@ -44,6 +44,10 @@ export default function PlayCoachFeedback({
   const detailsTrigger = useRef<HTMLButtonElement>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const checkerTurn = decision.action === 'move' || decision.action === 'pass';
+  const severity =
+    decision.revealed && decision.loss != null
+      ? playSeverity(decision.severity)
+      : 'none';
   useEffect(() => {
     panel.current?.focus({ preventScroll: true });
   }, []);
@@ -63,8 +67,10 @@ export default function PlayCoachFeedback({
           aria-busy={busy}
         >
           <h3>{t('coach')}</h3>
-          <p className="play-coach-choice">{choice}</p>
-          {decision.revealed && <DecisionEvaluation decision={decision} />}
+          <div className={`play-coach-note severity-${severity}`}>
+            <p className="play-coach-choice">{choice}</p>
+            {decision.revealed && <DecisionEvaluation decision={decision} />}
+          </div>
           {checkerTurn ? (
             <p>{playT(decision.action === 'pass' ? 'passReady' : 'ready')}</p>
           ) : (

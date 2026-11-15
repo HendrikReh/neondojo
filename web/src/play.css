@@ -790,13 +790,20 @@
 .play-coach-summary > button {
   width: 100%;
 }
+.play-coach-note {
+  display: grid;
+  gap: inherit;
+  border-radius: 6px;
+  padding: 4px 6px;
+}
 .play-coach-feedback .play-coach-choice {
-  color: var(--ui-text);
+  color: inherit;
   font-size: var(--font-size-subject);
   font-weight: var(--font-weight-semibold);
   font-variant-numeric: tabular-nums;
 }
 .play-coach-feedback .play-feedback-result {
+  color: inherit;
   font-size: var(--font-size-label);
 }
 .play-workspace .play-hint-button {
@@ -915,9 +922,11 @@
 
 .play-workspace .play-resign-button,
 .play-workspace .play-resign-confirm {
-  color: #a32929;
   border-color: #d7aaaa;
   min-height: 48px;
+}
+.play-workspace .play-resign-confirm {
+  color: #a32929;
 }
 .play-resign-dialog > p {
   text-align: left;

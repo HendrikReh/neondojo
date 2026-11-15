@@ -10,6 +10,7 @@ for (const width of [1440, 390])
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ colorScheme: width === 1440 ? 'dark' : 'light' });
     const { saved, writes, point } = await historyFixture(page);
     saved.play_mode = 'coach';
     await page.reload();
@@ -18,6 +19,11 @@ for (const width of [1440, 390])
     const toolbar = page.getByTestId('play-board-toolbar');
     const resign = toolbar.getByRole('button', { name: 'Resign', exact: true });
     await expect(resign).toBeVisible();
+    const hint = toolbar.getByRole('button', { name: 'Hint', exact: true });
+    await expect(resign).toHaveCSS(
+      'color',
+      await hint.evaluate((button) => getComputedStyle(button).color),
+    );
     const undoBox = (await toolbar
       .getByRole('button', { name: 'Undo step', exact: true })
       .boundingBox())!;

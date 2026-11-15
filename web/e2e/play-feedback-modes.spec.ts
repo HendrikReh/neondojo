@@ -157,6 +157,39 @@ test('Coach shows deltas while hiding absolute equity and probabilities', async 
     'false',
   );
 });
+for (const [grade, token, loss, width, height] of [
+  ['doubtful', '--ui-warning-text', 0.01, 1800, 1169],
+  ['bad', '--ui-bad-text', 0.08, 2560, 1440],
+  ['blunder', '--ui-danger-text', 0.16, 3840, 2160],
+  ['very_bad', '--ui-danger-text', 0.3, 3840, 2160],
+] as const) {
+  test(`Coach highlights a ${grade} decision using the review color`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height });
+    await page.emulateMedia({ colorScheme: width === 1800 ? 'light' : 'dark' });
+    await resume(
+      page,
+      saved('coach', { ...decision, revealed: true, loss, severity: grade }),
+    );
+    const panel = page.getByTestId('play-feedback');
+    const choice = panel.getByText('8/5 6/5', { exact: true });
+    const color = await choice.evaluate((element, property) => {
+      const sample = document.createElement('span');
+      sample.style.color = `var(${property})`;
+      element.append(sample);
+      const color = getComputedStyle(sample).color;
+      sample.remove();
+      return color;
+    }, token);
+    await expect(choice).toHaveCSS('color', color);
+    await expect(panel.locator('.play-feedback-result')).toHaveCSS(
+      'color',
+      color,
+    );
+  });
+}
+
 test('Tutor restores a neutral warning and reveals only on request', async ({
   page,
 }) => {
