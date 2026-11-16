@@ -335,6 +335,7 @@ test('an analyzed annotated position becomes a shared study card and a downloada
     await route.continue();
   });
   const download = page.waitForEvent('download');
+  await study.locator('.learning-anki-menu > summary').click();
   await study
     .getByRole('button', { name: 'Anki-Deck herunterladen', exact: true })
     .click();
@@ -350,6 +351,7 @@ test('an analyzed annotated position becomes a shared study card and a downloada
   await study
     .getByLabel('Deck auswählen', { exact: true })
     .selectOption(deck.id);
+  await study.locator('.learning-anki-menu > summary').click();
   await expect(
     study.getByRole('button', { name: 'Anki-Deck herunterladen', exact: true }),
   ).toBeEnabled();
@@ -379,7 +381,7 @@ test('an annotation jump supersedes a delayed game load and switching views pres
   await page
     .getByLabel('Matchdatei', { exact: true })
     .setInputFiles('../backend/tests/fixtures/WC2014.mat');
-  await expect(page.locator('.moves-list button')).toHaveCount(8);
+  await expect(page.locator('.moves-list .move-history-row')).toHaveCount(8);
   const id = await page
     .locator('[data-annotation-kind=position]')
     .getAttribute('data-annotation-id');
@@ -556,7 +558,7 @@ test('a whole-match deck trains checker, double and response cards with the sele
     .click();
   await expect(add).toContainText('1 Karten verarbeitet.');
   await page.getByLabel('Spiel auswählen', { exact: true }).selectOption('2');
-  await expect(page.locator('.moves-list button')).toHaveCount(0);
+  await expect(page.locator('.moves-list .move-history-row')).toHaveCount(0);
   await page.getByRole('tab', { name: 'Notizen', exact: true }).click();
   await expect(
     page.getByRole('tab', { name: 'Position', exact: true }),

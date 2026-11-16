@@ -556,6 +556,7 @@ test('real renamed decks update position membership and Anki; deleting one share
     });
   }
   const download = page.waitForEvent('download');
+  await study.locator('.learning-anki-menu > summary').click();
   await study
     .getByRole('button', { name: 'Download Anki deck', exact: true })
     .click();

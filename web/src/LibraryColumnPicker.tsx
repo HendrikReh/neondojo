@@ -1,6 +1,6 @@
 import { useI18n } from './i18n';
 import ActionButton from './ActionButton';
-import { useEffect, useRef } from 'react';
+import { useDetailsDismiss } from './useDetailsDismiss';
 import { useLibraryText } from './library-messages';
 
 export default function LibraryColumnPicker<Column extends string>({
@@ -27,31 +27,13 @@ export default function LibraryColumnPicker<Column extends string>({
     it: ['Sposta su', 'Sposta giù'],
     pl: ['Przenieś w górę', 'Przenieś w dół'],
   }[locale];
-  const l = useLibraryText(),
-    root = useRef<HTMLDetailsElement>(null);
-  useEffect(() => {
-    const close = (event: PointerEvent) => {
-      if (
-        root.current?.open &&
-        event.target instanceof Node &&
-        !root.current.contains(event.target)
-      )
-        root.current.open = false;
-    };
-    document.addEventListener('pointerdown', close);
-    return () => document.removeEventListener('pointerdown', close);
-  }, []);
+  const l = useLibraryText();
+  const dismiss = useDetailsDismiss();
   return (
     <details
       className="library-column-picker"
-      ref={root}
-      onKeyDown={(event) => {
-        if (event.key === 'Escape' && root.current?.open) {
-          event.preventDefault();
-          root.current.open = false;
-          root.current.querySelector('summary')?.focus();
-        }
-      }}
+      ref={dismiss.ref}
+      onKeyDown={dismiss.onKeyDown}
     >
       <summary>{l('columns')}</summary>
       <div

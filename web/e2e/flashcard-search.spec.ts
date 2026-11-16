@@ -268,10 +268,12 @@ test('Send to Anki targets the selected deck and reports the import outcome', as
       await route.fulfill({ status: 204 });
     }
   });
+  await study.locator('.learning-anki-menu > summary').click();
   await send.click();
   await expect(study.getByRole('alert')).toHaveText(
     'Open Anki Desktop with the AnkiConnect add-on listening on port 8765.',
   );
+  await study.locator('.learning-anki-menu > summary').click();
   await send.click();
   await expect(study.getByText('Anki imported “Mochy studies”.')).toBeVisible();
   await expect(study.getByRole('alert')).toHaveCount(0);
@@ -298,6 +300,7 @@ test('Sync Anki reviews reports both directions for the selected deck', async ({
       },
     });
   });
+  await study.locator('.learning-anki-menu > summary').click();
   await sync.click();
   await expect(study.getByText(/Anki profile Test profile/)).toContainText(
     '2 reviews received · 1 sent · 1 cards matched · 0 unmatched',

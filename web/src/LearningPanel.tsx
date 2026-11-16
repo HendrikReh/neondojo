@@ -17,6 +17,7 @@ import { useI18n } from './i18n';
 import { useLearningText } from './learning-messages';
 import type { Theme } from './themes';
 import StudyCardExercise from './StudyCardExercise';
+import { useDetailsDismiss } from './useDetailsDismiss';
 import LearningCardBrowser from './LearningCardBrowser';
 import CardSuggestionsPanel from './CardSuggestionsPanel';
 import CardSearchControls from './CardSearchControls';
@@ -481,6 +482,7 @@ export default function LearningWorkspace({
   const [appliedDeckToken, setAppliedDeckToken] = useState<number>();
   const [missingDeckToken, setMissingDeckToken] = useState<number>();
   const [studying, setStudying] = useState(false);
+  const ankiMenu = useDetailsDismiss();
   function chooseDeck(id: string) {
     setMissingDeckToken(undefined);
     setCardNotice(undefined);
@@ -996,50 +998,71 @@ export default function LearningWorkspace({
         >
           {t('studyNow')}
         </ActionButton>
-        <ActionButton
-          icon="export"
-          label={exporting ? t('exporting') : t('export')}
-          disabled={!sourceDeck.card_count || exporting}
-          onClick={() => void download()}
+        <details
+          className="learning-anki-menu"
+          ref={ankiMenu.ref}
+          onKeyDown={ankiMenu.onKeyDown}
         >
-          {exporting ? t('exporting') : t('export')}
-        </ActionButton>
-        <ActionButton
-          icon="link"
-          label={practiceT('sendAnki')}
-          disabled={!sourceDeck.card_count || ankiBusy}
-          onClick={() => void sendToAnki(sourceDeck)}
-        >
-          {practiceT('sendAnki')}
-        </ActionButton>
-        <ActionButton
-          icon="refresh"
-          label={practiceT('syncAnkiReviews')}
-          disabled={!sourceDeck.card_count || ankiBusy}
-          onClick={() => void syncReviews(sourceDeck)}
-        >
-          {practiceT('syncAnkiReviews')}
-        </ActionButton>
-        <input
-          ref={ankiInput}
-          type="file"
-          hidden
-          accept=".apkg"
-          multiple
-          onChange={(event) => {
-            const files = Array.from(event.target.files ?? []);
-            event.target.value = '';
-            void importAnki(files);
-          }}
-        />
-        <ActionButton
-          icon="open"
-          label={practiceT('ankiImport')}
-          disabled={ankiBusy}
-          onClick={() => ankiInput.current?.click()}
-        >
-          {practiceT('ankiImport')}
-        </ActionButton>
+          <summary>Anki</summary>
+          <div
+            className="learning-anki-menu-items"
+            role="group"
+            aria-label="Anki"
+            onClick={(event) => {
+              if (
+                event.target instanceof Element &&
+                event.target.closest('button') &&
+                ankiMenu.ref.current
+              )
+                ankiMenu.ref.current.open = false;
+            }}
+          >
+            <ActionButton
+              icon="export"
+              label={exporting ? t('exporting') : t('export')}
+              disabled={!sourceDeck.card_count || exporting}
+              onClick={() => void download()}
+            >
+              {exporting ? t('exporting') : t('export')}
+            </ActionButton>
+            <ActionButton
+              icon="link"
+              label={practiceT('sendAnki')}
+              disabled={!sourceDeck.card_count || ankiBusy}
+              onClick={() => void sendToAnki(sourceDeck)}
+            >
+              {practiceT('sendAnki')}
+            </ActionButton>
+            <ActionButton
+              icon="refresh"
+              label={practiceT('syncAnkiReviews')}
+              disabled={!sourceDeck.card_count || ankiBusy}
+              onClick={() => void syncReviews(sourceDeck)}
+            >
+              {practiceT('syncAnkiReviews')}
+            </ActionButton>
+            <input
+              ref={ankiInput}
+              type="file"
+              hidden
+              accept=".apkg"
+              multiple
+              onChange={(event) => {
+                const files = Array.from(event.target.files ?? []);
+                event.target.value = '';
+                void importAnki(files);
+              }}
+            />
+            <ActionButton
+              icon="open"
+              label={practiceT('ankiImport')}
+              disabled={ankiBusy}
+              onClick={() => ankiInput.current?.click()}
+            >
+              {practiceT('ankiImport')}
+            </ActionButton>
+          </div>
+        </details>
       </div>
       {visible && (
         <AnkiAutoSync
@@ -1147,63 +1170,113 @@ export default function LearningWorkspace({
       {cardNotice && <p role="status">{cardNotice}</p>}
     </>
   );
+  // Reviewing a deck gives the page to the card: the heading and the library
+  // actions return with the card search.
+  const reviewing = studying && !practiceRound;
+  const libraryActions = (
+    <div
+      className={
+        reviewing ? 'learning-controls learning-study-bar' : 'learning-controls'
+      }
+    >
+      {reviewing && (
+        <>
+          <ActionButton
+            icon="back"
+            label={t('back')}
+            className="subtle"
+            onClick={() => {
+              setStudying(false);
+              setBusy(false);
+              setLoading(false);
+              generation.current++;
+              setRevealed(null);
+              setNext(null);
+            }}
+          >
+            {t('back')}
+          </ActionButton>
+          {deckSelector}
+        </>
+      )}
+      <ActionButton
+        icon="open"
+        label={libraryText('decks')}
+        onClick={() => setLibraryDialog('decks')}
+      >
+        {libraryText('decks')}
+      </ActionButton>
+      {reviewing && activeNext && (
+        <p className="learning-counts">
+          {t('due', { count: activeNext.counts.due })} ·{' '}
+          {t('newCards', { count: activeNext.counts.new })}
+          {activeNext.counts.new_available != null &&
+            activeNext.counts.new > activeNext.counts.new_available && (
+              <>
+                {' '}
+                (
+                {t('newToday', {
+                  count: activeNext.counts.new_available,
+                })}
+                )
+              </>
+            )}
+        </p>
+      )}
+      {!studying && (
+        <ActionButton
+          icon="search"
+          label={libraryText('duplicates')}
+          onClick={() => setLibraryDialog('duplicates')}
+        >
+          {libraryText('duplicates')}
+        </ActionButton>
+      )}
+      {!studying && !practiceRound && (
+        <>
+          <ActionButton
+            icon="refresh"
+            label={practiceT('ankiOverview')}
+            onClick={() => setLibraryDialog('anki')}
+          >
+            {practiceT('ankiOverview')}
+          </ActionButton>
+          <input
+            ref={externalAnkiInput}
+            type="file"
+            hidden
+            accept=".apkg"
+            multiple
+            onChange={(event) => {
+              const files = Array.from(event.target.files ?? []);
+              event.target.value = '';
+              void importAnki(files, true);
+            }}
+          />
+          <ActionButton
+            icon="open"
+            label={practiceT('externalAnkiImport')}
+            disabled={ankiBusy}
+            onClick={() => externalAnkiInput.current?.click()}
+          >
+            {practiceT('externalAnkiImport')}
+          </ActionButton>
+        </>
+      )}
+    </div>
+  );
   return (
     <section className="learning-workspace" aria-label={t('study')}>
-      <div className="learning-heading">
-        <div>
-          <h1>{t('title')}</h1>
-          <p>{t('description')}</p>
+      {!reviewing && (
+        <div className="learning-heading">
+          <div>
+            <h1>{t('title')}</h1>
+            <p>{t('description')}</p>
+          </div>
+          {libraryActions}
         </div>
-      </div>
-      <div className="learning-controls">
-        <ActionButton
-          icon="open"
-          label={libraryText('decks')}
-          onClick={() => setLibraryDialog('decks')}
-        >
-          {libraryText('decks')}
-        </ActionButton>
-        {!studying && (
-          <ActionButton
-            icon="search"
-            label={libraryText('duplicates')}
-            onClick={() => setLibraryDialog('duplicates')}
-          >
-            {libraryText('duplicates')}
-          </ActionButton>
-        )}
-        {!studying && !practiceRound && (
-          <>
-            <ActionButton
-              icon="refresh"
-              label={practiceT('ankiOverview')}
-              onClick={() => setLibraryDialog('anki')}
-            >
-              {practiceT('ankiOverview')}
-            </ActionButton>
-            <input
-              ref={externalAnkiInput}
-              type="file"
-              hidden
-              accept=".apkg"
-              multiple
-              onChange={(event) => {
-                const files = Array.from(event.target.files ?? []);
-                event.target.value = '';
-                void importAnki(files, true);
-              }}
-            />
-            <ActionButton
-              icon="open"
-              label={practiceT('externalAnkiImport')}
-              disabled={ankiBusy}
-              onClick={() => externalAnkiInput.current?.click()}
-            >
-              {practiceT('externalAnkiImport')}
-            </ActionButton>
-          </>
-        )}
-      </div>
+      )}
+      {reviewing && libraryActions}
       {ankiImportProgress && (
         <p role="status">
           {practiceT('ankiImporting', {
@@ -1254,45 +1327,7 @@ export default function LearningWorkspace({
         />
       ) : studying ? (
         <>
-          <div className="learning-controls">
-            <ActionButton
-              icon="back"
-              label={t('back')}
-              className="subtle"
-              onClick={() => {
-                setStudying(false);
-                setBusy(false);
-                setLoading(false);
-                generation.current++;
-                setRevealed(null);
-                setNext(null);
-              }}
-            >
-              {t('back')}
-            </ActionButton>
-            {deckSelector}
-          </div>
-          <p className="learning-explainer">
-            {t('separateProgress')} {t('retention')}
-          </p>
           {loading && <p role="status">{t('loading')}</p>}
-          {activeNext && (
-            <p className="learning-counts">
-              {t('due', { count: activeNext.counts.due })} ·{' '}
-              {t('newCards', { count: activeNext.counts.new })}
-              {activeNext.counts.new_available != null &&
-                activeNext.counts.new > activeNext.counts.new_available && (
-                  <>
-                    {' '}
-                    (
-                    {t('newToday', {
-                      count: activeNext.counts.new_available,
-                    })}
-                    )
-                  </>
-                )}
-            </p>
-          )}
           {activeNext && !card && (
             <p role="status">
               {t(
@@ -1332,6 +1367,9 @@ export default function LearningWorkspace({
               onGrade={(answer, rating) => void grade(answer, rating)}
             />
           )}
+          <p className="learning-explainer learning-study-note">
+            {t('separateProgress')} {t('retention')}
+          </p>
         </>
       ) : (
         <>
@@ -1353,54 +1391,6 @@ export default function LearningWorkspace({
           >
             {deckSelector}
           </CardSearchControls>
-          <div className="learning-controls">
-            <SearchFilterSelect
-              label={practiceT('size')}
-              value={String(practiceLimit)}
-              onChange={(value) => setPracticeLimit(Number(value))}
-            >
-              <option value="10">{formatNumber(10)}</option>
-              <option value="20">{formatNumber(20)}</option>
-            </SearchFilterSelect>
-            <ActionButton
-              icon="play"
-              label={practiceT('start')}
-              disabled={
-                practiceStarting ||
-                cardSearch.loading ||
-                !cardSearch.items.length
-              }
-              onClick={() => void openPractice()}
-            >
-              {practiceT('start')}
-            </ActionButton>
-            {resumeRound && (
-              <ActionButton
-                icon="open"
-                label={practiceT('resume')}
-                disabled={practiceStarting}
-                onClick={() => void openPractice(resumeRound)}
-              >
-                {practiceT('resume')}
-              </ActionButton>
-            )}
-            <ActionButton
-              icon="view"
-              label={practiceT('preview')}
-              disabled={cardSearch.loading || !cardSearch.items.length}
-              onClick={(event) => {
-                specialPracticeTrigger.current = event.currentTarget;
-                setSpecialPractice({
-                  mode: 'preview',
-                  cards: cardSearch.items.slice(0, practiceLimit),
-                });
-              }}
-            >
-              {practiceT('preview')}
-            </ActionButton>
-          </div>
-          {practiceStarting && <p role="status">{t('loading')}</p>}
-          {!!practiceError && <p role="alert">{formatError(practiceError)}</p>}
           {deckPanel}
           <TransferPractice
             onStart={(round) => {
@@ -1432,7 +1422,60 @@ export default function LearningWorkspace({
             }}
             actions={
               <>
-                {cardActions}
+                <div className="learning-result-toolbar">
+                  <div className="learning-controls learning-practice-row">
+                    <SearchFilterSelect
+                      label={practiceT('size')}
+                      value={String(practiceLimit)}
+                      onChange={(value) => setPracticeLimit(Number(value))}
+                    >
+                      <option value="10">{formatNumber(10)}</option>
+                      <option value="20">{formatNumber(20)}</option>
+                    </SearchFilterSelect>
+                    <ActionButton
+                      icon="play"
+                      label={practiceT('start')}
+                      disabled={
+                        practiceStarting ||
+                        cardSearch.loading ||
+                        !cardSearch.items.length
+                      }
+                      onClick={() => void openPractice()}
+                    >
+                      {practiceT('start')}
+                    </ActionButton>
+                    {resumeRound && (
+                      <ActionButton
+                        icon="open"
+                        label={practiceT('resume')}
+                        disabled={practiceStarting}
+                        onClick={() => void openPractice(resumeRound)}
+                      >
+                        {practiceT('resume')}
+                      </ActionButton>
+                    )}
+                    <ActionButton
+                      icon="view"
+                      label={practiceT('preview')}
+                      disabled={cardSearch.loading || !cardSearch.items.length}
+                      onClick={(event) => {
+                        specialPracticeTrigger.current = event.currentTarget;
+                        setSpecialPractice({
+                          mode: 'preview',
+                          cards: cardSearch.items.slice(0, practiceLimit),
+                        });
+                      }}
+                    >
+                      {practiceT('preview')}
+                    </ActionButton>
+                  </div>
+                  {cardActions}
+                </div>
+                {practiceStarting && <p role="status">{t('loading')}</p>}
+                {!!practiceError && (
+                  <p role="alert">{formatError(practiceError)}</p>
+                )}
+
                 {selectedItem?.position && (
                   <div className="learning-controls">
                     <ActionButton

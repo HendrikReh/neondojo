@@ -68,7 +68,8 @@ recurring-mistakes practice dialog with the errors of the current page.
 
 Buttons that have a shortcut name it in their tooltip and expose it through
 `aria-keyshortcuts`. **N**, **D**, **T** and **P** choose a cube action,
-**Enter** checks an answer and continues, **1**–**4** rate a flashcard, and
+**Enter** checks an answer and continues, **A** shows the answer, **1**–**4**
+rate a flashcard (a study card shows these keys on its buttons), and
 **E** / **Shift+E** move to the next or previous error in Analysis. In
 **Playing**, **Enter** rolls, confirms a complete turn or passes, **D**
 doubles, **H** requests a hint, **Z** undoes a checker step, and **Escape**

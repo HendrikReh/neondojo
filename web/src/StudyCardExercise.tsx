@@ -292,6 +292,7 @@ export function CardExercise({
       type="button"
       icon="solution"
       label={t('reveal')}
+      shortcut="A"
       disabled={busy}
       onClick={() => {
         setError(undefined);
@@ -435,14 +436,6 @@ function CardSolution({
   const { decision, candidates, engine, plies } = answer.solution;
   return (
     <div className="study-solution-source">
-      <p>
-        {label}: {engine}
-        {plies == null
-          ? answer.solution.imported?.depth
-            ? ` · ${answer.solution.imported.depth}`
-            : ''
-          : ` · ${formatNumber(plies)}-ply`}
-      </p>
       {decision && (
         <div className="study-decision">
           <strong>
@@ -457,6 +450,14 @@ function CardSolution({
           </p>
         </div>
       )}
+      <p className="study-source">
+        {label}: {engine}
+        {plies == null
+          ? answer.solution.imported?.depth
+            ? ` · ${answer.solution.imported.depth}`
+            : ''
+          : ` · ${formatNumber(plies)}-ply`}
+      </p>
       {!!candidates.length && (
         <table>
           <thead>

@@ -104,6 +104,11 @@ beforeEach(() => {
   hooks.index = 0;
   hooks.pending.clear();
   fetch.mockReset();
+  // The Anki menu listens for pointer presses outside it.
+  vi.stubGlobal('document', {
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  });
   vi.stubGlobal('localStorage', {
     getItem: (key: string) => (key === 'bgtutor.deck' ? 'a' : 'en'),
     setItem: vi.fn(),

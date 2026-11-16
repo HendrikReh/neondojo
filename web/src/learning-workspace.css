@@ -348,3 +348,240 @@
   overflow-wrap: anywhere;
   max-width: 320px;
 }
+
+/* Reviewing: one bar above the card, then board and answer side by side. */
+.learning-study-bar {
+  align-items: end;
+  margin-top: 0;
+}
+.learning-study-bar .learning-counts {
+  margin: 0 0 0 auto;
+  align-self: center;
+  font-variant-numeric: tabular-nums;
+}
+.learning-workspace .study-card {
+  margin-block: 12px;
+}
+.learning-study-note {
+  max-width: 920px;
+  margin-inline: auto;
+  font-size: var(--font-size-meta);
+  color: var(--ui-muted);
+}
+.study-source {
+  font-size: var(--font-size-meta);
+  color: var(--ui-muted);
+}
+/* A shortcut is shown on its button, so nobody has to hover to learn it. */
+.study-card .action-button[data-shortcut]::after {
+  content: attr(data-shortcut);
+  min-width: 1.5em;
+  padding: 1px 5px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-micro);
+  line-height: 1.4;
+  text-align: center;
+  color: var(--ui-muted);
+}
+.study-card .action-button[data-shortcut='Enter']::after {
+  content: '↵';
+}
+.study-ratings .action-button > .action-icon {
+  display: none;
+}
+
+@media (width > 1200px) {
+  /* Board on the left, question, actions and answer in a column beside it.
+     The board spans every row; the last, flexible row takes up its height. */
+  .study-card:not(.study-card-anki) {
+    --study-side: 400px;
+    --study-gap: 24px;
+    /* The board keeps its aspect ratio, so its width follows the height left
+       below the page chrome: question, board and actions share one screen. */
+    --study-board: min(1040px, max(480px, (100vh - 330px) * 1.42));
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) var(--study-side);
+    grid-template-rows: repeat(15, auto) 1fr;
+    column-gap: var(--study-gap);
+    max-width: min(
+      100%,
+      calc(var(--study-board) + var(--study-side) + var(--study-gap) + 42px)
+    );
+  }
+  .study-card:not(.study-card-anki) > * {
+    grid-column: 2;
+    min-width: 0;
+  }
+  .study-card:not(.study-card-anki) > :is(.play-board, .board-shell) {
+    grid-column: 1;
+    grid-row: 1 / -1;
+  }
+  .study-card:not(.study-card-anki) > :is(.play-board, .board-shell) .board {
+    margin-block: 6px;
+  }
+  .study-card:not(.study-card-anki) > h3:first-of-type {
+    margin-top: 6px;
+  }
+  .study-card:not(.study-card-anki) > .study-answer {
+    margin-top: 16px;
+  }
+}
+
+/* Card search: the library actions share the heading row. */
+.learning-workspace .learning-heading {
+  align-items: start;
+  margin-bottom: 14px;
+}
+.learning-heading > .learning-controls {
+  margin: 0;
+}
+/* Text, player and deck choice sit in one row that ends in the search button. */
+.learning-workspace .position-search-row {
+  display: flex;
+  flex-wrap: wrap;
+}
+.learning-workspace .position-search-row > label {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+.learning-workspace .position-search-row > label:first-child {
+  flex-grow: 2;
+}
+.learning-workspace .position-search-row > label select {
+  width: 100%;
+  max-width: none;
+}
+/* "More filters" and "Clear filters" share the line below the fields. */
+.learning-workspace .position-filter-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.learning-workspace .position-filter-form > * {
+  grid-column: 1 / -1;
+}
+.learning-workspace .position-filter-form > :nth-child(2) {
+  grid-row: 2;
+}
+.learning-workspace .position-filter-form > .position-filter-footer {
+  grid-area: 2 / 2;
+  align-self: start;
+  margin-top: 9px;
+}
+.learning-workspace .position-filter-details {
+  margin-top: 9px;
+}
+.learning-workspace .position-filter-details summary {
+  width: fit-content;
+}
+/* Deck panel: name, the one primary action and the Anki menu in one row. */
+.learning-deck-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 16px;
+}
+.learning-deck-panel > h2 {
+  margin: 0;
+}
+.learning-deck-panel > :not(h2, .learning-controls) {
+  grid-column: 1 / -1;
+}
+.learning-deck-panel .learning-anki-auto-sync,
+.learning-deck-panel .learning-explainer {
+  margin-top: 0;
+}
+.learning-anki-menu {
+  position: relative;
+}
+.learning-anki-menu > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  font-size: var(--font-size-body);
+  cursor: pointer;
+  list-style: none;
+}
+.learning-anki-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.learning-anki-menu > summary::after {
+  content: '▾';
+  color: var(--ui-muted);
+}
+.learning-anki-menu-items {
+  position: absolute;
+  right: 0;
+  z-index: 20;
+  display: grid;
+  gap: 4px;
+  min-width: 260px;
+  margin-top: 4px;
+  padding: 6px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  box-shadow: 0 8px 24px #0004;
+}
+.learning-anki-menu-items .action-button {
+  justify-content: flex-start;
+  border-color: transparent;
+  background: transparent;
+}
+/* Optional tools between the deck and the results. */
+.learning-workspace > details {
+  margin-block: 4px;
+}
+.learning-workspace > details > summary {
+  width: fit-content;
+  padding: 4px 0;
+  color: var(--ui-muted);
+  font-size: var(--font-size-body);
+  cursor: pointer;
+}
+.learning-workspace > details[open] {
+  margin-bottom: 12px;
+}
+.learning-workspace > details + .learning-card-browser,
+.learning-workspace > details + .position-browser-layout {
+  margin-top: 12px;
+}
+/* Round size and the practice starts belong to the hits they work on. */
+.learning-result-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: 8px 24px;
+  margin-bottom: 10px;
+}
+.learning-result-toolbar > .learning-practice-row,
+.learning-result-toolbar > .position-selection-summary {
+  margin: 0;
+}
+.learning-result-toolbar > .learning-practice-row {
+  align-items: end;
+}
+.learning-result-toolbar > [role='status'] {
+  flex-basis: 100%;
+  margin: 0;
+}
+.learning-workspace .position-filter-footer .action-button {
+  min-height: 28px;
+  padding: 3px 6px;
+  border-color: transparent;
+  background: transparent;
+}
+.learning-anki-menu-items {
+  min-width: max-content;
+}
+.learning-anki-menu-items .action-button {
+  text-align: start;
+  white-space: nowrap;
+}
