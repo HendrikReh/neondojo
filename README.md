@@ -93,7 +93,9 @@ Open <http://127.0.0.1:5173>. Vite forwards `/api` to `http://127.0.0.1:8787` by
 
 ## Analysis workspace
 
-The top navigation opens **Playing**, **Analysis**, **Study**, **Positions**, **Match database**, **Player database**, and **Extras**, with **Settings** on the right. Arrow keys and Home/End navigate the main and detail tabs. The app restores the last match, game, and position locally. Switching tabs preserves filters, note drafts, and SSE subscriptions. A submitted job continues to be tracked if you change the selected game or position while the request is pending.
+The header lists **Playing**, **Analysis**, **Study**, **Positions**, **Match database**, **Player database**, and **Extras** from left to right, with **Settings** on the right. With a header tab focused, Left and Right select the previous and next tabs. Home selects **Playing** and End selects **Extras**. The app opens **Analysis** by default.
+
+Arrow keys and Home/End also navigate the detail tabs. The app restores the last match, game, and position locally. Switching tabs preserves filters, note drafts, and SSE subscriptions. A submitted job continues to be tracked if you change the selected game or position while the request is pending.
 
 The desktop **Checker** places move history on the left and position evaluation beside the board. Long lists scroll independently and keep the current move visible. Dedicated tabs include **Statistics**, **Cube**, **Notes**, and **Study cards**. The header shows the players, match ID and length, saved score, date, event, and PR per player. Date and event come from saved metadata and show `n/a` when unavailable. The header also shows the round and location when saved. Match PR updates when a complete native match analysis finishes.
 
@@ -298,6 +300,7 @@ BG Tutor automatically provides **Unsorted** for imports without an explicit tar
 
 ### Filtering and navigating matches
 
+- The match list loads when you open **Match database**. It requests 50 results at a time and fetches another page when you select it.
 - Use the search bar to find matches by player or file name. **Filters** opens the advanced match filters, **Notes** searches tags and comments, and **Position ID** finds exact board occurrences. Opening a panel collapses the previous panel and keeps its inputs. The match list and the exact position search share the table filters.
 - Applied table filters appear below the search field, even when the filter panel is collapsed. Remove a chip to rerun the search with the remaining filters.
 - An exact GNUbg Position ID filter shows every occurrence as its own row in the match table, including repeats in the same game. Use the **Database**, **Game** and **Move** columns to locate or sort the occurrences. Click the move number to open that exact occurrence. The result count refers to occurrences. A checkbox selects the entire match, and the bulk action bar counts each selected match once.
@@ -320,7 +323,7 @@ The library shows PR for a complete match analysis with native GNUbg statistics.
 
 Select matches with the checkboxes and choose an action in the toolbar above the list. **Open match**, **Resume match** and **Edit match details** require a single selection. **Copy**, **Move**, **Tags**, **Export** and **Delete** support multiple matches. Most actions support up to 100 matches. Exports support SGF and original format, with a limit of 50 matches and 64 MiB of combined source data.
 
-**Analyze selected matches …** uses one engine and depth for the entire selection and submits one background job per available match. The dialog counts matches that cannot be analyzed and reports rejected submissions by match. **Try again** resubmits the rejected matches. Progress above the list counts completed analyses out of the accepted jobs and shows failures separately, including after the dialog closes. Reloading the Match database during a bulk analysis restores the list and resumes progress tracking in the same browser tab.
+**Analyze selected matches …** uses one engine and depth for the entire selection and submits one background job per available match. The dialog counts matches that cannot be analyzed and reports rejected submissions by match. **Try again** resubmits the rejected matches. **Bulk analysis** above the list counts completed analyses out of the accepted jobs for the selected database and shows failures separately, including after the dialog closes. **All databases** shows the combined progress, including older jobs tracked without a database assignment. The match list refreshes as tracked analyses complete. Reloading the Match database during a bulk analysis restores the list and resumes progress tracking in the same browser tab.
 
 - Copies get independent match, position, game and move IDs, with copied tags, comments and all completed analyses with their original scopes and the selected analysis. Review history and active jobs belong to their original records.
 - Moves preserve IDs. BG Tutor detects duplicates within a database by original-file hash. If the destination already contains that file, it retains both the existing destination record and the source match, including their notes.
