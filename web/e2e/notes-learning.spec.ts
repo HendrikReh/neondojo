@@ -78,7 +78,10 @@ test('match and position notes persist, search jumps to the exact move, and conf
   );
   await page.getByRole('tab', { name: 'Matchdatenbank', exact: true }).click();
   const search = page.locator('.annotation-search');
-  await page.locator('.library-search-toolbar').getByRole('button', { name: 'Notizen', exact: true }).click();
+  await page
+    .locator('.library-search-toolbar')
+    .getByRole('button', { name: 'Notizen', exact: true })
+    .click();
   await search
     .getByLabel('Text', { exact: true })
     .fill(`position-comment-${suffix}`);
@@ -245,10 +248,12 @@ test('an analyzed annotated position becomes a shared study card and a downloada
     .getByRole('button', { name: 'Aktuelle Position hinzufügen', exact: true })
     .click();
   await expect(add).toContainText('1 Karten verarbeitet.');
-  await page.getByRole('tab', { name: 'Study', exact: true }).click();
-  await page.getByRole('tab', { name: 'Lernkarten & Anki', exact: true }).click();
+  await page.getByRole('tab', { name: 'Lernen', exact: true }).click();
+  await page
+    .getByRole('tab', { name: 'Lernkarten & Anki', exact: true })
+    .click();
   const study = page.getByRole('region', {
-    name: 'Study',
+    name: 'Lernen',
     exact: true,
   });
   await study
@@ -349,8 +354,10 @@ test('an analyzed annotated position becomes a shared study card and a downloada
     study.getByRole('button', { name: 'Anki-Deck herunterladen', exact: true }),
   ).toBeEnabled();
   await page.reload();
-  await page.getByRole('tab', { name: 'Study', exact: true }).click();
-  await page.getByRole('tab', { name: 'Lernkarten & Anki', exact: true }).click();
+  await page.getByRole('tab', { name: 'Lernen', exact: true }).click();
+  await page
+    .getByRole('tab', { name: 'Lernkarten & Anki', exact: true })
+    .click();
   await study
     .getByLabel('Deck auswählen', { exact: true })
     .selectOption(deck.id);
@@ -393,7 +400,10 @@ test('an annotation jump supersedes a delayed game load and switching views pres
   ).toBe(200);
   await page.getByRole('tab', { name: 'Matchdatenbank', exact: true }).click();
   const search = page.locator('.annotation-search');
-  await page.locator('.library-search-toolbar').getByRole('button', { name: 'Notizen', exact: true }).click();
+  await page
+    .locator('.library-search-toolbar')
+    .getByRole('button', { name: 'Notizen', exact: true })
+    .click();
   await search.getByLabel('Text', { exact: true }).fill(marker);
   await search
     .getByRole('button', { name: 'Notizen suchen', exact: true })
@@ -468,7 +478,7 @@ test('an annotation jump supersedes a delayed game load and switching views pres
   });
   await page.getByLabel('Spiel auswählen', { exact: true }).selectOption('2');
   await viewStarted;
-  await page.getByRole('tab', { name: 'Study', exact: true }).click();
+  await page.getByRole('tab', { name: 'Lernen', exact: true }).click();
   await expect(
     page.getByRole('tabpanel', { name: 'Übersicht', exact: true }),
   ).toBeVisible();
@@ -566,10 +576,12 @@ test('a whole-match deck trains checker, double and response cards with the sele
   await settings.getByRole('button', { name: 'Brett', exact: true }).click();
   await settings.getByRole('button', { name: 'Walnut', exact: true }).click();
   await applyAndCloseSettings(settings, 'de');
-  await page.getByRole('tab', { name: 'Study', exact: true }).click();
-  await page.getByRole('tab', { name: 'Lernkarten & Anki', exact: true }).click();
+  await page.getByRole('tab', { name: 'Lernen', exact: true }).click();
+  await page
+    .getByRole('tab', { name: 'Lernkarten & Anki', exact: true })
+    .click();
   const study = page.getByRole('region', {
-    name: 'Study',
+    name: 'Lernen',
     exact: true,
   });
   await study

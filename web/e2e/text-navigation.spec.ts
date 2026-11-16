@@ -221,7 +221,7 @@ test('header tabs follow the workspace order with mouse and keyboard', async ({
   const labels = [
     'Spielen',
     'Analyse',
-    'Study',
+    'Lernen',
     'Positionen',
     'Matchdatenbank',
     'Spielerdatenbank',

@@ -31,7 +31,12 @@ async function study(
     r.fulfill({ json: report }),
   );
   await page.goto('/');
-  await page.getByRole('tab', { name: 'Study', exact: true }).click();
+  await page
+    .getByRole('tab', {
+      name: locale === 'de' ? 'Lernen' : 'Study',
+      exact: true,
+    })
+    .click();
   await page
     .getByRole('tab', {
       name: locale === 'de' ? 'Auswertungen' : 'Reports',

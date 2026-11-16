@@ -8,7 +8,10 @@ async function open(page: Page, locale = 'en') {
   await page.route('**/api/decks', (route) => route.fulfill({ json: [] }));
   await page.goto('/');
   await page
-    .getByRole('tab', { name: 'Study', exact: true })
+    .getByRole('tab', {
+      name: locale === 'de' ? 'Lernen' : 'Study',
+      exact: true,
+    })
     .click({ timeout: 5000 });
   await page
     .getByRole('tab', {
@@ -190,7 +193,7 @@ test('Study areas support German labels, unknown PR and arrow/Home/End navigatio
     }),
   );
   await page.goto('/');
-  await page.getByRole('tab', { name: 'Study', exact: true }).click();
+  await page.getByRole('tab', { name: 'Lernen', exact: true }).click();
   const overview = page.getByRole('tab', { name: 'Übersicht', exact: true });
   const cards = page.getByRole('tab', {
     name: 'Lernkarten & Anki',
@@ -207,7 +210,9 @@ test('Study areas support German labels, unknown PR and arrow/Home/End navigatio
   await expect(archive.locator('tbody tr td').nth(6)).toHaveText('—');
   await page.keyboard.press('Home');
   await expect(overview).toBeFocused();
-  await expect(page.getByRole('tabpanel', { name: 'Übersicht', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('tabpanel', { name: 'Übersicht', exact: true }),
+  ).toBeVisible();
   await page.keyboard.press('End');
   const practiceHistory = page.getByRole('tab', {
     name: 'Übungsverlauf',

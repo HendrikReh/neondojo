@@ -70,7 +70,12 @@ async function open(page: Page, locale = 'en') {
   await page.route('**/api/decks', (r) => r.fulfill({ json: [] }));
   await page.route('**/api/databases', (r) => r.fulfill({ json: [database] }));
   await page.goto('/');
-  await page.getByRole('tab', { name: 'Study', exact: true }).click();
+  await page
+    .getByRole('tab', {
+      name: locale === 'de' ? 'Lernen' : 'Study',
+      exact: true,
+    })
+    .click();
   await page
     .getByRole('tab', {
       name:
@@ -710,6 +715,7 @@ test('position search exposes the same game plan labels and sends the chosen opt
   const select = pane.getByRole('combobox', { name: 'Game plan', exact: true });
   await expect(select.getByRole('option')).toHaveText([
     'Any',
+    'Opening',
     'Pure race',
     'Racing (contact)',
     'Attacking / blitz',
