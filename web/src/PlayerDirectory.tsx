@@ -232,8 +232,8 @@ function PlayerCard({
           <h2>{details.display_name}</h2>
           <p>
             {t('counts', {
-              matches: formatNumber(details.match_count),
-              games: formatNumber(details.game_count),
+              matches: details.match_count,
+              games: details.game_count,
             })}
           </p>
         </div>
@@ -271,8 +271,8 @@ function PlayerCard({
                 <strong>{formatNumber(rating.value, prDigits)}</strong>
                 <span>
                   {t('coverage', {
-                    rated: formatNumber(rating.match_count),
-                    total: formatNumber(details.match_count),
+                    rated: rating.match_count,
+                    total: details.match_count,
                   })}
                 </span>
                 <span className="player-rating-profile">{rating.profile}</span>

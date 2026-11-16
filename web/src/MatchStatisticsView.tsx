@@ -280,7 +280,7 @@ export default function MatchStatisticsView({
   comparison?: ReactNode;
 }) {
   const text = useStatisticsText();
-  const { formatNumber, formatError } = useI18n();
+  const { formatError } = useI18n();
   const catalogText = useAnalysisCatalogText();
   const current =
     analysisEntry && statistics?.analysis_id === analysisEntry.id
@@ -316,12 +316,9 @@ export default function MatchStatisticsView({
           {(summary || job) && (
             <p className="statistics-coverage">
               {text('coverage', {
-                completed: formatNumber(
+                completed:
                   summary?.completed_games ?? job?.completed_games ?? 0,
-                ),
-                total: formatNumber(
-                  summary?.total_games ?? job?.total_games ?? 0,
-                ),
+                total: summary?.total_games ?? job?.total_games ?? 0,
               })}
             </p>
           )}
@@ -329,8 +326,8 @@ export default function MatchStatisticsView({
             <>
               <p className="statistics-coverage">
                 {text('decisionsCoverage', {
-                  analyzed: formatNumber(summary.analyzed_moves),
-                  total: formatNumber(summary.total_moves),
+                  analyzed: summary.analyzed_moves,
+                  total: summary.total_moves,
                 })}
               </p>
               <PlayerStatisticsSummary

@@ -1,5 +1,5 @@
 import { useI18n, type Locale } from './i18n';
-import { interpolate, type TranslationParams } from './i18n-core';
+import { formatMessage, type TranslationParams } from './i18n-core';
 const en = {
   globalBusy:
     'Benchmark running or waiting. Other engine actions wait until measurement finishes.',
@@ -8,10 +8,12 @@ const en = {
   navigation: 'Extra tools',
   title: 'Engine benchmark',
   reference: 'Fixed reference',
-  referenceFacts: '{points} points · {games} games · {moves} checker moves',
+  referenceFacts:
+    '{points, plural, one {# point} other {# points}} · {games, plural, one {# game} other {# games}} · {moves, plural, one {# checker move} other {# checker moves}}',
   referenceVersion: 'Reference version {version}',
   protocol: 'Protocol',
-  timeout: 'Timeout: {seconds} seconds per game',
+  timeout:
+    'Timeout: {seconds, plural, one {# second} other {# seconds}} per game',
   noTimeout: 'No time limit',
   engine: 'Benchmark engine',
   plies: 'Analysis depth',
@@ -58,10 +60,12 @@ const de: Record<Key, string> = {
   navigation: 'Zusatzwerkzeuge',
   title: 'Engine-Benchmark',
   reference: 'Feste Referenz',
-  referenceFacts: '{points} Punkte · {games} Spiele · {moves} Checkerzüge',
+  referenceFacts:
+    '{points, plural, one {# Punkt} other {# Punkte}} · {games, plural, one {# Spiel} other {# Spiele}} · {moves, plural, one {# Checkerzug} other {# Checkerzüge}}',
   referenceVersion: 'Referenzversion {version}',
   protocol: 'Protokoll',
-  timeout: 'Zeitlimit: {seconds} Sekunden pro Spiel',
+  timeout:
+    'Zeitlimit: {seconds, plural, one {# Sekunde} other {# Sekunden}} pro Spiel',
   noTimeout: 'Ohne Zeitlimit',
   engine: 'Benchmark-Engine',
   plies: 'Analysetiefe',
@@ -111,10 +115,11 @@ const base: Record<Locale, Record<Key, string>> = {
     title: 'Benchmark de motores',
     reference: 'Referencia fija',
     referenceFacts:
-      '{points} puntos · {games} partidas · {moves} jugadas de fichas',
+      '{points, plural, one {# punto} other {# puntos}} · {games, plural, one {# partida} other {# partidas}} · {moves, plural, one {# jugada de fichas} other {# jugadas de fichas}}',
     referenceVersion: 'Versión de referencia {version}',
     protocol: 'Protocolo',
-    timeout: 'Límite de {seconds} segundos por partida',
+    timeout:
+      'Límite de {seconds, plural, one {# segundo} other {# segundos}} por partida',
     noTimeout: 'Sin límite de tiempo',
     engine: 'Motor del benchmark',
     plies: 'Profundidad de análisis',
@@ -161,10 +166,11 @@ const base: Record<Locale, Record<Key, string>> = {
     title: 'Benchmark des moteurs',
     reference: 'Référence fixe',
     referenceFacts:
-      '{points} points · {games} parties · {moves} coups de pions',
+      '{points, plural, one {# point} other {# points}} · {games, plural, one {# partie} other {# parties}} · {moves, plural, one {# coup de pions} other {# coups de pions}}',
     referenceVersion: 'Version de référence {version}',
     protocol: 'Protocole',
-    timeout: 'Limite de {seconds} secondes par partie',
+    timeout:
+      'Limite de {seconds, plural, one {# seconde} other {# secondes}} par partie',
     noTimeout: 'Sans limite de temps',
     engine: 'Moteur du benchmark',
     plies: 'Profondeur d’analyse',
@@ -211,10 +217,11 @@ const base: Record<Locale, Record<Key, string>> = {
     title: 'Benchmark dei motori',
     reference: 'Riferimento fisso',
     referenceFacts:
-      '{points} punti · {games} partite · {moves} mosse di pedine',
+      '{points, plural, one {# punto} other {# punti}} · {games, plural, one {# partita} other {# partite}} · {moves, plural, one {# mossa di pedine} other {# mosse di pedine}}',
     referenceVersion: 'Versione di riferimento {version}',
     protocol: 'Protocollo',
-    timeout: 'Limite di {seconds} secondi per partita',
+    timeout:
+      'Limite di {seconds, plural, one {# secondo} other {# secondi}} per partita',
     noTimeout: 'Senza limite di tempo',
     engine: 'Motore del benchmark',
     plies: 'Profondità di analisi',
@@ -260,10 +267,12 @@ const base: Record<Locale, Record<Key, string>> = {
     navigation: 'Narzędzia dodatkowe',
     title: 'Benchmark silników',
     reference: 'Stały materiał odniesienia',
-    referenceFacts: '{points} pkt · {games} partii · {moves} ruchów pionkami',
+    referenceFacts:
+      '{points} pkt · {games, plural, one {# partia} few {# partie} many {# partii}} · {moves, plural, one {# ruch pionkami} few {# ruchy pionkami} many {# ruchów pionkami}}',
     referenceVersion: 'Wersja materiału odniesienia {version}',
     protocol: 'Protokół',
-    timeout: 'Limit {seconds} sekund na partię',
+    timeout:
+      'Limit {seconds, plural, one {# sekunda} few {# sekundy} many {# sekund}} na partię',
     noTimeout: 'Bez limitu czasu',
     engine: 'Silnik benchmarku',
     plies: 'Głębokość analizy',
@@ -439,10 +448,10 @@ export const benchmarkText = (
   key: Key | PlayKey,
   values?: TranslationParams,
 ) =>
-  interpolate(
+  formatMessage(
+    locale,
     isPlayKey(key) ? play[locale][key] : base[locale][key],
     values,
-    locale,
   );
 export function useBenchmarkText() {
   const { locale } = useI18n();

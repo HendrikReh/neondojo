@@ -1,7 +1,7 @@
 import { useI18n } from './i18n';
 import { PAUSED_MATCHES_DATABASE_ID, type Database } from './library-api';
 import {
-  interpolate,
+  formatMessage,
   matchEventLabels,
   type Locale,
   type TranslationParams,
@@ -42,12 +42,12 @@ const rows = {
     'Attività di analisi accettate ({count})',
   ],
   bulkAnalysisProgress: [
-    'Bulk analysis · {completed} of {total} matches analyzed',
-    'Sammelanalyse · {completed} von {total} Matches analysiert',
-    'Análisis por lotes · {completed} de {total} partidas analizadas',
-    'Analyse par lot · {completed} matchs analysés sur {total}',
-    'Analiza zbiorcza · przeanalizowano {completed} z {total} meczów',
-    'Analisi in blocco · {completed} partite analizzate su {total}',
+    'Bulk analysis · {completed} of {total, plural, one {# match} other {# matches}} analyzed',
+    'Sammelanalyse · {completed} von {total, plural, one {# Match} other {# Matches}} analysiert',
+    'Análisis por lotes · {total, plural, one {{completed} de # partida analizada} other {{completed} de # partidas analizadas}}',
+    'Analyse par lot · {completed, plural, one {# match analysé} other {# matchs analysés}} sur {total}',
+    'Analiza zbiorcza · przeanalizowano {completed} z {total, plural, one {# meczu} few {# meczów} many {# meczów}}',
+    'Analisi in blocco · {completed, plural, one {# partita analizzata} other {# partite analizzate}} su {total}',
   ],
   retryAnalysis: [
     'Try again',
@@ -878,7 +878,7 @@ export function libraryText(
   key: Key,
   params: TranslationParams = {},
 ) {
-  return interpolate(rows[key][locales.indexOf(locale)], params, locale);
+  return formatMessage(locale, rows[key][locales.indexOf(locale)], params);
 }
 export function useLibraryText() {
   const { locale } = useI18n();

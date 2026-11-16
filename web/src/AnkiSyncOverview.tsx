@@ -443,8 +443,8 @@ export default function AnkiSyncOverview({
                 total: formatNumber(bulk.total),
               })
             : t('ankiOverviewRetryAllResult', {
-                succeeded: formatNumber(succeeded),
-                failed: formatNumber(bulk.results.length - succeeded),
+                succeeded,
+                failed: bulk.results.length - succeeded,
               })}
         </p>
       )}

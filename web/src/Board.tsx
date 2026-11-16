@@ -166,7 +166,7 @@ export default function Board({
         {showPipCounts && (
           <span>
             {t('board.pipsOff', {
-              pips: formatNumber(pips[1]),
+              pips: pips[1],
               off: formatNumber(15 - counts[1]),
             })}
           </span>
@@ -317,7 +317,7 @@ export default function Board({
         {showPipCounts && (
           <span>
             {t('board.pipsOff', {
-              pips: formatNumber(pips[0]),
+              pips: pips[0],
               off: formatNumber(15 - counts[0]),
             })}
           </span>

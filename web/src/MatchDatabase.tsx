@@ -671,8 +671,8 @@ export default function MatchDatabase({
                 ) : (
                   <>
                     {l('bulkAnalysisProgress', {
-                      completed: formatNumber(bulkAnalysisProgress.completed),
-                      total: formatNumber(bulkAnalysisProgress.total),
+                      completed: bulkAnalysisProgress.completed,
+                      total: bulkAnalysisProgress.total,
                     })}
                     {bulkAnalysisProgress.failed > 0 &&
                       ` · ${l('failed')} (${formatNumber(bulkAnalysisProgress.failed)})`}

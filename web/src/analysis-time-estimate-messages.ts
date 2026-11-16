@@ -1,5 +1,5 @@
 import type { Locale } from './i18n';
-import { interpolate, type TranslationParams } from './i18n-core';
+import { formatMessage, type TranslationParams } from './i18n-core';
 
 const en = {
   label: 'Analysis time estimate',
@@ -14,7 +14,8 @@ const en = {
   network: 'The estimate could not be loaded.',
   configuration: 'Waiting for the analysis settings to be applied.',
   game: 'Select a game to estimate its duration.',
-  moves: '{moves} checker moves · {plies} Ply',
+  moves:
+    '{moves, plural, one {# checker move} other {# checker moves}} · {plies} Ply',
   basis: 'Benchmark {date} · {engine}',
   caveat: 'Queueing excluded; time varies with position complexity.',
 };
@@ -32,7 +33,8 @@ const de: Record<Key, string> = {
   network: 'Die Schätzung konnte nicht geladen werden.',
   configuration: 'Wartet, bis die Analyseeinstellungen angewendet sind.',
   game: 'Wähle ein Spiel für die Laufzeitschätzung.',
-  moves: '{moves} Checkerzüge · {plies} Ply',
+  moves:
+    '{moves, plural, one {# Checkerzug} other {# Checkerzüge}} · {plies} Ply',
   basis: 'Benchmark {date} · {engine}',
   caveat:
     'Ohne Warteschlange; die Dauer hängt von der Komplexität der Stellungen ab.',
@@ -42,7 +44,7 @@ export function analysisEstimateText(
   key: Key,
   values?: TranslationParams,
 ) {
-  return interpolate((locale === 'de' ? de : en)[key], values);
+  return formatMessage(locale, (locale === 'de' ? de : en)[key], values);
 }
 
 export function formatAnalysisDuration(ms: number): string | null {

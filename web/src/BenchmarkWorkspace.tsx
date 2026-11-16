@@ -427,9 +427,9 @@ export default function BenchmarkWorkspace({
                 <strong>{reference.name}</strong>
                 {' · '}
                 {t('referenceFacts', {
-                  points: formatNumber(reference.match_length),
-                  games: formatNumber(reference.total_games),
-                  moves: formatNumber(reference.total_moves),
+                  points: reference.match_length,
+                  games: reference.total_games,
+                  moves: reference.total_moves,
                 })}
               </p>
               <details>
@@ -446,9 +446,7 @@ export default function BenchmarkWorkspace({
                     {reference.protocol.game_timeout_seconds == null
                       ? t('noTimeout')
                       : t('timeout', {
-                          seconds: formatNumber(
-                            reference.protocol.game_timeout_seconds,
-                          ),
+                          seconds: reference.protocol.game_timeout_seconds,
                         })}
                   </p>
                 )}

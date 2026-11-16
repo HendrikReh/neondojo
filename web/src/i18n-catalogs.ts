@@ -40,9 +40,9 @@ export const de = {
   'common.cube': 'Cube',
   'common.played': 'Gespielt',
   'board.points': '{count, plural, one {# Punkt} other {# Punkte}}',
-  'board.pipsOff': '{pips} Pips · {off} aus',
+  'board.pipsOff': '{pips, plural, one {# Pip} other {# Pips}} · {off} aus',
   'board.label':
-    'Backgammon-Position. {player} am Zug, Würfel {first} und {second}. Weiß {white} Pips, Schwarz {black} Pips.',
+    'Backgammon-Position. {player} am Zug, Würfel {first} und {second}. Weiß {white, plural, one {# Pip} other {# Pips}}, Schwarz {black, plural, one {# Pip} other {# Pips}}.',
   'board.cube': 'Doppler {value}, {owner}',
   'board.centered': 'zentriert',
   'board.themeSource': 'BGBlitz · {name}',
@@ -269,9 +269,9 @@ export const en = {
   'common.cube': 'Cube',
   'common.played': 'Played',
   'board.points': '{count, plural, one {# point} other {# points}}',
-  'board.pipsOff': '{pips} pips · {off} off',
+  'board.pipsOff': '{pips, plural, one {# pip} other {# pips}} · {off} off',
   'board.label':
-    'Backgammon position. {player} to move, dice {first} and {second}. White {white} pips, Black {black} pips.',
+    'Backgammon position. {player} to move, dice {first} and {second}. White {white, plural, one {# pip} other {# pips}}, Black {black, plural, one {# pip} other {# pips}}.',
   'board.cube': 'Cube {value}, {owner}',
   'board.centered': 'centered',
   'board.themeSource': 'BGBlitz · {name}',
@@ -490,9 +490,9 @@ export const es = {
   'common.cube': 'Cubo',
   'common.played': 'Jugada realizada',
   'board.points': '{count, plural, one {# punto} other {# puntos}}',
-  'board.pipsOff': '{pips} pips · {off} fuera',
+  'board.pipsOff': '{pips, plural, one {# pip} other {# pips}} · {off} fuera',
   'board.label':
-    'Posición de backgammon. Turno de {player}, dados {first} y {second}. Blancas {white} pips, negras {black} pips.',
+    'Posición de backgammon. Turno de {player}, dados {first} y {second}. Blancas {white, plural, one {# pip} other {# pips}}, negras {black, plural, one {# pip} other {# pips}}.',
   'board.cube': 'Cubo {value}, {owner}',
   'board.centered': 'centrado',
   'board.themeSource': 'BGBlitz · {name}',
@@ -714,9 +714,9 @@ export const fr = {
   'common.cube': 'Videau',
   'common.played': 'Joué',
   'board.points': '{count, plural, one {# point} other {# points}}',
-  'board.pipsOff': '{pips} pips · {off} sortis',
+  'board.pipsOff': '{pips, plural, one {# pip} other {# pips}} · {off} sortis',
   'board.label':
-    'Position de backgammon. À {player} de jouer, dés {first} et {second}. Blancs {white} pips, noirs {black} pips.',
+    'Position de backgammon. À {player} de jouer, dés {first} et {second}. Blancs {white, plural, one {# pip} other {# pips}}, noirs {black, plural, one {# pip} other {# pips}}.',
   'board.cube': 'Videau {value}, {owner}',
   'board.centered': 'au centre',
   'board.themeSource': 'BGBlitz · {name}',
@@ -940,9 +940,10 @@ export const pl = {
   'common.played': 'Zagrano',
   'board.points':
     '{count, plural, one {# punkt} few {# punkty} many {# punktów}}',
-  'board.pipsOff': '{pips} pipsów · {off} zdjęte',
+  'board.pipsOff':
+    '{pips, plural, one {# pips} few {# pipsy} many {# pipsów}} · {off} zdjęte',
   'board.label':
-    'Pozycja backgammona. Ruch gracza {player}, kości {first} i {second}. Białe {white} pipsów, czarne {black} pipsów.',
+    'Pozycja backgammona. Ruch gracza {player}, kości {first} i {second}. Białe {white, plural, one {# pips} few {# pipsy} many {# pipsów}}, czarne {black, plural, one {# pips} few {# pipsy} many {# pipsów}}.',
   'board.cube': 'Kostka {value}, {owner}',
   'board.centered': 'na środku',
   'board.themeSource': 'BGBlitz · {name}',

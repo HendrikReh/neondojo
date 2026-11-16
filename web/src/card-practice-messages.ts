@@ -209,10 +209,10 @@ const rows = {
   transferSummary: [
     '{scored} scored · {correct} correct · {revealed} revealed · mean equity loss {loss}',
     '{scored} bewertet · {correct} richtig · {revealed} aufgedeckt · mittlerer Equity-Verlust {loss}',
-    '{scored} evaluadas · {correct} correctas · {revealed} reveladas · pérdida media {loss}',
-    '{scored} évaluées · {correct} correctes · {revealed} révélées · perte moyenne {loss}',
-    '{scored} ocenionych · {correct} poprawnych · {revealed} odkrytych · średnia strata {loss}',
-    '{scored} valutate · {correct} corrette · {revealed} svelate · perdita media {loss}',
+    '{scored, plural, one {# evaluada} other {# evaluadas}} · {correct, plural, one {# correcta} other {# correctas}} · {revealed, plural, one {# revelada} other {# reveladas}} · pérdida media {loss}',
+    '{scored, plural, one {# évaluée} other {# évaluées}} · {correct, plural, one {# correcte} other {# correctes}} · {revealed, plural, one {# révélée} other {# révélées}} · perte moyenne {loss}',
+    '{scored, plural, one {# oceniona} few {# ocenione} many {# ocenionych}} · {correct, plural, one {# poprawna} few {# poprawne} many {# poprawnych}} · {revealed, plural, one {# odkryta} few {# odkryte} many {# odkrytych}} · średnia strata {loss}',
+    '{scored, plural, one {# valutata} other {# valutate}} · {correct, plural, one {# corretta} other {# corrette}} · {revealed, plural, one {# svelata} other {# svelate}} · perdita media {loss}',
   ],
   confidence: [
     'How sure are you?',
@@ -629,10 +629,10 @@ const rows = {
   ankiOverviewRetryAllResult: [
     '{succeeded} successful, {failed} failed.',
     '{succeeded} erfolgreich, {failed} fehlgeschlagen.',
-    '{succeeded} correctos, {failed} fallidos.',
-    '{succeeded} réussis, {failed} en échec.',
-    '{succeeded} udanych, {failed} nieudanych.',
-    '{succeeded} riusciti, {failed} non riusciti.',
+    '{succeeded, plural, one {# correcto} other {# correctos}}, {failed, plural, one {# fallido} other {# fallidos}}.',
+    '{succeeded, plural, one {# réussi} other {# réussis}}, {failed} en échec.',
+    '{succeeded, plural, one {# udany} few {# udane} many {# udanych}}, {failed, plural, one {# nieudany} few {# nieudane} many {# nieudanych}}.',
+    '{succeeded, plural, one {# riuscito} other {# riusciti}}, {failed, plural, one {# non riuscito} other {# non riusciti}}.',
   ],
   ankiOverviewRetryResults: [
     'Retry results by deck',

@@ -81,7 +81,7 @@ export default function PlayResignDialog({
           <strong>{`${white} ${formatNumber(projectedScores[0])} : ${formatNumber(projectedScores[1])} ${black}`}</strong>
           <span>
             {matchLength
-              ? t('target', { points: formatNumber(matchLength) })
+              ? t('target', { points: matchLength })
               : appT('common.moneyGame')}
           </span>
         </p>

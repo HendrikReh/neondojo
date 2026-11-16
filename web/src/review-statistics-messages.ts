@@ -1,5 +1,9 @@
 import { useI18n, type TranslationKey } from './i18n';
-import { interpolate, type Locale, type TranslationParams } from './i18n-core';
+import {
+  formatMessage,
+  type Locale,
+  type TranslationParams,
+} from './i18n-core';
 export const errorThresholdLabels = {
   questionable: 'severity.doubtful',
   error: 'severity.bad',
@@ -52,20 +56,20 @@ const rows = {
     '{engine} · {plies}-ply',
   ],
   coverage: [
-    '{completed} of {total} games fully analyzed',
-    '{completed} von {total} Spielen vollständig analysiert',
-    '{completed} de {total} partidas completamente analizadas',
-    '{completed} sur {total} parties entièrement analysées',
-    '{completed} z {total} gier w pełni przeanalizowanych',
+    '{completed} of {total, plural, one {# game} other {# games}} fully analyzed',
+    '{completed} von {total, plural, one {# Spiel} other {# Spielen}} vollständig analysiert',
+    '{total, plural, one {{completed} de # partida completamente analizada} other {{completed} de # partidas completamente analizadas}}',
+    '{total, plural, one {{completed} sur # partie entièrement analysée} other {{completed} sur # parties entièrement analysées}}',
+    '{completed} z {total, plural, one {# gry} few {# gier} many {# gier}} w pełni przeanalizowanych',
     '{completed} di {total} game completamente analizzati',
   ],
   decisionsCoverage: [
-    '{analyzed} of {total} checker moves analyzed',
-    '{analyzed} von {total} Checkerzügen analysiert',
-    '{analyzed} de {total} jugadas de fichas analizadas',
-    '{analyzed} sur {total} coups de pions analysés',
-    'Przeanalizowano {analyzed} z {total} ruchów pionami',
-    '{analyzed} di {total} mosse di pedine analizzate',
+    '{analyzed} of {total, plural, one {# checker move} other {# checker moves}} analyzed',
+    '{analyzed} von {total, plural, one {# Checkerzug} other {# Checkerzügen}} analysiert',
+    '{total, plural, one {{analyzed} de # jugada de fichas analizada} other {{analyzed} de # jugadas de fichas analizadas}}',
+    '{total, plural, one {{analyzed} sur # coup de pions analysé} other {{analyzed} sur # coups de pions analysés}}',
+    'Przeanalizowano {analyzed} z {total, plural, one {# ruchu pionami} few {# ruchów pionami} many {# ruchów pionami}}',
+    '{total, plural, one {{analyzed} di # mossa di pedine analizzata} other {{analyzed} di # mosse di pedine analizzate}}',
   ],
   noAnalysis: [
     'Choose a scope and run GNUbg analysis to review decisions.',
@@ -394,7 +398,7 @@ export function statisticsText(
   key: Key,
   params: TranslationParams = {},
 ) {
-  return interpolate(statisticsMessages[locale][key], params, locale);
+  return formatMessage(locale, statisticsMessages[locale][key], params);
 }
 export function useStatisticsText() {
   const { locale } = useI18n();

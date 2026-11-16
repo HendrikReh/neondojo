@@ -64,7 +64,7 @@ describe('language selection and translation', () => {
   it('renders every board description in the selected language without changing names', () => {
     expect(translate('en', 'board.points', { count: 7 })).toBe('7 points');
     expect(translate('pl', 'board.pipsOff', { pips: 123, off: 2 })).toBe(
-      '123 pipsów · 2 zdjęte',
+      '123 pipsy · 2 zdjęte',
     );
     expect(translate('fr', 'board.cube', { value: 4, owner: 'Élodie' })).toBe(
       'Videau 4, Élodie',

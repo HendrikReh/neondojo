@@ -1,4 +1,5 @@
 import { useI18n, type Locale } from './i18n';
+import { formatMessage, type TranslationParams } from './i18n-core';
 const en = {
   forfeitMatch: 'Forfeit match',
   forfeitHelp:
@@ -13,7 +14,7 @@ const en = {
   cancel: 'Continue playing',
   award: '{player} receives {points} if accepted.',
   score: 'Match score if accepted',
-  target: 'Match to {points} points',
+  target: 'Match to {points, plural, one {# point} other {# points}}',
   matchEnds: 'If accepted, the match ends. {player} wins.',
   matchContinues: 'If accepted, the match continues.',
   declined:
@@ -36,7 +37,7 @@ const messages: Record<Locale, Record<Key, string>> = {
     cancel: 'Weiterspielen',
     award: '{player} erhält bei Annahme {points}.',
     score: 'Matchstand bei Annahme',
-    target: 'Match bis {points} Punkte',
+    target: 'Match bis {points, plural, one {# Punkt} other {# Punkte}}',
     matchEnds: 'Bei Annahme endet das Match. {player} gewinnt.',
     matchContinues: 'Bei Annahme wird das Match fortgesetzt.',
     declined:
@@ -56,7 +57,7 @@ const messages: Record<Locale, Record<Key, string>> = {
     cancel: 'Seguir jugando',
     award: '{player} recibe {points} si acepta.',
     score: 'Marcador si se acepta',
-    target: 'Match a {points} puntos',
+    target: 'Match a {points, plural, one {# punto} other {# puntos}}',
     matchEnds: 'Si se acepta, termina el match. Gana {player}.',
     matchContinues: 'Si se acepta, el match continúa.',
     declined:
@@ -76,7 +77,7 @@ const messages: Record<Locale, Record<Key, string>> = {
     cancel: 'Continuer à jouer',
     award: '{player} reçoit {points} en cas d’acceptation.',
     score: 'Score en cas d’acceptation',
-    target: 'Match en {points} points',
+    target: 'Match en {points, plural, one {# point} other {# points}}',
     matchEnds: 'En cas d’acceptation, le match se termine. {player} gagne.',
     matchContinues: 'En cas d’acceptation, le match continue.',
     declined:
@@ -96,7 +97,7 @@ const messages: Record<Locale, Record<Key, string>> = {
     cancel: 'Continua a giocare',
     award: '{player} riceve {points} se accetta.',
     score: 'Punteggio in caso di accettazione',
-    target: 'Match a {points} punti',
+    target: 'Match a {points, plural, one {# punto} other {# punti}}',
     matchEnds: 'Se accetta, il match termina. Vince {player}.',
     matchContinues: 'Se accetta, il match continua.',
     declined:
@@ -125,8 +126,6 @@ const messages: Record<Locale, Record<Key, string>> = {
 };
 export function usePlayResignText() {
   const { locale } = useI18n();
-  return (key: Key, values: Record<string, string | number> = {}) =>
-    messages[locale][key].replace(/\{(\w+)\}/g, (_, name: string) =>
-      String(values[name] ?? `{${name}}`),
-    );
+  return (key: Key, values: TranslationParams = {}) =>
+    formatMessage(locale, messages[locale][key], values);
 }
