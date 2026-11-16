@@ -254,7 +254,7 @@ async fn ratings(
     pool: &PgPool,
     id: Uuid,
 ) -> Result<(Vec<PlayerRating>, Vec<PlayerRatingPoint>), sqlx::Error> {
-    let mut rows = sqlx::query_as::<_, (Uuid, i16, serde_json::Value, chrono::NaiveDate, f64)>(
+    let mut rows = sqlx::query_as::<_, (Uuid, i16, serde_json::Value, chrono::NaiveDate, Option<f64>)>(
         "WITH participants AS (
            SELECT mp.match_id,mp.side FROM player_aliases a JOIN match_players mp ON mp.alias_id=a.id
            WHERE a.profile_id=$1
@@ -272,7 +272,9 @@ async fn ratings(
            ) j
          )
          SELECT c.match_uuid,p.side,c.result,c.played,
-                (SELECT coalesce(sum(a.equity_loss),0)::float8 FROM move_analyses a
+                -- Null when the job saved no checker decisions for this player;
+                -- older jobs keep only totals and cannot be split.
+                (SELECT sum(a.equity_loss)::float8 FROM move_analyses a
                  WHERE a.job_id=c.job_id AND a.kind='checker' AND a.player=p.side) AS checker_loss
          FROM candidates c
          JOIN participants p ON p.match_id=c.match_uuid ORDER BY c.match_uuid",
@@ -292,14 +294,18 @@ async fn ratings(
                     value,
                     decisions: i64::from(player.unforced_checker_moves)
                         + i64::from(player.close_cube_decisions),
-                    checker_value: performance_rating_value(
-                        checker_loss.min(player.normalized_equity_loss),
-                        i64::from(player.unforced_checker_moves),
-                    ),
-                    cube_value: performance_rating_value(
-                        (player.normalized_equity_loss - checker_loss).max(0.0),
-                        i64::from(player.close_cube_decisions),
-                    ),
+                    checker_value: checker_loss.and_then(|loss| {
+                        performance_rating_value(
+                            loss.min(player.normalized_equity_loss),
+                            i64::from(player.unforced_checker_moves),
+                        )
+                    }),
+                    cube_value: checker_loss.and_then(|loss| {
+                        performance_rating_value(
+                            (player.normalized_equity_loss - loss).max(0.0),
+                            i64::from(player.close_cube_decisions),
+                        )
+                    }),
                 });
                 let (loss, decisions, count, last_match) =
                     totals.entry(rating.profile).or_default();
