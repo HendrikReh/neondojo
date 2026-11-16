@@ -19,7 +19,7 @@ Existing `aria-selected="true"`, `aria-pressed="true"`, `aria-current="page"` or
 relationships. `text-navigation--compact` reduces vertical padding in dense
 analysis panels; `text-navigation--stacked` arranges sidebar choices vertically.
 The main header retains its 20 px gap; other horizontal groups use 16 px.
-The header orders its workspaces as Analysis, Positions, Study, Play,
+The header orders its workspaces as Playing, Analysis, Study, Positions,
 Match database, Player database, and Extras. The arrow keys follow this order.
 
 The shared rules live in `web/src/text-navigation.css`, imported after the other

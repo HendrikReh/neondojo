@@ -77,10 +77,10 @@ type View =
   | 'play'
   | 'extras';
 const views: View[] = [
-  'analysis',
-  'positions',
-  'learning',
   'play',
+  'analysis',
+  'learning',
+  'positions',
   'database',
   'players',
   'extras',

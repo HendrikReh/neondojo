@@ -218,25 +218,28 @@ test('header tabs follow the workspace order with mouse and keyboard', async ({
   await page.goto('/');
   const header = page.getByRole('tablist', { name: 'Arbeitsbereiche' });
   const tabs = header.getByRole('tab');
-  await expect(tabs).toHaveText([
-    'Analyse',
-    'Positionen',
-    'Study',
+  const labels = [
     'Spielen',
+    'Analyse',
+    'Study',
+    'Positionen',
     'Matchdatenbank',
     'Spielerdatenbank',
     'Extras',
-  ]);
-  await expect(tabs.first()).toHaveAttribute('aria-selected', 'true');
-  await header.getByRole('tab', { name: 'Spielen', exact: true }).click();
-  await page.keyboard.press('ArrowRight');
-  const matches = header.getByRole('tab', { name: 'Matchdatenbank' });
-  await expect(matches).toBeFocused();
-  await expect(matches).toHaveAttribute('aria-selected', 'true');
-  await page.keyboard.press('ArrowRight');
-  const players = header.getByRole('tab', { name: 'Spielerdatenbank' });
-  await expect(players).toBeFocused();
-  await expect(players).toHaveAttribute('aria-selected', 'true');
+  ];
+  await expect(tabs).toHaveText(labels);
+  await expect(header.getByRole('tab', { selected: true })).toHaveText(
+    'Analyse',
+  );
+  await tabs.first().click();
+  for (const label of labels.slice(1)) {
+    await page.keyboard.press('ArrowRight');
+    const tab = header.getByRole('tab', { name: label, exact: true });
+    await expect(tab).toBeFocused();
+    await expect(tab).toHaveAttribute('aria-selected', 'true');
+  }
+  await page.keyboard.press('ArrowLeft');
+  await expect(tabs.nth(5)).toBeFocused();
   await page.keyboard.press('End');
   await expect(tabs.last()).toBeFocused();
   await page.keyboard.press('Home');
