@@ -108,3 +108,109 @@ for (const config of [
       fullPage: true,
     });
   });
+
+test('history rates the corrected move and names the session analysis engine', async ({
+  page,
+}) => {
+  const board = [
+    0, -2, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, -5, 5, 0, 0, 0, -3, 0, -5, 0, 0, 0, 0,
+    2, 0,
+  ];
+  const snapshot = (engine_id: string, engine_version: string) => ({
+    engine_id,
+    engine_version,
+    gnubg_path: '/opt/gnubg',
+  });
+  const saved = {
+    id,
+    version: 3,
+    human_player: 0,
+    human_name: 'Learner',
+    match_length: 0,
+    bearoff_direction: 'right',
+    engine: { id: 'gnubg', version: 'GNU Backgammon 1.08.003', plies: 0 },
+    engine_snapshots: {
+      rules: snapshot('gnubg', 'GNU Backgammon 1.08.003'),
+      bot: snapshot('gnubg', 'GNU Backgammon 1.08.003'),
+      analysis: snapshot(
+        'bgsage',
+        'Open Sage 2.0.20260907; model abc; 2ply cubeful',
+      ),
+    },
+    play_mode: 'coach',
+    analysis_plies: 2,
+    tutor_threshold: 0.02,
+    training_auto_analysis: true,
+    pending_decision: null,
+    decisions: [
+      {
+        id: '07aab353-8dc9-40c8-91a9-3377483240b5',
+        game_no: 1,
+        history_index: 0,
+        action: 'move',
+        move_index: 0,
+        notation: '13/7 8/7',
+        original_action: 'move',
+        original_move_index: 8,
+        original_notation: '8/2 6/5',
+        warning: false,
+        revealed: true,
+        assisted: false,
+        retry_count: 1,
+        first_loss: 0.331,
+        loss: 0,
+        first_severity: 'very_bad',
+        severity: 'none',
+        alternatives: [],
+        attempts: [],
+        committed: true,
+      },
+    ],
+    position: {
+      id,
+      match_uuid: id,
+      ordinal: 1,
+      game_no: 1,
+      ply: 1,
+      player: 0,
+      dice: [],
+      board,
+      position_id: '4HPwATDgc/ABMA',
+      gnubg_match_id: 'MAEHAAAAAAAA',
+      notation: '',
+    },
+    phase: 'roll',
+    can_double: false,
+    legal_moves: [],
+    history: [{ player: 0, dice: [6, 1], notation: '13/7 8/7' }],
+    scores: [0, 0],
+    game_no: 1,
+    winner: null,
+    opening: null,
+  };
+  await page.addInitScript((id) => {
+    localStorage.setItem('bgtutor.locale', 'en');
+    localStorage.setItem('bgtutor.play-session', id);
+  }, id);
+  await page.route(`**/api/play/sessions/${id}`, (r) =>
+    r.fulfill({ json: saved }),
+  );
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Playing', exact: true }).click();
+  const row = page.locator('.play-history .move-history-row').first();
+  await expect(row.locator('.move-history-details > strong')).toHaveText(
+    '13/7 8/7',
+  );
+  await expect(row.locator('.move-loss-value')).toHaveText('0.000');
+  await expect(row).not.toHaveClass(/move-assessment-very_bad/);
+  const marker = row.locator('.move-assessment-marker');
+  await expect(marker).toHaveAttribute(
+    'data-move-assessment',
+    /Open Sage 2\.0\.20260907 · 2-ply/,
+  );
+  await expect(marker).not.toHaveAttribute('data-move-assessment', /GNUbg/);
+  await row.hover();
+  await expect(page.getByRole('tooltip')).toContainText(
+    'First attempt: 8/2 6/5 · Δ +0.331',
+  );
+});

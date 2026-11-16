@@ -7,6 +7,7 @@ import MoveHistoryContent, { moveHistoryTooltip } from './MoveHistoryContent';
 import Tooltip from './Tooltip';
 import { usePlayModeText } from './play-mode-messages';
 import GameResultSummary, { type PlayGameResult } from './GameResultSummary';
+import { shortEngineLabel } from './engine-version';
 
 export default memo(function PlayHistory({
   history,
@@ -20,10 +21,15 @@ export default memo(function PlayHistory({
   decisions,
   gameResults,
   reviewAction,
+  analysisEngine,
+  analysisPlies,
 }: {
   history: PlaySession['history'];
   reviewAction?: ReactNode;
   decisions?: PlayDecision[];
+  /** Engine version recorded for this session's feedback analysis. */
+  analysisEngine?: string | null;
+  analysisPlies?: number;
   gameResults?: PlayGameResult[];
   white: string;
   black: string;
@@ -35,7 +41,7 @@ export default memo(function PlayHistory({
 }) {
   const t = usePlayText();
   const modeT = usePlayModeText();
-  const { formatNumber, formatDecision } = useI18n();
+  const { formatNumber, formatEquity, formatDecision } = useI18n();
   const list = useRef<HTMLOListElement>(null);
   const current = selectedIndex ?? history.length - 1;
   const results = useMemo(
@@ -71,8 +77,12 @@ export default memo(function PlayHistory({
               (d) =>
                 d.original_action === 'move' || d.original_action === 'pass',
             ) ?? relevant?.[0];
+          // The row rates the move that was actually played; the first
+          // attempt keeps its own loss in the tooltip.
+          const loss = decision?.loss ?? decision?.first_loss;
+          const severity = decision?.severity ?? decision?.first_severity;
           const firstAttempt = decision
-            ? `${modeT('first')}: ${formatDecision(decision.original_notation ?? '')} · ${modeT((decision.attempts[0]?.assisted ?? decision.assisted) ? 'assisted' : 'independent')}`
+            ? `${modeT('first')}: ${formatDecision(decision.original_notation ?? '')}${decision.first_loss != null ? ` · Δ ${formatEquity(decision.first_loss)}` : ''} · ${modeT((decision.attempts[0]?.assisted ?? decision.assisted) ? 'assisted' : 'independent')}`
             : undefined;
           return (
             <li key={index}>
@@ -80,7 +90,7 @@ export default memo(function PlayHistory({
                 as="button"
                 text={(anchor) => moveHistoryTooltip(anchor, firstAttempt)}
                 type="button"
-                className={`move-history-row${index === current ? ' current' : ''}${decision?.first_severity ? ` move-assessment-${decision.first_severity}` : ''}`}
+                className={`move-history-row${index === current ? ' current' : ''}${severity ? ` move-assessment-${severity}` : ''}`}
                 aria-current={index === current ? 'step' : undefined}
                 data-play-history-index={index}
                 tabIndex={index === current ? 0 : -1}
@@ -119,12 +129,18 @@ export default memo(function PlayHistory({
                 <MoveHistoryContent
                   position={turn}
                   assessment={
-                    decision?.first_loss != null && decision.first_severity
+                    loss != null && severity
                       ? {
-                          equity_loss: decision.first_loss,
-                          severity: playSeverity(decision.first_severity),
+                          equity_loss: loss,
+                          severity: playSeverity(severity),
                           source: 'native',
-                          engine: 'GNUbg',
+                          engine: analysisEngine
+                            ? shortEngineLabel(analysisEngine)
+                            : 'GNUbg',
+                          depth:
+                            analysisPlies == null
+                              ? undefined
+                              : `${analysisPlies}-ply`,
                         }
                       : undefined
                   }

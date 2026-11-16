@@ -1234,7 +1234,8 @@ export default function PlayWorkspace({
             <p className="play-mode-help">{modeT(`${mode}Help`)}</p>
             {mode === 'tutor' && (
               <p>
-                {modeT('threshold')} · {formatNumber(threshold, {
+                {modeT('threshold')} ·{' '}
+                {formatNumber(threshold, {
                   minimumFractionDigits: 3,
                   maximumFractionDigits: 6,
                 })}
@@ -1346,6 +1347,8 @@ export default function PlayWorkspace({
               white={name(0)}
               black={name(1)}
               sessionId={session.id}
+              analysisEngine={session.engine_snapshots?.analysis.engine_version}
+              analysisPlies={session.analysis_plies}
               visible={visible}
               selectedIndex={review.index}
               disabled={uiBusy || awaitingFeedback}
