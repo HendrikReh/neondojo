@@ -239,15 +239,17 @@ test('tracks selected matches after closing the dialog and reloading the page', 
     .getByRole('status')
     .filter({ hasText: /matches analyzed/ });
   await batch.getByRole('button', { name: 'Clear selection' }).click();
-  await expect(progress).toHaveText('0 of 2 matches analyzed');
+  await expect(progress).toHaveText('Bulk analysis · 0 of 2 matches analyzed');
   jobs.set(entries[0].id, 'completed');
-  await expect(progress).toHaveText('1 of 2 matches analyzed');
+  await expect(progress).toHaveText('Bulk analysis · 1 of 2 matches analyzed');
   await page.reload();
   await expect(database).toBeVisible();
-  await expect(progress).toHaveText('1 of 2 matches analyzed');
+  await expect(progress).toHaveText('Bulk analysis · 1 of 2 matches analyzed');
   expect(submissions).toHaveLength(3);
   jobs.set(entries[1].id, 'failed');
-  await expect(progress).toHaveText('1 of 2 matches analyzed · Failed (1)');
+  await expect(progress).toHaveText(
+    'Bulk analysis · 1 of 2 matches analyzed · Failed (1)',
+  );
   for (const [width, height] of [
     [1800, 1169],
     [2560, 1440],

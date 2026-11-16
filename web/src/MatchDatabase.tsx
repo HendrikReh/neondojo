@@ -86,6 +86,7 @@ const resultKey: Record<string, LibraryMessageKey> = {
 };
 export default function MatchDatabase({
   revision,
+  analysisRevision,
   annotationRevision,
   currentPosition,
   requestedPositionSearch,
@@ -104,6 +105,7 @@ export default function MatchDatabase({
   visible,
 }: {
   revision: number;
+  analysisRevision?: string;
   visible: boolean;
   annotationRevision: number;
   currentPosition?: Position;
@@ -308,6 +310,7 @@ export default function MatchDatabase({
     revision: JSON.stringify([
       revision,
       localRevision,
+      analysisRevision,
       annotationRevision,
     ]),
     loadPage: loadMatches,

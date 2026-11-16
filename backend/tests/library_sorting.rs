@@ -266,9 +266,9 @@ async fn analysis_sort_uses_selected_results_and_keeps_unavailable_results_last(
         .enumerate()
     {
         let id = ids[if i < 2 { i } else { i + 1 }];
-        if status == "queued" {
-            sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games) VALUES($1,$2,'match',0,'queued',1)")
-                .bind(Uuid::new_v4()).bind(id).execute(&pool).await.unwrap();
+        if matches!(status, "queued" | "running") {
+            sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games) VALUES($1,$2,'match',0,$3,1)")
+                .bind(Uuid::new_v4()).bind(id).bind(status).execute(&pool).await.unwrap();
         } else {
             checkpointed_job(
                 &pool,
@@ -292,6 +292,16 @@ async fn analysis_sort_uses_selected_results_and_keeps_unavailable_results_last(
     }
     // A completed whole-match result outranks a newer failed game checkpoint.
     checkpointed_job(&pool, ids[0], "failed", Some(1)).await;
+    // A running whole-match job takes precedence over a queued job at another depth.
+    sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games) VALUES($1,$2,'match',1,'queued',1)")
+        .bind(Uuid::new_v4()).bind(ids[5]).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,source_revision) VALUES($1,$2,'match',0,'queued',1,0)")
+        .bind(Uuid::new_v4()).bind(ids[6]).execute(&pool).await.unwrap();
+    sqlx::query("UPDATE matches SET source_revision=source_revision+1 WHERE id=$1")
+        .bind(ids[6])
+        .execute(&pool)
+        .await
+        .unwrap();
     let (status, page) = request(
         &pool,
         "GET",
@@ -305,7 +315,7 @@ async fn analysis_sort_uses_selected_results_and_keeps_unavailable_results_last(
         Some("failed"),
         Some("imported"),
         Some("partial"),
-        None,
+        Some("queued"),
         Some("running"),
         None,
     ]) {
@@ -318,8 +328,8 @@ async fn analysis_sort_uses_selected_results_and_keeps_unavailable_results_last(
         assert_eq!(item["analysis_status"].as_str(), expected, "{item}");
     }
     for (direction, indices) in [
-        ("asc", [0, 1, 2, 3, 5, 4, 6]),
-        ("desc", [5, 3, 2, 1, 0, 4, 6]),
+        ("asc", [0, 1, 2, 3, 4, 5, 6]),
+        ("desc", [5, 4, 3, 2, 1, 0, 6]),
     ] {
         let expected: Vec<_> = indices.into_iter().map(|index| ids[index]).collect();
         for limit in [1, 2, 200] {

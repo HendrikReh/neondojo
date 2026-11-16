@@ -114,8 +114,12 @@ choose **Show results** to view a saved analysis.
 For multiple matches, the dialog uses the same engine and depth for each
 available match and adds their jobs to the background queue. It reports
 rejected submissions and allows you to retry them from the dialog.
-The toolbar above the match list shows how many accepted matches have been
-analyzed and counts failed jobs separately, including after the dialog closes.
+**Bulk analysis** above the match list shows how many accepted jobs for the
+selected database have completed and counts failed jobs separately, including
+after the dialog closes. **All databases** shows the combined progress.
+The match list refreshes as tracked analyses complete.
+The **Analysis** column shows queued and running whole-match jobs before the
+first game result is saved. Any previous match PR remains visible during a rerun.
 Reloading the Match database during a bulk analysis reopens the list and
 refreshes the progress from the saved jobs.
 Analysis jobs use the selected engine and depth. A profile conflict

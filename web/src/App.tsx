@@ -161,13 +161,12 @@ export default function App() {
   const [bulkAnalysis, setBulkAnalysis] = useWorkspaceSession(
     'library.bulkAnalysis',
     undefined,
-    { jobIds: [], showMatchList: false },
+    { jobs: {}, showMatchList: false },
     decodeBulkAnalysisSession,
   );
+  const bulkJobIds = Object.keys(bulkAnalysis.jobs);
   const [view, setView] = useState<View>(() =>
-    bulkAnalysis.showMatchList && bulkAnalysis.jobIds.length
-      ? 'database'
-      : 'analysis',
+    bulkAnalysis.showMatchList && bulkJobIds.length ? 'database' : 'analysis',
   );
   useEffect(() => {
     if (view === 'players') setPlayersOpened(true);
@@ -218,26 +217,29 @@ export default function App() {
     track,
     missing: missingAnalysisJobs,
     assessmentRevision,
-  } = useBackgroundJobs(bulkAnalysis.jobIds);
+  } = useBackgroundJobs(bulkJobIds);
+  const visibleBulkJobIds = databaseId
+    ? bulkJobIds.filter((id) => bulkAnalysis.jobs[id] === databaseId)
+    : bulkJobIds;
   const bulkAnalysisProgress = {
-    total: bulkAnalysis.jobIds.length,
+    total: visibleBulkJobIds.length,
     completed: 0,
     failed: 0,
     missing: 0,
     loading: false,
   };
-  for (const id of bulkAnalysis.jobIds) {
+  for (const id of visibleBulkJobIds) {
     const status = trackedAnalysisJobs[id]?.status;
     if (missingAnalysisJobs.has(id)) bulkAnalysisProgress.missing++;
     else if (status === 'completed') bulkAnalysisProgress.completed++;
     else if (status === 'failed') bulkAnalysisProgress.failed++;
     else if (!status) bulkAnalysisProgress.loading = true;
   }
-  const bulkAnalysisInProgress =
-    bulkAnalysisProgress.completed +
-      bulkAnalysisProgress.failed +
-      bulkAnalysisProgress.missing <
-    bulkAnalysisProgress.total;
+  const bulkJobPending = (id: string) => {
+    const job = trackedAnalysisJobs[id];
+    return !missingAnalysisJobs.has(id) && (!job || !terminal(job));
+  };
+  const bulkAnalysisInProgress = bulkJobIds.some(bulkJobPending);
   const reopenMatchList = view === 'database' && bulkAnalysisInProgress;
   useEffect(() => {
     if (bulkAnalysis.showMatchList !== reopenMatchList)
@@ -904,6 +906,7 @@ export default function App() {
             }}
             revision={revision}
             databaseId={databaseId}
+            analysisRevision={assessmentRevision}
             onDatabase={setDatabaseId}
             visible={view === 'database'}
             onChanged={(deletedIds = [], validateSelection = false) => {
@@ -987,23 +990,24 @@ export default function App() {
               analysisInstallationKey={analysisInstallationKey}
               onAccepted={(jobs, continuesBatch) => {
                 if (!jobs.length) return;
+                const databaseByMatch = new Map(
+                  analysisSelection.matches.map((match) => [
+                    match.id,
+                    match.database_id,
+                  ]),
+                );
                 for (const job of jobs) track(job);
                 setBulkAnalysis((previous) => {
-                  const overlaps = previous.jobIds.some((id) => {
-                    const job = trackedAnalysisJobs[id];
-                    return (
-                      !missingAnalysisJobs.has(id) && (!job || !terminal(job))
-                    );
-                  });
-                  return {
-                    jobIds: [
-                      ...new Set([
-                        ...(continuesBatch || overlaps ? previous.jobIds : []),
-                        ...jobs.map((job) => job.id),
-                      ]),
-                    ],
-                    showMatchList: true,
-                  };
+                  const overlaps = Object.keys(previous.jobs).some(
+                    bulkJobPending,
+                  );
+                  const tracked =
+                    continuesBatch || overlaps ? { ...previous.jobs } : {};
+                  for (const job of jobs) {
+                    tracked[job.id] =
+                      databaseByMatch.get(job.match_uuid ?? '') ?? null;
+                  }
+                  return { jobs: tracked, showMatchList: true };
                 });
                 setRevision((value) => value + 1);
               }}

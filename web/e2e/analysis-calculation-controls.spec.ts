@@ -245,6 +245,12 @@ test('reload resumes native bulk match analysis without submitting new jobs', as
     throw new Error('Playwright did not provision a test database');
 
   const player = `Bulk ${crypto.randomUUID()}`;
+  const originName = `Bulk analysis ${crypto.randomUUID()}`;
+  const created = await page.request.post('/api/databases', {
+    data: { name: originName },
+  });
+  expect(created.ok(), await created.text()).toBe(true);
+  const origin = await created.json();
   const plies = 2;
   const matchIds: string[] = [];
   const fixtures = [
@@ -265,17 +271,22 @@ test('reload resumes native bulk match analysis without submitting new jobs', as
     },
   ];
   for (const fixture of fixtures) {
-    const imported = await page.request.post('/api/imports', {
-      multipart: {
-        file: { ...fixture, mimeType: 'application/octet-stream' },
+    const imported = await page.request.post(
+      `/api/imports?database_id=${origin.id}`,
+      {
+        multipart: {
+          file: { ...fixture, mimeType: 'application/octet-stream' },
+        },
       },
-    });
+    );
     expect(imported.status(), await imported.text()).toBe(201);
     matchIds.push((await imported.json()).match.id);
   }
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
   await page.goto('/');
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();
+  const originFilter = page.getByRole('button', { name: `${originName} 2` });
+  await originFilter.click({ timeout: 10_000 });
   await page.getByRole('textbox', { name: 'Search matches' }).fill(player);
   const rows = page.locator('.database-table tbody tr');
   await expect(rows).toHaveCount(2);
@@ -344,7 +355,7 @@ test('reload resumes native bulk match analysis without submitting new jobs', as
   const progress = database
     .getByRole('status')
     .filter({ hasText: /matches analyzed/ });
-  await expect(progress).toHaveText('1 of 2 matches analyzed', {
+  await expect(progress).toHaveText('Bulk analysis · 1 of 2 matches analyzed', {
     timeout: 30_000,
   });
   expect((await readJob(shortJob.id)).status).toBe('completed');
@@ -354,13 +365,24 @@ test('reload resumes native bulk match analysis without submitting new jobs', as
 
   await page.reload();
   await expect(database).toBeVisible();
-  await expect(progress).toHaveText('1 of 2 matches analyzed');
+  await expect(progress).toHaveText('Bulk analysis · 1 of 2 matches analyzed');
   expect((await readJob(longJob.id)).status).toBe('running');
   expect(posts).toBe(2);
 
-  await expect(progress).toHaveText('2 of 2 matches analyzed', {
+  await expect(progress).toHaveText('Bulk analysis · 2 of 2 matches analyzed', {
     timeout: 120_000,
   });
+  await expect(
+    rows.getByRole('cell', { name: 'Completed', exact: true }),
+  ).toHaveCount(2);
+  await page
+    .getByRole('button', { name: /^Unsorted \d/ })
+    .click({ timeout: 10_000 });
+  await expect(progress).toBeHidden();
+  await page.getByRole('button', { name: /^All databases \d/ }).click();
+  await expect(progress).toHaveText('Bulk analysis · 2 of 2 matches analyzed');
+  await originFilter.click();
+  await expect(progress).toHaveText('Bulk analysis · 2 of 2 matches analyzed');
   expect((await readJob(longJob.id)).completed_games).toBe(longJob.total_games);
   expect(posts).toBe(2);
   const persisted = spawnSync(

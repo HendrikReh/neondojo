@@ -42,12 +42,12 @@ const rows = {
     'Attività di analisi accettate ({count})',
   ],
   bulkAnalysisProgress: [
-    '{completed} of {total} matches analyzed',
-    '{completed} von {total} Matches analysiert',
-    '{completed} de {total} partidas analizadas',
-    '{completed} matchs analysés sur {total}',
-    'Przeanalizowano {completed} z {total} meczów',
-    '{completed} partite analizzate su {total}',
+    'Bulk analysis · {completed} of {total} matches analyzed',
+    'Sammelanalyse · {completed} von {total} Matches analysiert',
+    'Análisis por lotes · {completed} de {total} partidas analizadas',
+    'Analyse par lot · {completed} matchs analysés sur {total}',
+    'Analiza zbiorcza · przeanalizowano {completed} z {total} meczów',
+    'Analisi in blocco · {completed} partite analizzate su {total}',
   ],
   retryAnalysis: [
     'Try again',
@@ -646,7 +646,7 @@ const rows = {
   ],
   queued: [
     'Queued',
-    'Wartend',
+    'In Warteschlange',
     'En cola',
     'En attente',
     'W kolejce',

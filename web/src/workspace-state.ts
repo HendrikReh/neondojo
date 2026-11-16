@@ -7,25 +7,40 @@ const key = 'bgtutor.workspace';
 const uuid = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
 
 export type BulkAnalysisSession = {
-  jobIds: string[];
+  jobs: Record<string, string | null>;
   showMatchList: boolean;
 };
 
 export function decodeBulkAnalysisSession(
   value: unknown,
 ): BulkAnalysisSession | undefined {
-  if (
-    !value ||
-    typeof value !== 'object' ||
-    !('jobIds' in value) ||
-    !Array.isArray(value.jobIds) ||
-    !value.jobIds.every(
-      (id): id is string => typeof id === 'string' && uuid.test(id),
+  if (!value || typeof value !== 'object') return;
+  const jobs: BulkAnalysisSession['jobs'] = {};
+  if ('jobs' in value) {
+    if (
+      !value.jobs ||
+      typeof value.jobs !== 'object' ||
+      Array.isArray(value.jobs)
     )
-  )
-    return;
+      return;
+    for (const [id, databaseId] of Object.entries(value.jobs)) {
+      if (
+        !uuid.test(id) ||
+        (databaseId !== null &&
+          (typeof databaseId !== 'string' || !uuid.test(databaseId)))
+      )
+        return;
+      jobs[id] = databaseId;
+    }
+  } else {
+    if (!('jobIds' in value) || !Array.isArray(value.jobIds)) return;
+    for (const id of value.jobIds) {
+      if (typeof id !== 'string' || !uuid.test(id)) return;
+      jobs[id] = null;
+    }
+  }
   return {
-    jobIds: [...new Set(value.jobIds)],
+    jobs,
     showMatchList: 'showMatchList' in value && value.showMatchList === true,
   };
 }

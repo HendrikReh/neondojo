@@ -484,7 +484,7 @@ async fn remove_database_content(
 
 const MATCH_PLAY_JOIN: &str = " LEFT JOIN play_sessions ps ON ps.library_match_id=m.id";
 const MATCH_NOTE_JOIN: &str = " LEFT JOIN annotations a ON a.match_uuid=m.id";
-// Resolve one source for status and PR before validating native coverage.
+// Select the PR source independently of any active whole-match job.
 // Incomplete or imported selected results never borrow another source's rating.
 const MATCH_ANALYSIS_JOINS: &str = "
 LEFT JOIN LATERAL (
@@ -509,8 +509,28 @@ LEFT JOIN LATERAL (
     AND rawpr.result #>> '{performance_rating,players,0,player}'='0'
     AND rawpr.result #>> '{performance_rating,players,1,player}'='1'
 ) prj ON true
+LEFT JOIN (
+    SELECT j.match_uuid,j.source_revision,
+           CASE WHEN bool_or(j.status='running') THEN 'running' ELSE 'queued' END AS status
+    FROM jobs j
+    WHERE j.kind='match' AND j.game_no IS NULL AND j.status IN ('queued','running')
+    GROUP BY j.match_uuid,j.source_revision
+) active_match_job ON active_match_job.match_uuid=m.id AND active_match_job.source_revision=m.source_revision
+    AND NOT m.collection_only
+    AND (ps.id IS NULL OR coalesce(ps.state->>'play_mode','competition')<>'competition'
+         OR ps.state->>'phase'='match_over' OR (m.match_length=0 AND ps.state->>'phase'='game_over'))
 LEFT JOIN LATERAL (
-    SELECT coalesce(CASE WHEN selected.source='imported' THEN 'imported' WHEN selected_job.status='completed' AND (selected_job.kind='analysis' OR selected_job.game_no IS NOT NULL) THEN 'partial' ELSE selected_job.status END,(SELECT CASE WHEN c.source='imported' THEN 'imported' WHEN c.scope<>'match' AND c.status='completed' THEN 'partial' ELSE c.status END FROM analysis_catalog_sources c WHERE c.match_id=m.id ORDER BY (c.status='completed') DESC,c.created_at DESC,c.analysis_id DESC LIMIT 1)) AS status
+    SELECT coalesce(
+        active_match_job.status,
+        CASE WHEN selected.source='imported' THEN 'imported'
+             WHEN selected_job.status='completed' AND (selected_job.kind='analysis' OR selected_job.game_no IS NOT NULL) THEN 'partial'
+             ELSE selected_job.status END,
+        (SELECT CASE WHEN c.source='imported' THEN 'imported'
+                     WHEN c.scope<>'match' AND c.status='completed' THEN 'partial'
+                     ELSE c.status END
+         FROM analysis_catalog_sources c WHERE c.match_id=m.id
+         ORDER BY (c.status='completed') DESC,c.created_at DESC,c.analysis_id DESC LIMIT 1)
+    ) AS status
 ) analysis ON true";
 const MATCH_COLUMNS: &str = "coalesce((SELECT r.id FROM study_report_snapshots r WHERE r.session_id=ps.id ORDER BY r.game_no DESC,r.created_at DESC LIMIT 1),CASE WHEN ps.state->>'phase'='match_over' AND jsonb_typeof(ps.state->'review')='object' THEN ps.id END) AS study_report_id,ps.id AS play_session_id,ps.paused_from_database_id IS NOT NULL AS play_paused,ps.state->>'phase' AS play_phase,m.play_mode,m.play_assisted,m.id,NOT m.collection_only AS source_available,coalesce(m.source_match_no,m.match_no) AS match_no,m.filename,m.format,m.white,m.black,m.match_length,m.position_count,m.created_at,coalesce(m.source_database_id,m.database_id) AS database_id,coalesce(nullif(m.display_name,''),m.filename) AS display_name,m.played_on,m.tournament,m.round,m.place,m.result_state,m.white_score,m.black_score,(prj.result #>> '{performance_rating,players,0,value}')::float8 AS white_pr,(prj.result #>> '{performance_rating,players,1,value}')::float8 AS black_pr,prj.result #>> '{performance_rating,method}' AS pr_method,prj.result #>> '{performance_rating,profile}' AS pr_profile,analysis.status AS analysis_status,(SELECT count(*) FROM match_games g WHERE g.match_uuid=m.id) AS game_count,coalesce(a.tags,'{}'::text[]) AS tags,coalesce(a.comment,'') AS comment,m.metadata_version AS version";
 fn sort_spec(sort: &str) -> Option<(&'static str, &'static str)> {

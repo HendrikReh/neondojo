@@ -912,6 +912,25 @@ async fn scoped_game_analysis_has_partial_status_and_never_whole_match_pr(pool: 
     let (_, page) = request(&pool, "GET", "/api/library/matches", None).await;
     assert_eq!(page["items"][0]["analysis_status"], "completed");
     assert_eq!(page["items"][0]["white_pr"], 1.0);
+    let rerun = Uuid::new_v4();
+    sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games) VALUES($1,$2,'match',1,'queued',1)")
+        .bind(rerun).bind(id).execute(&pool).await.unwrap();
+    for (job_status, expected) in [
+        ("queued", "queued"),
+        ("running", "running"),
+        ("failed", "completed"),
+    ] {
+        sqlx::query("UPDATE jobs SET status=$2 WHERE id=$1")
+            .bind(rerun)
+            .bind(job_status)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let (status, page) = request(&pool, "GET", "/api/library/matches", None).await;
+        assert_eq!(status, 200, "{page}");
+        assert_eq!(page["items"][0]["analysis_status"], expected, "{page}");
+        assert_eq!(page["items"][0]["white_pr"], 1.0, "{page}");
+    }
 }
 
 #[sqlx::test(migrations = "./migrations")]
