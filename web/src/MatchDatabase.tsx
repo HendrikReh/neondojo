@@ -309,10 +309,21 @@ export default function MatchDatabase({
       revision,
       localRevision,
       annotationRevision,
-      visible,
     ]),
     loadPage: loadMatches,
-    debounceMs: 250,
+    enabled: visible,
+    debounce: {
+      key: JSON.stringify([
+        filters.q,
+        filters.player,
+        filters.match_name,
+        filters.tournament,
+        filters.round,
+        filters.tag,
+        filters.comment,
+      ]),
+      ms: 250,
+    },
   });
   const error = searchError || databaseError;
   function searchPosition() {

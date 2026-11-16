@@ -47,7 +47,7 @@ const entries = Array.from({ length: 50 }, (_, index) => ({
   version: 0,
 }));
 
-async function library(page: Page) {
+async function mockLibrary(page: Page) {
   await page.addInitScript((id) => {
     localStorage.setItem('bgtutor.locale', 'en');
     localStorage.setItem('bgtutor.database', id);
@@ -80,6 +80,11 @@ async function library(page: Page) {
       return route.fulfill({ json: [] });
     },
   );
+  return previewRequests;
+}
+
+async function library(page: Page) {
+  const previewRequests = await mockLibrary(page);
   await page.goto('/');
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();
   await expect(page.locator('.database-table tbody tr')).toHaveCount(
@@ -87,6 +92,43 @@ async function library(page: Page) {
   );
   return previewRequests;
 }
+
+test('loads match pages only while the database workspace is open', async ({
+  page,
+}) => {
+  await mockLibrary(page);
+  const requests: URLSearchParams[] = [];
+  await page.route('**/api/library/matches?*', (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    requests.push(params);
+    return route.fulfill({
+      json: {
+        items: params.get('page') === '2' ? entries.slice(1, 2) : entries,
+        total: 51,
+        next_cursor: null,
+      },
+    });
+  });
+  await page.clock.install();
+  await page.goto('/');
+  const tab = page.getByRole('tab', { name: 'Match database', exact: true });
+  await expect(tab).toHaveAttribute('aria-selected', 'false');
+  await page.clock.runFor(500);
+  expect(requests).toHaveLength(0);
+
+  await tab.click();
+  const panel = page.getByRole('tabpanel', { name: 'Match database' });
+  await expect(panel.locator('tbody tr')).toHaveCount(50);
+  expect(
+    requests.map((params) => [params.get('page'), params.get('limit')]),
+  ).toEqual([['1', '50']]);
+  await panel
+    .locator('.search-pagination')
+    .getByRole('button', { name: 'Page 2', exact: true })
+    .click();
+  await expect(panel.locator('tbody tr')).toHaveCount(1);
+  expect(requests.map((params) => params.get('page'))).toEqual(['1', '2']);
+});
 
 test('tracks selected matches after closing the dialog and reloading the page', async ({
   page,

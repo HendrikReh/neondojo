@@ -482,10 +482,14 @@ async fn remove_database_content(
     Ok(StatusCode::NO_CONTENT)
 }
 
+const MATCH_PLAY_JOIN: &str = " LEFT JOIN play_sessions ps ON ps.library_match_id=m.id";
+const MATCH_NOTE_JOIN: &str = " LEFT JOIN annotations a ON a.match_uuid=m.id";
 // Resolve one source for status and PR before validating native coverage.
 // Incomplete or imported selected results never borrow another source's rating.
-const MATCH_FROM: &str = "FROM matches m LEFT JOIN play_sessions ps ON ps.library_match_id=m.id LEFT JOIN annotations a ON a.match_uuid=m.id
-LEFT JOIN effective_analysis_selections selected ON selected.match_id=m.id
+const MATCH_ANALYSIS_JOINS: &str = "
+LEFT JOIN LATERAL (
+    SELECT a.source,a.job_id FROM effective_analysis_selections a WHERE a.match_id=m.id LIMIT 1
+) selected ON true
 LEFT JOIN jobs selected_job ON selected_job.id=selected.job_id
 LEFT JOIN LATERAL (
     SELECT selected_job.result,selected_job.total_games,selected_job.completed_games
@@ -689,6 +693,17 @@ fn occurrence_after(
         q.push("m.id > ").push_bind(id);
     }
 }
+
+fn library_row_projection(q: &mut QueryBuilder<'_, Postgres>, player_id: Option<Uuid>) {
+    q.push("SELECT ").push(MATCH_COLUMNS);
+    if let Some(id) = player_id {
+        q.push(",ARRAY(SELECT mp.side ")
+            .push(PLAYER_MATCH_FROM)
+            .push_bind(id)
+            .push(" ORDER BY mp.side) AS player_sides");
+    }
+}
+
 pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage> {
     for v in [
         &p.q,
@@ -771,7 +786,13 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
     } else {
         ""
     };
+    let projected_occurrence_columns = if occurrences {
+        ",ranked.occurrence_id,ranked.occurrence_ordinal,ranked.occurrence_game_no,ranked.occurrence_move_no,ranked.occurrence_database_name"
+    } else {
+        ""
+    };
     let compact = ["tags", "comment"].contains(&sort.as_str());
+    let sort_uses_analysis = ["white_pr", "black_pr", "analysis_status"].contains(&sort.as_str());
     let mut cursor = after
         .map(|v| {
             if v.len() > 4096 {
@@ -798,8 +819,9 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
         if c.anchor {
             // Use the same filters as the page, so a deleted anchor or one that
             // has left the current scope produces a validation error.
+            let play_join = if occurrences { MATCH_PLAY_JOIN } else { "" };
             let mut anchor = QueryBuilder::<Postgres>::new(format!(
-                "SELECT ({expr})::text AS cursor_key {MATCH_FROM}{occurrence_join} WHERE NOT m.collection_only"
+                "SELECT ({expr})::text AS cursor_key FROM matches m{MATCH_NOTE_JOIN}{play_join}{occurrence_join} WHERE NOT m.collection_only"
             ));
             library_filters(&mut anchor, &p, &date_field)?;
             anchor.push(" AND m.id=").push_bind(c.id);
@@ -846,27 +868,36 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
             return Err(ApiError::invalid("Cursor contains an invalid sort value"));
         }
     }
-    let mut q = QueryBuilder::<Postgres>::new("");
+    let mut q = QueryBuilder::<Postgres>::new("WITH ");
     if offset.is_some() {
-        q.push("WITH totals AS (SELECT count(*) AS total FROM matches m");
+        q.push("totals AS (SELECT count(*) AS total FROM matches m");
         if occurrences {
-            q.push(" LEFT JOIN play_sessions ps ON ps.library_match_id=m.id")
-                .push(occurrence_join);
+            q.push(MATCH_PLAY_JOIN).push(occurrence_join);
         }
         q.push(" WHERE NOT m.collection_only");
         library_filters(&mut q, &p, &date_field)?;
-        q.push("), page AS (");
+        q.push("), ");
     }
-    q.push(format!("SELECT {MATCH_COLUMNS}{occurrence_columns}"));
-    if let Some(id) = p.player_id {
-        q.push(",ARRAY(SELECT mp.side ")
-            .push(PLAYER_MATCH_FROM)
-            .push_bind(id)
-            .push(" ORDER BY mp.side) AS player_sides");
+    if sort_uses_analysis {
+        q.push("page AS (");
+        library_row_projection(&mut q, p.player_id);
+    } else {
+        // Sort and limit narrow rows before fetching notes, games and analysis.
+        q.push("ranked AS MATERIALIZED (SELECT m.id");
     }
-    q.push(format!(
-        ",({expr})::text AS cursor_key,({expr}) AS page_sort {MATCH_FROM}{occurrence_join} WHERE NOT m.collection_only"
+    q.push(occurrence_columns).push(format!(
+        ",({expr})::text AS cursor_key,({expr}) AS page_sort FROM matches m"
     ));
+    if occurrences || sort_uses_analysis {
+        q.push(MATCH_PLAY_JOIN);
+    }
+    if compact || sort_uses_analysis {
+        q.push(MATCH_NOTE_JOIN);
+    }
+    if sort_uses_analysis {
+        q.push(MATCH_ANALYSIS_JOINS);
+    }
+    q.push(occurrence_join).push(" WHERE NOT m.collection_only");
     library_filters(&mut q, &p, &date_field)?;
     if let Some(c) = cursor {
         q.push(" AND (");
@@ -893,26 +924,44 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
             q.push(")");
         }
     }
+    let sort_order = if direction == "asc" {
+        " ASC NULLS LAST"
+    } else {
+        " DESC NULLS LAST"
+    };
     q.push(" ORDER BY ")
         .push(expr)
-        .push(if direction == "asc" {
-            " ASC NULLS LAST"
-        } else {
-            " DESC NULLS LAST"
-        })
+        .push(sort_order)
         .push(",m.id ASC");
     if occurrences {
         q.push(",hit.ordinal ASC,hit.id ASC");
     }
     q.push(" LIMIT ").push_bind(limit + 1);
     if let Some(offset) = offset {
-        q.push(" OFFSET ").push_bind(offset)
-            .push(") SELECT page.*,totals.total FROM totals LEFT JOIN page ON true ORDER BY page_sort ")
-            .push(if direction == "asc" { "ASC NULLS LAST" } else { "DESC NULLS LAST" })
-            .push(",id ASC");
-        if occurrences {
-            q.push(",occurrence_ordinal ASC,occurrence_id ASC");
-        }
+        q.push(" OFFSET ").push_bind(offset);
+    }
+    q.push(")");
+    if !sort_uses_analysis {
+        q.push(", page AS (");
+        library_row_projection(&mut q, p.player_id);
+        q.push(",ranked.cursor_key,ranked.page_sort")
+            .push(projected_occurrence_columns)
+            .push(" FROM ranked JOIN matches m ON m.id=ranked.id")
+            .push(MATCH_PLAY_JOIN)
+            .push(MATCH_NOTE_JOIN)
+            .push(MATCH_ANALYSIS_JOINS)
+            .push(")");
+    }
+    if offset.is_some() {
+        q.push(" SELECT page.*,totals.total FROM totals LEFT JOIN page ON true");
+    } else {
+        q.push(" SELECT page.* FROM page");
+    }
+    q.push(" ORDER BY page_sort")
+        .push(sort_order)
+        .push(",id ASC");
+    if occurrences {
+        q.push(",occurrence_ordinal ASC,occurrence_id ASC");
     }
     let mut rows = q
         .build()
@@ -986,7 +1035,7 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
 }
 async fn database_match(pool: &PgPool, id: Uuid) -> ApiResult<DatabaseMatch> {
     sqlx::query_as(&format!(
-        "SELECT {MATCH_COLUMNS} {MATCH_FROM} WHERE m.id=$1"
+        "SELECT {MATCH_COLUMNS} FROM matches m{MATCH_PLAY_JOIN}{MATCH_NOTE_JOIN}{MATCH_ANALYSIS_JOINS} WHERE m.id=$1"
     ))
     .bind(id)
     .fetch_optional(pool)
