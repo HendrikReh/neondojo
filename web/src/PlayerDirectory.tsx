@@ -22,11 +22,13 @@ function PlayerMatches({
   id,
   databases,
   onOpen,
+  onProfile,
   revision,
 }: {
   id: string;
   databases: Database[];
   onOpen: (match: Match) => void;
+  onProfile: (id: string) => void;
   revision: number;
 }) {
   const t = usePlayerText();
@@ -115,17 +117,39 @@ function PlayerMatches({
                 .filter(Boolean)
                 .join(' · ');
               const databaseName = databaseNames.get(row.database_id);
+              const opponentId = row.opponent_player_id;
               return (
-                <tr key={row.id}>
+                <tr
+                  key={row.id}
+                  tabIndex={0}
+                  title={`${t('openMatch')}: ${names}`}
+                  onClick={() => onOpen(row)}
+                  onKeyDown={(event) => {
+                    if (
+                      event.target !== event.currentTarget ||
+                      event.key !== 'Enter'
+                    )
+                      return;
+                    event.preventDefault();
+                    onOpen(row);
+                  }}
+                >
                   <td>
-                    <button
-                      type="button"
-                      className="position-preview-link player-match-link"
-                      onClick={() => onOpen(row)}
-                      title={names}
-                    >
-                      {opponent}
-                    </button>
+                    {opponentId ? (
+                      <button
+                        type="button"
+                        className="position-preview-link player-match-link"
+                        title={t('openProfile')}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onProfile(opponentId);
+                        }}
+                      >
+                        {opponent}
+                      </button>
+                    ) : (
+                      <span className="player-match-opponent">{opponent}</span>
+                    )}
                     {event && (
                       <span className="player-match-event" title={event}>
                         {event}
@@ -167,12 +191,14 @@ function PlayerCard({
   revision,
   onChanged,
   onOpen,
+  onProfile,
 }: {
   id: string;
   databases: Database[];
   revision: number;
   onChanged: () => void;
   onOpen: (match: Match) => void;
+  onProfile: (id: string) => void;
 }) {
   const t = usePlayerText();
   const { formatError, formatNumber } = useI18n();
@@ -189,6 +215,15 @@ function PlayerCard({
     ) : (
       <p role="status">{t('loading')}</p>
     );
+
+  const trends = details.ratings
+    .map((rating) => ({
+      profile: rating.profile,
+      points: (details.rating_history ?? []).filter(
+        (point) => point.profile === rating.profile,
+      ),
+    }))
+    .filter((trend) => trend.points.length > 1);
 
   return (
     <section className="player-card" aria-label={details.display_name}>
@@ -227,12 +262,6 @@ function PlayerCard({
           {formatError(error)} <button onClick={retry}>{t('retry')}</button>
         </p>
       )}
-      <PlayerMatches
-        id={id}
-        databases={databases}
-        onOpen={onOpen}
-        revision={revision + matchesRevision}
-      />
       <section className="player-ratings" aria-label={t('pr')}>
         <h3>{t('pr')}</h3>
         {details.ratings.length ? (
@@ -240,17 +269,13 @@ function PlayerCard({
             {details.ratings.map((rating) => (
               <li key={rating.profile}>
                 <strong>{formatNumber(rating.value, prDigits)}</strong>
-                {' · '}
-                {t('coverage', {
-                  rated: formatNumber(rating.match_count),
-                  total: formatNumber(details.match_count),
-                })}
+                <span>
+                  {t('coverage', {
+                    rated: formatNumber(rating.match_count),
+                    total: formatNumber(details.match_count),
+                  })}
+                </span>
                 <span className="player-rating-profile">{rating.profile}</span>
-                <PlayerRatingTrend
-                  points={(details.rating_history ?? []).filter(
-                    (point) => point.profile === rating.profile,
-                  )}
-                />
               </li>
             ))}
           </ul>
@@ -258,6 +283,25 @@ function PlayerCard({
           <p>{t('noPr')}</p>
         )}
       </section>
+      <PlayerMatches
+        id={id}
+        databases={databases}
+        onOpen={onOpen}
+        onProfile={onProfile}
+        revision={revision + matchesRevision}
+      />
+      {trends.length > 0 && (
+        <section className="player-rating-trends" aria-label={t('prTrend')}>
+          {trends.map((trend) => (
+            <div key={trend.profile}>
+              {trends.length > 1 && (
+                <span className="player-rating-profile">{trend.profile}</span>
+              )}
+              <PlayerRatingTrend points={trend.points} />
+            </div>
+          ))}
+        </section>
+      )}
       {dialog === 'edit' && (
         <PlayerEditDialog
           profile={details}
@@ -350,6 +394,7 @@ export default function PlayerDirectory({
                 databases={databases}
                 revision={revision}
                 onOpen={onOpen}
+                onProfile={setId}
                 onChanged={() => setListRevision((n) => n + 1)}
               />
             ) : null}

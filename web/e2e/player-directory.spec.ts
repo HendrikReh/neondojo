@@ -47,6 +47,7 @@ test('edits an imported player profile and opens its match', async ({
     name: 'Spielerprofile zusammenführen',
   });
   const candidateSearch = merge.getByRole('searchbox');
+  await expect(candidateSearch).toBeFocused();
   await candidateSearch.fill(alias);
   await expect(merge.getByText('Keine Spieler gefunden.')).toBeVisible();
   await candidateSearch.fill('Gegner');
@@ -92,7 +93,17 @@ test('edits an imported player profile and opens its match', async ({
       path: test.info().outputPath(`player-directory-${width}.png`),
     });
   }
-  await page.getByRole('button', { name: 'Gegner', exact: true }).click();
+  const matches = page.locator('.player-match-table');
+  await matches.getByRole('button', { name: 'Gegner', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Gegner' })).toBeVisible();
+  await page
+    .locator('.player-list')
+    .getByRole('button', { name: 'Anna Beispiel' })
+    .click();
+  await expect(
+    page.getByRole('heading', { name: 'Anna Beispiel' }),
+  ).toBeVisible();
+  await matches.getByText('7-Punkte-Match').click();
   await expect(page.locator('.analysis-workspace .board')).toBeVisible();
   await page.getByRole('tab', { name: 'Spielerdatenbank' }).click();
   await page
@@ -104,9 +115,7 @@ test('edits an imported player profile and opens its match', async ({
     .getByRole('button', { name: 'Spielerprofile zusammenführen' })
     .click();
   await expect(merge).toBeHidden();
-  await expect(
-    page.getByRole('button', { name: 'Beide Seiten' }),
-  ).toBeVisible();
+  await expect(matches.getByText('Beide Seiten')).toBeVisible();
   await expect(page.getByText('Profile zusammengeführt.')).toBeVisible();
 });
 
@@ -157,4 +166,71 @@ test('springs directly between numbered player result pages and resets on search
   await page.getByRole('searchbox', { name: 'Spieler suchen' }).fill('Filter');
   await expect(list.getByText('Spieler auf Seite 1')).toBeVisible();
   await expect(pages).toHaveCount(0);
+});
+
+test('offers profiles with a similar name before a merge search is typed', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
+  const id = '7b0f6f0e-6a55-4d0c-9a53-2f6a3c1d9e10';
+  const queries: (string | null)[] = [];
+  await page.route('**/api/players?*', async (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    const candidates = params.get('exclude_id') === id;
+    if (candidates) queries.push(params.get('q'));
+    await route.fulfill({
+      json: {
+        items: [
+          candidates
+            ? {
+                id: 'c2a1c9c4-0d2b-4c58-8a43-5b1d6f1f7a11',
+                display_name: 'Akiko Yazawa',
+                match_count: 4,
+                game_count: 22,
+              }
+            : {
+                id,
+                display_name: 'Akiko_Yazawa',
+                match_count: 2,
+                game_count: 20,
+              },
+        ],
+        next_cursor: null,
+        total: 1,
+      },
+    });
+  });
+  await page.route(`**/api/players/${id}`, (route) =>
+    route.fulfill({
+      json: {
+        id,
+        display_name: 'Akiko_Yazawa',
+        first_name: '',
+        last_name: '',
+        version: 1,
+        match_count: 2,
+        game_count: 20,
+        aliases: [],
+        ratings: [],
+        rating_history: [],
+      },
+    }),
+  );
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Spielerdatenbank' }).click();
+  await page.getByRole('button', { name: 'Akiko_Yazawa' }).click();
+  await page
+    .getByRole('button', { name: 'Spielerprofile zusammenführen' })
+    .click();
+  const merge = page.getByRole('dialog', {
+    name: 'Spielerprofile zusammenführen',
+  });
+  await expect(merge.getByRole('searchbox')).toBeFocused();
+  await expect(merge.getByText('Ähnliche Namen')).toBeVisible();
+  await expect(
+    merge.getByRole('button', { name: 'Akiko Yazawa' }),
+  ).toBeVisible();
+  expect(new Set(queries)).toEqual(new Set(['Akiko']));
+  await merge.getByRole('searchbox').fill('Yaz');
+  await expect(merge.getByText('Ähnliche Namen')).toBeHidden();
 });

@@ -123,6 +123,22 @@ async fn source_aliases_stay_separate_until_assigned_and_apply_to_future_imports
     for row in matches["items"].as_array().unwrap() {
         let expected = if row["white"] == "example" { 0 } else { 1 };
         assert_eq!(row["player_sides"], json!([expected]));
+        let opponent = row["opponent_player_id"].as_str().unwrap();
+        assert_ne!(opponent, id.to_string());
+        let name = if expected == 0 {
+            &row["black"]
+        } else {
+            &row["white"]
+        };
+        let profile = call(
+            &app,
+            "GET",
+            &format!("/api/players/{opponent}"),
+            Value::Null,
+            200,
+        )
+        .await;
+        assert_eq!(&profile["display_name"], name);
     }
 }
 

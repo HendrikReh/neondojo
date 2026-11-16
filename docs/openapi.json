@@ -14946,6 +14946,14 @@
               }
             ]
           },
+          "opponent_player_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Profile of the other side, when filtered by player_id and that side\nbelongs to a different catalogued player."
+          },
           "place": {
             "type": [
               "string",

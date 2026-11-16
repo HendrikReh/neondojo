@@ -3531,6 +3531,12 @@ export interface components {
              */
             match_no: number;
             occurrence?: null | components["schemas"]["LibraryOccurrence"];
+            /**
+             * Format: uuid
+             * @description Profile of the other side, when filtered by player_id and that side
+             *     belongs to a different catalogued player.
+             */
+            opponent_player_id?: string | null;
             place?: string | null;
             play_assisted: boolean;
             play_mode?: null | components["schemas"]["PlayMode"];

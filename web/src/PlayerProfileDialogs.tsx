@@ -94,6 +94,11 @@ function usePlayerWrite(profile: Details) {
   return { busy, error, conflict, run };
 }
 
+/** First meaningful word of a name, to offer likely duplicates of a profile. */
+function nameSeed(name: string) {
+  return name.split(/[^\p{L}\p{N}]+/u).find((word) => word.length >= 3) ?? '';
+}
+
 function PlayerAliases({ aliases }: { aliases: Schema['PlayerAlias'][] }) {
   const t = usePlayerText();
   return (
@@ -284,6 +289,8 @@ export function PlayerMergeDialog({
   const [search, setSearch] = useState('');
   const [sourceId, setSourceId] = useState<string>();
   const [refresh, setRefresh] = useState(0);
+  const typed = search.trim();
+  const query = typed || nameSeed(profile.display_name);
   const {
     details: candidate,
     setDetails: setCandidate,
@@ -297,7 +304,7 @@ export function PlayerMergeDialog({
       busy={busy}
       onClose={onClose}
       native
-      initialFocus="dialog"
+      initialFocus="first-field"
     >
       <div className="player-merge position-browser">
         <label className="player-search">
@@ -314,10 +321,14 @@ export function PlayerMergeDialog({
             }}
           />
         </label>
-        {search.trim() && (
+        {query && (
           <div inert={busy}>
+            {!typed && (
+              <p className="player-merge-suggestions">{t('suggestions')}</p>
+            )}
             <PlayerResults
-              search={search}
+              search={query}
+              quietWhenEmpty={!typed}
               excludeId={profile.id}
               revision={revision + refresh}
               selected={sourceId}

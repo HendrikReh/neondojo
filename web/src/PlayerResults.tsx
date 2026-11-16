@@ -35,6 +35,7 @@ export function PlayerResults({
   selected,
   onSelect,
   reportTotal,
+  quietWhenEmpty = false,
 }: {
   search: string;
   excludeId?: string;
@@ -42,6 +43,8 @@ export function PlayerResults({
   selected?: string;
   onSelect: (id: string) => void;
   reportTotal?: (total: number) => void;
+  /** Suggestions stay silent when nothing matches. */
+  quietWhenEmpty?: boolean;
 }) {
   const t = usePlayerText();
   const { formatError, formatNumber } = useI18n();
@@ -62,7 +65,7 @@ export function PlayerResults({
         </p>
       )}
       {results.loading && <p role="status">{t('loading')}</p>}
-      {!results.loading && !results.error && !ids.length && (
+      {!quietWhenEmpty && !results.loading && !results.error && !ids.length && (
         <p className="position-empty">{t('empty')}</p>
       )}
       {!!ids.length && (

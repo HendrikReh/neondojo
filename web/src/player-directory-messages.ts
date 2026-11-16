@@ -54,6 +54,9 @@ const en = {
   reload: 'Reload profiles',
   bothSides: 'Both sides',
   matchFormat: 'Match format',
+  suggestions: 'Similar names',
+  openMatch: 'Open match',
+  openProfile: 'Open player profile',
 };
 type Key = keyof typeof en;
 const words: Record<Locale, Record<Key, string>> = {
@@ -111,6 +114,9 @@ const words: Record<Locale, Record<Key, string>> = {
     reload: 'Profile neu laden',
     bothSides: 'Beide Seiten',
     matchFormat: 'Matchformat',
+    suggestions: 'Ähnliche Namen',
+    openMatch: 'Match öffnen',
+    openProfile: 'Spielerprofil öffnen',
   },
   es: {
     title: 'Base de jugadores',
@@ -165,6 +171,9 @@ const words: Record<Locale, Record<Key, string>> = {
     reload: 'Recargar perfiles',
     bothSides: 'Ambos lados',
     matchFormat: 'Formato del encuentro',
+    suggestions: 'Nombres parecidos',
+    openMatch: 'Abrir encuentro',
+    openProfile: 'Abrir perfil del jugador',
   },
   fr: {
     title: 'Base de joueurs',
@@ -219,6 +228,9 @@ const words: Record<Locale, Record<Key, string>> = {
     reload: 'Recharger les profils',
     bothSides: 'Les deux côtés',
     matchFormat: 'Format du match',
+    suggestions: 'Noms similaires',
+    openMatch: 'Ouvrir le match',
+    openProfile: 'Ouvrir le profil du joueur',
   },
   it: {
     title: 'Database giocatori',
@@ -273,6 +285,9 @@ const words: Record<Locale, Record<Key, string>> = {
     reload: 'Ricarica i profili',
     bothSides: 'Entrambi i lati',
     matchFormat: 'Formato dell’incontro',
+    suggestions: 'Nomi simili',
+    openMatch: 'Apri incontro',
+    openProfile: 'Apri il profilo del giocatore',
   },
   pl: {
     title: 'Baza graczy',
@@ -327,6 +342,9 @@ const words: Record<Locale, Record<Key, string>> = {
     reload: 'Wczytaj profile ponownie',
     bothSides: 'Obie strony',
     matchFormat: 'Format meczu',
+    suggestions: 'Podobne nazwy',
+    openMatch: 'Otwórz mecz',
+    openProfile: 'Otwórz profil gracza',
   },
 };
 

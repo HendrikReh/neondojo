@@ -93,6 +93,11 @@ pub struct DatabaseMatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[sqlx(skip)]
     pub player_sides: Option<Vec<i16>>,
+    /// Profile of the other side, when filtered by player_id and that side
+    /// belongs to a different catalogued player.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[sqlx(skip)]
+    pub opponent_player_id: Option<Uuid>,
     pub id: Uuid,
     /// False for independent saved-position context whose source match was deleted.
     pub source_available: bool,
@@ -720,7 +725,10 @@ fn library_row_projection(q: &mut QueryBuilder<'_, Postgres>, player_id: Option<
         q.push(",ARRAY(SELECT mp.side ")
             .push(PLAYER_MATCH_FROM)
             .push_bind(id)
-            .push(" ORDER BY mp.side) AS player_sides");
+            .push(" ORDER BY mp.side) AS player_sides")
+            .push(",(SELECT a.profile_id FROM match_players mp JOIN player_aliases a ON a.id=mp.alias_id WHERE mp.match_id=m.id AND a.profile_id<>")
+            .push_bind(id)
+            .push(" ORDER BY mp.side LIMIT 1) AS opponent_player_id");
     }
 }
 
@@ -1003,6 +1011,9 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
             .map_err(anyhow::Error::from)?;
         if p.player_id.is_some() {
             m.player_sides = Some(row.try_get("player_sides").map_err(anyhow::Error::from)?);
+            m.opponent_player_id = row
+                .try_get("opponent_player_id")
+                .map_err(anyhow::Error::from)?;
         }
         let occurrence = if occurrences {
             let id = row.try_get("occurrence_id").map_err(anyhow::Error::from)?;
