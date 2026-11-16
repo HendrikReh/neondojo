@@ -13,7 +13,7 @@ import {
   type Match,
   type Position,
 } from './api';
-import type { Jobs } from './useJobs';
+import type { useJobs } from './useJobs';
 import { useI18n } from './i18n';
 import { useOpeningBook } from './useOpeningBook';
 import { useSourceText } from './analysis-source-messages';
@@ -35,16 +35,15 @@ import type { SourceAnalysis } from './source-analysis-api';
 const noImportedRecords: SourceAnalysis[] = [];
 
 export default function AnalysisPanel({
-  jobs,
+  positionJobs,
   catalog,
   stats,
   gameNo,
   disabled,
   active = true,
+  resultsVisible,
   calculationTarget,
   onShowResults,
-  restoring = false,
-  onAnalyze,
   defaultPlies = DEFAULT_ANALYSIS_PLIES,
   configuredEngine = 'gnubg',
   positionId,
@@ -56,16 +55,15 @@ export default function AnalysisPanel({
   players,
   analysisRevision,
 }: {
-  jobs: Jobs;
+  positionJobs: ReturnType<typeof useJobs>;
   catalog: AnalysisCatalog;
   stats: DiceStats | null;
   gameNo?: number;
   disabled: boolean;
   active?: boolean;
+  resultsVisible: boolean;
   calculationTarget?: HTMLElement | null;
   onShowResults?: () => void;
-  restoring?: boolean;
-  onAnalyze: (kind: 'analysis' | 'dice', plies: number) => void;
   defaultPlies?: number;
   configuredEngine?: MatchAnalysisEngine;
   positionId?: string;
@@ -126,6 +124,7 @@ export default function AnalysisPanel({
     setCalculation(undefined);
   }, [active, positionId, configuredEngine]);
   const [selectedRoll, setSelectedRoll] = useState('1-1');
+  const { jobs, restoring, failure, submitting, run } = positionJobs;
   const diceJob = jobs.dice;
   const latestJob = view === 'dice' ? diceJob : jobs.analysis;
   const pending = Object.values(jobs).some(
@@ -133,23 +132,41 @@ export default function AnalysisPanel({
   );
   const distribution =
     diceJob?.status === 'completed' ? (diceJob.result as Distribution) : null;
+  const blocked = disabled || submitting || restoring || pending;
+  const canRequestDice =
+    resultsVisible &&
+    !!positionId &&
+    !blocked &&
+    failure !== 'restore' &&
+    !settings;
+  const diceFailed = failure === 'dice' || diceJob?.status === 'failed';
+  const requestMissingDice = useEffectEvent(() => {
+    void run('dice', defaultPlies);
+  });
+  useEffect(() => {
+    if (view === 'dice' && canRequestDice && !diceJob && !diceFailed)
+      requestMissingDice();
+  }, [view, canRequestDice, diceJob, diceFailed]);
   const chooseDice = () => {
     setView('dice');
     onPreview?.(null);
+    if (canRequestDice && !distribution && diceFailed)
+      void run('dice', defaultPlies);
   };
   const closeCalculation = () => setCalculation(undefined);
   const startCalculation = () => {
-    if (!settings || disabled || restoring || pending) return;
+    if (!settings || blocked) return;
     closeCalculation();
     onShowResults?.();
     if (settings.kind === 'dice') {
-      chooseDice();
+      setView('dice');
       setDicePlies(settings.plies);
+      void run('dice', settings.plies);
     } else {
       setView('analysis');
       setCheckerPlies(settings.plies);
+      void run('analysis', settings.plies);
     }
-    onAnalyze(settings.kind, settings.plies);
   };
   const best = distribution?.rolls.find(
     (r) => r.dice.join('-') === selectedRoll,
@@ -269,7 +286,11 @@ export default function AnalysisPanel({
         />
       )}
       {view === 'dice' &&
-        (distribution ? (
+        (restoring || submitting ? (
+          <p className="fineprint" role="status">
+            {restoring ? library('loading') : t('matchAnalysis.submitting')}
+          </p>
+        ) : distribution ? (
           <div className="distribution">
             <div className="distribution-caption">
               <span>
@@ -333,13 +354,13 @@ export default function AnalysisPanel({
               {t('analysis.distributionMethod', { plies: distribution.plies })}
             </p>
           </div>
-        ) : (
+        ) : !pending && !positionJobs.error && !diceJob ? (
           <div className="panel-empty">
             <span className="empty-symbol">⚄</span>
             <h3>{t('analysis.diceEmptyHeading')}</h3>
             <p>{t('analysis.diceEmptyDescription')}</p>
           </div>
-        ))}
+        ) : null)}
       {view === 'observed' &&
         (stats ? (
           <div className="observed">
@@ -387,7 +408,7 @@ export default function AnalysisPanel({
                 icon="analysis"
                 label={`${t(kind === 'dice' ? 'analysis.recalculateDice' : 'analysis.recalculate')} …`}
                 aria-haspopup="dialog"
-                disabled={!positionId || disabled || pending || restoring}
+                disabled={!positionId || blocked}
                 onClick={(event) => {
                   if (!positionId) return;
                   event.currentTarget.focus();
@@ -430,7 +451,7 @@ export default function AnalysisPanel({
                         : 'analysis.analyze',
                     )}
                     className="primary"
-                    disabled={disabled || pending || restoring}
+                    disabled={blocked}
                     onClick={startCalculation}
                   />
                   <button type="button" onClick={closeCalculation}>

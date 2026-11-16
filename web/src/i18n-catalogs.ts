@@ -157,7 +157,7 @@ export const de = {
     'Grün: über der mittleren Equity. Pasch zählt 1/36, andere Kombinationen 2/36. {plies}-ply.',
   'analysis.diceEmptyHeading': 'Was bringt der nächste Wurf?',
   'analysis.diceEmptyDescription':
-    'Für diese Stellung liegt noch keine Würfel-Equity vor. Starte die Berechnung mit „Würfel-Equity neu berechnen“ in der Kopfzeile.',
+    'Für diese Stellung liegt noch keine Würfel-Equity vor.',
   'analysis.observedMethod':
     '{count} aufgezeichnete Würfe dieser Partie. Häufigkeiten sind keine Equity-Analyse; Eröffnungswürfe enthalten keinen Pasch.',
   'analysis.selectMatch': 'Wähle eine Partie aus.',
@@ -380,8 +380,7 @@ export const en = {
   'analysis.distributionMethod':
     'Green: above mean equity. Doubles count 1/36, other combinations 2/36. {plies}-ply.',
   'analysis.diceEmptyHeading': 'What will the next roll bring?',
-  'analysis.diceEmptyDescription':
-    'No dice equity is saved for this position. Start the calculation with Recalculate dice equity in the header.',
+  'analysis.diceEmptyDescription': 'No dice equity is saved for this position.',
   'analysis.observedMethod':
     '{count} recorded rolls in this match. Frequencies are not an equity analysis; opening rolls contain no doubles.',
   'analysis.selectMatch': 'Select a match.',
@@ -600,7 +599,7 @@ export const es = {
     'Verde: por encima de la equidad media. Los dobles cuentan 1/36; otras combinaciones, 2/36. {plies}-ply.',
   'analysis.diceEmptyHeading': '¿Qué traerá la próxima tirada?',
   'analysis.diceEmptyDescription':
-    'No hay equidad de dados guardada para esta posición. Inicia el cálculo desde la cabecera.',
+    'No hay equidad de dados guardada para esta posición.',
   'analysis.observedMethod':
     '{count} tiradas registradas en esta partida. Las frecuencias no son un análisis de equidad; las tiradas iniciales no incluyen dobles.',
   'analysis.selectMatch': 'Selecciona una partida.',
@@ -821,7 +820,7 @@ export const fr = {
     'Vert : au-dessus de l’équité moyenne. Les doubles comptent pour 1/36, les autres combinaisons pour 2/36. {plies}-ply.',
   'analysis.diceEmptyHeading': 'Que réserve le prochain jet ?',
   'analysis.diceEmptyDescription':
-    'Aucune équité des dés n’est enregistrée pour cette position. Lancez le calcul dans l’en-tête.',
+    'Aucune équité des dés n’est enregistrée pour cette position.',
   'analysis.observedMethod':
     '{count} jets enregistrés dans cette partie. Les fréquences ne sont pas une analyse d’équité ; les jets d’ouverture ne comportent pas de doubles.',
   'analysis.selectMatch': 'Sélectionnez une partie.',
@@ -1041,7 +1040,7 @@ export const pl = {
     'Zielony: powyżej średniej equity. Duble liczą się jako 1/36, inne kombinacje jako 2/36. {plies}-ply.',
   'analysis.diceEmptyHeading': 'Co przyniesie następny rzut?',
   'analysis.diceEmptyDescription':
-    'Dla tej pozycji nie zapisano equity rzutów. Uruchom obliczenia w nagłówku.',
+    'Dla tej pozycji nie zapisano equity rzutów.',
   'analysis.observedMethod':
     '{count} zapisanych rzutów w tym meczu. Częstości nie są analizą equity; rzuty otwarcia nie zawierają dubli.',
   'analysis.selectMatch': 'Wybierz mecz.',
@@ -1262,7 +1261,7 @@ export const it = {
     'Verde: sopra l’equity media. I doppi valgono 1/36, le altre combinazioni 2/36. {plies}-ply.',
   'analysis.diceEmptyHeading': 'Cosa porterà il prossimo lancio?',
   'analysis.diceEmptyDescription':
-    'Non è stata salvata l’equity dei dadi per questa posizione. Avvia il calcolo dall’intestazione.',
+    'Non è stata salvata l’equity dei dadi per questa posizione.',
   'analysis.observedMethod':
     '{count} lanci registrati in questa partita. Le frequenze non sono un’analisi dell’equity; i lanci iniziali non contengono doppi.',
   'analysis.selectMatch': 'Seleziona una partita.',

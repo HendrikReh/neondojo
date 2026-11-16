@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { request, terminal, mergeJob, type Job } from './api';
 import type { components } from './generated-api';
 import type { MatchAnalysisEngine } from './useMatchAnalysis';
@@ -14,17 +14,19 @@ export function useJobs(
   engineId: MatchAnalysisEngine,
   onAccepted?: (job: Job) => void,
 ) {
-  const scope = JSON.stringify([positionId]);
+  const scope = useMemo(() => ({ positionId }), [positionId]);
   const current = useRef(scope);
   current.current = scope;
   const [revision, setRevision] = useState(0);
   const [state, setState] = useState<{
-    scope: string;
+    scope: typeof scope;
     jobs: Jobs;
     error?: unknown;
     restored: boolean;
+    failure?: keyof Jobs | 'restore';
   }>();
-  const [pending, setPending] = useState<string>();
+  const submissions = useRef(new Set<string>());
+  const [pending, setPending] = useState<ReadonlySet<string>>(() => new Set());
   const mounted = useRef(false);
   useEffect(() => {
     mounted.current = true;
@@ -44,17 +46,19 @@ export function useJobs(
       if (abort.signal.aborted || current.current !== scope || !belongs(job))
         return;
       const kind = job.kind === 'dice' ? 'dice' : 'analysis';
-      setState((previous) => ({
-        scope,
-        restored: true,
-        jobs: {
-          ...(previous?.scope === scope ? previous.jobs : {}),
-          [kind]: mergeJob(
-            previous?.scope === scope ? previous.jobs[kind] : undefined,
-            job,
-          ),
-        },
-      }));
+      setState((previous) => {
+        const selected = previous?.scope === scope ? previous : undefined;
+        return {
+          scope,
+          restored: true,
+          jobs: {
+            ...selected?.jobs,
+            [kind]: mergeJob(selected?.jobs[kind], job),
+          },
+          failure: selected?.failure,
+          error: selected?.failure ? selected.error : undefined,
+        };
+      });
     }
     function monitor(job: Job) {
       if (terminal(job)) return;
@@ -72,7 +76,7 @@ export function useJobs(
             clearInterval(timer);
           }
         } catch (error) {
-          if (!abort.signal.aborted)
+          if (!abort.signal.aborted && current.current === scope)
             setState((previous) => ({
               scope,
               jobs: previous?.scope === scope ? previous.jobs : {},
@@ -101,7 +105,19 @@ export function useJobs(
     }).then(
       (jobs) => {
         if (abort.signal.aborted || current.current !== scope) return;
-        setState({ scope, jobs: {}, restored: true });
+        setState((previous) => {
+          const failedSubmission =
+            previous?.scope === scope &&
+            previous.failure &&
+            previous.failure !== 'restore';
+          return {
+            scope,
+            jobs: {},
+            restored: true,
+            failure: failedSubmission ? previous.failure : undefined,
+            error: failedSubmission ? previous.error : undefined,
+          };
+        });
         for (const job of jobs) {
           if (belongs(job)) {
             receive(job);
@@ -111,7 +127,13 @@ export function useJobs(
       },
       (error: unknown) => {
         if (!abort.signal.aborted && current.current === scope)
-          setState({ scope, jobs: {}, restored: true, error });
+          setState({
+            scope,
+            jobs: {},
+            restored: true,
+            failure: 'restore',
+            error,
+          });
       },
     );
     return () => {
@@ -122,8 +144,14 @@ export function useJobs(
   }, [positionId, scope, revision]);
 
   async function run(kind: 'analysis' | 'dice', plies: number) {
-    if (!positionId || pending === scope) return;
-    setPending(scope);
+    if (!positionId || submissions.current.has(positionId)) return;
+    submissions.current.add(positionId);
+    setPending(new Set(submissions.current));
+    setState((previous) =>
+      previous?.scope === scope
+        ? { ...previous, error: undefined, failure: undefined }
+        : previous,
+    );
     try {
       const job = await request<Job>('/jobs', {
         method: 'POST',
@@ -136,35 +164,39 @@ export function useJobs(
         } satisfies components['schemas']['JobRequest']),
       });
       onAccepted?.(job);
-      if (!mounted.current || current.current !== scope) return;
+      const selected = current.current;
+      if (!mounted.current || selected.positionId !== positionId) return;
       setState((previous) => ({
-        scope,
+        scope: selected,
         jobs: {
-          ...(previous?.scope === scope ? previous.jobs : {}),
+          ...(previous?.scope === selected ? previous.jobs : {}),
           [kind]: job,
         },
         restored: true,
       }));
       setRevision((value) => value + 1);
     } catch (error) {
-      if (mounted.current && current.current === scope)
+      const selected = current.current;
+      if (mounted.current && selected.positionId === positionId)
         setState((previous) => ({
-          scope,
-          jobs: previous?.scope === scope ? previous.jobs : {},
-          restored: true,
+          scope: selected,
+          jobs: previous?.scope === selected ? previous.jobs : {},
+          restored: previous?.scope === selected && previous.restored,
+          failure: kind,
           error,
         }));
     } finally {
-      if (mounted.current)
-        setPending((value) => (value === scope ? undefined : value));
+      submissions.current.delete(positionId);
+      if (mounted.current) setPending(new Set(submissions.current));
     }
   }
   return {
     jobs: state?.scope === scope ? state.jobs : {},
     run,
     refresh: () => setRevision((value) => value + 1),
-    submitting: pending === scope,
+    submitting: !!positionId && pending.has(positionId),
     error: state?.scope === scope ? state.error : undefined,
+    failure: state?.scope === scope ? state.failure : undefined,
     restoring: !!positionId && (state?.scope !== scope || !state.restored),
   };
 }

@@ -97,7 +97,7 @@ result after confirming its details. The selector returns to **Automatic** if
 the explicitly selected result is deleted. Deleting imported analysis values
 preserves the original match file.
 **Opening book** is an expandable reference beneath the selected result.
-Opening **Dice equity** also displays the saved calculation.
+Opening **Dice equity** displays the saved calculation or starts a missing one.
 **Analysis options** in the header includes **Recalculate position …** and
 **Recalculate dice equity …** for explicit calculations at a selected depth.
 
@@ -359,12 +359,12 @@ recognized Open Sage forks. **Copy version information** copies the report.
 
 ## Dice equity
 
-Selecting **Dice equity** in the position evaluation automatically requests the
-21 dice-pair evaluations used by its 36-cell grid. There is no separate Dice
-Distribution action. The latest saved result for the current position and
-engine is reused if its search depth matches, after saved jobs have loaded.
-Changing position or depth while this view is visible requests missing results;
-hidden evaluation views
-do not start work. Running jobs keep their captured depth and configuration.
+Selecting **Dice equity** in the position evaluation loads the latest saved
+calculation for the current position. If one is still running, the tab waits
+for it. A missing calculation starts with the active engine and profile depth
+and evaluates the 21 dice pairs used by the 36-cell grid.
+Changing position requests missing results while this tab is visible.
+Running jobs keep their captured depth and configuration.
 After a submission or engine failure, selecting **Dice equity** again retries
-once; failures never cause an automatic retry loop.
+once. Use **Analysis options → Recalculate dice equity …** to choose a different
+depth explicitly.

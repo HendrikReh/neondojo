@@ -87,7 +87,7 @@ Open <http://127.0.0.1:5173>. Vite forwards `/api` to `http://127.0.0.1:8787` by
 3. Select a move. The board shows the decision position before the recorded play, together with the score and doubling cube. Point numbering and notation follow the player on roll. Pip counts include checkers on the bar.
 4. In the Analysis header, open **Analysis options → Recalculate position …**, choose a depth, then select **Analyze position** to queue a persistent job. The default is 2-ply. The result includes up to five candidate moves, cubeful equity, and win probabilities.
 5. Use **Analyze game** in the Analysis header to evaluate the selected game. In the **Match database**, select one or more matches and use **Analyze selected matches …** above the list. Change the engine or depth in **Analysis options** for a game, or in the confirmation dialog for the selected matches. The engine starts with the profile's selection. GNUbg and Open Sage both offer 4-ply for game and match analysis. **Displayed analysis** selects a saved result from the shared catalog. Games with no checker moves, including cube-only games, can also be selected and analyzed.
-6. Use **Analysis options → Recalculate dice equity …** to evaluate all 21 unordered dice pairs. **Overview → Dice equity** displays saved values without starting a job. The matrix represents 36 equally likely ordered rolls, with weight 1 for doubles and 2 for other pairs. The weighted mean gives the expected equity. When a player has no legal play for a roll, GNUbg evaluates the forced pass. **Game rolls** shows the rolls recorded in the selected game.
+6. Open **Checker → Dice equity** to see saved values or calculate all 21 unordered dice pairs automatically if the position has no result. The matrix represents 36 equally likely ordered rolls, with weight 1 for doubles and 2 for other pairs. The weighted mean gives the expected equity. When a player has no legal play for a roll, GNUbg evaluates the forced pass. **Game rolls** shows the rolls recorded in the selected game.
 
 **Match database → Find a position in the library** searches for an exact GNUbg position ID, which represents the checker arrangement from the perspective of the player on roll. Analysis also uses the GNUbg match ID for context such as the score, cube, and dice. Each occurrence in the library has its own row with the database, game, and move. Opening a row selects that exact occurrence, even when the same position appears more than once in a match. To find related positions, save the position and choose **Find similar positions** in its preview under **Positions**.
 
@@ -100,7 +100,8 @@ The desktop **Checker** places move history on the left and position evaluation 
 The position pane shows existing results with their source and recorded depth.
 Use **Recalculate position …** or **Recalculate dice equity …** in the
 header's **Analysis options** to choose a depth and explicitly start a
-calculation. Opening the Dice equity tab only shows saved results.
+calculation. The **Dice equity** tab uses the active analysis profile when
+it calculates a missing result.
 
 **Analyze game** stays visible in the Analysis header and starts the selected
 game. Its options include the engine, depth and time estimate. Start a

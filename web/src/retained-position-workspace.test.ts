@@ -108,6 +108,7 @@ function props(
       error: null,
       submitting: false,
       restoring: false,
+      failure: undefined,
       run: async () => {},
     },
     theme: 'forest',

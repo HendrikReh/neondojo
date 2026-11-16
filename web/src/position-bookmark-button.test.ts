@@ -369,6 +369,7 @@ it('uses the real source occurrence beside review controls during candidate and 
       error: null,
       submitting: false,
       restoring: false,
+      failure: undefined,
       run: async () => {},
     },
     theme: 'forest',

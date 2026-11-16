@@ -90,17 +90,25 @@ it('offers an explicit action for a completed calculation while keeping the sele
           analysisId: 'imported:match',
           selectedId: 'imported:match',
         },
-        jobs: {
-          analysis: {
-            id: 'new',
-            status: 'completed',
-            kind: 'analysis',
-            result: null,
-          } as import('./api').Job,
+        positionJobs: {
+          jobs: {
+            analysis: {
+              id: 'new',
+              status: 'completed',
+              kind: 'analysis',
+              result: null,
+            } as import('./api').Job,
+          },
+          run: async () => {},
+          refresh: () => {},
+          submitting: false,
+          restoring: false,
+          error: undefined,
+          failure: undefined,
         },
         disabled: false,
+        resultsVisible: true,
         stats: null,
-        onAnalyze: () => {},
       }),
     }),
   );

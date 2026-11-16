@@ -767,10 +767,10 @@ export default function AnalysisWorkspace({
               </p>
             )}
             <AnalysisPanel
-              jobs={jobs.jobs}
+              positionJobs={jobs}
               catalog={catalog}
-              restoring={jobs.restoring}
               active={active && !cubeBoard}
+              resultsVisible={active && overview && !cubeBoard && !loading}
               calculationTarget={positionControls}
               onShowResults={() => onDetail('overview')}
               stats={sourceAvailable ? stats : null}
@@ -791,8 +791,7 @@ export default function AnalysisWorkspace({
               analysisRevision={catalogRevision}
               onPreview={onPreview}
               selectedPreview={selectedPreview}
-              disabled={!position || jobs.submitting || !configured}
-              onAnalyze={(kind, plies) => void jobs.run(kind, plies)}
+              disabled={!position || !configured}
             />
           </div>
           {sourceAvailable && (

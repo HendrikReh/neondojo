@@ -122,6 +122,7 @@ function props(player: 0 | 1 = 0) {
       error: null,
       submitting: false,
       restoring: false,
+      failure: undefined,
       run: async () => {},
     },
     theme: 'forest',

@@ -105,6 +105,7 @@ it('integrates the match header with identity and loading fields while omitting 
       error: null,
       submitting: false,
       restoring: false,
+      failure: undefined,
       run: async () => {},
     },
     theme: 'forest',
