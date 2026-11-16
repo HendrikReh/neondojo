@@ -98,7 +98,9 @@ export default function VersionInfo() {
 
   return (
     <section className="version-info" aria-labelledby="version-info-title">
-      <h1 id="version-info-title">{t('versions.title')}</h1>
+      <h1 id="version-info-title" className="sr-only">
+        {t('versions.title')}
+      </h1>
       <dl className="version-info-summary" aria-live="polite">
         <div>
           <dt>BG Tutor</dt>

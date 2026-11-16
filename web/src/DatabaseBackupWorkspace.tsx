@@ -184,7 +184,9 @@ export default function DatabaseBackupWorkspace() {
       className="database-backup"
       aria-labelledby="database-backup-title"
     >
-      <h1 id="database-backup-title">{t.title}</h1>
+      <h1 id="database-backup-title" className="sr-only">
+        {t.title}
+      </h1>
       <section
         className="database-backup-panel"
         aria-labelledby="database-backup-export"
@@ -217,11 +219,11 @@ export default function DatabaseBackupWorkspace() {
         aria-labelledby="database-backup-import"
       >
         <h2 id="database-backup-import">{t.importTitle}</h2>
-        <p className="database-backup-warning" id="database-backup-warning">
-          {t.warning}
-        </p>
         <p className="database-backup-help" id="database-backup-format">
           {t.importHelp}
+        </p>
+        <p className="database-backup-warning" id="database-backup-warning">
+          {t.warning}
         </p>
         <div className="database-backup-actions">
           <input

@@ -358,9 +358,7 @@ export default function EngineMatchWorkspace({
 
   return (
     <div className="benchmark-workspace engine-match-workspace">
-      <header className="engine-match-heading">
-        <h1>{text('title')}</h1>
-      </header>
+      <h1 className="sr-only">{text('title')}</h1>
       {displayedError !== undefined && (
         <div className="error" role="alert">
           {formatError(displayedError)}{' '}
@@ -673,6 +671,8 @@ function SeriesResults({
   const rate = statistics.win_rate_a;
   const interval = statistics.confidence_interval_a;
   const playing = active(series.status);
+  const counted = statistics.wins_a + statistics.wins_b;
+  const stoppedEmpty = !playing && counted === 0 && matches.length === 0;
   const competitors = [
     { side: 'A', profile: config.a, rate, wins: statistics.wins_a },
     {
@@ -721,64 +721,68 @@ function SeriesResults({
           )}
         </div>
       )}
-      <div className="engine-match-win-rates">
-        {competitors.map((competitor) => (
-          <dl key={competitor.side}>
-            <div className="engine-match-rate">
-              <dt>
-                <strong>
-                  {competitor.side} · {profile(competitor.profile)}
-                </strong>
-                <span>{text('winRate')}</span>
-              </dt>
-              <dd>
-                {competitor.rate == null
-                  ? '—'
-                  : formatPercent(competitor.rate, 1)}
-              </dd>
+      {!stoppedEmpty && (
+        <>
+          <div className="engine-match-win-rates">
+            {competitors.map((competitor) => (
+              <dl key={competitor.side}>
+                <div className="engine-match-rate">
+                  <dt>
+                    <strong>
+                      {competitor.side} · {profile(competitor.profile)}
+                    </strong>
+                    <span>{text('winRate')}</span>
+                  </dt>
+                  <dd>
+                    {competitor.rate == null
+                      ? '—'
+                      : formatPercent(competitor.rate, 1)}
+                  </dd>
+                </div>
+                <div className="engine-match-rate-count">
+                  <dt>{text('matchWins')}</dt>
+                  <dd>{formatNumber(competitor.wins)}</dd>
+                </div>
+              </dl>
+            ))}
+            {rate != null && (
+              <div className="engine-match-share" aria-hidden="true">
+                <span style={{ inlineSize: `${rate * 100}%` }} />
+              </div>
+            )}
+          </div>
+          <dl className="engine-match-statistics">
+            <div>
+              <dt>{text('matchesCounted')}</dt>
+              <dd>{formatNumber(counted)}</dd>
             </div>
-            <div className="engine-match-rate-count">
-              <dt>{text('matchWins')}</dt>
-              <dd>{formatNumber(competitor.wins)}</dd>
-            </div>
+            {paired && (
+              <div>
+                <dt>{text('completePairs')}</dt>
+                <dd>
+                  {formatNumber(statistics.complete_pairs)} /{' '}
+                  {formatNumber(config.count)}
+                </dd>
+              </div>
+            )}
+            {interval && (
+              <div>
+                <dt>{text('interval')}</dt>
+                <dd>
+                  {interval.map((value) => formatPercent(value, 1)).join(' – ')}
+                  <small>
+                    {text(
+                      interval[0] <= 0.5 && interval[1] >= 0.5
+                        ? 'intervalInconclusive'
+                        : 'intervalClear',
+                    )}
+                  </small>
+                </dd>
+              </div>
+            )}
           </dl>
-        ))}
-        {rate != null && (
-          <div className="engine-match-share" aria-hidden="true">
-            <span style={{ inlineSize: `${rate * 100}%` }} />
-          </div>
-        )}
-      </div>
-      <dl className="engine-match-statistics">
-        <div>
-          <dt>{text('matchesCounted')}</dt>
-          <dd>{formatNumber(statistics.wins_a + statistics.wins_b)}</dd>
-        </div>
-        {paired && (
-          <div>
-            <dt>{text('completePairs')}</dt>
-            <dd>
-              {formatNumber(statistics.complete_pairs)} /{' '}
-              {formatNumber(config.count)}
-            </dd>
-          </div>
-        )}
-        {interval && (
-          <div>
-            <dt>{text('interval')}</dt>
-            <dd>
-              {interval.map((value) => formatPercent(value, 1)).join(' – ')}
-              <small>
-                {text(
-                  interval[0] <= 0.5 && interval[1] >= 0.5
-                    ? 'intervalInconclusive'
-                    : 'intervalClear',
-                )}
-              </small>
-            </dd>
-          </div>
-        )}
-      </dl>
+        </>
+      )}
       <details className="engine-match-settings">
         <summary>{text('seriesSettings')}</summary>
         <p>
@@ -811,7 +815,7 @@ function SeriesResults({
           />
         </p>
       </details>
-      {matches.length === 0 ? (
+      {stoppedEmpty ? null : matches.length === 0 ? (
         <p>{text('noMatches')}</p>
       ) : (
         <div className="benchmark-table-scroll" aria-busy={paging}>

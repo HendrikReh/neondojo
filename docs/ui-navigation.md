@@ -366,9 +366,11 @@ Bei einem Profilkonflikt steht der Hinweis in der App-Sprache direkt unter „Ak
 **Extras** contains **Benchmark**, **Engine duels**, **Database backup**, and
 **Versions**. Use Left/Right or Home/End to switch tabs. BG Tutor remembers the
 last chosen tab on this browser. The link in Settings opens **Benchmark**.
+The selected tab names the tool, so the tools show no separate page title; each
+keeps its heading for assistive technology.
 
 Benchmark uses one engine selector for **Match analysis** and **Play-turn
-latency**. Each engine keeps its own depth selections while the app is open.
+latency**, which share a segmented switch below it. Each engine keeps its own depth selections while the app is open.
 The selected measurement type determines the setup, result columns and
 comparison. Active runs remain visible across both measurement types.
 The comparison table lists the median and range of the three most recent
@@ -382,7 +384,9 @@ Engine duels lists series beside the selected result on wide desktop windows.
 seed under **Advanced**. Series continue when leaving the tool. Results show
 progress and both match win rates in one card with a share bar. When the sample
 supports a confidence interval, a note says whether it includes 50%. Paired
-matches are grouped by pair.
+matches are grouped by pair. **Repeat series …** reopens setup with the
+settings and seed of the selected series. A series that stopped without a
+counted match shows its status and diagnostic without empty result tables.
 
 Database backup shows the scope of a restore before file selection. BG Tutor
 automatically checks each selected archive and compares its schema with the

@@ -2,12 +2,6 @@
   max-width: 48rem;
 }
 
-.database-backup > h1 {
-  margin: 0 0 16px;
-  font-size: var(--font-size-page);
-  font-weight: var(--font-weight-semibold);
-}
-
 .database-backup-panel {
   padding: 16px;
   margin-bottom: 12px;
@@ -160,4 +154,8 @@
 
 .database-backup-comparison td[data-difference='decrease'] {
   color: var(--ui-danger-text);
+}
+
+.database-backup-panel h2 + .database-backup-help {
+  margin-top: 4px;
 }

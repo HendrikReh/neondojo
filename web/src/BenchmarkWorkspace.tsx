@@ -224,7 +224,7 @@ export default function BenchmarkWorkspace({
   return (
     <div className="benchmark-workspace">
       <header className="benchmark-heading">
-        <h1>{t('title')}</h1>
+        <h1 className="sr-only">{t('title')}</h1>
         <p>{t('description')}</p>
       </header>
       {error !== undefined && (
@@ -251,6 +251,9 @@ export default function BenchmarkWorkspace({
             disabled={Boolean(starting)}
             onChange={(event) => setEngineId(event.target.value)}
           >
+            {engines.length === 0 && engineError === undefined && (
+              <option value={engineId}>{t('loading')}</option>
+            )}
             {engines.map((e) => (
               <option key={e.id} value={e.id} disabled={!e.available}>
                 {e.name}
@@ -261,7 +264,7 @@ export default function BenchmarkWorkspace({
         {!engine && engines.length > 0 && <p role="status">{t('noEngine')}</p>}
       </div>
       <div
-        className="text-navigation benchmark-modes"
+        className="benchmark-modes"
         role="group"
         aria-label={t('mode')}
       >

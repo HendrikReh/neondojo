@@ -1,15 +1,9 @@
 .version-info {
-  max-width: 44rem;
-}
-
-.version-info h1 {
-  margin: 0;
-  font-size: var(--font-size-page);
-  font-weight: var(--font-weight-semibold);
+  max-width: 48rem;
 }
 
 .version-info-summary {
-  margin: 16px 0 12px;
+  margin: 0 0 12px;
   font-size: var(--font-size-body);
 }
 
@@ -26,9 +20,9 @@
 }
 
 .version-info-summary dd {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
   align-items: baseline;
 }
 
@@ -42,8 +36,17 @@
 }
 
 .version-info-status {
-  grid-column: 2;
   color: var(--ui-muted);
+}
+
+.version-info-status--available::before {
+  content: '';
+  display: inline-block;
+  inline-size: 7px;
+  block-size: 7px;
+  margin-inline-end: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .version-info-status--available {

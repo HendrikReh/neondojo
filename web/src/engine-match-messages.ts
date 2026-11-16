@@ -132,12 +132,12 @@ const labels = {
     'Rozpocznij serię',
   ],
   reuse: [
-    'Reuse settings and seed',
-    'Einstellungen und Seed übernehmen',
-    'Reutilizar ajustes y semilla',
-    'Réutiliser les réglages et la graine',
-    'Riusa impostazioni e seme',
-    'Użyj ponownie ustawień i ziarna',
+    'Repeat series …',
+    'Serie wiederholen …',
+    'Repetir serie …',
+    'Répéter la série …',
+    'Ripeti serie …',
+    'Powtórz serię …',
   ],
   cancel: [
     'Cancel series',

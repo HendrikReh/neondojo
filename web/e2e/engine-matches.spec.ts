@@ -91,7 +91,7 @@ test('plays a seeded pair with the default dice mode and exports the return leg'
     });
   }
   await results
-    .getByRole('button', { name: 'Reuse settings and seed' })
+    .getByRole('button', { name: 'Repeat series …' })
     .click();
   await expect(setup.getByLabel('Dice mode')).toHaveValue('paired');
   await expect(seedInput).toBeVisible();
@@ -230,6 +230,11 @@ test('shows the retained diagnostic for a cancelled series', async ({
   await page.locator('nav').getByText('Engine duels', { exact: true }).click();
   const results = page.getByRole('region', { name: 'Series results' });
   await expect(results.getByText('Cancelled · 0 / 2 Matches')).toBeVisible();
+  await expect(results.getByText('A · GNUbg 0-ply')).toHaveCount(0);
+  await expect(results.getByText('Matches counted')).toHaveCount(0);
+  await expect(
+    results.getByRole('button', { name: 'Repeat series …' }),
+  ).toBeVisible();
   await expect(
     results.getByText('Interrupted by database restore'),
   ).toBeHidden();

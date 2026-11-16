@@ -1,13 +1,8 @@
-.engine-match-heading,
 .engine-match-progress {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px 16px;
-}
-
-.engine-match-heading {
-  margin-bottom: 16px;
 }
 
 .engine-match-archive-heading {
