@@ -159,6 +159,7 @@ export default function StudyWorkspace({
       >
         {visible && area === 'practice' && (
           <>
+            <h1 className="study-practice-heading">{p('practiceHistory')}</h1>
             <MistakePracticeHistory />
             <SimilarPracticeHistory />
           </>

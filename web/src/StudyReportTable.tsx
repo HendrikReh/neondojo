@@ -92,7 +92,6 @@ export default function StudyReportTable({
                   icon="open"
                   id={`open-study-report-${report.id}`}
                   label={t('open')}
-                  compact
                   aria-pressed={selectedId === report.id}
                   onClick={(event) => {
                     onOpen(report, event.currentTarget);

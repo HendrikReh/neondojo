@@ -57,6 +57,7 @@ export default function SimilarPracticeHistory() {
 
   return (
     <section aria-label={p('practiceHistory')}>
+      <h2 className="study-practice-subheading">{p('similar')}</h2>
       {saveFailed && (
         <div role="alert">
           <p>{p('practiceSaveFailed')}</p>

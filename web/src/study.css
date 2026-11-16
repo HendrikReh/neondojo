@@ -303,3 +303,40 @@
 .study-overview-limit input {
   width: 72px;
 }
+.study-practice-heading {
+  margin: 0 0 16px;
+}
+.study-practice-subheading {
+  margin: 20px 0 8px;
+}
+/* Every report group uses the same column widths, so the columns line up
+   from one money session or match to the next. */
+.study-reports .study-report-table {
+  table-layout: fixed;
+}
+.study-reports .study-report-table th:nth-child(1) {
+  width: 15%;
+}
+.study-reports .study-report-table th:nth-child(2) {
+  width: 22%;
+}
+.study-reports .study-report-table th:nth-child(3) {
+  width: 14%;
+}
+.study-reports .study-report-table th:nth-child(4),
+.study-reports .study-report-table th:nth-child(5) {
+  width: 11%;
+}
+.study-reports .study-report-table th:nth-child(6),
+.study-reports .study-report-table th:nth-child(7) {
+  width: 9%;
+}
+.study-reports .study-report-table td:nth-child(2) {
+  overflow-wrap: anywhere;
+}
+.study-reports .study-report-table :is(th, td):last-child {
+  text-align: right;
+}
+.study-reports .study-report-table .action-button {
+  white-space: nowrap;
+}
