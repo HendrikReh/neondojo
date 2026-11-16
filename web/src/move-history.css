@@ -136,8 +136,9 @@
 :is(.analysis-workspace, .play-workspace)
   .move-assessment-none
   .move-assessment-marker {
-  color: var(--ui-success-text);
-  background: var(--ui-success-bg);
+  /* Moves without a loss stay quiet so the graded errors stand out. */
+  color: var(--ui-muted);
+  background: transparent;
 }
 :is(.analysis-workspace, .play-workspace)
   .move-assessment-doubtful

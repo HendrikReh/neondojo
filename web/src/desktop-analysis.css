@@ -370,7 +370,8 @@
   }
 
   .analysis-workspace .move-assessment-none .move-assessment-marker {
-    color: var(--ui-success-text);
+    color: var(--ui-muted);
+    font-weight: var(--font-weight-medium);
   }
 
   .analysis-workspace :is(.move-assessment-blunder, .move-assessment-very_bad) .move-assessment-marker {
