@@ -21,13 +21,18 @@ test('edits an imported player profile and opens its match', async ({
   await page.goto('/');
   await page.getByRole('tab', { name: 'Spielerdatenbank' }).click();
   await page.getByRole('searchbox', { name: 'Spieler suchen' }).fill(alias);
-  await page.getByRole('button', { name: new RegExp(alias) }).click();
+  await page
+    .locator('.player-list')
+    .getByRole('button', { name: new RegExp(alias) })
+    .click();
   await expect(page.getByRole('textbox', { name: 'Vorname' })).toBeHidden();
   await expect(
     page.getByRole('columnheader', { name: 'Gegner' }),
   ).toBeVisible();
   await expect(page.getByText('7-Punkte-Match')).toBeVisible();
-  await page.getByRole('button', { name: 'Profil bearbeiten' }).click();
+  for (const name of ['Ergebnis', 'PR', 'Event'])
+    await expect(page.getByRole('columnheader', { name })).toBeVisible();
+  await page.getByRole('button', { name: 'Bearbeiten', exact: true }).click();
   const editor = page.getByRole('dialog', { name: 'Profil bearbeiten' });
   await editor.getByRole('textbox', { name: 'Vorname' }).fill('Anna');
   await editor.getByRole('textbox', { name: 'Nachname' }).fill('Beispiel');
@@ -40,9 +45,10 @@ test('edits an imported player profile and opens its match', async ({
   await expect(
     page.locator('.player-list').getByText(alias, { exact: false }),
   ).toBeVisible();
-  await page
-    .getByRole('button', { name: 'Spielerprofile zusammenführen' })
-    .click();
+  await expect(page.locator('.player-card-aliases')).toHaveText(
+    `Aliasse: ${alias}`,
+  );
+  await page.getByRole('button', { name: 'Zusammenführen …' }).click();
   const merge = page.getByRole('dialog', {
     name: 'Spielerprofile zusammenführen',
   });
@@ -106,9 +112,7 @@ test('edits an imported player profile and opens its match', async ({
   await matches.getByText('7-Punkte-Match').click();
   await expect(page.locator('.analysis-workspace .board')).toBeVisible();
   await page.getByRole('tab', { name: 'Spielerdatenbank' }).click();
-  await page
-    .getByRole('button', { name: 'Spielerprofile zusammenführen' })
-    .click();
+  await page.getByRole('button', { name: 'Zusammenführen …' }).click();
   await merge.getByRole('searchbox').fill('Gegner');
   await merge.getByRole('button', { name: 'Gegner', exact: true }).click();
   await merge
@@ -219,9 +223,7 @@ test('offers profiles with a similar name before a merge search is typed', async
   await page.goto('/');
   await page.getByRole('tab', { name: 'Spielerdatenbank' }).click();
   await page.getByRole('button', { name: 'Akiko_Yazawa' }).click();
-  await page
-    .getByRole('button', { name: 'Spielerprofile zusammenführen' })
-    .click();
+  await page.getByRole('button', { name: 'Zusammenführen …' }).click();
   const merge = page.getByRole('dialog', {
     name: 'Spielerprofile zusammenführen',
   });
@@ -261,21 +263,21 @@ test('sorts the player list from its column headings', async ({ page }) => {
   await page.getByRole('tab', { name: 'Spielerdatenbank' }).click();
   const list = page.locator('.player-list');
   const column = (name: string) => list.getByRole('columnheader', { name });
-  await expect(column('Spieler')).toHaveAttribute('aria-sort', 'ascending');
-  await list.getByRole('button', { name: 'Seite 2' }).click();
-  await list.getByRole('button', { name: 'Nach Matches sortieren' }).click();
-  await expect(list.getByText('Sortiert nach matches')).toBeVisible();
   await expect(column('Matches')).toHaveAttribute('aria-sort', 'descending');
   await expect(column('Spieler')).toHaveAttribute('aria-sort', 'none');
+  await list.getByRole('button', { name: 'Seite 2' }).click();
   await list.getByRole('button', { name: 'Nach Matches sortieren' }).click();
   await expect(column('Matches')).toHaveAttribute('aria-sort', 'ascending');
   await list.getByRole('button', { name: 'Nach Spieler sortieren' }).click();
+  await expect(list.getByText('Sortiert nach name')).toBeVisible();
   await expect(column('Spieler')).toHaveAttribute('aria-sort', 'ascending');
+  await list.getByRole('button', { name: 'Nach Spieler sortieren' }).click();
+  await expect(column('Spieler')).toHaveAttribute('aria-sort', 'descending');
   expect(orders).toEqual([
-    'name asc 1',
-    'name asc 2',
     'matches desc 1',
+    'matches desc 2',
     'matches asc 1',
     'name asc 1',
+    'name desc 1',
   ]);
 });

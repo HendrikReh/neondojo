@@ -11,8 +11,11 @@ import { useSearchPages, type SearchPage } from './useSearchPages';
 
 type Schema = components['schemas'];
 type PlayerSort = Schema['PlayerSort'];
-type Order = { sort: PlayerSort; direction: Schema['PlayerSortDirection'] };
-const NAME_ORDER: Order = { sort: 'name', direction: 'asc' };
+export type PlayerOrder = {
+  sort: PlayerSort;
+  direction: Schema['PlayerSortDirection'];
+};
+const NAME_ORDER: PlayerOrder = { sort: 'name', direction: 'asc' };
 
 export function aliasLabel(alias: Schema['PlayerAlias'], local: string) {
   return `${alias.name} · ${alias.platform || local}`;
@@ -40,6 +43,8 @@ export function PlayerResults({
   onSelect,
   reportTotal,
   quietWhenEmpty = false,
+  initialOrder = NAME_ORDER,
+  selectFirst = false,
 }: {
   search: string;
   excludeId?: string;
@@ -49,10 +54,13 @@ export function PlayerResults({
   reportTotal?: (total: number) => void;
   /** Suggestions stay silent when nothing matches. */
   quietWhenEmpty?: boolean;
+  initialOrder?: PlayerOrder;
+  /** Shows the first result while no profile is selected. */
+  selectFirst?: boolean;
 }) {
   const t = usePlayerText();
   const { formatError, formatNumber } = useI18n();
-  const [order, setOrder] = useState(NAME_ORDER);
+  const [order, setOrder] = useState(initialOrder);
   const results = usePlayerPage<Schema['PlayerSearchHit']>(
     '/players',
     { q: search.trim(), exclude_id: excludeId, ...order },
@@ -76,6 +84,10 @@ export function PlayerResults({
   const prefix = useId();
   const ids = results.items.map((row) => row.id);
   useEffect(() => reportTotal?.(results.total), [results.total, reportTotal]);
+  const first = selectFirst && !selected ? ids[0] : undefined;
+  useEffect(() => {
+    if (first) onSelect(first);
+  }, [first, onSelect]);
   return (
     <>
       {results.error !== undefined && (

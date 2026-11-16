@@ -8,7 +8,12 @@ import type { Database, LibraryMatch } from './library-api';
 import { usePlayerText } from './player-directory-messages';
 import { useLibraryText } from './library-messages';
 import { usePositionText } from './position-browser-messages';
-import { PlayerResults, usePlayerPage } from './PlayerResults';
+import {
+  aliasLabel,
+  PlayerResults,
+  usePlayerPage,
+  type PlayerOrder,
+} from './PlayerResults';
 import {
   PlayerEditDialog,
   PlayerMergeDialog,
@@ -17,6 +22,14 @@ import {
 import './player-directory.css';
 import { prDigits } from './pr-format';
 import PlayerRatingTrend from './PlayerRatingTrend';
+
+// The most active player leads the list, usually the owner of the library.
+const DIRECTORY_ORDER: PlayerOrder = { sort: 'matches', direction: 'desc' };
+
+/** Analysis depth of a profile such as "GNU Backgammon 1.08; 2-ply cubeful". */
+function profileDepth(profile: string) {
+  return profile.slice(profile.lastIndexOf(';') + 1).trim() || profile;
+}
 
 function PlayerMatches({
   id,
@@ -96,7 +109,10 @@ function PlayerMatches({
           <thead>
             <tr>
               <th scope="col">{p('opponent')}</th>
+              <th scope="col">{l('result')}</th>
+              <th scope="col">{t('prColumn')}</th>
               <th scope="col">{t('matchFormat')}</th>
+              <th scope="col">{l('tournament')}</th>
               <th scope="col">{t('database')}</th>
               <th scope="col">{t('date')}</th>
               <th scope="col">{t('games')}</th>
@@ -117,6 +133,18 @@ function PlayerMatches({
                 .filter(Boolean)
                 .join(' · ');
               const databaseName = databaseNames.get(row.database_id);
+              // Own points first when the profile played one side.
+              const black = sides?.length === 1 && sides[0] === 1;
+              const scores = black
+                ? [row.black_score, row.white_score]
+                : [row.white_score, row.black_score];
+              const [own, other] = scores;
+              const rating =
+                sides?.length === 1
+                  ? black
+                    ? row.black_pr
+                    : row.white_pr
+                  : null;
               const opponentId = row.opponent_player_id;
               return (
                 <tr
@@ -150,17 +178,25 @@ function PlayerMatches({
                     ) : (
                       <span className="player-match-opponent">{opponent}</span>
                     )}
-                    {event && (
-                      <span className="player-match-event" title={event}>
-                        {event}
-                      </span>
-                    )}
+                  </td>
+                  <td>
+                    {own == null || other == null
+                      ? '—'
+                      : `${formatNumber(own)}–${formatNumber(other)}`}
+                  </td>
+                  <td
+                    title={
+                      rating == null ? undefined : (row.pr_profile ?? undefined)
+                    }
+                  >
+                    {rating == null ? '—' : formatNumber(rating, prDigits)}
                   </td>
                   <td>
                     {row.match_length > 0
                       ? ui('app.matchLength', { count: row.match_length })
                       : ui('common.moneyGame')}
                   </td>
+                  <td title={event || undefined}>{event || '—'}</td>
                   <td title={databaseName}>{databaseName ?? '—'}</td>
                   <td>
                     {row.played_on
@@ -225,6 +261,10 @@ function PlayerCard({
     }))
     .filter((trend) => trend.points.length > 1);
 
+  const aliasNames = [
+    ...new Set(details.aliases.map((alias) => alias.name)),
+  ].filter((name) => name !== details.display_name);
+
   return (
     <section className="player-card" aria-label={details.display_name}>
       <header className="player-card-header">
@@ -236,10 +276,20 @@ function PlayerCard({
               games: formatNumber(details.game_count),
             })}
           </p>
+          {aliasNames.length > 0 && (
+            <p
+              className="player-card-aliases"
+              title={details.aliases
+                .map((alias) => aliasLabel(alias, t('local')))
+                .join('\n')}
+            >
+              {t('aliases')}: {aliasNames.join(', ')}
+            </p>
+          )}
         </div>
         <div className="player-profile-actions">
           <button type="button" onClick={() => setDialog('edit')}>
-            {t('edit')}
+            {t('editShort')}
           </button>
           <button
             type="button"
@@ -248,7 +298,7 @@ function PlayerCard({
               setDialog('merge');
             }}
           >
-            {t('merge')}
+            {t('mergeShort')}
           </button>
         </div>
       </header>
@@ -275,7 +325,9 @@ function PlayerCard({
                     total: formatNumber(details.match_count),
                   })}
                 </span>
-                <span className="player-rating-profile">{rating.profile}</span>
+                <span className="player-rating-profile" title={rating.profile}>
+                  {profileDepth(rating.profile)}
+                </span>
               </li>
             ))}
           </ul>
@@ -368,9 +420,9 @@ export default function PlayerDirectory({
         <h1>{t('title')}</h1>
       </div>
       <label className="player-search">
-        <span>{t('search')}</span>
         <input
           type="search"
+          aria-label={t('search')}
           maxLength={240}
           placeholder={t('searchHint')}
           value={search}
@@ -380,7 +432,12 @@ export default function PlayerDirectory({
       {error !== undefined && <p role="alert">{formatError(error)}</p>}
       <SearchResultList
         listClassName="player-list"
-        count={<span>{t('playerCount', { count: formatNumber(total) })}</span>}
+        title={t('player')}
+        count={
+          <span aria-label={t('playerCount', { count: formatNumber(total) })}>
+            {formatNumber(total)}
+          </span>
+        }
         preview={
           <SearchResultPreview
             className="player-preview"
@@ -407,6 +464,8 @@ export default function PlayerDirectory({
           selected={id}
           onSelect={setId}
           reportTotal={setTotal}
+          initialOrder={DIRECTORY_ORDER}
+          selectFirst
         />
       </SearchResultList>
     </section>

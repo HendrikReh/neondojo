@@ -57,6 +57,9 @@ const en = {
   suggestions: 'Similar names',
   openMatch: 'Open match',
   openProfile: 'Open player profile',
+  editShort: 'Edit',
+  mergeShort: 'Merge …',
+  prColumn: 'PR',
 };
 type Key = keyof typeof en;
 const words: Record<Locale, Record<Key, string>> = {
@@ -117,6 +120,9 @@ const words: Record<Locale, Record<Key, string>> = {
     suggestions: 'Ähnliche Namen',
     openMatch: 'Match öffnen',
     openProfile: 'Spielerprofil öffnen',
+    editShort: 'Bearbeiten',
+    mergeShort: 'Zusammenführen …',
+    prColumn: 'PR',
   },
   es: {
     title: 'Base de jugadores',
@@ -174,6 +180,9 @@ const words: Record<Locale, Record<Key, string>> = {
     suggestions: 'Nombres parecidos',
     openMatch: 'Abrir encuentro',
     openProfile: 'Abrir perfil del jugador',
+    editShort: 'Editar',
+    mergeShort: 'Fusionar …',
+    prColumn: 'PR',
   },
   fr: {
     title: 'Base de joueurs',
@@ -231,6 +240,9 @@ const words: Record<Locale, Record<Key, string>> = {
     suggestions: 'Noms similaires',
     openMatch: 'Ouvrir le match',
     openProfile: 'Ouvrir le profil du joueur',
+    editShort: 'Modifier',
+    mergeShort: 'Fusionner …',
+    prColumn: 'PR',
   },
   it: {
     title: 'Database giocatori',
@@ -288,6 +300,9 @@ const words: Record<Locale, Record<Key, string>> = {
     suggestions: 'Nomi simili',
     openMatch: 'Apri incontro',
     openProfile: 'Apri il profilo del giocatore',
+    editShort: 'Modifica',
+    mergeShort: 'Unisci …',
+    prColumn: 'PR',
   },
   pl: {
     title: 'Baza graczy',
@@ -345,6 +360,9 @@ const words: Record<Locale, Record<Key, string>> = {
     suggestions: 'Podobne nazwy',
     openMatch: 'Otwórz mecz',
     openProfile: 'Otwórz profil gracza',
+    editShort: 'Edytuj',
+    mergeShort: 'Połącz …',
+    prColumn: 'PR',
   },
 };
 

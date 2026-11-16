@@ -6,6 +6,7 @@ export function SearchResultList({
   className,
   listClassName,
   busy,
+  title,
   count,
   preview,
   divider,
@@ -15,6 +16,8 @@ export function SearchResultList({
   className?: string;
   listClassName?: string;
   busy?: boolean;
+  /** Replaces the generic results heading. */
+  title?: ReactNode;
   count: ReactNode;
   preview: ReactNode;
   divider?: ReactNode;
@@ -39,7 +42,7 @@ export function SearchResultList({
         aria-busy={busy}
       >
         <div className="position-result-heading">
-          <h2>{t('results')}</h2>
+          <h2>{title ?? t('results')}</h2>
           {count}
         </div>
         {children}

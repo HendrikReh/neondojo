@@ -61,17 +61,27 @@
 }
 
 .player-alias-hit,
-.player-match-event,
 .player-rating-profile {
   display: block;
   color: var(--ui-muted);
   font-size: var(--font-size-meta);
 }
 
-.player-alias-hit,
-.player-match-event {
+.player-alias-hit {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.player-card-header > div:first-child {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.player-card-header .player-card-aliases {
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .player-card-header,
@@ -141,15 +151,28 @@
 }
 
 .player-match-table th:nth-child(2) {
-  width: 23%;
+  width: 5.5rem;
 }
 
 .player-match-table th:nth-child(3) {
-  width: 24%;
+  width: 4.5rem;
 }
 
 .player-match-table th:nth-child(4) {
+  width: 9rem;
+}
+
+.player-match-table th:nth-child(5),
+.player-match-table th:nth-child(6) {
+  width: 17%;
+}
+
+.player-match-table th:nth-child(7) {
   width: 8rem;
+}
+
+.player-match-table :is(th, td):nth-child(3) {
+  text-align: right;
 }
 
 .player-match-table th:last-child {
