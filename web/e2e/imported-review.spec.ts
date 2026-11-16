@@ -265,10 +265,15 @@ test('real XG review opens checker and cube decisions with original source and r
       '.analysis-panel > .source-analysis .candidate-comparison-table .candidate-marker-played',
     ),
   ).toBeVisible();
-  for (const name of ['Gesamt', 'Einfach', 'Gammon', 'Backgammon']) {
-    await expect(
-      page.getByRole('columnheader', { name, exact: true }),
-    ).toBeVisible();
+  for (const side of ['Gewinne', 'Niederlagen']) {
+    for (const outcome of ['Gesamt', 'Gammon', 'Backgammon']) {
+      await expect(
+        page.getByRole('columnheader', {
+          name: `${side}: ${outcome}`,
+          exact: true,
+        }),
+      ).toBeVisible();
+    }
   }
   await expect(
     page.locator(

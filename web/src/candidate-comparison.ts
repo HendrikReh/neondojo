@@ -20,6 +20,22 @@ const knownUnits = new Set([
   'mwc',
 ]);
 
+/**
+ * Whether a candidate's depth only repeats the depth recorded for its table.
+ * A table may qualify the same search depth, as in "2-ply cubeful".
+ */
+export function repeatsTableDepth(
+  candidateDepth?: string | null,
+  tableDepth?: string | null,
+) {
+  if ((candidateDepth ?? null) === (tableDepth ?? null)) return true;
+  return (
+    !!candidateDepth &&
+    /^\d+-ply$/.test(candidateDepth) &&
+    !!tableDepth?.startsWith(`${candidateDepth} `)
+  );
+}
+
 export function candidateEquityDifference(
   candidate?: EquityValue,
   reference?: EquityValue,

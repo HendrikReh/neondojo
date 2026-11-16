@@ -142,8 +142,9 @@ The selected decision shows the played and best actions, the loss, and the analy
 Candidate tables share a compact layout for local, imported and opening-book results.
 They identify the best and played moves separately from the current preview, show
 comparable loss to the best result, and show win and loss probabilities for the
-total and for each separate outcome: single, gammon, and backgammon. Win is on
-top and loss below within each cell. Percentages use one decimal place. Missing
+total, gammon, and backgammon on one line: three **Wins** columns followed by
+three **Losses** columns. The total includes gammons and backgammons; gammon
+excludes backgammons. Percentages use one decimal place. Missing
 or inconsistent probabilities appear as dashes.
 Equity differences stay within the same source and known equity unit; MWC differences
 use percentage points. Unknown or incompatible values remain unavailable. Engine,

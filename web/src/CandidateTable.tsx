@@ -18,6 +18,7 @@ import {
   candidateLoss,
   candidateOutcomes,
   isPlayedCandidate,
+  repeatsTableDepth,
   type CandidatePosition,
   type ComparisonCandidate,
 } from './candidate-comparison';
@@ -25,7 +26,8 @@ import MoveExplanation from './MoveExplanation';
 import { useMoveExplanationText } from './move-explanation-messages';
 import './candidate-table.css';
 
-const outcomeColumns = ['total', 'single', 'gammon', 'backgammon'] as const;
+// Each side lists its total, then gammons and backgammons as separate outcomes.
+const outcomeColumns = ['total', 'gammon', 'backgammon'] as const;
 const outcomeSides = ['win', 'loss'] as const;
 
 export default function CandidateTable({
@@ -84,6 +86,7 @@ export default function CandidateTable({
         <strong>
           <EngineLabel details={source} />
         </strong>
+        {depth && <span data-table-depth>{depth}</span>}
         {units.length > 0 && (
           <span>{units.length === 1 ? unit(units[0]) : l('mixedUnits')}</span>
         )}
@@ -97,7 +100,9 @@ export default function CandidateTable({
         <div className="source-candidates">
           <table className="candidates candidate-comparison-table">
             <colgroup span={4} />
-            <colgroup span={outcomeColumns.length} />
+            {outcomeSides.map((side) => (
+              <colgroup key={side} span={outcomeColumns.length} />
+            ))}
             <thead>
               <tr>
                 <th scope="col" rowSpan={2}>
@@ -122,41 +127,48 @@ export default function CandidateTable({
                 >
                   {l('loss')}
                 </th>
-                <th
-                  scope="colgroup"
-                  colSpan={outcomeColumns.length}
-                  className="candidate-outcome-heading"
-                  title={l('outcomeHelp')}
-                >
-                  {l('outcomeHeading')}
-                </th>
-              </tr>
-              <tr>
-                {outcomeColumns.map((column) => (
+                {outcomeSides.map((side) => (
                   <th
-                    scope="col"
-                    key={column}
-                    className="candidate-number"
-                    data-outcome={column}
-                    aria-label={l(`outcome_${column}`)}
+                    key={side}
+                    scope="colgroup"
+                    colSpan={outcomeColumns.length}
+                    className="candidate-outcome-heading"
+                    data-outcome-side={side}
+                    title={l('outcomeHelp')}
                   >
-                    {column === 'backgammon' ? (
-                      <>
-                        <span className="candidate-backgammon-full">
-                          {l('outcome_backgammon')}
-                        </span>
-                        <abbr
-                          className="candidate-backgammon-short"
-                          title={l('outcome_backgammon')}
-                        >
-                          BG
-                        </abbr>
-                      </>
-                    ) : (
-                      l(`outcome_${column}`)
-                    )}
+                    {l(side === 'win' ? 'outcomeWins' : 'outcomeLosses')}
                   </th>
                 ))}
+              </tr>
+              <tr>
+                {outcomeSides.flatMap((side) =>
+                  outcomeColumns.map((column) => (
+                    <th
+                      scope="col"
+                      key={`${side}-${column}`}
+                      className="candidate-number"
+                      data-outcome={column}
+                      data-outcome-side={side}
+                      aria-label={`${l(side === 'win' ? 'outcomeWins' : 'outcomeLosses')}: ${l(`outcome_${column}`)}`}
+                    >
+                      {column === 'backgammon' ? (
+                        <>
+                          <span className="candidate-backgammon-full">
+                            {l('outcome_backgammon')}
+                          </span>
+                          <abbr
+                            className="candidate-backgammon-short"
+                            title={l('outcome_backgammon')}
+                          >
+                            BG
+                          </abbr>
+                        </>
+                      ) : (
+                        l(`outcome_${column}`)
+                      )}
+                    </th>
+                  )),
+                )}
               </tr>
             </thead>
             <tbody
@@ -231,7 +243,7 @@ export default function CandidateTable({
                         )}
                       </span>
                       {(showCandidateDepth ||
-                        (candidate.depth ?? null) !== (depth ?? null)) && (
+                        !repeatsTableDepth(candidate.depth, depth)) && (
                         <small className="candidate-depth">
                           {candidate.depth ?? sourceText('unknownDepth')}
                         </small>
@@ -246,20 +258,20 @@ export default function CandidateTable({
                     <td className="candidate-number" title={l('lossHelp')}>
                       {lossText(loss, candidate.equity_kind)}
                     </td>
-                    {outcomeColumns.map((column) => (
-                      <td
-                        key={column}
-                        className="candidate-number"
-                        data-outcome={column}
-                      >
-                        {outcomeSides.map((side) => {
-                          const value = outcomes[side][column];
-                          const label = l(
-                            side === 'win' ? 'gameWin' : 'gameLoss',
-                          );
-                          return (
+                    {outcomeSides.flatMap((side) =>
+                      outcomeColumns.map((column) => {
+                        const value = outcomes[side][column];
+                        const label = l(
+                          side === 'win' ? 'gameWin' : 'gameLoss',
+                        );
+                        return (
+                          <td
+                            key={`${side}-${column}`}
+                            className="candidate-number"
+                            data-outcome={column}
+                            data-outcome-side={side}
+                          >
                             <span
-                              key={side}
                               className={`candidate-probability-line ${side}`}
                               title={label}
                             >
@@ -268,10 +280,10 @@ export default function CandidateTable({
                                 {value === null ? '—' : formatPercent(value, 1)}
                               </span>
                             </span>
-                          );
-                        })}
-                      </td>
-                    ))}
+                          </td>
+                        );
+                      }),
+                    )}
                   </tr>
                 );
               })}

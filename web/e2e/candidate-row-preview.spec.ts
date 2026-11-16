@@ -255,13 +255,11 @@ for (const source of ['engine', 'file', 'book'] as const)
     await expect(rows.last().locator('td').nth(3)).toHaveText('0.100');
     await expect(rows.first().locator('[data-probability="win"]')).toHaveText([
       '55.0%',
-      '45.0%',
       '9.0%',
       '1.0%',
     ]);
     await expect(rows.first().locator('[data-probability="loss"]')).toHaveText([
       '45.0%',
-      '37.0%',
       '7.0%',
       '1.0%',
     ]);

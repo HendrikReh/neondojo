@@ -33,8 +33,7 @@
 .candidate-probability-line {
   /* Keep screen-reader labels inside the table's scroll area. */
   position: relative;
-  display: block;
-  line-height: 1.35;
+  display: inline-block;
 }
 .candidate-probability-line.loss {
   color: var(--ui-muted);
@@ -45,7 +44,7 @@
 .candidate-backgammon-short {
   display: none;
 }
-@container candidate-comparison (max-width: 450px) {
+@container candidate-comparison (max-width: 760px) {
   .candidate-backgammon-full {
     display: none;
   }

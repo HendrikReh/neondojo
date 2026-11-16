@@ -55,6 +55,24 @@ test('renders numerical losses and distinct best, played and preview markers', (
   expect(html).toContain('2-ply');
   expect(html).not.toContain('best-move');
 });
+test('names the table depth once and only on rows that deviate from it', () => {
+  const html = render({
+    depth: '2-ply cubeful',
+    candidates: [
+      { ...candidates[0], depth: '2-ply' },
+      { ...candidates[1], depth: '0-ply' },
+    ],
+  });
+  expect(html).toContain('<span data-table-depth="true">2-ply cubeful</span>');
+  expect(html.match(/class="candidate-depth"/g)).toHaveLength(1);
+  expect(html).toContain('<small class="candidate-depth">0-ply</small>');
+  const everyRow = render({
+    depth: '2-ply cubeful',
+    showCandidateDepth: true,
+    candidates: candidates.map((c) => ({ ...c, depth: '2-ply' })),
+  });
+  expect(everyRow.match(/class="candidate-depth"/g)).toHaveLength(2);
+});
 test('shows unknown equity units explicitly without a fabricated loss', () => {
   const html = render({
     candidates: candidates.map((c) => ({ ...c, equity_kind: 'unknown' })),
@@ -82,8 +100,8 @@ test('shows exclusive win outcomes for engine vectors and imported records', () 
     ],
   });
   expect(probabilityCells(html, 'win')).toEqual([
-    ['62.5%', '37.5%', '12.5%', '12.5%'],
-    ['50.0%', '37.5%', '12.5%', '0.0%'],
+    ['62.5%', '12.5%', '12.5%'],
+    ['50.0%', '12.5%', '0.0%'],
   ]);
 });
 
@@ -98,8 +116,8 @@ test('shows only win outcomes supported by available and consistent values', () 
     ],
   });
   expect(probabilityCells(html, 'win')).toEqual([
-    ['62.5%', '37.5%', '—', '—'],
-    ['50.0%', '—', '—', '—'],
+    ['62.5%', '—', '—'],
+    ['50.0%', '—', '—'],
   ]);
 });
 
@@ -117,8 +135,8 @@ test('shows exact loss outcomes for engine vectors and imported records', () => 
     ],
   });
   expect(probabilityCells(html, 'loss')).toEqual([
-    ['37.5%', '25.0%', '6.3%', '6.3%'],
-    ['20.0%', '0.0%', '20.0%', '0.0%'],
+    ['37.5%', '6.3%', '6.3%'],
+    ['20.0%', '20.0%', '0.0%'],
   ]);
 });
 
@@ -133,8 +151,8 @@ test('keeps partial loss data distinct from recorded zeroes', () => {
     ],
   });
   expect(probabilityCells(html, 'loss')).toEqual([
-    ['37.5%', '—', '—', '0.0%'],
-    ['50.0%', '—', '—', '—'],
+    ['37.5%', '—', '0.0%'],
+    ['50.0%', '—', '—'],
   ]);
 });
 
