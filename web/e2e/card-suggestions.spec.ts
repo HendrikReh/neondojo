@@ -73,8 +73,9 @@ test('match suggestions preview boards and add only the checked cards', async ({
   expect((await board.boundingBox())!.width).toBeGreaterThan(1300);
   expect((await deck.boundingBox())!.width).toBeGreaterThan(600);
   expect((await previews.first().boundingBox())!.width).toBeGreaterThan(220);
-  expect((await panel.locator('.card-suggestion-list').boundingBox())!.height)
-    .toBeGreaterThan(750);
+  expect(
+    (await panel.locator('.card-suggestion-list').boundingBox())!.height,
+  ).toBeGreaterThan(750);
 
   for (const item of (await items.all()).slice(1)) await item.uncheck();
   const write = page.waitForResponse(
@@ -88,7 +89,7 @@ test('match suggestions preview boards and add only the checked cards', async ({
   const response = await write;
   expect(response.status()).toBe(200);
   expect((await response.json()).added).toBe(1);
-  await expect(panel.getByText('1 Karten verarbeitet.')).toBeVisible();
+  await expect(panel.getByText('1 Karte verarbeitet.')).toBeVisible();
   await suggest.click();
   await expect(panel.getByText('Bereits in diesem Deck')).toHaveCount(1);
   await expect(items.first()).not.toBeChecked();

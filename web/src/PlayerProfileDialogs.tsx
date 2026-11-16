@@ -292,7 +292,7 @@ export function PlayerMergeDialog({
 }) {
   const t = usePlayerText();
   const l = useLibraryText();
-  const { formatError, formatNumber } = useI18n();
+  const { formatError } = useI18n();
   const [profile, setProfile] = useState(initialProfile);
   const { busy, error, conflict, run } = usePlayerWrite(profile);
   const [search, setSearch] = useState('');
@@ -375,8 +375,8 @@ export function PlayerMergeDialog({
                   <strong>{player.display_name}</strong>
                   <p>
                     {t('counts', {
-                      matches: formatNumber(player.match_count),
-                      games: formatNumber(player.game_count),
+                      matches: player.match_count,
+                      games: player.game_count,
                     })}
                   </p>
                   <PlayerAliases aliases={player.aliases} />

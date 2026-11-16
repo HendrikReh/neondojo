@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { I18nProvider } from './i18n';
+import { placeholders as args } from './i18n-core';
 import type { Job, MatchAnalysisSummary } from './api';
 import {
   buildStatisticsFilter,
@@ -238,8 +239,6 @@ it('provides every statistics message and parameter in all six languages', () =>
     expect(Object.keys(catalog).sort()).toEqual(Object.keys(source).sort());
     for (const key of Object.keys(source) as Array<keyof typeof source>) {
       expect(catalog[key]).not.toBe('');
-      const args = (text: string) =>
-        [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
       expect(args(catalog[key]), key).toEqual(args(source[key]));
     }
   }

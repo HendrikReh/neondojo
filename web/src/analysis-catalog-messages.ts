@@ -1,5 +1,9 @@
 import { useI18n } from './i18n';
-import { interpolate, type Locale, type TranslationParams } from './i18n-core';
+import {
+  formatMessage,
+  type Locale,
+  type TranslationParams,
+} from './i18n-core';
 const rows = {
   analysis: [
     'Displayed analysis',
@@ -188,12 +192,12 @@ const rows = {
     'Puoi selezionare altre analisi salvate qui sopra.',
   ],
   coverage: [
-    '{checker} checker · {cube} cube decisions',
-    '{checker} Zug- · {cube} Cube-Entscheidungen',
-    '{checker} decisiones de fichas · {cube} de cubo',
-    '{checker} décisions de pions · {cube} de cube',
-    '{checker} decyzji ruchu · {cube} kostki',
-    '{checker} decisioni pedine · {cube} cubo',
+    '{checker} checker · {cube, plural, one {# cube decision} other {# cube decisions}}',
+    '{checker} Zug- · {cube, plural, one {# Cube-Entscheidung} other {# Cube-Entscheidungen}}',
+    '{checker, plural, one {# decisión de fichas} other {# decisiones de fichas}} · {cube} de cubo',
+    '{checker, plural, one {# décision de pions} other {# décisions de pions}} · {cube} de cube',
+    '{checker, plural, one {# decyzja ruchu} few {# decyzje ruchu} many {# decyzji ruchu}} · {cube} kostki',
+    '{checker, plural, one {# decisione pedine} other {# decisioni pedine}} · {cube} cubo',
   ],
   showCalculated: [
     'Show calculated result',
@@ -227,7 +231,8 @@ export function analysisCatalogText(
   key: AnalysisCatalogMessage,
   params?: TranslationParams,
 ) {
-  return interpolate(
+  return formatMessage(
+    locale,
     rows[key][locales.indexOf(locale)] ?? rows[key][0],
     params,
   );

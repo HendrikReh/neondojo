@@ -1,5 +1,5 @@
 import { useI18n } from './i18n';
-import { interpolate, type TranslationParams } from './i18n-core';
+import { formatMessage, type TranslationParams } from './i18n-core';
 
 const de = {
   cardPreview: 'Kartenvorschau',
@@ -13,7 +13,7 @@ const de = {
   create: 'Deck erstellen',
   deckName: 'Deckname',
   chooseDeck: 'Deck auswählen',
-  cards: '{count} Karten',
+  cards: '{count, plural, one {# Karte} other {# Karten}}',
   due: '{count} fällig',
   newCards: '{count} neu',
   newToday: 'davon heute {count}',
@@ -52,10 +52,10 @@ const de = {
   both: 'Beide Spieler',
   addHint:
     'Die oben gewählte Analyse wird für die Karten verwendet. Tags und Kommentare werden für die Karten übernommen.',
-  added: '{count} Karten verarbeitet.',
+  added: '{count, plural, one {# Karte} other {# Karten}} verarbeitet.',
   adding: 'Karten werden gespeichert …',
   back: 'Zurück zur Kartensuche',
-  reviewCount: '{count} Wiederholungen',
+  reviewCount: '{count, plural, one {# Wiederholung} other {# Wiederholungen}}',
   reviews: 'Wiederholungen',
   nextDue: 'Nächste Wiederholung: {date}',
   separateProgress:
@@ -93,7 +93,7 @@ const en: Messages = {
   create: 'Create deck',
   deckName: 'Deck name',
   chooseDeck: 'Choose deck',
-  cards: '{count} cards',
+  cards: '{count, plural, one {# card} other {# cards}}',
   due: '{count} due',
   newCards: '{count} new',
   newToday: '{count} of them today',
@@ -131,10 +131,10 @@ const en: Messages = {
   both: 'Both players',
   addHint:
     'Cards use the analysis selected above. Tags and comments are included in the cards.',
-  added: 'Processed {count} cards.',
+  added: 'Processed {count, plural, one {# card} other {# cards}}.',
   adding: 'Saving cards …',
   back: 'Back to card search',
-  reviewCount: '{count} reviews',
+  reviewCount: '{count, plural, one {# review} other {# reviews}}',
   reviews: 'Reviews',
   nextDue: 'Next review: {date}',
   separateProgress:
@@ -170,9 +170,9 @@ const es: Messages = {
   create: 'Crear mazo',
   deckName: 'Nombre del mazo',
   chooseDeck: 'Elegir mazo',
-  cards: '{count} tarjetas',
-  due: '{count} pendientes',
-  newCards: '{count} nuevas',
+  cards: '{count, plural, one {# tarjeta} other {# tarjetas}}',
+  due: '{count, plural, one {# pendiente} other {# pendientes}}',
+  newCards: '{count, plural, one {# nueva} other {# nuevas}}',
   newToday: '{count} de ellas hoy',
   filterDecks: 'Filtrar mazos',
   dailyLimitReached:
@@ -208,10 +208,11 @@ const es: Messages = {
   both: 'Ambos jugadores',
   addHint:
     'Las tarjetas usan el análisis seleccionado arriba. Las tarjetas incluyen las etiquetas y los comentarios.',
-  added: '{count} tarjetas procesadas.',
+  added:
+    '{count, plural, one {# tarjeta procesada.} other {# tarjetas procesadas.}}',
   adding: 'Guardando tarjetas …',
   back: 'Volver a la búsqueda de tarjetas',
-  reviewCount: '{count} repasos',
+  reviewCount: '{count, plural, one {# repaso} other {# repasos}}',
   reviews: 'Repasos',
   nextDue: 'Próximo repaso: {date}',
   separateProgress:
@@ -247,9 +248,9 @@ const fr: Messages = {
   create: 'Créer un paquet',
   deckName: 'Nom du paquet',
   chooseDeck: 'Choisir un paquet',
-  cards: '{count} cartes',
+  cards: '{count, plural, one {# carte} other {# cartes}}',
   due: '{count} à réviser',
-  newCards: '{count} nouvelles',
+  newCards: '{count, plural, one {# nouvelle} other {# nouvelles}}',
   newToday: 'dont {count} aujourd’hui',
   filterDecks: 'Filtrer les paquets',
   dailyLimitReached:
@@ -286,10 +287,10 @@ const fr: Messages = {
   both: 'Les deux joueurs',
   addHint:
     'Les cartes utilisent l’analyse choisie ci-dessus. Les étiquettes et commentaires sont inclus dans les cartes.',
-  added: '{count} cartes traitées.',
+  added: '{count, plural, one {# carte traitée.} other {# cartes traitées.}}',
   adding: 'Enregistrement des cartes …',
   back: 'Retour à la recherche de cartes',
-  reviewCount: '{count} révisions',
+  reviewCount: '{count, plural, one {# révision} other {# révisions}}',
   reviews: 'Révisions',
   nextDue: 'Prochaine révision : {date}',
   separateProgress:
@@ -325,9 +326,9 @@ const pl: Messages = {
   create: 'Utwórz talię',
   deckName: 'Nazwa talii',
   chooseDeck: 'Wybierz talię',
-  cards: '{count} kart',
+  cards: '{count, plural, one {# karta} few {# karty} many {# kart}}',
   due: '{count} do powtórki',
-  newCards: '{count} nowych',
+  newCards: '{count, plural, one {# nowa} few {# nowe} many {# nowych}}',
   newToday: 'z tego dziś {count}',
   filterDecks: 'Filtruj talie',
   dailyLimitReached:
@@ -363,10 +364,12 @@ const pl: Messages = {
   both: 'Obaj gracze',
   addHint:
     'Karty korzystają z analizy wybranej powyżej. Tagi i komentarze są dołączane do kart.',
-  added: 'Przetworzono {count} kart.',
+  added:
+    'Przetworzono {count, plural, one {# kartę} few {# karty} many {# kart}}.',
   adding: 'Zapisywanie kart …',
   back: 'Wróć do wyszukiwania fiszek',
-  reviewCount: '{count} powtórek',
+  reviewCount:
+    '{count, plural, one {# powtórka} few {# powtórki} many {# powtórek}}',
   reviews: 'Powtórki',
   nextDue: 'Następna powtórka: {date}',
   separateProgress:
@@ -402,9 +405,9 @@ const it: Messages = {
   create: 'Crea mazzo',
   deckName: 'Nome del mazzo',
   chooseDeck: 'Scegli mazzo',
-  cards: '{count} schede',
+  cards: '{count, plural, one {# scheda} other {# schede}}',
   due: '{count} da ripassare',
-  newCards: '{count} nuove',
+  newCards: '{count, plural, one {# nuova} other {# nuove}}',
   newToday: 'di cui oggi {count}',
   filterDecks: 'Filtra mazzi',
   dailyLimitReached:
@@ -440,10 +443,11 @@ const it: Messages = {
   both: 'Entrambi i giocatori',
   addHint:
     'Le schede usano l’analisi selezionata sopra. Le schede includono tag e commenti.',
-  added: '{count} schede elaborate.',
+  added:
+    '{count, plural, one {# scheda elaborata.} other {# schede elaborate.}}',
   adding: 'Salvataggio schede …',
   back: 'Torna alla ricerca delle schede',
-  reviewCount: '{count} ripassi',
+  reviewCount: '{count, plural, one {# ripasso} other {# ripassi}}',
   reviews: 'Ripassi',
   nextDue: 'Prossimo ripasso: {date}',
   separateProgress:
@@ -469,15 +473,7 @@ const it: Messages = {
 };
 export const learningMessages = { de, en, es, fr, pl, it };
 export function useLearningText() {
-  const { locale, formatNumber } = useI18n();
+  const { locale } = useI18n();
   return (key: Key, params: TranslationParams = {}) =>
-    interpolate(
-      learningMessages[locale][key],
-      Object.fromEntries(
-        Object.entries(params).map(([key, value]) => [
-          key,
-          typeof value === 'number' ? formatNumber(value) : value,
-        ]),
-      ),
-    );
+    formatMessage(locale, learningMessages[locale][key], params);
 }

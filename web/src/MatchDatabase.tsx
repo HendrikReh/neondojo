@@ -667,8 +667,8 @@ export default function MatchDatabase({
                 ) : (
                   <>
                     {l('bulkAnalysisProgress', {
-                      completed: formatNumber(bulkAnalysisProgress.completed),
-                      total: formatNumber(bulkAnalysisProgress.total),
+                      completed: bulkAnalysisProgress.completed,
+                      total: bulkAnalysisProgress.total,
                     })}
                     {bulkAnalysisProgress.failed > 0 &&
                       ` · ${l('failed')} (${formatNumber(bulkAnalysisProgress.failed)})`}
@@ -721,9 +721,7 @@ export default function MatchDatabase({
             aria-label={l('actions')}
           >
             <strong role="status">
-              {l(selected.size === 1 ? 'selectedMatch' : 'selectedMatches', {
-                count: formatNumber(selected.size),
-              })}
+              {l('selectedMatches', { count: selected.size })}
             </strong>
             <ActionButton
               type="button"

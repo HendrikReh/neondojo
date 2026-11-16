@@ -706,7 +706,7 @@ test('deck search, card moves and shared membership removal work in Study', asyn
     .getByRole('button', { name: 'Move cards (1)', exact: true })
     .click();
   await expect(
-    study.getByText(`Moved 1 cards to “${target.name}”.`),
+    study.getByText(`Moved 1 card to “${target.name}”.`),
   ).toBeVisible();
   await expect(
     study.getByRole('checkbox', { name: 'Select card 1' }),

@@ -134,9 +134,9 @@ export default function TransferPractice({
               {search(entry.scope.kind)} ·{' '}
               {t(entry.scope.follow_up ? 'followUp' : 'baseline')} ·{' '}
               {t('transferSummary', {
-                scored: formatNumber(entry.scored),
-                correct: formatNumber(entry.correct),
-                revealed: formatNumber(entry.revealed),
+                scored: entry.scored,
+                correct: entry.correct,
+                revealed: entry.revealed,
                 loss:
                   entry.mean_loss == null
                     ? '—'

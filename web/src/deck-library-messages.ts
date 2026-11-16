@@ -1,5 +1,9 @@
 import { useI18n } from './i18n';
-import { interpolate, type Locale, type TranslationParams } from './i18n-core';
+import {
+  formatMessage,
+  type Locale,
+  type TranslationParams,
+} from './i18n-core';
 
 const entries = {
   decks: [
@@ -75,12 +79,12 @@ const entries = {
     'Aggiungi al mazzo',
   ],
   addCardsHelp: [
-    'Add {count} selected cards to a deck. Cards keep their review progress.',
-    '{count} ausgewählte Karten einem Deck hinzufügen. Ihr Lernfortschritt bleibt erhalten.',
-    'Añadir {count} tarjetas seleccionadas a un mazo. Conservan su progreso.',
-    'Ajouter {count} cartes sélectionnées à un paquet. Leur progression est conservée.',
-    'Dodaj wybrane fiszki ({count}) do talii. Zachowają postęp nauki.',
-    'Aggiungi {count} schede selezionate a un mazzo. I progressi vengono conservati.',
+    'Add {count, plural, one {# selected card} other {# selected cards}} to a deck. Cards keep their review progress.',
+    '{count, plural, one {# ausgewählte Karte} other {# ausgewählte Karten}} einem Deck hinzufügen. Der Lernfortschritt bleibt erhalten.',
+    '{count, plural, one {Añadir # tarjeta seleccionada a un mazo. Conserva su progreso.} other {Añadir # tarjetas seleccionadas a un mazo. Conservan su progreso.}}',
+    'Ajouter {count, plural, one {# carte sélectionnée} other {# cartes sélectionnées}} à un paquet. La progression est conservée.',
+    'Dodaj {count, plural, one {# wybraną fiszkę} few {# wybrane fiszki} many {# wybranych fiszek}} do talii. Postęp nauki zostanie zachowany.',
+    'Aggiungi {count, plural, one {# scheda selezionata} other {# schede selezionate}} a un mazzo. I progressi vengono conservati.',
   ],
   addedCards: [
     'Added to “{name}”: {count}. Already in deck: {existing}.',
@@ -99,12 +103,12 @@ const entries = {
     'Rimuovi da questo mazzo',
   ],
   removeCardsHelp: [
-    'Remove {count} selected cards from “{name}”? The cards and their reviews stay in the collection.',
-    '{count} ausgewählte Karten aus „{name}“ entfernen? Die Karten bleiben mit ihrem Lernverlauf in der Sammlung.',
-    '¿Quitar {count} tarjetas de «{name}»? Las tarjetas y su historial se conservan.',
-    'Retirer {count} cartes de «{name}» ? Les cartes et leurs révisions restent dans la collection.',
-    'Usunąć fiszki ({count}) z „{name}”? Fiszki i powtórki pozostaną w kolekcji.',
-    'Rimuovere {count} schede da «{name}»? Le schede e i ripassi restano nella raccolta.',
+    '{count, plural, one {Remove # selected card from “{name}”? The card and its reviews stay in the collection.} other {Remove # selected cards from “{name}”? The cards and their reviews stay in the collection.}}',
+    '{count, plural, one {# ausgewählte Karte aus „{name}“ entfernen? Die Karte bleibt mit ihrem Lernverlauf in der Sammlung.} other {# ausgewählte Karten aus „{name}“ entfernen? Die Karten bleiben mit ihrem Lernverlauf in der Sammlung.}}',
+    '{count, plural, one {¿Quitar # tarjeta de «{name}»? La tarjeta y su historial se conservan.} other {¿Quitar # tarjetas de «{name}»? Las tarjetas y su historial se conservan.}}',
+    '{count, plural, one {Retirer # carte de «{name}» ? La carte et ses révisions restent dans la collection.} other {Retirer # cartes de «{name}» ? Les cartes et leurs révisions restent dans la collection.}}',
+    'Usunąć {count, plural, one {# fiszkę} few {# fiszki} many {# fiszek}} z „{name}”? Fiszki i powtórki pozostaną w kolekcji.',
+    '{count, plural, one {Rimuovere # scheda da «{name}»? La scheda e i ripassi restano nella raccolta.} other {Rimuovere # schede da «{name}»? Le schede e i ripassi restano nella raccolta.}}',
   ],
   removedCards: [
     'Removed from “{name}”: {count}.',
@@ -123,12 +127,12 @@ const entries = {
     'Elimina definitivamente',
   ],
   deleteCardsHelp: [
-    'Permanently delete {count} selected cards from the collection and all their decks? Their review history will be deleted too.',
-    '{count} ausgewählte Karten endgültig aus der Sammlung und allen zugehörigen Decks löschen? Ihr Lernverlauf wird ebenfalls gelöscht.',
-    '¿Eliminar definitivamente {count} tarjetas de la colección y de todos sus mazos? También se borrará su historial.',
-    'Supprimer définitivement {count} cartes de la collection et de tous leurs paquets ? Leur historique sera également supprimé.',
-    'Trwale usunąć fiszki ({count}) z kolekcji i wszystkich ich talii? Historia powtórek też zostanie usunięta.',
-    'Eliminare definitivamente {count} schede dalla raccolta e da tutti i loro mazzi? Verrà eliminata anche la cronologia dei ripassi.',
+    '{count, plural, one {Permanently delete # selected card from the collection and all its decks? Its review history will be deleted too.} other {Permanently delete # selected cards from the collection and all their decks? Their review history will be deleted too.}}',
+    '{count, plural, one {# ausgewählte Karte} other {# ausgewählte Karten}} endgültig aus der Sammlung und allen zugehörigen Decks löschen? Der Lernverlauf wird ebenfalls gelöscht.',
+    '¿Eliminar definitivamente {count, plural, one {# tarjeta} other {# tarjetas}} de la colección y de todos sus mazos? También se borrará su historial.',
+    '{count, plural, one {Supprimer définitivement # carte de la collection et de tous ses paquets ? Son historique sera également supprimé.} other {Supprimer définitivement # cartes de la collection et de tous leurs paquets ? Leur historique sera également supprimé.}}',
+    'Trwale usunąć {count, plural, one {# fiszkę} few {# fiszki} many {# fiszek}} z kolekcji i wszystkich talii? Historia powtórek też zostanie usunięta.',
+    '{count, plural, one {Eliminare definitivamente # scheda dalla raccolta e da tutti i suoi mazzi?} other {Eliminare definitivamente # schede dalla raccolta e da tutti i loro mazzi?}} Verrà eliminata anche la cronologia dei ripassi.',
   ],
   deletedCards: [
     'Cards deleted: {count}.',
@@ -147,12 +151,12 @@ const entries = {
     'Azioni sulle schede',
   ],
   moveHelp: [
-    'Move {count} selected cards from “{name}”.',
-    '{count} ausgewählte Karten aus „{name}“ verschieben.',
-    'Mover {count} tarjetas seleccionadas de «{name}».',
-    'Déplacer {count} cartes sélectionnées de «{name}».',
-    'Przenieś wybrane fiszki ({count}) z „{name}”.',
-    'Sposta {count} schede selezionate da «{name}».',
+    'Move {count, plural, one {# selected card} other {# selected cards}} from “{name}”.',
+    '{count, plural, one {# ausgewählte Karte} other {# ausgewählte Karten}} aus „{name}“ verschieben.',
+    'Mover {count, plural, one {# tarjeta seleccionada} other {# tarjetas seleccionadas}} de «{name}».',
+    'Déplacer {count, plural, one {# carte sélectionnée} other {# cartes sélectionnées}} de «{name}».',
+    'Przenieś {count, plural, one {# wybraną fiszkę} few {# wybrane fiszki} many {# wybranych fiszek}} z „{name}”.',
+    'Sposta {count, plural, one {# scheda selezionata} other {# schede selezionate}} da «{name}».',
   ],
   target: [
     'Target deck',
@@ -163,12 +167,12 @@ const entries = {
     'Mazzo di destinazione',
   ],
   moved: [
-    'Moved {count} cards to “{name}”.',
-    '{count} Karten nach „{name}“ verschoben.',
-    'Se movieron {count} tarjetas a «{name}».',
-    '{count} cartes déplacées vers «{name}».',
-    'Przeniesiono fiszki ({count}) do „{name}”.',
-    '{count} schede spostate in «{name}».',
+    'Moved {count, plural, one {# card} other {# cards}} to “{name}”.',
+    '{count, plural, one {# Karte} other {# Karten}} nach „{name}“ verschoben.',
+    '{count, plural, one {Se movió # tarjeta} other {Se movieron # tarjetas}} a «{name}».',
+    '{count, plural, one {# carte déplacée} other {# cartes déplacées}} vers «{name}».',
+    'Przeniesiono {count, plural, one {# fiszkę} few {# fiszki} many {# fiszek}} do „{name}”.',
+    '{count, plural, one {# scheda spostata} other {# schede spostate}} in «{name}».',
   ],
   duplicates: [
     'Find duplicates',
@@ -195,12 +199,12 @@ const entries = {
     'In più mazzi',
   ],
   exact: [
-    'Identical question · {count} saved cards',
-    'Identische Lernfrage · {count} gespeicherte Karten',
-    'Pregunta idéntica · {count} tarjetas guardadas',
-    'Question identique · {count} cartes enregistrées',
-    'Identyczne pytanie · zapisane fiszki ({count})',
-    'Domanda identica · {count} schede salvate',
+    'Identical question · {count, plural, one {# saved card} other {# saved cards}}',
+    'Identische Lernfrage · {count, plural, one {# gespeicherte Karte} other {# gespeicherte Karten}}',
+    'Pregunta idéntica · {count, plural, one {# tarjeta guardada} other {# tarjetas guardadas}}',
+    'Question identique · {count, plural, one {# carte enregistrée} other {# cartes enregistrées}}',
+    'Identyczne pytanie · {count, plural, one {# zapisana fiszka} few {# zapisane fiszki} many {# zapisanych fiszek}}',
+    'Domanda identica · {count, plural, one {# scheda salvata} other {# schede salvate}}',
   ],
   remove: [
     'Remove from “{name}”',
@@ -235,12 +239,12 @@ const entries = {
     'Elimina duplicato',
   ],
   deleteHelp: [
-    'Delete this copy and its {count} reviews? Its decks will use the selected card and that card’s review history.',
-    'Diese Kopie mit ihren {count} Wiederholungen löschen? Ihre Decks übernehmen die ausgewählte Karte mit deren Lernverlauf.',
-    '¿Eliminar esta copia y sus {count} repasos? Sus mazos usarán la tarjeta elegida y su historial.',
-    'Supprimer cette copie et ses {count} révisions ? Ses paquets utiliseront la carte choisie et son historique.',
-    'Usunąć tę kopię i jej powtórki ({count})? Talie użyją wybranej fiszki i jej historii.',
-    'Eliminare questa copia e i suoi {count} ripassi? I mazzi useranno la scheda scelta e la sua cronologia.',
+    'Delete this copy and its {count, plural, one {# review} other {# reviews}}? Its decks will use the selected card and that card’s review history.',
+    'Diese Kopie mit {count, plural, one {ihrer # Wiederholung} other {ihren # Wiederholungen}} löschen? Ihre Decks übernehmen die ausgewählte Karte mit deren Lernverlauf.',
+    '¿Eliminar esta copia y {count, plural, one {su # repaso} other {sus # repasos}}? Sus mazos usarán la tarjeta elegida y su historial.',
+    'Supprimer cette copie avec {count, plural, one {# révision} other {# révisions}} ? Ses paquets utiliseront la carte choisie et son historique.',
+    'Usunąć tę kopię i jej {count, plural, one {# powtórkę} few {# powtórki} many {# powtórek}}? Talie użyją wybranej fiszki i jej historii.',
+    'Eliminare questa copia e {count, plural, one {il suo # ripasso} other {i suoi # ripassi}}? I mazzi useranno la scheda scelta e la sua cronologia.',
   ],
   stale: [
     'The cards or decks changed. Reload and check your selection.',
@@ -257,5 +261,5 @@ export function useDeckLibraryText() {
   const { locale } = useI18n();
   const index = locales.indexOf(locale);
   return (key: keyof typeof entries, values: TranslationParams = {}) =>
-    interpolate(entries[key][index], values);
+    formatMessage(locale, entries[key][index], values);
 }

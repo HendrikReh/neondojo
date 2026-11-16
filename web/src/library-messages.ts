@@ -1,7 +1,7 @@
 import { useI18n } from './i18n';
 import { PAUSED_MATCHES_DATABASE_ID, type Database } from './library-api';
 import {
-  interpolate,
+  formatMessage,
   matchEventLabels,
   type Locale,
   type TranslationParams,
@@ -42,12 +42,12 @@ const rows = {
     'Attività di analisi accettate ({count})',
   ],
   bulkAnalysisProgress: [
-    'Bulk analysis · {completed} of {total} matches analyzed',
-    'Sammelanalyse · {completed} von {total} Matches analysiert',
-    'Análisis por lotes · {completed} de {total} partidas analizadas',
-    'Analyse par lot · {completed} matchs analysés sur {total}',
-    'Analiza zbiorcza · przeanalizowano {completed} z {total} meczów',
-    'Analisi in blocco · {completed} partite analizzate su {total}',
+    'Bulk analysis · {completed} of {total, plural, one {# match} other {# matches}} analyzed',
+    'Sammelanalyse · {completed} von {total, plural, one {# Match} other {# Matches}} analysiert',
+    'Análisis por lotes · {total, plural, one {{completed} de # partida analizada} other {{completed} de # partidas analizadas}}',
+    'Analyse par lot · {completed, plural, one {# match analysé} other {# matchs analysés}} sur {total}',
+    'Analiza zbiorcza · przeanalizowano {completed} z {total, plural, one {# meczu} few {# meczów} many {# meczów}}',
+    'Analisi in blocco · {completed, plural, one {# partita analizzata} other {# partite analizzate}} su {total}',
   ],
   retryAnalysis: [
     'Try again',
@@ -498,26 +498,18 @@ const rows = {
   selected: [
     '{count} selected',
     '{count} ausgewählt',
-    '{count} seleccionados',
-    '{count} sélectionnés',
+    '{count, plural, one {# seleccionado} other {# seleccionados}}',
+    '{count, plural, one {# sélectionné} other {# sélectionnés}}',
     'Wybrano: {count}',
-    '{count} selezionati',
-  ],
-  selectedMatch: [
-    '{count} match selected',
-    '{count} Match ausgewählt',
-    '{count} partida seleccionada',
-    '{count} match sélectionné',
-    'Wybrano {count} mecz',
-    '{count} partita selezionata',
+    '{count, plural, one {# selezionato} other {# selezionati}}',
   ],
   selectedMatches: [
-    '{count} matches selected',
-    '{count} Matches ausgewählt',
-    '{count} partidas seleccionadas',
-    '{count} matchs sélectionnés',
-    'Wybrano {count} meczów',
-    '{count} partite selezionate',
+    '{count, plural, one {# match selected} other {# matches selected}}',
+    '{count, plural, one {# Match ausgewählt} other {# Matches ausgewählt}}',
+    '{count, plural, one {# partida seleccionada} other {# partidas seleccionadas}}',
+    '{count, plural, one {# match sélectionné} other {# matchs sélectionnés}}',
+    'Wybrano {count, plural, one {# mecz} few {# mecze} many {# meczów}}',
+    '{count, plural, one {# partita selezionata} other {# partite selezionate}}',
   ],
   selectMatch: [
     'Select match {name}',
@@ -686,28 +678,28 @@ const rows = {
     'PR: perdita di equity normalizzata × 500 / decisioni rilevanti. Richiede analisi completa; il conteggio può differire da XG.',
   ],
   deleteWarning: [
-    'Delete {count} matches and their notes? This cannot be undone.',
-    '{count} Matches mit ihren Notizen löschen? Das lässt sich nicht rückgängig machen.',
-    '¿Eliminar {count} matches y sus notas? No se puede deshacer.',
-    'Supprimer {count} matchs et leurs notes ? Action irréversible.',
-    'Usunąć {count} meczów i ich notatki? Tej operacji nie można cofnąć.',
-    'Eliminare {count} match e le loro note? Operazione irreversibile.',
+    '{count, plural, one {Delete # match and its notes?} other {Delete # matches and their notes?}} This cannot be undone.',
+    '{count, plural, one {# Match mit seinen Notizen löschen?} other {# Matches mit ihren Notizen löschen?}} Das lässt sich nicht rückgängig machen.',
+    '¿Eliminar {count, plural, one {# match} other {# matches}} y sus notas? No se puede deshacer.',
+    '{count, plural, one {Supprimer # match et ses notes ?} other {Supprimer # matchs et leurs notes ?}} Action irréversible.',
+    '{count, plural, one {Usunąć # mecz i jego notatki?} few {Usunąć # mecze i ich notatki?} many {Usunąć # meczów i ich notatki?}} Tej operacji nie można cofnąć.',
+    '{count, plural, one {Eliminare # match e le sue note?} other {Eliminare # match e le loro note?}} Operazione irreversibile.',
   ],
   databaseWarning: [
-    'Delete this database and all {count} matches with their notes?',
-    'Diese Datenbank mit allen {count} Matches und Notizen löschen?',
-    '¿Eliminar esta base y sus {count} matches con notas?',
-    'Supprimer cette base et ses {count} matchs et notes ?',
-    'Usunąć tę bazę oraz {count} meczów z notatkami?',
-    'Eliminare questo database e tutti i {count} match con note?',
+    '{count, plural, one {Delete this database and its # match with its notes?} other {Delete this database and all # matches with their notes?}}',
+    '{count, plural, one {Diese Datenbank mit ihrem # Match und dessen Notizen löschen?} other {Diese Datenbank mit allen # Matches und Notizen löschen?}}',
+    '¿Eliminar esta base con {count, plural, one {# match} other {# matches}} y sus notas?',
+    'Supprimer cette base avec {count, plural, one {# match} other {# matchs}} et les notes ?',
+    'Usunąć tę bazę oraz {count, plural, one {# mecz} few {# mecze} many {# meczów}} z notatkami?',
+    '{count, plural, one {Eliminare questo database e il suo # match con note?} other {Eliminare questo database e tutti i # match con note?}}',
   ],
   clearDatabaseWarning: [
-    'Delete all {count} matches and their notes from this database?',
-    'Alle {count} Matches und ihre Notizen aus dieser Datenbank löschen?',
-    '¿Eliminar los {count} matches y sus notas de esta base de datos?',
-    'Supprimer les {count} matchs et leurs notes de cette base ?',
+    '{count, plural, one {Delete the # match and its notes from this database?} other {Delete all # matches and their notes from this database?}}',
+    '{count, plural, one {Das # Match und seine Notizen aus dieser Datenbank löschen?} other {Alle # Matches und ihre Notizen aus dieser Datenbank löschen?}}',
+    '¿Eliminar {count, plural, one {# match} other {# matches}} y sus notas de esta base de datos?',
+    '{count, plural, one {Supprimer # match et ses notes de cette base ?} other {Supprimer les # matchs et leurs notes de cette base ?}}',
     'Usunąć wszystkie mecze ({count}) i ich notatki z tej bazy?',
-    'Eliminare tutti i {count} match e le loro note da questo database?',
+    '{count, plural, one {Eliminare il # match e le sue note da questo database?} other {Eliminare tutti i # match e le loro note da questo database?}}',
   ],
   copyHelp: [
     'Copies have independent tags and notes. Existing duplicates are skipped.',
@@ -886,7 +878,7 @@ export function libraryText(
   key: Key,
   params: TranslationParams = {},
 ) {
-  return interpolate(rows[key][locales.indexOf(locale)], params);
+  return formatMessage(locale, rows[key][locales.indexOf(locale)], params);
 }
 export function useLibraryText() {
   const { locale } = useI18n();

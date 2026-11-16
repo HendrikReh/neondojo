@@ -53,8 +53,7 @@ export default function XgPositionView({
               </table>
               {e.rollout && (
                 <p className="fineprint">
-                  {l('rolloutGames', { count: formatNumber(e.rollout.games) })}{' '}
-                  · σ{' '}
+                  {l('rolloutGames', { count: e.rollout.games })} · σ{' '}
                   {formatNumber(e.rollout.standard_deviation, {
                     maximumFractionDigits: 6,
                   })}

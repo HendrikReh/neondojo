@@ -1,5 +1,5 @@
 import { useI18n, type Locale } from './i18n';
-import { interpolate, type TranslationParams } from './i18n-core';
+import { formatMessage, type TranslationParams } from './i18n-core';
 const en = {
   moneySession: 'Money-game session',
   totalScore: 'Total score',
@@ -315,18 +315,18 @@ const overview = {
   todayBreakdown: [
     'Today: {due} due · {fresh} new',
     'Heute: {due} fällig · {fresh} neu',
-    'Hoy: {due} pendientes · {fresh} nuevas',
-    'Aujourd’hui : {due} à réviser · {fresh} nouvelles',
-    'Dziś: {due} do powtórki · {fresh} nowych',
-    'Oggi: {due} da ripassare · {fresh} nuove',
+    'Hoy: {due, plural, one {# pendiente} other {# pendientes}} · {fresh, plural, one {# nueva} other {# nuevas}}',
+    'Aujourd’hui : {due} à réviser · {fresh, plural, one {# nouvelle} other {# nouvelles}}',
+    'Dziś: {due} do powtórki · {fresh, plural, one {# nowa} few {# nowe} many {# nowych}}',
+    'Oggi: {due} da ripassare · {fresh, plural, one {# nuova} other {# nuove}}',
   ],
   newWaiting: [
-    '{count} more new cards are waiting for later days.',
-    '{count} weitere neue Karten warten auf die nächsten Tage.',
-    '{count} tarjetas nuevas más esperan a los próximos días.',
-    '{count} autres nouvelles cartes attendent les prochains jours.',
-    '{count} kolejnych nowych fiszek czeka na następne dni.',
-    'Altre {count} schede nuove aspettano i prossimi giorni.',
+    '{count, plural, one {# more new card is waiting} other {# more new cards are waiting}} for later days.',
+    '{count, plural, one {# weitere neue Karte wartet} other {# weitere neue Karten warten}} auf die nächsten Tage.',
+    '{count, plural, one {# tarjeta nueva más espera} other {# tarjetas nuevas más esperan}} a los próximos días.',
+    '{count, plural, one {# autre nouvelle carte attend} other {# autres nouvelles cartes attendent}} les prochains jours.',
+    '{count, plural, one {# kolejna nowa fiszka czeka} few {# kolejne nowe fiszki czekają} many {# kolejnych nowych fiszek czeka}} na następne dni.',
+    '{count, plural, one {Un’altra scheda nuova aspetta} other {Altre # schede nuove aspettano}} i prossimi giorni.',
   ],
   newPerDay: [
     'New cards per day',
@@ -371,18 +371,18 @@ const overview = {
   groupLoss: [
     '{loss} equity lost per 100 decisions ({count} evaluated)',
     '{loss} Equity-Verlust je 100 Entscheidungen ({count} bewertet)',
-    '{loss} de equidad perdida por 100 decisiones ({count} evaluadas)',
-    '{loss} d’équité perdue pour 100 décisions ({count} évaluées)',
-    '{loss} straty equity na 100 decyzji ({count} ocenionych)',
-    '{loss} di equity persa per 100 decisioni ({count} valutate)',
+    '{loss} de equidad perdida por 100 decisiones ({count, plural, one {# evaluada} other {# evaluadas}})',
+    '{loss} d’équité perdue pour 100 décisions ({count, plural, one {# évaluée} other {# évaluées}})',
+    '{loss} straty equity na 100 decyzji ({count, plural, one {# oceniona} few {# ocenione} many {# ocenionych}})',
+    '{loss} di equity persa per 100 decisioni ({count, plural, one {# valutata} other {# valutate}})',
   ],
   coverage: [
-    'Analysis coverage: {decisions} decisions in {matches} matches',
-    'Analyseabdeckung: {decisions} Entscheidungen in {matches} Matches',
-    'Cobertura: {decisions} decisiones en {matches} partidas',
-    'Couverture : {decisions} décisions dans {matches} parties',
-    'Zakres analizy: {decisions} decyzji w {matches} meczach',
-    'Copertura: {decisions} decisioni in {matches} partite',
+    'Analysis coverage: {decisions, plural, one {# decision} other {# decisions}} in {matches, plural, one {# match} other {# matches}}',
+    'Analyseabdeckung: {decisions, plural, one {# Entscheidung} other {# Entscheidungen}} in {matches, plural, one {# Match} other {# Matches}}',
+    'Cobertura: {decisions, plural, one {# decisión} other {# decisiones}} en {matches, plural, one {# partida} other {# partidas}}',
+    'Couverture : {decisions, plural, one {# décision} other {# décisions}} dans {matches, plural, one {# partie} other {# parties}}',
+    'Zakres analizy: {decisions, plural, one {# decyzja} few {# decyzje} many {# decyzji}} w {matches, plural, one {# meczu} few {# meczach} many {# meczach}}',
+    'Copertura: {decisions, plural, one {# decisione} other {# decisioni}} in {matches, plural, one {# partita} other {# partite}}',
   ],
   noRecurring: [
     'No mistake group spans at least two matches.',
@@ -423,5 +423,9 @@ const overviewLocales: Locale[] = ['en', 'de', 'es', 'fr', 'pl', 'it'];
 export function useStudyOverviewText() {
   const { locale } = useI18n();
   return (key: keyof typeof overview, params?: TranslationParams) =>
-    interpolate(overview[key][overviewLocales.indexOf(locale)], params);
+    formatMessage(
+      locale,
+      overview[key][overviewLocales.indexOf(locale)],
+      params,
+    );
 }

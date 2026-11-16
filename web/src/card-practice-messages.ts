@@ -1,5 +1,9 @@
 import { useI18n } from './i18n';
-import { interpolate, type Locale, type TranslationParams } from './i18n-core';
+import {
+  formatMessage,
+  type Locale,
+  type TranslationParams,
+} from './i18n-core';
 
 const rows = {
   start: [
@@ -83,12 +87,12 @@ const rows = {
     'Turno completato',
   ],
   summary: [
-    '{correct} correct · {errors} errors · {revealed} revealed · {skipped} skipped',
+    '{correct} correct · {errors, plural, one {# error} other {# errors}} · {revealed} revealed · {skipped} skipped',
     '{correct} richtig · {errors} Fehler · {revealed} aufgedeckt · {skipped} übersprungen',
-    '{correct} correctas · {errors} errores · {revealed} reveladas · {skipped} omitidas',
-    '{correct} correctes · {errors} erreurs · {revealed} révélées · {skipped} ignorées',
-    '{correct} poprawnych · {errors} błędów · {revealed} odkrytych · {skipped} pominiętych',
-    '{correct} corrette · {errors} errori · {revealed} svelate · {skipped} saltate',
+    '{correct, plural, one {# correcta} other {# correctas}} · {errors, plural, one {# error} other {# errores}} · {revealed, plural, one {# revelada} other {# reveladas}} · {skipped, plural, one {# omitida} other {# omitidas}}',
+    '{correct, plural, one {# correcte} other {# correctes}} · {errors, plural, one {# erreur} other {# erreurs}} · {revealed, plural, one {# révélée} other {# révélées}} · {skipped, plural, one {# ignorée} other {# ignorées}}',
+    '{correct, plural, one {# poprawna} few {# poprawne} many {# poprawnych}} · {errors, plural, one {# błąd} few {# błędy} many {# błędów}} · {revealed, plural, one {# odkryta} few {# odkryte} many {# odkrytych}} · {skipped, plural, one {# pominięta} few {# pominięte} many {# pominiętych}}',
+    '{correct, plural, one {# corretta} other {# corrette}} · {errors, plural, one {# errore} other {# errori}} · {revealed, plural, one {# svelata} other {# svelate}} · {skipped, plural, one {# saltata} other {# saltate}}',
   ],
   missing: [
     'This card was removed.',
@@ -205,10 +209,10 @@ const rows = {
   transferSummary: [
     '{scored} scored · {correct} correct · {revealed} revealed · mean equity loss {loss}',
     '{scored} bewertet · {correct} richtig · {revealed} aufgedeckt · mittlerer Equity-Verlust {loss}',
-    '{scored} evaluadas · {correct} correctas · {revealed} reveladas · pérdida media {loss}',
-    '{scored} évaluées · {correct} correctes · {revealed} révélées · perte moyenne {loss}',
-    '{scored} ocenionych · {correct} poprawnych · {revealed} odkrytych · średnia strata {loss}',
-    '{scored} valutate · {correct} corrette · {revealed} svelate · perdita media {loss}',
+    '{scored, plural, one {# evaluada} other {# evaluadas}} · {correct, plural, one {# correcta} other {# correctas}} · {revealed, plural, one {# revelada} other {# reveladas}} · pérdida media {loss}',
+    '{scored, plural, one {# évaluée} other {# évaluées}} · {correct, plural, one {# correcte} other {# correctes}} · {revealed, plural, one {# révélée} other {# révélées}} · perte moyenne {loss}',
+    '{scored, plural, one {# oceniona} few {# ocenione} many {# ocenionych}} · {correct, plural, one {# poprawna} few {# poprawne} many {# poprawnych}} · {revealed, plural, one {# odkryta} few {# odkryte} many {# odkrytych}} · średnia strata {loss}',
+    '{scored, plural, one {# valutata} other {# valutate}} · {correct, plural, one {# corretta} other {# corrette}} · {revealed, plural, one {# svelata} other {# svelate}} · perdita media {loss}',
   ],
   confidence: [
     'How sure are you?',
@@ -317,19 +321,19 @@ const rows = {
     'Avvia anteprima',
   ],
   previewSeen: [
-    '{count} cards viewed',
-    '{count} Karten angesehen',
-    '{count} tarjetas vistas',
-    '{count} cartes vues',
-    '{count} obejrzanych fiszek',
-    '{count} schede viste',
+    '{count, plural, one {# card viewed} other {# cards viewed}}',
+    '{count, plural, one {# Karte angesehen} other {# Karten angesehen}}',
+    '{count, plural, one {# tarjeta vista} other {# tarjetas vistas}}',
+    '{count, plural, one {# carte vue} other {# cartes vues}}',
+    '{count, plural, one {# obejrzana fiszka} few {# obejrzane fiszki} many {# obejrzanych fiszek}}',
+    '{count, plural, one {# scheda vista} other {# schede viste}}',
   ],
   barPips: [
-    '{total} pips · {bar} from the bar',
-    '{total} Pips · {bar} von der Bar',
-    '{total} pips · {bar} de la barra',
-    '{total} pips · {bar} sur la barre',
-    '{total} pipsów · {bar} z bandy',
+    '{total, plural, one {# pip} other {# pips}} · {bar} from the bar',
+    '{total, plural, one {# Pip} other {# Pips}} · {bar} von der Bar',
+    '{total, plural, one {# pip} other {# pips}} · {bar} de la barra',
+    '{total, plural, one {# pip} other {# pips}} · {bar} sur la barre',
+    '{total, plural, one {# pips} few {# pipsy} many {# pipsów}} · {bar} z bandy',
     '{total} pip · {bar} dalla barra',
   ],
   checkPips: [
@@ -367,10 +371,10 @@ const rows = {
   ankiImported: [
     '{added} new · {existing} already in the collection',
     '{added} neu · {existing} bereits in der Sammlung',
-    '{added} nuevas · {existing} ya en la colección',
-    '{added} nouvelles · {existing} déjà dans la collection',
-    '{added} nowych · {existing} już w kolekcji',
-    '{added} nuove · {existing} già nella raccolta',
+    '{added, plural, one {# nueva} other {# nuevas}} · {existing} ya en la colección',
+    '{added, plural, one {# nouvelle} other {# nouvelles}} · {existing} déjà dans la collection',
+    '{added, plural, one {# nowa} few {# nowe} many {# nowych}} · {existing} już w kolekcji',
+    '{added, plural, one {# nuova} other {# nuove}} · {existing} già nella raccolta',
   ],
   externalAnkiImport: [
     'Import Anki package',
@@ -469,12 +473,12 @@ const rows = {
     'Sincronizzazione della cronologia dei ripassi…',
   ],
   ankiReviewsSynced: [
-    '“{deck}” · Anki profile {profile} · {received} reviews received · {sent} sent · {matched} cards matched · {unmatched} unmatched',
-    '„{deck}“ · Anki-Profil {profile} · {received} Wiederholungen übernommen · {sent} gesendet · {matched} Karten zugeordnet · {unmatched} ohne Zuordnung',
-    '«{deck}» · Perfil de Anki {profile} · {received} repasos recibidos · {sent} enviados · {matched} tarjetas vinculadas · {unmatched} sin vincular',
-    '« {deck} » · Profil Anki {profile} · {received} révisions reçues · {sent} envoyées · {matched} cartes associées · {unmatched} sans correspondance',
-    '„{deck}” · Profil Anki {profile} · Odebrano {received} powtórek · Wysłano {sent} · Dopasowano {matched} kart · Bez dopasowania {unmatched}',
-    '«{deck}» · Profilo Anki {profile} · {received} ripassi ricevuti · {sent} inviati · {matched} schede abbinate · {unmatched} senza corrispondenza',
+    '“{deck}” · Anki profile {profile} · {received, plural, one {# review received} other {# reviews received}} · {sent} sent · {matched, plural, one {# card matched} other {# cards matched}} · {unmatched} unmatched',
+    '„{deck}“ · Anki-Profil {profile} · {received, plural, one {# Wiederholung übernommen} other {# Wiederholungen übernommen}} · {sent} gesendet · {matched, plural, one {# Karte zugeordnet} other {# Karten zugeordnet}} · {unmatched} ohne Zuordnung',
+    '«{deck}» · Perfil de Anki {profile} · {received, plural, one {# repaso recibido} other {# repasos recibidos}} · {sent, plural, one {# enviado} other {# enviados}} · {matched, plural, one {# tarjeta vinculada} other {# tarjetas vinculadas}} · {unmatched} sin vincular',
+    '« {deck} » · Profil Anki {profile} · {received, plural, one {# révision reçue} other {# révisions reçues}} · {sent, plural, one {# envoyée} other {# envoyées}} · {matched, plural, one {# carte associée} other {# cartes associées}} · {unmatched} sans correspondance',
+    '„{deck}” · Profil Anki {profile} · Odebrano {received, plural, one {# powtórkę} few {# powtórki} many {# powtórek}} · Wysłano {sent} · Dopasowano {matched, plural, one {# kartę} few {# karty} many {# kart}} · Bez dopasowania {unmatched}',
+    '«{deck}» · Profilo Anki {profile} · {received, plural, one {# ripasso ricevuto} other {# ripassi ricevuti}} · {sent, plural, one {# inviato} other {# inviati}} · {matched, plural, one {# scheda abbinata} other {# schede abbinate}} · {unmatched} senza corrispondenza',
   ],
   ankiAutoSync: [
     'Sync reviews automatically',
@@ -625,10 +629,10 @@ const rows = {
   ankiOverviewRetryAllResult: [
     '{succeeded} successful, {failed} failed.',
     '{succeeded} erfolgreich, {failed} fehlgeschlagen.',
-    '{succeeded} correctos, {failed} fallidos.',
-    '{succeeded} réussis, {failed} en échec.',
-    '{succeeded} udanych, {failed} nieudanych.',
-    '{succeeded} riusciti, {failed} non riusciti.',
+    '{succeeded, plural, one {# correcto} other {# correctos}}, {failed, plural, one {# fallido} other {# fallidos}}.',
+    '{succeeded, plural, one {# réussi} other {# réussis}}, {failed} en échec.',
+    '{succeeded, plural, one {# udany} few {# udane} many {# udanych}}, {failed, plural, one {# nieudany} few {# nieudane} many {# nieudanych}}.',
+    '{succeeded, plural, one {# riuscito} other {# riusciti}}, {failed, plural, one {# non riuscito} other {# non riusciti}}.',
   ],
   ankiOverviewRetryResults: [
     'Retry results by deck',
@@ -908,5 +912,9 @@ const languages: readonly Locale[] = ['en', 'de', 'es', 'fr', 'pl', 'it'];
 export function useCardPracticeText() {
   const { locale } = useI18n();
   return (key: keyof typeof rows, params: TranslationParams = {}) =>
-    interpolate(rows[key][languages.indexOf(locale)] ?? rows[key][0], params);
+    formatMessage(
+      locale,
+      rows[key][languages.indexOf(locale)] ?? rows[key][0],
+      params,
+    );
 }

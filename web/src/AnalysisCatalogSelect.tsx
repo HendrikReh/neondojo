@@ -43,7 +43,7 @@ export default function AnalysisCatalogSelect({
 }) {
   const text = useAnalysisCatalogText();
   const label = useAnalysisEntryLabel();
-  const { formatError, formatNumber } = useI18n();
+  const { formatError } = useI18n();
   const libraryText = useLibraryText();
   const [target, setTarget] = useState<{
     entry: AnalysisCatalogEntry;
@@ -99,8 +99,8 @@ export default function AnalysisCatalogSelect({
                 ? text('top14')
                 : undefined,
               text('coverage', {
-                checker: formatNumber(selected.checker_count),
-                cube: formatNumber(selected.cube_count),
+                checker: selected.checker_count,
+                cube: selected.cube_count,
               }),
             ]
               .filter(Boolean)

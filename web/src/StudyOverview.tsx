@@ -248,7 +248,7 @@ function Overview({
                 loss: formatNumber(action.rates.loss_per_100, {
                   maximumFractionDigits: 3,
                 }),
-                count: formatNumber(action.rates.decision_count),
+                count: action.rates.decision_count,
               })}
             </p>
             <ActionButton
@@ -318,17 +318,16 @@ function Overview({
               <>
                 <p data-study-today>
                   {t('todayBreakdown', {
-                    due: formatNumber(summary.data.review_due_count),
-                    fresh: formatNumber(summary.data.new_available_today),
+                    due: summary.data.review_due_count,
+                    fresh: summary.data.new_available_today,
                   })}
                 </p>
                 {summary.data.new_count > summary.data.new_available_today && (
                   <p className="fineprint">
                     {t('newWaiting', {
-                      count: formatNumber(
+                      count:
                         summary.data.new_count -
-                          summary.data.new_available_today,
-                      ),
+                        summary.data.new_available_today,
                     })}
                   </p>
                 )}
@@ -429,8 +428,8 @@ function Overview({
           <>
             <p>
               {t('coverage', {
-                decisions: formatNumber(playerMistakes.data.analyzed_decisions),
-                matches: formatNumber(playerMistakes.data.analyzed_matches),
+                decisions: playerMistakes.data.analyzed_decisions,
+                matches: playerMistakes.data.analyzed_matches,
               })}
             </p>
             {groups.length ? (

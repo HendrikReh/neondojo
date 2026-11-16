@@ -338,8 +338,8 @@ function PlayerCard({
           <h2>{details.display_name}</h2>
           <p>
             {t('counts', {
-              matches: formatNumber(details.match_count),
-              games: formatNumber(details.game_count),
+              matches: details.match_count,
+              games: details.game_count,
             })}
           </p>
           {aliasNames.length > 0 && (
@@ -387,8 +387,8 @@ function PlayerCard({
                 <strong>{formatNumber(rating.value, prDigits)}</strong>
                 <span>
                   {t('coverage', {
-                    rated: formatNumber(rating.match_count),
-                    total: formatNumber(details.match_count),
+                    rated: rating.match_count,
+                    total: details.match_count,
                   })}
                 </span>
                 <span className="player-rating-profile" title={rating.profile}>
@@ -518,7 +518,7 @@ export default function PlayerDirectory({
         listClassName="player-list"
         title={t('player')}
         count={
-          <span aria-label={t('playerCount', { count: formatNumber(total) })}>
+          <span aria-label={t('playerCount', { count: total })}>
             {formatNumber(total)}
           </span>
         }

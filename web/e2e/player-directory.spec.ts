@@ -90,7 +90,7 @@ test('edits an imported player profile and opens its match', async ({
   ).toContainText('Gegner');
   await expect(
     merge.getByRole('region', { name: 'Wird übernommen' }),
-  ).toContainText('1 Matches');
+  ).toContainText('1 Match ·');
   await merge.getByRole('button', { name: 'Schließen' }).click();
   for (const [width, height] of [
     [1800, 1169],

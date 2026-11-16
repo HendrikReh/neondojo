@@ -247,7 +247,7 @@ test('an analyzed annotated position becomes a shared study card and a downloada
   await add
     .getByRole('button', { name: 'Aktuelle Position hinzufügen', exact: true })
     .click();
-  await expect(add).toContainText('1 Karten verarbeitet.');
+  await expect(add).toContainText('1 Karte verarbeitet.');
   await page.getByRole('tab', { name: 'Lernen', exact: true }).click();
   await page
     .getByRole('tab', { name: 'Lernkarten & Anki', exact: true })
@@ -556,7 +556,7 @@ test('a whole-match deck trains checker, double and response cards with the sele
   await add
     .getByRole('button', { name: 'Fehler aus Spiel 1 übernehmen', exact: true })
     .click();
-  await expect(add).toContainText('1 Karten verarbeitet.');
+  await expect(add).toContainText('1 Karte verarbeitet.');
   await page.getByLabel('Spiel auswählen', { exact: true }).selectOption('2');
   await expect(page.locator('.moves-list .move-history-row')).toHaveCount(0);
   await page.getByRole('tab', { name: 'Notizen', exact: true }).click();

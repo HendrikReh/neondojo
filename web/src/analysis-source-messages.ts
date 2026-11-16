@@ -67,12 +67,12 @@ const rows = {
     'Verifica libro',
   ],
   available: [
-    'Book ready · {count} decisions',
-    'Buch bereit · {count} Entscheidungen',
-    'Libro listo · {count} decisiones',
-    'Bibliothèque prête · {count} décisions',
-    'Książka gotowa · {count} decyzji',
-    'Libro pronto · {count} decisioni',
+    'Book ready · {count, plural, one {# decision} other {# decisions}}',
+    'Buch bereit · {count, plural, one {# Entscheidung} other {# Entscheidungen}}',
+    'Libro listo · {count, plural, one {# decisión} other {# decisiones}}',
+    'Bibliothèque prête · {count, plural, one {# décision} other {# décisions}}',
+    'Książka gotowa · {count, plural, one {# decyzja} few {# decyzje} many {# decyzji}}',
+    'Libro pronto · {count, plural, one {# decisione} other {# decisioni}}',
   ],
   unavailable: [
     'Book unavailable',
@@ -83,12 +83,12 @@ const rows = {
     'Libro non disponibile',
   ],
   contextCount: [
-    '{count} score contexts',
-    '{count} Spielstandkontexte',
-    '{count} contextos de marcador',
-    '{count} contextes de score',
+    '{count, plural, one {# score context} other {# score contexts}}',
+    '{count, plural, one {# Spielstandkontext} other {# Spielstandkontexte}}',
+    '{count, plural, one {# contexto de marcador} other {# contextos de marcador}}',
+    '{count, plural, one {# contexte de score} other {# contextes de score}}',
     'Konteksty wyniku: {count}',
-    '{count} contesti di punteggio',
+    '{count, plural, one {# contesto di punteggio} other {# contesti di punteggio}}',
   ],
   configurationHelp: [
     'Choose the default opening book here. Book answers appear as an optional reference alongside the selected match analysis.',
@@ -311,12 +311,12 @@ const rows = {
     'Equity cubeful normalizzata',
   ],
   rolloutGames: [
-    'Rollout · {count} games',
-    'Rollout · {count} Spiele',
-    'Rollout · {count} partidas',
-    'Rollout · {count} parties',
-    'Rollout · {count} partii',
-    'Rollout · {count} partite',
+    'Rollout · {count, plural, one {# game} other {# games}}',
+    'Rollout · {count, plural, one {# Spiel} other {# Spiele}}',
+    'Rollout · {count, plural, one {# partida} other {# partidas}}',
+    'Rollout · {count, plural, one {# partie} other {# parties}}',
+    'Rollout · {count, plural, one {# partia} few {# partie} many {# partii}}',
+    'Rollout · {count, plural, one {# partita} other {# partite}}',
   ],
   sourceAuthor: [
     'Original rollout source',
@@ -359,12 +359,12 @@ const rows = {
     'Verifica libro XG',
   ],
   xgReady: [
-    'XG book ready · {count} entries',
-    'XG-Buch bereit · {count} Einträge',
-    'Libro XG listo · {count} entradas',
-    'Livre XG prêt · {count} entrées',
-    'Książka XG gotowa · {count} wpisów',
-    'Libro XG pronto · {count} voci',
+    'XG book ready · {count, plural, one {# entry} other {# entries}}',
+    'XG-Buch bereit · {count, plural, one {# Eintrag} other {# Einträge}}',
+    'Libro XG listo · {count, plural, one {# entrada} other {# entradas}}',
+    'Livre XG prêt · {count, plural, one {# entrée} other {# entrées}}',
+    'Książka XG gotowa · {count, plural, one {# wpis} few {# wpisy} many {# wpisów}}',
+    'Libro XG pronto · {count, plural, one {# voce} other {# voci}}',
   ],
   bookStructure: [
     'BackgammonDB keys a position and dice roll together. Its cube entries use a separate no-dice key. XG source results retain XG’s own labels.',
@@ -382,7 +382,7 @@ export function sourceText(
   key: Key,
   params: TranslationParams = {},
 ) {
-  return interpolate(rows[key][locales.indexOf(locale)], params);
+  return interpolate(rows[key][locales.indexOf(locale)], params, locale);
 }
 export function useSourceText() {
   const { locale } = useI18n();

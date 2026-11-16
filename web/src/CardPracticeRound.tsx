@@ -163,10 +163,10 @@ export default function CardPracticeRound({
           </h2>
           <p>
             {t('summary', {
-              correct: formatNumber(round.summary.correct),
-              errors: formatNumber(round.summary.errors),
-              revealed: formatNumber(round.summary.revealed),
-              skipped: formatNumber(round.summary.skipped),
+              correct: round.summary.correct,
+              errors: round.summary.errors,
+              revealed: round.summary.revealed,
+              skipped: round.summary.skipped,
             })}
           </p>
           {round.pass === 1 && round.summary.retry_count > 0 && (

@@ -635,7 +635,7 @@ export default function LearningWorkspace({
                 cards: formatNumber(cards),
               })
             : practiceT('ankiImported', {
-                added: formatNumber(added),
+                added,
                 existing: formatNumber(existing),
               }),
         );
@@ -681,9 +681,9 @@ export default function LearningWorkspace({
         practiceT('ankiReviewsSynced', {
           deck: deck.name,
           profile: result.profile,
-          received: formatNumber(result.received_reviews),
-          sent: formatNumber(result.sent_reviews),
-          matched: formatNumber(result.matched_cards),
+          received: result.received_reviews,
+          sent: result.sent_reviews,
+          matched: result.matched_cards,
           unmatched: formatNumber(result.unmatched_cards),
         }),
       );
@@ -1122,7 +1122,7 @@ export default function LearningWorkspace({
         aria-label={libraryText('actions')}
       >
         <strong aria-live="polite">
-          {p('selected', { count: formatNumber(selectedCards.size) })}
+          {p('selected', { count: selectedCards.size })}
         </strong>
         <ActionButton
           icon="clear"

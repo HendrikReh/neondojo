@@ -29,7 +29,7 @@ export default function AnalysisTimeEstimate({
   configured: boolean;
   installationKey?: string;
 }) {
-  const { locale, formatNumber } = useI18n();
+  const { locale } = useI18n();
   const text = (
     key: Parameters<typeof analysisEstimateText>[1],
     values?: Parameters<typeof analysisEstimateText>[2],
@@ -113,7 +113,7 @@ export default function AnalysisTimeEstimate({
         <>
           <span>
             {text('moves', {
-              moves: formatNumber(value.position_count),
+              moves: value.position_count,
               plies: value.plies,
             })}
           </span>

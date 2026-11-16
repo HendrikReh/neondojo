@@ -376,9 +376,7 @@ export default function DecisionSearch({
       {result.status === 'ready' && (
         <>
           <div className="decision-search-summary">
-            <p role="status">
-              {t('found', { count: formatNumber(result.page.total) })}
-            </p>
+            <p role="status">{t('found', { count: result.page.total })}</p>
             <ActionButton
               ref={practiceButton}
               icon="cards"

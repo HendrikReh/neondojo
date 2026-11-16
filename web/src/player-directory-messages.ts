@@ -1,5 +1,5 @@
 import { useI18n, type Locale } from './i18n';
-import { interpolate, type TranslationParams } from './i18n-core';
+import { formatMessage, type TranslationParams } from './i18n-core';
 
 const en = {
   title: 'Player database',
@@ -37,10 +37,11 @@ const en = {
   noMatches: 'No matches found.',
   edit: 'Edit profile',
   searchHint: 'Search name or alias',
-  playerCount: '{count} players',
-  counts: '{matches} matches · {games} games',
+  playerCount: '{count, plural, one {# player} other {# players}}',
+  counts:
+    '{matches, plural, one {# match} other {# matches}} · {games, plural, one {# game} other {# games}}',
   matchedAlias: 'Matched alias',
-  coverage: '{rated} of {total} matches rated',
+  coverage: '{rated} of {total, plural, one {# match} other {# matches}} rated',
   mergeWith: 'Profile to merge',
   mergeTarget: 'Profile to keep',
   mergeSource: 'Profile to absorb',
@@ -101,10 +102,12 @@ const words: Record<Locale, Record<Key, string>> = {
     noMatches: 'Keine Matches gefunden.',
     edit: 'Profil bearbeiten',
     searchHint: 'Name oder Alias suchen',
-    playerCount: '{count} Spieler',
-    counts: '{matches} Matches · {games} Spiele',
+    playerCount: '{count, plural, one {# Spieler} other {# Spieler}}',
+    counts:
+      '{matches, plural, one {# Match} other {# Matches}} · {games, plural, one {# Spiel} other {# Spiele}}',
     matchedAlias: 'Gefundener Alias',
-    coverage: '{rated} von {total} Matches gewertet',
+    coverage:
+      '{rated} von {total, plural, one {# Match} other {# Matches}} gewertet',
     mergeWith: 'Profil zur Übernahme suchen',
     mergeTarget: 'Bleibt erhalten',
     mergeSource: 'Wird übernommen',
@@ -162,10 +165,12 @@ const words: Record<Locale, Record<Key, string>> = {
     noMatches: 'No se encontraron encuentros.',
     edit: 'Editar perfil',
     searchHint: 'Buscar nombre o alias',
-    playerCount: '{count} jugadores',
-    counts: '{matches} encuentros · {games} partidas',
+    playerCount: '{count, plural, one {# jugador} other {# jugadores}}',
+    counts:
+      '{matches, plural, one {# encuentro} other {# encuentros}} · {games, plural, one {# partida} other {# partidas}}',
     matchedAlias: 'Alias encontrado',
-    coverage: '{rated} de {total} encuentros evaluados',
+    coverage:
+      '{total, plural, one {{rated} de # encuentro evaluado} other {{rated} de # encuentros evaluados}}',
     mergeWith: 'Buscar perfil para fusionar',
     mergeTarget: 'Perfil que se conserva',
     mergeSource: 'Perfil que se incorpora',
@@ -223,10 +228,12 @@ const words: Record<Locale, Record<Key, string>> = {
     noMatches: 'Aucun match trouvé.',
     edit: 'Modifier le profil',
     searchHint: 'Rechercher par nom ou alias',
-    playerCount: '{count} joueurs',
-    counts: '{matches} matchs · {games} parties',
+    playerCount: '{count, plural, one {# joueur} other {# joueurs}}',
+    counts:
+      '{matches, plural, one {# match} other {# matchs}} · {games, plural, one {# partie} other {# parties}}',
     matchedAlias: 'Alias trouvé',
-    coverage: '{rated} matchs évalués sur {total}',
+    coverage:
+      '{rated, plural, one {# match évalué} other {# matchs évalués}} sur {total}',
     mergeWith: 'Rechercher le profil à fusionner',
     mergeTarget: 'Profil conservé',
     mergeSource: 'Profil absorbé',
@@ -284,10 +291,12 @@ const words: Record<Locale, Record<Key, string>> = {
     noMatches: 'Nessun incontro trovato.',
     edit: 'Modifica profilo',
     searchHint: 'Cerca per nome o alias',
-    playerCount: '{count} giocatori',
-    counts: '{matches} incontri · {games} partite',
+    playerCount: '{count, plural, one {# giocatore} other {# giocatori}}',
+    counts:
+      '{matches, plural, one {# incontro} other {# incontri}} · {games, plural, one {# partita} other {# partite}}',
     matchedAlias: 'Alias trovato',
-    coverage: '{rated} incontri valutati su {total}',
+    coverage:
+      '{rated, plural, one {# incontro valutato} other {# incontri valutati}} su {total}',
     mergeWith: 'Cerca il profilo da unire',
     mergeTarget: 'Profilo mantenuto',
     mergeSource: 'Profilo incorporato',
@@ -345,10 +354,13 @@ const words: Record<Locale, Record<Key, string>> = {
     noMatches: 'Nie znaleziono meczów.',
     edit: 'Edytuj profil',
     searchHint: 'Szukaj nazwy lub aliasu',
-    playerCount: 'Gracze: {count}',
-    counts: 'Mecze: {matches} · Partie: {games}',
+    playerCount:
+      '{count, plural, one {# gracz} few {# gracze} many {# graczy}}',
+    counts:
+      '{matches, plural, one {# mecz} few {# mecze} many {# meczów}} · {games, plural, one {# partia} few {# partie} many {# partii}}',
     matchedAlias: 'Znaleziony alias',
-    coverage: 'Oceniono {rated} z {total} meczów',
+    coverage:
+      'Oceniono {rated} z {total, plural, one {# meczu} few {# meczów} many {# meczów}}',
     mergeWith: 'Znajdź profil do połączenia',
     mergeTarget: 'Profil zachowany',
     mergeSource: 'Profil przejmowany',
@@ -375,5 +387,5 @@ const words: Record<Locale, Record<Key, string>> = {
 export function usePlayerText() {
   const { locale } = useI18n();
   return (key: Key, params?: TranslationParams) =>
-    interpolate(words[locale][key], params);
+    formatMessage(locale, words[locale][key], params);
 }

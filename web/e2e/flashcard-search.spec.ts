@@ -303,7 +303,7 @@ test('Sync Anki reviews reports both directions for the selected deck', async ({
   await study.locator('.learning-anki-menu > summary').click();
   await sync.click();
   await expect(study.getByText(/Anki profile Test profile/)).toContainText(
-    '2 reviews received · 1 sent · 1 cards matched · 0 unmatched',
+    '2 reviews received · 1 sent · 1 card matched · 0 unmatched',
   );
 });
 

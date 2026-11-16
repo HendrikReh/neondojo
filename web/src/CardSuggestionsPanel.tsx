@@ -41,7 +41,7 @@ export default function CardSuggestionsPanel({
   const t = useLearningText();
   const planText = useGamePlanText();
   const mistakeText = useMistakeText();
-  const { formatError, formatNumber } = useI18n();
+  const { formatError, formatNumber, locale } = useI18n();
   const [result, setResult] = useState<CardSuggestions>();
   const [excluded, setExcluded] = useState<Set<number>>(new Set());
   const [pending, setPending] = useState<'load' | 'save'>();
@@ -201,9 +201,11 @@ export default function CardSuggestionsPanel({
                   </span>
                   <span>
                     {item.recurring_matches
-                      ? interpolate(text.recurring, {
-                          count: formatNumber(item.recurring_matches),
-                        })
+                      ? interpolate(
+                          text.recurring,
+                          { count: item.recurring_matches },
+                          locale,
+                        )
                       : text.largestLoss}
                   </span>
                   {item.card_id && (
