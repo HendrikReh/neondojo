@@ -273,12 +273,12 @@ const overview = {
     'Ripassa le schede in scadenza',
   ],
   deck: [
-    'Next deck: {name}',
-    'Nächstes Deck: {name}',
-    'Siguiente mazo: {name}',
-    'Prochain paquet : {name}',
-    'Następna talia: {name}',
-    'Prossimo mazzo: {name}',
+    'Starts in the deck “{name}”, which holds the card that has been due longest.',
+    'Beginnt im Deck „{name}“, in dem die am längsten fällige Karte liegt.',
+    'Empieza en el mazo «{name}», que contiene la tarjeta pendiente desde hace más tiempo.',
+    'Commence par le paquet « {name} », qui contient la carte due depuis le plus longtemps.',
+    'Zaczyna od talii „{name}”, w której jest najdłużej zaległa fiszka.',
+    'Inizia dal mazzo «{name}», che contiene la scheda in scadenza da più tempo.',
   ],
   openCards: [
     'Open Flashcards & Anki',

@@ -29,6 +29,12 @@ export default function StudyWorkspace({
   const overviewText = useStudyOverviewText();
   const p = usePositionText();
   const [area, setArea] = useState<Area>('overview');
+  // The overview hands its player to the full list; the token makes a repeated
+  // request for the same player count again.
+  const [mistakePlayer, setMistakePlayer] = useState<{
+    name: string;
+    token: number;
+  }>();
   const tabs = useRef<Partial<Record<Area, HTMLButtonElement | null>>>({});
   const token = props.requestedDeck?.token;
   useEffect(() => {
@@ -99,7 +105,14 @@ export default function StudyWorkspace({
           revision={props.revision}
           theme={props.theme}
           onOpenCards={() => openArea('cards')}
-          onOpenMistakes={() => openArea('mistakes')}
+          onOpenMistakes={(name) => {
+            if (name)
+              setMistakePlayer((current) => ({
+                name,
+                token: (current?.token ?? 0) + 1,
+              }));
+            openArea('mistakes');
+          }}
           onStudyDeck={(id) => {
             openArea('cards');
             onStudyDeck(id);
@@ -135,6 +148,7 @@ export default function StudyWorkspace({
         <RecurringMistakes
           visible={visible && area === 'mistakes'}
           theme={props.theme}
+          requestedPlayer={mistakePlayer}
         />
       </div>
       <div

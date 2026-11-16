@@ -238,6 +238,16 @@ test('the recommendation starts the highest-ranked mistake group and returns foc
   await expect(
     overview.getByText('No mistake group spans at least two matches.'),
   ).toBeVisible();
+
+  // The full list opens for the player the overview shows.
+  await overview
+    .getByRole('button', { name: 'Open mistake overview', exact: true })
+    .click();
+  await expect(
+    page
+      .getByRole('tabpanel', { name: 'My recurring mistakes', exact: true })
+      .getByRole('combobox', { name: 'Player' }),
+  ).toHaveValue('Bob');
 });
 
 test('refreshes when the next card becomes due while the overview stays open', async ({

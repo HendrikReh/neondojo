@@ -25,9 +25,12 @@ import './recurring-mistakes.css';
 export default function RecurringMistakes({
   visible,
   theme,
+  requestedPlayer,
 }: {
   visible: boolean;
   theme: Theme;
+  /** A player chosen elsewhere in Study; each new token applies it once. */
+  requestedPlayer?: { name: string; token: number };
 }) {
   const t = useMistakeText(),
     planText = useGamePlanText(),
@@ -47,6 +50,13 @@ export default function RecurringMistakes({
   const [practice, setPractice] = useState<MistakePracticeRequest>();
   const trigger = useRef<HTMLButtonElement | null>(null),
     generation = useRef(0);
+  const requestedToken = requestedPlayer?.token;
+  useEffect(() => {
+    if (!requestedPlayer) return;
+    setPractice(undefined);
+    setPlayer(requestedPlayer.name);
+    // Only a new request applies; later edits of the filter stay the user's.
+  }, [requestedToken]);
   const minLoss = Number(loss),
     valid =
       loss.trim() !== '' &&

@@ -682,9 +682,9 @@ New duels retain Open Sage's checker evaluations from play, including up to five
 
 **Study** opens on **Overview**, followed by **Flashcards & Anki**, **Reports**, **My recurring mistakes**, and **Practice history**. Use Left/Right to switch tabs and Home/End to jump to the first or last. Opening a deck from Positions still goes straight to **Flashcards & Anki**.
 
-Overview counts each due flashcard with a deck once, even when it belongs to several decks. **Study due cards** opens the deck containing the oldest due card and resumes its saved answer when available. When no cards are due, the overview shows the next scheduled review if one exists.
+Overview counts each due flashcard with a deck once, even when it belongs to several decks. **Study due cards** opens the deck containing the oldest due card and resumes its saved answer when available; the line above the button names that deck. When no cards are due, the overview shows the next scheduled review if one exists.
 
-Overview can preselect the player from the active profile and shows up to three mistake groups for that player. Each group must occur in at least two matches. When no cards are due, **Practice mistake group** opens the eligible group with the highest equity loss per 100 decisions. A recommendation requires at least 30 evaluable decisions in the group. Smaller groups can still be practiced from their rows, and **My recurring mistakes** shows the full list under its own filters. [Review flashcards](#review-cards-and-export-to-anki) · [Practice recurring mistakes](#my-recurring-mistakes)
+Overview can preselect the player from the active profile and shows up to three mistake groups for that player. Each group must occur in at least two matches. When no cards are due, **Practice mistake group** opens the eligible group with the highest equity loss per 100 decisions. A recommendation requires at least 30 evaluable decisions in the group. Smaller groups can still be practiced from their rows. The overview table shows the error rate, its trend and the loss per 100 decisions; **Open mistake overview** switches to **My recurring mistakes** with the same player selected, where the full list with counts and totals sits under its own filters. [Review flashcards](#review-cards-and-export-to-anki) · [Practice recurring mistakes](#my-recurring-mistakes)
 
 ### Reports
 

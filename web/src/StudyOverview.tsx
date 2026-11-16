@@ -32,7 +32,8 @@ type Props = {
   revision: number;
   theme: Theme;
   onOpenCards: () => void;
-  onOpenMistakes: () => void;
+  /** Opens the full list for the player the overview shows, if any. */
+  onOpenMistakes: (player: string) => void;
   onStudyDeck: (id: string) => void;
 };
 
@@ -381,7 +382,7 @@ function Overview({
           <ActionButton
             icon="open"
             label={t('openMistakes')}
-            onClick={onOpenMistakes}
+            onClick={() => onOpenMistakes(player)}
           />
         </div>
         {players.status === 'ready' && (
@@ -433,7 +434,11 @@ function Overview({
               })}
             </p>
             {groups.length ? (
-              <MistakeGroupTable groups={groups} onPractice={startPractice} />
+              <MistakeGroupTable
+                groups={groups}
+                onPractice={startPractice}
+                compact
+              />
             ) : (
               <p>
                 {playerMistakes.data.analyzed_decisions
