@@ -138,24 +138,8 @@
   font-weight: 600;
   pointer-events: none;
 }
-.play-turn,
-.play-turn-reserved {
+.play-turn {
   padding: 14px 0;
-}
-.play-turn h3,
-.play-turn-reserved h3 {
-  margin: 8px 0;
-}
-.play-turn-status {
-  display: grid;
-}
-.play-turn-status > * {
-  grid-area: 1 / 1;
-  align-self: start;
-  min-width: 0;
-}
-.play-turn-reserved {
-  visibility: hidden;
 }
 .play-workspace .play-history {
   grid-area: history;
@@ -773,7 +757,8 @@
   margin: 0;
   text-align: center;
 }
-.play-workspace .play-main-action {
+.play-workspace .play-main-action,
+.play-workspace .play-double-button {
   min-height: 48px;
 }
 .play-board-toolbar .primary > .action-label {
@@ -781,6 +766,11 @@
 }
 .play-board-toolbar > p {
   overflow-wrap: anywhere;
+}
+.play-board-toolbar > .play-turn-help {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-meta);
 }
 .play-coach-summary {
   display: grid;
@@ -827,8 +817,8 @@
     --play-board-gap: 18px;
     --play-layout-gap: 28px;
     --play-workspace-padding: 16px;
-    /* Leave space for the match header, player bars and controls below the board. */
-    --play-artwork-width: min(58vw, calc((100dvh - 425px) * 1.35));
+    /* Leave space for the match header, player bars and the result line below the board. */
+    --play-artwork-width: min(58vw, calc((100dvh - 375px) * 1.35));
     max-width: calc(
       var(--play-artwork-width) + var(--play-history-width) +
         var(--play-layout-gap) + var(--play-board-gap) +
@@ -907,6 +897,10 @@
   }
   .play-board-toolbar .play-selected-steps {
     font-size: var(--font-size-meta);
+  }
+  /* The narrow action column has no room for running text. */
+  .play-board-toolbar > .play-turn-help {
+    display: none;
   }
   .play-coach-feedback .play-coach-choice {
     font-size: var(--font-size-body);

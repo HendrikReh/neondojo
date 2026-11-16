@@ -69,7 +69,10 @@ recurring-mistakes practice dialog with the errors of the current page.
 Buttons that have a shortcut name it in their tooltip and expose it through
 `aria-keyshortcuts`. **N**, **D**, **T** and **P** choose a cube action,
 **Enter** checks an answer and continues, **1**–**4** rate a flashcard, and
-**E** / **Shift+E** move to the next or previous error in Analysis. The
+**E** / **Shift+E** move to the next or previous error in Analysis. In
+**Playing**, **Enter** rolls, confirms a complete turn or passes, **D**
+doubles, **H** requests a hint, **Z** undoes a checker step, and **Escape**
+returns from a reviewed move to the game. The
 shortcuts are declared with the `shortcut` property of `ActionButton` and
 handled once in `web/src/useButtonShortcuts.ts`. They are ignored in text
 fields, and an open dialog confines them to its own buttons.
@@ -185,7 +188,11 @@ controls the board column within the current window's limits.
 
 On large desktop windows, the board grows and the move history uses the height
 of the playing area. The history scrolls independently and follows the latest
-move. The layout leaves room for the action panel beside the board.
+move. The layout leaves room for the action panel beside the board. The panel
+names the current step, always shows its primary action (**Roll dice**,
+**Confirm turn** or **Pass**) and carries the instructions for that step. The
+dice pair and the cube on the board remain a second way to trigger the same
+actions.
 
 ## Study areas
 

@@ -882,9 +882,9 @@ export default function PlayWorkspace({
     !awaitingFeedback &&
     (beforeRoll ||
       (session.phase === 'move' &&
-        session.position.player === session.human_player &&
-        session.legal_moves.length > 0)),
+        session.position.player === session.human_player)),
   );
+  const turnHeading = beforeRoll ? 'yourTurn' : forcedPass ? 'pass' : 'move';
   const canForfeit =
     session &&
     session.match_length > 0 &&
@@ -939,6 +939,7 @@ export default function PlayWorkspace({
       onClick={() => feedback('hint')}
       icon="hint"
       label={modeT('hint')}
+      shortcut="H"
     />
   );
   const resignButton = () => (
@@ -1473,6 +1474,7 @@ export default function PlayWorkspace({
                         onClick={review.reset}
                         icon="resume"
                         label={t('returnToGame')}
+                        shortcut="Escape"
                       >
                         {t('returnToGame')}
                       </ActionButton>
@@ -1547,27 +1549,60 @@ export default function PlayWorkspace({
                     className="play-board-toolbar"
                     data-testid="play-board-toolbar"
                     role="group"
-                    aria-label={t(beforeRoll ? 'yourTurn' : 'move')}
+                    aria-label={t(turnHeading)}
                   >
+                    <h3>{t(turnHeading)}</h3>
+                    {/* The dice pair stays a second way to trigger the same action. */}
                     {beforeRoll ? (
-                      !botRoll && (
-                        <ActionButton
-                          className="primary play-main-action"
-                          data-play-action="roll"
-                          disabled={!boardRollReady}
-                          onClick={rollTurn}
-                          icon="roll"
-                          label={t('roll')}
-                        />
-                      )
+                      <ActionButton
+                        className="primary play-main-action"
+                        data-play-action="roll"
+                        disabled={!boardRollReady}
+                        onClick={rollTurn}
+                        icon="roll"
+                        label={t('roll')}
+                        shortcut="Enter"
+                      />
+                    ) : forcedPass ? (
+                      <ActionButton
+                        className="primary play-main-action"
+                        data-play-action="pass"
+                        disabled={!canPass}
+                        onClick={() => action('pass')}
+                        icon="pass"
+                        label={t('passTurn')}
+                        shortcut="Enter"
+                      />
                     ) : (
-                      <h3>{t('move')}</h3>
+                      <ActionButton
+                        className="primary play-main-action"
+                        data-play-action="confirm"
+                        disabled={!canConfirm}
+                        onClick={confirmTurn}
+                        icon="confirm"
+                        label={t('confirm')}
+                        shortcut="Enter"
+                      />
                     )}
+                    {beforeRoll &&
+                      session.can_double &&
+                      !pendingRoutineRoll && (
+                        <ActionButton
+                          className="play-double-button"
+                          data-play-action="double"
+                          disabled={!boardRollReady}
+                          onClick={doubleCube}
+                          icon="double"
+                          label={t('double')}
+                          shortcut="D"
+                        />
+                      )}
                     {!competition &&
                       !pendingRoutineRoll &&
+                      !forcedPass &&
                       (!beforeRoll || session.can_double) &&
                       hintButton()}
-                    {!beforeRoll && (
+                    {!beforeRoll && !forcedPass && (
                       <ActionButton
                         type="button"
                         className="play-undo-button"
@@ -1575,6 +1610,7 @@ export default function PlayWorkspace({
                         onClick={undo}
                         icon="undo"
                         label={t('undo')}
+                        shortcut="Z"
                       >
                         <span>{t('undo')}</span>
                         {steps.length > 0 && (
@@ -1601,6 +1637,17 @@ export default function PlayWorkspace({
                               `${step.from === 0 || step.from === 25 ? t('bar') : relativePoint(step.from, session.human_player)}/${step.to < 0 || step.to > 25 ? t('off') : relativePoint(step.to, session.human_player)}`,
                           )
                           .join(' ')}
+                      </p>
+                    )}
+                    {!beforeRoll && (
+                      <p className="play-turn-help">
+                        {t(
+                          forcedPass
+                            ? 'passReady'
+                            : completed
+                              ? 'ready'
+                              : 'select',
+                        )}
                       </p>
                     )}
                   </div>
@@ -1970,50 +2017,33 @@ export default function PlayWorkspace({
                   </PlayBoardDialog>
                 )}
               </div>
-              <div className="play-turn-status">
-                <div className="play-turn-reserved" aria-hidden="true">
-                  <h3>{t('move')}</h3>
-                  <p>{t('select')}</p>
-                  <p>&nbsp;</p>
-                </div>
-                {!busy &&
-                  !paused &&
-                  !review.active &&
-                  !interruption &&
-                  !openingPhase &&
-                  !awaitingFeedback &&
-                  session.phase !== 'double_response' &&
-                  session.phase !== 'roll' && (
-                    <div className="play-turn" aria-live="polite">
-                      {session.winner != null &&
-                        ['game_over', 'match_over'].includes(session.phase) && (
-                          <p>
-                            {t('winner')}: {name(session.winner)}
-                          </p>
-                        )}
-                      {canPass ? (
-                        <p>{t('passReady')}</p>
-                      ) : (
-                        canMove &&
-                        !forcedPass && (
-                          <p>{completed ? t('ready') : t('select')}</p>
-                        )
-                      )}
+              {!busy &&
+                !paused &&
+                !review.active &&
+                !interruption &&
+                !awaitingFeedback &&
+                (session.phase === 'game_over' ||
+                  session.phase === 'match_over') && (
+                  <div className="play-turn" aria-live="polite">
+                    {session.winner != null && (
+                      <p>
+                        {t('winner')}: {name(session.winner)}
+                      </p>
+                    )}
+                    {session.phase === 'game_over' && (
                       <div className="play-actions">
-                        {session.phase === 'game_over' && (
-                          <ActionButton
-                            disabled={uiBusy}
-                            onClick={() => action('next_game')}
-                            icon="new-game"
-                            label={t('next_game')}
-                          >
-                            {t('next_game')}
-                          </ActionButton>
-                        )}
+                        <ActionButton
+                          disabled={uiBusy}
+                          onClick={() => action('next_game')}
+                          icon="new-game"
+                          label={t('next_game')}
+                        >
+                          {t('next_game')}
+                        </ActionButton>
                       </div>
-                    </div>
-                  )}
-              </div>
+                    )}
+                  </div>
+                )}
             </section>
           </div>
         </>

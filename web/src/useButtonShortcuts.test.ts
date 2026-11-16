@@ -11,7 +11,8 @@ const key = (key: string, modifiers: Partial<KeyboardEventInit> = {}) => ({
 });
 
 describe('shortcut tokens', () => {
-  it('names letters, digits and Enter the way buttons declare them', () => {
+  it('names letters, digits, Enter and Escape the way buttons declare them', () => {
+    expect(shortcutToken(key('Escape'))).toBe('Escape');
     expect(shortcutToken(key('d'))).toBe('D');
     expect(shortcutToken(key('3'))).toBe('3');
     expect(shortcutToken(key('Enter'))).toBe('Enter');

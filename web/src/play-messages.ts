@@ -63,6 +63,7 @@ const en = {
   undo: 'Undo step',
   reset: 'Reset turn',
   pass: 'No legal move — pass',
+  passTurn: 'Pass',
   passReady: 'Click the dice pair to pass.',
   double: 'Double',
   take: 'Take double',
@@ -162,6 +163,7 @@ const de: Record<Key, string> = {
   undo: 'Schritt zurück',
   reset: 'Zug zurücksetzen',
   pass: 'Kein legaler Zug — aussetzen',
+  passTurn: 'Aussetzen',
   passReady: 'Klicke auf das Würfelpaar, um auszusetzen.',
   double: 'Doppeln',
   take: 'Doppel annehmen',
@@ -419,6 +421,7 @@ Object.assign(extra.es, {
   game_over: 'Juego terminado',
   match_over: 'Partida terminada',
   pass: 'Sin movimientos legales — pasar',
+  passTurn: 'Pasar',
   passReady: 'Haz clic en los dados para pasar el turno.',
   select:
     'Pasa el cursor sobre una ficha para ver su destino. Haz clic para moverla. Si puedes usar ambos dados, tiene prioridad el primero.',
@@ -445,6 +448,7 @@ Object.assign(extra.fr, {
   game_over: 'Partie terminée',
   match_over: 'Match terminé',
   pass: 'Aucun coup légal — passer',
+  passTurn: 'Passer',
   passReady: 'Cliquez sur les dés pour passer votre tour.',
   select:
     'Survolez un pion pour voir sa destination. Cliquez pour le déplacer. Si les deux dés sont jouables, le premier est prioritaire.',
@@ -472,6 +476,7 @@ Object.assign(extra.it, {
   game_over: 'Partita terminata',
   match_over: 'Match terminato',
   pass: 'Nessuna mossa legale — passa',
+  passTurn: 'Passa',
   passReady: 'Fai clic sui dadi per passare il turno.',
   select:
     'Passa il puntatore su una pedina per vedere la destinazione. Fai clic per muoverla. Se entrambi i dadi sono giocabili, ha la precedenza il primo.',
@@ -498,6 +503,7 @@ Object.assign(extra.pl, {
   game_over: 'Gra zakończona',
   match_over: 'Mecz zakończony',
   pass: 'Brak legalnego ruchu — pasuj',
+  passTurn: 'Pasuj',
   passReady: 'Kliknij parę kości, aby spasować.',
   select:
     'Najedź na pionek, aby zobaczyć jego cel. Kliknij, aby go przesunąć. Jeśli można użyć obu kości, pierwsza ma pierwszeństwo.',

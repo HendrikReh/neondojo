@@ -131,7 +131,7 @@ for (const config of [
         name: 'Confirm turn',
         exact: true,
       });
-    await expect(toolbarConfirm).toHaveCount(0);
+    await expect(toolbarConfirm).toBeDisabled();
     await die.click();
     await expect(die).toHaveCSS('outline-style', 'none');
     await expect(die).toHaveCSS('filter', 'none');
@@ -151,7 +151,7 @@ for (const config of [
     await expect(page.locator('.play-selected-steps')).toHaveText('13/10');
     await point(10).click();
     await expect(pair).toBeEnabled();
-    await expect(toolbarConfirm).toHaveCount(0);
+    await expect(toolbarConfirm).toBeEnabled();
     await page.mouse.move(0, 0);
     const faces = await artwork.all();
     const resting = (
@@ -191,7 +191,7 @@ for (const config of [
       'false',
     );
     await expect(die).toHaveAttribute('data-dice-action', 'none');
-    await expect(toolbarConfirm).toHaveCount(0);
+    await expect(toolbarConfirm).toBeDisabled();
     await page.mouse.click(gap.x, gap.y);
     expect(writes).toEqual([]);
     await point(10).click();

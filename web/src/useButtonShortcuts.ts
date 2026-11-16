@@ -5,7 +5,7 @@ const TEXT_ENTRY =
 /** Elements that already act on Enter themselves. */
 const OWN_ENTER = `${TEXT_ENTRY},button,a,summary,[role="tab"],[role="row"],[role="option"],[role="separator"]`;
 
-/** "D", "1", "Enter" or "Shift+E"; undefined for keys that are never shortcuts. */
+/** "D", "1", "Enter", "Escape" or "Shift+E"; undefined for keys that are never shortcuts. */
 export function shortcutToken(event: {
   key: string;
   shiftKey: boolean;
@@ -15,8 +15,8 @@ export function shortcutToken(event: {
 }): string | undefined {
   if (event.altKey || event.ctrlKey || event.metaKey) return undefined;
   const key =
-    event.key === 'Enter'
-      ? 'Enter'
+    event.key === 'Enter' || event.key === 'Escape'
+      ? event.key
       : /^[a-z0-9]$/i.test(event.key)
         ? event.key.toUpperCase()
         : undefined;
