@@ -356,6 +356,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cube-context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Describe the score, cube and take point of a cube decision. */
+        post: operations["context"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/database-backup": {
         parameters: {
             query?: never;
@@ -1316,6 +1333,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/move-explanations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Count what each of two checker plays leaves on the board. */
+        post: operations["move_explanations"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/moves/{id}": {
         parameters: {
             query?: never;
@@ -2148,6 +2182,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/study/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["search"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/study/learning-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["read"];
+        put: operations["write"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/study/learning-summary": {
         parameters: {
             query?: never;
@@ -2190,6 +2256,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["attempt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/study/mistakes/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3341,6 +3423,47 @@ export interface components {
             /** Format: uuid */
             seed?: string | null;
         };
+        CubeContext: {
+            /** @description Points still needed by White and Black; absent in money play. */
+            away?: number[] | null;
+            crawford: boolean;
+            /**
+             * Format: int32
+             * @description 0 White, 1 Black, absent while the cube is centered.
+             */
+            cube_owner?: number | null;
+            /**
+             * Format: int32
+             * @description Cube value before a pending offer.
+             */
+            cube_value: number;
+            /**
+             * Format: int32
+             * @description Absolute color of the player who offers or considers the double.
+             */
+            doubler: number;
+            /** @description Money play only. */
+            jacoby?: boolean | null;
+            /**
+             * Format: int32
+             * @description 0 is money play.
+             */
+            match_length: number;
+            /** @description A one-away score after the Crawford game has been played. */
+            post_crawford: boolean;
+            /** @description Points scored so far by White and Black. */
+            scores: number[];
+            take_point?: null | components["schemas"]["TakePoint"];
+        };
+        CubeContextRequest: {
+            /**
+             * Format: int32
+             * @description Absolute color of the player who doubles: 0 White, 1 Black.
+             */
+            doubler: number;
+            /** @description GNUbg match ID of the decision; a pending offer keeps the previous cube value. */
+            match_id: string;
+        };
         /** @enum {string} */
         CubeEquityUnit: "cubeful" | "mwc";
         /** @description Recorded cube outcomes, from the player making the decision. */
@@ -3351,10 +3474,18 @@ export interface components {
             double_take: number;
             /** Format: double */
             no_double: number;
+            /**
+             * @description Cubeless win, gammon and backgammon chances followed by the three
+             *     losing chances, for the same player. Absent in older checkpoints and
+             *     for sources that do not record them.
+             */
+            probabilities?: number[] | null;
             unit: components["schemas"]["CubeEquityUnit"];
         };
         /** @enum {string} */
         CubeOfferAction: "no_double" | "double";
+        /** @enum {string} */
+        CubeOwnerFilter: "self" | "opponent" | "centered";
         /** @enum {string} */
         CubeResponseAction: "take" | "drop";
         Database: {
@@ -3495,6 +3626,39 @@ export interface components {
             player: number;
             /** @description Saved decision severity. Analysis views can reclassify the stored equity loss. */
             severity: string;
+        };
+        DecisionHit: components["schemas"]["MistakePracticeQuestion"] & {
+            /** @description Points still needed by the deciding player and the opponent. */
+            away?: number[] | null;
+            best: string;
+            crawford: boolean;
+            /**
+             * Format: int32
+             * @description Absolute color; absent while the cube is centered.
+             */
+            cube_owner?: number | null;
+            /** Format: int32 */
+            cube_value: number;
+            /** Format: double */
+            equity_loss: number;
+            game_plan: components["schemas"]["GamePlan"];
+            /**
+             * Format: int32
+             * @description 0 is money play.
+             */
+            match_length: number;
+            mistake_kind?: null | components["schemas"]["MistakeKind"];
+            played: string;
+            /** @description True when the practice endpoints accept this reference. */
+            practicable: boolean;
+        };
+        /** @enum {string} */
+        DecisionKind: "checker" | "cube_offer" | "cube_response";
+        DecisionSearchPage: {
+            items: components["schemas"]["DecisionHit"][];
+            limit: number;
+            page: number;
+            total: number;
         };
         Deck: {
             /** Format: int64 */
@@ -3709,7 +3873,7 @@ export interface components {
             match_id: string;
         };
         /** @enum {string} */
-        GamePlan: "pure_race" | "racing" | "attacking" | "priming" | "anchoring";
+        GamePlan: "opening" | "pure_race" | "racing" | "attacking" | "priming" | "anchoring";
         GamePlanRequest: {
             /**
              * @description Absolute-color board: points 1–24 use positive White/negative Black;
@@ -3936,14 +4100,46 @@ export interface components {
             explanation: string;
             next_question: string;
         };
+        LearningPreferences: {
+            /**
+             * Format: int32
+             * @description New flashcards introduced per local day; 0 pauses new cards.
+             */
+            new_cards_per_day: number;
+        };
         LearningSummary: {
             /** Format: int64 */
             card_count: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Every card whose due time has passed, including never-reviewed cards.
+             */
             due_count: number;
+            /**
+             * Format: int64
+             * @description New cards still allowed today, at most `new_count`.
+             */
+            new_available_today: number;
+            /** Format: int32 */
+            new_cards_per_day: number;
+            /**
+             * Format: int64
+             * @description Due cards in a deck that have never been reviewed.
+             */
+            new_count: number;
             next_deck?: null | components["schemas"]["StudyDeck"];
             /** Format: date-time */
             next_due_at?: string | null;
+            /**
+             * Format: int64
+             * @description Due cards that have been reviewed before.
+             */
+            review_due_count: number;
+            /**
+             * Format: int64
+             * @description Due reviews plus the new cards still allowed today.
+             */
+            today_count: number;
         };
         LibraryAction: {
             action: string;
@@ -4132,6 +4328,29 @@ export interface components {
         MistakePractice: {
             items: components["schemas"]["MistakePracticeQuestion"][];
         };
+        MistakePracticeDay: {
+            /** Format: int64 */
+            attempts: number;
+            /** Format: double */
+            average_equity_loss: number;
+            /**
+             * Format: int64
+             * @description Answers that matched the best decision.
+             */
+            best: number;
+            /**
+             * Format: date
+             * @description Day in the database server's time zone.
+             */
+            day: string;
+            game_plan: components["schemas"]["GamePlan"];
+            mistake_kind: components["schemas"]["MistakeKind"];
+            player: string;
+        };
+        MistakePracticeHistory: {
+            /** @description Newest day first; at most 500 day-and-group rows. */
+            items: components["schemas"]["MistakePracticeDay"][];
+        };
         MistakePracticeQuestion: {
             depth?: string | null;
             engine: string;
@@ -4172,6 +4391,7 @@ export interface components {
             loss_per_100: number;
             /** @description True when there are fewer than 30 evaluable decisions. */
             small_sample: boolean;
+            trend: null | components["schemas"]["MistakeTrend"];
         };
         MistakeReference: {
             /** Format: int32 */
@@ -4185,6 +4405,14 @@ export interface components {
         };
         /** @enum {string} */
         MistakeSource: "native" | "xg" | "bgblitz" | "sgf";
+        MistakeTrend: {
+            earlier_decisions: number;
+            /** Format: double */
+            earlier_error_rate: number;
+            recent_decisions: number;
+            /** Format: double */
+            recent_error_rate: number;
+        };
         Mistakes: {
             analyzed_decisions: number;
             analyzed_matches: number;
@@ -4234,6 +4462,23 @@ export interface components {
         MoveCardsResult: {
             already_in_target: number;
             moved: number;
+        };
+        MoveExplanation: {
+            best: components["schemas"]["PlayFacts"];
+            played: components["schemas"]["PlayFacts"];
+        };
+        MoveExplanationRequest: {
+            /** @description Checker notation of the two plays to compare. */
+            best: string;
+            /** @description Absolute-color board before the play, as in the game-plan request. */
+            board: number[];
+            dice: number[];
+            played: string;
+            /**
+             * Format: int32
+             * @description Mover: 0 White, 1 Black.
+             */
+            player: number;
         };
         /**
          * @description Decision severity for normalized equity loss. Existing category identifiers are retained.
@@ -4387,6 +4632,36 @@ export interface components {
             analysis: components["schemas"]["EngineSnapshot"];
             bot: components["schemas"]["EngineSnapshot"];
             rules: components["schemas"]["EngineSnapshot"];
+        };
+        PlayFacts: {
+            /** @description The mover's single checkers on points 1 to 24, as point numbers. */
+            blots: number[];
+            /**
+             * Format: int32
+             * @description Opponent rolls out of 36 that can hit one of those blots.
+             */
+            hitting_rolls: number;
+            /**
+             * Format: int32
+             * @description Held points among the mover's home points 1 to 6.
+             */
+            home_points: number;
+            /**
+             * Format: int32
+             * @description Longest run of adjacent held points.
+             */
+            longest_prime: number;
+            /**
+             * Format: int32
+             * @description Opponent checkers on the bar after the play.
+             */
+            opponent_on_bar: number;
+            /** Format: int32 */
+            opponent_pips: number;
+            /** Format: int32 */
+            pips: number;
+            /** @description Points the mover holds with two or more checkers. */
+            points: number[];
         };
         PlayFeedbackRequest: {
             /** Format: uuid */
@@ -4578,6 +4853,8 @@ export interface components {
         };
         PlayerDetails: components["schemas"]["PlayerProfile"] & {
             aliases: components["schemas"]["PlayerAlias"][];
+            /** @description Per-match ratings, oldest first. */
+            rating_history: components["schemas"]["PlayerRatingPoint"][];
             ratings: components["schemas"]["PlayerRating"][];
         };
         PlayerErrorBreakdown: {
@@ -4641,6 +4918,35 @@ export interface components {
         PlayerRating: {
             /** Format: int64 */
             match_count: number;
+            profile: string;
+            /** Format: double */
+            value: number;
+        };
+        /** @description One fully analyzed match of the player, for a rating trend. */
+        PlayerRatingPoint: {
+            /**
+             * Format: double
+             * @description The same rating for checker play alone: saved checker losses over
+             *     unforced checker plays. Absent without such plays.
+             */
+            checker_value?: number | null;
+            /**
+             * Format: double
+             * @description The remaining loss over close cube decisions. Absent without them.
+             */
+            cube_value?: number | null;
+            /**
+             * Format: date
+             * @description Date played, or the import date when the match records none.
+             */
+            date: string;
+            /**
+             * Format: int64
+             * @description Unforced checker plays and close cube decisions behind the value.
+             */
+            decisions: number;
+            /** Format: uuid */
+            match_id: string;
             profile: string;
             /** Format: double */
             value: number;
@@ -4843,6 +5149,7 @@ export interface components {
             chosen: string;
             /** Format: double */
             chosen_equity?: number | null;
+            cube_evaluation?: null | components["schemas"]["CubeEvaluation"];
             /** Format: double */
             equity_loss: number;
             provenance: components["schemas"]["PracticeProvenance"];
@@ -4966,10 +5273,21 @@ export interface components {
             session_id: string;
         };
         ReviewCounts: {
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Due cards that have been reviewed before.
+             */
             due: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Due cards that have never been reviewed.
+             */
             new: number;
+            /**
+             * Format: int64
+             * @description New cards of this deck still allowed today.
+             */
+            new_available?: number;
             /** Format: int64 */
             total: number;
         };
@@ -5215,6 +5533,12 @@ export interface components {
              * @description Minimum checker-pips needed to transform one arrangement into the other.
              */
             distance: number;
+            /**
+             * Format: double
+             * @description Loss of the played move in the match's displayed native analysis;
+             *     null without one.
+             */
+            equity_loss: number | null;
             match_name: string;
             position: components["schemas"]["Position"];
             white: string;
@@ -5363,6 +5687,18 @@ export interface components {
             /** Format: int64 */
             tags_version: number;
         };
+        TakePoint: {
+            basis: components["schemas"]["TakePointBasis"];
+            /** @description Match equity table name; absent in money play. */
+            table?: string | null;
+            /**
+             * Format: double
+             * @description Game winning chance the taker needs, from 0 to 1.
+             */
+            value: number;
+        };
+        /** @enum {string} */
+        TakePointBasis: "money" | "match_equity_table";
         Topic: {
             evidence_refs: string[];
             observation: string;
@@ -6482,6 +6818,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConfigurationErrorBody"];
+                };
+            };
+        };
+    };
+    context: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CubeContextRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CubeContext"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -9553,6 +9920,37 @@ export interface operations {
             };
         };
     };
+    move_explanations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveExplanationRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoveExplanation"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     get_move: {
         parameters: {
             query?: never;
@@ -12029,6 +12427,105 @@ export interface operations {
             };
         };
     };
+    search: {
+        parameters: {
+            query: {
+                /** @description Exact player name, ignoring case and surrounding spaces. */
+                player: string;
+                database_id?: string;
+                kind?: components["schemas"]["DecisionKind"];
+                /** @description Only errors of this type; implies a positive loss. */
+                mistake_kind?: components["schemas"]["MistakeKind"];
+                game_plan?: components["schemas"]["GamePlan"];
+                /** @description Minimum normalized equity loss; 0 includes correct decisions. */
+                min_loss?: number;
+                max_loss?: number;
+                /** @description Points the deciding player still needs; match play only. */
+                away?: number;
+                /** @description Points the opponent still needs; match play only. */
+                opponent_away?: number;
+                /** @description Cube value before the decision. */
+                cube_value?: number;
+                /** @description self, opponent or centered, relative to the deciding player. */
+                cube_owner?: components["schemas"]["CubeOwnerFilter"];
+                /** @description One-based page. */
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionSearchPage"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    read: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningPreferences"];
+                };
+            };
+        };
+    };
+    write: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LearningPreferences"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningPreferences"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     learning_summary: {
         parameters: {
             query?: never;
@@ -12139,6 +12636,25 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MistakePracticeHistory"];
                 };
             };
         };

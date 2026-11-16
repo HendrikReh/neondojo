@@ -93,5 +93,8 @@ repository artifacts or runtime dependencies. No upstream scripts ran.
 When updating the reference, pin the new full commit, verify each file's
 SPDX header and LICENSE, regenerate the C++ expectations, rerun both-color
 and reflection parity, and update SOURCE_REVISION and these provenance hashes.
-Keep classifier "opensage_rules_v1" tied to these rule semantics; a deliberate
+BG Tutor adds one label of its own on top of these rules: "opening", when
+both sides have at most four checkers off their starting points. It is not
+part of the Open Sage reference; the classifier name carries the suffix
+"_opening1" for it. Keep the "opensage_rules_v1" prefix tied to these rule semantics; a deliberate
 rule change requires an explicit version decision.

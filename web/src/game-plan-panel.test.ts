@@ -7,7 +7,7 @@ import { I18nProvider, type Locale } from './i18n';
 import type { GamePlans } from './game-plan-api';
 
 const plans: GamePlans = {
-  classifier: 'opensage_rules_v1',
+  classifier: 'opensage_rules_v1_opening1',
   source_revision: 'revision',
   game_over: false,
   white: 'anchoring',

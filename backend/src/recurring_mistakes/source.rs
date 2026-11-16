@@ -81,8 +81,17 @@ WITH eligible AS (
         j.id AS job_id,m.id AS match_id,c.game_no,j.plies,
         catalog.engine
     FROM eligible m
-    JOIN effective_analysis_selections selected ON selected.match_id=m.id
-    JOIN analysis_catalog_sources catalog ON catalog.match_id=m.id AND catalog.analysis_id=selected.analysis_id
+    -- The catalog views aggregate every analysis of a match. OFFSET 0 keeps
+    -- each lookup scoped to one eligible match; a plain join makes the planner
+    -- build the catalog for the whole library first.
+    CROSS JOIN LATERAL (
+        SELECT s.analysis_id,s.job_id FROM effective_analysis_selections s
+        WHERE s.match_id=m.id OFFSET 0
+    ) selected
+    CROSS JOIN LATERAL (
+        SELECT a.engine FROM analysis_catalog_sources a
+        WHERE a.match_id=m.id AND a.analysis_id=selected.analysis_id OFFSET 0
+    ) catalog
     JOIN jobs j ON j.id=selected.job_id AND j.match_uuid=m.id
     JOIN match_analysis_games c ON c.job_id=j.id
     WHERE j.kind='match' AND j.status='completed'
@@ -139,6 +148,21 @@ pub(crate) async fn load_native_match(
         .await
         .map_err(anyhow::Error::from)??;
     Ok((has_analysis, decisions))
+}
+
+pub(super) async fn require_database(pool: &PgPool, id: Uuid) -> ApiResult<()> {
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM databases WHERE id=$1 AND NOT collection_only)",
+    )
+    .bind(id)
+    .fetch_one(pool)
+    .await
+    .map_err(anyhow::Error::from)?;
+    if exists {
+        Ok(())
+    } else {
+        Err(ApiError::invalid("Choose an existing database"))
+    }
 }
 
 async fn read_snapshot(pool: &PgPool) -> ApiResult<Transaction<'_, Postgres>> {

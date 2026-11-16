@@ -56,6 +56,24 @@ database filter and page controls sit outside the scrollable table. Edit and
 merge actions open dialogs and return focus to their trigger when closed.
 The merge search has its own page controls.
 
+## Positions
+
+**Saved positions** and **All analyzed decisions** switch the Positions
+workspace between the bookmarked collection and a search over every analyzed
+decision of one player. The decision search keeps its filters above a result
+table with a board preview on the right. **Practice results** opens the
+recurring-mistakes practice dialog with the errors of the current page.
+
+## Keyboard shortcuts in practice and review
+
+Buttons that have a shortcut name it in their tooltip and expose it through
+`aria-keyshortcuts`. **N**, **D**, **T** and **P** choose a cube action,
+**Enter** checks an answer and continues, **1**–**4** rate a flashcard, and
+**E** / **Shift+E** move to the next or previous error in Analysis. The
+shortcuts are declared with the `shortcut` property of `ActionButton` and
+handled once in `web/src/useButtonShortcuts.ts`. They are ignored in text
+fields, and an open dialog confines them to its own buttons.
+
 ## Match analysis
 
 **Checker** places the position analysis beside the board. Its analysis views
@@ -179,6 +197,9 @@ The match-end action in **Playing** opens **AI assessment** directly.
 The assessment can continue while you switch views. Select a decision
 reference to open its original position next to the report and continue
 with the same board controls used for learning review.
+
+The Study workspace carries a translated name outside English: Lernen,
+Estudio, Étude, Nauka and Studio.
 
 Study opens on Overview, followed by Flashcards & Anki, Reports, My recurring
 mistakes, and Practice history. Left/Right wrap between all five tabs. Home

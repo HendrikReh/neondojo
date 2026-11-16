@@ -1,0 +1,39 @@
+.decision-search {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.decision-search > h2,
+.decision-search > p {
+  margin: 0;
+}
+
+.decision-search-filters {
+  align-items: end;
+}
+
+.decision-search-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.decision-search-summary p {
+  margin: 0;
+}
+
+.decision-search-table td {
+  white-space: nowrap;
+}
+
+.decision-search-loss {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.position-scope {
+  margin: 0 0 12px;
+}

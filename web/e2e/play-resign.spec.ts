@@ -199,7 +199,7 @@ test('German resignation shows the active cube and its exact award', async ({
   await page.locator('#workspace-tab-play').click();
   await page.getByRole('button', { name: 'Aufgeben', exact: true }).click();
   const dialog = page.getByRole('dialog', {
-    name: 'Diese Partie aufgeben',
+    name: 'Dieses Spiel aufgeben',
     exact: true,
   });
   await dialog.getByRole('radio', { name: 'Gammon', exact: true }).check();
@@ -220,7 +220,7 @@ test('German resignation shows the active cube and its exact award', async ({
   ).toBeVisible();
   await dialog.getByRole('radio', { name: 'Gammon', exact: true }).check();
   await expect(
-    dialog.getByRole('button', { name: 'Partie aufgeben', exact: true }),
+    dialog.getByRole('button', { name: 'Spiel aufgeben', exact: true }),
   ).toBeVisible();
   await dialog
     .getByRole('button', { name: 'Weiterspielen', exact: true })

@@ -20,7 +20,7 @@ async function importStudy(
   metadata = 'MI[length:7][ws:0][bs:0]',
 ) {
   await page.goto('/');
-  await page.getByLabel('Partiedatei', { exact: true }).setInputFiles({
+  await page.getByLabel('Matchdatei', { exact: true }).setInputFiles({
     name: `study-${suffix}.sgf`,
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(
@@ -66,7 +66,7 @@ test('match and position notes persist, search jumps to the exact move, and conf
   ).toBeVisible();
   await page.reload();
   await page.getByRole('tab', { name: 'Matchdatenbank', exact: true }).click();
-  await page.getByLabel('Partien durchsuchen').fill(`Study ${suffix}`);
+  await page.getByLabel('Matches durchsuchen').fill(`Study ${suffix}`);
   await page
     .locator('.match-card')
     .filter({ hasText: `Study ${suffix}` })
@@ -178,7 +178,7 @@ test('an analyzed annotated position becomes a shared study card and a downloada
   ).json();
   await page.reload();
   await page.getByRole('tab', { name: 'Matchdatenbank', exact: true }).click();
-  await page.getByLabel('Partien durchsuchen').fill(`Study ${suffix}`);
+  await page.getByLabel('Matches durchsuchen').fill(`Study ${suffix}`);
   await page
     .locator('.match-card')
     .filter({ hasText: `Study ${suffix}` })
@@ -370,7 +370,7 @@ test('an annotation jump supersedes a delayed game load and switching views pres
 }) => {
   await page.goto('/');
   await page
-    .getByLabel('Partiedatei', { exact: true })
+    .getByLabel('Matchdatei', { exact: true })
     .setInputFiles('../backend/tests/fixtures/WC2014.mat');
   await expect(page.locator('.moves-list button')).toHaveCount(8);
   const id = await page
@@ -494,7 +494,7 @@ test('a whole-match deck trains checker, double and response cards with the sele
   const suffix = crypto.randomUUID();
   const metadata = await unusedLearningScores(page);
   await page.goto('/');
-  await page.getByLabel('Partiedatei', { exact: true }).setInputFiles({
+  await page.getByLabel('Matchdatei', { exact: true }).setInputFiles({
     name: `bulk-${suffix}.sgf`,
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(
@@ -503,7 +503,7 @@ test('a whole-match deck trains checker, double and response cards with the sele
   });
   await expect(page.locator('.board')).toBeVisible();
   const panel = page.getByRole('region', {
-    name: 'Vollständige Partieanalyse',
+    name: 'Vollständige Matchanalyse',
     exact: true,
   });
   const started = page.waitForResponse(

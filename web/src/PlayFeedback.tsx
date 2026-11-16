@@ -3,6 +3,9 @@ import ActionButton from './ActionButton';
 import { useEffect, useRef } from 'react';
 import { playSeverity, type PlayDecision, type PlaySession } from './play-api';
 import { usePlayModeText } from './play-mode-messages';
+import { usePlayText } from './play-messages';
+import { CubeContextLine } from './CubeDecisionDetails';
+import MoveExplanation from './MoveExplanation';
 import { useI18n } from './i18n';
 import PlayMovePreview, {
   hasPlayMovePreview,
@@ -78,6 +81,7 @@ export function DecisionDetails({
   session: PlaySession;
 }) {
   const t = usePlayModeText();
+  const playT = usePlayText();
   const review = useBoardReviewText();
   const previewIndices = decision.alternatives.flatMap((alternative, index) =>
     alternative.action === 'move' ? [index] : [],
@@ -96,9 +100,27 @@ export function DecisionDetails({
           ? 'no double'
           : (action ?? ''),
     );
+  const cubeDecision =
+    decision.alternatives.length > 0 && previewIndices.length === 0;
+  // The engine's top checker play and the play the feedback is about.
+  const bestMove = decision.alternatives.find(
+    (alternative) => alternative.action === 'move' && alternative.loss === 0,
+  );
+  const chosenMove =
+    decision.action === 'move' ? (decision.notation ?? undefined) : undefined;
+  const playerName = (player: number) =>
+    player === session.human_player
+      ? session.human_name || playT('you')
+      : playT('bot');
   return (
     <>
       <DecisionEvaluation decision={decision} />
+      {cubeDecision && (
+        <CubeContextLine
+          matchId={session.position.gnubg_match_id}
+          players={[playerName(0), playerName(1)]}
+        />
+      )}
       {decision.original_action && (
         <p>
           {t('first')}:{' '}
@@ -218,6 +240,21 @@ export function DecisionDetails({
             </tbody>
           </table>
         </div>
+      )}
+      {bestMove && chosenMove && bestMove.notation !== chosenMove && (
+        <MoveExplanation
+          position={session.position}
+          best={bestMove.notation}
+          played={chosenMove}
+          bestChances={bestMove.probabilities}
+          playedChances={
+            decision.alternatives.find(
+              (alternative) =>
+                alternative.action === 'move' &&
+                alternative.notation === chosenMove,
+            )?.probabilities
+          }
+        />
       )}
     </>
   );

@@ -2,6 +2,7 @@ import { useId } from 'react';
 import type { Match } from './api';
 import { useSourceText } from './analysis-source-messages';
 import { useBoardReviewText } from './board-review-messages';
+import CubeDecisionDetails, { CubeContextLine } from './CubeDecisionDetails';
 import EngineLabel from './EngineLabel';
 import { useI18n } from './i18n';
 import type { ReviewDecision } from './review-decisions-api';
@@ -46,6 +47,8 @@ export default function CubeReviewEvaluation({
       typeof option[1] === 'number' && Number.isFinite(option[1]),
   );
   const equityLabel = mwc ? 'MWC' : t('common.equity');
+  const names = [players.white, players.black] as const;
+  const matchId = decision.review_position?.gnubg_match_id;
 
   return (
     <section className="cube-review-evaluation" aria-labelledby={heading}>
@@ -58,7 +61,23 @@ export default function CubeReviewEvaluation({
         {' · '}
         {decision.depth ?? source('unknownDepth')}
       </p>
-      {values.length > 0 && (
+      {matchId && (
+        <CubeContextLine
+          matchId={matchId}
+          players={names}
+          offeredBy={response ? 1 - decision.player : undefined}
+        />
+      )}
+      {available && evaluation && (
+        <CubeDecisionDetails
+          matchId={matchId}
+          player={decision.player}
+          response={response}
+          evaluation={evaluation}
+          players={names}
+        />
+      )}
+      {!evaluation && values.length > 0 && (
         <table
           className="candidates"
           aria-labelledby={heading}

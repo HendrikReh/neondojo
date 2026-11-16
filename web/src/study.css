@@ -294,3 +294,13 @@
   border-radius: 0 0 10px 10px;
   margin-bottom: 0;
 }
+.study-overview-limit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.study-overview-limit input {
+  width: 72px;
+}

@@ -11,6 +11,7 @@ import {
 import type { AnalysisCatalog } from './useAnalysisCatalog';
 import { useAnalysisCatalogText } from './analysis-catalog-messages';
 import { useAnalysisEntryLabel } from './AnalysisCatalogSelect';
+import { prDigits } from './pr-format';
 
 export function comparisonEntries(
   entries: AnalysisCatalogEntry[],
@@ -120,7 +121,9 @@ export function MatchAnalysisComparisonResults({
                   entry?.source === 'native' && summary
                     ? nativePerformanceRating(summary, player)
                     : undefined;
-                return rating === undefined ? undefined : decimal(rating);
+                return rating === undefined
+                  ? undefined
+                  : formatNumber(rating, prDigits);
               }),
             ],
           ] as const;

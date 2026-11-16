@@ -1,4 +1,7 @@
 import type { components } from './generated-api';
+import CubeDecisionDetails from './CubeDecisionDetails';
+import MoveExplanation from './MoveExplanation';
+import type { ExplainedPosition } from './move-explanation';
 import EngineLabel from './EngineLabel';
 import { useI18n } from './i18n';
 import { useLearningText } from './learning-messages';
@@ -13,9 +16,20 @@ const verdictKeys = {
 export default function PracticeResult({
   evaluation: result,
   storedSource,
+  cube,
+  checker,
 }: {
+  /** Position of a checker question; explains a play that was not best. */
+  checker?: ExplainedPosition;
   evaluation: components['schemas']['PracticeEvaluation'];
   storedSource?: string;
+  /** Decision context of a cube question; adds all outcomes and the take point. */
+  cube?: {
+    matchId: string;
+    player: number;
+    response: boolean;
+    players: readonly [string, string];
+  };
 }) {
   const t = useLearningText();
   const { formatDecision, formatEquity, formatNumber } = useI18n();
@@ -52,6 +66,22 @@ export default function PracticeResult({
           maximumFractionDigits: 6,
         })}
       </p>
+      {cube && (
+        <CubeDecisionDetails
+          matchId={cube.matchId}
+          player={cube.player}
+          response={cube.response}
+          evaluation={result.cube_evaluation}
+          players={cube.players}
+        />
+      )}
+      {checker && result.verdict !== 'best' && result.verdict !== 'forced' && (
+        <MoveExplanation
+          position={checker}
+          best={result.best}
+          played={result.chosen}
+        />
+      )}
       {provenance.kind !== 'forced' && (
         <p>
           {t(

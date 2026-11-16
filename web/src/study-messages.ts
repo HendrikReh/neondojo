@@ -43,7 +43,7 @@ const de: Record<Key, string> = {
   totalScore: 'Gesamtpunktestand',
   ended: 'Beendet',
   ongoing: 'Laufend',
-  gameReports: 'Partieauswertungen',
+  gameReports: 'Spielauswertungen',
   decisionPreview: 'Entscheidungsvorschau',
   bestMove: 'Bester Zug',
   previewDecision: 'Entscheidung ansehen',
@@ -52,13 +52,13 @@ const de: Record<Key, string> = {
     'Die gespeicherte Stellung dieser Entscheidung ist nicht verfügbar.',
   decisions: 'Entscheidungen und Versuche',
   mistakes: 'Meine wiederkehrenden Fehler',
-  navigation: 'Study-Bereiche',
+  navigation: 'Lernbereiche',
   reports: 'Auswertungen',
   cards: 'Lernkarten & Anki',
   archive: 'Gespeicherte Auswertungen',
   description:
     'Lernauswertungen werden beim Erstellen am Partieende automatisch gespeichert. Auch deine bisherigen Berichte findest du hier.',
-  saved: 'Automatisch unter Study → Auswertungen gespeichert.',
+  saved: 'Automatisch unter Lernen → Auswertungen gespeichert.',
   empty: 'Noch keine gespeicherten Auswertungen.',
   emptyHelp:
     'Beende eine Partie und erstelle ihre Lernauswertung, um hier einen Bericht abzulegen.',
@@ -69,7 +69,7 @@ const de: Record<Key, string> = {
   refresh: 'Auswertungen aktualisieren',
   open: 'Bericht öffnen',
   date: 'Datum',
-  match: 'Partie',
+  match: 'Match',
   score: 'Spielstand',
   mode: 'Spielmodus',
   assistance: 'Lernhilfen',
@@ -96,7 +96,7 @@ const es: Record<Key, string> = {
   archive: 'Informes guardados',
   description:
     'Las evaluaciones se guardan automáticamente al crearlas al final de la partida. Tus informes anteriores también están disponibles aquí.',
-  saved: 'Guardado automáticamente en Study → Informes.',
+  saved: 'Guardado automáticamente en Estudio → Informes.',
   empty: 'Aún no hay informes guardados.',
   emptyHelp:
     'Termina una partida y crea su evaluación para añadir un informe aquí.',
@@ -134,7 +134,7 @@ const fr: Record<Key, string> = {
   archive: 'Rapports enregistrés',
   description:
     'Les bilans sont enregistrés automatiquement lors de leur création en fin de match. Vos rapports précédents sont également disponibles ici.',
-  saved: 'Enregistré automatiquement dans Study → Rapports.',
+  saved: 'Enregistré automatiquement dans Étude → Rapports.',
   empty: 'Aucun rapport enregistré.',
   emptyHelp:
     'Terminez un match et créez son bilan pour ajouter un rapport ici.',
@@ -171,7 +171,7 @@ const pl: Record<Key, string> = {
   archive: 'Zapisane raporty',
   description:
     'Oceny są zapisywane automatycznie po ich utworzeniu na końcu meczu. Poprzednie raporty są również dostępne tutaj.',
-  saved: 'Zapisano automatycznie w Study → Raporty.',
+  saved: 'Zapisano automatycznie w Nauka → Raporty.',
   empty: 'Brak zapisanych raportów.',
   emptyHelp: 'Zakończ mecz i utwórz jego ocenę, aby dodać raport.',
   loading: 'Wczytywanie raportów…',
@@ -208,7 +208,7 @@ const it: Record<Key, string> = {
   archive: 'Resoconti salvati',
   description:
     'Le valutazioni vengono salvate automaticamente quando le crei alla fine della partita. Qui trovi anche i resoconti precedenti.',
-  saved: 'Salvato automaticamente in Study → Resoconti.',
+  saved: 'Salvato automaticamente in Studio → Resoconti.',
   empty: 'Nessun resoconto salvato.',
   emptyHelp:
     'Concludi una partita e crea la sua valutazione per aggiungere un resoconto.',
@@ -312,6 +312,38 @@ const overview = {
     'Dodaj przeanalizowane pozycje do talii, aby rozpocząć naukę.',
     'Aggiungi posizioni analizzate a un mazzo per iniziare.',
   ],
+  todayBreakdown: [
+    'Today: {due} due · {fresh} new',
+    'Heute: {due} fällig · {fresh} neu',
+    'Hoy: {due} pendientes · {fresh} nuevas',
+    'Aujourd’hui : {due} à réviser · {fresh} nouvelles',
+    'Dziś: {due} do powtórki · {fresh} nowych',
+    'Oggi: {due} da ripassare · {fresh} nuove',
+  ],
+  newWaiting: [
+    '{count} more new cards are waiting for later days.',
+    '{count} weitere neue Karten warten auf die nächsten Tage.',
+    '{count} tarjetas nuevas más esperan a los próximos días.',
+    '{count} autres nouvelles cartes attendent les prochains jours.',
+    '{count} kolejnych nowych fiszek czeka na następne dni.',
+    'Altre {count} schede nuove aspettano i prossimi giorni.',
+  ],
+  newPerDay: [
+    'New cards per day',
+    'Neue Karten pro Tag',
+    'Tarjetas nuevas por día',
+    'Nouvelles cartes par jour',
+    'Nowe fiszki dziennie',
+    'Schede nuove al giorno',
+  ],
+  newPerDayHint: [
+    'Due reviews are always offered. 0 pauses new cards.',
+    'Fällige Wiederholungen kommen immer. 0 pausiert neue Karten.',
+    'Los repasos pendientes siempre se ofrecen. 0 pausa las tarjetas nuevas.',
+    'Les révisions dues sont toujours proposées. 0 met les nouvelles cartes en pause.',
+    'Zaległe powtórki są zawsze dostępne. 0 wstrzymuje nowe fiszki.',
+    'I ripassi dovuti vengono sempre proposti. 0 mette in pausa le schede nuove.',
+  ],
   noDue: [
     'No cards are due now.',
     'Aktuell sind keine Karten fällig.',
@@ -330,7 +362,7 @@ const overview = {
   ],
   groupMatches: [
     'Matches with this mistake: {count}',
-    'Partien mit diesem Fehler: {count}',
+    'Matches mit diesem Fehler: {count}',
     'Partidas con este error: {count}',
     'Parties avec cette erreur : {count}',
     'Mecze z tym błędem: {count}',
@@ -346,7 +378,7 @@ const overview = {
   ],
   coverage: [
     'Analysis coverage: {decisions} decisions in {matches} matches',
-    'Analyseabdeckung: {decisions} Entscheidungen in {matches} Partien',
+    'Analyseabdeckung: {decisions} Entscheidungen in {matches} Matches',
     'Cobertura: {decisions} decisiones en {matches} partidas',
     'Couverture : {decisions} décisions dans {matches} parties',
     'Zakres analizy: {decisions} decyzji w {matches} meczach',
@@ -354,7 +386,7 @@ const overview = {
   ],
   noRecurring: [
     'No mistake group spans at least two matches.',
-    'Keine Fehlergruppe kommt in mindestens zwei Partien vor.',
+    'Keine Fehlergruppe kommt in mindestens zwei Matches vor.',
     'Ningún grupo de errores aparece en al menos dos partidas.',
     'Aucun groupe d’erreurs n’apparaît dans au moins deux parties.',
     'Żadna grupa błędów nie występuje w co najmniej dwóch meczach.',

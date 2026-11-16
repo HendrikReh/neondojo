@@ -88,7 +88,7 @@ export default function Board({
   /** A response exercise may carry an older Match ID without the offer bit. */
   cubeOfferPending?: boolean;
 }) {
-  const { t, formatNumber } = useI18n();
+  const { t, formatNumber, formatPoints } = useI18n();
   const review = useBoardReviewText();
   const [failedTheme, setFailedTheme] = useState('');
   useEffect(() => setFailedTheme(''), [theme]);
@@ -161,8 +161,7 @@ export default function Board({
           ) : (
             <i className="player-dot black" />
           )}
-          {black}{' '}
-          <small>· {t('board.points', { count: context.scores[1] })}</small>
+          {black} <small>· {formatPoints(context.scores[1])}</small>
         </span>
         {showPipCounts && (
           <span>
@@ -311,7 +310,7 @@ export default function Board({
           )}
           {white}{' '}
           <small>
-            · {t('board.points', { count: context.scores[0] })}
+            · {formatPoints(context.scores[0])}
             {context.crawford ? ' · Crawford' : ''}
           </small>
         </span>

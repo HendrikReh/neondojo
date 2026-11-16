@@ -4,6 +4,7 @@ import { useI18n } from './i18n';
 import { usePlayText } from './play-messages';
 import { useStudyText } from './study-messages';
 import { isPlayMode, usePlayModeText } from './play-mode-messages';
+import { prDigits } from './pr-format';
 
 export default function StudyReportTable({
   reports,
@@ -20,8 +21,6 @@ export default function StudyReportTable({
     gameText = usePlayText(),
     modeT = usePlayModeText();
   const { locale, formatNumber, t: appT } = useI18n();
-  const number = (value: number) =>
-    formatNumber(value, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
   return (
     <div className="study-report-table-scroll">
       <table className="study-report-table">
@@ -86,7 +85,7 @@ export default function StudyReportTable({
               <td>
                 {report.first_attempt_rating == null
                   ? '—'
-                  : number(report.first_attempt_rating)}
+                  : formatNumber(report.first_attempt_rating, prDigits)}
               </td>
               <td>
                 <ActionButton

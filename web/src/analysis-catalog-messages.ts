@@ -35,7 +35,7 @@ const rows = {
   ],
   match: [
     'Entire match',
-    'Ganze Partie',
+    'Ganzes Match',
     'Partida completa',
     'Match entier',
     'Cały mecz',

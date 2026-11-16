@@ -54,12 +54,31 @@ struct PlayerRating {
     match_count: i64,
 }
 
+/// One fully analyzed match of the player, for a rating trend.
+#[derive(Serialize, ToSchema)]
+struct PlayerRatingPoint {
+    match_id: Uuid,
+    /// Date played, or the import date when the match records none.
+    date: chrono::NaiveDate,
+    profile: String,
+    value: f64,
+    /// Unforced checker plays and close cube decisions behind the value.
+    decisions: i64,
+    /// The same rating for checker play alone: saved checker losses over
+    /// unforced checker plays. Absent without such plays.
+    checker_value: Option<f64>,
+    /// The remaining loss over close cube decisions. Absent without them.
+    cube_value: Option<f64>,
+}
+
 #[derive(Serialize, ToSchema)]
 struct PlayerDetails {
     #[serde(flatten)]
     profile: PlayerProfile,
     aliases: Vec<PlayerAlias>,
     ratings: Vec<PlayerRating>,
+    /// Per-match ratings, oldest first.
+    rating_history: Vec<PlayerRatingPoint>,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -222,24 +241,29 @@ async fn details(pool: &PgPool, id: Uuid) -> ApiResult<PlayerDetails> {
     .fetch_all(pool)
     .await
     .map_err(anyhow::Error::from)?;
-    let ratings = ratings(pool, id).await.map_err(anyhow::Error::from)?;
+    let (ratings, rating_history) = ratings(pool, id).await.map_err(anyhow::Error::from)?;
     Ok(PlayerDetails {
         profile,
         aliases,
         ratings,
+        rating_history,
     })
 }
 
-async fn ratings(pool: &PgPool, id: Uuid) -> Result<Vec<PlayerRating>, sqlx::Error> {
-    let mut rows = sqlx::query_as::<_, (Uuid, i16, serde_json::Value)>(
+async fn ratings(
+    pool: &PgPool,
+    id: Uuid,
+) -> Result<(Vec<PlayerRating>, Vec<PlayerRatingPoint>), sqlx::Error> {
+    let mut rows = sqlx::query_as::<_, (Uuid, i16, serde_json::Value, chrono::NaiveDate, f64)>(
         "WITH participants AS (
            SELECT mp.match_id,mp.side FROM player_aliases a JOIN match_players mp ON mp.alias_id=a.id
            WHERE a.profile_id=$1
          ), candidates AS (
-           SELECT j.match_uuid,j.result FROM (SELECT DISTINCT match_id FROM participants) p
+           SELECT j.match_uuid,j.result,coalesce(m.played_on,m.created_at::date) AS played,j.id AS job_id
+           FROM (SELECT DISTINCT match_id FROM participants) p
            JOIN matches m ON m.id=p.match_id
            CROSS JOIN LATERAL (
-             SELECT DISTINCT ON (result #>> '{performance_rating,profile}') j.match_uuid,j.result
+             SELECT DISTINCT ON (result #>> '{performance_rating,profile}') j.match_uuid,j.result,j.id
              FROM jobs j WHERE j.match_uuid=m.id AND j.source_revision=m.source_revision
                AND j.kind='match' AND j.game_no IS NULL AND j.status='completed'
                AND j.total_games>0 AND j.completed_games=j.total_games
@@ -247,16 +271,36 @@ async fn ratings(pool: &PgPool, id: Uuid) -> Result<Vec<PlayerRating>, sqlx::Err
              ORDER BY result #>> '{performance_rating,profile}', j.created_at DESC,j.id DESC
            ) j
          )
-         SELECT c.match_uuid,p.side,c.result FROM candidates c
+         SELECT c.match_uuid,p.side,c.result,c.played,
+                (SELECT coalesce(sum(a.equity_loss),0)::float8 FROM move_analyses a
+                 WHERE a.job_id=c.job_id AND a.kind='checker' AND a.player=p.side) AS checker_loss
+         FROM candidates c
          JOIN participants p ON p.match_id=c.match_uuid ORDER BY c.match_uuid",
     )
     .bind(id)
     .fetch(pool);
     let mut totals = BTreeMap::<String, (f64, i64, i64, Option<Uuid>)>::new();
-    while let Some((match_id, side, result)) = rows.try_next().await? {
+    let mut history = Vec::new();
+    while let Some((match_id, side, result, date, checker_loss)) = rows.try_next().await? {
         if let Some(rating) = match_performance_rating(&result) {
             let player = &rating.players[side as usize];
-            if player.value.is_some() {
+            if let Some(value) = player.value {
+                history.push(PlayerRatingPoint {
+                    match_id,
+                    date,
+                    profile: rating.profile.clone(),
+                    value,
+                    decisions: i64::from(player.unforced_checker_moves)
+                        + i64::from(player.close_cube_decisions),
+                    checker_value: performance_rating_value(
+                        checker_loss.min(player.normalized_equity_loss),
+                        i64::from(player.unforced_checker_moves),
+                    ),
+                    cube_value: performance_rating_value(
+                        (player.normalized_equity_loss - checker_loss).max(0.0),
+                        i64::from(player.close_cube_decisions),
+                    ),
+                });
                 let (loss, decisions, count, last_match) =
                     totals.entry(rating.profile).or_default();
                 *loss += player.normalized_equity_loss;
@@ -269,7 +313,8 @@ async fn ratings(pool: &PgPool, id: Uuid) -> Result<Vec<PlayerRating>, sqlx::Err
             }
         }
     }
-    Ok(totals
+    history.sort_by(|a, b| a.date.cmp(&b.date).then(a.match_id.cmp(&b.match_id)));
+    let ratings = totals
         .into_iter()
         .filter_map(|(profile, (loss, decisions, match_count, _))| {
             performance_rating_value(loss, decisions).map(|value| PlayerRating {
@@ -278,7 +323,8 @@ async fn ratings(pool: &PgPool, id: Uuid) -> Result<Vec<PlayerRating>, sqlx::Err
                 match_count,
             })
         })
-        .collect())
+        .collect();
+    Ok((ratings, history))
 }
 
 #[utoipa::path(put,path="/api/players/{id}",params(("id"=Uuid,Path)),request_body=PlayerNameWrite,responses((status=200,body=PlayerDetails),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Players")]
@@ -405,6 +451,7 @@ async fn add_alias(
         PlayerDetails,
         PlayerAlias,
         PlayerRating,
+        PlayerRatingPoint,
         PlayerNameWrite,
         PlayerAliasWrite,
         PlayerMerge,

@@ -209,8 +209,8 @@ test('header PR refreshes after full match completion and stays unknown for a si
   expect(Number.isFinite(full.black_pr)).toBe(true);
   const pr = (value: number) =>
     new Intl.NumberFormat('en', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
     }).format(value);
   await expect(field(page, 'pr-white')).toContainText(pr(full.white_pr));
   await expect(field(page, 'pr-black')).toContainText(pr(full.black_pr));

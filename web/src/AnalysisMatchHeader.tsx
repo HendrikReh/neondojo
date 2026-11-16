@@ -12,6 +12,7 @@ import type { Theme } from './themes';
 import AnalysisStudyReportAction from './AnalysisStudyReportAction';
 import type { AnalysisCatalogEntry } from './analysis-catalog-api';
 import { nativePerformanceRating } from './match-statistics-api';
+import { prDigits } from './pr-format';
 
 interface HeaderState {
   identity: string;
@@ -156,10 +157,7 @@ export function AnalysisMatchHeaderView({
   const pr = (value: number | null) =>
     value == null || !Number.isFinite(value)
       ? 'n/a'
-      : formatNumber(value, {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        });
+      : formatNumber(value, prDigits);
   const result = details
     ? details.white_score != null && details.black_score != null
       ? `${formatNumber(details.white_score)}–${formatNumber(details.black_score)}`

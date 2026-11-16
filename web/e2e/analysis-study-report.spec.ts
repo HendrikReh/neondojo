@@ -69,7 +69,7 @@ for (const width of [1440, 390])
       exact: true,
     });
     await expect(dialog).toBeVisible();
-    await expect(dialog.locator('.play-first-pr')).toContainText('4.500');
+    await expect(dialog.locator('.play-first-pr')).toContainText('4.5');
     expect(f.reads()).toBe(1);
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
@@ -145,7 +145,7 @@ test('report loading errors and a mismatched report can be retried without write
   await expect(dialog.getByRole('alert')).toBeVisible();
   await expect(dialog.locator('.play-learning-review')).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Try again', exact: true }).click();
-  await expect(dialog.locator('.play-first-pr')).toContainText('4.500');
+  await expect(dialog.locator('.play-first-pr')).toContainText('4.5');
   expect(attempts).toBe(3);
   expect(writes).toEqual([]);
 });

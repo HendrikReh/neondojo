@@ -13,6 +13,13 @@ export type StudyDeck = Schema['StudyDeck'];
 export type LearningSummary = Schema['LearningSummary'];
 export const loadLearningSummary = (signal: AbortSignal) =>
   request<LearningSummary>('/study/learning-summary', { signal });
+export type LearningPreferences = Schema['LearningPreferences'];
+export const saveLearningPreferences = (preferences: LearningPreferences) =>
+  request<LearningPreferences>('/study/learning-preferences', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(preferences),
+  });
 export type RevealedCard = Required<Schema['RevealedCard']>;
 export type PracticeAnswer = Schema['PracticeAnswer'];
 export type AttemptedCard = Schema['AttemptedCard'];
@@ -91,7 +98,11 @@ export type AnkiAutoSyncSettings = Schema['AutoSyncSettings'];
 export type LinkedAnkiDeck = Schema['LinkedAnkiDeck'];
 export type AnkiSyncAction = Schema['SyncActionRequest']['action'];
 
-export function actOnAnkiSync(deckId: string, action: AnkiSyncAction, retryOf?: string) {
+export function actOnAnkiSync(
+  deckId: string,
+  action: AnkiSyncAction,
+  retryOf?: string,
+) {
   const body: Schema['SyncActionRequest'] = { action, retry_of: retryOf };
   return sendAnkiSyncAction<void>(deckId, body);
 }
@@ -104,7 +115,10 @@ export function retryAnkiOpenErrors(deckId: string) {
   });
 }
 
-function sendAnkiSyncAction<T>(deckId: string, body: Schema['SyncActionRequest']) {
+function sendAnkiSyncAction<T>(
+  deckId: string,
+  body: Schema['SyncActionRequest'],
+) {
   return request<T>(`/decks/${deckId}/anki-auto-sync/action`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -118,11 +132,16 @@ export function loadAnkiSyncOverview(signal: AbortSignal) {
 
 export type AnkiSyncHistoryEntry = Schema['AnkiSyncHistoryEntry'];
 export function loadAnkiSyncHistory(deckId: string, signal: AbortSignal) {
-  return request<AnkiSyncHistoryEntry[]>(`/decks/${deckId}/anki-auto-sync/history`, { signal });
+  return request<AnkiSyncHistoryEntry[]>(
+    `/decks/${deckId}/anki-auto-sync/history`,
+    { signal },
+  );
 }
 
 export function loadAnkiAutoSync(deckId: string, signal: AbortSignal) {
-  return request<AnkiAutoSyncSettings>(`/decks/${deckId}/anki-auto-sync`, { signal });
+  return request<AnkiAutoSyncSettings>(`/decks/${deckId}/anki-auto-sync`, {
+    signal,
+  });
 }
 
 export function setAnkiAutoSync(deckId: string, body: Schema['SetAutoSync']) {

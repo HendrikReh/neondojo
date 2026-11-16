@@ -3,6 +3,7 @@ import { playModeText } from './play-mode-messages';
 import type { Locale } from './i18n-core';
 import { libraryText, type LibraryMessageKey } from './library-messages';
 import { workspaceText } from './workspace-messages';
+import { prDigits } from './pr-format';
 
 export function libraryAnalysisStatus(status: string | null, locale: Locale) {
   const key: LibraryMessageKey =
@@ -51,16 +52,13 @@ function excerpt(value: string, limit = 160) {
 export function createMatchSummaryFormatter(locale: Locale) {
   const l = (key: LibraryMessageKey) => libraryText(locale, key);
   const numbers = new Intl.NumberFormat(locale);
-  const equities = new Intl.NumberFormat(locale, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
   const dates = new Intl.DateTimeFormat(locale, { dateStyle: 'medium' });
   const number = (value: number) => numbers.format(value);
   const date = (value: string) =>
     dates.format(new Date(value.length === 10 ? `${value}T12:00:00` : value));
+  const ratings = new Intl.NumberFormat(locale, prDigits);
   const pr = (value: number | null) =>
-    value == null ? '—' : equities.format(value);
+    value == null ? '—' : ratings.format(value);
   return (match: LibraryMatch) => {
     const name =
       match.display_name !== match.filename ? excerpt(match.display_name) : '';

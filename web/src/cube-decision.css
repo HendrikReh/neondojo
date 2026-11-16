@@ -1,0 +1,46 @@
+.cube-context-line {
+  margin: 0;
+  color: var(--ui-muted);
+  font-size: var(--font-size-body);
+}
+
+.cube-decision-details {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cube-decision-details p {
+  margin: 0;
+}
+
+.cube-decision-details caption {
+  padding-bottom: 4px;
+  color: var(--ui-muted);
+  font-size: var(--font-size-table);
+  text-align: left;
+}
+
+.cube-decision-details .candidates td {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.cube-decision-details tr[data-proper] th,
+.cube-decision-details tr[data-proper] td {
+  font-weight: 600;
+}
+
+.cube-proper {
+  color: var(--ui-accent);
+}
+
+.cube-too-good {
+  color: var(--ui-accent);
+  font-weight: 600;
+}
+
+.cube-take-point {
+  color: var(--ui-muted);
+  font-size: var(--font-size-table);
+}

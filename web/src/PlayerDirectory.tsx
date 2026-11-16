@@ -15,6 +15,8 @@ import {
   usePlayerDetails,
 } from './PlayerProfileDialogs';
 import './player-directory.css';
+import { prDigits } from './pr-format';
+import PlayerRatingTrend from './PlayerRatingTrend';
 
 function PlayerMatches({
   id,
@@ -237,15 +239,18 @@ function PlayerCard({
           <ul>
             {details.ratings.map((rating) => (
               <li key={rating.profile}>
-                <strong>
-                  {formatNumber(rating.value, { maximumFractionDigits: 2 })}
-                </strong>
+                <strong>{formatNumber(rating.value, prDigits)}</strong>
                 {' · '}
                 {t('coverage', {
                   rated: formatNumber(rating.match_count),
                   total: formatNumber(details.match_count),
                 })}
                 <span className="player-rating-profile">{rating.profile}</span>
+                <PlayerRatingTrend
+                  points={(details.rating_history ?? []).filter(
+                    (point) => point.profile === rating.profile,
+                  )}
+                />
               </li>
             ))}
           </ul>

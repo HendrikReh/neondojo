@@ -107,6 +107,8 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::move_assessments::routes())
         .merge(crate::review_decisions::routes())
         .merge(crate::game_plan::routes())
+        .merge(crate::cube_context::routes())
+        .merge(crate::move_explanation::routes())
         .route("/api/health", get(health))
         .route("/api/version", get(version))
         .route("/api/imports", post(upload))
@@ -1002,6 +1004,7 @@ impl OpenApi for ApiDoc {
         doc.merge(crate::move_catalog::MoveCatalogDoc::openapi());
         doc.merge(crate::annotations::AnnotationDoc::openapi());
         doc.merge(crate::learning::LearningDoc::openapi());
+        doc.merge(crate::learning::daily_doc());
         doc.merge(crate::analysis_statistics::StatisticsDoc::openapi());
         doc.merge(crate::analysis_statistics::catalog::CatalogStatisticsDoc::openapi());
         doc.merge(crate::position_browser::PositionBrowserDoc::openapi());
@@ -1011,6 +1014,8 @@ impl OpenApi for ApiDoc {
         doc.merge(crate::move_assessments::MoveAssessmentsDoc::openapi());
         doc.merge(crate::review_decisions::ReviewDoc::openapi());
         doc.merge(crate::game_plan::GamePlanDoc::openapi());
+        doc.merge(crate::cube_context::CubeContextDoc::openapi());
+        doc.merge(crate::move_explanation::MoveExplanationDoc::openapi());
         doc
     }
 }

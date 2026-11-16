@@ -20,7 +20,8 @@ import StudyCardExercise from './StudyCardExercise';
 import LearningCardBrowser from './LearningCardBrowser';
 import CardSuggestionsPanel from './CardSuggestionsPanel';
 import CardSearchControls from './CardSearchControls';
-import { SearchFilterSelect } from './SearchFilterForm';
+import { SearchFilterInput, SearchFilterSelect } from './SearchFilterForm';
+import { groupDecks } from './deck-groups';
 import { useSearchPages } from './useSearchPages';
 import {
   ALL_CARDS,
@@ -470,6 +471,7 @@ export default function LearningWorkspace({
     ready,
     settled,
   } = useDecks(revision);
+  const [deckFilter, setDeckFilter] = useState('');
   const [deckId, setDeckId] = useWorkspaceSession(
     'study.deck',
     legacy?.learning.deck_id,
@@ -941,20 +943,39 @@ export default function LearningWorkspace({
         )}
       </section>
     );
+  const deckOption = (deck: (typeof decks)[number], label: string) => (
+    <option value={deck.id} key={deck.id}>
+      {label} · {t('cards', { count: deck.card_count })}
+    </option>
+  );
   const deckSelector = (
-    <SearchFilterSelect
-      label={t('chooseDeck')}
-      value={deckId}
-      onChange={chooseDeck}
-    >
-      <option value={ALL_CARDS}>{searchT('allCards')}</option>
-      <option value={CARDS_WITHOUT_DECK}>{searchT('withoutDeck')}</option>
-      {decks.map((deck) => (
-        <option value={deck.id} key={deck.id}>
-          {deck.name} · {t('cards', { count: deck.card_count })}
-        </option>
-      ))}
-    </SearchFilterSelect>
+    <>
+      {decks.length > 12 && (
+        <SearchFilterInput
+          label={t('filterDecks')}
+          type="search"
+          value={deckFilter}
+          onChange={setDeckFilter}
+        />
+      )}
+      <SearchFilterSelect
+        label={t('chooseDeck')}
+        value={deckId}
+        onChange={chooseDeck}
+      >
+        <option value={ALL_CARDS}>{searchT('allCards')}</option>
+        <option value={CARDS_WITHOUT_DECK}>{searchT('withoutDeck')}</option>
+        {groupDecks(decks, deckFilter, deckId).map((group) =>
+          group.path ? (
+            <optgroup key={group.path} label={group.path}>
+              {group.decks.map(({ deck, label }) => deckOption(deck, label))}
+            </optgroup>
+          ) : (
+            group.decks.map(({ deck, label }) => deckOption(deck, label))
+          ),
+        )}
+      </SearchFilterSelect>
+    </>
   );
   const deckPanel = sourceDeck && !studying && (
     <div className="learning-deck-panel position-deck-panel">
@@ -1259,9 +1280,29 @@ export default function LearningWorkspace({
             <p className="learning-counts">
               {t('due', { count: activeNext.counts.due })} ·{' '}
               {t('newCards', { count: activeNext.counts.new })}
+              {activeNext.counts.new_available != null &&
+                activeNext.counts.new > activeNext.counts.new_available && (
+                  <>
+                    {' '}
+                    (
+                    {t('newToday', {
+                      count: activeNext.counts.new_available,
+                    })}
+                    )
+                  </>
+                )}
             </p>
           )}
-          {activeNext && !card && <p role="status">{t('noDue')}</p>}
+          {activeNext && !card && (
+            <p role="status">
+              {t(
+                activeNext.counts.new > 0 &&
+                  activeNext.counts.new_available === 0
+                  ? 'dailyLimitReached'
+                  : 'noDue',
+              )}
+            </p>
+          )}
           {card && (
             <StudyCardExercise
               key={`${deckId}:${queueRevision}:${card.id}:${card.version}`}

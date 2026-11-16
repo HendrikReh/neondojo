@@ -1,0 +1,37 @@
+.move-explanation {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  font-size: var(--font-size-body);
+}
+
+.move-explanation h4,
+.move-explanation p,
+.move-explanation ul {
+  margin: 0;
+}
+
+.move-explanation h4 {
+  font-size: var(--font-size-panel);
+}
+
+.move-explanation ul,
+.evaluation-glossary ul {
+  padding-left: 18px;
+}
+
+.evaluation-glossary {
+  color: var(--ui-muted);
+  font-size: var(--font-size-table);
+}
+
+.evaluation-glossary summary {
+  cursor: pointer;
+}
+
+.evaluation-glossary li + li {
+  margin-top: 4px;
+}

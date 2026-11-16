@@ -286,7 +286,7 @@ for (const [layout, viewport] of [
     );
     await page.goto('/');
     await page
-      .getByLabel('Partiedatei', { exact: true })
+      .getByLabel('Matchdatei', { exact: true })
       .setInputFiles('../backend/tests/fixtures/WC2014.xg');
     await page.getByLabel('Spiel auswählen', { exact: true }).selectOption('6');
     await expect(page.locator('.board-heading')).toContainText('Spiel 6');

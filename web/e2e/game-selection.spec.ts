@@ -49,7 +49,7 @@ async function openReference(page: import('@playwright/test').Page) {
       new URL(r.url()).pathname === '/api/imports',
   );
   await page
-    .getByLabel('Partiedatei')
+    .getByLabel('Matchdatei')
     .setInputFiles('../backend/tests/fixtures/WC2014.mat');
   const match = (await (await imported).json()).match;
   await expect(
@@ -98,7 +98,7 @@ test('one game owns its move list, board boundaries and native analysis; full ma
   const analysis = page.locator('.match-analysis');
   await openMatchAnalysisOptions(page);
   await expect(page.getByLabel('Angezeigte Analyse', { exact: true })).toBeVisible();
-  const depth = page.getByLabel('Partie-Analysetiefe', { exact: true });
+  const depth = page.getByLabel('Match-Analysetiefe', { exact: true });
   await depth.selectOption('0');
   const scoped = page.waitForResponse(
     (r) =>
@@ -153,7 +153,7 @@ test('one game owns its move list, board boundaries and native analysis; full ma
       new URL(r.url()).pathname === `/api/matches/${match.id}/analysis`,
   );
   const dialog = await openFullMatchAnalysis(page);
-  await dialog.getByLabel('Partie-Analysetiefe', { exact: true }).selectOption('0');
+  await dialog.getByLabel('Match-Analysetiefe', { exact: true }).selectOption('0');
   await submitFullMatchAnalysis(page, dialog);
   const fullResponse = await full;
   expect(fullResponse.request().postDataJSON()).toEqual({
@@ -167,7 +167,7 @@ test('one game owns its move list, board boundaries and native analysis; full ma
   await expect(
     page
       .locator('.workspace-analysis-command')
-      .getByText('Partieanalyse abgeschlossen', { exact: true }),
+      .getByText('Matchanalyse abgeschlossen', { exact: true }),
   ).toBeVisible({ timeout: 30_000 });
 });
 
@@ -253,7 +253,7 @@ test('a long individual game transparently loads all pages within that game', as
     if (new URL(request.url()).pathname === '/api/positions')
       calls.push(request.url());
   });
-  await page.getByLabel('Partiedatei').setInputFiles({
+  await page.getByLabel('Matchdatei').setInputFiles({
     name: 'long-game.sgf',
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(source),
@@ -274,7 +274,7 @@ test('changing Cube filters resets the decision count', async ({ page }) => {
   const match = await openReference(page);
   await completedFullJob(page, match.id);
   await page.getByRole('tab', { name: 'Cube', exact: true }).click();
-  await expect(page.locator('.workspace-analysis-command').getByText('Partieanalyse abgeschlossen', { exact: true })).toBeVisible();
+  await expect(page.locator('.workspace-analysis-command').getByText('Matchanalyse abgeschlossen', { exact: true })).toBeVisible();
   const panel = page.getByRole('tabpanel', { name: 'Cube', exact: true });
   await panel.getByLabel('Nur Auffälligkeiten').uncheck();
   const count = page.locator('.board-error-count');
@@ -315,9 +315,9 @@ test('a saved whole-match result stays identified while game navigation loads', 
       page.getByRole('button', { name: 'Spiel analysieren', exact: true }),
     ).toBeDisabled();
     await expect(analysis).toHaveAttribute('data-job-id', fullJob.id);
-    await expect(analysis).toHaveAttribute('aria-label', 'Vollständige Partieanalyse');
-    await expect(page.getByLabel('Angezeigte Analyse').locator('option:checked')).toContainText('Ganze Partie');
-    await expect(page.locator('.match-analysis-progress:visible')).toContainText('Partieanalyse abgeschlossen');
+    await expect(analysis).toHaveAttribute('aria-label', 'Vollständige Matchanalyse');
+    await expect(page.getByLabel('Angezeigte Analyse').locator('option:checked')).toContainText('Ganzes Match');
+    await expect(page.locator('.match-analysis-progress:visible')).toContainText('Matchanalyse abgeschlossen');
   } finally {
     release();
   }

@@ -117,6 +117,7 @@ export default function CardPracticeRound({
     <ActionButton
       icon="play"
       label={t('next')}
+      shortcut={result ? 'Enter' : undefined}
       disabled={waiting}
       onClick={() =>
         void update('advance', {

@@ -108,7 +108,7 @@ it('compares imported and native analyses with all saved entries available in ei
   expect(html).toContain('>0.124<');
   expect(html).toContain('>0.456<');
   expect(html).not.toContain('>0.999<');
-  expect(html).toContain('>20.667<');
+  expect(html).toContain('>20.7<');
   expect(html).not.toContain('>76.000<');
 });
 it('respects explicit column choices without preferring engine names or ply levels', () => {

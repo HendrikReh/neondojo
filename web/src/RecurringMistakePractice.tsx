@@ -5,6 +5,7 @@ import CheckerPracticeBoard, {
 } from './CheckerPracticeBoard';
 import CubePracticeChoices from './CubePracticeChoices';
 import PracticeResult from './PracticeResult';
+import { CubeContextLine } from './CubeDecisionDetails';
 import { matchContext } from './boardMath';
 import ActionButton from './ActionButton';
 import EngineLabel from './EngineLabel';
@@ -38,11 +39,15 @@ import './recurring-mistakes.css';
 
 export default function RecurringMistakePractice({
   request,
+  items: given,
   theme,
   returnFocus,
   onClose,
 }: {
-  request: MistakePracticeRequest;
+  /** Load questions for a mistake group. */
+  request?: MistakePracticeRequest;
+  /** Questions chosen elsewhere, such as search results; skips loading. */
+  items?: MistakeQuestion[];
   theme: Theme;
   returnFocus: RefObject<HTMLElement | null>;
   onClose: () => void;
@@ -62,6 +67,14 @@ export default function RecurringMistakePractice({
     setError(undefined);
     setItems(undefined);
     setIndex(0);
+    if (given || !request) {
+      setItems((given ?? []).slice(0, 20));
+      setLoading(false);
+      return () => {
+        abort.abort();
+        generation.current++;
+      };
+    }
     void loadMistakePractice(request, abort.signal)
       .then((result) => {
         if (!abort.signal.aborted && version === generation.current)
@@ -79,7 +92,7 @@ export default function RecurringMistakePractice({
       abort.abort();
       generation.current++;
     };
-  }, [request, revision]);
+  }, [request, given, revision]);
   const item = items?.[index];
   return (
     <PlayBoardDialog
@@ -248,6 +261,11 @@ function MistakeQuestion({
       {item.kind === 'cube_response' && (
         <p>{learn('offeredCube', { value: context.cube * 2 })}</p>
       )}
+      <CubeContextLine
+        matchId={item.position.gnubg_match_id}
+        players={[item.players[0], item.players[1]]}
+        withFormat={false}
+      />
       {result &&
         chosenProjection?.ok &&
         bestProjection?.ok &&
@@ -351,6 +369,17 @@ function MistakeQuestion({
             <div className="recurring-attempt-result" aria-live="polite">
               <PracticeResult
                 evaluation={checked.evaluation}
+                checker={item.kind === 'checker' ? item.position : undefined}
+                cube={
+                  item.kind === 'checker'
+                    ? undefined
+                    : {
+                        matchId: item.position.gnubg_match_id,
+                        player: item.position.player,
+                        response: item.kind === 'cube_response',
+                        players: [item.players[0], item.players[1]],
+                      }
+                }
                 storedSource={
                   original.source === 'native'
                     ? undefined
@@ -385,6 +414,7 @@ function MistakeQuestion({
       <ActionButton
         icon="next"
         label={t(last ? 'finish' : 'next')}
+        shortcut={result ? 'Enter' : undefined}
         onClick={onNext}
       >
         {t(last ? 'finish' : 'next')}

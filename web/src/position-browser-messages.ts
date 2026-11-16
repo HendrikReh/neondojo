@@ -330,7 +330,7 @@ const translations = {
     'ID meczu',
     'ID partita',
   ],
-  gameNumber: ['Game', 'Partie', 'Partida', 'Partie', 'Partia', 'Partita'],
+  gameNumber: ['Game', 'Spiel', 'Partida', 'Partie', 'Partia', 'Partita'],
   moveNumber: ['Move', 'Zug', 'Jugada', 'Coup', 'Ruch', 'Mossa'],
   playedMove: [
     'Played move',
@@ -910,7 +910,7 @@ const translations = {
   ],
   selectRow: [
     'Select game {game}, ply {ply}, {player}',
-    'Partie {game}, Zug {ply}, {player} auswählen',
+    'Spiel {game}, Zug {ply}, {player} auswählen',
     'Seleccionar juego {game}, jugada {ply}, {player}',
     'Sélectionner partie {game}, demi-coup {ply}, {player}',
     'Wybierz grę {game}, ruch {ply}, {player}',
@@ -958,7 +958,7 @@ const translations = {
   ],
   game: [
     'Game {number}',
-    'Partie {number}',
+    'Spiel {number}',
     'Juego {number}',
     'Partie {number}',
     'Gra {number}',
@@ -1045,7 +1045,7 @@ const translations = {
     '{count} kart w talii',
     '{count} schede nel mazzo',
   ],
-  deck: ['Study', 'Study', 'Study', 'Study', 'Study', 'Study'],
+  deck: ['Study', 'Lernen', 'Estudio', 'Étude', 'Nauka', 'Studio'],
   addToDeck: [
     'Add to deck',
     'Zu Lernstapel hinzufügen',
@@ -1216,7 +1216,7 @@ const translations = {
     'Le schede esistenti e la cronologia sono condivise. Ogni posizione senza soluzione nativa viene segnalata.',
   ],
   scopeMatch: ['Match', 'Match', 'Partida', 'Match', 'Mecz', 'Partita'],
-  scopeGame: ['Game', 'Partie', 'Juego', 'Partie', 'Gra', 'Gioco'],
+  scopeGame: ['Game', 'Spiel', 'Juego', 'Partie', 'Gra', 'Gioco'],
   scopePosition: [
     'Position',
     'Position',

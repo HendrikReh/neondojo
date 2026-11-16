@@ -22,6 +22,7 @@ import {
   useStatisticsText,
 } from './review-statistics-messages';
 import './match-statistics.css';
+import { prDigits } from './pr-format';
 
 type PlayerStats = MatchAnalysisSummary['players'][number];
 type SelectMetric = (action: StatisticsAction) => void;
@@ -154,7 +155,7 @@ function PlayerStatisticsCard({
             <strong>{text('unavailable')}</strong>
           </div>
         ) : (
-          metric('pr', text('pr'), decimal(rating))
+          metric('pr', text('pr'), formatNumber(rating, prDigits))
         )}
       </div>
       <div

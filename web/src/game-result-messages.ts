@@ -18,7 +18,7 @@ type Key = keyof typeof en;
 const messages: Record<Locale, Record<Key, string>> = {
   en,
   de: {
-    heading: 'Partieergebnis',
+    heading: 'Spielergebnis',
     winner: '{player} gewinnt {points} Punkte',
     winnerOne: '{player} gewinnt 1 Punkt',
     point: 'Punkt',

@@ -1257,3 +1257,86 @@ async fn card_suggestions_span_games_and_save_only_selected_decisions(pool: PgPo
         .unwrap();
     assert_eq!(call(&router, "POST", &url, body).await.0, 409);
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn decision_search_filters_by_type_score_cube_and_loss_with_stable_pages(pool: PgPool) {
+    let id = source(&pool).await;
+    // Game 1 of the 7-point match starts at 0-0 with a centered cube.
+    let saved = job(
+        &pool,
+        id,
+        2,
+        Some(1),
+        &[
+            (1, decision(1, 0, "8/5 6/5", "6/3 6/5", 0.03)),
+            (1, decision(2, 1, "double", "no double", 0.2)),
+            (1, decision(3, 0, "take", "drop", 0.125)),
+            (1, decision(4, 1, "24/20 24/22", "24/20 24/22", 0.0)),
+        ],
+    )
+    .await;
+    let router = app(&pool);
+    let search = |query: &str| {
+        let router = router.clone();
+        let uri = format!("/api/study/decisions?{query}");
+        async move { call(&router, "GET", &uri, Value::Null).await }
+    };
+
+    let (status, all) = search("player=alice").await;
+    assert_eq!(status, 200, "{all}");
+    assert_eq!(all["total"], 2);
+    // Largest loss first.
+    assert_eq!(all["items"][0]["kind"], "cube_response");
+    assert_eq!(all["items"][0]["played"], "take");
+    assert_eq!(all["items"][0]["best"], "drop");
+    assert_eq!(all["items"][0]["equity_loss"], 0.125);
+    assert_eq!(all["items"][0]["mistake_kind"], "wrong_take");
+    assert_eq!(all["items"][0]["match_length"], 7);
+    assert_eq!(all["items"][0]["away"], json!([7, 7]));
+    assert_eq!(all["items"][0]["cube_value"], 1);
+    assert_eq!(all["items"][0]["cube_owner"], Value::Null);
+    assert_eq!(all["items"][0]["practicable"], true);
+    assert_eq!(
+        all["items"][0]["reference"],
+        json!({"job_id":saved,"game_no":1,"decision_no":3})
+    );
+    assert_eq!(all["items"][1]["kind"], "checker");
+
+    let (_, takes) = search("player=Alice&kind=cube_response&min_loss=0.05&away=7").await;
+    assert_eq!(takes["total"], 1);
+    let (_, none) = search("player=Alice&kind=cube_response&away=2").await;
+    assert_eq!(none["total"], 0);
+    let (_, small) = search("player=Alice&max_loss=0.05").await;
+    assert_eq!(small["total"], 1);
+    assert_eq!(small["items"][0]["kind"], "checker");
+    let (_, owned) = search("player=Alice&cube_owner=self").await;
+    assert_eq!(owned["total"], 0);
+    let (_, centered) = search("player=Alice&cube_owner=centered&cube_value=1").await;
+    assert_eq!(centered["total"], 2);
+    let (_, kind) = search("player=Bob&mistake_kind=premature_double").await;
+    assert_eq!(kind["total"], 1);
+    // Bob's correct checker play has no loss and is not an error type.
+    let (_, bob) = search("player=Bob").await;
+    assert_eq!(bob["total"], 2);
+    assert_eq!(bob["items"][1]["mistake_kind"], Value::Null);
+    assert_eq!(bob["items"][1]["practicable"], false);
+
+    let (_, first) = search("player=Alice&limit=1").await;
+    let (_, second) = search("player=Alice&limit=1&page=2").await;
+    assert_eq!(first["items"].as_array().unwrap().len(), 1);
+    assert_eq!(first["items"][0]["reference"]["decision_no"], 3);
+    assert_eq!(second["items"][0]["reference"]["decision_no"], 1);
+    assert_eq!(second["total"], 2);
+
+    for invalid in [
+        "player=",
+        "player=Alice&limit=101",
+        "player=Alice&page=0",
+        "player=Alice&away=0",
+        "player=Alice&cube_value=3",
+        "player=Alice&min_loss=0.2&max_loss=0.1",
+        "kind=checker",
+    ] {
+        assert_eq!(search(invalid).await.0, 422, "{invalid}");
+    }
+}

@@ -44,6 +44,11 @@ const createFormatters = (locale: Locale) => ({
     position?: Parameters<typeof localizeDecision>[2],
   ) => localizeDecision(locale, notation, position),
   formatError: (error: unknown) => formatLocalizedError(locale, error),
+  /** "1 point" or "5 points", in the interface language. */
+  formatPoints: (count: number) =>
+    translate(locale, count === 1 ? 'board.point' : 'board.points', {
+      count,
+    }),
 });
 
 const I18nContext = createContext({

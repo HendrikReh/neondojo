@@ -92,7 +92,7 @@ const rows = {
   ],
   configurationHelp: [
     'Choose the default opening book here. Book answers appear as an optional reference alongside the selected match analysis.',
-    'Hier wählst du das Standard-Eröffnungsbuch. Buchantworten erscheinen als optionale Referenz neben der ausgewählten Partieanalyse.',
+    'Hier wählst du das Standard-Eröffnungsbuch. Buchantworten erscheinen als optionale Referenz neben der ausgewählten Matchanalyse.',
     'Elige aquí el libro de aperturas predeterminado. Sus respuestas aparecen como referencia opcional junto al análisis seleccionado de la partida.',
     'Choisissez ici la bibliothèque d’ouvertures par défaut. Ses réponses apparaissent comme référence facultative à côté de l’analyse sélectionnée du match.',
     'Wybierz domyślną książkę otwarć. Jej odpowiedzi pojawiają się jako opcjonalne odniesienie obok wybranej analizy meczu.',
@@ -312,7 +312,7 @@ const rows = {
   ],
   rolloutGames: [
     'Rollout · {count} games',
-    'Rollout · {count} Partien',
+    'Rollout · {count} Spiele',
     'Rollout · {count} partidas',
     'Rollout · {count} parties',
     'Rollout · {count} partii',

@@ -53,7 +53,7 @@ const rows = {
   ],
   coverage: [
     '{completed} of {total} games fully analyzed',
-    '{completed} von {total} Partien vollständig analysiert',
+    '{completed} von {total} Spielen vollständig analysiert',
     '{completed} de {total} partidas completamente analizadas',
     '{completed} sur {total} parties entièrement analysées',
     '{completed} z {total} gier w pełni przeanalizowanych',
@@ -91,7 +91,7 @@ const rows = {
     'Wczytywanie statystyk…',
     'Caricamento statistiche…',
   ],
-  games: ['Games', 'Partieübersicht', 'Partidas', 'Parties', 'Gry', 'Game'],
+  games: ['Games', 'Spielübersicht', 'Partidas', 'Parties', 'Gry', 'Game'],
   game: [
     'Game {game}',
     'Spiel {game}',

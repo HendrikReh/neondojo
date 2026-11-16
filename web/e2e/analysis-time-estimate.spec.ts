@@ -68,7 +68,7 @@ async function openMatch(p: Page, locale = 'en') {
       r.request().method() === 'POST',
   );
   await p
-    .getByLabel(locale === 'de' ? 'Partiedatei' : 'Match file', { exact: true })
+    .getByLabel(locale === 'de' ? 'Matchdatei' : 'Match file', { exact: true })
     .setInputFiles({
       name: `estimate-${crypto.randomUUID()}.sgf`,
       mimeType: 'application/octet-stream',

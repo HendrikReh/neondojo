@@ -74,7 +74,7 @@ test('Study uses the draggable modal, traps focus and returns to the trigger aft
   const { dialog, trigger } = await study(page);
   await expect(dialog).toBeVisible();
   expect(await dialog.evaluate((el) => el.matches(':modal'))).toBe(true);
-  await expect(dialog).toContainText('4.500');
+  await expect(dialog).toContainText('4.5');
   await drag(page, dialog);
   for (let i = 0; i < 6; i++) {
     await page.keyboard.press('Tab');
@@ -158,7 +158,7 @@ test('end-of-match generation opens the same report modal and reopening never re
     exact: true,
   });
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText('4.500');
+  await expect(dialog).toContainText('4.5');
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   await expect(trigger).toBeFocused();

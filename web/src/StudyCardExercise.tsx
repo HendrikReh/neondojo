@@ -25,6 +25,7 @@ import { useLearningText } from './learning-messages';
 import { projectMove, projectPracticeSteps } from './move-preview';
 import CubePracticeChoices from './CubePracticeChoices';
 import PracticeResult from './PracticeResult';
+import { CubeContextLine } from './CubeDecisionDetails';
 import { usePositionText } from './position-browser-messages';
 import type { Theme } from './themes';
 
@@ -95,18 +96,21 @@ export default function StudyCardExercise({
             cards={[{ id: card.id, tags_version: card.tags_version ?? 0 }]}
           />
           <div className="study-ratings">
-            {(['again', 'hard', 'good', 'easy'] as const).map((rating) => (
-              <ActionButton
-                icon={rating === 'again' ? 'reset' : 'confirm'}
-                label={t(rating)}
-                key={rating}
-                disabled={busy}
-                onClick={() => onGrade(answer, rating)}
-              >
-                {t(rating)}
-                <small>{interval(answer.intervals[rating])}</small>
-              </ActionButton>
-            ))}
+            {(['again', 'hard', 'good', 'easy'] as const).map(
+              (rating, index) => (
+                <ActionButton
+                  icon={rating === 'again' ? 'reset' : 'confirm'}
+                  label={t(rating)}
+                  shortcut={String(index + 1)}
+                  key={rating}
+                  disabled={busy}
+                  onClick={() => onGrade(answer, rating)}
+                >
+                  {t(rating)}
+                  <small>{interval(answer.intervals[rating])}</small>
+                </ActionButton>
+              ),
+            )}
           </div>
         </>
       )}
@@ -315,6 +319,11 @@ export function CardExercise({
         · {uiT('app.toMove', { player: card.players[card.position.player] })}
       </p>
       {cubeResponse && <p>{t('offeredCube', { value: context.cube * 2 })}</p>}
+      <CubeContextLine
+        matchId={card.position.gnubg_match_id}
+        players={[card.players[0], card.players[1]]}
+        withFormat={false}
+      />
       {!answer && beforeAnswer}
       {checker && !answer ? (
         <CheckerPracticeBoard
@@ -385,7 +394,20 @@ export function CardExercise({
                     ))}
                   </div>
                 )}
-              <PracticeResult evaluation={result} />
+              <PracticeResult
+                evaluation={result}
+                checker={checker ? card.position : undefined}
+                cube={
+                  checker
+                    ? undefined
+                    : {
+                        matchId: card.position.gnubg_match_id,
+                        player: card.position.player,
+                        response: cubeResponse,
+                        players: [card.players[0], card.players[1]],
+                      }
+                }
+              />
             </div>
           )}
           <CardSolution

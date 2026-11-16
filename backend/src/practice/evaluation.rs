@@ -3,7 +3,9 @@ use crate::{
     api::{ApiError, ApiResult, AppState},
     engine::{Candidate, CubeEquities},
     engines::AnalysisEngine,
-    match_analysis::{Decision, cube_options, evaluated_equities, normalized_loss},
+    match_analysis::{
+        CubeEquityUnit, CubeEvaluation, Decision, cube_options, evaluated_equities, normalized_loss,
+    },
     model::Position,
     move_assessments::after_play,
     play::PlayStep,
@@ -77,6 +79,9 @@ pub(crate) struct PracticeEvaluation {
     best_equity: Option<f64>,
     equity_loss: f64,
     provenance: PracticeProvenance,
+    /// All cube outcomes behind a cube answer, from the answering player.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    cube_evaluation: Option<CubeEvaluation>,
 }
 
 pub(crate) struct SavedEvaluation<'a> {
@@ -122,6 +127,17 @@ fn proven_checker_depth(solution: &SavedEvaluation<'_>) -> Option<i32> {
 }
 
 impl PracticeEvaluation {
+    /// Verdict name and loss, for practice history.
+    pub(crate) fn outcome(&self) -> (&'static str, f64) {
+        let verdict = match self.verdict {
+            PracticeVerdict::Best => "best",
+            PracticeVerdict::Playable => "playable",
+            PracticeVerdict::Error => "error",
+            PracticeVerdict::Forced => "forced",
+        };
+        (verdict, self.equity_loss)
+    }
+
     pub(crate) fn is_recomputed(&self) -> bool {
         matches!(self.provenance.kind, PracticeProvenanceKind::Recomputed)
     }
@@ -158,6 +174,7 @@ impl PracticeEvaluation {
             best_equity: Some(best_equity),
             equity_loss,
             provenance,
+            cube_evaluation: None,
         })
     }
 
@@ -174,6 +191,7 @@ impl PracticeEvaluation {
                 engine: None,
                 plies: None,
             },
+            cube_evaluation: None,
         }
     }
 }
@@ -206,6 +224,7 @@ impl CubeAnswer {
             no_double,
             take,
             pass,
+            ..
         } = equities;
         match self {
             Self::Offer(_) => cube_options(self.notation(), no_double, take, pass),
@@ -332,7 +351,10 @@ fn stored_evaluation(
             } else {
                 return None;
             };
-            PracticeEvaluation::scored(chosen, &decision.best, equity, best, provenance)
+            let mut result =
+                PracticeEvaluation::scored(chosen, &decision.best, equity, best, provenance)?;
+            result.cube_evaluation = decision.cube_evaluation.clone();
+            Some(result)
         }
     }
 }
@@ -439,19 +461,38 @@ async fn fresh_cube(
                     no_double: cube.no_double,
                     take: cube.take,
                     pass: cube.pass,
+                    probabilities: cube.probabilities.as_slice().try_into().ok(),
                 },
             )
         }
     };
+    // Engines report the doubler's view; a response is graded from the taker's.
+    let response = matches!(answer, CubeAnswer::Response(_));
+    let sign = if response { -1.0 } else { 1.0 };
+    let cube_evaluation = CubeEvaluation {
+        unit: CubeEquityUnit::Cubeful,
+        no_double: sign * equities.no_double,
+        double_take: sign * equities.take,
+        double_pass: sign * equities.pass,
+        probabilities: if response {
+            equities
+                .probabilities
+                .map(crate::engine::flip_probabilities)
+        } else {
+            equities.probabilities
+        },
+    };
     let (best, chosen_eq, best_eq) = answer.options(equities).context("Invalid cube options")?;
-    PracticeEvaluation::scored(
+    let mut result = PracticeEvaluation::scored(
         answer.notation(),
         best,
         chosen_eq,
         best_eq,
         PracticeProvenance::recomputed(name, depth),
     )
-    .context("Invalid cube evaluation")
+    .context("Invalid cube evaluation")?;
+    result.cube_evaluation = Some(cube_evaluation);
+    Ok(result)
 }
 
 pub(crate) async fn evaluate(

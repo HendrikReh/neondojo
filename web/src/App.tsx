@@ -67,6 +67,9 @@ import type { PlaySession } from './play-api';
 import { DEFAULT_ANALYSIS_PLIES } from './analysis-depth';
 import MoveNotesDialog, { type MoveNotesTarget } from './MoveNotesDialog';
 import { useUiAppearance } from './useUiAppearance';
+import { useButtonShortcuts } from './useButtonShortcuts';
+import DecisionSearch from './DecisionSearch';
+import { useDecisionSearchText } from './decision-search-messages';
 
 type View =
   | 'analysis'
@@ -86,6 +89,9 @@ const views: View[] = [
   'extras',
 ];
 export default function App() {
+  useButtonShortcuts();
+  const decisionText = useDecisionSearchText();
+  const [positionScope, setPositionScope] = useState<'saved' | 'all'>('saved');
   const confirmed = useConfirmedConfiguration();
   const legacy = useWorkspaceDefaults();
   const [settingsCategory, setSettingsCategory] = useState<
@@ -1031,9 +1037,41 @@ export default function App() {
           aria-labelledby="workspace-tab-positions"
           hidden={view !== 'positions'}
         >
-          <div hidden={!!similarTarget}>
+          <div
+            className="text-navigation position-scope"
+            role="group"
+            aria-label={decisionText('scope')}
+            hidden={!!similarTarget}
+          >
+            {(['saved', 'all'] as const).map((scope) => (
+              <button
+                key={scope}
+                type="button"
+                aria-pressed={positionScope === scope}
+                onClick={() => setPositionScope(scope)}
+              >
+                {decisionText(scope)}
+              </button>
+            ))}
+          </div>
+          {positionScope === 'all' && !similarTarget && (
+            <DecisionSearch
+              visible={view === 'positions'}
+              revision={revision}
+              theme={theme}
+              onOpenPosition={(id) => {
+                setDetail('overview');
+                openPosition(id);
+              }}
+            />
+          )}
+          <div hidden={!!similarTarget || positionScope === 'all'}>
             <PositionBrowser
-              visible={view === 'positions' && !similarTarget}
+              visible={
+                view === 'positions' &&
+                !similarTarget &&
+                positionScope === 'saved'
+              }
               bookmarkRevision={bookmarkRevision}
               onBookmarkChanged={bookmarkChanged}
               revision={revision}

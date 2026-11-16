@@ -41,7 +41,7 @@ test('Study opens persisted reports with original attempts and keeps flashcards 
   await open(page);
   const archive = page.getByRole('region', { name: 'Saved reports' });
   await expect(archive).toContainText('Hendrik · GNUbg');
-  await expect(archive).toContainText('4.500');
+  await expect(archive).toContainText('4.5');
   await archive
     .getByRole('button', { name: 'Open report', exact: true })
     .click();
@@ -63,7 +63,7 @@ test('Study opens persisted reports with original attempts and keeps flashcards 
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
   await page.getByRole('tab', { name: 'Reports', exact: true }).click();
   await page.getByRole('button', { name: 'Open report', exact: true }).click();
-  await expect(report).toContainText('4.500');
+  await expect(report).toContainText('4.5');
   expect(writes).toEqual([]);
   await page.screenshot({
     path: test.info().outputPath('study-report.png'),

@@ -30,6 +30,10 @@ const MEDIA_TYPE: &str = "application/vnd.bgtutor.backup";
 const MAX_ARCHIVE_BYTES: u64 = 16 * 1024 * 1024 * 1024;
 const MAX_DATA_BYTES: u64 = 64 * 1024 * 1024 * 1024;
 
+/// Derived from the backed-up tables and rebuilt on demand. A restore clears
+/// them with the data they describe; they are never written to an archive.
+const DERIVED_TABLES: &[&str] = &["decision_index", "decision_index_matches"];
+
 // Parent tables precede their children so foreign keys remain enforced. Host
 // installations and the benchmark machine identity belong to the destination.
 const TABLES: &[&str] = &[
@@ -53,6 +57,8 @@ const TABLES: &[&str] = &[
     "imported_analyses",
     "imported_analysis_projections",
     "decks",
+    "learning_preferences",
+    "mistake_practice_attempts",
     "learning_cards",
     "anki_media",
     "anki_card_faces",
@@ -450,6 +456,11 @@ mod tests {
             .collect::<std::collections::BTreeSet<_>>();
         assert_eq!(covered.len(), TABLES.len());
         covered.extend(["engine_installations".into(), "benchmark_machine".into()]);
+        covered.extend(
+            super::DERIVED_TABLES
+                .iter()
+                .map(|table| (*table).to_owned()),
+        );
         assert_eq!(actual, covered);
     }
 }

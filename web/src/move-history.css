@@ -157,3 +157,13 @@
   color: var(--ui-danger-text);
   background: var(--ui-danger-bg);
 }
+.move-history-cube {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 4px 7px 4px 43px;
+  border-bottom: 1px solid var(--ui-border);
+  color: var(--ui-muted);
+  font-size: var(--font-size-table);
+}

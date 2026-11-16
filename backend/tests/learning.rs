@@ -336,7 +336,9 @@ async fn learning_summary_counts_unique_due_cards(pool: PgPool) {
         Engine::new("unused".into()),
     ));
     let url = "/api/study/learning-summary";
-    let empty = json!({"card_count":0,"due_count":0,"next_due_at":null,"next_deck":null});
+    let empty = json!({"card_count":0,"due_count":0,"review_due_count":0,"new_count":0,
+        "new_cards_per_day":10,"new_available_today":0,"today_count":0,
+        "next_due_at":null,"next_deck":null});
     assert_eq!(
         call(app.clone(), "GET", url, Value::Null).await,
         (200, empty)
@@ -399,8 +401,92 @@ async fn learning_summary_counts_unique_due_cards(pool: PgPool) {
     assert_eq!(status, 200);
     assert_eq!(
         summary,
-        json!({"card_count":3,"due_count":2,"next_due_at":future_at,
-        "next_deck":{"id":first_deck,"name":"First"}})
+        json!({"card_count":3,"due_count":2,"review_due_count":0,"new_count":2,
+        "new_cards_per_day":10,"new_available_today":2,"today_count":2,
+        "next_due_at":future_at,"next_deck":{"id":first_deck,"name":"First"}})
+    );
+    // Pausing new cards leaves nothing to study today; reviews stay available.
+    let preferences = "/api/study/learning-preferences";
+    assert_eq!(
+        call(
+            app.clone(),
+            "PUT",
+            preferences,
+            json!({"new_cards_per_day":1001})
+        )
+        .await
+        .0,
+        422
+    );
+    assert_eq!(
+        call(
+            app.clone(),
+            "PUT",
+            preferences,
+            json!({"new_cards_per_day":0})
+        )
+        .await,
+        (200, json!({"new_cards_per_day":0}))
+    );
+    let (_, paused) = call(app.clone(), "GET", url, Value::Null).await;
+    assert_eq!(paused["today_count"], 0);
+    assert_eq!(paused["new_available_today"], 0);
+    assert_eq!(paused["next_deck"], Value::Null);
+    let first_next = format!("/api/decks/{first_deck}/next");
+    let (_, none) = call(app.clone(), "GET", &first_next, Value::Null).await;
+    assert_eq!(none["card"], Value::Null);
+    assert_eq!(
+        none["counts"],
+        json!({"total":2,"due":0,"new":1,"new_available":0})
+    );
+    sqlx::query("UPDATE learning_cards SET review_count=1 WHERE id=$1")
+        .bind(tied)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (_, reviews) = call(app.clone(), "GET", url, Value::Null).await;
+    assert_eq!(reviews["review_due_count"], 1);
+    assert_eq!(reviews["today_count"], 1);
+    assert_eq!(reviews["next_deck"]["id"], json!(second_deck));
+    sqlx::query("UPDATE learning_cards SET review_count=0 WHERE id=$1")
+        .bind(tied)
+        .execute(&pool)
+        .await
+        .unwrap();
+    // A new card reviewed for the first time today uses up the allowance.
+    assert_eq!(
+        call(
+            app.clone(),
+            "PUT",
+            preferences,
+            json!({"new_cards_per_day":1})
+        )
+        .await
+        .0,
+        200
+    );
+    sqlx::query("WITH session AS (INSERT INTO review_sessions(id,card_id,card_version,expires_at) VALUES(gen_random_uuid(),$1,1,now()) RETURNING id) INSERT INTO card_reviews(card_id,request_id,session_id,rating,result,reviewed_at) SELECT $1,gen_random_uuid(),id,'good','{}',now() FROM session")
+        .bind(orphan)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (_, used) = call(app.clone(), "GET", url, Value::Null).await;
+    assert_eq!(used["new_available_today"], 0);
+    sqlx::query("WITH gone AS (DELETE FROM card_reviews WHERE card_id=$1 RETURNING session_id) DELETE FROM review_sessions WHERE card_id=$1")
+        .bind(orphan)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        call(
+            app.clone(),
+            "PUT",
+            preferences,
+            json!({"new_cards_per_day":10})
+        )
+        .await
+        .0,
+        200
     );
     let next = format!(
         "/api/decks/{}/next",
@@ -418,7 +504,9 @@ async fn learning_summary_counts_unique_due_cards(pool: PgPool) {
         .unwrap();
     assert_eq!(
         call(app, "GET", url, Value::Null).await.1,
-        json!({"card_count":1,"due_count":0,"next_due_at":future_at,"next_deck":null})
+        json!({"card_count":1,"due_count":0,"review_due_count":0,"new_count":0,
+            "new_cards_per_day":10,"new_available_today":0,"today_count":0,
+            "next_due_at":future_at,"next_deck":null})
     );
 }
 

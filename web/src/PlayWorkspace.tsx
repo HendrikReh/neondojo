@@ -139,7 +139,7 @@ export default function PlayWorkspace({
     return () => stopPlaySounds();
   }, [visible]);
   const t = usePlayText(),
-    { formatError, formatNumber, locale, t: appT } = useI18n();
+    { formatError, formatNumber, formatPoints, locale, t: appT } = useI18n();
   const modeT = usePlayModeText();
   const libraryT = useLibraryText();
   const resignT = usePlayResignText();
@@ -1206,7 +1206,7 @@ export default function PlayWorkspace({
                 <option value="0">{appT('common.moneyGame')}</option>
                 {[1, 3, 5, 7, 9, 11, 15, 21, 25].map((n) => (
                   <option key={n} value={n}>
-                    {n} {t('points')}
+                    {formatPoints(n)}
                   </option>
                 ))}
               </select>
@@ -1309,7 +1309,7 @@ export default function PlayWorkspace({
               </h2>
               <p className="play-match-format">
                 {session.match_length
-                  ? appT('board.points', { count: session.match_length })
+                  ? formatPoints(session.match_length)
                   : appT('common.moneyGame')}{' '}
                 · {t('game')} {formatNumber(session.game_no)}
               </p>

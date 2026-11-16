@@ -11,6 +11,7 @@ const rates = {
   error_rate: 0.1,
   loss_per_100: 1,
   small_sample: false,
+  trend: null,
 };
 const checker: MistakeGroup = {
   game_plan: 'priming',
@@ -51,6 +52,7 @@ describe('study overview', () => {
         error_rate: 1,
         loss_per_100: 10,
         small_sample: true,
+        trend: null,
       },
     };
     const frequent = {
@@ -62,6 +64,7 @@ describe('study overview', () => {
         error_rate: 0.01,
         loss_per_100: 0.5,
         small_sample: false,
+        trend: null,
       },
     };
     const more = { ...checker, count: 6 };

@@ -10,6 +10,7 @@ const MAX_BATCHES: usize = 8;
 
 pub(crate) fn label(plan: GamePlan) -> &'static str {
     match plan {
+        GamePlan::Opening => "opening",
         GamePlan::PureRace => "pure_race",
         GamePlan::Racing => "racing",
         GamePlan::Attacking => "attacking",

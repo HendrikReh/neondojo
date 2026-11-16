@@ -8,6 +8,7 @@ import { matchContext } from './boardMath';
 import type { components } from './generated-api';
 import { useI18n } from './i18n';
 import { usePositionText } from './position-browser-messages';
+import { useDecisionSearchText } from './decision-search-messages';
 import SimilarPositionPractice from './SimilarPositionPractice';
 import type { Theme } from './themes';
 
@@ -31,7 +32,8 @@ export default function SimilarPositions({
   onOpen: (id: string) => void;
 }) {
   const p = usePositionText();
-  const { t, formatError } = useI18n();
+  const decisions = useDecisionSearchText();
+  const { t, formatError, formatDecision, formatNumber } = useI18n();
   const heading = useRef<HTMLHeadingElement>(null);
   const practiceButton = useRef<HTMLButtonElement>(null);
   const [filters, setFilters] = useState({
@@ -92,6 +94,22 @@ export default function SimilarPositions({
   const rows = hits.slice((page - 1) * pageSize, page * pageSize);
   const preview = hits.find((hit) => hit.position.id === selected) ?? hits[0];
   const context = preview && matchContext(preview.position.gnubg_match_id);
+  // Score from the mover's side, so equal boards at different scores stand out.
+  const scoreLabel = (hit: (typeof rows)[number]) => {
+    const match = matchContext(hit.position.gnubg_match_id);
+    if (!match.length) return t('common.moneyGame');
+    const own = hit.position.player;
+    return decisions('scoreAway', {
+      own: match.length - match.scores[own],
+      opponent: match.length - match.scores[1 - own],
+    });
+  };
+  const cubeLabel = (hit: (typeof rows)[number]) => {
+    const match = matchContext(hit.position.gnubg_match_id);
+    return match.owner == null
+      ? String(match.cube)
+      : `${match.cube} · ${match.owner === 0 ? hit.white : hit.black}`;
+  };
   return (
     <section
       className="position-browser similar-positions"
@@ -163,6 +181,10 @@ export default function SimilarPositions({
                     <th scope="col">{p('player')}</th>
                     <th scope="col">{p('gameNumber')}</th>
                     <th scope="col">{p('moveNumber')}</th>
+                    <th scope="col">{decisions('score')}</th>
+                    <th scope="col">{decisions('cube')}</th>
+                    <th scope="col">{decisions('played')}</th>
+                    <th scope="col">{decisions('loss')}</th>
                     <th scope="col">{p('checkerDistance')}</th>
                   </tr>
                 </thead>
@@ -190,6 +212,17 @@ export default function SimilarPositions({
                       </td>
                       <td>{hit.position.game_no}</td>
                       <td>{hit.position.ply}</td>
+                      <td>{scoreLabel(hit)}</td>
+                      <td>{cubeLabel(hit)}</td>
+                      <td>{formatDecision(hit.position.notation) || '—'}</td>
+                      <td>
+                        {hit.equity_loss == null
+                          ? '—'
+                          : formatNumber(hit.equity_loss, {
+                              minimumFractionDigits: 3,
+                              maximumFractionDigits: 3,
+                            })}
+                      </td>
                       <td>{hit.distance}</td>
                     </tr>
                   ))}

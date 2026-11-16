@@ -3,6 +3,7 @@ import type { components } from './generated-api';
 type Schema = components['schemas'];
 import type { GamePlan } from './game-plan-api';
 export const mistakeGamePlans: GamePlan[] = [
+  'opening',
   'pure_race',
   'racing',
   'attacking',
@@ -58,3 +59,32 @@ export const checkMistake = (
   input: MistakeAttemptRequest,
   signal: AbortSignal,
 ) => post<MistakeAttempt>('attempt', input, signal);
+
+export type DecisionHit = Omit<Schema['DecisionHit'], 'kind' | 'players'> & {
+  kind: MistakeQuestion['kind'];
+  players: [string, string];
+};
+export type DecisionSearchPage = Omit<Schema['DecisionSearchPage'], 'items'> & {
+  items: DecisionHit[];
+};
+export type DecisionFilters = {
+  player: string;
+  database_id?: string;
+  kind?: Schema['DecisionKind'];
+  mistake_kind?: MistakeKind;
+  game_plan?: GamePlan;
+  min_loss?: number;
+  max_loss?: number;
+  away?: number;
+  opponent_away?: number;
+  cube_value?: number;
+  cube_owner?: Schema['CubeOwnerFilter'];
+  page?: number;
+  limit?: number;
+};
+export function searchDecisions(filters: DecisionFilters, signal: AbortSignal) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters))
+    if (value !== undefined && value !== '') params.set(key, String(value));
+  return request<DecisionSearchPage>(`/study/decisions?${params}`, { signal });
+}

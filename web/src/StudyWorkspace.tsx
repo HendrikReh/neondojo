@@ -11,6 +11,7 @@ import StudyReports from './StudyReports';
 import type { AssessmentEntry } from './match-assessment-api';
 import RecurringMistakes from './RecurringMistakes';
 import SimilarPracticeHistory from './SimilarPracticeHistory';
+import MistakePracticeHistory from './MistakePracticeHistory';
 import { usePositionText } from './position-browser-messages';
 import { useStudyOverviewText, useStudyText } from './study-messages';
 import './study.css';
@@ -142,7 +143,12 @@ export default function StudyWorkspace({
         aria-labelledby="study-tab-practice"
         hidden={area !== 'practice'}
       >
-        {visible && area === 'practice' && <SimilarPracticeHistory />}
+        {visible && area === 'practice' && (
+          <>
+            <MistakePracticeHistory />
+            <SimilarPracticeHistory />
+          </>
+        )}
       </div>
     </div>
   );

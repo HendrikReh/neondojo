@@ -241,6 +241,7 @@ function ScorePractice({ card, theme }: { card: CardQuestion; theme: Theme }) {
               <ActionButton
                 icon="play"
                 label={t('next')}
+                shortcut="Enter"
                 onClick={() => setIndex(index + 1)}
               >
                 {t('next')}

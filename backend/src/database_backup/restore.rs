@@ -1,6 +1,6 @@
 use super::{
-    TABLES, archive::Prepared, columns, relation, schema, schema_mismatch, sequences,
-    transfer_settings, validate_sequences,
+    DERIVED_TABLES, TABLES, archive::Prepared, columns, relation, schema, schema_mismatch,
+    sequences, transfer_settings, validate_sequences,
 };
 use crate::api::{ApiError, ApiResult, AppState};
 use anyhow::{Context, Result};
@@ -205,6 +205,7 @@ pub(super) async fn replace(state: &AppState, mut input: Prepared) -> ApiResult<
         .context("Setting restore lock timeout")?;
     let tables = TABLES
         .iter()
+        .chain(DERIVED_TABLES)
         .map(|table| relation(table))
         .collect::<Vec<_>>()
         .join(",");

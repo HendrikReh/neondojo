@@ -107,6 +107,33 @@ pub(crate) struct CubeEquities {
     pub(crate) no_double: f64,
     pub(crate) take: f64,
     pub(crate) pass: f64,
+    /// Cubeless win, gammon and backgammon chances followed by the three
+    /// losing chances, in the same perspective as the equities.
+    pub(crate) probabilities: Option<[f64; 6]>,
+}
+
+/// Swap the winning and losing halves when changing the player perspective.
+pub(crate) fn flip_probabilities(p: [f64; 6]) -> [f64; 6] {
+    [p[3], p[4], p[5], p[0], p[1], p[2]]
+}
+
+/// GNUbg prints the cubeless outcome chances on the line after the
+/// "cubeless equity" heading of a cube analysis.
+fn parse_cube_probabilities(output: &str) -> Option<[f64; 6]> {
+    static PATTERN: OnceLock<Regex> = OnceLock::new();
+    let pattern = PATTERN.get_or_init(|| {
+        Regex::new(
+            r"(?m)cubeless equity[^\n]*\n\s*([0-9.]+) ([0-9.]+) ([0-9.]+) - ([0-9.]+) ([0-9.]+) ([0-9.]+)\s*$",
+        )
+        .unwrap()
+    });
+    let row = pattern.captures(output)?;
+    let mut values = [0.0_f64; 6];
+    for (index, value) in values.iter_mut().enumerate() {
+        *value = row[index + 1].parse().ok()?;
+    }
+    (values.iter().all(|p| (0.0..=1.0).contains(p)) && (values[0] + values[3] - 1.0).abs() < 0.001)
+        .then_some(values)
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -547,6 +574,7 @@ pub(crate) fn parse_cube_equities(output: &str) -> Result<CubeEquities> {
         no_double,
         take,
         pass,
+        probabilities: parse_cube_probabilities(output),
     })
 }
 
@@ -928,6 +956,22 @@ mod tests {
 #[cfg(test)]
 mod benchmark_gate_tests {
     use super::*;
+
+    #[test]
+    fn cube_analysis_keeps_outcome_chances_in_the_equity_perspective() {
+        let block = "Cube analysis\n0-ply cubeless equity -0.007818 (Money: -0.007901)\n  0.492641 0.140604 0.005944 - 0.507359 0.133160 0.006572\nCubeful equities:\n1. No double           -0.013765\n2. Double, pass        +1.000000  (+1.013765)\n3. Double, take        -0.373791  (-0.360025)\n";
+        let equities = parse_cube_equities(block).unwrap();
+        assert_eq!(equities.no_double, -0.013765);
+        let chances = equities.probabilities.unwrap();
+        assert_eq!(
+            chances,
+            [0.492641, 0.140604, 0.005944, 0.507359, 0.133160, 0.006572]
+        );
+        assert_eq!(flip_probabilities(chances)[0], 0.507359);
+        // Equities without the chance line stay usable.
+        let bare = "1. No double +0.1\n2. Double, pass +1.0\n3. Double, take +0.2\n";
+        assert!(parse_cube_equities(bare).unwrap().probabilities.is_none());
+    }
     #[tokio::test]
     async fn exclusive_benchmark_blocks_normal_invocations_but_allows_its_own_checks() {
         let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();

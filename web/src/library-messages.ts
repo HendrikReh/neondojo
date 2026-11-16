@@ -113,11 +113,11 @@ const rows = {
     'Wystąpienia',
     'Occorrenze',
   ],
-  occurrenceGame: ['Game', 'Partie', 'Partida', 'Partie', 'Partia', 'Partita'],
+  occurrenceGame: ['Game', 'Spiel', 'Partida', 'Partie', 'Partia', 'Partita'],
   occurrenceMove: ['Move', 'Zug', 'Jugada', 'Coup', 'Ruch', 'Mossa'],
   openOccurrence: [
     'Open position in game {game}, move {move}',
-    'Position öffnen in Partie {game}, Zug {move}',
+    'Position öffnen in Spiel {game}, Zug {move}',
     'Abrir posición en la partida {game}, jugada {move}',
     'Ouvrir la position dans la partie {game}, coup {move}',
     'Otwórz pozycję w partii {game}, ruch {move}',
@@ -196,7 +196,7 @@ const rows = {
     'Wpisz poprawny 14-znakowy identyfikator pozycji GNUbg.',
     'Inserisci un ID posizione GNUbg valido di 14 caratteri.',
   ],
-  games: ['Games', 'Partien', 'Partidas', 'Parties', 'Partie', 'Partite'],
+  games: ['Games', 'Spiele', 'Partidas', 'Parties', 'Partie', 'Partite'],
   resizeColumn: [
     'Resize {column} column',
     'Spalte {column} verbreitern oder verkleinern',
@@ -569,7 +569,7 @@ const rows = {
   ],
   previewHint: [
     'Select a match to preview its games and moves.',
-    'Wähle ein Match für die Partie- und Zugvorschau.',
+    'Wähle ein Match für die Spiel- und Zugvorschau.',
     'Selecciona un match para ver sus partidas y jugadas.',
     'Sélectionnez un match pour voir ses parties et coups.',
     'Wybierz mecz, aby obejrzeć partie i ruchy.',
@@ -591,7 +591,7 @@ const rows = {
     'Otwórz do analizy',
     'Apri per analisi',
   ],
-  game: ['Game', 'Partie', 'Partida', 'Partie', 'Partia', 'Partita'],
+  game: ['Game', 'Spiel', 'Partida', 'Partie', 'Partia', 'Partita'],
   sourceMove: ['Move', 'Zug', 'Jugada', 'Coup', 'Ruch', 'Mossa'],
   previous: [
     'Previous move',
@@ -611,7 +611,7 @@ const rows = {
   ],
   emptyGame: [
     'This game has no recorded moves.',
-    'Diese Partie hat keine aufgezeichneten Züge.',
+    'Dieses Spiel hat keine aufgezeichneten Züge.',
     'Esta partida no tiene jugadas.',
     'Cette partie n’a pas de coups enregistrés.',
     'Ta partia nie zawiera ruchów.',

@@ -120,11 +120,11 @@ test('notes tabs support keyboard navigation and localized scope labels', async 
   await expect(positionTab).toBeVisible();
   await positionTab.focus();
   await expect(
-    page.getByRole('tab', { name: 'Partie', exact: true }),
+    page.getByRole('tab', { name: 'Spiel', exact: true }),
   ).toBeEnabled();
   await page.keyboard.press('ArrowLeft');
   await expect(
-    page.getByRole('tab', { name: 'Partie', exact: true }),
+    page.getByRole('tab', { name: 'Spiel', exact: true }),
   ).toBeFocused();
   await page.keyboard.press('ArrowLeft');
   await expect(matchTab).toBeFocused();

@@ -19,12 +19,15 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::HashSet;
 use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
 
+mod history;
 mod imported;
 pub(crate) mod imported_projection;
+mod index;
+mod search;
 pub(crate) mod source;
 use source::{SourceDecision, load, players};
 
@@ -72,6 +75,17 @@ pub struct MistakeRates {
     pub loss_per_100: f64,
     /// True when there are fewer than 30 evaluable decisions.
     pub small_sample: bool,
+    /// Error rate in the earlier and the recent half of the player's matches.
+    /// Null unless both halves hold at least 10 evaluable decisions.
+    #[schema(required = true)]
+    pub trend: Option<MistakeTrend>,
+}
+#[derive(Serialize, ToSchema)]
+pub struct MistakeTrend {
+    pub earlier_error_rate: f64,
+    pub recent_error_rate: f64,
+    pub earlier_decisions: usize,
+    pub recent_decisions: usize,
 }
 #[derive(Serialize, ToSchema)]
 pub struct Mistakes {
@@ -159,6 +173,8 @@ struct MistakeAttempt {
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/study/mistakes", get(list))
+        .route("/api/study/decisions", get(search::search))
+        .route("/api/study/mistakes/history", get(history::list))
         .route("/api/study/mistakes/practice", post(practice))
         .route("/api/study/mistakes/reveal", post(reveal))
         .route("/api/study/mistakes/attempt", post(attempt))
@@ -234,37 +250,6 @@ fn can_practice_correct_cube(row: &SourceDecision) -> bool {
     }
 }
 
-#[derive(Default)]
-struct GroupStats {
-    decisions: usize,
-    errors: usize,
-    matches: BTreeSet<Uuid>,
-    loss: f64,
-}
-
-impl GroupStats {
-    fn record_error(&mut self, match_id: Uuid, loss: f64) {
-        self.errors += 1;
-        self.matches.insert(match_id);
-        self.loss += loss;
-    }
-
-    fn group(self, game_plan: GamePlan, mistake_kind: MistakeKind) -> MistakeGroup {
-        MistakeGroup {
-            game_plan,
-            mistake_kind,
-            count: self.errors,
-            match_count: self.matches.len(),
-            total_loss: self.loss,
-            rates: (self.decisions > 0).then(|| MistakeRates {
-                decision_count: self.decisions,
-                error_rate: self.errors as f64 / self.decisions as f64,
-                loss_per_100: self.loss / self.decisions as f64 * 100.0,
-                small_sample: self.decisions < MIN_RANKED_DECISIONS,
-            }),
-        }
-    }
-}
 #[utoipa::path(get,path="/api/study/mistakes",params(MistakesQuery),responses((status=200,body=Mistakes),(status=422,body=ErrorBody)),tag="Study")]
 async fn list(
     State(s): State<AppState>,
@@ -282,42 +267,17 @@ async fn list(
     let Some(player) = player else {
         return Ok(Json(result));
     };
-    let rows = load(&s.pool, q.database_id, None, Some(&player)).await?;
-    let player = player.to_lowercase();
-    let mut coverage = HashSet::new();
-    let mut groups = BTreeMap::<(&str, MistakeKind), (GamePlan, GroupStats)>::new();
-    for row in rows {
-        if !row.in_scope(&player, q.game_plan) {
-            continue;
-        }
-        let match_id = row.question.position.match_uuid;
-        result.analyzed_decisions += 1;
-        coverage.insert(match_id);
-        let plan = crate::position_game_plans::label(row.plan);
-        if let Some(mistake_kind) = opportunity(&row.decision) {
-            groups
-                .entry((plan, mistake_kind))
-                .or_insert_with(|| (row.plan, GroupStats::default()))
-                .1
-                .decisions += 1;
-        }
-        if row.meets_loss_threshold(loss) {
-            groups
-                .entry((plan, kind(&row.decision)))
-                .or_insert_with(|| (row.plan, GroupStats::default()))
-                .1
-                .record_error(match_id, row.decision.equity_loss);
-        }
-    }
-    result.analyzed_matches = coverage.len();
-    result.groups = groups
-        .into_iter()
-        .filter(|(_, (_, stats))| stats.errors > 0)
-        .map(|((_, mistake_kind), (game_plan, stats))| stats.group(game_plan, mistake_kind))
-        .collect();
-    result
-        .groups
-        .sort_by(|a, b| b.total_loss.total_cmp(&a.total_loss));
+    let (groups, decisions, matches) = index::ensure_and_group(
+        &s.pool,
+        q.database_id,
+        &player.to_lowercase(),
+        q.game_plan,
+        loss,
+    )
+    .await?;
+    result.groups = groups;
+    result.analyzed_decisions = decisions;
+    result.analyzed_matches = matches;
     Ok(Json(result))
 }
 #[utoipa::path(post,path="/api/study/mistakes/practice",request_body=MistakePracticeRequest,responses((status=200,body=MistakePractice),(status=422,body=ErrorBody)),tag="Study")]
@@ -453,6 +413,7 @@ async fn attempt(
     if evaluation.is_recomputed() {
         load_question(&s, &input.reference).await?;
     }
+    history::record(&s.pool, &row, &evaluation).await?;
     Ok(Json(MistakeAttempt {
         evaluation,
         original: original_answer(row),
@@ -509,12 +470,13 @@ fn original_answer(row: SourceDecision) -> MistakeAnswer {
 }
 #[derive(OpenApi)]
 #[openapi(
-    paths(list, practice, reveal, attempt),
+    paths(list, practice, reveal, attempt, search::search, history::list),
     components(schemas(
         MistakeKind,
         MistakeSource,
         MistakeGroup,
         MistakeRates,
+        MistakeTrend,
         Mistakes,
         MistakePracticeRequest,
         MistakeReference,
@@ -522,7 +484,13 @@ fn original_answer(row: SourceDecision) -> MistakeAnswer {
         MistakePractice,
         MistakeAnswer,
         MistakeAttemptRequest,
-        MistakeAttempt
+        MistakeAttempt,
+        search::DecisionKind,
+        search::CubeOwnerFilter,
+        search::DecisionHit,
+        search::DecisionSearchPage,
+        history::MistakePracticeDay,
+        history::MistakePracticeHistory
     ))
 )]
 pub struct RecurringMistakesDoc;

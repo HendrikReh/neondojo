@@ -24,6 +24,7 @@ export default function CardSearchControls({
   const practice = useCardPracticeText();
   const gamePlan = useGamePlanText();
   const plans = [
+    'opening',
     'pure_race',
     'racing',
     'attacking',

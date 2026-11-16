@@ -876,3 +876,87 @@ test('practice shows original match length and money-game Jacoby rules before re
   await expect(dialog).not.toContainText(answer.played);
   expect(reveals).toBe(0);
 });
+
+test('a cube question is answered by keyboard and explains score, outcomes and take point', async ({
+  page,
+}) => {
+  await list(page);
+  await page.route('**/api/study/mistakes/practice', (route) =>
+    route.fulfill({
+      json: {
+        items: [1, 2].map((n) => ({
+          ...question(n),
+          kind: 'cube_offer',
+          position: { ...position, gnubg_match_id: 'cIngAAAAAAAE', dice: [] },
+        })),
+      },
+    }),
+  );
+  const attempts: unknown[] = [];
+  await page.route('**/api/study/mistakes/attempt', (route) => {
+    attempts.push(route.request().postDataJSON().answer);
+    return route.fulfill({
+      json: {
+        original: { ...answer, best: 'double', played: 'no double' },
+        evaluation: {
+          verdict: 'best',
+          chosen: 'double',
+          best: 'double',
+          chosen_equity: 0.9,
+          best_equity: 0.9,
+          equity_loss: 0,
+          provenance: { kind: 'stored', engine: 'gnubg', plies: 2 },
+          cube_evaluation: {
+            unit: 'cubeful',
+            no_double: 0.7,
+            double_take: 0.9,
+            double_pass: 1,
+            probabilities: [0.74, 0.3, 0.01, 0.26, 0.05, 0],
+          },
+        },
+      },
+    });
+  });
+  await open(page);
+  const panel = page.getByRole('region', {
+    name: 'My recurring mistakes',
+    exact: true,
+  });
+  await panel
+    .getByRole('combobox', { name: 'Player', exact: true })
+    .selectOption('Alice');
+  await panel.getByRole('button', { name: 'Practice', exact: true }).click();
+  const dialog = page.getByRole('dialog', {
+    name: 'Practice recurring mistakes',
+    exact: true,
+  });
+  // The score reads as points still needed and the cube state is spelled out.
+  await expect(dialog.locator('[data-cube-context]')).toHaveText(
+    'Alice 7-away, Bob 7-away · Cube 1, centered',
+  );
+  const double = dialog.getByRole('button', { name: 'Double', exact: true });
+  await expect(double).toHaveAttribute('aria-keyshortcuts', 'D');
+  await double.hover();
+  await expect(page.getByRole('tooltip')).toHaveText('Double (D)');
+  // Enter does nothing before a choice; D selects and Enter checks.
+  await page.keyboard.press('Enter');
+  expect(attempts).toEqual([]);
+  await expect(dialog).toContainText('1 / 2');
+  await page.keyboard.press('d');
+  await expect(double).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.press('Enter');
+  await expect(dialog.locator('.cube-outcomes')).toContainText(
+    'Double / take · Best+0.900',
+  );
+  expect(attempts).toEqual([{ kind: 'cube_offer', action: 'double' }]);
+  await expect(dialog.locator('.cube-outcomes')).toContainText(
+    'Normalized cubeful equity · Values for Alice',
+  );
+  await expect(dialog.locator('.cube-chances')).toContainText('74.0%');
+  await expect(dialog.locator('[data-take-point]')).toHaveText(
+    /Take point at this score: \d\d\.\d% \(Kazaross-XG2; no gammons, no later cube use\) Bob wins 26\.0% of the games here\./,
+  );
+  await page.keyboard.press('Enter');
+  await expect(dialog).toContainText('2 / 2');
+  await expect(dialog.locator('.cube-outcomes')).toHaveCount(0);
+});

@@ -14,7 +14,7 @@ test('analysis-first tabs preserve the selected game, notes and database navigat
   await page.goto('/');
   const analysisTab = page.getByRole('tab', { name: 'Analyse', exact: true });
   await expect(analysisTab).toHaveAttribute('aria-selected', 'true');
-  await page.getByLabel('Partiedatei').setInputFiles({
+  await page.getByLabel('Matchdatei').setInputFiles({
     name: 'workspace.sgf',
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(
@@ -86,7 +86,7 @@ test('a delayed initial settings response cannot replace a newer saved profile',
   await page.goto('/');
   await started;
   await page
-    .getByLabel('Partiedatei')
+    .getByLabel('Matchdatei')
     .setInputFiles('../backend/tests/fixtures/tutorial.mat');
   await expect(page.locator('.board')).toBeVisible();
   await expect(
@@ -106,7 +106,7 @@ test('a delayed initial settings response cannot replace a newer saved profile',
   await expect(
     page
       .locator('.workspace-analysis-command')
-      .getByLabel('Partie-Analysetiefe', { exact: true }),
+      .getByLabel('Match-Analysetiefe', { exact: true }),
   ).toHaveValue('2');
   expect(profiles.state.current_configuration.analysis.plies).toBe(2);
   release();
@@ -114,7 +114,7 @@ test('a delayed initial settings response cannot replace a newer saved profile',
   await expect(
     page
       .locator('.workspace-analysis-command')
-      .getByLabel('Partie-Analysetiefe', { exact: true }),
+      .getByLabel('Match-Analysetiefe', { exact: true }),
   ).toHaveValue('2');
 });
 
@@ -124,7 +124,7 @@ test('inspector tabs support arrow, Home and End navigation', async ({
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
   await page.goto('/');
   await page
-    .getByLabel('Partiedatei')
+    .getByLabel('Matchdatei')
     .setInputFiles('../backend/tests/fixtures/tutorial.mat');
   const notes = page.getByRole('tab', { name: 'Notizen', exact: true });
   await notes.click();
@@ -150,7 +150,7 @@ test('an analysis submission error appears once in the errors view', async ({
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
   await page.goto('/');
   await page
-    .getByLabel('Partiedatei')
+    .getByLabel('Matchdatei')
     .setInputFiles('../backend/tests/fixtures/tutorial.mat');
   await expect(page.locator('.board')).toBeVisible();
   await page.route('**/api/matches/*/analysis', async (route) =>
@@ -177,7 +177,7 @@ test('accepted position jobs remain tracked without a duplicate banner after a p
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
   await page.goto('/');
   await page
-    .getByLabel('Partiedatei')
+    .getByLabel('Matchdatei')
     .setInputFiles('../backend/tests/fixtures/tutorial.mat');
   await expect(page.locator('.board')).toBeVisible();
   let release = () => {},
@@ -227,7 +227,7 @@ test('accepted game jobs remain tracked when the game changes during submission'
 }) => {
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
   await page.goto('/');
-  await page.getByLabel('Partiedatei').setInputFiles({
+  await page.getByLabel('Matchdatei').setInputFiles({
     name: 'job-switch.sgf',
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(
@@ -277,7 +277,7 @@ test('accepted game jobs remain tracked when the game changes during submission'
 test('next position error respects the player filter', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
   await page.goto('/');
-  await page.getByLabel('Partiedatei').setInputFiles({
+  await page.getByLabel('Matchdatei').setInputFiles({
     name: 'filtered-errors.sgf',
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(
@@ -325,7 +325,7 @@ test('the last game and exact move restore without starting an analysis', async 
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
   await page.goto('/');
   await page
-    .getByLabel('Partiedatei')
+    .getByLabel('Matchdatei')
     .setInputFiles('../backend/tests/fixtures/WC2014.mat');
   await page.getByLabel('Spiel auswählen', { exact: true }).selectOption('8');
   await expect(page.locator('.board-heading')).toContainText('Spiel 8');

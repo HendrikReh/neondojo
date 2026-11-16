@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import ActionButton from './ActionButton';
 import { useConfirmedConfiguration } from './ConfigurationProvider';
 import MistakeGroupTable from './MistakeGroupTable';
@@ -6,7 +6,11 @@ import MistakePlayerSelect from './MistakePlayerSelect';
 import RecurringMistakePractice from './RecurringMistakePractice';
 import { useGamePlanText } from './game-plan-messages';
 import { useI18n } from './i18n';
-import { loadLearningSummary, type LearningSummary } from './learning-api';
+import {
+  loadLearningSummary,
+  saveLearningPreferences,
+  type LearningSummary,
+} from './learning-api';
 import { useLearningText } from './learning-messages';
 import {
   loadMistakes,
@@ -64,6 +68,29 @@ function Overview({
   const { locale, formatError, formatNumber } = useI18n();
   const [summary, setSummary] = useState<Result<LearningSummary>>(loading);
   const [cardRefresh, setCardRefresh] = useState(0);
+  const [limitDraft, setLimitDraft] = useState<string>();
+  const [limitError, setLimitError] = useState<unknown>();
+  const limitId = useId();
+  const limitHint = useId();
+  const saveLimit = (saved: number) => {
+    const value = Number(limitDraft);
+    if (limitDraft === undefined || limitDraft.trim() === '') {
+      setLimitDraft(undefined);
+      return;
+    }
+    if (!Number.isInteger(value) || value < 0 || value > 1000) return;
+    if (value === saved) {
+      setLimitDraft(undefined);
+      return;
+    }
+    setLimitError(undefined);
+    void saveLearningPreferences({ new_cards_per_day: value })
+      .then(() => {
+        setLimitDraft(undefined);
+        setCardRefresh((count) => count + 1);
+      })
+      .catch((error: unknown) => setLimitError(error));
+  };
   const [players, setPlayers] = useState<Result<string[]>>(loading);
   const [mistakeRefresh, setMistakeRefresh] = useState(0);
   const [manualPlayer, setManualPlayer] = useState<string>();
@@ -284,9 +311,52 @@ function Overview({
         {summary.status === 'ready' && (
           <>
             <p className="study-overview-due">
-              {formatNumber(summary.data.due_count)}
+              {formatNumber(summary.data.today_count ?? summary.data.due_count)}
             </p>
-            {summary.data.due_count === 0 && (
+            {summary.data.today_count != null && (
+              <>
+                <p data-study-today>
+                  {t('todayBreakdown', {
+                    due: formatNumber(summary.data.review_due_count),
+                    fresh: formatNumber(summary.data.new_available_today),
+                  })}
+                </p>
+                {summary.data.new_count > summary.data.new_available_today && (
+                  <p className="fineprint">
+                    {t('newWaiting', {
+                      count: formatNumber(
+                        summary.data.new_count -
+                          summary.data.new_available_today,
+                      ),
+                    })}
+                  </p>
+                )}
+                <div className="study-overview-limit">
+                  <label htmlFor={limitId}>{t('newPerDay')}</label>
+                  <input
+                    id={limitId}
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    max={1000}
+                    step={1}
+                    aria-describedby={limitHint}
+                    value={limitDraft ?? summary.data.new_cards_per_day}
+                    onChange={(event) => setLimitDraft(event.target.value)}
+                    onBlur={() => saveLimit(summary.data.new_cards_per_day)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter')
+                        saveLimit(summary.data.new_cards_per_day);
+                    }}
+                  />
+                  <span id={limitHint} className="fineprint">
+                    {t('newPerDayHint')}
+                  </span>
+                </div>
+                {!!limitError && <p role="alert">{formatError(limitError)}</p>}
+              </>
+            )}
+            {(summary.data.today_count ?? summary.data.due_count) === 0 && (
               <p>
                 {summary.data.next_due_at
                   ? t('nextDue', {

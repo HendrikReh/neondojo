@@ -217,6 +217,7 @@ pub(crate) fn project(
                     no_double: sign * nd,
                     double_take: sign * dt,
                     double_pass: sign * dp,
+                    probabilities: None,
                 };
                 let (best, pe, be) = cube_options(
                     played,
@@ -321,6 +322,7 @@ fn bgblitz_cube(record: &ImportedAnalysisData, played: &str) -> Option<ImportedC
         no_double: nd,
         double_take: dt,
         double_pass: dp,
+        probabilities: None,
     };
     let error = number(&record.raw["pr"]["cubeError"])?;
     if error > 0.0 || error == -99.0 {

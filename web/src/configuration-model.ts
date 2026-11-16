@@ -469,9 +469,15 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
   )
     invalid('learning.filters');
   if (
-    !['', 'pure_race', 'racing', 'attacking', 'priming', 'anchoring'].includes(
-      c.learning.filters.game_plan ?? '',
-    )
+    ![
+      '',
+      'opening',
+      'pure_race',
+      'racing',
+      'attacking',
+      'priming',
+      'anchoring',
+    ].includes(c.learning.filters.game_plan ?? '')
   )
     invalid('learning.filters.game_plan');
   if (!isCollectionScope(c.learning.deck_id) && !uuid.test(c.learning.deck_id))

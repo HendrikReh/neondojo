@@ -184,7 +184,11 @@ test('collections, independent copies, filters and metadata work together', asyn
   ).toHaveCount(0);
   await page.locator('.database-table tbody tr').first().click();
   await expect(page.locator('.match-preview')).toHaveCount(0);
-  await page.locator('.database-table tbody tr').first().getByRole('checkbox').check();
+  await page
+    .locator('.database-table tbody tr')
+    .first()
+    .getByRole('checkbox')
+    .check();
   await page
     .locator('.library-batch-bar')
     .getByRole('button', {
@@ -544,7 +548,7 @@ test('a native full-match analysis supplies GNUbg PR to the match overview', asy
   await page.getByLabel('Search matches', { exact: true }).fill(player);
   const row = page.locator('.database-table tbody tr');
   await expect(row).toHaveCount(1);
-  await expect(row.locator('td').nth(3)).toHaveText(/\d+\.\d{2}/);
-  await expect(row.locator('td').nth(5)).toHaveText(/\d+\.\d{2}/);
+  await expect(row.locator('td').nth(3)).toHaveText(/^\d+\.\d$/);
+  await expect(row.locator('td').nth(5)).toHaveText(/^\d+\.\d$/);
   await expect(row).toContainText('Completed');
 });

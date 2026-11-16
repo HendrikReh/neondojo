@@ -18,7 +18,7 @@ const entries = {
   ],
   coverage: [
     'Completed local analyses take precedence for each game; otherwise, comparable imported XG and BGBlitz analyses are included. Each decision is counted once.',
-    'Pro Partie haben abgeschlossene lokale Analysen Vorrang; sonst zählen vergleichbare importierte XG- und BGBlitz-Analysen. Jede Entscheidung zählt einmal.',
+    'Pro Spiel haben abgeschlossene lokale Analysen Vorrang; sonst zählen vergleichbare importierte XG- und BGBlitz-Analysen. Jede Entscheidung zählt einmal.',
     'Los análisis locales completos tienen prioridad por partida; en su ausencia se incluyen análisis XG y BGBlitz importados comparables. Cada decisión se cuenta una vez.',
     'Les analyses locales terminées sont prioritaires par partie ; sinon les analyses XG et BGBlitz importées comparables sont incluses. Chaque décision compte une seule fois.',
     'Ukończone analizy lokalne mają pierwszeństwo dla danej gry; w pozostałych uwzględniamy porównywalne analizy XG i BGBlitz. Każda decyzja jest liczona raz.',
@@ -43,7 +43,7 @@ const entries = {
   ],
   noPlayers: [
     'No players found in the selected match collection.',
-    'In der gewählten Partiensammlung wurden keine Spieler gefunden.',
+    'In der gewählten Matchdatenbank wurden keine Spieler gefunden.',
     'No se encontraron jugadores en la colección de partidas seleccionada.',
     'Aucun joueur trouvé dans la collection de parties sélectionnée.',
     'Nie znaleziono graczy w wybranej kolekcji meczów.',
@@ -202,6 +202,22 @@ const entries = {
     'Taux d’erreur',
     'Odsetek błędów',
     'Tasso di errore',
+  ],
+  trend: [
+    'Earlier → recent',
+    'Früher → zuletzt',
+    'Antes → reciente',
+    'Avant → récemment',
+    'Wcześniej → ostatnio',
+    'Prima → di recente',
+  ],
+  trendHelp: [
+    'Error rate in the earlier and the recent half of the matches, by date. Shown when each half has at least 10 evaluable decisions.',
+    'Fehlerquote in der früheren und der jüngeren Hälfte der Matches nach Datum. Erscheint, wenn jede Hälfte mindestens 10 bewertbare Entscheidungen hat.',
+    'Tasa de error en la mitad anterior y en la mitad reciente de los encuentros, por fecha. Se muestra si cada mitad tiene al menos 10 decisiones evaluables.',
+    'Taux d’erreur dans la première et la seconde moitié des matchs, par date. Affiché si chaque moitié compte au moins 10 décisions évaluables.',
+    'Odsetek błędów we wcześniejszej i późniejszej połowie meczów według daty. Widoczny, gdy każda połowa ma co najmniej 10 ocenialnych decyzji.',
+    'Tasso di errore nella metà precedente e in quella recente dei match, per data. Mostrato se ogni metà ha almeno 10 decisioni valutabili.',
   ],
   lossPer100: [
     'Equity loss per 100 decisions',

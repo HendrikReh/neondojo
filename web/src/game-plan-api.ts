@@ -7,10 +7,11 @@ export type GamePlans = Omit<
   components['schemas']['GamePlans'],
   'classifier'
 > & {
-  classifier: 'opensage_rules_v1';
+  classifier: 'opensage_rules_v1_opening1';
 };
 
 const planNames = new Set<GamePlan>([
+  'opening',
   'pure_race',
   'racing',
   'attacking',
@@ -41,7 +42,7 @@ export function validateGamePlans(
   if (!value || typeof value !== 'object') return undefined;
   const result = value as Partial<GamePlans>;
   if (
-    result.classifier !== 'opensage_rules_v1' ||
+    result.classifier !== 'opensage_rules_v1_opening1' ||
     typeof result.source_revision !== 'string' ||
     !result.source_revision.trim() ||
     typeof result.game_over !== 'boolean' ||

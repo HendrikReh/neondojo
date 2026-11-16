@@ -11,6 +11,14 @@ const entries = {
   ],
   white: ['White', 'Weiß', 'Blancas', 'Blancs', 'Białe', 'Bianchi'],
   black: ['Black', 'Schwarz', 'Negras', 'Noirs', 'Czarne', 'Neri'],
+  opening: [
+    'Opening',
+    'Eröffnung',
+    'Apertura',
+    'Ouverture',
+    'Otwarcie',
+    'Apertura',
+  ],
   pure_race: [
     'Pure race',
     'Reines Rennen',

@@ -1,6 +1,7 @@
 import { useWorkspaceDefaults } from './ConfigurationProvider';
 import ActionButton from './ActionButton';
 import {
+  Fragment,
   useCallback,
   useMemo,
   useEffect,
@@ -10,6 +11,7 @@ import {
   type KeyboardEvent,
   type CSSProperties,
 } from 'react';
+import { useGameCubeActions, type CubeAction } from './useGameCubeActions';
 import Board, { type Theme } from './Board';
 import BoardReviewControls from './BoardReviewControls';
 import { useBoardReviewShortcuts } from './useBoardReviewShortcuts';
@@ -214,6 +216,23 @@ export default function AnalysisWorkspace({
     (typeof moveHistoryFilters)[number]
   >('analysis.moveHistory', undefined, 'all', parseMoveHistoryFilter);
   const filteredMoves = sourceAvailable && moveFilter !== 'all';
+  // Doubles, takes and passes are shown between checker moves when the
+  // history is unfiltered, so a row never appears next to the wrong action.
+  const cubeActions = useGameCubeActions(
+    sourceAvailable && !filteredMoves ? match?.id : undefined,
+    game?.game_no,
+  );
+  const cubeLines = (actions?: CubeAction[]) =>
+    actions?.map((action) => (
+      <p key={action.id} className="move-history-cube" data-cube-action>
+        <i
+          aria-hidden="true"
+          className={`player-dot ${action.player === 0 ? 'white' : 'black'}`}
+        />
+        {action.player === 0 ? match?.white : match?.black}:{' '}
+        {formatDecision(action.notation)}
+      </p>
+    ));
   const history = useMemo(
     () =>
       positions.flatMap((move, index) => {
@@ -494,16 +513,19 @@ export default function AnalysisWorkspace({
           )}
           <div className="moves-list" ref={moveList}>
             {history.map(({ move, index: moveIndex, assessment }) => (
-              <MoveHistoryRow
-                key={move.id}
-                position={move}
-                players={[match.white, match.black]}
-                assessment={assessment}
-                current={moveIndex === index}
-                buttonRef={moveIndex === index ? currentMove : undefined}
-                onSelect={() => navigation.selectIndex(moveIndex)}
-              />
+              <Fragment key={move.id}>
+                {cubeLines(cubeActions?.before.get(move.id))}
+                <MoveHistoryRow
+                  position={move}
+                  players={[match.white, match.black]}
+                  assessment={assessment}
+                  current={moveIndex === index}
+                  buttonRef={moveIndex === index ? currentMove : undefined}
+                  onSelect={() => navigation.selectIndex(moveIndex)}
+                />
+              </Fragment>
             ))}
+            {!filteredMoves && cubeLines(cubeActions?.trailing)}
             {filteredMoves &&
               history.length === 0 &&
               !moveAssessments.error && (

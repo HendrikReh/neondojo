@@ -209,6 +209,9 @@ test('history rates the corrected move and names the session analysis engine', a
     /Open Sage 2\.0\.20260907 · 2-ply/,
   );
   await expect(marker).not.toHaveAttribute('data-move-assessment', /GNUbg/);
+  await expect(
+    page.locator('.play-history .play-history-first-attempt'),
+  ).toHaveText('First attempt: 8/2 6/5 · 0.331');
   await row.hover();
   await expect(page.getByRole('tooltip')).toContainText(
     'First attempt: 8/2 6/5 · Δ +0.331',

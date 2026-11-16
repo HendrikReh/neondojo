@@ -25,6 +25,9 @@ export default function MistakeGroupTable({
             <th scope="col">{t('occurrences')}</th>
             <th scope="col">{t('opportunities')}</th>
             <th scope="col">{t('errorRate')}</th>
+            <th scope="col" title={t('trendHelp')}>
+              {t('trend')}
+            </th>
             <th scope="col">{t('matches')}</th>
             <th scope="col">{t('totalLoss')}</th>
             <th scope="col">{t('lossPer100')}</th>
@@ -47,6 +50,11 @@ export default function MistakeGroupTable({
               </td>
               <td>
                 {group.rates ? formatPercent(group.rates.error_rate, 1) : '—'}
+              </td>
+              <td data-mistake-trend>
+                {group.rates?.trend
+                  ? `${formatPercent(group.rates.trend.earlier_error_rate, 1)} → ${formatPercent(group.rates.trend.recent_error_rate, 1)}`
+                  : '—'}
               </td>
               <td>{formatNumber(group.match_count)}</td>
               <td>{formatNumber(group.total_loss, lossDigits)}</td>

@@ -63,6 +63,7 @@ import LibraryFilters, {
 } from './LibraryFilters';
 import LibraryDialogs, { type LibraryDialogState } from './LibraryDialogs';
 import './library.css';
+import { prDigits } from './pr-format';
 
 export interface PositionSearchRequest {
   positionId: string;
@@ -121,7 +122,10 @@ export default function MatchDatabase({
     missing: number;
     loading: boolean;
   };
-  onAnalyzeMatches?: (matches: LibraryMatch[], unavailableCount: number) => void;
+  onAnalyzeMatches?: (
+    matches: LibraryMatch[],
+    unavailableCount: number,
+  ) => void;
   onPosition: (p: Position) => void;
   onAnnotation: (hit: AnnotationHit) => void;
   onImport: (databaseId: string) => void;
@@ -508,12 +512,7 @@ export default function MatchDatabase({
       !isUnfinishedCompetition(match),
   );
   const pr = (value: number | null) =>
-    value == null
-      ? '—'
-      : formatNumber(value, {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        });
+    value == null ? '—' : formatNumber(value, prDigits);
   const date = (value: string | null) =>
     value
       ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(

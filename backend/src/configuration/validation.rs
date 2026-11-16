@@ -415,6 +415,7 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
         &f.game_plan,
         &[
             "",
+            "opening",
             "pure_race",
             "racing",
             "attacking",

@@ -52,7 +52,7 @@ export const databaseBackupMessages = {
     title: 'Datenbanksicherung',
     exportTitle: 'Sicherung exportieren',
     exportHelp:
-      'Alle Partiedatenbanken, Notizen, Analysen, Profile und den Lernfortschritt als eine Datei herunterladen.',
+      'Alle Matchdatenbanken, Notizen, Analysen, Profile und den Lernfortschritt als eine Datei herunterladen.',
     exporting: 'Sicherung wird erstellt …',
     exported: 'Der Download der Sicherung wurde gestartet.',
     importTitle: 'Sicherung wiederherstellen',

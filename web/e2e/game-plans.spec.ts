@@ -42,7 +42,7 @@ function gate() {
   return { waiting, release };
 }
 const response = (white: string, black: string, game_over = false) => ({
-  classifier: 'opensage_rules_v1',
+  classifier: 'opensage_rules_v1_opening1',
   source_revision: '139427d826dd67798226e7d23c003c90315306ba',
   game_over,
   white,

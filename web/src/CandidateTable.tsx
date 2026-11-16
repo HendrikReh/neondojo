@@ -21,6 +21,8 @@ import {
   type CandidatePosition,
   type ComparisonCandidate,
 } from './candidate-comparison';
+import MoveExplanation from './MoveExplanation';
+import { useMoveExplanationText } from './move-explanation-messages';
 import './candidate-table.css';
 
 const outcomeColumns = ['total', 'single', 'gammon', 'backgammon'] as const;
@@ -52,6 +54,7 @@ export default function CandidateTable({
   const lossText = useCandidateLossText();
   const sourceText = useSourceText();
   const review = useBoardReviewText();
+  const glossary = useMoveExplanationText();
   const best = candidates.find((candidate) => candidate.rank === 1);
   const units = [
     ...new Set(candidates.map((candidate) => candidate.equity_kind)),
@@ -68,6 +71,7 @@ export default function CandidateTable({
       ),
     [candidates, played, position],
   );
+  const playedCandidate = candidates[playedRows.indexOf(true)];
   const preview = (candidate: ComparisonCandidate) =>
     onPreview?.({
       notation: candidatePreviewNotation(candidate),
@@ -102,7 +106,12 @@ export default function CandidateTable({
                 <th scope="col" rowSpan={2} className="candidate-move-heading">
                   {t('common.move')}
                 </th>
-                <th scope="col" rowSpan={2} className="candidate-number">
+                <th
+                  scope="col"
+                  rowSpan={2}
+                  className="candidate-number"
+                  title={glossary('equity')}
+                >
                   {t('common.equity')}
                 </th>
                 <th
@@ -269,6 +278,15 @@ export default function CandidateTable({
             </tbody>
           </table>
         </div>
+      )}
+      {position && best && playedCandidate && playedCandidate !== best && (
+        <MoveExplanation
+          position={position}
+          best={candidatePreviewNotation(best)}
+          played={candidatePreviewNotation(playedCandidate)}
+          bestChances={best.probabilities}
+          playedChances={playedCandidate.probabilities}
+        />
       )}
     </div>
   );

@@ -82,6 +82,9 @@ impl SageEngine {
                         cube.take,
                         cube.pass,
                     )?;
+                    if let Some(evaluation) = &mut result.cube_evaluation {
+                        evaluation.probabilities = cube.probabilities.as_slice().try_into().ok();
+                    }
                     result.checker_no = event.checker_ply;
                     decisions.push(result);
                 }
@@ -129,13 +132,23 @@ impl SageEngine {
                     .await?;
                 let response = matches!(played.as_str(), "take" | "drop");
                 let sign = if response { -1.0 } else { 1.0 };
-                decisions.push(evaluated_cube_decision(
+                let mut result = evaluated_cube_decision(
                     event.player,
                     &played,
                     sign * cube.no_double,
                     sign * cube.take,
                     sign * cube.pass,
-                )?);
+                )?;
+                if let Some(evaluation) = &mut result.cube_evaluation {
+                    let probabilities: Option<[f64; 6]> =
+                        cube.probabilities.as_slice().try_into().ok();
+                    evaluation.probabilities = if response {
+                        probabilities.map(crate::engine::flip_probabilities)
+                    } else {
+                        probabilities
+                    };
+                }
+                decisions.push(result);
             }
         }
         ensure!(

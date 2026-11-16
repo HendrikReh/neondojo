@@ -10,6 +10,7 @@ import { useStudyText } from './study-messages';
 import type { PlaySession } from './play-api';
 import { usePlayModeText } from './play-mode-messages';
 import { useI18n } from './i18n';
+import { prDigits } from './pr-format';
 export default function PlayLearningReview({
   session,
   theme,
@@ -73,7 +74,7 @@ export default function PlayLearningReview({
             {t('firstPr')}:{' '}
             {result.first_attempt_rating == null
               ? '—'
-              : number(result.first_attempt_rating)}
+              : formatNumber(result.first_attempt_rating, prDigits)}
           </strong>
         </p>
         <p className="play-mode-help">{t('firstPrHelp')}</p>

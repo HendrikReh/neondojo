@@ -194,9 +194,13 @@ test('actively answers and reviews all three card types, with an idempotent retr
         await route.fulfill({
           json: {
             card_count: counts.total,
-            due_count: counts.due,
+            // Due reviews and the new cards still allowed today.
+            due_count: counts.due + (counts.new_available ?? 0),
             next_due_at: null,
-            next_deck: counts.due ? { id: deck.id, name: deck.name } : null,
+            next_deck:
+              counts.due + (counts.new_available ?? 0)
+                ? { id: deck.id, name: deck.name }
+                : null,
           },
         });
       });

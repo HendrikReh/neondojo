@@ -130,7 +130,7 @@ const de: Record<Key, string> = {
   watchMove: 'Die Steine werden gezogen…',
   sounds: 'Spielgeräusche',
   soundsHelp:
-    'Dezente Geräusche für Ziehen, Würfeln, Schlagen, Bear-off und Dopplerangebote. Die Einstellung wird in der aktuellen Konfiguration gespeichert und gilt auch für laufende Partien.',
+    'Dezente Geräusche für Ziehen, Würfeln, Schlagen, Bear-off und Dopplerangebote. Die Einstellung wird in der aktuellen Konfiguration gespeichert und gilt auch für laufende Matches.',
   openingRolling: 'Beide Seiten werfen je einen Würfel…',
   openingPreparing: 'Der erste Zug wird vorbereitet…',
   openingNotRolled: 'Noch nicht gewürfelt',

@@ -98,6 +98,12 @@ pub struct CubeEvaluation {
     pub no_double: f64,
     pub double_take: f64,
     pub double_pass: f64,
+    /// Cubeless win, gammon and backgammon chances followed by the three
+    /// losing chances, for the same player. Absent in older checkpoints and
+    /// for sources that do not record them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(min_items = 6, max_items = 6)]
+    pub probabilities: Option<[f64; 6]>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -571,6 +577,7 @@ fn cube_decision(block: &str, player: i32, played: &str) -> Result<Decision> {
         mut no_double,
         mut take,
         mut pass,
+        mut probabilities,
     } = crate::engine::parse_cube_equities(block)?;
     // A pass loses one pre-offer cube unit for the responder. Older
     // GNUbg exports use the doubler's perspective, where it is positive.
@@ -578,8 +585,13 @@ fn cube_decision(block: &str, player: i32, played: &str) -> Result<Decision> {
         no_double = -no_double;
         take = -take;
         pass = -pass;
+        probabilities = probabilities.map(crate::engine::flip_probabilities);
     }
-    evaluated_cube_decision(player, played, no_double, take, pass)
+    let mut result = evaluated_cube_decision(player, played, no_double, take, pass)?;
+    if let Some(evaluation) = &mut result.cube_evaluation {
+        evaluation.probabilities = probabilities;
+    }
+    Ok(result)
 }
 
 pub(crate) fn evaluated_cube_decision(
@@ -597,6 +609,7 @@ pub(crate) fn evaluated_cube_decision(
         no_double,
         double_take,
         double_pass,
+        probabilities: None,
     });
     Ok(result)
 }

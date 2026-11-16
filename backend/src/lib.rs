@@ -1,4 +1,5 @@
 pub mod api;
+pub mod cube_context;
 pub mod engine;
 pub mod engines;
 pub mod game_plan;
@@ -20,6 +21,7 @@ pub mod settings;
 mod database_backup;
 pub mod databases;
 pub mod move_catalog;
+pub mod move_explanation;
 mod player_directory;
 
 pub mod opening_book;

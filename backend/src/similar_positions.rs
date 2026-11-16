@@ -59,6 +59,10 @@ struct SimilarHit {
     black: String,
     /// Minimum checker-pips needed to transform one arrangement into the other.
     distance: i32,
+    /// Loss of the played move in the match's displayed native analysis;
+    /// null without one.
+    #[schema(required = true)]
+    equity_loss: Option<f64>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -208,9 +212,24 @@ async fn search(
     }
     let (distances, ids): (Vec<i32>, Vec<Uuid>) = closest.into_sorted_vec().into_iter().unzip();
     let items = sqlx::query_as(
-        "SELECT p.*,ranked.distance,coalesce(nullif(m.display_name,''),m.filename) AS match_name,
-                m.white,m.black
-         FROM unnest($1::uuid[],$2::integer[]) WITH ORDINALITY AS ranked(id,distance,ordinal)
+        "WITH ranked AS (
+             SELECT * FROM unnest($1::uuid[],$2::integer[]) WITH ORDINALITY AS r(id,distance,ordinal)
+         ), displayed AS (
+             -- One catalog lookup per match, not per position.
+             SELECT hit.match_uuid,sel.job_id
+             FROM (SELECT DISTINCT p.match_uuid FROM ranked JOIN positions p ON p.id=ranked.id) hit
+             CROSS JOIN LATERAL (
+                 SELECT s.job_id FROM effective_analysis_selections s
+                 WHERE s.match_id=hit.match_uuid AND s.source='native' OFFSET 0
+             ) sel
+         )
+         SELECT p.*,ranked.distance,coalesce(nullif(m.display_name,''),m.filename) AS match_name,
+                m.white,m.black,
+                (SELECT a.equity_loss FROM displayed d
+                 JOIN move_analyses a ON a.job_id=d.job_id
+                 WHERE d.match_uuid=p.match_uuid AND a.position_uuid=p.id AND a.kind='checker'
+                 LIMIT 1) AS equity_loss
+         FROM ranked
          JOIN positions p ON p.id=ranked.id JOIN matches m ON m.id=p.match_uuid
          ORDER BY ranked.ordinal",
     )

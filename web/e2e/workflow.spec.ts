@@ -22,7 +22,7 @@ test('real import, search, GNUbg analysis, distribution, themes and mobile layou
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/');
   await expect(page.getByText('GNUbg verbunden')).toBeVisible();
-  await page.getByLabel('Partiedatei').setInputFiles({
+  await page.getByLabel('Matchdatei').setInputFiles({
     name: 'tutorial.mat',
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(
@@ -76,7 +76,7 @@ test('real import, search, GNUbg analysis, distribution, themes and mobile layou
     '4 aufgezeichnete Würfe',
   );
   await page.getByRole('tab', { name: 'Matchdatenbank', exact: true }).click();
-  await page.getByLabel('Partien durchsuchen').fill('Tutor Demo');
+  await page.getByLabel('Matches durchsuchen').fill('Tutor Demo');
   await expect(page.locator('.match-card')).toHaveCount(1);
   await page.getByRole('tab', { name: 'Analyse', exact: true }).click();
   await page.getByRole('tab', { name: 'Zugkandidaten' }).click();
@@ -88,7 +88,7 @@ test('real import, search, GNUbg analysis, distribution, themes and mobile layou
   await page.reload();
   await expect(page.locator('.analysis-workspace .theme-walnut')).toBeVisible();
   await page.getByRole('tab', { name: 'Matchdatenbank', exact: true }).click();
-  await page.getByLabel('Partien durchsuchen').fill('Tutor Demo');
+  await page.getByLabel('Matches durchsuchen').fill('Tutor Demo');
   await page
     .locator('.match-card')
     .filter({ hasText: 'Tutor Demo' })
@@ -116,7 +116,7 @@ test('a late game loads directly and its full move list stops at its own boundar
 }) => {
   await page.goto('/');
   await page
-    .getByLabel('Partiedatei')
+    .getByLabel('Matchdatei')
     .setInputFiles('../backend/tests/fixtures/WC2014.xg');
   await page.getByLabel('Spiel auswählen', { exact: true }).selectOption('1');
   await expect(page.locator('.moves-list button')).toHaveCount(8, {
@@ -141,7 +141,7 @@ test('full match analysis, errors, board navigation and persisted results', asyn
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/');
-  await page.getByLabel('Partiedatei').setInputFiles({
+  await page.getByLabel('Matchdatei').setInputFiles({
     name: 'match-analysis-demo.mat',
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(
@@ -150,7 +150,7 @@ test('full match analysis, errors, board navigation and persisted results', asyn
   });
   await page.getByRole('tab', { name: 'Cube', exact: true }).click();
   const panel = page.getByRole('region', {
-    name: 'Vollständige Partieanalyse',
+    name: 'Vollständige Matchanalyse',
     exact: true,
   });
   const progress = page
@@ -167,7 +167,7 @@ test('full match analysis, errors, board navigation and persisted results', asyn
   expect(submitted.status()).toBe(202);
   const created = await submitted.json();
   await expect(
-    progress.getByText('Partieanalyse abgeschlossen', { exact: true }),
+    progress.getByText('Matchanalyse abgeschlossen', { exact: true }),
   ).toBeVisible({ timeout: 45_000 });
   await expect(progress.getByRole('progressbar')).toHaveAttribute(
     'value',
@@ -186,10 +186,21 @@ test('full match analysis, errors, board navigation and persisted results', asyn
   await expect(panel.getByRole('checkbox', { name: /Nur Auffälligkeiten/ })).toBeChecked();
   await panel.getByLabel('Nur Auffälligkeiten').uncheck();
   await page.getByRole('button', { name: 'Nächste Entscheidung', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Cube-Bewertung', exact: true })).toBeVisible();
+  const cubeReview = page.getByRole('region', { name: 'Cube-Bewertung', exact: true });
+  await expect(cubeReview).toBeVisible();
+  // Score as points still needed, cube state, all outcomes and the take point.
+  await expect(cubeReview.locator('[data-cube-context]')).toContainText(
+    /7-Punkte-Match · Match Review Demo [67]-away, Opponent Review [67]-away · Cube 1, in der Mitte/,
+  );
+  for (const outcome of ['Nicht doppeln', 'Doppeln / annehmen', 'Doppeln / passen'])
+    await expect(cubeReview.locator('.cube-outcomes')).toContainText(outcome);
+  await expect(cubeReview.locator('.cube-chances')).toContainText('Gammon');
+  await expect(cubeReview.locator('[data-take-point]')).toContainText(
+    /Take-Point bei diesem Stand: \d+,\d\u00a0% \(Kazaross-XG2/,
+  );
   await page.reload();
   await page.getByRole('tab', { name: 'Matchdatenbank', exact: true }).click();
-  await page.getByLabel('Partien durchsuchen').fill('Match Review Demo');
+  await page.getByLabel('Matches durchsuchen').fill('Match Review Demo');
   await page
     .locator('.match-card')
     .filter({ hasText: 'Match Review Demo' })
@@ -197,7 +208,7 @@ test('full match analysis, errors, board navigation and persisted results', asyn
     .click();
   await page.getByRole('tab', { name: 'Cube', exact: true }).click();
   await expect(
-    progress.getByText('Partieanalyse abgeschlossen', { exact: true }),
+    progress.getByText('Matchanalyse abgeschlossen', { exact: true }),
   ).toBeVisible();
   await expect(page.locator('.board-error-count')).toContainText('Entscheidungen:');
   await panel.scrollIntoViewIfNeeded();
@@ -241,7 +252,7 @@ test('full match analysis starts and preserves conflicting local settings', asyn
   }, pending);
 
   await page.goto('/');
-  await page.getByLabel('Partiedatei').setInputFiles({
+  await page.getByLabel('Matchdatei').setInputFiles({
     name: 'analysis-profile-conflict.mat',
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(
@@ -250,7 +261,7 @@ test('full match analysis starts and preserves conflicting local settings', asyn
   });
   const dialog = await openFullMatchAnalysis(page);
   await dialog
-    .getByLabel('Partie-Analysetiefe', { exact: true })
+    .getByLabel('Match-Analysetiefe', { exact: true })
     .selectOption('0');
   const submitted = page.waitForResponse(
     (response) =>
@@ -281,11 +292,11 @@ test('full match analysis starts and preserves conflicting local settings', asyn
 
 test('manual checker selection wins during a delayed review response', async ({ page }) => {
   await page.goto('/');
-  await page.getByLabel('Partiedatei').setInputFiles('../backend/tests/fixtures/WC2014.mat');
+  await page.getByLabel('Matchdatei').setInputFiles('../backend/tests/fixtures/WC2014.mat');
   const dialog = await openFullMatchAnalysis(page);
-  await dialog.getByLabel('Partie-Analysetiefe', { exact: true }).selectOption('0');
+  await dialog.getByLabel('Match-Analysetiefe', { exact: true }).selectOption('0');
   await submitFullMatchAnalysis(page, dialog);
-  await expect(page.locator('.match-analysis-progress')).toContainText('Partieanalyse abgeschlossen');
+  await expect(page.locator('.match-analysis-progress')).toContainText('Matchanalyse abgeschlossen');
   await page.getByRole('tab', { name: 'Statistik', exact: true }).click();
   await page.locator('.statistics-summary [data-statistics-metric="checker"]').first().click();
   const next = page.getByRole('button', { name: 'Nächste Entscheidung', exact: true });

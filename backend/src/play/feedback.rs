@@ -418,6 +418,7 @@ pub(super) async fn analyze_decision(
         no_double,
         take,
         pass,
+        ..
     } = crate::engine::parse_cube_equities(&output)?;
     let native_values: Vec<f64> =
         serde_json::from_slice(&tokio::fs::read(directory.path().join("cube.json")).await?)?;

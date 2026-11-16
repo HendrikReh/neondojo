@@ -1857,8 +1857,9 @@ async fn game_plan_filter_uses_the_player_on_roll_and_precedes_pagination(pool: 
 #[ignore = "requires PostgreSQL"]
 async fn game_plan_cache_is_versioned_and_retained_positions_remain_searchable(pool: PgPool) {
     let (app, id, positions) = setup(&pool).await;
+    // Past the opening, so the pinned rules decide the labels.
     let board = vec![
-        0, -1, 1, 0, 1, 0, 5, -1, 1, 0, 0, 0, -5, 5, 0, 0, 0, -3, 0, -4, 0, 0, 0, -1, 2, 0,
+        0, -1, 1, 1, 1, 1, 5, -1, 1, 1, 0, 0, -2, 2, 0, 0, 0, -3, -2, -4, -1, 0, 0, -1, 2, 0,
     ];
     for position in &positions[..2] {
         sqlx::query("UPDATE positions SET board=$2 WHERE id=$1")

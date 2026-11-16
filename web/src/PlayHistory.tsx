@@ -84,6 +84,11 @@ export default memo(function PlayHistory({
           const firstAttempt = decision
             ? `${modeT('first')}: ${formatDecision(decision.original_notation ?? '')}${decision.first_loss != null ? ` · Δ ${formatEquity(decision.first_loss)}` : ''} · ${modeT((decision.attempts[0]?.assisted ?? decision.assisted) ? 'assisted' : 'independent')}`
             : undefined;
+          // Shown under the row when the played move replaced an earlier choice.
+          const corrected =
+            !!decision?.original_notation &&
+            !!decision.notation &&
+            decision.original_notation !== decision.notation;
           return (
             <li key={index}>
               <Tooltip
@@ -148,6 +153,17 @@ export default memo(function PlayHistory({
                   moveNumber={index + 1}
                 />
               </Tooltip>
+              {corrected && decision && (
+                <small className="play-history-first-attempt">
+                  {modeT('first')}:{' '}
+                  {formatDecision(decision.original_notation ?? '')}
+                  {decision.first_loss != null &&
+                    ` · ${formatNumber(decision.first_loss, {
+                      minimumFractionDigits: 3,
+                      maximumFractionDigits: 3,
+                    })}`}
+                </small>
+              )}
               {results.get(index) && (
                 <GameResultSummary
                   result={results.get(index)!}

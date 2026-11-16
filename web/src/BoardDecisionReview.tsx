@@ -59,6 +59,7 @@ export function BoardErrorNavigation({
           type="button"
           icon="back"
           label={review(errorsOnly ? 'previousError' : 'previousDecision')}
+          shortcut="Shift+E"
           disabled={total === 0}
           aria-disabled={busy || undefined}
           onClick={() => onNavigate('previous')}
@@ -67,6 +68,7 @@ export function BoardErrorNavigation({
           type="button"
           icon="next"
           label={errorsOnly ? workspace('nextError') : review('nextDecision')}
+          shortcut="E"
           disabled={total === 0}
           aria-disabled={busy || undefined}
           onClick={() => onNavigate('next')}

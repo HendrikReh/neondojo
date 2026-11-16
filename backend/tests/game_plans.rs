@@ -50,7 +50,7 @@ async fn classifies_both_absolute_colors_without_database_or_engine() {
     assert_eq!(
         body,
         json!({
-            "classifier":"opensage_rules_v1",
+            "classifier":"opensage_rules_v1_opening1",
             "source_revision":SOURCE_REVISION,
             "game_over":false,
             "white":"pure_race",
@@ -61,8 +61,9 @@ async fn classifies_both_absolute_colors_without_database_or_engine() {
 
 #[tokio::test]
 async fn preserves_absolute_color_identity_for_different_plans() {
+    // Past the opening: each side has five checkers off its starting points.
     let board = [
-        0, -1, 1, 0, 1, 0, 5, -1, 1, 0, 0, 0, -5, 5, 0, 0, 0, -3, 0, -4, 0, 0, 0, -1, 2, 0,
+        0, -1, 1, 1, 1, 1, 5, -1, 1, 1, 0, 0, -2, 2, 0, 0, 0, -3, -2, -4, -1, 0, 0, -1, 2, 0,
     ];
     let (status, body) = call(
         "POST",
@@ -188,7 +189,14 @@ async fn publishes_game_plan_openapi_contract() {
     let schemas = &schema["components"]["schemas"];
     assert_eq!(
         schemas["GamePlan"]["enum"],
-        json!(["pure_race", "racing", "attacking", "priming", "anchoring"])
+        json!([
+            "opening",
+            "pure_race",
+            "racing",
+            "attacking",
+            "priming",
+            "anchoring"
+        ])
     );
     assert_eq!(schemas["GamePlanRequest"]["additionalProperties"], false);
     assert_eq!(

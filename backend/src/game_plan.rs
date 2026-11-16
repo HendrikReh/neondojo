@@ -9,12 +9,15 @@ use axum::{Json, Router, extract::rejection::JsonRejection, routing::post};
 use serde::{Deserialize, Serialize};
 use utoipa::{OpenApi, ToSchema};
 
-pub const CLASSIFIER: &str = "opensage_rules_v1";
+/// The pinned Open Sage rules with BG Tutor's opening label on top.
+pub const CLASSIFIER: &str = "opensage_rules_v1_opening1";
 pub const SOURCE_REVISION: &str = "139427d826dd67798226e7d23c003c90315306ba";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum GamePlan {
+    /// BG Tutor label: both sides are still close to the starting position.
+    Opening,
     PureRace,
     Racing,
     Attacking,
@@ -50,6 +53,18 @@ pub fn routes() -> Router<AppState> {
 
 /// Classify both absolute colors without a database, engine or network request.
 pub fn classify(board: &[i32; 26]) -> Result<GamePlans, String> {
+    let mut plans = classify_reference(board)?;
+    // The reference rules label the starting position as anchoring. The first
+    // moves of a game are their own subject, so they get their own label.
+    if is_opening(board) {
+        plans.white = GamePlan::Opening;
+        plans.black = GamePlan::Opening;
+    }
+    Ok(plans)
+}
+
+/// The pinned Open Sage rules alone, without BG Tutor's opening label.
+pub fn classify_reference(board: &[i32; 26]) -> Result<GamePlans, String> {
     if board.iter().any(|&count| !(-15..=15).contains(&count)) {
         return Err("Each board count must be between -15 and 15".into());
     }
@@ -75,6 +90,21 @@ pub fn classify(board: &[i32; 26]) -> Result<GamePlans, String> {
         white: classify_game_plan(&white_board),
         black: classify_game_plan(&black_board),
     })
+}
+
+/// Checkers of one side that may have left their starting points while the
+/// position still counts as the opening: about two rolls per player.
+const OPENING_MAX_DISPLACED: i32 = 4;
+
+/// Both sides have at most four checkers off their starting points.
+fn is_opening(board: &[i32; 26]) -> bool {
+    let start = crate::import::sgf::initial_board();
+    let displaced = |sign: i32| -> i32 {
+        (1..=24)
+            .map(|point| ((start[point] * sign).max(0) - (board[point] * sign).max(0)).max(0))
+            .sum()
+    };
+    displaced(1) <= OPENING_MAX_DISPLACED && displaced(-1) <= OPENING_MAX_DISPLACED
 }
 
 fn flip(board: &[i32; 26]) -> [i32; 26] {

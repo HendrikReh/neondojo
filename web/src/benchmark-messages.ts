@@ -303,7 +303,8 @@ const base: Record<Locale, Record<Key, string>> = {
 };
 const playEn = {
   matchAnalysis: 'Match analysis',
-  depthFallback: '{ply}-ply selected because the requested depth is unavailable.',
+  depthFallback:
+    '{ply}-ply selected because the requested depth is unavailable.',
   mode: 'Measurement type',
   playPly: 'Playing depth',
   details: 'Details',
@@ -326,7 +327,8 @@ const play: Record<Locale, Record<PlayKey, string>> = {
   en: playEn,
   de: {
     matchAnalysis: 'Matchanalyse',
-    depthFallback: '{ply} Ply gewählt, da die gewünschte Tiefe nicht verfügbar ist.',
+    depthFallback:
+      '{ply} Ply gewählt, da die gewünschte Tiefe nicht verfügbar ist.',
     mode: 'Messart',
     playPly: 'Spieltiefe',
     details: 'Details',
@@ -346,7 +348,8 @@ const play: Record<Locale, Record<PlayKey, string>> = {
   },
   es: {
     matchAnalysis: 'Análisis del encuentro',
-    depthFallback: 'Se seleccionó {ply} ply porque la profundidad solicitada no está disponible.',
+    depthFallback:
+      'Se seleccionó {ply} ply porque la profundidad solicitada no está disponible.',
     mode: 'Tipo de medición',
     playPly: 'Profundidad de juego',
     details: 'Detalles',
@@ -366,7 +369,8 @@ const play: Record<Locale, Record<PlayKey, string>> = {
   },
   fr: {
     matchAnalysis: 'Analyse de match',
-    depthFallback: '{ply} ply sélectionné, car la profondeur demandée est indisponible.',
+    depthFallback:
+      '{ply} ply sélectionné, car la profondeur demandée est indisponible.',
     mode: 'Type de mesure',
     playPly: 'Profondeur de jeu',
     details: 'Détails',
@@ -386,7 +390,8 @@ const play: Record<Locale, Record<PlayKey, string>> = {
   },
   it: {
     matchAnalysis: 'Analisi del match',
-    depthFallback: 'Selezionati {ply} ply perché la profondità richiesta non è disponibile.',
+    depthFallback:
+      'Selezionati {ply} ply perché la profondità richiesta non è disponibile.',
     mode: 'Tipo di misurazione',
     playPly: 'Profondità di gioco',
     details: 'Dettagli',
@@ -406,7 +411,8 @@ const play: Record<Locale, Record<PlayKey, string>> = {
   },
   pl: {
     matchAnalysis: 'Analiza meczu',
-    depthFallback: 'Wybrano {ply} ply, ponieważ żądana głębokość jest niedostępna.',
+    depthFallback:
+      'Wybrano {ply} ply, ponieważ żądana głębokość jest niedostępna.',
     mode: 'Rodzaj pomiaru',
     playPly: 'Głębokość gry',
     details: 'Szczegóły',

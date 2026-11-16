@@ -164,9 +164,9 @@ it('shows numeric ID, match score, played date, event and zero PR in White/Black
   expect(field(html, 'result')).toContain('Final score');
   expect(field(html, 'date')).toContain('Nov 8, 2026');
   expect(field(html, 'event')).toContain('Autumn Open');
-  expect(field(html, 'pr-white')).toContain('0.00');
+  expect(field(html, 'pr-white')).toContain('0.0');
   expect(field(html, 'pr-white')).toContain('Alice');
-  expect(field(html, 'pr-black')).toContain('4.75');
+  expect(field(html, 'pr-black')).toContain('4.8');
   expect(field(html, 'pr-black')).toContain('Bob');
   expect(html.indexOf('data-match-field="pr-white"')).toBeLessThan(
     html.indexOf('data-match-field="pr-black"'),
@@ -213,7 +213,7 @@ it('shows n/a for unknown metadata and partial PR without inventing results', ()
   });
   for (const key of ['result', 'date', 'event', 'pr-white'])
     expect(field(html, key)).toContain('n/a');
-  expect(field(html, 'pr-black')).toContain('4.75');
+  expect(field(html, 'pr-black')).toContain('4.8');
   expect(html).not.toContain('Final score');
   expect(html).not.toContain('2026');
 });
@@ -255,17 +255,17 @@ it('does not present full-match PR for an independently retained position', () =
   const html = renderHeader(retained);
   expect(field(html, 'pr-white')).toContain('n/a');
   expect(field(html, 'pr-black')).toContain('n/a');
-  expect(field(html, 'pr-white')).not.toContain('0.00');
-  expect(field(html, 'pr-black')).not.toContain('4.75');
+  expect(field(html, 'pr-white')).not.toContain('0.0');
+  expect(field(html, 'pr-black')).not.toContain('4.8');
 });
 
 it.each([
-  ['en', 'Length', 'Played', 'Event', 'PR White', 'PR Black', '4.75'],
-  ['de', 'Länge', 'Gespielt', 'Event', 'PR Weiß', 'PR Schwarz', '4,75'],
-  ['es', 'Longitud', 'Jugado', 'Evento', 'PR Blancas', 'PR Negras', '4,75'],
-  ['fr', 'Longueur', 'Joué', 'Événement', 'PR Blancs', 'PR Noirs', '4,75'],
-  ['pl', 'Długość', 'Rozegrano', 'Wydarzenie', 'PR Białe', 'PR Czarne', '4,75'],
-  ['it', 'Lunghezza', 'Giocato', 'Evento', 'PR Bianchi', 'PR Neri', '4,75'],
+  ['en', 'Length', 'Played', 'Event', 'PR White', 'PR Black', '4.8'],
+  ['de', 'Länge', 'Gespielt', 'Event', 'PR Weiß', 'PR Schwarz', '4,8'],
+  ['es', 'Longitud', 'Jugado', 'Evento', 'PR Blancas', 'PR Negras', '4,8'],
+  ['fr', 'Longueur', 'Joué', 'Événement', 'PR Blancs', 'PR Noirs', '4,8'],
+  ['pl', 'Długość', 'Rozegrano', 'Wydarzenie', 'PR Białe', 'PR Czarne', '4,8'],
+  ['it', 'Lunghezza', 'Giocato', 'Evento', 'PR Bianchi', 'PR Neri', '4,8'],
 ] as const)(
   'localizes %s metadata labels and PR',
   (locale, length, played, event, white, black, pr) => {
@@ -312,5 +312,5 @@ it('uses selected analysis PR explicitly instead of unrelated library ratings', 
   );
   expect(field(html, 'pr-white')).toContain('n/a');
   expect(field(html, 'pr-black')).toContain('n/a');
-  expect(field(html, 'pr-black')).not.toContain('4.75');
+  expect(field(html, 'pr-black')).not.toContain('4.8');
 });

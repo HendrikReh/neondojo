@@ -448,3 +448,56 @@ test('ignores a superseded player response even after reselecting that player', 
     overview.getByRole('region', { name: 'Next step' }),
   ).toContainText('Matches with this mistake: 3');
 });
+
+test('shows today as due reviews plus allowed new cards and saves the daily limit', async ({
+  page,
+}) => {
+  await profileBackend(page);
+  let limit = 10;
+  await page.route('**/api/study/learning-summary', (route) => {
+    const fresh = Math.min(1200, limit);
+    return route.fulfill({
+      json: {
+        card_count: 1222,
+        due_count: 1222,
+        review_due_count: 22,
+        new_count: 1200,
+        new_cards_per_day: limit,
+        new_available_today: fresh,
+        today_count: 22 + fresh,
+        next_due_at: null,
+        next_deck: { id: 'deck', name: 'Training' },
+      },
+    });
+  });
+  const saved: unknown[] = [];
+  await page.route('**/api/study/learning-preferences', (route) => {
+    const body = route.request().postDataJSON();
+    saved.push(body);
+    limit = body.new_cards_per_day;
+    return route.fulfill({ json: body });
+  });
+  await page.route(/\/api\/study\/mistakes\?/, (route) =>
+    route.fulfill({ json: { ...list([]), players: [] } }),
+  );
+  const overview = await openOverview(page);
+  const cards = overview.getByRole('region', { name: 'Due flashcards' });
+  // The headline is today's workload, not every card that was ever created.
+  await expect(cards.locator('.study-overview-due')).toHaveText('32');
+  await expect(cards.locator('[data-study-today]')).toHaveText(
+    'Today: 22 due · 10 new',
+  );
+  await expect(cards).toContainText(
+    '1,190 more new cards are waiting for later days.',
+  );
+  const field = cards.getByRole('spinbutton', { name: 'New cards per day' });
+  await expect(field).toHaveValue('10');
+  await field.fill('2000');
+  await field.press('Enter');
+  expect(saved).toEqual([]);
+  await field.fill('25');
+  await field.press('Enter');
+  await expect(cards.locator('.study-overview-due')).toHaveText('47');
+  expect(saved).toEqual([{ new_cards_per_day: 25 }]);
+  await expect(field).toHaveValue('25');
+});

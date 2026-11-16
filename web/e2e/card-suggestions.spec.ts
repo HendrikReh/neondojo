@@ -11,7 +11,7 @@ test('match suggestions preview boards and add only the checked cards', async ({
       response.request().method() === 'POST',
   );
   await page
-    .getByLabel('Partiedatei')
+    .getByLabel('Matchdatei')
     .setInputFiles('../backend/tests/fixtures/WC2014.mat');
   const { match } = await (await importing).json();
   const panel = page.getByRole('tabpanel', { name: 'Lernkarten', exact: true });

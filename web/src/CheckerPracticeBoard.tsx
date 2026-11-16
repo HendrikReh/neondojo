@@ -152,6 +152,7 @@ export default function CheckerPracticeBoard({
           type="button"
           icon="confirm"
           label={submitLabel}
+          shortcut="Enter"
           disabled={busy || !canCheck}
           onClick={() => onCheck(steps)}
         >

@@ -13,6 +13,7 @@ import type {
 import { SearchFilterInput, SearchFilterSelect } from './SearchFilterForm';
 
 const plans = [
+  'opening',
   'pure_race',
   'racing',
   'attacking',

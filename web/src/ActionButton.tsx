@@ -14,13 +14,18 @@ interface ActionProps {
   label: string;
   compact?: boolean;
   tooltip?: string;
+  /** Key handled by useButtonShortcuts, such as "D", "Enter" or "Shift+E". */
+  shortcut?: string;
 }
 function actionTooltipText(
   label: string,
   compact: boolean,
   children: ReactNode,
   tooltip?: string,
+  shortcut?: string,
 ) {
+  // A shortcut is only discoverable if the tooltip names it.
+  if (shortcut) return `${tooltip?.trim() || label} (${shortcut})`;
   const text = tooltip?.trim();
   if (compact) return text ?? label;
   const visibleText = typeof children === 'string' ? children.trim() : label;
@@ -39,6 +44,7 @@ const ActionButton = forwardRef<HTMLButtonElement, ActionButtonProps>(
       label,
       compact = false,
       tooltip,
+      shortcut,
       title,
       className = '',
       children,
@@ -56,7 +62,7 @@ const ActionButton = forwardRef<HTMLButtonElement, ActionButtonProps>(
     ref,
   ) {
     const tip = useActionTooltip(
-      actionTooltipText(label, compact, children, tooltip ?? title),
+      actionTooltipText(label, compact, children, tooltip ?? title, shortcut),
       disabled,
     );
     const mergedRef = useCallback(
@@ -83,6 +89,8 @@ const ActionButton = forwardRef<HTMLButtonElement, ActionButtonProps>(
         }
         data-action-icon={icon}
         data-action-compact={compact}
+        data-shortcut={shortcut}
+        aria-keyshortcuts={shortcut}
         onFocus={(e) => {
           tip.onFocus();
           onFocus?.(e);
@@ -125,6 +133,7 @@ export const ActionLink = forwardRef<HTMLAnchorElement, ActionLinkProps>(
       label,
       compact = false,
       tooltip,
+      shortcut,
       title,
       className = '',
       children,
@@ -141,7 +150,7 @@ export const ActionLink = forwardRef<HTMLAnchorElement, ActionLinkProps>(
     ref,
   ) {
     const tip = useActionTooltip(
-      actionTooltipText(label, compact, children, tooltip ?? title),
+      actionTooltipText(label, compact, children, tooltip ?? title, shortcut),
     );
     const mergedRef = useCallback(
       (node: HTMLAnchorElement | null) => {

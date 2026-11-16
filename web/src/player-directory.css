@@ -246,3 +246,99 @@
     position: static;
   }
 }
+.player-rating-trend {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0 0;
+}
+.player-rating-trend figcaption {
+  display: grid;
+  gap: 2px;
+}
+.player-rating-plot {
+  position: relative;
+  height: 140px;
+  margin-left: 28px;
+  border-left: 1px solid var(--ui-border);
+  border-bottom: 1px solid var(--ui-border);
+}
+.player-rating-plot svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.player-rating-average {
+  fill: none;
+  stroke: var(--ui-accent);
+  stroke-width: 2;
+}
+.player-rating-point {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ui-muted);
+  transform: translate(-50%, -50%);
+}
+.player-rating-point:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 2px;
+}
+.player-rating-axis {
+  position: absolute;
+  left: -28px;
+  top: -6px;
+  width: 24px;
+  color: var(--ui-muted);
+  font-size: var(--font-size-meta);
+  text-align: right;
+}
+.player-rating-axis--zero {
+  top: auto;
+  bottom: -6px;
+}
+.player-rating-dates {
+  display: flex;
+  justify-content: space-between;
+  margin-left: 28px;
+  color: var(--ui-muted);
+  font-size: var(--font-size-meta);
+}
+.player-rating-split {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+.player-rating-split--checker,
+.player-rating-key--checker::before {
+  stroke: var(--ui-success-text);
+  background: var(--ui-success-text);
+}
+.player-rating-split--cube,
+.player-rating-key--cube::before {
+  stroke: var(--ui-warning-text);
+  background: var(--ui-warning-text);
+}
+.player-rating-key--total::before {
+  background: var(--ui-accent);
+}
+.player-rating-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ui-muted);
+  font-size: var(--font-size-meta);
+}
+.player-rating-key::before {
+  content: '';
+  display: inline-block;
+  width: 14px;
+  height: 2px;
+  margin-right: 5px;
+  vertical-align: middle;
+}
