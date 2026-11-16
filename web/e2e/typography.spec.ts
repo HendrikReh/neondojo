@@ -286,6 +286,8 @@ test('comment editors, modal titles and study questions follow their roles while
     'font-size',
     '13px',
   );
+  // The list shows 25 decks per page; decks of earlier tests can fill it.
+  await deckLibrary.getByRole('searchbox').fill(deckName);
   await deckLibrary
     .getByRole('listitem')
     .filter({ has: page.getByText(deckName, { exact: true }) })
