@@ -1,6 +1,7 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
+import { createWriteStream } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer as createHttpServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -69,9 +70,19 @@ function listeningUrl(child: ChildProcess) {
       child.removeListener('exit', exited);
       child.stdout?.off('data', output);
       child.stderr?.off('data', output);
-      // Keep draining the pipes after startup.
-      child.stdout?.resume();
-      child.stderr?.resume();
+      // Keep draining the pipes after startup. BGTUTOR_E2E_BACKEND_LOG names
+      // a file that receives the backend's output for diagnosing a failed run.
+      const sink = process.env.BGTUTOR_E2E_BACKEND_LOG
+        ? createWriteStream(process.env.BGTUTOR_E2E_BACKEND_LOG, { flags: 'a' })
+        : undefined;
+      if (sink) {
+        sink.write(log);
+        child.stdout?.pipe(sink, { end: false });
+        child.stderr?.pipe(sink, { end: false });
+      } else {
+        child.stdout?.resume();
+        child.stderr?.resume();
+      }
       if (error) reject(error);
       else resolve(url!);
     }
