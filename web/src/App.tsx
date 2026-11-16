@@ -655,6 +655,74 @@ export default function App() {
       {restoring && <p role="status">{w('lastMatch')}</p>}
     </section>
   );
+  const selectForAnalysis = (
+    matches: LibraryMatch[],
+    unavailableCount: number,
+  ) =>
+    setAnalysisSelection(
+      matches.length === 1 && !unavailableCount
+        ? { kind: 'single', match: matches[0] }
+        : { kind: 'bulk', matches, unavailableCount },
+    );
+  // Shown by the workspace that asked for the analysis.
+  const analysisDialogs = (
+    <>
+      {analysisSelection?.kind === 'single' && (
+        <MatchAnalysisDialog
+          key={analysisSelection.match.id}
+          match={analysisSelection.match}
+          defaultEngine={analysisEngine}
+          defaultPlies={analysisPlies}
+          configured
+          analysisInstallationKey={analysisInstallationKey}
+          trackedJobs={trackedAnalysisJobs}
+          onAccepted={(job) => {
+            track(job);
+            setRevision((value) => value + 1);
+          }}
+          onShowResults={(job) => {
+            setAnalysisSelection(undefined);
+            openMatch(analysisSelection.match, undefined, job);
+            requestAnimationFrame(() => tabs.current.analysis?.focus());
+          }}
+          onClose={() => setAnalysisSelection(undefined)}
+        />
+      )}
+      {analysisSelection?.kind === 'bulk' && (
+        <BulkMatchAnalysisDialog
+          matches={analysisSelection.matches}
+          unavailableCount={analysisSelection.unavailableCount}
+          defaultEngine={analysisEngine}
+          defaultPlies={analysisPlies}
+          configured
+          analysisInstallationKey={analysisInstallationKey}
+          onAccepted={(jobs, continuesBatch) => {
+            if (!jobs.length) return;
+            const databaseByMatch = new Map(
+              analysisSelection.matches.map((match) => [
+                match.id,
+                match.database_id,
+              ]),
+            );
+            for (const job of jobs) track(job);
+            setBulkAnalysis((previous) => {
+              const overlaps = Object.keys(previous.jobs).some(bulkJobPending);
+              const tracked =
+                continuesBatch || overlaps ? { ...previous.jobs } : {};
+              for (const job of jobs) {
+                tracked[job.id] =
+                  databaseByMatch.get(job.match_uuid ?? '') ?? null;
+              }
+              return { jobs: tracked, showMatchList: true };
+            });
+            setRevision((value) => value + 1);
+          }}
+          onClose={() => setAnalysisSelection(undefined)}
+        />
+      )}
+    </>
+  );
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -957,73 +1025,13 @@ export default function App() {
             selectedMatchId={navigation.match?.id}
             onOpen={openMatch}
             bulkAnalysisProgress={bulkAnalysisProgress}
-            onAnalyzeMatches={(matches, unavailableCount) => {
-              setAnalysisSelection(
-                matches.length === 1 && !unavailableCount
-                  ? { kind: 'single', match: matches[0] }
-                  : { kind: 'bulk', matches, unavailableCount },
-              );
-            }}
+            onAnalyzeMatches={selectForAnalysis}
             onPosition={openPosition}
             onAnnotation={openAnnotation}
             uploading={uploading}
             onImport={chooseImportFiles}
           />
-          {view === 'database' && analysisSelection?.kind === 'single' && (
-            <MatchAnalysisDialog
-              key={analysisSelection.match.id}
-              match={analysisSelection.match}
-              defaultEngine={analysisEngine}
-              defaultPlies={analysisPlies}
-              configured
-              analysisInstallationKey={analysisInstallationKey}
-              trackedJobs={trackedAnalysisJobs}
-              onAccepted={(job) => {
-                track(job);
-                setRevision((value) => value + 1);
-              }}
-              onShowResults={(job) => {
-                setAnalysisSelection(undefined);
-                openMatch(analysisSelection.match, undefined, job);
-                requestAnimationFrame(() => tabs.current.analysis?.focus());
-              }}
-              onClose={() => setAnalysisSelection(undefined)}
-            />
-          )}
-          {view === 'database' && analysisSelection?.kind === 'bulk' && (
-            <BulkMatchAnalysisDialog
-              matches={analysisSelection.matches}
-              unavailableCount={analysisSelection.unavailableCount}
-              defaultEngine={analysisEngine}
-              defaultPlies={analysisPlies}
-              configured
-              analysisInstallationKey={analysisInstallationKey}
-              onAccepted={(jobs, continuesBatch) => {
-                if (!jobs.length) return;
-                const databaseByMatch = new Map(
-                  analysisSelection.matches.map((match) => [
-                    match.id,
-                    match.database_id,
-                  ]),
-                );
-                for (const job of jobs) track(job);
-                setBulkAnalysis((previous) => {
-                  const overlaps = Object.keys(previous.jobs).some(
-                    bulkJobPending,
-                  );
-                  const tracked =
-                    continuesBatch || overlaps ? { ...previous.jobs } : {};
-                  for (const job of jobs) {
-                    tracked[job.id] =
-                      databaseByMatch.get(job.match_uuid ?? '') ?? null;
-                  }
-                  return { jobs: tracked, showMatchList: true };
-                });
-                setRevision((value) => value + 1);
-              }}
-              onClose={() => setAnalysisSelection(undefined)}
-            />
-          )}
+          {view === 'database' && analysisDialogs}
         </div>
         <div
           id="workspace-panel-players"
@@ -1032,8 +1040,13 @@ export default function App() {
           hidden={view !== 'players'}
         >
           {(view === 'players' || playersOpened) && (
-            <PlayerDirectory revision={revision} onOpen={openMatch} />
+            <PlayerDirectory
+              revision={revision}
+              onOpen={openMatch}
+              onAnalyzeMatches={selectForAnalysis}
+            />
           )}
+          {view === 'players' && analysisDialogs}
         </div>
         <div
           id="workspace-panel-positions"

@@ -32,12 +32,34 @@ test('edits an imported player profile and opens its match', async ({
   await expect(page.getByText('7-Punkte-Match')).toBeVisible();
   for (const name of ['Ergebnis', 'PR', 'Event'])
     await expect(page.getByRole('columnheader', { name })).toBeVisible();
+  await page
+    .getByRole('button', { name: 'Ungewertete Matches analysieren …' })
+    .click();
+  const analysis = page.getByRole('dialog', {
+    name: 'Gesamtes Match analysieren',
+  });
+  await expect(analysis).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(analysis).toBeHidden();
   await page.getByRole('button', { name: 'Bearbeiten', exact: true }).click();
   const editor = page.getByRole('dialog', { name: 'Profil bearbeiten' });
   await editor.getByRole('textbox', { name: 'Vorname' }).fill('Anna');
   await editor.getByRole('textbox', { name: 'Nachname' }).fill('Beispiel');
-  await editor.getByRole('button', { name: 'Namen speichern' }).click();
-  await expect(editor.getByText('Name gespeichert.')).toBeVisible();
+  const second = `Zweitname ${crypto.randomUUID()}`;
+  await editor
+    .getByRole('textbox', { name: 'Importierter Spielername' })
+    .fill(second);
+  await editor.getByRole('button', { name: 'Speichern' }).click();
+  await expect(editor.getByText('Profil gespeichert.')).toBeVisible();
+  await editor.screenshot({
+    path: test.info().outputPath('player-edit-dialog.png'),
+  });
+  await expect(
+    editor.getByRole('listitem').filter({ hasText: second }),
+  ).toHaveText(second);
+  await expect(
+    editor.getByRole('button', { name: 'Speichern' }),
+  ).toBeDisabled();
   await editor.getByRole('button', { name: 'Schließen' }).click();
   await expect(
     page.getByRole('heading', { name: 'Anna Beispiel' }),
@@ -46,7 +68,7 @@ test('edits an imported player profile and opens its match', async ({
     page.locator('.player-list').getByText(alias, { exact: false }),
   ).toBeVisible();
   await expect(page.locator('.player-card-aliases')).toHaveText(
-    `Aliasse: ${alias}`,
+    `Aliasse: ${alias}, ${second}`,
   );
   await page.getByRole('button', { name: 'Zusammenführen …' }).click();
   const merge = page.getByRole('dialog', {

@@ -57,7 +57,8 @@ below it. Click a match row or press Enter on it to open the match; the
 opponent's name switches to that player's profile. The database filter and page
 controls sit outside the scrollable table. Edit and merge actions open dialogs
 and return focus to their trigger when closed. The merge dialog focuses its
-search field.
+search field. **Analyze unrated matches …** beside the PR opens the
+match analysis dialog for the profile's matches without a rating.
 The merge search has its own page controls.
 
 ## Positions

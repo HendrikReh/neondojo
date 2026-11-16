@@ -240,9 +240,22 @@
 
 .player-form {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: end;
   gap: 10px;
+}
+
+fieldset.player-form {
+  margin: 12px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+fieldset.player-form legend {
+  margin-bottom: 6px;
+  padding: 0;
+  color: var(--ui-muted);
+  font-size: var(--font-size-label);
 }
 
 .player-form label {
@@ -256,7 +269,6 @@
   border-top: 1px solid var(--ui-border);
 }
 
-.player-profile-editor section form,
 .player-profile-editor .library-dialog-actions {
   margin-top: 12px;
 }

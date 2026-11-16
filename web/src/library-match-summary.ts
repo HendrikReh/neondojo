@@ -29,6 +29,18 @@ export function isUnfinishedCompetition(
     !(match.match_length === 0 && match.play_phase === 'game_over')
   );
 }
+/** Matches a new analysis job can be submitted for. */
+export function canAnalyzeMatch(
+  match: Parameters<typeof isUnfinishedCompetition>[0] &
+    Pick<LibraryMatch, 'source_available'> &
+    Partial<Pick<LibraryMatch, 'play_paused'>>,
+) {
+  return (
+    match.source_available &&
+    !match.play_paused &&
+    !isUnfinishedCompetition(match)
+  );
+}
 export function canShowMatchPr(
   match: Pick<
     LibraryMatch,

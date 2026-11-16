@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { request, type Match } from './api';
 import { NumberedSearchPagination } from './SearchPagination';
 import { SearchResultList, SearchResultTable } from './SearchResultList';
 import { SearchResultPreview } from './SearchResultPreview';
 import { useI18n } from './i18n';
+import { cursorSearchParams } from './cursor-search';
 import type { Database, LibraryMatch } from './library-api';
+import { canAnalyzeMatch } from './library-match-summary';
 import { usePlayerText } from './player-directory-messages';
 import { useLibraryText } from './library-messages';
 import { usePositionText } from './position-browser-messages';
@@ -29,6 +31,38 @@ const DIRECTORY_ORDER: PlayerOrder = { sort: 'matches', direction: 'desc' };
 /** Analysis depth of a profile such as "GNU Backgammon 1.08; 2-ply cubeful". */
 function profileDepth(profile: string) {
   return profile.slice(profile.lastIndexOf(';') + 1).trim() || profile;
+}
+
+type AnalyzeMatches = (
+  matches: LibraryMatch[],
+  unavailableCount: number,
+) => void;
+const ANALYSIS_BATCH_LIMIT = 2000;
+
+/** Every match of a profile that has neither a PR for it nor a pending or finished analysis. */
+async function unratedMatches(id: string) {
+  const matches: LibraryMatch[] = [];
+  let after: string | undefined;
+  do {
+    const page = await request<{
+      items: LibraryMatch[];
+      next_cursor: string | null;
+    }>(
+      `/library/matches?${cursorSearchParams(200, { player_id: id, sort: 'played_at' }, after)}`,
+    );
+    matches.push(...page.items);
+    after = page.next_cursor ?? undefined;
+  } while (after && matches.length < ANALYSIS_BATCH_LIMIT);
+  return matches.filter((match) => {
+    const sides = match.player_sides ?? [0, 1];
+    const rated = sides.every(
+      (side) => (side === 1 ? match.black_pr : match.white_pr) != null,
+    );
+    return (
+      !rated &&
+      !['queued', 'running', 'completed'].includes(match.analysis_status ?? '')
+    );
+  });
 }
 
 function PlayerMatches({
@@ -228,6 +262,7 @@ function PlayerCard({
   onChanged,
   onOpen,
   onProfile,
+  onAnalyzeMatches,
 }: {
   id: string;
   databases: Database[];
@@ -235,6 +270,7 @@ function PlayerCard({
   onChanged: () => void;
   onOpen: (match: Match) => void;
   onProfile: (id: string) => void;
+  onAnalyzeMatches?: AnalyzeMatches;
 }) {
   const t = usePlayerText();
   const { formatError, formatNumber } = useI18n();
@@ -242,6 +278,32 @@ function PlayerCard({
   const [dialog, setDialog] = useState<'edit' | 'merge'>();
   const [matchesRevision, setMatchesRevision] = useState(0);
   const [merged, setMerged] = useState(false);
+  const [collecting, setCollecting] = useState(false);
+  const [collected, setCollected] = useState<{ error?: unknown }>();
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  async function analyzeRest() {
+    setCollecting(true);
+    setCollected(undefined);
+    try {
+      const unrated = await unratedMatches(id);
+      if (!mounted.current) return;
+      const matches = unrated.filter(canAnalyzeMatch);
+      if (matches.length)
+        onAnalyzeMatches?.(matches, unrated.length - matches.length);
+      else setCollected({});
+    } catch (error) {
+      if (mounted.current) setCollected({ error });
+    } finally {
+      if (mounted.current) setCollecting(false);
+    }
+  }
 
   if (!details)
     return error ? (
@@ -261,6 +323,10 @@ function PlayerCard({
     }))
     .filter((trend) => trend.points.length > 1);
 
+  const rated = Math.max(
+    0,
+    ...details.ratings.map((rating) => rating.match_count),
+  );
   const aliasNames = [
     ...new Set(details.aliases.map((alias) => alias.name)),
   ].filter((name) => name !== details.display_name);
@@ -280,7 +346,7 @@ function PlayerCard({
             <p
               className="player-card-aliases"
               title={details.aliases
-                .map((alias) => aliasLabel(alias, t('local')))
+                .map((alias) => aliasLabel(alias))
                 .join('\n')}
             >
               {t('aliases')}: {aliasNames.join(', ')}
@@ -334,6 +400,22 @@ function PlayerCard({
         ) : (
           <p>{t('noPr')}</p>
         )}
+        {onAnalyzeMatches && rated < details.match_count && (
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            disabled={collecting}
+            onClick={() => void analyzeRest()}
+          >
+            {collecting ? t('loading') : t('analyzeRest')}
+          </button>
+        )}
+        {collected &&
+          (collected.error === undefined ? (
+            <p role="status">{t('nothingToAnalyze')}</p>
+          ) : (
+            <p role="alert">{formatError(collected.error)}</p>
+          ))}
       </section>
       <PlayerMatches
         id={id}
@@ -386,9 +468,11 @@ function PlayerCard({
 export default function PlayerDirectory({
   revision,
   onOpen,
+  onAnalyzeMatches,
 }: {
   revision: number;
   onOpen: (match: Match) => void;
+  onAnalyzeMatches?: AnalyzeMatches;
 }) {
   const t = usePlayerText();
   const { formatError, formatNumber } = useI18n();
@@ -452,6 +536,7 @@ export default function PlayerDirectory({
                 revision={revision}
                 onOpen={onOpen}
                 onProfile={setId}
+                onAnalyzeMatches={onAnalyzeMatches}
                 onChanged={() => setListRevision((n) => n + 1)}
               />
             ) : null}

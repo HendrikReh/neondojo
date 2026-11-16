@@ -17,8 +17,9 @@ export type PlayerOrder = {
 };
 const NAME_ORDER: PlayerOrder = { sort: 'name', direction: 'asc' };
 
-export function aliasLabel(alias: Schema['PlayerAlias'], local: string) {
-  return `${alias.name} · ${alias.platform || local}`;
+/** Names the platform of an alias; other sources need no label. */
+export function aliasLabel(alias: Schema['PlayerAlias']) {
+  return alias.platform ? `${alias.name} · ${alias.platform}` : alias.name;
 }
 
 export function usePlayerPage<T>(
@@ -140,12 +141,12 @@ export function PlayerResults({
                   {row.matching_alias && (
                     <span
                       className="player-alias-hit"
-                      title={aliasLabel(row.matching_alias, t('local'))}
+                      title={aliasLabel(row.matching_alias)}
                     >
                       <span className="visually-hidden">
                         {t('matchedAlias')}{' '}
                       </span>
-                      {aliasLabel(row.matching_alias, t('local'))}
+                      {aliasLabel(row.matching_alias)}
                     </span>
                   )}
                 </td>

@@ -46,6 +46,7 @@ import { useLibraryColumns } from './useLibraryColumns';
 import {
   createMatchSummaryFormatter,
   libraryAnalysisStatus,
+  canAnalyzeMatch,
   isUnfinishedCompetition,
   canShowMatchPr,
 } from './library-match-summary';
@@ -505,12 +506,7 @@ export default function MatchDatabase({
       ? singleSelected.play_session_id
       : undefined;
   const selectionIsCurrent = matchResultScope === matchScope;
-  const analyzableMatches = selection.filter(
-    (match) =>
-      match.source_available &&
-      !match.play_paused &&
-      !isUnfinishedCompetition(match),
-  );
+  const analyzableMatches = selection.filter(canAnalyzeMatch);
   const pr = (value: number | null) =>
     value == null ? '—' : formatNumber(value, prDigits);
   const date = (value: string | null) =>

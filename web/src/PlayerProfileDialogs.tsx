@@ -64,7 +64,8 @@ function usePlayerWrite(profile: Details) {
   const [error, setError] = useState<unknown>();
   const [conflict, setConflict] = useState(false);
 
-  async function run(change?: PlayerWrite) {
+  /** `version` continues from a write of the same submission. */
+  async function run(change?: PlayerWrite, version = profile.version) {
     if (busy) return;
     setBusy(true);
     setError(undefined);
@@ -74,7 +75,7 @@ function usePlayerWrite(profile: Details) {
         change && {
           method: change.method,
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...change.body, version: profile.version }),
+          body: JSON.stringify({ ...change.body, version }),
         },
       );
       setConflict(false);
@@ -100,13 +101,10 @@ function nameSeed(name: string) {
 }
 
 function PlayerAliases({ aliases }: { aliases: Schema['PlayerAlias'][] }) {
-  const t = usePlayerText();
   return (
     <ul className="player-aliases">
       {aliases.map((alias) => (
-        <li key={`${alias.platform}:${alias.name}`}>
-          {aliasLabel(alias, t('local'))}
-        </li>
+        <li key={`${alias.platform}:${alias.name}`}>{aliasLabel(alias)}</li>
       ))}
     </ul>
   );
@@ -129,10 +127,44 @@ export function PlayerEditDialog({
   const [last, setLast] = useState(profile.last_name);
   const [alias, setAlias] = useState('');
   const [platform, setPlatform] = useState('');
-  const [feedback, setFeedback] = useState<'saved' | 'aliasAdded'>();
+  const [saved, setSaved] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const nameChanged =
     first !== profile.first_name || last !== profile.last_name;
+
+  /** Saves the name first; a new alias continues from the saved version. */
+  async function save() {
+    setSaved(false);
+    let current = profile;
+    if (nameChanged) {
+      const named = await run({
+        path: '',
+        method: 'PUT',
+        body: { first_name: first, last_name: last },
+      });
+      if (!named) return;
+      current = named;
+      setProfile(named);
+      setFirst(named.first_name);
+      setLast(named.last_name);
+      onChanged(named);
+    }
+    if (alias.trim()) {
+      const added = await run(
+        {
+          path: '/aliases',
+          method: 'POST',
+          body: { name: alias, platform },
+        },
+        current.version,
+      );
+      if (!added) return;
+      setProfile(added);
+      setAlias('');
+      onChanged(added);
+    }
+    setSaved(true);
+  }
 
   function close() {
     if (confirmDiscard) setConfirmDiscard(false);
@@ -159,26 +191,14 @@ export function PlayerEditDialog({
           </div>
         </>
       ) : (
-        <div className="player-profile-editor">
-          <form
-            className="player-form"
-            onSubmit={async (event) => {
-              event.preventDefault();
-              setFeedback(undefined);
-              const saved = await run({
-                path: '',
-                method: 'PUT',
-                body: { first_name: first, last_name: last },
-              });
-              if (saved) {
-                setProfile(saved);
-                setFirst(saved.first_name);
-                setLast(saved.last_name);
-                onChanged(saved);
-                setFeedback('saved');
-              }
-            }}
-          >
+        <form
+          className="player-profile-editor"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void save();
+          }}
+        >
+          <div className="player-form">
             <label>
               {t('first')}
               <input
@@ -197,29 +217,12 @@ export function PlayerEditDialog({
                 onChange={(event) => setLast(event.target.value)}
               />
             </label>
-            <button disabled={busy || !nameChanged}>{t('save')}</button>
-          </form>
+          </div>
           <section>
             <h3>{t('aliases')}</h3>
             <PlayerAliases aliases={profile.aliases} />
-            <form
-              className="player-form"
-              onSubmit={async (event) => {
-                event.preventDefault();
-                setFeedback(undefined);
-                const saved = await run({
-                  path: '/aliases',
-                  method: 'POST',
-                  body: { name: alias, platform },
-                });
-                if (saved) {
-                  setProfile(saved);
-                  onChanged(saved);
-                  setAlias('');
-                  setFeedback('aliasAdded');
-                }
-              }}
-            >
+            <fieldset className="player-form">
+              <legend>{t('add')}</legend>
               <label>
                 {t('source')}
                 <select
@@ -238,14 +241,12 @@ export function PlayerEditDialog({
                   value={alias}
                   maxLength={1024}
                   disabled={busy}
-                  required
                   onChange={(event) => setAlias(event.target.value)}
                 />
               </label>
-              <button disabled={busy || !alias.trim()}>{t('add')}</button>
-            </form>
+            </fieldset>
           </section>
-          {feedback && <p role="status">{t(feedback)}</p>}
+          {saved && <p role="status">{t('saved')}</p>}
           {error !== undefined && <p role="alert">{formatError(error)}</p>}
           {conflict && (
             <button
@@ -262,7 +263,15 @@ export function PlayerEditDialog({
               {t('reload')}
             </button>
           )}
-        </div>
+          <div className="library-dialog-actions">
+            <button
+              className="primary"
+              disabled={busy || !(nameChanged || alias.trim())}
+            >
+              {t('save')}
+            </button>
+          </div>
+        </form>
       )}
     </LibraryDialog>
   );
