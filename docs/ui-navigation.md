@@ -364,12 +364,18 @@ Benchmark uses one engine selector for **Match analysis** and **Play-turn
 latency**. Each engine keeps its own depth selections while the app is open.
 The selected measurement type determines the setup, result columns and
 comparison. Active runs remain visible across both measurement types.
+The comparison table lists the median and range of the three most recent
+matching runs for each engine and depth. History shows total times of one
+second or more in seconds, minutes, or hours, with the exact milliseconds in the
+tooltip, and shows progress counts only for runs that did not complete.
 Reference methodology and per-run technical data can be expanded on demand.
 
 Engine duels lists series beside the selected result on wide desktop windows.
-**New series** opens setup, with the optional seed under **Advanced**. Series
-continue when leaving the tool. Results show progress, match win rates by
-engine, and the confidence interval when the sample supports it.
+**New series** sits above the series list and opens setup, with the optional
+seed under **Advanced**. Series continue when leaving the tool. Results show
+progress and both match win rates in one card with a share bar. When the sample
+supports a confidence interval, a note says whether it includes 50%. Paired
+matches are grouped by pair.
 
 Database backup shows the scope of a restore before file selection. BG Tutor
 automatically checks each selected archive and compares its schema with the

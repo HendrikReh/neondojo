@@ -91,25 +91,20 @@
   margin-top: 6px;
 }
 .benchmark-comparison {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
-.benchmark-comparison details + details {
-  margin-top: 6px;
+.benchmark-comparison table {
+  max-width: 52rem;
 }
-.benchmark-comparison summary {
-  cursor: pointer;
+.benchmark-history table {
+  max-width: 72rem;
 }
-.benchmark-comparison dl {
-  margin: 6px 0 10px 1rem;
+.benchmark-comparison tbody th {
+  color: var(--ui-text);
+  font-weight: var(--font-weight-semibold);
 }
-.benchmark-comparison dl > div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-}
-.benchmark-comparison dd {
-  margin: 0;
-  overflow-wrap: anywhere;
+.benchmark-median {
+  font-weight: var(--font-weight-semibold);
 }
 .benchmark-active {
   margin: 0 0 32px;
@@ -133,30 +128,31 @@
 .benchmark-table-scroll {
   overflow-x: auto;
 }
-:is(.benchmark-history, .engine-match-history) table {
+:is(.benchmark-comparison, .benchmark-history, .engine-match-history) table {
   width: 100%;
   border-collapse: collapse;
 }
-:is(.benchmark-history, .engine-match-history) th,
-:is(.benchmark-history, .engine-match-history) td {
+:is(.benchmark-comparison, .benchmark-history, .engine-match-history) th,
+:is(.benchmark-comparison, .benchmark-history, .engine-match-history) td {
   text-align: left;
   vertical-align: top;
   padding: 7px 14px 7px 0;
   border-bottom: 1px solid var(--ui-border);
 }
-:is(.benchmark-history, .engine-match-history) th {
+:is(.benchmark-comparison, .benchmark-history, .engine-match-history) th {
   color: var(--ui-muted);
   font-weight: 500;
 }
-:is(.benchmark-history, .engine-match-history) small {
+:is(.benchmark-comparison, .benchmark-history, .engine-match-history) small {
   display: block;
   margin-top: 5px;
   color: var(--ui-muted);
 }
-.benchmark-history [data-benchmark-time],
-.benchmark-latency {
+:is(.benchmark-comparison, .benchmark-history) :is(th, td).benchmark-number {
+  text-align: right;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+  padding-inline: 14px 28px;
 }
 .benchmark-history .benchmark-run-error,
 .benchmark-status-failed {

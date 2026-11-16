@@ -293,6 +293,22 @@ const labels = {
     'Intervallo di confidenza al 95% per A',
     '95-procentowy przedział ufności dla A',
   ],
+  intervalInconclusive: [
+    'Includes 50% · no clear difference in strength',
+    'Enthält 50 % · kein klarer Stärkeunterschied',
+    'Incluye el 50 % · sin diferencia clara de nivel',
+    'Inclut 50 % · pas de différence de niveau nette',
+    'Include il 50% · nessuna differenza di livello chiara',
+    'Obejmuje 50% · brak wyraźnej różnicy siły',
+  ],
+  intervalClear: [
+    'Excludes 50% · clear difference in strength',
+    'Schließt 50 % aus · klarer Stärkeunterschied',
+    'Excluye el 50 % · diferencia clara de nivel',
+    'Exclut 50 % · différence de niveau nette',
+    'Esclude il 50% · differenza di livello chiara',
+    'Nie obejmuje 50% · wyraźna różnica siły',
+  ],
   score: [
     'Score A–B',
     'Punktestand A–B',

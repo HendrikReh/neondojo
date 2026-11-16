@@ -360,14 +360,6 @@ export default function EngineMatchWorkspace({
     <div className="benchmark-workspace engine-match-workspace">
       <header className="engine-match-heading">
         <h1>{text('title')}</h1>
-        <button
-          type="button"
-          className="primary"
-          ref={newSeriesButton}
-          onClick={(event) => openSetup(event.currentTarget)}
-        >
-          {text('newSeries')}
-        </button>
       </header>
       {displayedError !== undefined && (
         <div className="error" role="alert">
@@ -388,7 +380,17 @@ export default function EngineMatchWorkspace({
           className="engine-match-archive"
           aria-labelledby={seriesHeading}
         >
-          <h2 id={seriesHeading}>{text('series')}</h2>
+          <div className="engine-match-archive-heading">
+            <h2 id={seriesHeading}>{text('series')}</h2>
+            <button
+              type="button"
+              className="primary"
+              ref={newSeriesButton}
+              onClick={(event) => openSetup(event.currentTarget)}
+            >
+              {text('newSeries')}
+            </button>
+          </div>
           {!recent ? (
             loadError === undefined && <p role="status">{text('loading')}</p>
           ) : rows.length === 0 ? (
@@ -741,6 +743,11 @@ function SeriesResults({
             </div>
           </dl>
         ))}
+        {rate != null && (
+          <div className="engine-match-share" aria-hidden="true">
+            <span style={{ inlineSize: `${rate * 100}%` }} />
+          </div>
+        )}
       </div>
       <dl className="engine-match-statistics">
         <div>
@@ -761,6 +768,13 @@ function SeriesResults({
             <dt>{text('interval')}</dt>
             <dd>
               {interval.map((value) => formatPercent(value, 1)).join(' – ')}
+              <small>
+                {text(
+                  interval[0] <= 0.5 && interval[1] >= 0.5
+                    ? 'intervalInconclusive'
+                    : 'intervalClear',
+                )}
+              </small>
             </dd>
           </div>
         )}
@@ -820,7 +834,12 @@ function SeriesResults({
                   !isReturn &&
                   match.match_index + 1 === series.completed_matches;
                 return (
-                  <tr key={match.match_index}>
+                  <tr
+                    key={match.match_index}
+                    data-leg={
+                      paired ? (isReturn ? 'return' : 'outbound') : undefined
+                    }
+                  >
                     <th scope="row">
                       {formatNumber(
                         paired
@@ -836,7 +855,7 @@ function SeriesResults({
                       {formatNumber(match.score_b)}
                     </td>
                     <td>{formatNumber(match.games)}</td>
-                    <td>
+                    <td className="engine-match-seed">
                       <code>{match.seed}</code>
                     </td>
                     <td>

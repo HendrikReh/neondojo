@@ -5,6 +5,7 @@ import configurationOptions from '../../shared/configuration-options.json' with 
 import { useEffect, useRef, useState } from 'react';
 import EngineLabel from './EngineLabel';
 import { ANALYSIS_PLIES } from './analysis-depth';
+import { formatBenchmarkDuration } from './benchmark-duration';
 import { useI18n } from './i18n';
 import { loadEngines, type EngineInfo } from './settings-api';
 import {
@@ -479,8 +480,14 @@ export default function BenchmarkWorkspace({
                   <th scope="col">{t('date')}</th>
                   <th scope="col">{t('engineColumn')}</th>
                   <th scope="col">{t('depth')}</th>
-                  {!play && <th scope="col">{t('total')}</th>}
-                  <th scope="col">{t(play ? 'playAverage' : 'average')}</th>
+                  {!play && (
+                    <th scope="col" className="benchmark-number">
+                      {t('total')}
+                    </th>
+                  )}
+                  <th scope="col" className="benchmark-number">
+                    {t(play ? 'playAverage' : 'average')}
+                  </th>
                   <th scope="col">{t('status')}</th>
                   <th scope="col">{t('details')}</th>
                 </tr>
@@ -496,12 +503,32 @@ export default function BenchmarkWorkspace({
                     <td>{run.engine_name}</td>
                     <td>{formatNumber(run.plies)}-ply</td>
                     {!play && (
-                      <td data-benchmark-time>
-                        {time(run, run.total_elapsed_ms)}
+                      <td
+                        className="benchmark-number"
+                        data-benchmark-time
+                        title={
+                          run.status === 'completed' &&
+                          typeof run.total_elapsed_ms === 'number' &&
+                          run.total_elapsed_ms >= 1000
+                            ? time(run, run.total_elapsed_ms)
+                            : undefined
+                        }
+                      >
+                        {run.status === 'completed' &&
+                        typeof run.total_elapsed_ms === 'number'
+                          ? formatBenchmarkDuration(
+                              run.total_elapsed_ms,
+                              formatNumber,
+                            )
+                          : '—'}
                       </td>
                     )}
                     <td
-                      className={play ? 'benchmark-latency' : undefined}
+                      className={
+                        play
+                          ? 'benchmark-number benchmark-latency'
+                          : 'benchmark-number'
+                      }
                       data-benchmark-time
                     >
                       {time(
@@ -515,7 +542,9 @@ export default function BenchmarkWorkspace({
                       >
                         {statusLabel(run.status)}
                       </span>
-                      <small>{progress(run)}</small>
+                      {run.status !== 'completed' && (
+                        <small>{progress(run)}</small>
+                      )}
                       {run.error && (
                         <small className="benchmark-run-error">
                           {run.error}

@@ -266,7 +266,7 @@ test('play-turn latency starts independently and has its own history metric', as
   const row = page.getByRole('row').filter({ hasText: '42 ms' });
   await expect(row).toContainText('Open Sage');
   await expect(row).toContainText('1-ply');
-  await expect(row).toContainText('11 / 11 checker turns');
+  await expect(row).not.toContainText('11 / 11 checker turns');
   await expect(row).toContainText('42 ms');
   await expect(page.locator('.benchmark-history tbody tr')).toHaveCount(1);
   await row.getByText('Details', { exact: true }).click();
@@ -335,10 +335,13 @@ test('Extras shows reference, saved history and only the saved default ply', asy
     'Apple M4',
     '16 GiB',
     'GNUbg 1.08',
-    '60,000 ms',
     '130.43 ms',
   ])
     await expect(rows.first()).toContainText(text);
+  await expect(rows.first().locator('[data-benchmark-time]')).toHaveText([
+    '1m',
+    '130.43 ms',
+  ]);
   await expect(rows.nth(1)).toContainText('Engine version changed');
   await expect(rows.nth(1).locator('[data-benchmark-time]')).toHaveText([
     '—',
@@ -568,9 +571,9 @@ test('comparison identifies stored engine versions and measurement protocols', a
   );
   await open(page);
   const comparison = page.getByRole('region', {
-    name: 'Three comparable runs',
+    name: 'Comparison · median of 3 runs',
   });
-  const groups = comparison.locator('details');
+  const groups = comparison.locator('tbody tr');
   await expect(groups).toHaveCount(2);
   await groups.nth(0).locator('summary').click();
   await expect(
@@ -586,5 +589,8 @@ test('comparison identifies stored engine versions and measurement protocols', a
   await expect(
     groups.nth(1).getByText('gnubg-match-v2-unlimited', { exact: true }),
   ).toBeVisible();
-  await expect(groups.nth(1).locator('summary')).toContainText('2 threads');
+  await expect(groups.nth(1)).toContainText('2 threads');
+  await expect(groups.nth(1).locator('.benchmark-median')).toHaveText(
+    /^\d[\d.,]* ms$/,
+  );
 });
