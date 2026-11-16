@@ -201,7 +201,9 @@ export default function PositionBrowserControls({
             disabled={busy}
             onRemove={(key, button) => {
               button.form
-                ?.querySelector<HTMLElement>('.position-filter-details > summary')
+                ?.querySelector<HTMLElement>(
+                  '.position-filter-details > summary',
+                )
                 ?.focus();
               onRemoveFilter(key);
             }}
@@ -234,68 +236,74 @@ export default function PositionBrowserControls({
           ))}
         </SearchFilterSelect>
       }
-      beforeTextFilters={
-        <>
-          <SearchFilterSelect
-            label={planText('title')}
-            value={filters.game_plan ?? ''}
-            onChange={(game_plan) => onChange({ ...filters, game_plan })}
-          >
-            <option value="">{p('any')}</option>
-            {mistakeGamePlans.map((plan) => (
-              <option key={plan} value={plan}>
-                {planText(plan)}
-              </option>
-            ))}
-          </SearchFilterSelect>
-          {field('match_name')}
-          {field('tournament')}
-          {field('round')}
-        </>
-      }
-      footer={
-        <>
-          {select('sort', 'sort', [
-            ['match', 'sortMatch'],
-            ['loss', 'sortLoss'],
-            ['match_id', 'matchId'],
-            ['database', 'database'],
-            ['game', 'gameNumber'],
-            ['ply', 'moveNumber'],
-            ['player', 'player'],
-            ['opponent', 'opponent'],
-            ['dice', 'dice'],
-            ['score', 'score'],
-            ['cube', 'cube'],
-            ['played_move', 'playedMove'],
-            ['decks', 'decks'],
-            ['tags', 'tag'],
-            ['comment', 'comment'],
-          ])}
-          {select('direction', 'direction', [
-            ['', 'sortDefault'],
-            ['asc', 'ascending'],
-            ['desc', 'descending'],
-          ])}
-        </>
-      }
-    >
-      {field('match_points_min', 'number')}
-      {field('match_points_max', 'number')}
-      {field('die1', 'number', 1, 6)}
-      {field('die2', 'number', 1, 6)}
-      {field('white_score', 'number')}
-      {field('black_score', 'number')}
-      {select('crawford', filterLabels.crawford, [
-        ['', 'any'],
-        ['true', 'yes'],
-        ['false', 'no'],
-      ])}
-      {field('cube_value', 'number', 1, 32768)}
-      {select('analysis_state', filterLabels.analysis_state, analysisOptions)}
-      {field('min_loss', 'number')}
-      {field('max_loss', 'number')}
-    </SearchFilterForm>
+      filterGroups={(text) => (
+        <div className="position-filter-groups">
+          <fieldset className="position-filter-group">
+            <legend>{p('groupMatch')}</legend>
+            <div className="position-filter-grid">
+              {field('match_name')}
+              {field('tournament')}
+              {field('round')}
+              <div className="position-filter-pair">
+                {field('match_points_min', 'number')}
+                {field('match_points_max', 'number')}
+              </div>
+            </div>
+          </fieldset>
+          <fieldset className="position-filter-group">
+            <legend>{p('groupPosition')}</legend>
+            <div className="position-filter-grid">
+              <SearchFilterSelect
+                label={planText('title')}
+                value={filters.game_plan ?? ''}
+                onChange={(game_plan) => onChange({ ...filters, game_plan })}
+              >
+                <option value="">{p('any')}</option>
+                {mistakeGamePlans.map((plan) => (
+                  <option key={plan} value={plan}>
+                    {planText(plan)}
+                  </option>
+                ))}
+              </SearchFilterSelect>
+              <div className="position-filter-pair">
+                {field('die1', 'number', 1, 6)}
+                {field('die2', 'number', 1, 6)}
+              </div>
+              {field('white_score', 'number')}
+              {field('black_score', 'number')}
+              {select('crawford', filterLabels.crawford, [
+                ['', 'any'],
+                ['true', 'yes'],
+                ['false', 'no'],
+              ])}
+              {field('cube_value', 'number', 1, 32768)}
+              {text.position_id}
+            </div>
+          </fieldset>
+          <fieldset className="position-filter-group position-filter-group--half">
+            <legend>{p('groupAnalysis')}</legend>
+            <div className="position-filter-grid">
+              {select(
+                'analysis_state',
+                filterLabels.analysis_state,
+                analysisOptions,
+              )}
+              <div className="position-filter-pair">
+                {field('min_loss', 'number')}
+                {field('max_loss', 'number')}
+              </div>
+            </div>
+          </fieldset>
+          <fieldset className="position-filter-group position-filter-group--half">
+            <legend>{p('groupNotes')}</legend>
+            <div className="position-filter-grid">
+              {text.tag}
+              {text.comment}
+            </div>
+          </fieldset>
+        </div>
+      )}
+    />
   );
 }
 
@@ -318,6 +326,7 @@ function SavedPositionSearches({
     [error, setError] = useState<unknown>(),
     [invalid, setInvalid] = useState(false),
     [notice, setNotice] = useState<'saved' | 'deleted'>(),
+    [deleted, setDeleted] = useState<SavedPositionFilter>(),
     [reload, setReload] = useState(0);
   const live = useRef(true),
     generation = useRef(0);
@@ -412,6 +421,32 @@ function SavedPositionSearches({
       setChosen('');
       setName('');
       setNotice('deleted');
+      setDeleted(item);
+      setReload((value) => value + 1);
+    } catch (error) {
+      if (live.current && version === generation.current) setError(error);
+    } finally {
+      if (live.current && version === generation.current) setBusy(false);
+    }
+  }
+  async function restore() {
+    if (!deleted) return;
+    const item = deleted,
+      version = ++generation.current;
+    setBusy(true);
+    setError(undefined);
+    setNotice(undefined);
+    try {
+      const saved = await savePositionFilter(item.name, item.definition);
+      if (!live.current || version !== generation.current) return;
+      setItems((previous) =>
+        [...previous.filter((other) => other.id !== saved.id), saved].sort(
+          (a, b) => a.name.localeCompare(b.name),
+        ),
+      );
+      setDeleted(undefined);
+      setChosen(saved.id);
+      setNotice('saved');
       setReload((value) => value + 1);
     } catch (error) {
       if (live.current && version === generation.current) setError(error);
@@ -495,7 +530,16 @@ function SavedPositionSearches({
         </p>
       )}
       {busy && <p role="status">{p('saving')}</p>}
-      {notice && <p role="status">{p(notice)}</p>}
+      {notice && (
+        <p role="status" className="position-undo-notice">
+          {p(notice)}
+          {notice === 'deleted' && deleted && (
+            <button type="button" onClick={() => void restore()}>
+              {p('undo')}
+            </button>
+          )}
+        </p>
+      )}
     </details>
   );
 }

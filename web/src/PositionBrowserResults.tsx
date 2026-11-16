@@ -2,7 +2,7 @@ import { useWorkspaceDefaults } from './ConfigurationProvider';
 import { layoutColumns, useWorkspaceLayout } from './useWorkspaceSession';
 import ActionButton from './ActionButton';
 import EngineLabel from './EngineLabel';
-import { useMemo, type Ref } from 'react';
+import { useMemo, type ReactNode, type Ref } from 'react';
 import {
   SearchResultNotes,
   SearchResultRow,
@@ -62,6 +62,8 @@ export interface PositionResultsProps {
   direction?: PositionDirection;
   onSort?: (sort: PositionSort) => void;
   sortDisabled?: boolean;
+  /** Actions for the current selection, shown at the start of the toolbar. */
+  toolbarStart?: ReactNode;
 }
 const scopeKeys: Record<
   PositionBrowserHit['notes'][number]['scope'],
@@ -130,6 +132,7 @@ export function PositionBrowserResults({
   direction = sort === 'loss' ? 'desc' : 'asc',
   onSort,
   sortDisabled = false,
+  toolbarStart,
 }: PositionResultsProps) {
   const legacy = useWorkspaceDefaults();
   const p = usePositionText(),
@@ -217,16 +220,7 @@ export function PositionBrowserResults({
   return (
     <div className="position-browser-results" aria-busy={busy}>
       <div className="position-page-select">
-        <label>
-          <input
-            ref={selectPageRef}
-            type="checkbox"
-            checked={all}
-            disabled={!ids.length || busy || (!all && selected.size >= 200)}
-            onChange={(event) => onToggle(ids, event.target.checked)}
-          />
-          {p('selectPage')}
-        </label>
+        {toolbarStart}
         <label className="position-played-toggle">
           <input
             type="checkbox"
@@ -299,9 +293,15 @@ export function PositionBrowserResults({
         <thead>
           <tr>
             <th scope="col" data-column="select">
-              <span className="visually-hidden">
-                {p('selected', { count: selected.size })}
-              </span>
+              <input
+                ref={selectPageRef}
+                type="checkbox"
+                aria-label={p('selectPage')}
+                title={p('selectPage')}
+                checked={all}
+                disabled={!ids.length || busy || (!all && selected.size >= 200)}
+                onChange={(event) => onToggle(ids, event.target.checked)}
+              />
               {columns.handle('select', l('selection'))}
             </th>
             {activeColumns.map(
@@ -384,15 +384,13 @@ export function PositionBrowserResults({
               {shown.includes('score') && (
                 <td>
                   {hit.white_score == null || hit.black_score == null
-                    ? 'n/a'
+                    ? '—'
                     : `${formatNumber(hit.white_score)}–${formatNumber(hit.black_score)}`}
                 </td>
               )}
               {shown.includes('cube') && (
                 <td>
-                  {hit.cube_value == null
-                    ? 'n/a'
-                    : formatNumber(hit.cube_value)}
+                  {hit.cube_value == null ? '—' : formatNumber(hit.cube_value)}
                 </td>
               )}
               {showPlayed && (
@@ -412,7 +410,7 @@ export function PositionBrowserResults({
                       })}
                     </span>
                   ) : (
-                    'n/a'
+                    '—'
                   )}
                 </td>
               )}

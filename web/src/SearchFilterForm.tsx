@@ -25,6 +25,7 @@ export default function SearchFilterForm<T extends Record<TextFilter, string>>({
   beforeTextFilters,
   footer,
   compactToolbar,
+  filterGroups,
   children,
 }: {
   filters: T;
@@ -39,7 +40,11 @@ export default function SearchFilterForm<T extends Record<TextFilter, string>>({
   beforeTextFilters?: ReactNode;
   footer?: ReactNode;
   compactToolbar?: { appliedFilters: ReactNode; reset: boolean };
-  children: ReactNode;
+  /** Replaces the flat grid with the caller's own grouping of all filters. */
+  filterGroups?: (
+    text: Record<'tag' | 'comment' | 'position_id', ReactNode>,
+  ) => ReactNode;
+  children?: ReactNode;
 }) {
   const t = usePositionText();
   const textField = (key: TextFilter) => {
@@ -96,14 +101,22 @@ export default function SearchFilterForm<T extends Record<TextFilter, string>>({
         <div className={compactToolbar ? 'position-filter-toolbar' : undefined}>
           <details className="position-filter-details">
             <summary>{t('filters')}</summary>
-            <div className="position-filter-grid">
-              {beforeTextFilters}
-              {textField('tag')}
-              {textField('comment')}
-              {textField('position_id')}
-              {children}
-              {compactToolbar && footer}
-            </div>
+            {filterGroups ? (
+              filterGroups({
+                tag: textField('tag'),
+                comment: textField('comment'),
+                position_id: textField('position_id'),
+              })
+            ) : (
+              <div className="position-filter-grid">
+                {beforeTextFilters}
+                {textField('tag')}
+                {textField('comment')}
+                {textField('position_id')}
+                {children}
+                {compactToolbar && footer}
+              </div>
+            )}
           </details>
           {compactToolbar?.reset && clear}
         </div>

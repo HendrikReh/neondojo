@@ -774,3 +774,93 @@
   line-height: 1.4;
   margin: 8px 0;
 }
+
+/* Grouped filters: related fields share a block, ranges share a cell. */
+.position-filter-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 12px;
+  margin: 8px 0 4px;
+}
+.position-filter-group {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.position-filter-group--half {
+  grid-column: auto;
+}
+.position-filter-group legend {
+  padding: 0;
+  color: var(--ui-muted);
+  font-size: var(--font-size-table-heading);
+  font-weight: var(--font-weight-semibold);
+}
+.position-filter-toolbar .position-filter-group .position-filter-grid {
+  margin: 6px 0 10px;
+  align-items: end;
+}
+.position-filter-group--half .position-filter-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.position-filter-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: 8px;
+  min-width: 0;
+}
+@media (max-width: 700px) {
+  .position-filter-group--half {
+    grid-column: 1 / -1;
+  }
+}
+
+/* The selection actions take the place of the toolbar start, so checking a
+   row never moves the table. */
+.position-page-select {
+  min-height: 60px;
+}
+.position-page-select .position-selection-summary {
+  margin: 0;
+}
+.position-table th[data-column='select'] input {
+  display: block;
+}
+
+/* Row removal stays a full-size target but only shows for the row in use. */
+.position-browser .position-remove-saved {
+  border-color: transparent;
+  background: transparent;
+  color: var(--ui-muted);
+  opacity: 0;
+}
+.position-table
+  tbody
+  tr:is(:hover, :focus-within, :focus-visible, .position-preview-selected)
+  .position-remove-saved {
+  opacity: 1;
+}
+.position-browser .position-remove-saved:is(:hover, :focus-visible) {
+  color: var(--ui-danger-text);
+}
+
+.position-undo-notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 12px;
+  font-size: var(--font-size-body);
+}
+.position-undo-notice button {
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--ui-accent);
+  font: inherit;
+  font-weight: var(--font-weight-semibold);
+  text-decoration: underline;
+  cursor: pointer;
+}

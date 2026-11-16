@@ -139,6 +139,43 @@ test('imports stay out of the collection until the user deliberately saves a pos
   ).toBeVisible();
 });
 
+test('undo puts removed positions back into the collection', async ({
+  page,
+}) => {
+  const f = await imported(page);
+  for (const position of f.positions) {
+    expect(
+      (await page.request.put(`/api/positions/${position.id}/bookmark`)).ok(),
+    ).toBe(true);
+  }
+  const pane = await openCollection(page, f.database.id),
+    rows = pane.locator('.position-table tbody tr'),
+    notice = pane.locator('.position-undo-notice');
+  await expect(rows).toHaveCount(2);
+  await expect(notice).toHaveCount(0);
+  await rows
+    .first()
+    .getByRole('button', { name: 'Remove from collection', exact: true })
+    .click();
+  await expect(rows).toHaveCount(1);
+  await expect(notice).toContainText('Removed from collection: 1');
+  await notice.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(rows).toHaveCount(2);
+  await expect(notice).toHaveCount(0);
+  await pane.getByLabel('Select this page', { exact: true }).check();
+  const tableTop = (await pane.locator('.position-table').boundingBox())!.y;
+  await removeSelected(pane);
+  await expect(rows).toHaveCount(0);
+  await expect(notice).toContainText('Removed from collection: 2');
+  await notice.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(rows).toHaveCount(2);
+  // Selecting rows shows its actions in the toolbar without moving the table.
+  await pane.getByLabel('Select this page', { exact: true }).uncheck();
+  expect((await pane.locator('.position-table').boundingBox())!.y).toBe(
+    tableTop,
+  );
+});
+
 test('selected removal retains original notes and permits saving the same position again', async ({
   page,
 }) => {

@@ -1,4 +1,7 @@
-import { useConfirmedConfiguration, useWorkspaceDefaults } from './ConfigurationProvider';
+import {
+  useConfirmedConfiguration,
+  useWorkspaceDefaults,
+} from './ConfigurationProvider';
 import { useWorkspaceLayout, useWorkspaceSession } from './useWorkspaceSession';
 import ActionButton from './ActionButton';
 import SearchPagination from './SearchPagination';
@@ -14,13 +17,14 @@ import {
   useState,
 } from 'react';
 import { request } from './api';
-import { removePositionBookmark } from './position-bookmark-api';
+import {
+  removePositionBookmark,
+  savePositionBookmark,
+} from './position-bookmark-api';
 import { useI18n } from './i18n';
 import type { Database } from './library-api';
 import type { Theme } from './themes';
-import {
-  readPositionPlayed,
-} from './position-table-columns';
+import { readPositionPlayed } from './position-table-columns';
 import PositionBrowserControls from './PositionBrowserControls';
 import PositionBrowserDecks from './PositionBrowserDecks';
 import {
@@ -114,6 +118,9 @@ export default function PositionBrowser({
     [transferOpen, setTransferOpen] = useState(false),
     [removing, setRemoving] = useState(false),
     [removeError, setRemoveError] = useState<unknown>(),
+    [removedIds, setRemovedIds] = useState<string[]>([]),
+    [restoring, setRestoring] = useState(false),
+    [restoreError, setRestoreError] = useState<unknown>(),
     [databaseError, setDatabaseError] = useState<unknown>(),
     [invalid, setInvalid] = useState(false),
     [refresh, setRefresh] = useState(0),
@@ -121,7 +128,7 @@ export default function PositionBrowser({
       'positions.showPlayed',
       legacy?.positions.show_played,
       readPositionPlayed(),
-      (value) => typeof value === 'boolean' ? value : undefined,
+      (value) => (typeof value === 'boolean' ? value : undefined),
     );
   const scope = JSON.stringify(definition);
   useEffect(() => {
@@ -255,7 +262,7 @@ export default function PositionBrowser({
     apply({ ...appliedFilters, ...cleared });
   }
   function sortResults(sort: PositionSort) {
-    if (transferBusy || removing) return;
+    if (transferBusy || removing || restoring) return;
     const currentSort = definition.sort ?? 'match';
     const direction =
       definition.direction ?? (currentSort === 'loss' ? 'desc' : 'asc');
@@ -265,9 +272,10 @@ export default function PositionBrowser({
     apply({ ...positionDraft(definition), sort, direction: nextDirection });
   }
   async function removeSaved(ids: string[]) {
-    if (loading || transferBusy || removing || !ids.length) return;
+    if (loading || transferBusy || removing || restoring || !ids.length) return;
     setRemoving(true);
     setRemoveError(undefined);
+    setRestoreError(undefined);
     const removed = new Set<string>();
     let failure: unknown;
     try {
@@ -292,17 +300,115 @@ export default function PositionBrowser({
         );
         onBookmarkChanged();
         setRefresh((value) => value + 1);
+        setRemovedIds([...removed]);
       }
       if (failure) setRemoveError(failure);
     } finally {
       setRemoving(false);
     }
   }
-  const busy = loading || transferBusy || removing;
+  /** Puts the positions of the last removal back into the collection. */
+  async function restoreRemoved() {
+    if (loading || transferBusy || removing || restoring) return;
+    const ids = removedIds;
+    if (!ids.length) return;
+    setRestoring(true);
+    setRestoreError(undefined);
+    const restored = new Set<string>();
+    let failure: unknown;
+    try {
+      for (let start = 0; start < ids.length; start += 8) {
+        const batch = ids.slice(start, start + 8);
+        const saved = await Promise.allSettled(
+          batch.map((id) => savePositionBookmark(id)),
+        );
+        saved.forEach((result, index) => {
+          if (result.status === 'fulfilled') restored.add(batch[index]);
+          else failure ??= result.reason;
+        });
+      }
+      if (restored.size) {
+        results.invalidateResults();
+        onBookmarkChanged();
+        setRefresh((value) => value + 1);
+      }
+      // Failed positions stay on offer for another attempt.
+      setRemovedIds(ids.filter((id) => !restored.has(id)));
+      if (failure) setRestoreError(failure);
+    } finally {
+      setRestoring(false);
+    }
+  }
+  const busy = loading || transferBusy || removing || restoring;
   useEffect(() => {
     if (!visible || busy || !selected.size)
       selectionMenu.current?.hidePopover();
   }, [visible, busy, selected.size]);
+  const selectionBar = (
+    <div
+      className="position-selection-summary position-selection-actions"
+      hidden={!selected.size}
+      aria-label={p('selectionLimit')}
+      role="group"
+    >
+      <strong aria-live="polite">
+        {p('selected', { count: selected.size })}
+      </strong>
+      <ActionButton
+        icon="add"
+        label={p('addToDeck')}
+        type="button"
+        className="primary"
+        disabled={busy}
+        onClick={() => setTransferOpen(true)}
+      />
+      <ActionButton
+        icon="clear"
+        label={p('clearSelection')}
+        type="button"
+        disabled={busy}
+        onClick={() => {
+          changeSelection([...selected], false);
+          selectPage.current?.focus();
+        }}
+      />
+      <ActionButton
+        ref={selectionMenuButton}
+        icon="more"
+        label={p('moreSelectionActions')}
+        compact
+        type="button"
+        popoverTarget={selectionMenuId}
+        disabled={busy}
+      />
+      <div
+        id={selectionMenuId}
+        ref={selectionMenu}
+        popover="auto"
+        className="position-selection-menu"
+        onToggle={(event) => setSelectionMenuOpen(event.newState === 'open')}
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape') return;
+          event.preventDefault();
+          event.stopPropagation();
+          selectionMenu.current?.hidePopover();
+          selectionMenuButton.current?.focus();
+        }}
+      >
+        <ActionButton
+          icon="delete"
+          label={p(removing ? 'removing' : 'removeSaved')}
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            selectionMenu.current?.hidePopover();
+            selectionMenuButton.current?.focus();
+            void removeSaved([...selected]);
+          }}
+        />
+      </div>
+    </div>
+  );
   return (
     <section className="position-browser" aria-label={p('title')}>
       <div className="position-browser-heading">
@@ -339,6 +445,25 @@ export default function PositionBrowser({
           {p('removalFailed')} {formatError(removeError)}
         </p>
       )}
+      {!!restoreError && (
+        <p role="alert" className="error">
+          {p('restoreFailed')} {formatError(restoreError)}
+        </p>
+      )}
+      {removedIds.length > 0 && (
+        <p role="status" className="position-undo-notice">
+          {p(restoring ? 'restoring' : 'removedNotice', {
+            count: removedIds.length,
+          })}
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void restoreRemoved()}
+          >
+            {p('undo')}
+          </button>
+        </p>
+      )}
       {!!error && (
         <p role="alert" className="error">
           {formatError(error)}{' '}
@@ -360,81 +485,19 @@ export default function PositionBrowser({
           />
         }
       >
-        <div
-          className="position-selection-summary position-selection-actions"
-          hidden={!selected.size}
-          aria-label={p('selectionLimit')}
-          role="group"
-        >
-          <strong aria-live="polite">
-            {p('selected', { count: selected.size })}
-          </strong>
-          <ActionButton
-            icon="add"
-            label={p('addToDeck')}
-            type="button"
-            className="primary"
-            disabled={busy}
-            onClick={() => setTransferOpen(true)}
-          />
-          <ActionButton
-            icon="clear"
-            label={p('clearSelection')}
-            type="button"
-            disabled={busy}
-            onClick={() => {
-              changeSelection([...selected], false);
-              selectPage.current?.focus();
-            }}
-          />
-          <ActionButton
-            ref={selectionMenuButton}
-            icon="more"
-            label={p('moreSelectionActions')}
-            compact
-            type="button"
-            popoverTarget={selectionMenuId}
-            disabled={busy}
-          />
-          <div
-            id={selectionMenuId}
-            ref={selectionMenu}
-            popover="auto"
-            className="position-selection-menu"
-            onToggle={(event) =>
-              setSelectionMenuOpen(event.newState === 'open')
-            }
-            onKeyDown={(event) => {
-              if (event.key !== 'Escape') return;
-              event.preventDefault();
-              event.stopPropagation();
-              selectionMenu.current?.hidePopover();
-              selectionMenuButton.current?.focus();
-            }}
-          >
-            <ActionButton
-              icon="delete"
-              label={p(removing ? 'removing' : 'removeSaved')}
-              type="button"
-              disabled={busy}
-              onClick={() => {
-                selectionMenu.current?.hidePopover();
-                selectionMenuButton.current?.focus();
-                void removeSaved([...selected]);
-              }}
-            />
-          </div>
-        </div>
         {loading && <p role="status">{p('loading')}</p>}
         {!items.length && !loading && !error ? (
-          <div className="position-empty" role="status">
-            <p>{p(hasFilters ? 'noFilterResults' : 'empty')}</p>
-            {hasFilters && (
-              <button type="button" onClick={clearFilters}>
-                {p('showAllSaved')}
-              </button>
-            )}
-          </div>
+          <>
+            {selectionBar}
+            <div className="position-empty" role="status">
+              <p>{p(hasFilters ? 'noFilterResults' : 'empty')}</p>
+              {hasFilters && (
+                <button type="button" onClick={clearFilters}>
+                  {p('showAllSaved')}
+                </button>
+              )}
+            </div>
+          </>
         ) : (
           <PositionBrowserResults
             items={items}
@@ -455,14 +518,15 @@ export default function PositionBrowser({
               (definition.sort === 'loss' ? 'desc' : 'asc')
             }
             onSort={sortResults}
-            sortDisabled={transferBusy || removing}
+            sortDisabled={transferBusy || removing || restoring}
+            toolbarStart={selectionBar}
           />
         )}
         <SearchPagination
           page={results.page}
           lastPage={results.lastPage}
           busy={loading}
-          disabled={transferBusy || removing}
+          disabled={transferBusy || removing || restoring}
           onPageChange={results.setPage}
         />
         <PositionBrowserDecks

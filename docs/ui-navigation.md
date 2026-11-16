@@ -68,6 +68,13 @@ decision of one player. The decision search keeps its filters above a result
 table with a board preview on the right. **Practice results** opens the
 recurring-mistakes practice dialog with the errors of the current page.
 
+In **Saved positions**, the header checkbox selects the current page and the
+selection actions appear in the toolbar above the table, so the rows keep
+their place. The remove icon of a row shows for the hovered, focused or
+previewed row and keeps its 44 px target. Removing positions or deleting a
+saved search offers **Undo**. **More filters** groups its fields by match,
+position, analysis, and tags and comments. Missing values show as a dash.
+
 ## Keyboard shortcuts in practice and review
 
 Buttons that have a shortcut name it in their tooltip and expose it through
