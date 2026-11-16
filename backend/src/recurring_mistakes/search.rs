@@ -62,9 +62,30 @@ pub struct DecisionSearchQuery {
     pub cube_value: Option<i32>,
     /// self, opponent or centered, relative to the deciding player.
     pub cube_owner: Option<CubeOwnerFilter>,
+    /// Order by equity loss; the largest loss comes first by default.
+    pub direction: Option<LossDirection>,
     /// One-based page.
     pub page: Option<usize>,
     pub limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum LossDirection {
+    Asc,
+    #[default]
+    Desc,
+}
+
+impl LossDirection {
+    /// Both orders follow decision_index_player_loss: descending reads it
+    /// forward, ascending reverses every key so it is read backward.
+    fn order_by(self) -> &'static str {
+        match self {
+            Self::Desc => "d.equity_loss DESC,d.match_id,d.game_no,d.decision_no",
+            Self::Asc => "d.equity_loss,d.match_id DESC,d.game_no DESC,d.decision_no DESC",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
@@ -225,10 +246,11 @@ pub(super) async fn search(
     let plan = q.game_plan.map(crate::position_game_plans::label);
     let owner = q.cube_owner.map(CubeOwnerFilter::name);
     // The order matches decision_index_player_loss, so a page is read in index order.
+    let order = q.direction.unwrap_or_default().order_by();
     let page_sql = format!(
         "SELECT d.hit FROM decision_index d JOIN matches m ON m.id=d.match_id
          WHERE {FILTER}
-         ORDER BY d.equity_loss DESC,d.match_id,d.game_no,d.decision_no
+         ORDER BY {order}
          LIMIT $12 OFFSET $13"
     );
     let items: Vec<serde_json::Value> = sqlx::query_scalar(&page_sql)

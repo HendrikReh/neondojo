@@ -1328,7 +1328,19 @@ async fn decision_search_filters_by_type_score_cube_and_loss_with_stable_pages(p
     assert_eq!(second["items"][0]["reference"]["decision_no"], 1);
     assert_eq!(second["total"], 2);
 
+    // Ascending loss reverses the order and pages without gaps or repeats.
+    let (status, ascending) = search("player=Alice&direction=asc").await;
+    assert_eq!(status, 200, "{ascending}");
+    assert_eq!(ascending["total"], 2);
+    assert_eq!(ascending["items"][0]["reference"]["decision_no"], 1);
+    assert_eq!(ascending["items"][1]["reference"]["decision_no"], 3);
+    let (_, last) = search("player=Alice&direction=asc&limit=1&page=2").await;
+    assert_eq!(last["items"][0]["reference"]["decision_no"], 3);
+    let (_, descending) = search("player=Alice&direction=desc").await;
+    assert_eq!(descending["items"], all["items"]);
+
     for invalid in [
+        "player=Alice&direction=up",
         "player=",
         "player=Alice&limit=101",
         "player=Alice&page=0",

@@ -10127,6 +10127,15 @@
             }
           },
           {
+            "name": "direction",
+            "in": "query",
+            "description": "Order by equity loss; the largest loss comes first by default.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/LossDirection"
+            }
+          },
+          {
             "name": "page",
             "in": "query",
             "description": "One-based page.",
@@ -17099,6 +17108,13 @@
             "$ref": "#/components/schemas/OverviewStatus"
           }
         }
+      },
+      "LossDirection": {
+        "type": "string",
+        "enum": [
+          "asc",
+          "desc"
+        ]
       },
       "Machine": {
         "type": "object",

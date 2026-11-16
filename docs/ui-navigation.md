@@ -84,6 +84,11 @@ only the source details stay collapsed. Deck choice and Anki export belong to
 Study; after adding positions to a deck, **Study this deck** appears beside
 the transfer outcome.
 
+**All analyzed decisions** uses the same filter card and keeps its filters,
+results and chosen row while the saved positions are open. A row is selected
+with a click or the arrow keys; Enter or a double-click opens a checker
+decision in Analysis. The **Loss** heading reverses the order.
+
 ## Keyboard shortcuts in practice and review
 
 Buttons that have a shortcut name it in their tooltip and expose it through

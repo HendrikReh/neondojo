@@ -4192,6 +4192,8 @@ export interface components {
             sent_reviews: number;
             status: components["schemas"]["OverviewStatus"];
         };
+        /** @enum {string} */
+        LossDirection: "asc" | "desc";
         Machine: {
             architecture: string;
             cpu_model?: string | null;
@@ -12463,6 +12465,8 @@ export interface operations {
                 cube_value?: number;
                 /** @description self, opponent or centered, relative to the deciding player. */
                 cube_owner?: components["schemas"]["CubeOwnerFilter"];
+                /** @description Order by equity loss; the largest loss comes first by default. */
+                direction?: components["schemas"]["LossDirection"];
                 /** @description One-based page. */
                 page?: number;
                 limit?: number;

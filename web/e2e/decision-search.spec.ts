@@ -79,16 +79,24 @@ test('all analyzed decisions are filtered on the server, previewed and practiced
   );
   const submit = search.getByRole('button', { name: 'Search decisions' });
   await expect(submit).toBeDisabled();
+  // The disabled button names what is still missing.
+  await expect(submit).toHaveAccessibleDescription(
+    'Choose a player to search their analyzed decisions.',
+  );
   await search
     .getByRole('combobox', { name: 'Player', exact: true })
     .selectOption('Alice');
   await search
     .getByRole('combobox', { name: 'Decision type' })
     .selectOption('cube_response');
+  await search.locator('.position-filter-details > summary').click();
   await search
     .getByRole('spinbutton', { name: 'Player needs (away)' })
     .fill('2');
   await submit.click();
+  await expect(search).not.toContainText(
+    'Choose a player to search their analyzed decisions.',
+  );
   await expect(search).toContainText('51 decisions found');
   expect(Object.fromEntries(searches[0])).toEqual({
     player: 'Alice',
@@ -118,6 +126,38 @@ test('all analyzed decisions are filtered on the server, previewed and practiced
   await expect(
     preview.getByRole('button', { name: 'Open in Analysis' }),
   ).toHaveCount(0);
+
+  // The whole row selects, and the arrow keys move the preview.
+  const second = table.getByRole('row').nth(2);
+  await second.getByText('0.060').click();
+  await expect(second).toHaveAttribute('aria-selected', 'true');
+  await expect(preview).toContainText('Loss: 0.060');
+  await page.keyboard.press('ArrowUp');
+  await expect(first).toBeFocused();
+  await expect(preview).toContainText('Loss: 0.125');
+  await page.keyboard.press('ArrowDown');
+  await expect(preview).toContainText('Loss: 0.060');
+
+  // Filters, results and the chosen row survive a visit to the collection.
+  await scope.getByRole('button', { name: 'Saved positions' }).click();
+  await expect(search).toBeHidden();
+  await scope.getByRole('button', { name: 'All analyzed decisions' }).click();
+  await expect(
+    search.getByRole('combobox', { name: 'Player', exact: true }),
+  ).toHaveValue('Alice');
+  await expect(search).toContainText('51 decisions found');
+  await expect(second).toHaveAttribute('aria-selected', 'true');
+
+  // The loss heading reverses the order on the server and returns to page 1.
+  const lossHeading = table.getByRole('columnheader', { name: 'Loss' });
+  await expect(lossHeading).toHaveAttribute('aria-sort', 'descending');
+  await lossHeading.getByRole('button').click();
+  await expect(lossHeading).toHaveAttribute('aria-sort', 'ascending');
+  expect(searches.at(-1)?.get('direction')).toBe('asc');
+  expect(searches.at(-1)?.get('page')).toBe('1');
+  await lossHeading.getByRole('button').click();
+  await expect(lossHeading).toHaveAttribute('aria-sort', 'descending');
+  expect(searches.at(-1)?.has('direction')).toBe(false);
 
   await search
     .getByRole('navigation', { name: 'Analyzed decisions' })

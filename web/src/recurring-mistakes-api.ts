@@ -79,6 +79,8 @@ export type DecisionFilters = {
   opponent_away?: number;
   cube_value?: number;
   cube_owner?: Schema['CubeOwnerFilter'];
+  /** Order by loss; the largest loss comes first by default. */
+  direction?: Schema['LossDirection'];
   page?: number;
   limit?: number;
 };

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import ActionButton from './ActionButton';
 import { request } from './api';
 import type { Database } from './library-api';
@@ -6,6 +6,10 @@ import Board from './Board';
 import { CubeContextLine } from './CubeDecisionDetails';
 import { useDecisionSearchText } from './decision-search-messages';
 import EngineLabel from './EngineLabel';
+import LibrarySortHeading from './LibrarySortHeading';
+import PositionBookmarkButton from './PositionBookmarkButton';
+import { usePositionText } from './position-browser-messages';
+import { SearchResultRow } from './SearchResultList';
 import { useGamePlanText } from './game-plan-messages';
 import type { GamePlan } from './game-plan-api';
 import { useI18n } from './i18n';
@@ -100,22 +104,28 @@ export function decisionFilters(draft: Draft): DecisionFilters | undefined {
 
 type Result =
   | { status: 'idle' }
-  | { status: 'loading' }
   | { status: 'error'; error: unknown }
   | { status: 'ready'; page: DecisionSearchPage };
 
 export default function DecisionSearch({
   visible,
   revision,
+  bookmarkRevision,
+  onBookmarkChanged,
   theme,
   onOpenPosition,
 }: {
   visible: boolean;
   revision: number;
+  bookmarkRevision: number;
+  onBookmarkChanged: () => void;
   theme: Theme;
   onOpenPosition: (id: string) => void;
 }) {
   const t = useDecisionSearchText();
+  const p = usePositionText();
+  const hintId = useId();
+  const rowPrefix = `${useId()}-`;
   const mistake = useMistakeText();
   const plan = useGamePlanText();
   const { formatDecision, formatError, formatNumber } = useI18n();
@@ -128,6 +138,7 @@ export default function DecisionSearch({
     attempt: number;
   }>();
   const [result, setResult] = useState<Result>({ status: 'idle' });
+  const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<string>();
   const [practice, setPractice] = useState<MistakeQuestion[]>();
   const practiceButton = useRef<HTMLButtonElement>(null);
@@ -168,20 +179,27 @@ export default function DecisionSearch({
   useEffect(() => {
     if (!visible || !applied) return;
     const abort = new AbortController();
-    setResult({ status: 'loading' });
+    // The previous results stay visible while the next ones load.
+    setLoading(true);
     void searchDecisions(
       { ...applied.filters, page: applied.page },
       abort.signal,
     )
       .then((page) => {
         if (abort.signal.aborted) return;
+        setLoading(false);
         setResult({ status: 'ready', page });
-        setSelected(
-          page.items[0] && mistakeReferenceKey(page.items[0].reference),
+        const keys = page.items.map((item) =>
+          mistakeReferenceKey(item.reference),
+        );
+        setSelected((current) =>
+          current && keys.includes(current) ? current : keys[0],
         );
       })
       .catch((error: unknown) => {
-        if (!abort.signal.aborted) setResult({ status: 'error', error });
+        if (abort.signal.aborted) return;
+        setLoading(false);
+        setResult({ status: 'error', error });
       });
     return () => abort.abort();
   }, [visible, applied, revision]);
@@ -191,6 +209,15 @@ export default function DecisionSearch({
   const preview =
     items.find((item) => mistakeReferenceKey(item.reference) === selected) ??
     items[0];
+  const keys = items.map((item) => mistakeReferenceKey(item.reference));
+  const direction = applied?.filters.direction ?? 'desc';
+  const openable = (hit: DecisionHit) => hit.position.id !== NIL_UUID;
+  function open(key: string) {
+    const hit = items.find(
+      (item) => mistakeReferenceKey(item.reference) === key,
+    );
+    if (hit && openable(hit)) onOpenPosition(hit.position.id);
+  }
   const practicable = items.filter((item) => item.practicable).slice(0, 20);
   const score = (hit: DecisionHit) =>
     hit.away
@@ -208,154 +235,174 @@ export default function DecisionSearch({
       className="position-browser decision-search"
       aria-labelledby="decision-search-title"
     >
-      <h2 id="decision-search-title">{t('title')}</h2>
-      <p className="fineprint">{t('intro')}</p>
-      <form
-        className="recurring-filters decision-search-filters"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (filters)
-            setApplied((current) => ({
-              filters,
-              page: 1,
-              attempt: (current?.attempt ?? 0) + 1,
-            }));
-        }}
-      >
-        <MistakePlayerSelect
-          players={players}
-          value={draft.player}
-          onChange={set('player')}
-        />
-        <SearchFilterSelect
-          label={t('database')}
-          value={draft.database}
-          onChange={set('database')}
+      <h2 id="decision-search-title" className="visually-hidden">
+        {t('title')}
+      </h2>
+      <div className="position-controls position-controls--compact">
+        <form
+          className="position-filter-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (filters)
+              setApplied((current) => ({
+                filters: {
+                  ...filters,
+                  direction: current?.filters.direction,
+                },
+                page: 1,
+                attempt: (current?.attempt ?? 0) + 1,
+              }));
+          }}
         >
-          <option value="">{t('allDatabases')}</option>
-          {databases.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.name}
-            </option>
-          ))}
-        </SearchFilterSelect>
-        <SearchFilterSelect
-          label={t('kind')}
-          value={draft.kind}
-          onChange={set('kind')}
-        >
-          <option value="">{t('any')}</option>
-          {kinds.map((kind) => (
-            <option key={kind} value={kind}>
-              {mistake(kind)}
-            </option>
-          ))}
-        </SearchFilterSelect>
-        <SearchFilterSelect
-          label={t('mistake')}
-          value={draft.mistake}
-          onChange={set('mistake')}
-        >
-          <option value="">{t('any')}</option>
-          {mistakeKinds.map((kind) => (
-            <option key={kind} value={kind}>
-              {mistake(kind)}
-            </option>
-          ))}
-        </SearchFilterSelect>
-        <SearchFilterSelect
-          label={t('plan')}
-          value={draft.plan}
-          onChange={set('plan')}
-        >
-          <option value="">{t('any')}</option>
-          {mistakeGamePlans.map((name) => (
-            <option key={name} value={name}>
-              {plan(name)}
-            </option>
-          ))}
-        </SearchFilterSelect>
-        <SearchFilterInput
-          label={t('minLoss')}
-          type="number"
-          min={0}
-          max={1000}
-          step={0.005}
-          value={draft.minLoss}
-          onChange={set('minLoss')}
-        />
-        <SearchFilterInput
-          label={t('maxLoss')}
-          type="number"
-          min={0}
-          max={1000}
-          step={0.005}
-          value={draft.maxLoss}
-          onChange={set('maxLoss')}
-        />
-        <SearchFilterInput
-          label={t('away')}
-          type="number"
-          min={1}
-          max={64}
-          step={1}
-          value={draft.away}
-          onChange={set('away')}
-        />
-        <SearchFilterInput
-          label={t('opponentAway')}
-          type="number"
-          min={1}
-          max={64}
-          step={1}
-          value={draft.opponentAway}
-          onChange={set('opponentAway')}
-        />
-        <SearchFilterSelect
-          label={t('cubeValue')}
-          value={draft.cubeValue}
-          onChange={set('cubeValue')}
-        >
-          <option value="">{t('any')}</option>
-          {[1, 2, 4, 8, 16, 32, 64].map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </SearchFilterSelect>
-        <SearchFilterSelect
-          label={t('cubeOwner')}
-          value={draft.cubeOwner}
-          onChange={set('cubeOwner')}
-        >
-          <option value="">{t('any')}</option>
-          {owners.map((owner) => (
-            <option key={owner} value={owner}>
-              {t(
-                owner === 'self'
-                  ? 'ownerSelf'
-                  : owner === 'opponent'
-                    ? 'ownerOpponent'
-                    : 'ownerCentered',
-              )}
-            </option>
-          ))}
-        </SearchFilterSelect>
-        <ActionButton
-          type="submit"
-          className="primary"
-          icon="search"
-          label={t('search')}
-          disabled={!filters}
-        >
-          {t('search')}
-        </ActionButton>
-      </form>
+          <div className="position-search-row decision-search-row">
+            <MistakePlayerSelect
+              players={players}
+              value={draft.player}
+              onChange={set('player')}
+            />
+            <SearchFilterSelect
+              label={t('database')}
+              value={draft.database}
+              onChange={set('database')}
+            >
+              <option value="">{t('allDatabases')}</option>
+              {databases.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </SearchFilterSelect>
+            <SearchFilterSelect
+              label={t('kind')}
+              value={draft.kind}
+              onChange={set('kind')}
+            >
+              <option value="">{t('any')}</option>
+              {kinds.map((kind) => (
+                <option key={kind} value={kind}>
+                  {mistake(kind)}
+                </option>
+              ))}
+            </SearchFilterSelect>
+            <SearchFilterSelect
+              label={t('mistake')}
+              value={draft.mistake}
+              onChange={set('mistake')}
+            >
+              <option value="">{t('any')}</option>
+              {mistakeKinds.map((kind) => (
+                <option key={kind} value={kind}>
+                  {mistake(kind)}
+                </option>
+              ))}
+            </SearchFilterSelect>
+            <div className="position-filter-pair">
+              <SearchFilterInput
+                label={t('minLoss')}
+                type="number"
+                min={0}
+                max={1000}
+                step={0.005}
+                value={draft.minLoss}
+                onChange={set('minLoss')}
+              />
+              <SearchFilterInput
+                label={t('maxLoss')}
+                type="number"
+                min={0}
+                max={1000}
+                step={0.005}
+                value={draft.maxLoss}
+                onChange={set('maxLoss')}
+              />
+            </div>
+            <ActionButton
+              type="submit"
+              className="primary"
+              icon="search"
+              label={t('search')}
+              disabled={!filters}
+              aria-describedby={draft.player ? undefined : hintId}
+            />
+          </div>
+          <div className="position-filter-toolbar">
+            <details className="position-filter-details">
+              <summary>{p('filters')}</summary>
+              <div className="position-filter-grid">
+                <SearchFilterSelect
+                  label={t('plan')}
+                  value={draft.plan}
+                  onChange={set('plan')}
+                >
+                  <option value="">{t('any')}</option>
+                  {mistakeGamePlans.map((name) => (
+                    <option key={name} value={name}>
+                      {plan(name)}
+                    </option>
+                  ))}
+                </SearchFilterSelect>
+                <SearchFilterInput
+                  label={t('away')}
+                  type="number"
+                  min={1}
+                  max={64}
+                  step={1}
+                  value={draft.away}
+                  onChange={set('away')}
+                />
+                <SearchFilterInput
+                  label={t('opponentAway')}
+                  type="number"
+                  min={1}
+                  max={64}
+                  step={1}
+                  value={draft.opponentAway}
+                  onChange={set('opponentAway')}
+                />
+                <SearchFilterSelect
+                  label={t('cubeValue')}
+                  value={draft.cubeValue}
+                  onChange={set('cubeValue')}
+                >
+                  <option value="">{t('any')}</option>
+                  {[1, 2, 4, 8, 16, 32, 64].map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </SearchFilterSelect>
+                <SearchFilterSelect
+                  label={t('cubeOwner')}
+                  value={draft.cubeOwner}
+                  onChange={set('cubeOwner')}
+                >
+                  <option value="">{t('any')}</option>
+                  {owners.map((owner) => (
+                    <option key={owner} value={owner}>
+                      {t(
+                        owner === 'self'
+                          ? 'ownerSelf'
+                          : owner === 'opponent'
+                            ? 'ownerOpponent'
+                            : 'ownerCentered',
+                      )}
+                    </option>
+                  ))}
+                </SearchFilterSelect>
+              </div>
+            </details>
+            {!draft.player && (
+              <p id={hintId} className="decision-search-hint">
+                {t('choosePlayer')}
+              </p>
+            )}
+          </div>
+        </form>
+      </div>
 
-      {!draft.player && result.status === 'idle' && (
-        <p className="position-empty">{t('choosePlayer')}</p>
+      {loading && result.status !== 'ready' && (
+        <p role="status">{t('loading')}</p>
       )}
-      {result.status === 'loading' && <p role="status">{t('loading')}</p>}
       {result.status === 'error' && (
         <div role="alert">
           <p>{formatError(result.error)}</p>
@@ -392,7 +439,7 @@ export default function DecisionSearch({
             <p className="position-empty">{t('empty')}</p>
           ) : (
             <div className="position-browser-layout">
-              <div>
+              <div className="position-browser-main" aria-busy={loading}>
                 <div className="position-table-scroll">
                   <table
                     className="similar-position-table decision-search-table"
@@ -407,30 +454,47 @@ export default function DecisionSearch({
                         <th scope="col">{t('cube')}</th>
                         <th scope="col">{t('played')}</th>
                         <th scope="col">{t('best')}</th>
-                        <th scope="col">{t('loss')}</th>
+                        <LibrarySortHeading<'loss'>
+                          fields={[{ key: 'loss', label: t('loss') }]}
+                          sort="loss"
+                          direction={direction}
+                          disabled={loading}
+                          onSort={() =>
+                            setApplied(
+                              (current) =>
+                                current && {
+                                  ...current,
+                                  page: 1,
+                                  filters: {
+                                    ...current.filters,
+                                    direction:
+                                      direction === 'desc' ? 'asc' : undefined,
+                                  },
+                                },
+                            )
+                          }
+                        />
                         <th scope="col">{t('source')}</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {items.map((hit) => {
-                        const key = mistakeReferenceKey(hit.reference);
+                      {items.map((hit, index) => {
+                        const key = keys[index];
                         return (
-                          <tr
+                          <SearchResultRow
                             key={key}
-                            className={
-                              hit === preview
-                                ? 'similar-position-selected'
-                                : undefined
-                            }
+                            ids={keys}
+                            index={index}
+                            idPrefix={rowPrefix}
+                            active={hit === preview}
+                            selectedClassName="similar-position-selected"
+                            aria-selected={hit === preview}
+                            onPreview={setSelected}
+                            onOpen={open}
+                            jumpToEdges
                           >
                             <td>
-                              <button
-                                type="button"
-                                aria-pressed={hit === preview}
-                                onClick={() => setSelected(key)}
-                              >
-                                {hit.players[0]} – {hit.players[1]}
-                              </button>
+                              {hit.players[0]} – {hit.players[1]}
                             </td>
                             <td>
                               {hit.reference.game_no}.
@@ -453,7 +517,7 @@ export default function DecisionSearch({
                                 tooltip={mistakeProvenance(hit, mistake)}
                               />
                             </td>
-                          </tr>
+                          </SearchResultRow>
                         );
                       })}
                     </tbody>
@@ -473,9 +537,34 @@ export default function DecisionSearch({
               </div>
               {preview && (
                 <aside className="position-preview" aria-label={t('preview')}>
-                  <h3>
-                    {preview.players[0]} – {preview.players[1]}
-                  </h3>
+                  <div className="saved-position-preview-header">
+                    <div>
+                      <h3>
+                        {preview.players[0]} – {preview.players[1]}
+                      </h3>
+                      <p className="position-preview-context">
+                        {t('move')} {preview.reference.game_no}.
+                        {preview.reference.decision_no} ·{' '}
+                        {mistake(preview.mistake_kind ?? preview.kind)}
+                      </p>
+                    </div>
+                    {openable(preview) && (
+                      <div className="saved-position-preview-actions">
+                        <PositionBookmarkButton
+                          positionId={preview.position.id}
+                          revision={bookmarkRevision}
+                          onChanged={onBookmarkChanged}
+                        />
+                        <ActionButton
+                          type="button"
+                          icon="analysis"
+                          className="primary"
+                          label={t('openAnalysis')}
+                          onClick={() => onOpenPosition(preview.position.id)}
+                        />
+                      </div>
+                    )}
+                  </div>
                   <CubeContextLine
                     matchId={preview.position.gnubg_match_id}
                     players={preview.players}
@@ -497,16 +586,6 @@ export default function DecisionSearch({
                     {t('best')}: {formatDecision(preview.best)} · {t('loss')}:{' '}
                     {loss(preview.equity_loss)}
                   </p>
-                  {preview.position.id !== NIL_UUID && (
-                    <ActionButton
-                      type="button"
-                      icon="analysis"
-                      label={t('openAnalysis')}
-                      onClick={() => onOpenPosition(preview.position.id)}
-                    >
-                      {t('openAnalysis')}
-                    </ActionButton>
-                  )}
                 </aside>
               )}
             </div>

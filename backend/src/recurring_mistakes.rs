@@ -487,6 +487,7 @@ fn original_answer(row: SourceDecision) -> MistakeAnswer {
         MistakeAttempt,
         search::DecisionKind,
         search::CubeOwnerFilter,
+        search::LossDirection,
         search::DecisionHit,
         search::DecisionSearchPage,
         history::MistakePracticeDay,

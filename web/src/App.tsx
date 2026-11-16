@@ -92,6 +92,11 @@ export default function App() {
   useButtonShortcuts();
   const decisionText = useDecisionSearchText();
   const [positionScope, setPositionScope] = useState<'saved' | 'all'>('saved');
+  // The decision search stays mounted after its first visit, so its filters
+  // and results survive a switch to the saved positions and back.
+  const [decisionSearchOpened, setDecisionSearchOpened] = useState(false);
+  if (positionScope === 'all' && !decisionSearchOpened)
+    setDecisionSearchOpened(true);
   const confirmed = useConfirmedConfiguration();
   const legacy = useWorkspaceDefaults();
   const [settingsCategory, setSettingsCategory] = useState<
@@ -1071,16 +1076,24 @@ export default function App() {
               </button>
             ))}
           </div>
-          {positionScope === 'all' && !similarTarget && (
-            <DecisionSearch
-              visible={view === 'positions'}
-              revision={revision}
-              theme={theme}
-              onOpenPosition={(id) => {
-                setDetail('overview');
-                openPosition(id);
-              }}
-            />
+          {decisionSearchOpened && (
+            <div hidden={!!similarTarget || positionScope !== 'all'}>
+              <DecisionSearch
+                visible={
+                  view === 'positions' &&
+                  !similarTarget &&
+                  positionScope === 'all'
+                }
+                revision={revision}
+                bookmarkRevision={bookmarkRevision}
+                onBookmarkChanged={bookmarkChanged}
+                theme={theme}
+                onOpenPosition={(id) => {
+                  setDetail('overview');
+                  openPosition(id);
+                }}
+              />
+            </div>
           )}
           <div hidden={!!similarTarget || positionScope === 'all'}>
             <PositionBrowser
