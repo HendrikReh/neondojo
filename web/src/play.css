@@ -115,6 +115,7 @@
   display: grid;
   grid-template-columns: 1fr;
   gap: 28px;
+  max-width: 480px;
   margin: 20px 0;
   padding: 22px;
   border: 1px solid var(--border, #5b675d);
@@ -129,11 +130,68 @@
 .play-setup label {
   display: grid;
   gap: 5px;
-  width: min(100%, 360px);
+  width: 100%;
 }
 .play-setup select {
   width: 100%;
   padding: 8px;
+}
+/* Few options are shown side by side or as a list instead of a dropdown. */
+.play-setup .play-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.play-setup .play-choice > legend {
+  margin-bottom: 5px;
+  padding: 0;
+}
+.play-setup .play-choice > label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+  flex: 1 1 0;
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.play-setup .play-choice > label:has(input:checked) {
+  border-color: var(--ui-accent);
+  background: var(--ui-selected);
+}
+.play-setup .play-choice input {
+  margin: 0;
+}
+.play-setup .play-mode-choice {
+  flex-direction: column;
+}
+.play-setup .play-mode-choice > label {
+  flex: 0 0 auto;
+  align-items: flex-start;
+}
+.play-setup .play-mode-choice > label > span {
+  display: grid;
+  gap: 2px;
+}
+.play-setup .play-mode-choice small {
+  color: var(--ui-muted);
+  font-size: var(--font-size-meta);
+}
+.play-setup .play-mode-choice input {
+  margin-top: 3px;
+}
+.play-setup-engine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
 }
 .play-workspace .play-layout {
   display: grid;

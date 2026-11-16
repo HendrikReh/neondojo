@@ -49,11 +49,16 @@ for (const config of [
     expect(saved.status(), await saved.text()).toBe(200);
     await page.reload();
     await page.getByRole('tab', { name: 'Playing', exact: true }).click();
-    await page.getByLabel('Your checkers').selectOption(String(config.human));
+    await page
+      .getByRole('radio', {
+        name: config.human ? 'Black' : 'White',
+        exact: true,
+      })
+      .check();
     await page
       .getByRole('tabpanel', { name: 'Playing', exact: true })
-      .getByLabel('Play mode', { exact: true })
-      .selectOption('competition');
+      .getByRole('radio', { name: 'Competition', exact: true })
+      .check();
     const opening = watchOpening(page);
     const create = page.waitForResponse(
       (response) =>

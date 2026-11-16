@@ -75,7 +75,7 @@ import UiAppearancePreview from './UiAppearancePreview';
 
 export interface SettingsDialogProps {
   open: boolean;
-  initialCategory?: 'general' | 'profiles';
+  initialCategory?: 'general' | 'play' | 'profiles';
   onClose: () => void;
   onBookSaved: () => void;
   onBenchmark?: () => void;

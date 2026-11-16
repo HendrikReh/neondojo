@@ -112,15 +112,17 @@ test('Coach is the default mode and all four profiles are selectable', async ({
   );
   await page.goto('/');
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();
-  await expect(
-    page.locator('.play-setup').getByLabel('Play mode', { exact: true }),
-  ).toHaveValue('coach');
-  await expect(
-    page
-      .locator('.play-setup')
-      .getByLabel('Play mode', { exact: true })
-      .locator('option'),
-  ).toHaveCount(4);
+  const modes = page
+    .locator('.play-setup')
+    .getByRole('group', { name: 'Play mode', exact: true })
+    .getByRole('radio');
+  await expect(modes).toHaveCount(4);
+  await expect(modes.and(page.locator(':checked'))).toHaveAccessibleName(
+    'Coach',
+  );
+  await expect(modes.first()).toHaveAccessibleDescription(
+    /Analysis and pip counts stay hidden/,
+  );
 });
 test('Coach shows deltas while hiding absolute equity and probabilities', async ({
   page,
@@ -384,8 +386,8 @@ test('Analysis thresholds and the default play mode apply to new matches', async
   );
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();
   await expect(
-    page.locator('.play-setup').getByLabel('Play mode', { exact: true }),
-  ).toHaveValue('tutor');
+    page.locator('.play-setup').getByRole('radio', { name: 'Tutor', exact: true }),
+  ).toBeChecked();
   await expect(
     page.getByText('Tutor warning threshold · 0.025', { exact: true }),
   ).toBeVisible();

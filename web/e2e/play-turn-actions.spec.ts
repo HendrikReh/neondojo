@@ -1,6 +1,6 @@
 import { test, expect } from './test';
 import { historyFixture } from './play-history-review-helpers';
-import { botDice } from './play-board-actions';
+import { botDice, playMenuItem } from './play-board-actions';
 
 test('the action panel confirms a turn by button and by Enter', async ({
   page,
@@ -109,5 +109,52 @@ test('Escape returns from the move review to the game', async ({ page }) => {
   await page.keyboard.press('Escape');
   await expect(back).toHaveCount(0);
   await expect(page.getByTestId('play-board-toolbar')).toBeVisible();
+  expect(writes).toEqual([]);
+});
+
+test('the setup form marks the start action and opens the play settings', async ({
+  page,
+}) => {
+  await historyFixture(page);
+  await (await playMenuItem(page, 'New match')).click();
+  const setup = page.locator('.play-setup');
+  await expect(
+    setup.getByRole('button', { name: 'Start match', exact: true }),
+  ).toHaveClass(/\bprimary\b/);
+  await setup.getByRole('radio', { name: 'Black', exact: true }).check();
+  await expect(
+    setup.getByRole('radio', { name: 'White', exact: true }),
+  ).not.toBeChecked();
+  await setup
+    .getByRole('button', { name: 'Change engine in Settings', exact: true })
+    .click();
+  const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
+  await expect(
+    settings.getByRole('group', { name: 'Playing', exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press('Escape');
+  await setup
+    .getByRole('button', { name: 'Back to match', exact: true })
+    .click();
+  await expect(page.getByTestId('play-board-toolbar')).toBeVisible();
+});
+
+test('a blocked Double stays visible and names the reason', async ({
+  page,
+}) => {
+  const { saved, writes } = await historyFixture(page);
+  Object.assign(saved, {
+    phase: 'roll',
+    can_double: false,
+    legal_moves: [],
+    position: { ...saved.position, dice: [] },
+  });
+  await page.reload();
+  await page.getByRole('tab', { name: 'Playing', exact: true }).click();
+  const double = page
+    .getByTestId('play-board-toolbar')
+    .getByRole('button', { name: 'Double', exact: true });
+  await expect(double).toBeDisabled();
+  await expect(double).toHaveAccessibleDescription(/\S/);
   expect(writes).toEqual([]);
 });

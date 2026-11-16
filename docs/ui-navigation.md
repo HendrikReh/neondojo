@@ -204,6 +204,10 @@ the **More actions** menu with **Resign game**, **Forfeit match**, **New
 match** and **Paused Matches**. Escape closes the menu and returns focus to
 its button.
 
+The **New match** form is a narrow card. Color and play mode are radio
+choices, **Start match** is the primary button, and the gear beside the engine
+line opens **Settings → Playing**.
+
 ## Study areas
 
 **Reports → Open report** opens a saved point match in a dedicated view.

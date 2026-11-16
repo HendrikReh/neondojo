@@ -75,15 +75,11 @@ test('starts a match while preserving conflicting profile changes for recovery',
 
   await (await playMenuItem(page, 'New match')).click();
   const setup = page.locator('.play-setup');
-  await setup
-    .getByRole('combobox', { name: 'Your checkers', exact: true })
-    .selectOption('1');
+  await setup.getByRole('radio', { name: 'Black', exact: true }).check();
   await setup
     .getByRole('combobox', { name: 'Match length', exact: true })
     .selectOption('3');
-  await setup
-    .getByRole('combobox', { name: 'Play mode', exact: true })
-    .selectOption('training');
+  await setup.getByRole('radio', { name: 'Training', exact: true }).check();
   await setup.getByLabel('Open training analysis automatically').uncheck();
   await setup.getByRole('button', { name: 'Start match', exact: true }).click();
 

@@ -149,11 +149,13 @@ async function create(
   }
   await page.goto('/');
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();
-  await page.getByLabel('Your checkers').selectOption(String(human));
+  await page
+    .getByRole('radio', { name: human ? 'Black' : 'White', exact: true })
+    .check();
   await page
     .getByRole('tabpanel', { name: 'Playing', exact: true })
-    .getByLabel('Play mode', { exact: true })
-    .selectOption('competition');
+    .getByRole('radio', { name: 'Competition', exact: true })
+    .check();
   await page
     .getByRole('combobox', { name: 'Match length', exact: true })
     .selectOption(String(length));

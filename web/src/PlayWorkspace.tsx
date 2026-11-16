@@ -85,6 +85,7 @@ export default function PlayWorkspace({
   onSaved,
   onModeChanged,
   onOpenPausedMatches,
+  onOpenPlaySettings,
   onOpenAssessment,
 }: {
   visible: boolean;
@@ -94,12 +95,14 @@ export default function PlayWorkspace({
   onSaved?: () => void;
   onModeChanged?: (session: PlaySession) => void;
   onOpenPausedMatches: () => void;
+  onOpenPlaySettings: () => void;
   onOpenAssessment: (reportId: string) => void;
 }) {
   const assessmentT = useMatchAssessmentText();
   const playback = usePlayAnimation(visible);
   const boardAnchor = useRef<HTMLDivElement>(null);
   const doubleReasonId = useId();
+  const setupId = useId();
   const turnNotationId = useId();
   const hintTrigger = useRef<HTMLButtonElement>(null);
   const learningReviewTrigger = useRef<HTMLButtonElement>(null);
@@ -1145,22 +1148,23 @@ export default function PlayWorkspace({
             <h2 ref={setupHeading} tabIndex={-1}>
               {t('newMatch')}
             </h2>
-            <label>
-              {t('humanColor')}
-              <select
-                value={human}
-                onChange={(event) =>
-                  setSetupOptions({
-                    ...setupOptions,
-                    human: Number(event.target.value),
-                  })
-                }
-                disabled={setupDisabled}
-              >
-                <option value="0">{t('white')}</option>
-                <option value="1">{t('black')}</option>
-              </select>
-            </label>
+            <fieldset className="play-choice">
+              <legend>{t('humanColor')}</legend>
+              {([0, 1] as const).map((value) => (
+                <label key={value}>
+                  <input
+                    type="radio"
+                    name={`${setupId}-color`}
+                    checked={human === value}
+                    disabled={setupDisabled}
+                    onChange={() =>
+                      setSetupOptions({ ...setupOptions, human: value })
+                    }
+                  />
+                  {t(value === 0 ? 'white' : 'black')}
+                </label>
+              ))}
+            </fieldset>
             <label>
               {t('length')}
               <select
@@ -1181,27 +1185,30 @@ export default function PlayWorkspace({
                 ))}
               </select>
             </label>
-            <label>
-              {modeT('mode')}
-              <select
-                aria-label={modeT('mode')}
-                value={mode}
-                disabled={setupDisabled}
-                onChange={(event) =>
-                  setSetupOptions({
-                    ...setupOptions,
-                    mode: event.target.value as PlayMode,
-                  })
-                }
-              >
-                {playModes.map((value) => (
-                  <option key={value} value={value}>
-                    {modeT(value)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <p className="play-mode-help">{modeT(`${mode}Help`)}</p>
+            <fieldset className="play-choice play-mode-choice">
+              <legend>{modeT('mode')}</legend>
+              {playModes.map((value) => (
+                <label key={value}>
+                  <input
+                    type="radio"
+                    name={`${setupId}-mode`}
+                    aria-label={modeT(value)}
+                    aria-describedby={`${setupId}-${value}`}
+                    checked={mode === value}
+                    disabled={setupDisabled}
+                    onChange={() =>
+                      setSetupOptions({ ...setupOptions, mode: value })
+                    }
+                  />
+                  <span>
+                    <strong>{modeT(value)}</strong>
+                    <small id={`${setupId}-${value}`}>
+                      {modeT(`${value}Help`)}
+                    </small>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
             {mode === 'tutor' && (
               <p>
                 {modeT('threshold')} ·{' '}
@@ -1227,45 +1234,60 @@ export default function PlayWorkspace({
                 {modeT('automatic')}
               </label>
             )}
-            <p className="play-engine">
-              {settingsT('playEngine')}:{' '}
-              {(confirmed?.play.engine ?? settings?.play_engine) === 'bgsage'
-                ? 'Open Sage'
-                : 'GNUbg'}{' '}
-              ·{' '}
-              {confirmed?.play.plies ?? settings?.play_plies ?? defaults.plies}
-              -ply
-              {' · '}
-              {settingsT('analysisEngine')}:{' '}
-              {(confirmed?.analysis.engine ?? settings?.analysis_engine) ===
-              'bgsage'
-                ? 'Open Sage'
-                : 'GNUbg'}{' '}
-              ·{' '}
-              {confirmed?.analysis.plies ??
-                settings?.analysis_plies ??
-                defaultConfiguration.analysis.plies}
-              -ply
-            </p>
-            <ActionButton
-              type="submit"
-              disabled={setupDisabled}
-              icon="play"
-              label={t('start')}
-            >
-              {t('start')}
-            </ActionButton>
-            {session && (
+            <p className="play-engine play-setup-engine">
+              <span>
+                {settingsT('playEngine')}:{' '}
+                {(confirmed?.play.engine ?? settings?.play_engine) === 'bgsage'
+                  ? 'Open Sage'
+                  : 'GNUbg'}{' '}
+                ·{' '}
+                {confirmed?.play.plies ??
+                  settings?.play_plies ??
+                  defaults.plies}
+                -ply
+                {' · '}
+                {settingsT('analysisEngine')}:{' '}
+                {(confirmed?.analysis.engine ?? settings?.analysis_engine) ===
+                'bgsage'
+                  ? 'Open Sage'
+                  : 'GNUbg'}{' '}
+                ·{' '}
+                {confirmed?.analysis.plies ??
+                  settings?.analysis_plies ??
+                  defaultConfiguration.analysis.plies}
+                -ply
+              </span>
               <ActionButton
                 type="button"
-                onClick={resumeMatch}
-                disabled={uiBusy}
-                icon="resume"
-                label={t('resumeMatch')}
+                compact
+                icon="settings"
+                label={t('changeEngine')}
+                disabled={setupDisabled}
+                onClick={onOpenPlaySettings}
+              />
+            </p>
+            <div className="play-actions">
+              <ActionButton
+                type="submit"
+                className="primary"
+                disabled={setupDisabled}
+                icon="play"
+                label={t('start')}
               >
-                {t('resumeMatch')}
+                {t('start')}
               </ActionButton>
-            )}
+              {session && (
+                <ActionButton
+                  type="button"
+                  onClick={resumeMatch}
+                  disabled={uiBusy}
+                  icon={session.paused ? 'resume' : 'back'}
+                  label={t(session.paused ? 'resumeMatch' : 'backToMatch')}
+                >
+                  {t(session.paused ? 'resumeMatch' : 'backToMatch')}
+                </ActionButton>
+              )}
+            </div>
           </form>
         </section>
       )}
@@ -1648,19 +1670,28 @@ export default function PlayWorkspace({
                         shortcut="Enter"
                       />
                     )}
-                    {beforeRoll &&
-                      session.can_double &&
-                      !pendingRoutineRoll && (
-                        <ActionButton
-                          className="play-double-button"
-                          data-play-action="double"
-                          disabled={!boardRollReady}
-                          onClick={doubleCube}
-                          icon="double"
-                          label={t('double')}
-                          shortcut="D"
-                        />
-                      )}
+                    {beforeRoll && !pendingRoutineRoll && (
+                      <ActionButton
+                        className="play-double-button"
+                        data-play-action="double"
+                        disabled={!boardRollReady || !session.can_double}
+                        aria-describedby={
+                          session.can_double ? undefined : doubleReasonId
+                        }
+                        onClick={doubleCube}
+                        icon="double"
+                        label={t('double')}
+                        shortcut="D"
+                      />
+                    )}
+                    {beforeRoll && !session.can_double && (
+                      <p
+                        id={doubleReasonId}
+                        className="play-double-unavailable"
+                      >
+                        {doubleUnavailableReason}
+                      </p>
+                    )}
                     {!competition &&
                       !pendingRoutineRoll &&
                       !forcedPass &&
@@ -1683,14 +1714,6 @@ export default function PlayWorkspace({
                           </span>
                         )}
                       </ActionButton>
-                    )}
-                    {beforeRoll && !session.can_double && (
-                      <p
-                        id={doubleReasonId}
-                        className="play-double-unavailable"
-                      >
-                        {doubleUnavailableReason}
-                      </p>
                     )}
                     {steps.length > 0 && (
                       <p id={turnNotationId} className="play-selected-steps">

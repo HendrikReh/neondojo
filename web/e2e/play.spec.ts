@@ -127,7 +127,7 @@ test('black perspective is stable and uses archive artwork with readable labels'
   );
   await page.goto('/');
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();
-  await page.getByLabel('Your checkers').selectOption('1');
+  await page.getByRole('radio', { name: 'Black', exact: true }).check();
   await page.getByRole('button', { name: 'Start match', exact: true }).click();
   await expect(page.locator('.play-board')).toHaveAttribute(
     'data-human-player',

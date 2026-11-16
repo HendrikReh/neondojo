@@ -317,7 +317,9 @@ test('a finished match opens the new match setup directly', async ({
   await expect(dialog).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'New match' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start match' })).toBeEnabled();
-  await page.getByRole('button', { name: 'Resume match', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Back to match', exact: true })
+    .click();
   await expect(page.locator('.play-board .board')).toBeVisible();
   await expect(dialog).toHaveCount(0);
 });

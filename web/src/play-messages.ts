@@ -65,6 +65,8 @@ const en = {
   pass: 'No legal move — pass',
   passTurn: 'Pass',
   moreActions: 'More actions',
+  backToMatch: 'Back to match',
+  changeEngine: 'Change engine in Settings',
   passReady: 'Click the dice pair to pass.',
   double: 'Double',
   take: 'Take double',
@@ -166,6 +168,8 @@ const de: Record<Key, string> = {
   pass: 'Kein legaler Zug — aussetzen',
   passTurn: 'Aussetzen',
   moreActions: 'Weitere Aktionen',
+  backToMatch: 'Zurück zum Match',
+  changeEngine: 'Engine in den Einstellungen ändern',
   passReady: 'Klicke auf das Würfelpaar, um auszusetzen.',
   double: 'Doppeln',
   take: 'Doppel annehmen',
@@ -425,6 +429,8 @@ Object.assign(extra.es, {
   pass: 'Sin movimientos legales — pasar',
   passTurn: 'Pasar',
   moreActions: 'Más acciones',
+  backToMatch: 'Volver a la partida',
+  changeEngine: 'Cambiar el motor en Ajustes',
   passReady: 'Haz clic en los dados para pasar el turno.',
   select:
     'Pasa el cursor sobre una ficha para ver su destino. Haz clic para moverla. Si puedes usar ambos dados, tiene prioridad el primero.',
@@ -453,6 +459,8 @@ Object.assign(extra.fr, {
   pass: 'Aucun coup légal — passer',
   passTurn: 'Passer',
   moreActions: 'Autres actions',
+  backToMatch: 'Retour au match',
+  changeEngine: 'Changer le moteur dans les réglages',
   passReady: 'Cliquez sur les dés pour passer votre tour.',
   select:
     'Survolez un pion pour voir sa destination. Cliquez pour le déplacer. Si les deux dés sont jouables, le premier est prioritaire.',
@@ -482,6 +490,8 @@ Object.assign(extra.it, {
   pass: 'Nessuna mossa legale — passa',
   passTurn: 'Passa',
   moreActions: 'Altre azioni',
+  backToMatch: 'Torna al match',
+  changeEngine: 'Cambia il motore nelle impostazioni',
   passReady: 'Fai clic sui dadi per passare il turno.',
   select:
     'Passa il puntatore su una pedina per vedere la destinazione. Fai clic per muoverla. Se entrambi i dadi sono giocabili, ha la precedenza il primo.',
@@ -510,6 +520,8 @@ Object.assign(extra.pl, {
   pass: 'Brak legalnego ruchu — pasuj',
   passTurn: 'Pasuj',
   moreActions: 'Więcej działań',
+  backToMatch: 'Wróć do meczu',
+  changeEngine: 'Zmień silnik w ustawieniach',
   passReady: 'Kliknij parę kości, aby spasować.',
   select:
     'Najedź na pionek, aby zobaczyć jego cel. Kliknij, aby go przesunąć. Jeśli można użyć obu kości, pierwsza ma pierwszeństwo.',

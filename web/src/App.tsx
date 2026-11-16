@@ -95,7 +95,7 @@ export default function App() {
   const confirmed = useConfirmedConfiguration();
   const legacy = useWorkspaceDefaults();
   const [settingsCategory, setSettingsCategory] = useState<
-    'general' | 'profiles'
+    'general' | 'play' | 'profiles'
   >('general');
   const playText = usePlayText();
   const benchmarkT = useBenchmarkText();
@@ -758,6 +758,10 @@ export default function App() {
             requestedSession={requestedPlaySession}
             onSaved={() => setRevision((n) => n + 1)}
             onModeChanged={playModeChanged}
+            onOpenPlaySettings={() => {
+              setSettingsCategory('play');
+              setSettingsOpen(true);
+            }}
             onOpenAssessment={(id) => {
               cancelRestoration();
               setRequestedAssessment((previous) => ({
