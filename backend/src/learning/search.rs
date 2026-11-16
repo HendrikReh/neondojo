@@ -127,14 +127,19 @@ impl CardQuery {
 }
 // Include all note scopes. A retained position can now belong to its private source
 // container, while the snapshot still points to the original source match.
+// Each game lookup names one game by its key. A single subquery joining both
+// lookups with OR made PostgreSQL scan every game for each card and note pair.
 pub(super) const NOTE_SCOPE: &str = r#"(
     a.match_uuid=(c.payload#>>'{source,match_id}')::uuid
     OR a.position_uuid=(c.payload#>>'{source,position_id}')::uuid
     OR a.match_uuid=(SELECT p.match_uuid FROM positions p WHERE p.id=(c.payload#>>'{source,position_id}')::uuid)
-    OR a.game_uuid IN (
+    OR a.game_uuid=(
         SELECT g.id FROM match_games g
-        WHERE (g.match_uuid=(c.payload#>>'{source,match_id}')::uuid AND g.game_no=(c.payload#>>'{source,game_no}')::int)
-        OR EXISTS(SELECT 1 FROM positions p WHERE p.id=(c.payload#>>'{source,position_id}')::uuid AND p.match_uuid=g.match_uuid AND p.game_no=g.game_no)
+        WHERE g.match_uuid=(c.payload#>>'{source,match_id}')::uuid AND g.game_no=(c.payload#>>'{source,game_no}')::int
+    )
+    OR a.game_uuid=(
+        SELECT g.id FROM positions p JOIN match_games g ON g.match_uuid=p.match_uuid AND g.game_no=p.game_no
+        WHERE p.id=(c.payload#>>'{source,position_id}')::uuid
     )
     OR a.move_uuid IN (
         SELECT mv.id FROM match_moves mv
