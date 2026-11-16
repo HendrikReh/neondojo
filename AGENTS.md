@@ -67,6 +67,7 @@ Prioritize backgammon correctness, preservation of user data, database performan
 - Prioritize desktop information density and mouse and keyboard operation. Keep additional mobile product work within explicit scope.
 - Follow [typography](docs/typography.md) and [UI navigation](docs/ui-navigation.md). Reuse tokens and components for color, spacing, and type.
 - Keep header rendering and keyboard navigation driven by the same workspace order in `web/src/App.tsx`. When changing that order, update the README, the UI navigation guide, and the header test in `web/e2e/text-navigation.spec.ts`.
+- Start missing dice equity through the existing position-job flow once the visible Dice equity tab has loaded the selected position's saved and active jobs. Use the active analysis engine and profile depth for automatic requests. Preserve explicit retries after failures and use [the dice equity browser tests](web/e2e/dice-equity.spec.ts) to check result reuse, position changes, and duplicate submissions.
 - Localize visible text and format numbers consistently in English, German, Spanish, French, Italian, and Polish.
 - Handle loading, empty, error, conflict, and disabled states. Preserve focus, accessible labels, table controls, and unsaved drafts.
 - Visually verify affected desktop layouts at relevant logical viewport sizes such as 1800 × 1169, 2560 × 1440, and 3840 × 2160.

@@ -99,11 +99,15 @@ Arrow keys and Home/End also navigate the detail tabs. The app restores the last
 
 The desktop **Checker** places move history on the left and position evaluation beside the board. Long lists scroll independently and keep the current move visible. Dedicated tabs include **Statistics**, **Cube**, **Notes**, and **Study cards**. The header shows the players, match ID and length, saved score, date, event, and PR per player. Date and event come from saved metadata and show `n/a` when unavailable. The header also shows the round and location when saved. Match PR updates when a complete native match analysis finishes.
 
-The position pane shows existing results with their source and recorded depth.
-Use **Recalculate position …** or **Recalculate dice equity …** in the
-header's **Analysis options** to choose a depth and explicitly start a
-calculation. The **Dice equity** tab uses the active analysis profile when
-it calculates a missing result.
+In **Checker → Dice equity**, BG Tutor checks the selected position for a saved
+result or a queued or running job. If none exists, it starts a calculation with
+the engine and search depth from the active analysis profile. Selecting another
+position does the same while **Dice equity** is visible. After a submission or
+engine failure, select **Dice equity** again to retry.
+
+The position pane shows each result with its source and recorded depth. To
+choose a depth and calculate again, use **Recalculate position …** or
+**Recalculate dice equity …** in the header's **Analysis options**.
 
 **Analyze game** stays visible in the Analysis header and starts the selected
 game. Its options include the engine, depth and time estimate. Start a
@@ -963,10 +967,13 @@ Playwright requires Google Chrome, `psql`, PostgreSQL, and the frontend dependen
 npm run test:e2e --prefix web
 ```
 
-Pass a spec path to run only the affected workflow. These specs cover native match analysis and the Study overview, including its two direct practice actions.
+Pass a spec path to run only the affected workflow. These specs cover native
+match analysis, automatic dice equity, and the Study overview with its two
+direct practice actions.
 
 ```sh
 npm run test:e2e --prefix web -- e2e/workflow.spec.ts
+npm run test:e2e --prefix web -- e2e/dice-equity.spec.ts
 npm run test:e2e --prefix web -- e2e/study-overview.spec.ts
 ```
 
