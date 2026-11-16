@@ -69,7 +69,8 @@ test('important game actions retain text beside their Lucide icons', async ({
   await point(13).click();
   await expect(undo).toBeEnabled();
   await undo.focus();
-  await expect(undo.getByRole('tooltip')).toHaveCount(0);
+  // The label is visible, so the tooltip only adds the keyboard shortcut.
+  await expect(undo.getByRole('tooltip')).toHaveText('Undo step (Z)');
   await undo.click();
   await expect(undo).toBeDisabled();
   expect(writes).toEqual([]);

@@ -180,6 +180,8 @@ export default memo(function PlayHistory({
           icon="export"
           label={t('export')}
           className="play-history-export"
+          // The history column fits three actions in one row only as icons.
+          compact
           href={`/api/play/sessions/${encodeURIComponent(sessionId)}/sgf`}
           download="match.sgf"
         >

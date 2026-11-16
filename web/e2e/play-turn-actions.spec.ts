@@ -168,9 +168,6 @@ test('a money session names resignations and its score without match wording', a
   await page.reload();
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();
   await expect(rows.last().locator('strong')).toHaveText('Resign');
-  await expect(
-    page.getByRole('link', { name: 'Download SGF', exact: true }),
-  ).toContainText('Download SGF');
   const mode = page.getByLabel('Change play mode', { exact: true });
   await mode.hover();
   await expect(page.getByRole('tooltip')).toContainText(
