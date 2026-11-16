@@ -24,19 +24,23 @@ test('flashcard browsing previews the selected question without changing learnin
       )
     ).json()
   ).items;
-  for (const position of positions) {
-    const job = await (
-      await page.request.post('/api/jobs', {
-        data: { position_id: position.id, kind: 'analysis', plies: 0 },
-      })
-    ).json();
-    await expect
-      .poll(
-        async () =>
-          (await (await page.request.get(`/api/jobs/${job.id}`)).json()).status,
-      )
-      .toBe('completed');
-  }
+  // Cards come from the match's displayed analysis and from saved positions.
+  const job = await (
+    await page.request.post(`/api/matches/${imported.match.id}/analysis`, {
+      data: { plies: 0 },
+    })
+  ).json();
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/jobs/${job.id}`)).json()).status,
+      { timeout: 60000 },
+    )
+    .toBe('completed');
+  for (const position of positions)
+    expect(
+      (await page.request.put(`/api/positions/${position.id}/bookmark`)).ok(),
+    ).toBe(true);
   const decks = [];
   for (const [index, ids] of [
     [0, positions.slice(0, 2).map((p) => p.id)],
@@ -70,7 +74,9 @@ test('flashcard browsing previews the selected question without changing learnin
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
   await page.goto('/');
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
-  await page.getByRole('tab', { name: 'Flashcards & Anki', exact: true }).click();
+  await page
+    .getByRole('tab', { name: 'Flashcards & Anki', exact: true })
+    .click();
   const study = page.getByRole('region', { name: 'Study', exact: true });
   await study
     .getByLabel('Choose deck', { exact: true })
@@ -193,6 +199,11 @@ test('more cards preserve the preview and a late page cannot survive a deck roun
       { timeout: 90000 },
     )
     .toBe('completed');
+  // Only saved positions can be added to a deck.
+  for (const position of positions)
+    expect(
+      (await page.request.put(`/api/positions/${position.id}/bookmark`)).ok(),
+    ).toBe(true);
   const deck = await (
     await page.request.post('/api/decks', {
       data: { name: `Paged preview ${suffix}` },
@@ -219,7 +230,9 @@ test('more cards preserve the preview and a late page cannot survive a deck roun
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
   await page.goto('/');
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
-  await page.getByRole('tab', { name: 'Flashcards & Anki', exact: true }).click();
+  await page
+    .getByRole('tab', { name: 'Flashcards & Anki', exact: true })
+    .click();
   const study = page.getByRole('region', { name: 'Study', exact: true });
   const chooser = study.getByLabel('Choose deck', { exact: true });
   const rows = study.locator('.learning-card-list tbody tr'),
@@ -228,7 +241,7 @@ test('more cards preserve the preview and a late page cannot survive a deck roun
   await expect(rows).toHaveCount(50);
   await rows.nth(10).click();
   const selected = await rows.nth(10).getAttribute('data-card-id');
-  await study.getByRole('button', { name: 'More cards', exact: true }).click();
+  await study.getByRole('button', { name: 'Page 2', exact: true }).click();
   await expect(rows).toHaveCount(2);
   await expect(preview).toHaveAttribute('data-card-id', selected!);
   await rows.last().focus();
@@ -254,7 +267,9 @@ test('more cards preserve the preview and a late page cannot survive a deck roun
       finished = resolve;
     });
   await page.route(`**/api/decks/${deck.id}/cards?*`, async (route) => {
-    if (!new URL(route.request().url()).searchParams.has('after'))
+    const params = new URL(route.request().url()).searchParams;
+    // Hold only the request for the second page.
+    if (!params.has('after') && params.get('page') !== '2')
       return route.continue();
     const response = await route.fetch();
     started();
@@ -262,7 +277,7 @@ test('more cards preserve the preview and a late page cannot survive a deck roun
     await route.fulfill({ response }).catch(() => {});
     finished();
   });
-  await study.getByRole('button', { name: 'More cards', exact: true }).click();
+  await study.getByRole('button', { name: 'Page 2', exact: true }).click();
   await waiting;
   await chooser.selectOption(other.id);
   await expect(rows).toHaveCount(1);
@@ -274,6 +289,6 @@ test('more cards preserve the preview and a late page cannot survive a deck roun
   await expect(rows).toHaveCount(50);
   await expect(preview).toHaveAttribute('data-card-id', fresh!);
   await page.unroute(`**/api/decks/${deck.id}/cards?*`);
-  await study.getByRole('button', { name: 'More cards', exact: true }).click();
+  await study.getByRole('button', { name: 'Page 2', exact: true }).click();
   await expect(rows).toHaveCount(2);
 });

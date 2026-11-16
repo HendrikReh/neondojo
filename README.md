@@ -113,8 +113,8 @@ choose a depth and calculate again, use **Recalculate position …** or
 game. Its options include the engine, depth and time estimate. Start a
 whole-match analysis from the selection toolbar in the **Match database**.
 For one match, the dialog shows the engine, depth and estimate before you
-confirm. In Analysis, **Result scope** and the selected engine determine which
-saved results the decision reviews and **Statistics** show. Running jobs stay
+confirm. In Analysis, **Displayed analysis** determines which saved results
+the decision reviews and **Statistics** show. Running jobs stay
 visible as you switch tabs or positions.
 
 ### Moves, errors, and statistics

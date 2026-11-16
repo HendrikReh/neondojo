@@ -247,11 +247,9 @@ function MistakeQuestion({
         {item.reference.decision_no}
       </p>
       <p className="recurring-source">
-        {t('source')}:{' '}
-        <EngineLabel
-          details={item.engine}
-          tooltip={mistakeProvenance(item, t)}
-        />
+        {/* Origin, engine, depth and method stay readable without hovering:
+            an imported rollout and a 0-ply evaluation are not the same evidence. */}
+        {t('source')}: {mistakeProvenance(item, t)}
       </p>
       <p className="study-context">
         {context.length

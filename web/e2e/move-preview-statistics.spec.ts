@@ -220,9 +220,10 @@ test('file, book and native candidates preview explicitly and source changes res
   await page
     .getByLabel('Match file', { exact: true })
     .setInputFiles(analyzedGameFile());
+  // The selector names engine and depth; the origin is in its details.
   await expect(
     page.getByLabel('Displayed analysis', { exact: true }),
-  ).toContainText('Imported');
+  ).toContainText('GNU Backgammon 1.05.002 · 0-ply');
   const imported = page.locator('.analysis-panel > .source-analysis');
   await imported.getByRole('button', { name: /^Preview move 2:/ }).click();
   await expect(page.locator('.board-review-selection')).toContainText(
@@ -292,7 +293,7 @@ for (const [layout, viewport] of [
     await expect(page.locator('.board-heading')).toContainText('Spiel 6');
     await expect(
       page.getByLabel('Angezeigte Analyse', { exact: true }),
-    ).toContainText('Importiert');
+    ).toContainText('eXtreme Gammon');
     await page.getByRole('button', { name: /^Zug 2 ansehen:/ }).click();
 
     const moveList = page.locator('.analysis-workspace .moves-list');
@@ -377,7 +378,9 @@ test('native match and game metrics open the exact visible decision filters', as
   // The whole-match decision filter stays on game 2 while browsing another game.
   await page.getByLabel('Select game', { exact: true }).selectOption('1');
   await expect(page.locator('.board-heading')).toContainText('Game 1');
-  await expect(page.getByLabel('Filter by game', { exact: true })).toHaveValue('2');
+  await expect(page.getByLabel('Filter by game', { exact: true })).toHaveValue(
+    '2',
+  );
   const nextError = page.waitForRequest(
     (r) =>
       new URL(r.url()).pathname.endsWith('/review-decisions') &&

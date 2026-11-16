@@ -31,14 +31,20 @@ async function openMatch(
   });
   expect(response.ok()).toBe(true);
   const imported = await response.json();
-  const analyzed = await page.request.post(`/api/matches/${imported.match.id}/analysis`, {
-    data: { engine_id: 'gnubg', plies: 0 },
-  });
+  const analyzed = await page.request.post(
+    `/api/matches/${imported.match.id}/analysis`,
+    {
+      data: { engine_id: 'gnubg', plies: 0 },
+    },
+  );
   expect(analyzed.status()).toBe(202);
   const job = await analyzed.json();
-  await expect.poll(async () =>
-    (await (await page.request.get(`/api/jobs/${job.id}`)).json()).status,
-  ).toBe('completed');
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/jobs/${job.id}`)).json()).status,
+    )
+    .toBe('completed');
   const positions = (
     await (
       await page.request.get(
@@ -159,18 +165,24 @@ test('header keyboard navigation and history navigation retain selection, focus 
   await openMatch(page);
   const tab = page.getByRole('tab', { name: 'Analysis', exact: true });
   await tab.focus();
+  // The header order is Playing, Analysis, Study, Positions, …
   await page.keyboard.press('ArrowRight');
   await expect(
-    page.getByRole('tab', { name: 'Positions', exact: true }),
+    page.getByRole('tab', { name: 'Study', exact: true }),
   ).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('End');
   await expect(
     page.getByRole('tab', { name: 'Extras', exact: true }),
   ).toBeFocused();
+  const playing = page.getByRole('tab', { name: 'Playing', exact: true });
   await page.keyboard.press('Home');
-  await expect(tab).toBeFocused();
+  await expect(playing).toBeFocused();
   await page.keyboard.press('ArrowLeft');
-  await expect(page.getByRole('tab', { name: 'Extras', exact: true })).toBeFocused();
+  await expect(
+    page.getByRole('tab', { name: 'Extras', exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await expect(playing).toBeFocused();
   await page.keyboard.press('ArrowRight');
   await expect(tab).toBeFocused();
   await expect(tab).toHaveAttribute('aria-selected', 'true');

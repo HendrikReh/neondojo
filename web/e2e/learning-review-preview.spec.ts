@@ -1,7 +1,7 @@
 import { test, expect, type Page } from './test';
 import { applySteps } from '../src/play-state';
 import { nativeSteps } from '../src/play-sound-events';
-import { summary, id } from './study-report-fixture';
+import { moneySummary, id } from './study-report-fixture';
 const initial = [
   0, -2, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, -5, 5, 0, 0, 0, -3, 0, -5, 0, 0, 0, 0, 2,
   0,
@@ -135,10 +135,12 @@ async function setup(
   }, id);
   await page.route('**/api/decks', (r) => r.fulfill({ json: [] }));
   await page.route('**/api/study/reports?group_by=session', (r) =>
-    r.fulfill({ json: { items: [summary()], next_cursor: null } }),
+    r.fulfill({ json: { items: [moneySummary()], next_cursor: null } }),
   );
+  // Study keeps the review dialog for money games; point matches open a
+  // dedicated report view.
   await page.route(`**/api/study/reports/${id}`, (r) =>
-    r.fulfill({ json: data.session }),
+    r.fulfill({ json: { ...data.session, match_length: 0 } }),
   );
   await page.route(`**/api/play/sessions/${id}`, (r) =>
     r.fulfill({ json: data.session }),

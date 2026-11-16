@@ -1,4 +1,6 @@
 import { expect, test, type Page } from './test';
+import { closeSettings } from './settings-actions';
+import type { Locale } from '../src/i18n-core';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -10,7 +12,7 @@ test.beforeEach(async ({ page }) => {
 async function importNotesMatch(page: Page) {
   const marker = crypto.randomUUID();
   await page.goto('/');
-  await page.locator('input[type=file]').setInputFiles({
+  await page.locator('input[type=file][accept*=".mat"]').setInputFiles({
     name: `notes-scope-${marker}.sgf`,
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(
@@ -147,7 +149,8 @@ test('notes tabs support keyboard navigation and localized scope labels', async 
     const dialog = page.getByRole('dialog');
     await dialog.locator('select').first().selectOption(locale);
     await dialog.locator('button[type=submit]').click();
-    await expect(dialog).not.toBeVisible();
+    // Apply keeps Settings open; Close is already labeled in the new language.
+    await closeSettings(dialog, locale as Locale);
     await expect(
       tablist.getByRole('tab', { name: match, exact: true }),
     ).toBeVisible();

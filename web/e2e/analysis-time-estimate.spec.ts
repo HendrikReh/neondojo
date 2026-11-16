@@ -1,4 +1,7 @@
-import { openFullMatchAnalysis, openMatchAnalysisOptions } from './analysis-controls';
+import {
+  openFullMatchAnalysis,
+  openMatchAnalysisOptions,
+} from './analysis-controls';
 import { expect, test, type Page } from './test';
 import { profileBackend } from './profile-backend';
 import { defaultConfiguration } from '../src/configuration-model';
@@ -84,6 +87,8 @@ async function openMatch(p: Page, locale = 'en') {
 test('starts GNUbg 4-ply for the selected game with an Open Sage profile', async ({
   page,
 }) => {
+  // A real 4-ply game analysis; other specs allow the same three minutes.
+  test.setTimeout(240_000);
   await page.setViewportSize({ width: 1800, height: 1169 });
   const config = structuredClone(defaultConfiguration);
   config.analysis.engine = 'bgsage';
@@ -160,7 +165,7 @@ test('starts GNUbg 4-ply for the selected game with an Open Sage profile', async
         const response = await page.request.get(`/api/jobs/${job.id}`);
         return (await response.json()).status;
       },
-      { timeout: 30_000 },
+      { timeout: 180_000 },
     )
     .toBe('completed');
   await expect(page.locator('.match-analysis-progress:visible')).toContainText(
@@ -214,7 +219,9 @@ test('shows benchmark basis before any job and follows game, scope and depth', a
     .poll(() => new URL(requests.at(-1)!).searchParams.get('game_no'))
     .toBe('2');
   expect(new URL(requests.at(-1)!).searchParams.get('game_no')).toBe('2');
-  const controls = page.locator('.workspace-analysis-command .match-analysis-controls');
+  const controls = page.locator(
+    '.workspace-analysis-command .match-analysis-controls',
+  );
   for (const label of await controls.locator('label').all())
     expect((await label.boundingBox())!.width).toBeGreaterThan(100);
   await controls.getByRole('button', { name: 'Analysis options' }).click();
@@ -223,8 +230,12 @@ test('shows benchmark basis before any job and follows game, scope and depth', a
   await expect
     .poll(() => new URL(requests.at(-1)!).searchParams.has('game_no'))
     .toBe(false);
-  await dialog.getByLabel('Match analysis depth', { exact: true }).selectOption('4');
-  await expect(estimate(page)).toContainText('Estimated analysis time: approx. 40s');
+  await dialog
+    .getByLabel('Match analysis depth', { exact: true })
+    .selectOption('4');
+  await expect(estimate(page)).toContainText(
+    'Estimated analysis time: approx. 40s',
+  );
   await expect(estimate(page)).toContainText('4 Ply');
   expect(starts).toEqual([]);
   await page.screenshot({
@@ -343,7 +354,10 @@ test('retains the estimate when confirmed settings change only appearance', asyn
   await openMatch(page);
   await openMatchAnalysisOptions(page);
   await expect(estimate(page)).toContainText('approx. 40s');
-  backend.updateRemote({ ...config, appearance: { ...config.appearance, mode: 'dark' } });
+  backend.updateRemote({
+    ...config,
+    appearance: { ...config.appearance, mode: 'dark' },
+  });
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page.locator('html')).toHaveAttribute('data-ui-mode', 'dark');
   await expect(estimate(page)).toContainText('approx. 40s');
@@ -367,7 +381,8 @@ async function mountEstimateHarness(page: Page) {
     const { defaultConfiguration } =
       await import('/src/configuration-model.ts');
     const { default: MatchPanel } = await import('/src/MatchAnalysisPanel.tsx');
-    const { catalogFixture } = await import('/src/analysis-catalog-test-fixtures.ts');
+    const { catalogFixture } =
+      await import('/src/analysis-catalog-test-fixtures.ts');
     const config = structuredClone(defaultConfiguration);
     const profile = {
       id: 'fixture',
@@ -564,7 +579,9 @@ test('hides pre-start estimate during submission and queued engine work', async 
   await page.getByRole('button', { name: 'Analyze game', exact: true }).click();
   await expect(estimate(page)).toHaveCount(0);
   release();
-  const background = page.locator('.analysis-commandbar .analysis-running-jobs');
+  const background = page.locator(
+    '.analysis-commandbar .analysis-running-jobs',
+  );
   await expect(background).toContainText('Analysis queued');
   await openMatchAnalysisOptions(page);
   const engine = page.getByLabel('Analysis engine', { exact: true });

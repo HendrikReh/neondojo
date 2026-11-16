@@ -33,6 +33,9 @@ artwork retain their own fonts. Table actions inherit the table size; compact
 metadata and icon controls can use smaller roles without changing ordinary
 form controls.
 
+The checker candidate table in Analysis is the one table that grows with its
+pane on desktop: headings scale from 12 to 14 px and cells from 13 to 16 px.
+
 The November 2026 rendered audit found serif page titles ranging from 25–30 px,
 a 21 px sans-serif Study title, differing table weights/sizes and form controls
 between 11–14 px. These were normalized to the shared roles. Note editors already

@@ -67,3 +67,21 @@ export function detail(reportId = id) {
     },
   };
 }
+
+/**
+ * A completed money game. Study opens point matches in a dedicated report
+ * view and keeps the review dialog for money games.
+ */
+export const moneySummary = (reportId = id, name = 'Hendrik · GNUbg') => ({
+  ...summary(reportId, name),
+  match_length: 0,
+  game_no: 1,
+  session_id: reportId,
+  scores: [2, 0],
+  session_scores: [2, 0],
+  money_session_ended: true,
+});
+/** Turn a saved report into the money game that `moneySummary` lists. */
+export function asMoneyReport<T extends object>(report: T) {
+  return Object.assign(report, { match_length: 0, review_game_no: 1 });
+}

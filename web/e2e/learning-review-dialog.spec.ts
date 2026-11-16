@@ -3,7 +3,12 @@ import {
   historyFixture,
   historySessionId,
 } from './play-history-review-helpers';
-import { id, summary, detail } from './study-report-fixture';
+import {
+  asMoneyReport,
+  detail,
+  id,
+  moneySummary,
+} from './study-report-fixture';
 async function study(
   page: Page,
   long = false,
@@ -16,9 +21,11 @@ async function study(
   );
   await page.route('**/api/decks', (r) => r.fulfill({ json: [] }));
   await page.route('**/api/study/reports?group_by=session', (r) =>
-    r.fulfill({ json: { items: [summary(id, name)], next_cursor: null } }),
+    r.fulfill({
+      json: { items: [moneySummary(id, name)], next_cursor: null },
+    }),
   );
-  const report = detail();
+  const report = asMoneyReport(detail());
   if (long)
     report.review.games[0].decisions = Array.from(
       { length: 150 },
@@ -337,7 +344,17 @@ for (const width of [1440, 390])
     expect(r.width).toBe(d.width);
     expect(r.height).toBe(d.height);
     expect(r.y).toBeCloseTo(d.y, 0);
-    expect(r.x - d.x - d.width).toBe(8);
+    // A finished point match offers its AI assessment between the two icons.
+    const assessment = actions.getByRole('button', {
+      name: 'Create AI assessment',
+      exact: true,
+    });
+    await expect(assessment).toBeVisible();
+    const a = (await assessment.boundingBox())!;
+    // The labeled button is lower than the icons and centered on their row.
+    expect(a.y + a.height / 2).toBeCloseTo(d.y + d.height / 2, 0);
+    expect(a.x - d.x - d.width).toBeCloseTo(8, 0);
+    expect(r.x - a.x - a.width).toBeCloseTo(8, 0);
     expect(r.x + r.width).toBeLessThanOrEqual(width);
     for (const button of [download, review]) {
       const icon = (await button.locator('.action-icon').boundingBox())!;

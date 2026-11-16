@@ -29,12 +29,41 @@ test('move history filters the selected game by the saved grade without moving t
     engine: 'GNU Backgammon',
     equity_loss: 0,
   } as const;
+  // Move marks follow the displayed analysis, so the match needs one.
+  const entry = {
+    id: `imported:${match.id}`,
+    source: 'imported',
+    scope: 'match',
+    engine: 'GNU Backgammon',
+    depth: '2-ply',
+    game_no: null,
+    position_id: null,
+    created_at: match.created_at,
+    status: 'completed',
+    complete: true,
+    checker_count: 3,
+    cube_count: 0,
+    job: null,
+  };
+  await page.route(`**/api/matches/${match.id}/analyses?*`, (route) =>
+    route.fulfill({
+      json: {
+        match_id: match.id,
+        items: [entry],
+        selected: entry,
+        selected_id: entry.id,
+        next_cursor: null,
+        source_revision: match.source_revision ?? 0,
+      },
+    }),
+  );
   await page.route(`**/api/matches/${match.id}/move-assessments?*`, (route) =>
     route.fulfill({
       json: {
         match_id: match.id,
         game_no: 1,
         job_id: null,
+        analysis_id: entry.id,
         items: [
           { ...assessment, position_id: positions[0].id, severity: 'none' },
           {

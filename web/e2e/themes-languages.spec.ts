@@ -303,12 +303,6 @@ test('all six languages switch complete views on save and persist with the theme
     await expect(analysis(page).locator('.analysis-heading h1')).toContainText(
       'GNUbg Demo',
     );
-    await expect(
-      analysis(page).getByRole('button', {
-        name: `${catalogs[locale]['analysis.recalculate']} …`,
-        exact: true,
-      }),
-    ).toBeVisible();
     const matchOptions = analysis(page)
       .locator('.workspace-analysis-command')
       .getByRole('button', {
@@ -316,6 +310,16 @@ test('all six languages switch complete views on save and persist with the theme
         exact: true,
       });
     await expect(matchOptions).toBeVisible();
+    // Position recalculation lives under Analysis options.
+    if ((await matchOptions.getAttribute('aria-expanded')) === 'false')
+      await matchOptions.click();
+    await expect(
+      analysis(page).getByRole('button', {
+        name: `${catalogs[locale]['analysis.recalculate']} …`,
+        exact: true,
+      }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
     await expect(
       analysis(page).getByRole('img', {
         name: new RegExp(

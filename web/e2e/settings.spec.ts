@@ -745,12 +745,6 @@ for (const plies of [3, 4]) {
     ).toBeVisible();
     if (plies === 4) {
       for (const scope of ['dice', 'game', 'match']) {
-        if (scope !== 'dice') {
-          await openMatchAnalysisOptions(page);
-          await page
-            .getByLabel('Result scope', { exact: true })
-            .selectOption(scope);
-        }
         const submitted = page.waitForResponse(
           (response) =>
             response.request().method() === 'POST' &&
@@ -762,9 +756,14 @@ for (const plies of [3, 4]) {
         );
         if (scope === 'dice') await calculateDiceEquity(page);
         else if (scope === 'match')
-          await submitFullMatchAnalysis(page, await openFullMatchAnalysis(page));
+          await submitFullMatchAnalysis(
+            page,
+            await openFullMatchAnalysis(page),
+          );
         else
-          await page.getByRole('button', { name: 'Analyze game', exact: true }).click();
+          await page
+            .getByRole('button', { name: 'Analyze game', exact: true })
+            .click();
         const response = await submitted;
         expect(response.status()).toBe(202);
         const request = response.request().postDataJSON();

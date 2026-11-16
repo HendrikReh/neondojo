@@ -1,10 +1,9 @@
 import { closeSettings } from './settings-actions';
 import {
   openFullMatchAnalysis,
-  openMatchAnalysisOptions,
   submitFullMatchAnalysis,
 } from './analysis-controls';
-import { expect, test, type Page } from './test';
+import { expect, test, type Locator, type Page } from './test';
 
 test.use({ viewport: { width: 1800, height: 1169 }, actionTimeout: 10000 });
 
@@ -93,6 +92,8 @@ async function fixture(
   return { positionId: position.id as string, deckName: deck.name as string };
 }
 
+const fontSize = (locator: Locator) =>
+  locator.evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
 const views = [
   [
     'analysis',
@@ -159,10 +160,19 @@ for (const theme of ['graphite', 'club', 'paper'])
         }
         const head = panel.locator(`${table} thead th`).first();
         const cell = panel.locator(`${table} tbody td`).first();
-        await expect(head).toHaveCSS('font-size', '11px');
+        // The checker candidate table grows with its pane on desktop:
+        // 12-14 px headings and 13-16 px cells. Other tables use the scale.
+        if (id === 'analysis') {
+          expect(await fontSize(head)).toBeGreaterThanOrEqual(12);
+          expect(await fontSize(head)).toBeLessThanOrEqual(14);
+          expect(await fontSize(cell)).toBeGreaterThanOrEqual(13);
+          expect(await fontSize(cell)).toBeLessThanOrEqual(16);
+        } else {
+          await expect(head).toHaveCSS('font-size', '11px');
+          await expect(cell).toHaveCSS('font-size', '12px');
+        }
         await expect(head).toHaveCSS('font-weight', '600');
         await expect(head).toHaveCSS('text-transform', 'none');
-        await expect(cell).toHaveCSS('font-size', '12px');
         await expect(cell).toHaveCSS('font-family', family);
         if (id === 'analysis')
           await expect(panel.locator('.moves-panel h3')).toHaveCSS(
@@ -170,9 +180,10 @@ for (const theme of ['graphite', 'club', 'paper'])
             '14px',
           );
         if (id === 'analysis') {
-          await expect(
-            panel.locator('.candidate-preview-button').first(),
-          ).toHaveCSS('font-size', '12px');
+          // The move button follows its growing candidate cell.
+          expect(
+            await fontSize(panel.locator('.candidate-preview-button').first()),
+          ).toBe(await fontSize(cell));
           await expect(
             panel.locator('.board-view-buttons button').first(),
           ).toHaveCSS('font-size', '13px');
@@ -231,7 +242,9 @@ test('comment editors, modal titles and study questions follow their roles while
     .locator('.library-dialog')
     .getByRole('button', { name: 'Cancel', exact: true })
     .click();
-  await expect(page.locator('.settings-dialog')).not.toBeVisible();
+  // Closing Opening books returns to Settings, which is then closed itself.
+  await expect(page.locator('.library-dialog')).toHaveCount(0);
+  await closeSettings(page.locator('.settings-dialog'));
   await page.getByRole('tab', { name: 'Notes', exact: true }).click();
   await expect(page.locator('textarea:visible').first()).toHaveCSS(
     'font-family',
@@ -306,12 +319,10 @@ test('analysis statistics and the move history use shared typography', async ({
   page,
 }) => {
   await fixture(page);
-  await openMatchAnalysisOptions(page);
-  await page
-    .getByLabel('Result scope', { exact: true })
-    .selectOption('match');
   const dialog = await openFullMatchAnalysis(page);
-  await dialog.getByLabel('Match analysis depth', { exact: true }).selectOption('0');
+  await dialog
+    .getByLabel('Match analysis depth', { exact: true })
+    .selectOption('0');
   await submitFullMatchAnalysis(page, dialog);
   await expect(page.locator('.match-analysis-progress')).toContainText(
     'Match analysis complete',
@@ -333,12 +344,12 @@ test('analysis statistics and the move history use shared typography', async ({
   await page.getByRole('tab', { name: 'Cube', exact: true }).click();
   const errorsPanel = page.getByRole('tabpanel', { name: 'Cube', exact: true });
   const history = page.locator('.analysis-workspace .moves-panel');
-  await expect(history.locator('.move-history-details > strong').first()).toHaveCSS(
-    'font-size', '12px',
-  );
-  await expect(history.getByRole('combobox', { name: 'Filter moves by severity' })).toHaveCSS(
-    'font-size', '13px',
-  );
+  await expect(
+    history.locator('.move-history-details > strong').first(),
+  ).toHaveCSS('font-size', '12px');
+  await expect(
+    history.getByRole('combobox', { name: 'Filter moves by severity' }),
+  ).toHaveCSS('font-size', '13px');
   await expect(errorsPanel.locator('.statistics-reset')).toHaveCSS(
     'font-size',
     '13px',
@@ -449,10 +460,11 @@ test('the shared role scale stays stable across desktop widths and every locale'
       await page.locator(`#workspace-tab-${id}`).click();
       const panel = page.locator(`#workspace-panel-${id}`);
       await expect(panel.locator(title)).toHaveCSS('font-size', '24px');
-      await expect(panel.locator(`${table} tbody td`).first()).toHaveCSS(
-        'font-size',
-        '12px',
-      );
+      const cell = panel.locator(`${table} tbody td`).first();
+      if (id === 'analysis') {
+        expect(await fontSize(cell)).toBeGreaterThanOrEqual(13);
+        expect(await fontSize(cell)).toBeLessThanOrEqual(16);
+      } else await expect(cell).toHaveCSS('font-size', '12px');
     }
     expect(
       await page.evaluate(
@@ -471,10 +483,11 @@ test('the shared role scale stays stable across desktop widths and every locale'
       await page.getByRole('tab', { name, exact: true }).click();
       const panel = page.locator(`#workspace-panel-${id}`);
       await expect(panel.locator(title)).toHaveCSS('font-size', '24px');
-      await expect(panel.locator(`${table} tbody td`).first()).toHaveCSS(
-        'font-size',
-        '12px',
-      );
+      const cell = panel.locator(`${table} tbody td`).first();
+      if (id === 'analysis') {
+        expect(await fontSize(cell)).toBeGreaterThanOrEqual(13);
+        expect(await fontSize(cell)).toBeLessThanOrEqual(16);
+      } else await expect(cell).toHaveCSS('font-size', '12px');
       expect(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= innerWidth,

@@ -170,7 +170,7 @@ test('search results add, move, remove and delete selected cards', async ({
   await expect(button('Add to deck')).toBeDisabled();
   await expect(button('Remove from this deck')).toHaveCount(0);
   await study.getByRole('checkbox', { name: 'Select this page' }).check();
-  await expect(actions).toContainText('2 / 200 selected');
+  await expect(actions).toContainText('2 selected');
   const checkColumn = study.getByRole('columnheader').first();
   expect((await checkColumn.boundingBox())?.width).toBeLessThanOrEqual(60);
   for (const [width, height] of [

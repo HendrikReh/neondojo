@@ -379,17 +379,22 @@ test('a late imported source response cannot replace a newer position', async ({
       `/api/positions/${positions.items[1].id}/imported-analysis`,
     )
   ).json();
-  const expected = records.find((r: { kind: string }) => r.kind === 'checker')
-    .candidates[0].notation;
+  // The table shows a combined move by its end points (13/8 8/7 as 13/7*),
+  // so the newer position is identified by its best candidate's equity.
+  const best = Math.max(
+    ...records
+      .find((r: { kind: string }) => r.kind === 'checker')
+      .candidates.map((candidate: { equity: number }) => candidate.equity),
+  );
   await page.getByRole('button', { name: 'Next move', exact: true }).click();
   await expect(
     page.locator('.source-analysis:visible .candidates tbody tr').first(),
-  ).toContainText(expected);
+  ).toContainText(best.toFixed(3));
   release();
   await page.unrouteAll({ behavior: 'wait' });
   await expect(
     page.locator('.source-analysis:visible .candidates tbody tr').first(),
-  ).toContainText(expected);
+  ).toContainText(best.toFixed(3));
   await expect(page.locator('.board-heading')).toContainText('Move 2');
 });
 
