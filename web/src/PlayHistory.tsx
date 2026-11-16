@@ -179,7 +179,6 @@ export default memo(function PlayHistory({
         <ActionLink
           icon="export"
           label={t('export')}
-          compact
           className="play-history-export"
           href={`/api/play/sessions/${encodeURIComponent(sessionId)}/sgf`}
           download="match.sgf"

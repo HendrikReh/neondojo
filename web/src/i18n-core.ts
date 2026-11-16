@@ -122,6 +122,7 @@ const decisionKeys: Record<string, TranslationKey> = {
   drop: 'decision.drop',
   'cannot move': 'decision.cannotMove',
   dance: 'decision.cannotMove',
+  resign: 'decision.resign',
 };
 
 export function localizeDecision(

@@ -158,3 +158,30 @@ test('a blocked Double stays visible and names the reason', async ({
   await expect(double).toHaveAccessibleDescription(/\S/);
   expect(writes).toEqual([]);
 });
+
+test('a money session names resignations and its score without match wording', async ({
+  page,
+}) => {
+  const { saved, rows } = await historyFixture(page);
+  saved.match_length = 0;
+  saved.history.push({ player: 1, dice: [], notation: 'resign' });
+  await page.reload();
+  await page.getByRole('tab', { name: 'Playing', exact: true }).click();
+  await expect(rows.last().locator('strong')).toHaveText('Resign');
+  await expect(
+    page.getByRole('link', { name: 'Download SGF', exact: true }),
+  ).toContainText('Download SGF');
+  const mode = page.getByLabel('Change play mode', { exact: true });
+  await mode.hover();
+  await expect(page.getByRole('tooltip')).toContainText(
+    'Analysis and pip counts stay hidden',
+  );
+  await (await playMenuItem(page, 'Resign game')).click();
+  const dialog = page.getByRole('dialog', {
+    name: 'Resign this game',
+    exact: true,
+  });
+  await expect(dialog).toContainText('Score if accepted');
+  await expect(dialog).toContainText('If accepted, the session continues.');
+  await expect(dialog).not.toContainText('match continues');
+});

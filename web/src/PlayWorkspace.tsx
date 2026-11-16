@@ -1003,7 +1003,9 @@ export default function PlayWorkspace({
     <div className="play-mode-control">
       <label>
         {modeT('mode')}
-        <select
+        <Tooltip
+          as="select"
+          text={modeT(`${feedbackMode}Help`)}
           aria-label={modeT('changeMode')}
           value={feedbackMode}
           disabled={
@@ -1016,7 +1018,7 @@ export default function PlayWorkspace({
               {modeT(value)}
             </option>
           ))}
-        </select>
+        </Tooltip>
       </label>
       {feedbackMode === 'tutor' && (
         <div className="play-threshold-control">
@@ -1558,6 +1560,7 @@ export default function PlayWorkspace({
                       <ActionButton
                         type="button"
                         onClick={review.reset}
+                        className="primary"
                         icon="resume"
                         label={t('returnToGame')}
                         shortcut="Escape"

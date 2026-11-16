@@ -77,7 +77,7 @@ export default function PlayResignDialog({
           })}
         </p>
         <p className="play-resign-score">
-          <span>{t('score')}:</span>
+          <span>{t(matchLength ? 'score' : 'moneyScore')}:</span>
           <strong>{`${white} ${formatNumber(projectedScores[0])} : ${formatNumber(projectedScores[1])} ${black}`}</strong>
           <span>
             {matchLength
@@ -87,9 +87,16 @@ export default function PlayResignDialog({
         </p>
         <p className="play-resign-outcome" data-match-ending={endsMatch}>
           <strong>
-            {t(endsMatch ? 'matchEnds' : 'matchContinues', {
-              player: opponent,
-            })}
+            {t(
+              endsMatch
+                ? 'matchEnds'
+                : matchLength
+                  ? 'matchContinues'
+                  : 'sessionContinues',
+              {
+                player: opponent,
+              },
+            )}
           </strong>
         </p>
       </div>

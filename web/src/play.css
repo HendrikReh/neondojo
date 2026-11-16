@@ -259,6 +259,7 @@
 }
 .play-history-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   flex: 0 0 auto;
@@ -485,6 +486,15 @@
 }
 .play-history-review {
   overflow-wrap: anywhere;
+}
+/* A reviewed move is not the live position: frame the board and the way back. */
+.play-history-review.play-board-toolbar {
+  border-color: var(--ui-accent);
+}
+.play-live-board[data-play-review] > .board-shell > .board {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 3px;
+  border-radius: 4px;
 }
 .play-history-review-heading {
   display: grid;

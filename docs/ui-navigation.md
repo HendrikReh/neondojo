@@ -208,6 +208,10 @@ The **New match** form is a narrow card. Color and play mode are radio
 choices, **Start match** is the primary button, and the gear beside the engine
 line opens **Settings → Playing**.
 
+While a move from the history is reviewed, an accent frame around the board
+and the primary **Return to game** button mark that the board does not show
+the live position.
+
 ## Study areas
 
 **Reports → Open report** opens a saved point match in a dedicated view.
