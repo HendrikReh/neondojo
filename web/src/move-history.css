@@ -157,13 +157,35 @@
   color: var(--ui-danger-text);
   background: var(--ui-danger-bg);
 }
-.move-history-cube {
+.analysis-workspace .moves-list button.move-history-cube {
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
   margin: 0;
   padding: 4px 7px 4px 43px;
+  border: 0;
   border-bottom: 1px solid var(--ui-border);
+  border-radius: 0;
+  background: transparent;
   color: var(--ui-muted);
   font-size: var(--font-size-table);
+  text-align: left;
+  cursor: pointer;
+}
+.analysis-workspace .moves-list button.move-history-cube:hover {
+  background: var(--ui-surface-alt);
+}
+.analysis-workspace .moves-list button.move-history-cube:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: -2px;
+}
+.move-history-cube small {
+  margin-left: auto;
+  font-size: var(--font-size-meta);
+}
+.analysis-workspace .moves-list button.move-history-cube.current {
+  background: var(--ui-selected);
+  box-shadow: inset 3px 0 var(--ui-accent);
+  color: var(--ui-text);
 }

@@ -119,14 +119,14 @@ test('a late game loads directly and its full move list stops at its own boundar
     .getByLabel('Matchdatei')
     .setInputFiles('../backend/tests/fixtures/WC2014.xg');
   await page.getByLabel('Spiel auswählen', { exact: true }).selectOption('1');
-  await expect(page.locator('.moves-list button')).toHaveCount(8, {
+  await expect(page.locator('.moves-list .move-history-row')).toHaveCount(8, {
     timeout: 15000,
   });
   await page.getByLabel('Spiel auswählen', { exact: true }).selectOption('10');
   await expect(page.locator('.board-heading')).toContainText('Spiel 10');
-  const moves = await page.locator('.moves-list button').count();
+  const moves = await page.locator('.moves-list .move-history-row').count();
   expect(moves).toBeGreaterThan(0);
-  await page.locator('.moves-list button').last().click();
+  await page.locator('.moves-list .move-history-row').last().click();
   await expect(page.locator('.board-navigation')).toContainText(
     `${moves} / ${moves}`,
   );

@@ -1375,6 +1375,9 @@ progress::-webkit-progress-value {
   align-items: flex-end;
   gap: 8px 12px;
 }
+.match-analysis-inline-options {
+  display: contents;
+}
 .match-analysis-scope,
 .match-analysis-options label {
   min-width: 0;

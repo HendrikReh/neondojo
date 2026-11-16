@@ -127,6 +127,61 @@ export default function MatchAnalysisPanel({
   const [showSettings, setShowSettings] = useState(false);
   const settingsId = useId();
   const settingsButton = useRef<HTMLButtonElement>(null);
+  const settingsPanel = useRef<HTMLDivElement>(null);
+  const settingsPopover = !!controlsTarget && showSettings;
+  // The header options float above the board; dismiss them like a menu.
+  useEffect(() => {
+    if (!settingsPopover) return;
+    const inside = (target: EventTarget | null) =>
+      target instanceof Node &&
+      (settingsPanel.current?.contains(target) ||
+        settingsButton.current?.contains(target));
+    const pointer = (event: PointerEvent) => {
+      if (!inside(event.target)) setShowSettings(false);
+    };
+    const key = (event: KeyboardEvent) => {
+      // A recalculation dialog opened from the options handles its own Escape.
+      if (
+        event.key !== 'Escape' ||
+        event.defaultPrevented ||
+        settingsPanel.current?.querySelector('dialog[open]')
+      )
+        return;
+      const refocus = inside(document.activeElement);
+      setShowSettings(false);
+      if (refocus) settingsButton.current?.focus();
+    };
+    // Once a recalculation starts, its dialog closes and the options must
+    // not keep covering the analysis; a cancelled dialog returns to them.
+    const panel = settingsPanel.current;
+    let started = false;
+    const click = (event: MouseEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      started = !!target
+        ?.closest('dialog')
+        ?.contains(target.closest('button.primary'));
+    };
+    let dialogOpen = !!panel?.querySelector('dialog');
+    const dialogs = new MutationObserver(() => {
+      const open = !!panel?.querySelector('dialog');
+      if (dialogOpen && !open && started) {
+        setShowSettings(false);
+        settingsButton.current?.focus();
+      }
+      if (!open) started = false;
+      dialogOpen = open;
+    });
+    if (panel) dialogs.observe(panel, { childList: true, subtree: true });
+    panel?.addEventListener('click', click, true);
+    document.addEventListener('pointerdown', pointer);
+    document.addEventListener('keydown', key);
+    return () => {
+      dialogs.disconnect();
+      panel?.removeEventListener('click', click, true);
+      document.removeEventListener('pointerdown', pointer);
+      document.removeEventListener('keydown', key);
+    };
+  }, [settingsPopover]);
   const errorsToggle = useRef<HTMLInputElement>(null);
   const resetButton = useRef<HTMLButtonElement>(null);
   const { t, formatNumber, formatPercent, formatError } = useI18n();
@@ -571,38 +626,39 @@ export default function MatchAnalysisPanel({
         </div>
         <div
           id={settingsId}
-          className="match-analysis-options"
+          ref={settingsPanel}
+          className={
+            controlsTarget
+              ? 'match-analysis-popover'
+              : 'match-analysis-inline-options'
+          }
           hidden={!!controlsTarget && !showSettings}
-          onKeyDown={(event) => {
-            if (!controlsTarget || event.key !== 'Escape') return;
-            event.preventDefault();
-            setShowSettings(false);
-            settingsButton.current?.focus();
-          }}
         >
-          <MatchAnalysisFields
-            options={options}
-            disabled={submitting || !configured}
-          />
-          {positionControlsRef && (
-            <div
-              className="position-analysis-actions"
-              ref={positionControlsRef}
+          <div className="match-analysis-options">
+            <MatchAnalysisFields
+              options={options}
+              disabled={submitting || !configured}
+            />
+            {positionControlsRef && (
+              <div
+                className="position-analysis-actions"
+                ref={positionControlsRef}
+              />
+            )}
+          </div>
+          {showEstimate && (
+            <AnalysisTimeEstimate
+              key={match.position_count}
+              matchId={match.id}
+              gameNo={gameNo}
+              scoped
+              engineId={engineId}
+              plies={plies}
+              configured={analysisConfigured}
+              installationKey={analysisInstallationKey}
             />
           )}
         </div>
-        {showEstimate && (
-          <AnalysisTimeEstimate
-            key={match.position_count}
-            matchId={match.id}
-            gameNo={gameNo}
-            scoped
-            engineId={engineId}
-            plies={plies}
-            configured={analysisConfigured}
-            installationKey={analysisInstallationKey}
-          />
-        )}
         {!!engineCatalog?.error && (
           <p className="analysis-error" role="alert">
             {formatError(engineCatalog.error)}

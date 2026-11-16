@@ -35,7 +35,11 @@ import NotesPanel from './NotesPanel';
 import GameSelector from './GameSelector';
 import { AddCardsPanel } from './LearningPanel';
 import { type Job } from './api';
-import type { ReviewDecision } from './review-decisions-api';
+import {
+  canOpenReviewDecision,
+  findCubeReviewDecision,
+  type ReviewDecision,
+} from './review-decisions-api';
 import { type DecisionKind } from './match-statistics-api';
 import { useGameNavigation } from './useGameNavigation';
 import { useJobs } from './useJobs';
@@ -222,16 +226,57 @@ export default function AnalysisWorkspace({
     sourceAvailable && !filteredMoves ? match?.id : undefined,
     game?.game_no,
   );
+  const cubeLookup = useRef<AbortController>(undefined);
+  const [unratedCubeAction, setUnratedCubeAction] = useState<string>();
+  useEffect(() => () => cubeLookup.current?.abort(), []);
+  // A cube line opens its saved review; the lookup yields to newer navigation.
+  async function openCubeAction(action: CubeAction) {
+    if (!match || !game) return;
+    cubeLookup.current?.abort();
+    const abort = new AbortController();
+    cubeLookup.current = abort;
+    const started = navigation.intent();
+    setUnratedCubeAction(undefined);
+    const analysisId = catalog.analysisId;
+    let row: ReviewDecision | undefined;
+    try {
+      row = analysisId
+        ? await findCubeReviewDecision(match.id, game.game_no, action.id, {
+            analysisId,
+            signal: abort.signal,
+          })
+        : undefined;
+    } catch {
+      row = undefined;
+    }
+    if (abort.signal.aborted || navigation.intent() !== started) return;
+    if (row && canOpenReviewDecision(row)) {
+      onDetail('errors');
+      openReviewDecision(row);
+    } else setUnratedCubeAction(action.id);
+  }
   const cubeLines = (actions?: CubeAction[]) =>
     actions?.map((action) => (
-      <p key={action.id} className="move-history-cube" data-cube-action>
+      <button
+        type="button"
+        key={action.id}
+        className={`move-history-cube${action.id === reviewedCubeMove ? ' current' : ''}`}
+        aria-current={action.id === reviewedCubeMove ? 'true' : undefined}
+        data-cube-action
+        onClick={() => void openCubeAction(action)}
+      >
         <i
           aria-hidden="true"
           className={`player-dot ${action.player === 0 ? 'white' : 'black'}`}
         />
-        {action.player === 0 ? match?.white : match?.black}:{' '}
-        {formatDecision(action.notation)}
-      </p>
+        <span>
+          {action.player === 0 ? match?.white : match?.black}:{' '}
+          {formatDecision(action.notation)}
+        </span>
+        {unratedCubeAction === action.id && (
+          <small role="status">{t('matchAnalysis.unavailable')}</small>
+        )}
+      </button>
     ));
   const history = useMemo(
     () =>
@@ -344,6 +389,22 @@ export default function AnalysisWorkspace({
   const cube = errors && reviewRow?.kind === 'cube' ? reviewRow : undefined;
   const cubeBoard = cube?.review_position;
   const cubeMoveId = cube?.move_id;
+  // Mark the reviewed cube action only while the history shows its line.
+  const reviewedCubeMove =
+    cubeBoard &&
+    cubeMoveId &&
+    cubeActions &&
+    [...cubeActions.before.values(), cubeActions.trailing].some((actions) =>
+      actions.some((action) => action.id === cubeMoveId),
+    )
+      ? cubeMoveId
+      : undefined;
+  useEffect(() => {
+    if (reviewedCubeMove)
+      moveList.current
+        ?.querySelector('.move-history-cube.current')
+        ?.scrollIntoView({ block: 'nearest' });
+  }, [reviewedCubeMove]);
   const boardPosition = cubeBoard ?? position;
   const checkerReview =
     reviewingCheckers &&
@@ -405,21 +466,23 @@ export default function AnalysisWorkspace({
       className={`analysis-workspace analysis-${detail} ${sourceAvailable ? '' : 'analysis-retained'}`}
       aria-label={w('analysis')}
     >
-      <AnalysisMatchHeader
-        match={match}
-        selectedAnalysis={catalog.selected}
-        metadataRevision={metadataRevision}
-        analysisRevision={analysisRevision}
-        theme={theme}
-        active={active && !notesSuspended}
-      />
-      <AnalysisCatalogSelect
-        key={match.id}
-        catalog={catalog}
-        onDeleted={(entry) => {
-          if (entry.scope === 'position') jobs.refresh();
-        }}
-      />
+      <div className="analysis-header-row">
+        <AnalysisMatchHeader
+          match={match}
+          selectedAnalysis={catalog.selected}
+          metadataRevision={metadataRevision}
+          analysisRevision={analysisRevision}
+          theme={theme}
+          active={active && !notesSuspended}
+        />
+        <AnalysisCatalogSelect
+          key={match.id}
+          catalog={catalog}
+          onDeleted={(entry) => {
+            if (entry.scope === 'position') jobs.refresh();
+          }}
+        />
+      </div>
       {!sourceAvailable && (
         <p className="analysis-retained-context" role="status">
           {headerText('retainedPosition')}
@@ -431,6 +494,35 @@ export default function AnalysisWorkspace({
           selected={game?.game_no}
           onSelect={(number) => void navigation.selectGame(number)}
         />
+        <div
+          className="inspector-tabs analysis-detail-navigation text-navigation text-navigation--compact"
+          role="tablist"
+          aria-label={w('positionDetails')}
+        >
+          {availableTabs.map((tab) => (
+            <button
+              key={tab}
+              role="tab"
+              id={`inspector-tab-${tab}`}
+              aria-controls={`inspector-panel-${tab}`}
+              aria-selected={detail === tab}
+              tabIndex={detail === tab ? 0 : -1}
+              ref={(element) => {
+                tabRefs.current[tab] = element;
+              }}
+              onKeyDown={(event) => tabKey(event, tab)}
+              onClick={() => onDetail(tab)}
+            >
+              {tab === 'overview'
+                ? t('common.checker')
+                : tab === 'errors'
+                  ? t('common.cube')
+                  : tab === 'statistics'
+                    ? statistics('tab')
+                    : w(tab)}
+            </button>
+          ))}
+        </div>
         {sourceAvailable && (
           <div className="workspace-analysis-command" ref={setCommandTarget} />
         )}
@@ -444,35 +536,6 @@ export default function AnalysisWorkspace({
           jobs={runningJobs}
           displayedJobId={catalog.selected?.job?.id}
         />
-      </div>
-      <div
-        className="inspector-tabs analysis-detail-navigation text-navigation text-navigation--compact"
-        role="tablist"
-        aria-label={w('positionDetails')}
-      >
-        {availableTabs.map((tab) => (
-          <button
-            key={tab}
-            role="tab"
-            id={`inspector-tab-${tab}`}
-            aria-controls={`inspector-panel-${tab}`}
-            aria-selected={detail === tab}
-            tabIndex={detail === tab ? 0 : -1}
-            ref={(element) => {
-              tabRefs.current[tab] = element;
-            }}
-            onKeyDown={(event) => tabKey(event, tab)}
-            onClick={() => onDetail(tab)}
-          >
-            {tab === 'overview'
-              ? t('common.checker')
-              : tab === 'errors'
-                ? t('common.cube')
-                : tab === 'statistics'
-                  ? statistics('tab')
-                  : w(tab)}
-          </button>
-        ))}
       </div>
       <div
         className={`analysis-grid${boardResize.dragging ? ' analysis-resizing' : ''}`}
@@ -519,7 +582,7 @@ export default function AnalysisWorkspace({
                   position={move}
                   players={[match.white, match.black]}
                   assessment={assessment}
-                  current={moveIndex === index}
+                  current={moveIndex === index && !reviewedCubeMove}
                   buttonRef={moveIndex === index ? currentMove : undefined}
                   onSelect={() => navigation.selectIndex(moveIndex)}
                 />
@@ -732,11 +795,6 @@ export default function AnalysisWorkspace({
         </section>
         {boardResize.handle}
         <aside className="position-inspector">
-          {cube && cubeBoard && (
-            <div className="overview-evaluation">
-              <CubeReviewEvaluation decision={cube} players={match} />
-            </div>
-          )}
           <div
             className="overview-evaluation"
             role="region"
@@ -852,6 +910,16 @@ export default function AnalysisWorkspace({
               selectedDecisionId={(cube ?? checkerReview)?.id}
               selectedPositionId={cubeBoard ? undefined : position?.id}
             />
+          )}
+          {cube && cubeBoard && (
+            <div className="overview-evaluation">
+              <CubeReviewEvaluation decision={cube} players={match} />
+            </div>
+          )}
+          {errors && sourceAvailable && !cubeBoard && (
+            <p className="analysis-empty cube-review-unselected">
+              {review('cubeUnselected')}
+            </p>
           )}
           <div
             id="inspector-panel-notes"

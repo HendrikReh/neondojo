@@ -57,6 +57,14 @@ const entries = {
     'Decyzje: {total}',
     'Decisioni: {total}',
   ],
+  cubeUnselected: [
+    'No cube decision selected. Use the buttons above the board to step through them.',
+    'Keine Cube-Entscheidung ausgewählt. Mit den Schaltflächen über dem Brett gehst du sie durch.',
+    'Ninguna decisión de cubo seleccionada. Usa los botones sobre el tablero para recorrerlas.',
+    'Aucune décision de videau sélectionnée. Parcourez-les avec les boutons au-dessus du plateau.',
+    'Nie wybrano decyzji kostką. Przeglądaj je przyciskami nad planszą.',
+    'Nessuna decisione di cubo selezionata. Scorrile con i pulsanti sopra il tavoliere.',
+  ],
   errorNavigation: [
     'Review errors',
     'Fehler durchgehen',

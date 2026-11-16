@@ -65,7 +65,7 @@ test('one game owns its move list, board boundaries and native analysis; full ma
   const match = await openReference(page);
   const picker = page.getByLabel('Spiel auswählen', { exact: true });
   await expect(picker.locator('option')).toHaveCount(10);
-  await expect(page.locator('.moves-list button')).toHaveCount(8);
+  await expect(page.locator('.moves-list .move-history-row')).toHaveCount(8);
   await expect(
     page.getByRole('button', { name: 'Weiter im Verlauf', exact: true }),
   ).toHaveCount(0);
@@ -85,7 +85,7 @@ test('one game owns its move list, board boundaries and native analysis; full ma
       text.startsWith('10.'),
     ),
   ).toBe(true);
-  await page.locator('.moves-list button').last().click();
+  await page.locator('.moves-list .move-history-row').last().click();
   await expect(
     page.getByRole('button', { name: 'Nächster Zug', exact: true }),
   ).toBeDisabled();
@@ -258,12 +258,12 @@ test('a long individual game transparently loads all pages within that game', as
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(source),
   });
-  await expect(page.locator('.moves-list button')).toHaveCount(126);
+  await expect(page.locator('.moves-list .move-history-row')).toHaveCount(126);
   expect(calls).toHaveLength(2);
   expect(
     calls.every((url) => new URL(url).searchParams.get('game_no') === '1'),
   ).toBe(true);
-  await page.locator('.moves-list button').last().click();
+  await page.locator('.moves-list .move-history-row').last().click();
   await expect(page.locator('.board-navigation')).toContainText('126 / 126');
   await expect(
     page.getByRole('button', { name: 'Nächster Zug', exact: true }),
@@ -285,6 +285,36 @@ test('changing Cube filters resets the decision count', async ({ page }) => {
   await expect(count).not.toHaveText(total);
   await player.selectOption('');
   await expect(count).toHaveText(total);
+});
+
+test('a cube line in the move history opens its review and is marked', async ({
+  page,
+}) => {
+  const match = await openReference(page);
+  await completedFullJob(page, match.id);
+  await expect(
+    page
+      .locator('.workspace-analysis-command')
+      .getByText('Matchanalyse abgeschlossen', { exact: true }),
+  ).toBeVisible();
+  const line = page.locator('.moves-list [data-cube-action]').last();
+  await expect(line).toContainText('Passen');
+  await line.click();
+  await expect(
+    page.getByRole('tab', { name: 'Cube', exact: true }),
+  ).toHaveAttribute('aria-selected', 'true');
+  await expect(line).toHaveAttribute('aria-current', 'true');
+  await expect(page.locator('.moves-list .move-history-row.current')).toHaveCount(
+    0,
+  );
+  await expect(page.locator('.board-heading')).toContainText('Cube');
+  await page
+    .getByRole('button', { name: 'Zurück zum Checkerzug', exact: true })
+    .click();
+  await expect(line).not.toHaveAttribute('aria-current', 'true');
+  await expect(page.locator('.moves-list .move-history-row.current')).toHaveCount(
+    1,
+  );
 });
 
 test('a saved whole-match result stays identified while game navigation loads', async ({

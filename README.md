@@ -119,7 +119,7 @@ visible as you switch tabs or positions.
 
 ### Moves, errors, and statistics
 
-Move history shows all checker moves in the selected game by default, including those without an evaluation. Choose **All errors** or a specific grade to narrow the list without changing the board position. The filter uses the saved assessments and the configured error grades. Each row shows notation, player, dice, and localized equity loss. A zero loss is shown as `0.000` in English, and a dash indicates that no evaluation is available. Hover over the loss to see the grade, analysis source and depth. With **All moves** selected, recorded doubles, takes and passes appear as lines between the checker moves, with the player who acted.
+Move history shows all checker moves in the selected game by default, including those without an evaluation. Choose **All errors** or a specific grade to narrow the list without changing the board position. The filter uses the saved assessments and the configured error grades. Each row shows notation, player, dice, and localized equity loss. A zero loss is shown as `0.000` in English, and a dash indicates that no evaluation is available. Hover over the loss to see the grade, analysis source and depth. With **All moves** selected, recorded doubles, takes and passes appear as lines between the checker moves, with the player who acted. Select one of these lines to open its saved review in **Cube**; a line without a saved evaluation shows `Not evaluated`. While **Cube** shows one of these decisions on the board, its line is marked in place of the checker move.
 
 **Cube** reviews only cube decisions. **Inaccuracies only** starts at the
 configured **Questionable** threshold. Turn it off to include all cube

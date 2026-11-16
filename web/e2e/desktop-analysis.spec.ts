@@ -574,7 +574,7 @@ test('move assessments stay scoped while switching games during a delayed respon
     page.locator('.moves-list .move-assessment-very_bad'),
   ).toHaveCount(0);
   await page
-    .locator('.moves-list button:has(.move-assessment-marker)')
+    .locator('.moves-list .move-history-row:has(.move-assessment-marker)')
     .first()
     .focus();
   await expect(page.getByRole('tooltip')).toContainText('Fixture engine');
@@ -724,7 +724,7 @@ test('a background position analysis refreshes its history row after navigating 
   page,
 }) => {
   await importDesktopMatch(page);
-  const first = page.locator('.moves-list button').first();
+  const first = page.locator('.moves-list .move-history-row').first();
   await expect(first.locator('.move-assessment-marker')).toHaveCount(0);
   let release = () => {},
     requested = () => {};

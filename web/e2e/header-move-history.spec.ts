@@ -82,7 +82,7 @@ async function openMatch(
     imported.match.id,
   );
   await page.goto('/');
-  await expect(page.locator('.moves-list button')).toHaveCount(6);
+  await expect(page.locator('.moves-list .move-history-row')).toHaveCount(6);
   return { positions, match: imported.match };
 }
 
@@ -107,7 +107,7 @@ for (const theme of ['graphite', 'club', 'paper'])
       await expect(tab).toHaveCSS('border-bottom-color', accent);
       await tab.hover();
       await expect(tab).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-      const rows = page.locator('.moves-list button');
+      const rows = page.locator('.moves-list .move-history-row');
       await expect(rows.first().locator('.move-history-context')).toContainText(
         'Hendrik',
       );
@@ -186,11 +186,11 @@ test('header keyboard navigation and history navigation retain selection, focus 
   await page.keyboard.press('ArrowRight');
   await expect(tab).toBeFocused();
   await expect(tab).toHaveAttribute('aria-selected', 'true');
-  await page.locator('.moves-list button').nth(1).focus();
+  await page.locator('.moves-list .move-history-row').nth(1).focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('.board-heading')).toContainText('Move 2');
   await page.getByRole('button', { name: 'Next move', exact: true }).click();
-  await expect(page.locator('.moves-list button').nth(2)).toHaveAttribute(
+  await expect(page.locator('.moves-list .move-history-row').nth(2)).toHaveAttribute(
     'aria-current',
     'step',
   );
@@ -215,7 +215,7 @@ test('German loss badges use decimal commas and remain readable at laptop and4K 
     { width: 3840, height: 2160 },
   ]) {
     await page.setViewportSize(viewport);
-    const row = page.locator('.moves-list button').nth(1);
+    const row = page.locator('.moves-list .move-history-row').nth(1);
     await expect(row.locator('.move-history-context')).toBeVisible();
     expect((await row.boundingBox())!.height).toBeLessThanOrEqual(52);
     expect(

@@ -11,6 +11,8 @@
 
   .analysis-workspace {
     --analysis-gap: 10px;
+    /* Compact action buttons set the height of the toolbar's first line. */
+    --analysis-toolbar-row: 44px;
     --analysis-pane-border: var(--ui-border);
     --analysis-available-height: calc(100dvh - 300px);
     --analysis-grid-height: max(680px, var(--analysis-available-height));
@@ -35,25 +37,50 @@
     font-size: var(--font-size-table);
   }
 
-  .analysis-workspace .analysis-commandbar {
-    align-items: flex-start;
-    gap: 10px 20px;
-    padding: 9px 12px;
+  /* The match, its displayed analysis and the PR values share the first row. */
+  .analysis-workspace .analysis-header-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 20px;
     margin-bottom: 9px;
-    border-radius: 7px;
-  }
-
-  .analysis-workspace .analysis-commandbar .game-selector {
-    flex: 1 1 340px;
     min-width: 0;
   }
 
+  .analysis-workspace .analysis-header-row > .analysis-heading {
+    flex: 1 1 760px;
+    margin-bottom: 0;
+  }
+
+  .analysis-workspace .analysis-header-row > .analysis-catalog-control {
+    /* The match identity keeps the room it needs to stay on one line. */
+    flex: 0 1 clamp(480px, 32vw, 760px);
+    padding-block: 0;
+  }
+
+  /* Game, detail view and calculation share the second row. */
+  .analysis-workspace .analysis-commandbar {
+    align-items: flex-start;
+    gap: 8px 20px;
+    padding: 0 0 6px;
+    margin-bottom: 9px;
+    border: 0;
+    border-bottom: 1px solid var(--ui-border);
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .analysis-workspace .analysis-commandbar .game-selector {
+    flex: 0 1 300px;
+    min-width: 220px;
+  }
+
   .analysis-workspace .game-selector-controls {
-    align-items: flex-end;
+    align-items: center;
   }
 
   .analysis-workspace .game-selector-controls label {
-    gap: 3px;
+    gap: 0;
     min-width: 0;
     flex: 1;
   }
@@ -72,7 +99,33 @@
   }
 
   .analysis-workspace .workspace-analysis-command {
-    flex: 2 1 540px;
+    display: flex;
+    flex: 1 1 420px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: flex-end;
+    gap: 6px 20px;
+  }
+
+  /* Options float below their button instead of pushing the board down. */
+  .analysis-workspace .workspace-analysis-command .match-analysis-controls {
+    position: relative;
+  }
+
+  .analysis-workspace .match-analysis-popover:not([hidden]) {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 30;
+    display: grid;
+    gap: 10px;
+    width: max-content;
+    max-width: min(560px, calc(100vw - 36px));
+    padding: 12px;
+    border: 1px solid var(--ui-border);
+    border-radius: 8px;
+    background: var(--ui-surface);
+    box-shadow: 0 8px 24px var(--ui-shadow);
   }
 
   .analysis-workspace
@@ -82,8 +135,21 @@
     gap: 3px;
   }
 
+  /* Status precedes the actions so the buttons keep a fixed right edge. */
   .analysis-workspace .workspace-analysis-command .match-analysis-progress {
-    margin: 6px 0 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 2px 10px;
+    order: -1;
+    min-height: var(--analysis-toolbar-row);
+    margin: 0;
+  }
+
+  .analysis-workspace .workspace-analysis-command .match-analysis-actions {
+    align-items: center;
+    min-height: var(--analysis-toolbar-row);
   }
 
   .analysis-workspace
@@ -99,8 +165,9 @@
     .workspace-analysis-command
     .match-analysis-progress
     progress {
+    width: 96px;
     height: 4px;
-    margin: 4px 0;
+    margin: 0;
   }
 
   .analysis-workspace
@@ -112,9 +179,13 @@
 
   .analysis-workspace .analysis-detail-navigation.inspector-tabs {
     position: static;
+    flex: 0 0 auto;
     justify-content: flex-start;
-    padding: 0 0 8px;
-    margin: 0 0 9px;
+    align-items: center;
+    min-height: var(--analysis-toolbar-row);
+    padding: 0;
+    margin: 0;
+    border: 0;
     background: transparent;
   }
 
@@ -469,6 +540,7 @@
 
   .analysis-workspace.analysis-overview .position-inspector .candidates th {
     font-size: var(--font-size-table-heading);
+
     letter-spacing: normal;
   }
 

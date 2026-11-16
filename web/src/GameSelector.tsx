@@ -26,7 +26,7 @@ export default function GameSelector({
           onClick={() => onSelect(games[index - 1].game_no)}
         />
         <label>
-          {t('games.choose')}
+          <span className="sr-only">{t('games.choose')}</span>
           <select
             aria-label={t('games.choose')}
             value={selected ?? ''}

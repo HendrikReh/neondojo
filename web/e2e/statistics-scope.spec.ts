@@ -24,7 +24,7 @@ test('single-game statistics pin errors to their source game across views, reset
   await expect(page.locator('.match-analysis-progress')).toContainText(
     'Game analysis complete',
   );
-  await page.locator('.moves-list button').nth(1).click();
+  await page.locator('.moves-list .move-history-row').nth(1).click();
   const before = await page.locator('.position-code code').textContent();
   await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
   const moveRequest = page.waitForResponse(

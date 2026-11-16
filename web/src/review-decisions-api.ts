@@ -36,6 +36,27 @@ export function canOpenReviewDecision(row: ReviewDecision) {
   return row.kind === 'cube' ? !!row.review_position : !!row.position_uuid;
 }
 
+/** The saved review row of one recorded cube action, if the analysis has it. */
+export async function findCubeReviewDecision(
+  matchId: string,
+  gameNo: number,
+  moveId: string,
+  options: { analysisId: string; signal: AbortSignal },
+): Promise<ReviewDecision | undefined> {
+  let after: string | null = null;
+  do {
+    const page = await reviewDecisions(
+      matchId,
+      { game_no: gameNo, player: '', kind: 'cube', errors_only: false },
+      { ...options, after, limit: 100 },
+    );
+    const row = page.items.find((item) => item.move_id === moveId);
+    if (row) return row;
+    after = page.next_cursor ?? null;
+  } while (after);
+  return undefined;
+}
+
 export type ReviewEmptyReason = 'missing' | 'filtered' | 'clean';
 
 export async function reviewEmptyReason(

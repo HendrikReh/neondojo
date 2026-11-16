@@ -329,7 +329,7 @@ test('the last game and exact move restore without starting an analysis', async 
     .setInputFiles('../backend/tests/fixtures/WC2014.mat');
   await page.getByLabel('Spiel auswählen', { exact: true }).selectOption('8');
   await expect(page.locator('.board-heading')).toContainText('Spiel 8');
-  await page.locator('.moves-list button').nth(5).click();
+  await page.locator('.moves-list .move-history-row').nth(5).click();
   const position = await page
     .locator('[data-annotation-kind=position]')
     .getAttribute('data-annotation-id');
