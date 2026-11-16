@@ -8,7 +8,7 @@ const messages = {
     noAnalysis: 'This match has no completed local analysis yet.',
     empty: 'No decisions in this match meet the selected filters.',
     largestLoss: 'High equity loss in this match',
-    recurring: 'Recurring in {count} matches',
+    recurring: 'Recurring in {count, plural, one {# match} other {# matches}}',
     historyUnavailable:
       'The database is too large to include all recurring mistakes. The selection also uses equity loss in this match.',
     decision: 'Game {game} · Decision {decision}',
@@ -24,7 +24,8 @@ const messages = {
       'Für dieses Match ist noch keine abgeschlossene lokale Analyse verfügbar.',
     empty: 'Keine Entscheidung in diesem Match erfüllt die gewählten Filter.',
     largestLoss: 'Hoher Equity-Verlust in diesem Match',
-    recurring: 'Wiederkehrend in {count} Matches',
+    recurring:
+      'Wiederkehrend in {count, plural, one {# Match} other {# Matches}}',
     historyUnavailable:
       'Die Datenbank ist zu groß, um alle wiederkehrenden Fehler zu berücksichtigen. Die Auswahl nutzt auch den Equity-Verlust in diesem Match.',
     decision: 'Spiel {game} · Entscheidung {decision}',
@@ -39,7 +40,8 @@ const messages = {
     noAnalysis: 'Este partido aún no tiene un análisis local completo.',
     empty: 'Ninguna decisión de este partido cumple los filtros seleccionados.',
     largestLoss: 'Pérdida de equidad alta en este partido',
-    recurring: 'Se repite en {count} partidos',
+    recurring:
+      'Se repite en {count, plural, one {# partido} other {# partidos}}',
     historyUnavailable:
       'La base de datos es demasiado grande para incluir todos los errores recurrentes. La selección también usa la pérdida de equidad en este partido.',
     decision: 'Juego {game} · Decisión {decision}',
@@ -54,7 +56,7 @@ const messages = {
     noAnalysis: 'Ce match ne dispose pas encore d’une analyse locale terminée.',
     empty: 'Aucune décision de ce match ne correspond aux filtres choisis.',
     largestLoss: 'Forte perte d’équité dans ce match',
-    recurring: 'Se répète dans {count} matchs',
+    recurring: 'Se répète dans {count, plural, one {# match} other {# matchs}}',
     historyUnavailable:
       'La base est trop volumineuse pour inclure toutes les erreurs récurrentes. La sélection tient aussi compte de la perte d’équité dans ce match.',
     decision: 'Partie {game} · Décision {decision}',
@@ -69,7 +71,8 @@ const messages = {
     noAnalysis: 'Ten mecz nie ma jeszcze ukończonej analizy lokalnej.',
     empty: 'Żadna decyzja w tym meczu nie spełnia wybranych filtrów.',
     largestLoss: 'Duża strata equity w tym meczu',
-    recurring: 'Powtarza się w {count} meczach',
+    recurring:
+      'Powtarza się w {count, plural, one {# meczu} few {# meczach} many {# meczach}}',
     historyUnavailable:
       'Baza danych jest zbyt duża, aby uwzględnić wszystkie powtarzające się błędy. Wybór uwzględnia także stratę equity w tym meczu.',
     decision: 'Gra {game} · Decyzja {decision}',
@@ -85,7 +88,8 @@ const messages = {
       'Per questa partita non è ancora disponibile un’analisi locale completata.',
     empty: 'Nessuna decisione di questa partita corrisponde ai filtri scelti.',
     largestLoss: 'Perdita elevata di equity in questa partita',
-    recurring: 'Si ripete in {count} partite',
+    recurring:
+      'Si ripete in {count, plural, one {# partita} other {# partite}}',
     historyUnavailable:
       'Il database è troppo grande per includere tutti gli errori ricorrenti. La selezione usa anche la perdita di equity in questa partita.',
     decision: 'Gioco {game} · Decisione {decision}',

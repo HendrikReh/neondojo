@@ -1,5 +1,9 @@
 import { useI18n } from './i18n';
-import { interpolate, type Locale, type TranslationParams } from './i18n-core';
+import {
+  formatMessage,
+  type Locale,
+  type TranslationParams,
+} from './i18n-core';
 const rows = {
   resizePreview: [
     'Resize card preview',
@@ -42,12 +46,12 @@ const rows = {
     'Cerca schede',
   ],
   found: [
-    '{count} cards found',
-    '{count} Lernkarten gefunden',
-    '{count} tarjetas encontradas',
-    '{count} cartes trouvées',
-    'Znaleziono {count} fiszek',
-    '{count} schede trovate',
+    '{count, plural, one {# card found} other {# cards found}}',
+    '{count, plural, one {# Lernkarte gefunden} other {# Lernkarten gefunden}}',
+    '{count, plural, one {# tarjeta encontrada} other {# tarjetas encontradas}}',
+    '{count, plural, one {# carte trouvée} other {# cartes trouvées}}',
+    'Znaleziono {count, plural, one {# fiszkę} few {# fiszki} many {# fiszek}}',
+    '{count, plural, one {# scheda trovata} other {# schede trovate}}',
   ],
   noResults: [
     'No flashcards match these filters.',
@@ -154,15 +158,7 @@ export function cardSearchText(
   key: CardSearchMessage,
   params: TranslationParams = {},
 ) {
-  return interpolate(
-    rows[key][locales.indexOf(locale)],
-    Object.fromEntries(
-      Object.entries(params).map(([k, v]) => [
-        k,
-        typeof v === 'number' ? new Intl.NumberFormat(locale).format(v) : v,
-      ]),
-    ),
-  );
+  return formatMessage(locale, rows[key][locales.indexOf(locale)], params);
 }
 export function useCardSearchText() {
   const { locale } = useI18n();

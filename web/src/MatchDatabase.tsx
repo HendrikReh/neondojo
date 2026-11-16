@@ -725,9 +725,7 @@ export default function MatchDatabase({
             aria-label={l('actions')}
           >
             <strong role="status">
-              {l(selected.size === 1 ? 'selectedMatch' : 'selectedMatches', {
-                count: formatNumber(selected.size),
-              })}
+              {l('selectedMatches', { count: selected.size })}
             </strong>
             <ActionButton
               type="button"

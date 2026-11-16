@@ -1,6 +1,6 @@
 import { useI18n } from './i18n';
 import {
-  interpolate,
+  formatMessage,
   matchEventLabels,
   type Locale,
   type TranslationParams,
@@ -869,12 +869,12 @@ const translations = {
     'Risultati ricerca',
   ],
   resultCount: [
-    '{count} positions',
-    '{count} Positionen',
-    '{count} posiciones',
-    '{count} positions',
+    '{count, plural, one {# position} other {# positions}}',
+    '{count, plural, one {# Position} other {# Positionen}}',
+    '{count, plural, one {# posición} other {# posiciones}}',
+    '{count, plural, one {# position} other {# positions}}',
     'Pozycje: {count}',
-    '{count} posizioni',
+    '{count, plural, one {# posizione} other {# posizioni}}',
   ],
   empty: [
     'Your collection is empty. In Analysis, use “Save position” to add a decision.',
@@ -935,10 +935,10 @@ const translations = {
   selected: [
     '{count} selected',
     '{count} ausgewählt',
-    '{count} seleccionadas',
-    '{count} sélectionnées',
+    '{count, plural, one {# seleccionada} other {# seleccionadas}}',
+    '{count, plural, one {# sélectionnée} other {# sélectionnées}}',
     'Wybrano {count}',
-    '{count} selezionate',
+    '{count, plural, one {# selezionata} other {# selezionate}}',
   ],
   selectionLimit: [
     'Select up to 200 loaded positions. Page selection includes only this page.',
@@ -1038,12 +1038,12 @@ const translations = {
     'Serve un’analisi locale per creare una scheda. Apri l’analisi di questa posizione.',
   ],
   deckCount: [
-    '{count} cards in deck',
-    '{count} Karten im Deck',
-    '{count} tarjetas en el mazo',
-    '{count} cartes dans le paquet',
-    '{count} kart w talii',
-    '{count} schede nel mazzo',
+    '{count, plural, one {# card in deck} other {# cards in deck}}',
+    '{count, plural, one {# Karte im Deck} other {# Karten im Deck}}',
+    '{count, plural, one {# tarjeta en el mazo} other {# tarjetas en el mazo}}',
+    '{count, plural, one {# carte dans le paquet} other {# cartes dans le paquet}}',
+    '{count, plural, one {# karta w talii} few {# karty w talii} many {# kart w talii}}',
+    '{count, plural, one {# scheda nel mazzo} other {# schede nel mazzo}}',
   ],
   deck: ['Study', 'Lernen', 'Estudio', 'Étude', 'Nauka', 'Studio'],
   addToDeck: [
@@ -1245,33 +1245,16 @@ export const positionMessages = Object.fromEntries(
     ),
   ]),
 ) as Record<Locale, Messages>;
-export function usePositionText() {
-  const { locale, formatNumber } = useI18n();
-  return (key: PositionMessageKey, params: TranslationParams = {}) =>
-    interpolate(
-      positionMessages[locale][key],
-      Object.fromEntries(
-        Object.entries(params).map(([name, value]) => [
-          name,
-          typeof value === 'number' ? formatNumber(value) : value,
-        ]),
-      ),
-    );
-}
-
 export function positionText(
   locale: Locale,
   key: PositionMessageKey,
   params: TranslationParams = {},
 ) {
-  const number = new Intl.NumberFormat(locale);
-  return interpolate(
-    positionMessages[locale][key],
-    Object.fromEntries(
-      Object.entries(params).map(([key, value]) => [
-        key,
-        typeof value === 'number' ? number.format(value) : value,
-      ]),
-    ),
-  );
+  return formatMessage(locale, positionMessages[locale][key], params);
+}
+
+export function usePositionText() {
+  const { locale } = useI18n();
+  return (key: PositionMessageKey, params: TranslationParams = {}) =>
+    positionText(locale, key, params);
 }

@@ -339,7 +339,7 @@ export default function PlayerDirectory({
   onOpen: (match: Match) => void;
 }) {
   const t = usePlayerText();
-  const { formatError, formatNumber } = useI18n();
+  const { formatError } = useI18n();
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
   const [id, setId] = useState<string>();
@@ -380,7 +380,7 @@ export default function PlayerDirectory({
       {error !== undefined && <p role="alert">{formatError(error)}</p>}
       <SearchResultList
         listClassName="player-list"
-        count={<span>{t('playerCount', { count: formatNumber(total) })}</span>}
+        count={<span>{t('playerCount', { count: total })}</span>}
         preview={
           <SearchResultPreview
             className="player-preview"

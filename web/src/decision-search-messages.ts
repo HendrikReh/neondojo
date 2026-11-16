@@ -172,12 +172,12 @@ const entries = {
     'Ricerca delle decisioni …',
   ],
   found: [
-    '{count} decisions found',
-    '{count} Entscheidungen gefunden',
-    '{count} decisiones encontradas',
-    '{count} décisions trouvées',
-    'Znaleziono decyzji: {count}',
-    '{count} decisioni trovate',
+    '{count, plural, one {# decision found} other {# decisions found}}',
+    '{count, plural, one {# Entscheidung gefunden} other {# Entscheidungen gefunden}}',
+    '{count, plural, one {# decisión encontrada} other {# decisiones encontradas}}',
+    '{count, plural, one {# décision trouvée} other {# décisions trouvées}}',
+    'Znaleziono {count, plural, one {# decyzję} few {# decyzje} many {# decyzji}}',
+    '{count, plural, one {# decisione trovata} other {# decisioni trovate}}',
   ],
   empty: [
     'No analyzed decision matches these filters.',
@@ -289,5 +289,5 @@ export const decisionSearchMessages = Object.fromEntries(
 export function useDecisionSearchText() {
   const { locale } = useI18n();
   return (key: Key, params: TranslationParams = {}) =>
-    interpolate(decisionSearchMessages[locale][key], params);
+    interpolate(decisionSearchMessages[locale][key], params, locale);
 }

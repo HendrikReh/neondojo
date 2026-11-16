@@ -1,5 +1,9 @@
 import { useI18n } from './i18n';
-import { interpolate, type Locale, type TranslationParams } from './i18n-core';
+import {
+  formatMessage,
+  type Locale,
+  type TranslationParams,
+} from './i18n-core';
 
 const en = {
   eyebrow: 'Your notes',
@@ -51,7 +55,7 @@ const en = {
   invalidQuery:
     'Search text cannot contain control characters, tabs or line breaks.',
   noResults: 'No matching notes found.',
-  resultCount: '{count} results shown',
+  resultCount: '{count, plural, one {# result shown} other {# results shown}}',
   more: 'Load more results',
   match: 'Match',
   position: 'Position',
@@ -185,7 +189,8 @@ export const annotationMessages: Record<Locale, AnnotationMessages> = {
     invalidQuery:
       'El texto de búsqueda no puede contener caracteres de control, tabulaciones ni saltos de línea.',
     noResults: 'No se han encontrado notas coincidentes.',
-    resultCount: '{count} resultados mostrados',
+    resultCount:
+      '{count, plural, one {# resultado mostrado} other {# resultados mostrados}}',
     more: 'Cargar más resultados',
     match: 'Partida',
     position: 'Posición',
@@ -251,7 +256,8 @@ export const annotationMessages: Record<Locale, AnnotationMessages> = {
     invalidQuery:
       'Le texte recherché ne peut pas contenir de caractères de contrôle, de tabulations ou de sauts de ligne.',
     noResults: 'Aucune note correspondante.',
-    resultCount: '{count} résultats affichés',
+    resultCount:
+      '{count, plural, one {# résultat affiché} other {# résultats affichés}}',
     more: 'Charger plus de résultats',
     match: 'Match',
     position: 'Position',
@@ -374,7 +380,8 @@ export const annotationMessages: Record<Locale, AnnotationMessages> = {
     invalidQuery:
       'Il testo di ricerca non può contenere caratteri di controllo, tabulazioni o interruzioni di riga.',
     noResults: 'Nessuna nota corrispondente trovata.',
-    resultCount: '{count} risultati visualizzati',
+    resultCount:
+      '{count, plural, one {# risultato visualizzato} other {# risultati visualizzati}}',
     more: 'Carica altri risultati',
     match: 'Partita',
     position: 'Posizione',
@@ -391,17 +398,7 @@ export function annotationText(
   key: AnnotationMessageKey,
   params: TranslationParams = {},
 ) {
-  return interpolate(
-    annotationMessages[locale][key],
-    Object.fromEntries(
-      Object.entries(params).map(([name, value]) => [
-        name,
-        typeof value === 'number'
-          ? new Intl.NumberFormat(locale).format(value)
-          : value,
-      ]),
-    ),
-  );
+  return formatMessage(locale, annotationMessages[locale][key], params);
 }
 
 export function useAnnotationI18n() {

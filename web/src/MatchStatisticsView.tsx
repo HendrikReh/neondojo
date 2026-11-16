@@ -209,14 +209,12 @@ function PlayerStatisticsCard({
       {(stats.forced_moves > 0 || stats.unavailable > 0) && (
         <p className="statistics-footnote">
           {stats.forced_moves > 0 && (
-            <span>
-              {text('forced', { count: formatNumber(stats.forced_moves) })}
-            </span>
+            <span>{text('forced', { count: stats.forced_moves })}</span>
           )}
           {stats.unavailable > 0 && (
             <span>
               {text('unavailableDecisions', {
-                count: formatNumber(stats.unavailable),
+                count: stats.unavailable,
               })}
             </span>
           )}

@@ -86,9 +86,7 @@ export default function BenchmarkComparison({
                   <th scope="row">
                     {run.engine_name}
                     {threads != null && (
-                      <small>
-                        {text('threads', { count: formatNumber(threads) })}
-                      </small>
+                      <small>{text('threads', { count: threads })}</small>
                     )}
                   </th>
                   <td>{formatNumber(run.plies)}-ply</td>

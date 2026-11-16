@@ -125,9 +125,8 @@ export default function BenchmarkWorkspace({
     requestedAnalysisDepths.length > 0 && compatiblePlies.length === 0
       ? preferredDepth(availableAnalysisDepths)
       : undefined;
-  const selected = analysisFallback === undefined
-    ? compatiblePlies
-    : [analysisFallback];
+  const selected =
+    analysisFallback === undefined ? compatiblePlies : [analysisFallback];
   const play = mode === 'play';
   const modeRuns = runs.filter((run) => Boolean(run.play_reference) === play);
   const supportedPlayDepths = (
@@ -263,11 +262,7 @@ export default function BenchmarkWorkspace({
         </label>
         {!engine && engines.length > 0 && <p role="status">{t('noEngine')}</p>}
       </div>
-      <div
-        className="benchmark-modes"
-        role="group"
-        aria-label={t('mode')}
-      >
+      <div className="benchmark-modes" role="group" aria-label={t('mode')}>
         <button
           type="button"
           aria-pressed={!play}
@@ -586,7 +581,7 @@ function BenchmarkRunDetails({ run }: { run: BenchmarkRun }) {
             run.machine.cpu_model,
             run.machine.logical_cpus == null
               ? undefined
-              : t('cpus', { count: formatNumber(run.machine.logical_cpus) }),
+              : t('cpus', { count: run.machine.logical_cpus }),
             run.machine.memory_bytes == null
               ? undefined
               : `${formatNumber(run.machine.memory_bytes / 2 ** 30, { maximumFractionDigits: 1 })} GiB`,

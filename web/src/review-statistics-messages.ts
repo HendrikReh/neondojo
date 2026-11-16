@@ -219,20 +219,20 @@ const rows = {
     'Non disponibile',
   ],
   forced: [
-    '{count} forced checker moves',
-    '{count} erzwungene Checkerzüge',
-    '{count} jugadas de fichas forzadas',
-    '{count} coups de pions forcés',
-    '{count} wymuszonych ruchów pionami',
-    '{count} mosse di pedine forzate',
+    '{count, plural, one {# forced checker move} other {# forced checker moves}}',
+    '{count, plural, one {# erzwungener Checkerzug} other {# erzwungene Checkerzüge}}',
+    '{count, plural, one {# jugada de fichas forzada} other {# jugadas de fichas forzadas}}',
+    '{count, plural, one {# coup de pions forcé} other {# coups de pions forcés}}',
+    '{count, plural, one {# wymuszony ruch pionami} few {# wymuszone ruchy pionami} many {# wymuszonych ruchów pionami}}',
+    '{count, plural, one {# mossa di pedine forzata} other {# mosse di pedine forzate}}',
   ],
   unavailableDecisions: [
-    '{count} decisions unavailable',
-    '{count} Entscheidungen nicht verfügbar',
-    '{count} decisiones no disponibles',
-    '{count} décisions indisponibles',
-    '{count} niedostępnych decyzji',
-    '{count} decisioni non disponibili',
+    '{count, plural, one {# decision unavailable} other {# decisions unavailable}}',
+    '{count, plural, one {# Entscheidung nicht verfügbar} other {# Entscheidungen nicht verfügbar}}',
+    '{count, plural, one {# decisión no disponible} other {# decisiones no disponibles}}',
+    '{count, plural, one {# décision indisponible} other {# décisions indisponibles}}',
+    '{count, plural, one {# niedostępna decyzja} few {# niedostępne decyzje} many {# niedostępnych decyzji}}',
+    '{count, plural, one {# decisione non disponibile} other {# decisioni non disponibili}}',
   ],
   filterSeverity: [
     'Filter by severity',
@@ -394,7 +394,7 @@ export function statisticsText(
   key: Key,
   params: TranslationParams = {},
 ) {
-  return interpolate(statisticsMessages[locale][key], params);
+  return interpolate(statisticsMessages[locale][key], params, locale);
 }
 export function useStatisticsText() {
   const { locale } = useI18n();

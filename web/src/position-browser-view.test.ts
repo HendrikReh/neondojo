@@ -6,6 +6,7 @@ import {
   PositionBrowserResults,
   PositionBrowserPreview,
 } from './PositionBrowserResults';
+import { placeholders as args } from './i18n-core';
 import { positionMessages } from './position-browser-messages';
 import type { PositionBrowserHit } from './position-browser-api';
 beforeEach(() => vi.stubGlobal('localStorage', { getItem: () => 'en' }));
@@ -221,8 +222,6 @@ test('all six position catalogs preserve keys and arguments', () => {
     expect(Object.keys(catalog)).toEqual(Object.keys(source));
     for (const key of Object.keys(source) as (keyof typeof source)[]) {
       expect(catalog[key]).not.toBe('');
-      const args = (value: string) =>
-        [...value.matchAll(/\{(\w+)\}/g)].map((match) => match[1]).sort();
       expect(args(catalog[key])).toEqual(args(source[key]));
     }
   }

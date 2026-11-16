@@ -4,7 +4,8 @@ export const de = {
   'games.choose': 'Spiel auswählen',
   'games.previous': 'Vorheriges Spiel',
   'games.next': 'Nächstes Spiel',
-  'games.option': 'Spiel {game} · {white}:{black} · {moves} Züge',
+  'games.option':
+    'Spiel {game} · {white}:{black} · {moves, plural, one {# Zug} other {# Züge}}',
   'games.heading': 'Einzelnes Spiel',
   'games.loading': 'Spiele werden geladen …',
   'games.retry': 'Spiel erneut laden',
@@ -21,7 +22,7 @@ export const de = {
   'gameAnalysis.scopeMatch': 'Gesamtes Match',
   'analysis.observedGame': 'Spielwürfe',
   'analysis.observedGameDescription':
-    '{count} aufgezeichnete Würfe aus Spiel {game}. Häufigkeiten sind keine Equity-Analyse.',
+    '{count, plural, one {# aufgezeichneter Wurf} other {# aufgezeichnete Würfe}} aus Spiel {game}. Häufigkeiten sind keine Equity-Analyse.',
   'games.addErrors': 'Fehler aus Spiel {game} übernehmen',
   'board.assetError':
     'Theme-Grafik konnte nicht geladen werden. Das Standardbrett wird angezeigt.',
@@ -38,8 +39,7 @@ export const de = {
   'common.checker': 'Checker',
   'common.cube': 'Cube',
   'common.played': 'Gespielt',
-  'board.points': '{count} Punkte',
-  'board.point': '{count} Punkt',
+  'board.points': '{count, plural, one {# Punkt} other {# Punkte}}',
   'board.pipsOff': '{pips} Pips · {off} aus',
   'board.label':
     'Backgammon-Position. {player} am Zug, Würfel {first} und {second}. Weiß {white} Pips, Schwarz {black} Pips.',
@@ -61,7 +61,7 @@ export const de = {
   'app.searchMin': 'Mindestens 3 Zeichen eingeben.',
   'app.matches': 'Matches',
   'app.searching': 'Suche …',
-  'app.moves': '{count} Züge',
+  'app.moves': '{count, plural, one {# Zug} other {# Züge}}',
   'app.noMatches': 'Keine passenden Matches.',
   'app.libraryEmpty': 'Deine nächste Erkenntnis beginnt mit einer Partie.',
   'app.moreMatches': 'Weitere Matches laden',
@@ -102,7 +102,8 @@ export const de = {
   'app.collectMatches': 'Matches sammeln',
   'app.findPositions': 'Positionen finden',
   'app.understandMoves': 'Züge verstehen',
-  'app.matchLength': '{count}-Punkte-Match',
+  'app.matchLength':
+    '{count, plural, one {#-Punkt-Match} other {#-Punkte-Match}}',
   'app.gameMove': 'Spiel {game} · Zug {move}',
   'app.toMove': '{player} am Zug',
   'app.previousMove': 'Vorheriger Zug',
@@ -122,7 +123,8 @@ export const de = {
   'app.footer': 'Lern aus jeder Position.',
   'app.engineVersion': 'Engine ohne Oberfläche / v0.1',
   'app.importDuplicate': 'Diese Datei ist bereits in deiner Bibliothek.',
-  'app.importCount': '{count} Positionen importiert.',
+  'app.importCount':
+    '{count, plural, one {# Position importiert.} other {# Positionen importiert.}}',
   'analysis.depth': 'Suchtiefe',
   'analysis.fast': '0-ply · schnell',
   'analysis.accurate': '2-ply · genauer',
@@ -161,7 +163,7 @@ export const de = {
   'analysis.diceEmptyDescription':
     'Für diese Stellung liegt noch keine Würfel-Equity vor.',
   'analysis.observedMethod':
-    '{count} aufgezeichnete Würfe dieses Spiels. Häufigkeiten sind keine Equity-Analyse; Eröffnungswürfe enthalten keinen Pasch.',
+    '{count, plural, one {# aufgezeichneter Wurf} other {# aufgezeichnete Würfe}} dieses Spiels. Häufigkeiten sind keine Equity-Analyse; Eröffnungswürfe enthalten keinen Pasch.',
   'analysis.selectMatch': 'Wähle ein Match aus.',
   'matchAnalysis.label': 'Vollständige Matchanalyse',
   'matchAnalysis.eyebrow': 'DAS GANZE MATCH VERSTEHEN',
@@ -231,7 +233,8 @@ export const en = {
   'games.choose': 'Select game',
   'games.previous': 'Previous game',
   'games.next': 'Next game',
-  'games.option': 'Game {game} · {white}:{black} · {moves} moves',
+  'games.option':
+    'Game {game} · {white}:{black} · {moves, plural, one {# move} other {# moves}}',
   'games.heading': 'Individual game',
   'games.loading': 'Loading games…',
   'games.retry': 'Reload game',
@@ -248,7 +251,7 @@ export const en = {
   'gameAnalysis.scopeMatch': 'Entire match',
   'analysis.observedGame': 'Game rolls',
   'analysis.observedGameDescription':
-    '{count} recorded rolls from game {game}. Frequencies are not an equity analysis.',
+    '{count, plural, one {# recorded roll} other {# recorded rolls}} from game {game}. Frequencies are not an equity analysis.',
   'games.addErrors': 'Add errors from game {game}',
   'board.assetError':
     'The theme image could not be loaded. The default board is shown.',
@@ -265,8 +268,7 @@ export const en = {
   'common.checker': 'Checker',
   'common.cube': 'Cube',
   'common.played': 'Played',
-  'board.points': '{count} points',
-  'board.point': '{count} point',
+  'board.points': '{count, plural, one {# point} other {# points}}',
   'board.pipsOff': '{pips} pips · {off} off',
   'board.label':
     'Backgammon position. {player} to move, dice {first} and {second}. White {white} pips, Black {black} pips.',
@@ -288,7 +290,7 @@ export const en = {
   'app.searchMin': 'Enter at least 3 characters.',
   'app.matches': 'Matches',
   'app.searching': 'Searching …',
-  'app.moves': '{count} moves',
+  'app.moves': '{count, plural, one {# move} other {# moves}}',
   'app.noMatches': 'No matching matches.',
   'app.libraryEmpty': 'Your next insight starts with a match.',
   'app.moreMatches': 'Load more matches',
@@ -348,7 +350,8 @@ export const en = {
   'app.footer': 'Learn from every position.',
   'app.engineVersion': 'Headless engine / v0.1',
   'app.importDuplicate': 'This file is already in your library.',
-  'app.importCount': '{count} positions imported.',
+  'app.importCount':
+    '{count, plural, one {# position imported.} other {# positions imported.}}',
   'analysis.depth': 'Search depth',
   'analysis.fast': '0-ply · fast',
   'analysis.accurate': '2-ply · more accurate',
@@ -386,7 +389,7 @@ export const en = {
   'analysis.diceEmptyHeading': 'What will the next roll bring?',
   'analysis.diceEmptyDescription': 'No dice equity is saved for this position.',
   'analysis.observedMethod':
-    '{count} recorded rolls in this match. Frequencies are not an equity analysis; opening rolls contain no doubles.',
+    '{count, plural, one {# recorded roll} other {# recorded rolls}} in this match. Frequencies are not an equity analysis; opening rolls contain no doubles.',
   'analysis.selectMatch': 'Select a match.',
   'matchAnalysis.label': 'Full match analysis',
   'matchAnalysis.eyebrow': 'UNDERSTAND THE WHOLE MATCH',
@@ -451,7 +454,8 @@ export const es = {
   'games.choose': 'Seleccionar juego',
   'games.previous': 'Juego anterior',
   'games.next': 'Juego siguiente',
-  'games.option': 'Juego {game} · {white}:{black} · {moves} jugadas',
+  'games.option':
+    'Juego {game} · {white}:{black} · {moves, plural, one {# jugada} other {# jugadas}}',
   'games.heading': 'Juego individual',
   'games.loading': 'Cargando juegos…',
   'games.retry': 'Recargar juego',
@@ -468,7 +472,7 @@ export const es = {
   'gameAnalysis.scopeMatch': 'Partida completa',
   'analysis.observedGame': 'Tiradas del juego',
   'analysis.observedGameDescription':
-    '{count} tiradas registradas del juego {game}. Las frecuencias no son un análisis de equity.',
+    '{count, plural, one {# tirada registrada} other {# tiradas registradas}} del juego {game}. Las frecuencias no son un análisis de equity.',
   'games.addErrors': 'Añadir errores del juego {game}',
   'board.assetError':
     'No se ha podido cargar la imagen del tema. Se muestra el tablero predeterminado.',
@@ -485,8 +489,7 @@ export const es = {
   'common.checker': 'Fichas',
   'common.cube': 'Cubo',
   'common.played': 'Jugada realizada',
-  'board.points': '{count} puntos',
-  'board.point': '{count} punto',
+  'board.points': '{count, plural, one {# punto} other {# puntos}}',
   'board.pipsOff': '{pips} pips · {off} fuera',
   'board.label':
     'Posición de backgammon. Turno de {player}, dados {first} y {second}. Blancas {white} pips, negras {black} pips.',
@@ -508,7 +511,7 @@ export const es = {
   'app.searchMin': 'Introduce al menos 3 caracteres.',
   'app.matches': 'Partidas',
   'app.searching': 'Buscando …',
-  'app.moves': '{count} jugadas',
+  'app.moves': '{count, plural, one {# jugada} other {# jugadas}}',
   'app.noMatches': 'No hay partidas coincidentes.',
   'app.libraryEmpty': 'Tu próximo descubrimiento empieza con una partida.',
   'app.moreMatches': 'Cargar más partidas',
@@ -548,7 +551,8 @@ export const es = {
   'app.collectMatches': 'Reunir partidas',
   'app.findPositions': 'Encontrar posiciones',
   'app.understandMoves': 'Entender jugadas',
-  'app.matchLength': 'Partida a {count} puntos',
+  'app.matchLength':
+    'Partida a {count, plural, one {# punto} other {# puntos}}',
   'app.gameMove': 'Juego {game} · Jugada {move}',
   'app.toMove': 'Turno de {player}',
   'app.previousMove': 'Jugada anterior',
@@ -568,7 +572,8 @@ export const es = {
   'app.footer': 'Aprende de cada posición.',
   'app.engineVersion': 'Motor sin interfaz / v0.1',
   'app.importDuplicate': 'Este archivo ya está en tu biblioteca.',
-  'app.importCount': '{count} posiciones importadas.',
+  'app.importCount':
+    '{count, plural, one {# posición importada.} other {# posiciones importadas.}}',
   'analysis.depth': 'Profundidad de búsqueda',
   'analysis.fast': '0-ply · rápido',
   'analysis.accurate': '2-ply · más preciso',
@@ -607,7 +612,7 @@ export const es = {
   'analysis.diceEmptyDescription':
     'No hay equidad de dados guardada para esta posición.',
   'analysis.observedMethod':
-    '{count} tiradas registradas en esta partida. Las frecuencias no son un análisis de equidad; las tiradas iniciales no incluyen dobles.',
+    '{count, plural, one {# tirada registrada} other {# tiradas registradas}} en esta partida. Las frecuencias no son un análisis de equidad; las tiradas iniciales no incluyen dobles.',
   'analysis.selectMatch': 'Selecciona una partida.',
   'matchAnalysis.label': 'Análisis completo de la partida',
   'matchAnalysis.eyebrow': 'ENTENDER TODA LA PARTIDA',
@@ -673,7 +678,8 @@ export const fr = {
   'games.choose': 'Choisir une manche',
   'games.previous': 'Manche précédente',
   'games.next': 'Manche suivante',
-  'games.option': 'Manche {game} · {white}:{black} · {moves} coups',
+  'games.option':
+    'Manche {game} · {white}:{black} · {moves, plural, one {# coup} other {# coups}}',
   'games.heading': 'Manche individuelle',
   'games.loading': 'Chargement des manches…',
   'games.retry': 'Recharger la manche',
@@ -690,7 +696,7 @@ export const fr = {
   'gameAnalysis.scopeMatch': 'Match complet',
   'analysis.observedGame': 'Lancers de la manche',
   'analysis.observedGameDescription':
-    '{count} lancers enregistrés dans la manche {game}. Les fréquences ne sont pas une analyse d’équité.',
+    '{count, plural, one {# lancer enregistré} other {# lancers enregistrés}} dans la manche {game}. Les fréquences ne sont pas une analyse d’équité.',
   'games.addErrors': 'Ajouter les erreurs de la manche {game}',
   'board.assetError':
     'L’image du thème n’a pas pu être chargée. Le plateau par défaut est affiché.',
@@ -707,8 +713,7 @@ export const fr = {
   'common.checker': 'Pions',
   'common.cube': 'Videau',
   'common.played': 'Joué',
-  'board.points': '{count} points',
-  'board.point': '{count} point',
+  'board.points': '{count, plural, one {# point} other {# points}}',
   'board.pipsOff': '{pips} pips · {off} sortis',
   'board.label':
     'Position de backgammon. À {player} de jouer, dés {first} et {second}. Blancs {white} pips, noirs {black} pips.',
@@ -730,7 +735,7 @@ export const fr = {
   'app.searchMin': 'Saisissez au moins 3 caractères.',
   'app.matches': 'Parties',
   'app.searching': 'Recherche …',
-  'app.moves': '{count} coups',
+  'app.moves': '{count, plural, one {# coup} other {# coups}}',
   'app.noMatches': 'Aucune partie correspondante.',
   'app.libraryEmpty': 'Votre prochain déclic commence par une partie.',
   'app.moreMatches': 'Charger d’autres parties',
@@ -771,7 +776,7 @@ export const fr = {
   'app.collectMatches': 'Rassembler des parties',
   'app.findPositions': 'Trouver des positions',
   'app.understandMoves': 'Comprendre les coups',
-  'app.matchLength': 'Match en {count} points',
+  'app.matchLength': 'Match en {count, plural, one {# point} other {# points}}',
   'app.gameMove': 'Manche {game} · Coup {move}',
   'app.toMove': 'À {player} de jouer',
   'app.previousMove': 'Coup précédent',
@@ -791,7 +796,8 @@ export const fr = {
   'app.footer': 'Apprenez de chaque position.',
   'app.engineVersion': 'Moteur sans interface / v0.1',
   'app.importDuplicate': 'Ce fichier est déjà dans votre bibliothèque.',
-  'app.importCount': '{count} positions importées.',
+  'app.importCount':
+    '{count, plural, one {# position importée.} other {# positions importées.}}',
   'analysis.depth': 'Profondeur de recherche',
   'analysis.fast': '0-ply · rapide',
   'analysis.accurate': '2-ply · plus précis',
@@ -830,7 +836,7 @@ export const fr = {
   'analysis.diceEmptyDescription':
     'Aucune équité des dés n’est enregistrée pour cette position.',
   'analysis.observedMethod':
-    '{count} jets enregistrés dans cette partie. Les fréquences ne sont pas une analyse d’équité ; les jets d’ouverture ne comportent pas de doubles.',
+    '{count, plural, one {# jet enregistré} other {# jets enregistrés}} dans cette partie. Les fréquences ne sont pas une analyse d’équité ; les jets d’ouverture ne comportent pas de doubles.',
   'analysis.selectMatch': 'Sélectionnez une partie.',
   'matchAnalysis.label': 'Analyse complète de la partie',
   'matchAnalysis.eyebrow': 'COMPRENDRE TOUTE LA PARTIE',
@@ -860,7 +866,8 @@ export const fr = {
   'matchAnalysis.decisionsCount': '{moves} coups · {cube} décisions de videau',
   'matchAnalysis.severityCount':
     '{doubtful} imprécisions · {bad} erreurs · {veryBad} grosses erreurs',
-  'matchAnalysis.unavailableCount': ' · {count} non évalués',
+  'matchAnalysis.unavailableCount':
+    ' · {count, plural, one {# non évalué} other {# non évalués}}',
   'matchAnalysis.method':
     '{analyzed} / {total} coups évalués. La perte d’équité est l’écart avec la meilleure décision, pas le PR. Imprécision dès {doubtful} · erreur dès {bad} · grosse erreur dès {veryBad}.',
   'matchAnalysis.errorsOnly': 'Imprécisions uniquement (≥ {threshold})',
@@ -896,7 +903,8 @@ export const pl = {
   'games.choose': 'Wybierz partię',
   'games.previous': 'Poprzednia partia',
   'games.next': 'Następna partia',
-  'games.option': 'Partia {game} · {white}:{black} · {moves} ruchów',
+  'games.option':
+    'Partia {game} · {white}:{black} · {moves, plural, one {# ruch} few {# ruchy} many {# ruchów}}',
   'games.heading': 'Pojedyncza partia',
   'games.loading': 'Ładowanie partii…',
   'games.retry': 'Wczytaj partię ponownie',
@@ -913,7 +921,7 @@ export const pl = {
   'gameAnalysis.scopeMatch': 'Cały mecz',
   'analysis.observedGame': 'Rzuty w partii',
   'analysis.observedGameDescription':
-    '{count} zapisanych rzutów w partii {game}. Częstości nie stanowią analizy equity.',
+    '{count, plural, one {# zapisany rzut} few {# zapisane rzuty} many {# zapisanych rzutów}} w partii {game}. Częstości nie stanowią analizy equity.',
   'games.addErrors': 'Dodaj błędy z partii {game}',
   'board.assetError':
     'Nie udało się wczytać grafiki motywu. Wyświetlana jest domyślna plansza.',
@@ -930,8 +938,8 @@ export const pl = {
   'common.checker': 'Pionki',
   'common.cube': 'Kostka dublująca',
   'common.played': 'Zagrano',
-  'board.points': '{count} punktów',
-  'board.point': '{count} punkt',
+  'board.points':
+    '{count, plural, one {# punkt} few {# punkty} many {# punktów}}',
   'board.pipsOff': '{pips} pipsów · {off} zdjęte',
   'board.label':
     'Pozycja backgammona. Ruch gracza {player}, kości {first} i {second}. Białe {white} pipsów, czarne {black} pipsów.',
@@ -953,7 +961,7 @@ export const pl = {
   'app.searchMin': 'Wpisz co najmniej 3 znaki.',
   'app.matches': 'Mecze',
   'app.searching': 'Wyszukiwanie …',
-  'app.moves': '{count} ruchów',
+  'app.moves': '{count, plural, one {# ruch} few {# ruchy} many {# ruchów}}',
   'app.noMatches': 'Brak pasujących meczów.',
   'app.libraryEmpty': 'Kolejna lekcja zaczyna się od meczu.',
   'app.moreMatches': 'Wczytaj więcej meczów',
@@ -993,7 +1001,8 @@ export const pl = {
   'app.collectMatches': 'Zbieraj mecze',
   'app.findPositions': 'Znajduj pozycje',
   'app.understandMoves': 'Rozumiej ruchy',
-  'app.matchLength': 'Mecz do {count} punktów',
+  'app.matchLength':
+    'Mecz do {count, plural, one {# punktu} few {# punktów} many {# punktów}}',
   'app.gameMove': 'Partia {game} · Ruch {move}',
   'app.toMove': 'Ruch gracza {player}',
   'app.previousMove': 'Poprzedni ruch',
@@ -1013,7 +1022,8 @@ export const pl = {
   'app.footer': 'Ucz się z każdej pozycji.',
   'app.engineVersion': 'Silnik bez interfejsu / v0.1',
   'app.importDuplicate': 'Ten plik jest już w twojej bibliotece.',
-  'app.importCount': 'Zaimportowano {count} pozycji.',
+  'app.importCount':
+    'Zaimportowano {count, plural, one {# pozycję} few {# pozycje} many {# pozycji}}.',
   'analysis.depth': 'Głębokość wyszukiwania',
   'analysis.fast': '0-ply · szybko',
   'analysis.accurate': '2-ply · dokładniej',
@@ -1051,7 +1061,7 @@ export const pl = {
   'analysis.diceEmptyDescription':
     'Dla tej pozycji nie zapisano equity rzutów.',
   'analysis.observedMethod':
-    '{count} zapisanych rzutów w tym meczu. Częstości nie są analizą equity; rzuty otwarcia nie zawierają dubli.',
+    '{count, plural, one {# zapisany rzut} few {# zapisane rzuty} many {# zapisanych rzutów}} w tym meczu. Częstości nie są analizą equity; rzuty otwarcia nie zawierają dubli.',
   'analysis.selectMatch': 'Wybierz mecz.',
   'matchAnalysis.label': 'Pełna analiza meczu',
   'matchAnalysis.eyebrow': 'ZROZUM CAŁY MECZ',
@@ -1117,7 +1127,8 @@ export const it = {
   'games.choose': 'Seleziona game',
   'games.previous': 'Game precedente',
   'games.next': 'Game successivo',
-  'games.option': 'Game {game} · {white}:{black} · {moves} mosse',
+  'games.option':
+    'Game {game} · {white}:{black} · {moves, plural, one {# mossa} other {# mosse}}',
   'games.heading': 'Singolo game',
   'games.loading': 'Caricamento dei game…',
   'games.retry': 'Ricarica game',
@@ -1134,7 +1145,7 @@ export const it = {
   'gameAnalysis.scopeMatch': 'Match intero',
   'analysis.observedGame': 'Tiri del game',
   'analysis.observedGameDescription':
-    '{count} tiri registrati nel game {game}. Le frequenze non sono un’analisi dell’equity.',
+    '{count, plural, one {# tiro registrato} other {# tiri registrati}} nel game {game}. Le frequenze non sono un’analisi dell’equity.',
   'games.addErrors': 'Aggiungi errori del game {game}',
   'board.assetError':
     'Impossibile caricare l’immagine del tema. Viene mostrato il tavoliere predefinito.',
@@ -1151,8 +1162,7 @@ export const it = {
   'common.checker': 'Pedine',
   'common.cube': 'Cubo',
   'common.played': 'Giocata',
-  'board.points': '{count} punti',
-  'board.point': '{count} punto',
+  'board.points': '{count, plural, one {# punto} other {# punti}}',
   'board.pipsOff': '{pips} pip · {off} fuori',
   'board.label':
     'Posizione di backgammon. Tocca a {player}, dadi {first} e {second}. Bianco {white} pip, nero {black} pip.',
@@ -1174,7 +1184,7 @@ export const it = {
   'app.searchMin': 'Inserisci almeno 3 caratteri.',
   'app.matches': 'Partite',
   'app.searching': 'Ricerca …',
-  'app.moves': '{count} mosse',
+  'app.moves': '{count, plural, one {# mossa} other {# mosse}}',
   'app.noMatches': 'Nessuna partita corrispondente.',
   'app.libraryEmpty': 'La tua prossima scoperta inizia con una partita.',
   'app.moreMatches': 'Carica altre partite',
@@ -1215,7 +1225,7 @@ export const it = {
   'app.collectMatches': 'Raccogli partite',
   'app.findPositions': 'Trova posizioni',
   'app.understandMoves': 'Comprendi le mosse',
-  'app.matchLength': 'Match a {count} punti',
+  'app.matchLength': 'Match a {count, plural, one {# punto} other {# punti}}',
   'app.gameMove': 'Game {game} · Mossa {move}',
   'app.toMove': 'Tocca a {player}',
   'app.previousMove': 'Mossa precedente',
@@ -1235,7 +1245,8 @@ export const it = {
   'app.footer': 'Impara da ogni posizione.',
   'app.engineVersion': 'Motore senza interfaccia / v0.1',
   'app.importDuplicate': 'Questo file è già nella tua libreria.',
-  'app.importCount': '{count} posizioni importate.',
+  'app.importCount':
+    '{count, plural, one {# posizione importata.} other {# posizioni importate.}}',
   'analysis.depth': 'Profondità di ricerca',
   'analysis.fast': '0-ply · veloce',
   'analysis.accurate': '2-ply · più preciso',
@@ -1274,7 +1285,7 @@ export const it = {
   'analysis.diceEmptyDescription':
     'Non è stata salvata l’equity dei dadi per questa posizione.',
   'analysis.observedMethod':
-    '{count} lanci registrati in questa partita. Le frequenze non sono un’analisi dell’equity; i lanci iniziali non contengono doppi.',
+    '{count, plural, one {# lancio registrato} other {# lanci registrati}} in questa partita. Le frequenze non sono un’analisi dell’equity; i lanci iniziali non contengono doppi.',
   'analysis.selectMatch': 'Seleziona una partita.',
   'matchAnalysis.label': 'Analisi completa della partita',
   'matchAnalysis.eyebrow': 'COMPRENDI L’INTERA PARTITA',
@@ -1303,7 +1314,8 @@ export const it = {
   'matchAnalysis.decisionsCount': '{moves} mosse · {cube} decisioni sul cubo',
   'matchAnalysis.severityCount':
     '{doubtful} dubbie · {bad} errori · {veryBad} errori gravi',
-  'matchAnalysis.unavailableCount': ' · {count} non valutate',
+  'matchAnalysis.unavailableCount':
+    ' · {count, plural, one {# non valutata} other {# non valutate}}',
   'matchAnalysis.method':
     '{analyzed} / {total} mosse valutate. La perdita di equity è la differenza dalla decisione migliore, non il PR. Dubbia da {doubtful} · errore da {bad} · errore grave da {veryBad}.',
   'matchAnalysis.errorsOnly': 'Solo imprecisioni (≥ {threshold})',

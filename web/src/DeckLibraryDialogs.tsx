@@ -210,9 +210,8 @@ export function CardBatchDialog({
         .sort((a, b) => a.name.localeCompare(b.name, locale))
     : [];
   const target = options.find((deck) => deck.id === destination);
-  const count = formatNumber(
-    action.mode === 'delete' ? action.cards.length : action.ids.length,
-  );
+  const count =
+    action.mode === 'delete' ? action.cards.length : action.ids.length;
   const title = t(batchLabel[action.mode], { count });
   async function submit() {
     if ((needsTarget && !target) || busy || stale) return;
@@ -237,7 +236,7 @@ export function CardBatchDialog({
           const result = await moveDeckCards(action.source, target, action.ids);
           completed(
             t('moved', {
-              count: formatNumber(result.moved),
+              count: result.moved,
               name: target.name,
             }),
           );
@@ -337,7 +336,7 @@ export function DuplicateCardsDialog({
   const t = useDeckLibraryText();
   const learning = useLearningText();
   const management = useDeckManagementText();
-  const { formatError, formatNumber, t: ui } = useI18n();
+  const { formatError, t: ui } = useI18n();
   const [writing, setWriting] = useState(false);
   const [revision, setRevision] = useState(0);
   const [writeError, setError] = useState<unknown>();
@@ -416,7 +415,7 @@ export function DuplicateCardsDialog({
             {'deck' in action
               ? t('removeHelp', { name: action.deck.name })
               : t('deleteHelp', {
-                  count: formatNumber(action.card.card.review_count),
+                  count: action.card.card.review_count,
                 })}
           </p>
           {'keep' in action && (
@@ -487,9 +486,7 @@ export function DuplicateCardsDialog({
                 )}
                 {key && (
                   <div className="learning-controls">
-                    <span>
-                      {t('exact', { count: formatNumber(entry.copies) })}
-                    </span>
+                    <span>{t('exact', { count: entry.copies })}</span>
                     {!!peers.length && (
                       <>
                         <label>

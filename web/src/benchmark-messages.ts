@@ -46,7 +46,7 @@ const en = {
   total: 'Total analysis time',
   average: 'Ø analysis time / move',
   status: 'Status',
-  cpus: '{count} logical CPUs',
+  cpus: '{count, plural, one {# logical CPU} other {# logical CPUs}}',
   open: 'Open benchmark',
 };
 type Key = keyof typeof en;
@@ -96,7 +96,7 @@ const de: Record<Key, string> = {
   total: 'Gesamtanalysezeit',
   average: 'Ø Analysezeit / Zug',
   status: 'Status',
-  cpus: '{count} logische CPUs',
+  cpus: '{count, plural, one {# logische CPU} other {# logische CPUs}}',
   open: 'Benchmark öffnen',
 };
 const base: Record<Locale, Record<Key, string>> = {
@@ -149,7 +149,7 @@ const base: Record<Locale, Record<Key, string>> = {
     total: 'Tiempo total de análisis',
     average: 'Tiempo medio de análisis por jugada',
     status: 'Estado',
-    cpus: '{count} CPU lógicas',
+    cpus: '{count, plural, one {# CPU lógica} other {# CPU lógicas}}',
     open: 'Abrir benchmark',
   },
   fr: {
@@ -199,7 +199,7 @@ const base: Record<Locale, Record<Key, string>> = {
     total: 'Temps total d’analyse',
     average: 'Temps moyen d’analyse par coup',
     status: 'État',
-    cpus: '{count} processeurs logiques',
+    cpus: '{count, plural, one {# processeur logique} other {# processeurs logiques}}',
     open: 'Ouvrir le benchmark',
   },
   it: {
@@ -249,7 +249,7 @@ const base: Record<Locale, Record<Key, string>> = {
     total: 'Tempo totale di analisi',
     average: 'Tempo medio di analisi per mossa',
     status: 'Stato',
-    cpus: '{count} CPU logiche',
+    cpus: '{count, plural, one {# CPU logica} other {# CPU logiche}}',
     open: 'Apri benchmark',
   },
   pl: {
@@ -297,7 +297,7 @@ const base: Record<Locale, Record<Key, string>> = {
     total: 'Całkowity czas analizy',
     average: 'Średni czas analizy ruchu',
     status: 'Stan',
-    cpus: '{count} procesorów logicznych',
+    cpus: '{count, plural, one {# procesor logiczny} few {# procesory logiczne} many {# procesorów logicznych}}',
     open: 'Otwórz benchmark',
   },
 };
@@ -309,7 +309,7 @@ const playEn = {
   playPly: 'Playing depth',
   details: 'Details',
   methodology: 'Reference and methodology',
-  threads: '{count} threads',
+  threads: '{count, plural, one {# thread} other {# threads}}',
   recordedEngineVersion: 'Engine version',
   rulesVersion: 'GNUbg rules version',
   description:
@@ -333,7 +333,7 @@ const play: Record<Locale, Record<PlayKey, string>> = {
     playPly: 'Spieltiefe',
     details: 'Details',
     methodology: 'Referenz und Methodik',
-    threads: '{count} Threads',
+    threads: '{count, plural, one {# Thread} other {# Threads}}',
     recordedEngineVersion: 'Engine-Version',
     rulesVersion: 'Version der GNUbg-Regel-Engine',
     description:
@@ -354,7 +354,7 @@ const play: Record<Locale, Record<PlayKey, string>> = {
     playPly: 'Profundidad de juego',
     details: 'Detalles',
     methodology: 'Referencia y metodología',
-    threads: '{count} hilos',
+    threads: '{count, plural, one {# hilo} other {# hilos}}',
     recordedEngineVersion: 'Versión del motor',
     rulesVersion: 'Versión de las reglas de GNUbg',
     description:
@@ -375,7 +375,7 @@ const play: Record<Locale, Record<PlayKey, string>> = {
     playPly: 'Profondeur de jeu',
     details: 'Détails',
     methodology: 'Référence et méthode',
-    threads: '{count} threads',
+    threads: '{count, plural, one {# thread} other {# threads}}',
     recordedEngineVersion: 'Version du moteur',
     rulesVersion: 'Version des règles GNUbg',
     description:
@@ -396,7 +396,7 @@ const play: Record<Locale, Record<PlayKey, string>> = {
     playPly: 'Profondità di gioco',
     details: 'Dettagli',
     methodology: 'Riferimento e metodologia',
-    threads: '{count} thread',
+    threads: '{count, plural, one {# thread} other {# thread}}',
     recordedEngineVersion: 'Versione del motore',
     rulesVersion: 'Versione delle regole GNUbg',
     description:
@@ -417,7 +417,7 @@ const play: Record<Locale, Record<PlayKey, string>> = {
     playPly: 'Głębokość gry',
     details: 'Szczegóły',
     methodology: 'Odniesienie i metodologia',
-    threads: '{count} wątki',
+    threads: '{count, plural, one {# wątek} few {# wątki} many {# wątków}}',
     recordedEngineVersion: 'Wersja silnika',
     rulesVersion: 'Wersja reguł GNUbg',
     description:
@@ -439,7 +439,11 @@ export const benchmarkText = (
   key: Key | PlayKey,
   values?: TranslationParams,
 ) =>
-  interpolate(isPlayKey(key) ? play[locale][key] : base[locale][key], values);
+  interpolate(
+    isPlayKey(key) ? play[locale][key] : base[locale][key],
+    values,
+    locale,
+  );
 export function useBenchmarkText() {
   const { locale } = useI18n();
   return (key: Key | PlayKey, values?: TranslationParams) =>

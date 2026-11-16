@@ -156,7 +156,7 @@ function PipPractice({
               {uiT(index === 0 ? 'common.white' : 'common.black')} ·{' '}
               {t(result.correct[index] ? 'correct' : 'incorrect')} ·{' '}
               {t('barPips', {
-                total: formatNumber(count),
+                total: count,
                 bar: formatNumber(result.bar_pips[index]),
               })}
             </li>
@@ -281,7 +281,7 @@ function TimedPreview({
 }) {
   const t = useCardPracticeText();
   const learning = useLearningText();
-  const { formatError, formatNumber, formatDecision } = useI18n();
+  const { formatError, formatDecision } = useI18n();
   const [questionTime, setQuestionTime] = useState('12');
   const [answerTime, setAnswerTime] = useState('8');
   const [playing, setPlaying] = useState(false);
@@ -360,7 +360,7 @@ function TimedPreview({
       </div>
       {!!error && <p role="alert">{formatError(error)}</p>}
       <p role="status">
-        {t('previewSeen', { count: formatNumber(index + Number(!!answer)) })}
+        {t('previewSeen', { count: index + Number(!!answer) })}
       </p>
       {card && !card.position && (
         <AnkiCardFace

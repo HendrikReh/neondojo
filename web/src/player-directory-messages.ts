@@ -37,7 +37,7 @@ const en = {
   noMatches: 'No matches found.',
   edit: 'Edit profile',
   searchHint: 'Search name or alias',
-  playerCount: '{count} players',
+  playerCount: '{count, plural, one {# player} other {# players}}',
   counts: '{matches} matches · {games} games',
   matchedAlias: 'Matched alias',
   coverage: '{rated} of {total} matches rated',
@@ -97,7 +97,7 @@ const words: Record<Locale, Record<Key, string>> = {
     noMatches: 'Keine Matches gefunden.',
     edit: 'Profil bearbeiten',
     searchHint: 'Name oder Alias suchen',
-    playerCount: '{count} Spieler',
+    playerCount: '{count, plural, one {# Spieler} other {# Spieler}}',
     counts: '{matches} Matches · {games} Spiele',
     matchedAlias: 'Gefundener Alias',
     coverage: '{rated} von {total} Matches gewertet',
@@ -154,7 +154,7 @@ const words: Record<Locale, Record<Key, string>> = {
     noMatches: 'No se encontraron encuentros.',
     edit: 'Editar perfil',
     searchHint: 'Buscar nombre o alias',
-    playerCount: '{count} jugadores',
+    playerCount: '{count, plural, one {# jugador} other {# jugadores}}',
     counts: '{matches} encuentros · {games} partidas',
     matchedAlias: 'Alias encontrado',
     coverage: '{rated} de {total} encuentros evaluados',
@@ -211,7 +211,7 @@ const words: Record<Locale, Record<Key, string>> = {
     noMatches: 'Aucun match trouvé.',
     edit: 'Modifier le profil',
     searchHint: 'Rechercher par nom ou alias',
-    playerCount: '{count} joueurs',
+    playerCount: '{count, plural, one {# joueur} other {# joueurs}}',
     counts: '{matches} matchs · {games} parties',
     matchedAlias: 'Alias trouvé',
     coverage: '{rated} matchs évalués sur {total}',
@@ -268,7 +268,7 @@ const words: Record<Locale, Record<Key, string>> = {
     noMatches: 'Nessun incontro trovato.',
     edit: 'Modifica profilo',
     searchHint: 'Cerca per nome o alias',
-    playerCount: '{count} giocatori',
+    playerCount: '{count, plural, one {# giocatore} other {# giocatori}}',
     counts: '{matches} incontri · {games} partite',
     matchedAlias: 'Alias trovato',
     coverage: '{rated} incontri valutati su {total}',
@@ -325,7 +325,8 @@ const words: Record<Locale, Record<Key, string>> = {
     noMatches: 'Nie znaleziono meczów.',
     edit: 'Edytuj profil',
     searchHint: 'Szukaj nazwy lub aliasu',
-    playerCount: 'Gracze: {count}',
+    playerCount:
+      '{count, plural, one {# gracz} few {# gracze} many {# graczy}}',
     counts: 'Mecze: {matches} · Partie: {games}',
     matchedAlias: 'Znaleziony alias',
     coverage: 'Oceniono {rated} z {total} meczów',
@@ -351,5 +352,5 @@ const words: Record<Locale, Record<Key, string>> = {
 export function usePlayerText() {
   const { locale } = useI18n();
   return (key: Key, params?: TranslationParams) =>
-    interpolate(words[locale][key], params);
+    interpolate(words[locale][key], params, locale);
 }

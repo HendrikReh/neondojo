@@ -31,7 +31,7 @@ export default function OpeningBookDialog({
   const configuration = useOptionalConfiguration();
   const profileT = useProfileText();
   const l = useSourceText(),
-    { locale, formatError, formatNumber } = useI18n();
+    { locale, formatError } = useI18n();
   const [xgChecked, setXgChecked] = useState<XgBookStatus>();
   const [saved, setSaved] = useState<BookSettings>(),
     [draft, setDraft] = useState<BookConfig>(),
@@ -231,7 +231,7 @@ export default function OpeningBookDialog({
               <strong>
                 BackgammonDB ·{' '}
                 {status.available
-                  ? l('available', { count: formatNumber(status.entries) })
+                  ? l('available', { count: status.entries })
                   : l('unavailable')}
               </strong>
               {status.available && (
@@ -281,7 +281,7 @@ export default function OpeningBookDialog({
             <div className="source-book-status">
               <strong>
                 {xgStatus.available
-                  ? l('xgReady', { count: formatNumber(xgStatus.entries) })
+                  ? l('xgReady', { count: xgStatus.entries })
                   : l('unavailable')}
               </strong>
               {xgStatus.book_version && (
