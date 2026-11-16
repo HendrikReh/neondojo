@@ -200,9 +200,9 @@ for (const theme of ['graphite', 'club', 'paper'])
             '13px',
           );
         if (id === 'positions')
-          await expect(panel.locator('.position-preview h2')).toHaveCSS(
+          await expect(panel.locator('.position-preview h3')).toHaveCSS(
             'font-size',
-            '14px',
+            '16px',
           );
         if (id === 'learning')
           await expect(panel.locator('.learning-card-preview h4')).toHaveCSS(

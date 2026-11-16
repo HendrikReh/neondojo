@@ -218,10 +218,10 @@ test('selected removal retains original notes and permits saving the same positi
     .click();
   await openCollection(page, f.database.id);
   await expect(rows).toHaveCount(1);
-  await pane.locator('.saved-position-preview-details summary').click();
-  await expect(pane.locator('.saved-position-preview-details')).toContainText(
-    'Keep this explanation',
-  );
+  // Notes show below the board without opening the source details.
+  await expect(
+    pane.locator('.position-preview .position-hit-notes'),
+  ).toContainText('Keep this explanation');
 });
 
 test('partial removal keeps failed rows selected and makes a retry possible', async ({

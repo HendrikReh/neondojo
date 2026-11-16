@@ -251,8 +251,17 @@ test('Mochy research includes both colors, excludes opponents, and saves header 
   await expect(pane.locator('.position-preview-played')).toContainText(
     records[1].notation,
   );
-  await pane.locator('.position-saved-searches summary').click();
   await pane
+    .getByRole('button', { name: 'Saved search actions', exact: true })
+    .click();
+  await pane
+    .getByRole('button', { name: 'Save current search…', exact: true })
+    .click();
+  const saveDialog = page.getByRole('dialog', {
+    name: 'Save search',
+    exact: true,
+  });
+  await saveDialog
     .getByLabel('Search name', { exact: true })
     .fill(`Mochy ${crypto.randomUUID()}`);
   const savedResponse = page.waitForResponse(
@@ -260,7 +269,7 @@ test('Mochy research includes both colors, excludes opponents, and saves header 
       new URL(r.url()).pathname === '/api/position-filters' &&
       r.request().method() === 'POST',
   );
-  await pane
+  await saveDialog
     .getByRole('button', { name: 'Save as new search', exact: true })
     .click();
   const saved = await (await savedResponse).json();
@@ -274,11 +283,9 @@ test('Mochy research includes both colors, excludes opponents, and saves header 
   });
   await page.reload();
   await page.getByRole('tab', { name: 'Positions', exact: true }).click();
-  await pane.locator('.position-saved-searches summary').click();
   await pane
     .getByRole('combobox', { name: 'Choose saved search', exact: true })
     .selectOption(saved.id);
-  await pane.getByRole('button', { name: 'Load search', exact: true }).click();
   await expect(rows.locator('.position-opponent')).toHaveText([
     'Opponent B',
     'Opponent A',

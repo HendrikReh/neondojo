@@ -576,18 +576,10 @@ test('real renamed decks update position membership and Anki; deleting one share
   await expect(positions.locator('.position-preview-decks')).toContainText(
     renamed,
   );
-  await expect(
-    positions
-      .getByLabel('Choose deck', { exact: true })
-      .locator(`option[value="${decks[0].id}"]`),
-  ).toHaveText(renamed);
-  await positions
+  await page.getByRole('tab', { name: 'Study', exact: true }).click();
+  await study
     .getByLabel('Choose deck', { exact: true })
     .selectOption(decks[0].id);
-  // Exercise the externally requested-deck token before deleting its target.
-  await positions
-    .getByRole('button', { name: 'Study this deck', exact: true })
-    .click();
   await expect(study.getByLabel('Choose deck', { exact: true })).toHaveValue(
     decks[0].id,
   );

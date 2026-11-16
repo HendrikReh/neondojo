@@ -1,3 +1,4 @@
+import type { Locator, Page } from '@playwright/test';
 import { openPositionCalculation } from './analysis-controls';
 import { expect, test } from './test';
 import {
@@ -213,6 +214,21 @@ test('default position columns fit beside the board and optional columns persist
   ).toHaveCount(1);
 });
 
+async function savedSearchAction(pane: Locator, name: string) {
+  await pane
+    .getByRole('button', { name: 'Saved search actions', exact: true })
+    .click();
+  await pane.getByRole('button', { name, exact: true }).click();
+}
+
+async function saveSearchDialog(page: Page, pane: Locator) {
+  await savedSearchAction(pane, 'Save current search…');
+  return page.getByRole('dialog', {
+    name: 'Save search',
+    exact: true,
+  });
+}
+
 test('paging previews the first result and keeps checkbox selections across pages', async ({
   page,
 }) => {
@@ -319,7 +335,9 @@ test('transfer checks positions in selection order', async ({ page }) => {
   const second = await rows.nth(1).getAttribute('data-position-id');
   await rows.nth(1).getByRole('checkbox').check();
   await rows.nth(0).getByRole('checkbox').check();
-  const readiness = page.waitForRequest('**/api/position-browser/analysis-readiness');
+  const readiness = page.waitForRequest(
+    '**/api/position-browser/analysis-readiness',
+  );
   await pane.getByRole('button', { name: 'Add to deck', exact: true }).click();
   expect((await readiness).postDataJSON()).toEqual({
     position_ids: [second, first],
@@ -490,34 +508,35 @@ test('position notes filter exact decisions, search definitions persist, and pag
   await expect(rows.first()).toContainText(
     'Position browser needle 50%_literal',
   );
-  await pane.locator('.position-saved-searches summary').click();
   const name = `Needle ${crypto.randomUUID()}`;
-  await pane.getByLabel('Search name', { exact: true }).fill(name);
+  let saveDialog = await saveSearchDialog(page, pane);
+  await saveDialog.getByLabel('Search name', { exact: true }).fill(name);
   const savedResponse = page.waitForResponse(
     (r) =>
       new URL(r.url()).pathname === '/api/position-filters' &&
       r.request().method() === 'POST',
   );
-  await pane
+  await saveDialog
     .getByRole('button', { name: 'Save as new search', exact: true })
     .click();
   const saved = await (await savedResponse).json();
   expect(saved.definition.tag).toBe('only-here');
+  await expect(saveDialog).toHaveCount(0);
   const renamed = name + ' renamed';
-  await pane.getByLabel('Search name', { exact: true }).fill(renamed);
-  await pane
+  saveDialog = await saveSearchDialog(page, pane);
+  await saveDialog.getByLabel('Search name', { exact: true }).fill(renamed);
+  await saveDialog
     .getByRole('button', { name: 'Update / rename', exact: true })
     .click();
+  await expect(saveDialog).toHaveCount(0);
   await expect(
     pane.getByRole('combobox', { name: 'Choose saved search', exact: true }),
   ).toContainText(renamed);
   await page.reload();
   await page.getByRole('tab', { name: 'Positions', exact: true }).click();
-  await pane.locator('.position-saved-searches summary').click();
   await pane
     .getByRole('combobox', { name: 'Choose saved search', exact: true })
     .selectOption(saved.id);
-  await pane.getByRole('button', { name: 'Load search', exact: true }).click();
   await expect(
     pane.getByRole('combobox', { name: 'Database', exact: true }),
   ).toHaveValue(f.database.id);
@@ -549,9 +568,7 @@ test('position notes filter exact decisions, search definitions persist, and pag
     f.positions[1].position_id,
   );
   await page.getByRole('tab', { name: 'Positions', exact: true }).click();
-  await pane
-    .getByRole('button', { name: 'Delete search', exact: true })
-    .click();
+  await savedSearchAction(pane, 'Delete search');
   await expect(
     pane.getByRole('combobox', { name: 'Choose saved search', exact: true }),
   ).not.toContainText(renamed);
@@ -610,16 +627,21 @@ test('found positions flow through real analysis, partial card transfer, Anki ex
   await expect(
     pane.locator('[data-transfer-status="analysis_required"]'),
   ).toHaveCount(1);
-  const download = page.waitForEvent('download');
-  await pane
-    .getByRole('button', { name: 'Download entire deck as Anki', exact: true })
-    .click();
-  const file = await download;
-  expect(file.suggestedFilename()).toMatch(/\.apkg$/);
-  const path = await file.path();
-  expect(path).toBeTruthy();
-  const { readFileSync } = await import('node:fs');
-  expect(readFileSync(path!).subarray(0, 2).toString()).toBe('PK');
+  // Positions no longer exports decks itself; the new deck still exports.
+  const decks: { id: string; name: string }[] = await (
+    await page.request.get('/api/decks')
+  ).json();
+  const exported = await page.request.get(
+    `/api/decks/${decks.find((deck) => deck.name === deckName)!.id}/export.apkg?locale=en`,
+  );
+  expect(exported.ok()).toBe(true);
+  expect((await exported.body()).subarray(0, 2).toString()).toBe('PK');
+  await expect(
+    pane.getByRole('button', {
+      name: 'Download entire deck as Anki',
+      exact: true,
+    }),
+  ).toHaveCount(0);
   // Opening a requested deck must switch away from a previously selected report area.
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
   await page.getByRole('tab', { name: 'Reports', exact: true }).click();
@@ -693,11 +715,9 @@ test('a delayed old search cannot replace a newly loaded saved search', async ({
   await page.getByRole('tab', { name: 'Positions', exact: true }).click();
   await waiting;
   const pane = page.getByRole('tabpanel', { name: 'Positions', exact: true });
-  await pane.locator('.position-saved-searches summary').click();
   await pane
     .getByRole('combobox', { name: 'Choose saved search', exact: true })
     .selectOption(saved.id);
-  await pane.getByRole('button', { name: 'Load search', exact: true }).click();
   await expect(pane.locator('.position-table tbody tr')).toHaveCount(2);
   release();
   await fulfilled;
@@ -732,11 +752,9 @@ test('saved-search conflicts retain drafts and deleted database scopes never bro
     })
   ).json();
   const pane = await openBrowser(page, f.database.id);
-  await pane.locator('.position-saved-searches summary').click();
   await pane
     .getByRole('combobox', { name: 'Choose saved search', exact: true })
     .selectOption(saved.id);
-  await pane.getByRole('button', { name: 'Load search', exact: true }).click();
   expect(
     (
       await page.request.put(`/api/position-filters/${saved.id}`, {
@@ -748,16 +766,17 @@ test('saved-search conflicts retain drafts and deleted database scopes never bro
       })
     ).ok(),
   ).toBe(true);
-  await pane
+  let saveDialog = await saveSearchDialog(page, pane);
+  await saveDialog
     .getByLabel('Search name', { exact: true })
     .fill('My retained draft');
-  await pane
+  await saveDialog
     .getByRole('button', { name: 'Update / rename', exact: true })
     .click();
-  await expect(pane.getByRole('alert')).toContainText('409');
-  await expect(pane.getByLabel('Search name', { exact: true })).toHaveValue(
-    'My retained draft',
-  );
+  await expect(saveDialog.getByRole('alert')).toContainText('409');
+  await expect(
+    saveDialog.getByLabel('Search name', { exact: true }),
+  ).toHaveValue('My retained draft');
   expect(
     (
       await page.request.delete(
@@ -767,11 +786,9 @@ test('saved-search conflicts retain drafts and deleted database scopes never bro
   ).toBe(true);
   await page.reload();
   await page.getByRole('tab', { name: 'Positions', exact: true }).click();
-  await pane.locator('.position-saved-searches summary').click();
   await pane
     .getByRole('combobox', { name: 'Choose saved search', exact: true })
     .selectOption(saved.id);
-  await pane.getByRole('button', { name: 'Load search', exact: true }).click();
   await expect(
     pane.getByRole('combobox', { name: 'Database', exact: true }),
   ).toHaveValue(f.database.id);
@@ -780,9 +797,11 @@ test('saved-search conflicts retain drafts and deleted database scopes never bro
   await pane
     .getByRole('combobox', { name: 'Database', exact: true })
     .selectOption(replacement.database.id);
-  await pane
+  saveDialog = await saveSearchDialog(page, pane);
+  await saveDialog
     .getByRole('button', { name: 'Update / rename', exact: true })
     .click();
+  await expect(saveDialog).toHaveCount(0);
   await pane
     .getByRole('button', { name: 'Search positions', exact: true })
     .click();

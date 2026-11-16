@@ -7,10 +7,16 @@ import { usePositionText } from './position-browser-messages';
 export function SearchResultPreview({
   title,
   hint,
+  hideTitle,
   className,
   children,
   ...panel
-}: ComponentPropsWithoutRef<'aside'> & { title: string; hint: string }) {
+}: ComponentPropsWithoutRef<'aside'> & {
+  title: string;
+  hint: string;
+  /** The panel keeps its accessible name without a visible heading. */
+  hideTitle?: boolean;
+}) {
   return (
     <aside
       {...panel}
@@ -19,7 +25,7 @@ export function SearchResultPreview({
       }
       aria-label={title}
     >
-      <h2>{title}</h2>
+      {!hideTitle && <h2>{title}</h2>}
       {Children.toArray(children).length ? children : <p>{hint}</p>}
     </aside>
   );
@@ -71,10 +77,13 @@ export function SearchPreviewBoard({
 export function SearchPreviewDetails({
   positionId,
   decks,
+  hideDecks,
   children,
 }: {
   positionId: string;
   decks?: string;
+  /** For callers that show the decks outside the details. */
+  hideDecks?: boolean;
   children?: ReactNode;
 }) {
   const t = usePositionText();
@@ -87,9 +96,16 @@ export function SearchPreviewDetails({
         </div>
         {children}
       </dl>
-      <p className="position-preview-decks">
-        <strong>{t('decks')}:</strong> {decks || t('noDecks')}
-      </p>
+      {!hideDecks && <SearchPreviewDecks decks={decks} />}
     </>
+  );
+}
+
+export function SearchPreviewDecks({ decks }: { decks?: string }) {
+  const t = usePositionText();
+  return (
+    <p className="position-preview-decks">
+      <strong>{t('decks')}:</strong> {decks || t('noDecks')}
+    </p>
   );
 }

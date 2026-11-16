@@ -11,6 +11,7 @@ import {
 } from './SearchResultList';
 import {
   SearchPreviewBoard,
+  SearchPreviewDecks,
   SearchPreviewDetails,
   SearchResultPreview,
 } from './SearchResultPreview';
@@ -486,6 +487,7 @@ export function PositionBrowserPreview({
       className="saved-position-preview"
       title={p('preview')}
       hint={p('previewHint')}
+      hideTitle
     >
       {hit && (
         <>
@@ -497,20 +499,23 @@ export function PositionBrowserPreview({
                 {p('ply', { number: hit.position.ply })}
               </p>
             </div>
-            <ActionButton
-              icon="analysis"
-              label={p('openAnalysis')}
-              className="primary"
-              onClick={() => onOpen(hit.position.id)}
-            />
+            <div className="saved-position-preview-actions">
+              {onFindSimilar && (
+                <ActionButton
+                  icon="similar"
+                  label={p('findSimilar')}
+                  compact
+                  onClick={() => onFindSimilar(hit.position, hit.display_name)}
+                />
+              )}
+              <ActionButton
+                icon="analysis"
+                label={p('openAnalysis')}
+                className="primary"
+                onClick={() => onOpen(hit.position.id)}
+              />
+            </div>
           </div>
-          {onFindSimilar && (
-            <ActionButton
-              icon="similar"
-              label={p('findSimilar')}
-              onClick={() => onFindSimilar(hit.position, hit.display_name)}
-            />
-          )}
           <SearchPreviewBoard
             position={hit.position}
             white={hit.match_info.white}
@@ -531,11 +536,18 @@ export function PositionBrowserPreview({
               {formatDecision(hit.position.notation)}
             </p>
           )}
+          <p className="position-preview-loss">
+            <strong>{p('nativeError')}:</strong> <NativeError hit={hit} />
+          </p>
+          <SearchPreviewDecks
+            decks={hit.decks.map((deck) => deck.name).join(', ')}
+          />
+          <HitNotes hit={hit} />
           <details className="saved-position-preview-details">
             <summary>{p('previewDetails')}</summary>
             <SearchPreviewDetails
               positionId={hit.position.position_id}
-              decks={hit.decks.map((deck) => deck.name).join(', ')}
+              hideDecks
             >
               <div>
                 <dt>{p('database')}</dt>
@@ -564,10 +576,6 @@ export function PositionBrowserPreview({
                 </div>
               )}
             </SearchPreviewDetails>
-            <HitNotes hit={hit} />
-            <p>
-              {p('nativeError')}: <NativeError hit={hit} />
-            </p>
           </details>
           {!hit.card_ready && (
             <p className="position-analysis-needed">{p('needed')}</p>

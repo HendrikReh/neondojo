@@ -22,6 +22,7 @@ export default function SearchFilterForm<T extends Record<TextFilter, string>>({
   limitTextLength,
   savedSearches,
   scope,
+  searchRowExtra,
   beforeTextFilters,
   footer,
   compactToolbar,
@@ -37,6 +38,8 @@ export default function SearchFilterForm<T extends Record<TextFilter, string>>({
   limitTextLength?: boolean;
   savedSearches?: ReactNode;
   scope: ReactNode;
+  /** A further field in the search row, before the search button. */
+  searchRowExtra?: ReactNode;
   beforeTextFilters?: ReactNode;
   footer?: ReactNode;
   compactToolbar?: { appliedFilters: ReactNode; reset: boolean };
@@ -85,10 +88,17 @@ export default function SearchFilterForm<T extends Record<TextFilter, string>>({
           onSearch();
         }}
       >
-        <div className="position-search-row">
+        <div
+          className={
+            searchRowExtra
+              ? 'position-search-row position-search-row--extra'
+              : 'position-search-row'
+          }
+        >
           {textField('q')}
           {textField('player')}
           {scope}
+          {searchRowExtra}
           <ActionButton
             icon="search"
             label={searchLabel}

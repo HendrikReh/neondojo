@@ -76,6 +76,14 @@ previewed row and keeps its 44 px target. Removing positions or deleting a
 saved search offers **Undo**. **More filters** groups its fields by match,
 position, analysis, and tags and comments. Missing values show as a dash.
 
+The page title carries the result count. **Saved searches** is one field in
+the search row: choosing a search loads it, and the three-dot button beside it
+holds save, delete and reload. The preview has no heading of its own, grows
+with the window and shows equity loss, decks, tags and notes below the board;
+only the source details stay collapsed. Deck choice and Anki export belong to
+Study; after adding positions to a deck, **Study this deck** appears beside
+the transfer outcome.
+
 ## Keyboard shortcuts in practice and review
 
 Buttons that have a shortcut name it in their tooltip and expose it through

@@ -8,6 +8,7 @@ export function SearchResultList({
   busy,
   title,
   count,
+  hideHeading,
   preview,
   divider,
   children,
@@ -18,7 +19,9 @@ export function SearchResultList({
   busy?: boolean;
   /** Replaces the generic results heading. */
   title?: ReactNode;
-  count: ReactNode;
+  count?: ReactNode;
+  /** Keeps the results heading for assistive technology only. */
+  hideHeading?: boolean;
   preview: ReactNode;
   divider?: ReactNode;
   children: ReactNode;
@@ -41,10 +44,14 @@ export function SearchResultList({
         }
         aria-busy={busy}
       >
-        <div className="position-result-heading">
-          <h2>{title ?? t('results')}</h2>
-          {count}
-        </div>
+        {hideHeading ? (
+          <h2 className="visually-hidden">{title ?? t('results')}</h2>
+        ) : (
+          <div className="position-result-heading">
+            <h2>{title ?? t('results')}</h2>
+            {count}
+          </div>
+        )}
         {children}
       </div>
       {divider}

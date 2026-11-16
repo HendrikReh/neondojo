@@ -7,11 +7,11 @@ import ActionButton from './ActionButton';
 import SearchPagination from './SearchPagination';
 import { SearchResultList } from './SearchResultList';
 import { useSearchPages } from './useSearchPages';
+import { usePopoverPlacement } from './usePopoverPlacement';
 import {
   useCallback,
   useEffect,
   useId,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -184,40 +184,7 @@ export default function PositionBrowser({
   const selectionMenuButton = useRef<HTMLButtonElement>(null);
   const selectionMenu = useRef<HTMLDivElement>(null);
   const [selectionMenuOpen, setSelectionMenuOpen] = useState(false);
-  useLayoutEffect(() => {
-    const menu = selectionMenu.current;
-    const trigger = selectionMenuButton.current;
-    if (!selectionMenuOpen || !menu || !trigger) return;
-    const gap = 4;
-    const edge = 8;
-    const positionMenu = () => {
-      const bounds = trigger.getBoundingClientRect();
-      const below = bounds.bottom + gap;
-      const top =
-        below + menu.offsetHeight <= window.innerHeight - edge
-          ? below
-          : Math.max(edge, bounds.top - menu.offsetHeight - gap);
-      const left = Math.max(
-        edge,
-        Math.min(bounds.left, window.innerWidth - menu.offsetWidth - edge),
-      );
-      menu.style.top = `${top}px`;
-      menu.style.left = `${left}px`;
-      menu.style.visibility = 'visible';
-    };
-    positionMenu();
-    const observer = new ResizeObserver(positionMenu);
-    observer.observe(menu);
-    if (trigger.parentElement) observer.observe(trigger.parentElement);
-    window.addEventListener('resize', positionMenu);
-    window.addEventListener('scroll', positionMenu, true);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', positionMenu);
-      window.removeEventListener('scroll', positionMenu, true);
-      menu.style.removeProperty('visibility');
-    };
-  }, [selectionMenuOpen]);
+  usePopoverPlacement(selectionMenuOpen, selectionMenuButton, selectionMenu);
   const selectPage = useRef<HTMLInputElement>(null);
   function changeSelection(ids: string[], checked: boolean) {
     setSelectedHits((previous) => {
@@ -412,10 +379,8 @@ export default function PositionBrowser({
   return (
     <section className="position-browser" aria-label={p('title')}>
       <div className="position-browser-heading">
-        <div>
-          <h1>{p('title')}</h1>
-          <p>{p('description')}</p>
-        </div>
+        <h1>{p('title')}</h1>
+        <span>{p('resultCount', { count: results.total })}</span>
       </div>
       <PositionBrowserControls
         filters={draft}
@@ -473,7 +438,7 @@ export default function PositionBrowser({
         </p>
       )}
       <SearchResultList
-        count={<span>{p('resultCount', { count: results.total })}</span>}
+        hideHeading
         preview={
           <PositionBrowserPreview
             hit={activePreview}

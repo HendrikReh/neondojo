@@ -7,7 +7,9 @@ import SearchFilterForm, {
 } from './SearchFilterForm';
 import { useGamePlanText } from './game-plan-messages';
 import { mistakeGamePlans } from './recurring-mistakes-api';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { DeckDialog } from './DeckLibraryDialogs';
+import { usePopoverPlacement } from './usePopoverPlacement';
 import { useI18n } from './i18n';
 import type { Database } from './library-api';
 import {
@@ -182,6 +184,7 @@ export default function PositionBrowserControls({
       ))}
     </SearchFilterSelect>
   );
+  const saved = useSavedPositionSearches({ filters, onLoad, revision });
   const databaseMissing =
     !!filters.database_id &&
     !databases.some((database) => database.id === filters.database_id);
@@ -210,13 +213,8 @@ export default function PositionBrowserControls({
           />
         ),
       }}
-      savedSearches={
-        <SavedPositionSearches
-          filters={filters}
-          onLoad={onLoad}
-          revision={revision}
-        />
-      }
+      searchRowExtra={saved.field}
+      savedSearches={saved.status}
       scope={
         <SearchFilterSelect
           label={p(filterLabels.database_id)}
@@ -307,7 +305,7 @@ export default function PositionBrowserControls({
   );
 }
 
-function SavedPositionSearches({
+export function useSavedPositionSearches({
   filters,
   onLoad,
   revision,
@@ -327,7 +325,13 @@ function SavedPositionSearches({
     [invalid, setInvalid] = useState(false),
     [notice, setNotice] = useState<'saved' | 'deleted'>(),
     [deleted, setDeleted] = useState<SavedPositionFilter>(),
+    [saving, setSaving] = useState(false),
+    [menuOpen, setMenuOpen] = useState(false),
     [reload, setReload] = useState(0);
+  const menuId = useId(),
+    menu = useRef<HTMLDivElement>(null),
+    menuButton = useRef<HTMLButtonElement>(null);
+  usePopoverPlacement(menuOpen, menuButton, menu);
   const live = useRef(true),
     generation = useRef(0);
   useEffect(() => {
@@ -360,10 +364,12 @@ function SavedPositionSearches({
   } catch {
     changed = !!active;
   }
-  function load() {
-    const item = items.find((item) => item.id === chosen);
-    if (!item) return;
+  function choose(id: string) {
+    const item = items.find((item) => item.id === id);
+    setChosen(item?.id ?? '');
+    setNotice(undefined);
     setActive(item);
+    if (!item) return;
     setName(item.name);
     setError(undefined);
     setInvalid(false);
@@ -399,6 +405,7 @@ function SavedPositionSearches({
       setChosen(item.id);
       setName(item.name);
       setNotice('saved');
+      setSaving(false);
       setReload((value) => value + 1);
     } catch (error) {
       if (live.current && version === generation.current) setError(error);
@@ -454,92 +461,181 @@ function SavedPositionSearches({
       if (live.current && version === generation.current) setBusy(false);
     }
   }
-  return (
-    <details className="position-saved-searches">
-      <summary>{p('savedSearches')}</summary>
-      <div className="position-saved-controls">
-        <label>
-          <span>{p('chooseSearch')}</span>
-          <select
-            value={chosen}
-            disabled={busy}
-            onChange={(event) => {
-              setChosen(event.target.value);
-              setNotice(undefined);
-            }}
-          >
-            <option value="">—</option>
-            {items.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-                {item.database_missing ? ` · ${p('missing')}` : ''}
-              </option>
-            ))}
-          </select>
-        </label>
-        <ActionButton
-          icon="open"
-          label={p('loadSearch')}
-          compact
-          disabled={!chosen || busy}
-          onClick={load}
-        />
-        <label>
-          <span>{p('searchName')}</span>
-          <input
-            value={name}
-            maxLength={120}
-            disabled={busy}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </label>
+  function closeMenu() {
+    menu.current?.hidePopover();
+    menuButton.current?.focus();
+  }
+  const field = (
+    <div className="position-saved-field">
+      <label>
+        <span>{p('savedSearches')}</span>
+        <select
+          aria-label={p('chooseSearch')}
+          value={chosen}
+          disabled={busy}
+          onChange={(event) => choose(event.target.value)}
+        >
+          <option value="">—</option>
+          {items.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+              {item.database_missing ? ` · ${p('missing')}` : ''}
+            </option>
+          ))}
+        </select>
+      </label>
+      <ActionButton
+        ref={menuButton}
+        icon="more"
+        label={p('savedSearchActions')}
+        compact
+        type="button"
+        popoverTarget={menuId}
+        disabled={busy}
+      />
+      <div
+        id={menuId}
+        ref={menu}
+        popover="auto"
+        className="position-saved-menu"
+        onToggle={(event) => setMenuOpen(event.newState === 'open')}
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape') return;
+          event.preventDefault();
+          event.stopPropagation();
+          closeMenu();
+        }}
+      >
         <ActionButton
           icon="save"
-          label={p('saveNew')}
-          disabled={!name.trim() || busy}
-          onClick={() => void save(false)}
-        />
-        <ActionButton
-          icon="save"
-          label={p('updateSearch')}
-          compact
-          disabled={!active || !name.trim() || busy}
-          onClick={() => void save(true)}
+          label={p('saveCurrent')}
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            closeMenu();
+            setError(undefined);
+            setInvalid(false);
+            setSaving(true);
+          }}
         />
         <ActionButton
           icon="delete"
           label={p('deleteSearch')}
-          compact
+          type="button"
           disabled={!active || busy}
-          onClick={() => void remove()}
+          onClick={() => {
+            closeMenu();
+            void remove();
+          }}
         />
         <ActionButton
           icon="refresh"
           label={p('reload')}
-          compact
+          type="button"
           disabled={busy}
-          onClick={() => setReload((value) => value + 1)}
+          onClick={() => {
+            closeMenu();
+            setReload((value) => value + 1);
+          }}
         />
       </div>
-      {active?.database_missing && <p role="alert">{p('databaseMissing')}</p>}
-      {changed && <p className="position-unsaved">{p('dirty')}</p>}
+    </div>
+  );
+  const problem = (
+    <>
       {invalid && <p role="alert">{p('invalidFilter')}</p>}
       {!!error && (
         <p role="alert" className="error">
           {formatError(error)}
         </p>
       )}
-      {busy && <p role="status">{p('saving')}</p>}
-      {notice && (
-        <p role="status" className="position-undo-notice">
-          {p(notice)}
-          {notice === 'deleted' && deleted && (
-            <button type="button" onClick={() => void restore()}>
-              {p('undo')}
-            </button>
-          )}
-        </p>
-      )}
-    </details>
+    </>
   );
+  const messages = [
+    active?.database_missing && (
+      <p key="missing" role="alert">
+        {p('databaseMissing')}
+      </p>
+    ),
+    changed && (
+      <p key="dirty" className="position-unsaved">
+        {p('dirty')}
+      </p>
+    ),
+    !saving && (invalid || !!error) && <div key="problem">{problem}</div>,
+    busy && !saving && (
+      <p key="busy" role="status">
+        {p('saving')}
+      </p>
+    ),
+    notice && (
+      <p key="notice" role="status" className="position-undo-notice">
+        {p(notice)}
+        {notice === 'deleted' && deleted && (
+          <button type="button" onClick={() => void restore()}>
+            {p('undo')}
+          </button>
+        )}
+      </p>
+    ),
+  ].filter(Boolean);
+  const primary = active ? 'update' : 'new';
+  const status = (
+    <>
+      {messages.length > 0 && (
+        <div className="position-saved-status">{messages}</div>
+      )}
+      {saving && (
+        <DeckDialog
+          title={p('saveSearchTitle')}
+          close={() => setSaving(false)}
+          busy={busy}
+          className="position-save-search-dialog"
+          actions={
+            <>
+              <ActionButton
+                icon="save"
+                label={p('saveNew')}
+                type="button"
+                className={primary === 'new' ? 'primary' : undefined}
+                disabled={!name.trim() || busy}
+                onClick={() => void save(false)}
+              />
+              {active && (
+                <ActionButton
+                  icon="save"
+                  label={p('updateSearch')}
+                  type="button"
+                  className="primary"
+                  disabled={!name.trim() || busy}
+                  onClick={() => void save(true)}
+                />
+              )}
+            </>
+          }
+        >
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (name.trim() && !busy) void save(primary === 'update');
+            }}
+          >
+            <label>
+              <span>{p('searchName')}</span>
+              <input
+                autoFocus
+                value={name}
+                maxLength={120}
+                disabled={busy}
+                onChange={(event) => setName(event.target.value)}
+              />
+            </label>
+          </form>
+          {problem}
+          {busy && <p role="status">{p('saving')}</p>}
+        </DeckDialog>
+      )}
+    </>
+  );
+  return { field, status };
 }

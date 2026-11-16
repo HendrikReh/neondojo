@@ -1,8 +1,7 @@
 import ActionButton from './ActionButton';
-import { useEffect, useRef, useState, useId } from 'react';
+import { useEffect, useRef, useState, useId, type ReactNode } from 'react';
 import { request } from './api';
 import { useI18n } from './i18n';
-import { AppError } from './i18n-core';
 import { DeckDialog } from './DeckLibraryDialogs';
 import type { Deck } from './learning-api';
 import {
@@ -18,15 +17,21 @@ export function PositionTransferOutcomes({
   result,
   names,
   onOpen,
+  action,
 }: {
   result: PositionTransferResult;
   names: Record<string, string>;
   onOpen: (id: string) => void;
+  /** Follow-up for the deck that received the positions. */
+  action?: ReactNode;
 }) {
   const p = usePositionText();
   return (
     <div className="position-transfer-results" role="status">
-      <h3>{p('outcome')}</h3>
+      <div className="position-transfer-heading">
+        <h3>{p('outcome')}</h3>
+        {action}
+      </div>
       <ul>
         {result.items.map((item, index) => (
           <li
@@ -71,12 +76,11 @@ export default function PositionBrowserDecks({
 }) {
   const deckCountId = useId();
   const p = usePositionText(),
-    { locale, formatError } = useI18n();
+    { formatError } = useI18n();
   const [decks, setDecks] = useState<Deck[]>([]),
     [deckId, setDeckId] = useState(''),
     [name, setName] = useState(''),
     [busy, setBusy] = useState(false),
-    [exporting, setExporting] = useState(false),
     [deckError, setDeckError] = useState<unknown>(),
     [error, setError] = useState<unknown>(),
     [readiness, setReadiness] = useState<{
@@ -86,6 +90,7 @@ export default function PositionBrowserDecks({
     }>(),
     [readinessAttempt, setReadinessAttempt] = useState(0),
     [result, setResult] = useState<PositionTransferResult>(),
+    [resultDeck, setResultDeck] = useState<Deck>(),
     [resultNames, setResultNames] = useState<Record<string, string>>({});
   const live = useRef(true),
     generation = useRef(0),
@@ -171,7 +176,7 @@ export default function PositionBrowserDecks({
     }
   }
   async function add() {
-    if (!deckId || ready <= 0 || busy || exporting) return;
+    if (!deckId || ready <= 0 || busy) return;
     const version = ++generation.current,
       id = deckId,
       ids = [...selected];
@@ -190,6 +195,7 @@ export default function PositionBrowserDecks({
       const value = await transferPositions(id, ids);
       if (!live.current || version !== generation.current) return;
       setResult(value);
+      setResultDeck(decks.find((deck) => deck.id === id));
       setResultNames(names);
       setDecks((previous) =>
         previous.map((deck) =>
@@ -204,48 +210,7 @@ export default function PositionBrowserDecks({
       if (live.current && version === generation.current) setWorking(false);
     }
   }
-  async function download() {
-    if (!deckId) return;
-    setExporting(true);
-    setError(undefined);
-    try {
-      const response = await fetch(
-        `/api/decks/${deckId}/export.apkg?locale=${locale}`,
-      );
-      if (!response.ok) {
-        let diagnostic = await response.text();
-        try {
-          diagnostic = JSON.parse(diagnostic).error ?? diagnostic;
-        } catch {
-          /* Plain HTTP error. */
-        }
-        throw new AppError(
-          'error.request',
-          { status: String(response.status) },
-          diagnostic,
-        );
-      }
-      const blob = await response.blob();
-      if (!live.current) return;
-      const url = URL.createObjectURL(blob),
-        anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download =
-        /filename="([^"]+)"/.exec(
-          response.headers.get('Content-Disposition') ?? '',
-        )?.[1] ?? 'bgtutor.apkg';
-      document.body.append(anchor);
-      anchor.click();
-      anchor.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (error) {
-      if (live.current) setError(error);
-    } finally {
-      if (live.current) setExporting(false);
-    }
-  }
-  const chosenDeck = decks.find((deck) => deck.id === deckId),
-    hasCards = (chosenDeck?.card_count ?? 0) > 0;
+  const chosenDeck = decks.find((deck) => deck.id === deckId);
   const deckPicker = (countId: string) => (
     <label>
       <span>{p('chooseDeck')}</span>
@@ -253,7 +218,7 @@ export default function PositionBrowserDecks({
         aria-label={p('chooseDeck')}
         aria-describedby={countId}
         value={deckId}
-        disabled={busy || exporting}
+        disabled={busy}
         onChange={(event) => setDeckId(event.target.value)}
       >
         {!decks.length && <option value="">—</option>}
@@ -275,35 +240,25 @@ export default function PositionBrowserDecks({
           result={result}
           names={resultNames}
           onOpen={onOpen}
+          action={
+            resultDeck &&
+            result.total > 0 && (
+              <ActionButton
+                icon="cards"
+                label={p('study')}
+                tooltip={resultDeck.name}
+                disabled={busy}
+                onClick={() => onStudy(resultDeck.id)}
+              />
+            )
+          }
         />
       )}
-      <section className="position-deck-panel" aria-label={p('deck')}>
-        <h2>{p('deck')}</h2>
-        <div className="position-deck-controls">
-          {deckPicker(deckCountId)}
-          <ActionButton
-            icon="cards"
-            label={p('study')}
-            disabled={!hasCards || busy || exporting}
-            onClick={() => onStudy(deckId)}
-          />
-        </div>
-        <div className="position-deck-export">
-          <ActionButton
-            icon="export"
-            label={p(exporting ? 'exporting' : 'exportDeck')}
-            compact
-            disabled={!hasCards || busy || exporting}
-            onClick={() => void download()}
-          />
-          <small>{p('exportHint')}</small>
-        </div>
-        {(!!deckError || (!!error && !transferOpen)) && (
-          <p role="alert" className="error">
-            {formatError(deckError ?? error)}
-          </p>
-        )}
-      </section>
+      {!!deckError && !transferOpen && (
+        <p role="alert" className="error">
+          {formatError(deckError)}
+        </p>
+      )}
       {transferOpen && selected.size > 0 && (
         <DeckDialog
           title={p('addToDeck')}
@@ -324,7 +279,7 @@ export default function PositionBrowserDecks({
                 }
                 type="button"
                 className="primary"
-                disabled={!deckId || busy || exporting}
+                disabled={!deckId || busy}
                 onClick={() => void add()}
               />
             ) : (
