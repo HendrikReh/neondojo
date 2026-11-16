@@ -234,3 +234,48 @@ test('offers profiles with a similar name before a merge search is typed', async
   await merge.getByRole('searchbox').fill('Yaz');
   await expect(merge.getByText('Ähnliche Namen')).toBeHidden();
 });
+
+test('sorts the player list from its column headings', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
+  const orders: string[] = [];
+  await page.route('**/api/players?*', async (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    const order = `${params.get('sort')} ${params.get('direction')} ${params.get('page')}`;
+    if (orders.at(-1) !== order) orders.push(order);
+    await route.fulfill({
+      json: {
+        items: [
+          {
+            id: 'player-1',
+            display_name: `Sortiert nach ${params.get('sort')}`,
+            match_count: 3,
+            game_count: 7,
+          },
+        ],
+        next_cursor: null,
+        total: 120,
+      },
+    });
+  });
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Spielerdatenbank' }).click();
+  const list = page.locator('.player-list');
+  const column = (name: string) => list.getByRole('columnheader', { name });
+  await expect(column('Spieler')).toHaveAttribute('aria-sort', 'ascending');
+  await list.getByRole('button', { name: 'Seite 2' }).click();
+  await list.getByRole('button', { name: 'Nach Matches sortieren' }).click();
+  await expect(list.getByText('Sortiert nach matches')).toBeVisible();
+  await expect(column('Matches')).toHaveAttribute('aria-sort', 'descending');
+  await expect(column('Spieler')).toHaveAttribute('aria-sort', 'none');
+  await list.getByRole('button', { name: 'Nach Matches sortieren' }).click();
+  await expect(column('Matches')).toHaveAttribute('aria-sort', 'ascending');
+  await list.getByRole('button', { name: 'Nach Spieler sortieren' }).click();
+  await expect(column('Spieler')).toHaveAttribute('aria-sort', 'ascending');
+  expect(orders).toEqual([
+    'name asc 1',
+    'name asc 2',
+    'matches desc 1',
+    'matches asc 1',
+    'name asc 1',
+  ]);
+});

@@ -4960,6 +4960,10 @@ export interface components {
         PlayerSearchHit: components["schemas"]["PlayerProfile"] & {
             matching_alias?: null | components["schemas"]["PlayerAlias"];
         };
+        /** @enum {string} */
+        PlayerSort: "name" | "matches" | "games";
+        /** @enum {string} */
+        PlayerSortDirection: "asc" | "desc";
         Position: {
             board: number[];
             dice: number[];
@@ -10637,16 +10641,21 @@ export interface operations {
     };
     list: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                q: string | null;
-                after: string | null;
+            query?: {
+                q?: string;
+                /** @description Continues the default order (name ascending) after this profile. */
+                after?: string;
+                /** @description Omitted: name. Players with equal counts follow in name order. */
+                sort?: components["schemas"]["PlayerSort"];
+                /** @description Omitted: name ascending; match and game counts descending. */
+                direction?: components["schemas"]["PlayerSortDirection"];
                 /** @description Exclude the destination profile when choosing a profile to merge. */
-                exclude_id: string | null;
+                exclude_id?: string;
                 /** @description One-based result page. Mutually exclusive with `after`. */
-                page: number | null;
+                page?: number;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;

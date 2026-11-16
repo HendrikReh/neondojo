@@ -24,7 +24,11 @@
 }
 
 .player-result-table th:not(:first-child) {
-  width: 5.5rem;
+  width: 7.5rem;
+}
+
+.player-result-table th:not(:first-child) .library-sort-heading {
+  justify-content: flex-end;
 }
 
 :is(.player-result-table, .player-match-table) :is(th, td):last-child,

@@ -51,7 +51,8 @@ play session. Batch actions are available when the selected matches support them
 
 The player database uses the Positions layout with a result table on the left
 and the selected profile on the right. Click a row or use the arrow keys to
-change the profile. The profile header shows the PR, and the match list begins
+change the profile. The column headings sort the result table by name, matches
+or games. The profile header shows the PR, and the match list begins
 below it. Click a match row or press Enter on it to open the match; the
 opponent's name switches to that player's profile. The database filter and page
 controls sit outside the scrollable table. Edit and merge actions open dialogs

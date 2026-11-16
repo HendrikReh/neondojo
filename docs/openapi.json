@@ -7317,50 +7317,57 @@
         "parameters": [
           {
             "name": "q",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "after",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "description": "Continues the default order (name ascending) after this profile.",
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ],
+              "type": "string",
               "format": "uuid"
             }
           },
           {
-            "name": "exclude_id",
-            "in": "path",
-            "description": "Exclude the destination profile when choosing a profile to merge.",
-            "required": true,
+            "name": "sort",
+            "in": "query",
+            "description": "Omitted: name. Players with equal counts follow in name order.",
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ],
+              "$ref": "#/components/schemas/PlayerSort"
+            }
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "description": "Omitted: name ascending; match and game counts descending.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/PlayerSortDirection"
+            }
+          },
+          {
+            "name": "exclude_id",
+            "in": "query",
+            "description": "Exclude the destination profile when choosing a profile to merge.",
+            "required": false,
+            "schema": {
+              "type": "string",
               "format": "uuid"
             }
           },
           {
             "name": "page",
-            "in": "path",
+            "in": "query",
             "description": "One-based result page. Mutually exclusive with `after`.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "format": "int64"
             }
           }
@@ -19664,6 +19671,21 @@
               }
             }
           }
+        ]
+      },
+      "PlayerSort": {
+        "type": "string",
+        "enum": [
+          "name",
+          "matches",
+          "games"
+        ]
+      },
+      "PlayerSortDirection": {
+        "type": "string",
+        "enum": [
+          "asc",
+          "desc"
         ]
       },
       "Position": {

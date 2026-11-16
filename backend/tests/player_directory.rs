@@ -181,6 +181,79 @@ async fn numbered_player_pages_preserve_search_order_and_total(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
+async fn players_sort_by_name_or_counts_with_name_as_tie_break(pool: PgPool) {
+    for (index, (white, black)) in [
+        ("Anna", "Bob"),
+        ("Anna", "Bob"),
+        ("Anna", "Cara"),
+        ("Dora", "Emil"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let sgf = format!(
+            "(;GM[6]PW[{white}]PB[{black}]MI[length:{}];W[31hefe])",
+            index + 3
+        );
+        store::import_match(
+            &pool,
+            &format!("sort-{index}.sgf"),
+            "sgf",
+            sgf.as_bytes(),
+            &sgf,
+            &import::parse_sgf(&sgf).unwrap(),
+        )
+        .await
+        .unwrap();
+    }
+    let app = api::router(AppState::new(pool, Engine::new("unused".into())));
+    for (params, expected) in [
+        ("", ["Anna", "Bob", "Cara", "Dora", "Emil"]),
+        (
+            "&sort=name&direction=desc",
+            ["Emil", "Dora", "Cara", "Bob", "Anna"],
+        ),
+        ("&sort=matches", ["Anna", "Bob", "Cara", "Dora", "Emil"]),
+        (
+            "&sort=matches&direction=asc",
+            ["Cara", "Dora", "Emil", "Bob", "Anna"],
+        ),
+        ("&sort=games", ["Anna", "Bob", "Cara", "Dora", "Emil"]),
+        (
+            "&sort=games&direction=asc",
+            ["Cara", "Dora", "Emil", "Bob", "Anna"],
+        ),
+    ] {
+        let page = call(
+            &app,
+            "GET",
+            &format!("/api/players?page=1{params}"),
+            Value::Null,
+            200,
+        )
+        .await;
+        let names: Vec<_> = page["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["display_name"].as_str().unwrap())
+            .collect();
+        assert_eq!(names, expected, "{params}");
+    }
+    let first = call(&app, "GET", "/api/players?sort=matches", Value::Null, 200).await;
+    let anna = first["items"][0]["id"].as_str().unwrap();
+    assert_eq!(first["items"][0]["match_count"], 3);
+    for rejected in [
+        format!("/api/players?sort=matches&after={anna}"),
+        format!("/api/players?direction=desc&after={anna}"),
+        "/api/players?sort=rating".to_owned(),
+    ] {
+        call(&app, "GET", &rejected, Value::Null, 422).await;
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
 async fn ratings_weight_decisions_and_keep_analysis_profiles_separate(pool: PgPool) {
     use bgtutor::model::{
         MatchAnalysisSummary, PerformanceRatingSummary, PlayerAnalysisSummary,

@@ -1,14 +1,18 @@
-import { useCallback, useEffect, useId } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { request } from './api';
 import { cursorSearchParams } from './cursor-search';
 import type { components } from './generated-api';
 import { useI18n } from './i18n';
+import LibrarySortHeading from './LibrarySortHeading';
 import { usePlayerText } from './player-directory-messages';
 import { NumberedSearchPagination } from './SearchPagination';
 import { SearchResultRow, SearchResultTable } from './SearchResultList';
 import { useSearchPages, type SearchPage } from './useSearchPages';
 
 type Schema = components['schemas'];
+type PlayerSort = Schema['PlayerSort'];
+type Order = { sort: PlayerSort; direction: Schema['PlayerSortDirection'] };
+const NAME_ORDER: Order = { sort: 'name', direction: 'asc' };
 
 export function aliasLabel(alias: Schema['PlayerAlias'], local: string) {
   return `${alias.name} · ${alias.platform || local}`;
@@ -48,10 +52,26 @@ export function PlayerResults({
 }) {
   const t = usePlayerText();
   const { formatError, formatNumber } = useI18n();
+  const [order, setOrder] = useState(NAME_ORDER);
   const results = usePlayerPage<Schema['PlayerSearchHit']>(
     '/players',
-    { q: search.trim(), exclude_id: excludeId },
+    { q: search.trim(), exclude_id: excludeId, ...order },
     revision,
+  );
+  // Names start ascending; counts start with the most active players.
+  const sortBy = (sort: PlayerSort) =>
+    setOrder((current) =>
+      current.sort === sort
+        ? { sort, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+        : { sort, direction: sort === 'name' ? 'asc' : 'desc' },
+    );
+  const heading = (sort: PlayerSort, label: string) => (
+    <LibrarySortHeading<PlayerSort>
+      fields={[{ key: sort, label }]}
+      sort={order.sort}
+      direction={order.direction}
+      onSort={sortBy}
+    />
   );
   const prefix = useId();
   const ids = results.items.map((row) => row.id);
@@ -77,9 +97,9 @@ export function PlayerResults({
         >
           <thead>
             <tr>
-              <th scope="col">{t('player')}</th>
-              <th scope="col">{t('matches')}</th>
-              <th scope="col">{t('games')}</th>
+              {heading('name', t('player'))}
+              {heading('matches', t('matches'))}
+              {heading('games', t('games'))}
             </tr>
           </thead>
           <tbody>

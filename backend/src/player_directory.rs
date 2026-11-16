@@ -102,10 +102,33 @@ struct PlayerAliasWrite {
     version: i64,
 }
 
+#[derive(Clone, Copy, Default, PartialEq, Eq, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+enum PlayerSort {
+    #[default]
+    Name,
+    Matches,
+    Games,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+enum PlayerSortDirection {
+    Asc,
+    Desc,
+}
+
 #[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 struct PlayerQuery {
     q: Option<String>,
+    /// Continues the default order (name ascending) after this profile.
     after: Option<Uuid>,
+    /// Omitted: name. Players with equal counts follow in name order.
+    #[serde(default)]
+    sort: PlayerSort,
+    /// Omitted: name ascending; match and game counts descending.
+    direction: Option<PlayerSortDirection>,
     /// Exclude the destination profile when choosing a profile to merge.
     exclude_id: Option<Uuid>,
     /// One-based result page. Mutually exclusive with `after`.
@@ -124,13 +147,12 @@ struct PlayerPage {
 const DISPLAY_NAME: &str = "coalesce(nullif(concat_ws(' ',nullif(p.first_name,''),nullif(p.last_name,'')),''),p.source_name)";
 const MATCHING_ALIAS: &str =
     "FROM player_aliases a WHERE a.profile_id=p.id AND lower(a.name) LIKE $2";
-const COUNTS: &str = "
-    (SELECT count(DISTINCT mp.match_id) FROM player_aliases a
-     JOIN match_players mp ON mp.alias_id=a.id WHERE a.profile_id=p.id) AS match_count,
-    (SELECT count(*) FROM match_games g WHERE EXISTS (
+const MATCH_COUNT: &str = "(SELECT count(DISTINCT mp.match_id) FROM player_aliases a
+     JOIN match_players mp ON mp.alias_id=a.id WHERE a.profile_id=p.id)";
+const GAME_COUNT: &str = "(SELECT count(*) FROM match_games g WHERE EXISTS (
         SELECT 1 FROM player_aliases a JOIN match_players mp ON mp.alias_id=a.id
         WHERE a.profile_id=p.id AND mp.match_id=g.match_uuid
-    )) AS game_count";
+    ))";
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
@@ -151,6 +173,31 @@ async fn list(
         return Err(ApiError::invalid("Player search is too long"));
     }
     let offset = crate::search::page_offset(params.page, params.after.is_some(), 50)?;
+    let descending = match params.direction {
+        Some(direction) => direction == PlayerSortDirection::Desc,
+        None => params.sort != PlayerSort::Name,
+    };
+    if params.after.is_some() && (params.sort != PlayerSort::Name || descending) {
+        return Err(ApiError::invalid(
+            "A cursor continues the name order only; use page with another sort",
+        ));
+    }
+    let direction = if descending { "DESC" } else { "ASC" };
+    // The page is chosen from the profiles, the final order from its rows.
+    let (page_order, row_order) = match params.sort {
+        PlayerSort::Name => (
+            format!("lower({DISPLAY_NAME}) {direction}, p.id"),
+            format!("lower(p.display_name) {direction}, p.id"),
+        ),
+        PlayerSort::Matches => (
+            format!("{MATCH_COUNT} {direction}, lower({DISPLAY_NAME}), p.id"),
+            format!("match_count {direction}, lower(p.display_name), p.id"),
+        ),
+        PlayerSort::Games => (
+            format!("{GAME_COUNT} {direction}, lower({DISPLAY_NAME}), p.id"),
+            format!("game_count {direction}, lower(p.display_name), p.id"),
+        ),
+    };
     let filters = format!(
         "(EXISTS (SELECT 1 FROM player_aliases a JOIN match_players mp ON mp.alias_id=a.id
                  WHERE a.profile_id=p.id) OR p.first_name<>'' OR p.last_name<>'')
@@ -185,14 +232,15 @@ async fn list(
            WHERE {filters}
              AND ($4::uuid IS NULL OR (lower({DISPLAY_NAME}), p.id) >
                   (SELECT lower({DISPLAY_NAME}), p.id FROM player_profiles p WHERE p.id=$4))
-           ORDER BY lower({DISPLAY_NAME}), p.id LIMIT 51 OFFSET $5
+           ORDER BY {page_order} LIMIT 51 OFFSET $5
          )
-         SELECT p.id,p.display_name,p.first_name,p.last_name,p.version,{COUNTS},
+         SELECT p.id,p.display_name,p.first_name,p.last_name,p.version,
+           {MATCH_COUNT} AS match_count,{GAME_COUNT} AS game_count,
            CASE WHEN $1<>'' AND lower(p.display_name) NOT LIKE $2 THEN (
              SELECT jsonb_build_object('name',a.name,'platform',a.platform)
              {MATCHING_ALIAS} ORDER BY a.name,a.platform LIMIT 1
            ) END AS matching_alias
-         FROM page p ORDER BY lower(p.display_name), p.id"
+         FROM page p ORDER BY {row_order}"
     ))
     .bind(search)
     .bind(pattern)
@@ -226,7 +274,8 @@ async fn detail(
 
 async fn details(pool: &PgPool, id: Uuid) -> ApiResult<PlayerDetails> {
     let profile = sqlx::query_as(&format!(
-        "SELECT p.id,{DISPLAY_NAME} AS display_name,p.first_name,p.last_name,p.version,{COUNTS}
+        "SELECT p.id,{DISPLAY_NAME} AS display_name,p.first_name,p.last_name,p.version,
+           {MATCH_COUNT} AS match_count,{GAME_COUNT} AS game_count
          FROM player_profiles p WHERE p.id=$1"
     ))
     .bind(id)
@@ -461,7 +510,9 @@ async fn add_alias(
         PlayerNameWrite,
         PlayerAliasWrite,
         PlayerMerge,
-        PlayerPage
+        PlayerPage,
+        PlayerSort,
+        PlayerSortDirection
     ))
 )]
 pub(crate) struct PlayerDoc;
