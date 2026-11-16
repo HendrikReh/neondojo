@@ -2,6 +2,15 @@ use sqlx::{Executor, postgres::PgPoolOptions};
 
 pub(crate) fn options() -> PgPoolOptions {
     PgPoolOptions::new()
+        // List queries join many small per-row lookups. Their estimated cost
+        // crosses PostgreSQL's JIT threshold although they touch few rows, and
+        // compiling their expressions then takes longer than running them.
+        .after_connect(|connection, _| {
+            Box::pin(async move {
+                connection.execute("SET jit = off").await?;
+                Ok(())
+            })
+        })
         // SQLx 0.8 can return a live connection after BEGIN reached PostgreSQL
         // but the caller stopped waiting before SQLx recorded the transaction.
         // Use a PostgreSQL check in place of the normal checkout ping. A DO

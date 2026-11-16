@@ -39,10 +39,13 @@ pub(crate) async fn ensure_saved(pool: &PgPool, database_id: Option<Uuid>) -> Ap
         source_revision: i64,
         event: Option<sqlx::types::Json<StoredMove>>,
     }
+    // OFFSET 0 keeps the primary-record lookup per saved position. Joined
+    // directly, PostgreSQL ranks the imported analyses of the whole library.
     let rows:Vec<Row> = sqlx::query_as(
         "SELECT ia.id,ia.data,m.format,m.source_revision,p.ply AS checker_ply,to_jsonb(e) AS event
          FROM saved_positions saved JOIN positions p ON p.id=saved.position_uuid JOIN matches m ON m.id=p.match_uuid
-         JOIN primary_imported_analyses ia ON ia.position_uuid=p.id AND ia.match_uuid=m.id AND ia.kind='checker'
+         JOIN LATERAL (SELECT primary_record.* FROM primary_imported_analyses primary_record
+             WHERE primary_record.position_uuid=p.id AND primary_record.match_uuid=m.id AND primary_record.kind='checker' OFFSET 0) ia ON true
          LEFT JOIN imported_analysis_projections cached ON cached.imported_analysis_id=ia.id AND cached.revision=$2 AND cached.source_revision=m.source_revision
          LEFT JOIN match_moves e ON e.match_uuid=m.id AND e.game_no=ia.game_no AND e.move_no=ia.source_move_no AND e.position_uuid=p.id
          WHERE ($1::uuid IS NULL OR coalesce(m.source_database_id,m.database_id)=$1) AND cached.imported_analysis_id IS NULL
