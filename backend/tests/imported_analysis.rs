@@ -348,7 +348,14 @@ async fn library_distinguishes_imported_analysis_from_native_job_status_and_pr(p
 
     let job = Uuid::new_v4();
     sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games) VALUES($1,$2,'match',0,'queued',1)").bind(job).bind(id).execute(&pool).await.unwrap();
-    for native_status in ["queued", "running", "failed", "completed"] {
+    // An active whole-match job shows its progress. Once it stops without a
+    // durable result, the imported analysis is the displayed one again.
+    for (native_status, expected) in [
+        ("queued", "queued"),
+        ("running", "running"),
+        ("failed", "imported"),
+        ("completed", "imported"),
+    ] {
         sqlx::query("UPDATE jobs SET status=$2 WHERE id=$1")
             .bind(job)
             .bind(native_status)
@@ -357,7 +364,7 @@ async fn library_distinguishes_imported_analysis_from_native_job_status_and_pr(p
             .unwrap();
         let source = item(&pool, id).await;
         assert_eq!(
-            source["analysis_status"], "imported",
+            source["analysis_status"], expected,
             "{native_status}: {source}"
         );
         no_native_pr(&source);
