@@ -276,6 +276,8 @@ for (const [width, height] of [
     const rows = page.locator('.database-table tbody tr');
     const first = rows.first(),
       long = rows.nth(1);
+    // Measure only once both rows are rendered.
+    await expect(long).toBeVisible();
     for (const row of [first, long])
       expect((await row.boundingBox())!.height).toBeLessThanOrEqual(56);
     const sizes = await page.locator('.library-content').evaluate((element) => {
