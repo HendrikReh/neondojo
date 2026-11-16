@@ -249,7 +249,7 @@ test('Competition hides pip counts and live feedback', async ({ page }) => {
   await expect(engine).toHaveText('GNU Backgammon 1.08.003');
   await engine.hover();
   await expect(page.getByRole('tooltip')).toHaveText(
-    'GNU Backgammon 1.08.003 20261108 · 0-ply',
+    'GNU Backgammon 1.08.003 20261108 · 0-ply · Bear off to the right',
   );
   await expect(page.getByTestId('play-feedback')).toHaveCount(0);
   await expect(

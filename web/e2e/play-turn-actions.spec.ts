@@ -33,7 +33,7 @@ test('the action panel confirms a turn by button and by Enter', async ({
   await expect(toolbar.locator('.play-turn-help')).toHaveText(
     'Click the dice pair to confirm your turn.',
   );
-  await page.locator('.play-workspace h1').click();
+  await page.locator('.play-match-format').click();
   await page.keyboard.press('Enter');
   await expect
     .poll(() => writes)
@@ -71,7 +71,7 @@ test('Roll, Double and Hint stay visible after the bot has rolled', async ({
   await expect.poll(() => writes).toEqual([{ version: 7, action: 'double' }]);
   await expect(roll).toBeEnabled();
   // Enter on the focused workspace tab belongs to the tab itself.
-  await page.locator('.play-workspace h1').click();
+  await page.locator('.play-match-format').click();
   await page.keyboard.press('Enter');
   await expect
     .poll(() => writes)
@@ -105,7 +105,7 @@ test('Escape returns from the move review to the game', async ({ page }) => {
     exact: true,
   });
   await expect(back).toHaveAttribute('aria-keyshortcuts', 'Escape');
-  await page.locator('.play-workspace h1').click();
+  await page.locator('.play-match-format').click();
   await page.keyboard.press('Escape');
   await expect(back).toHaveCount(0);
   await expect(page.getByTestId('play-board-toolbar')).toBeVisible();

@@ -1,4 +1,4 @@
-import { rollDice } from './play-board-actions';
+import { rollDice, playMenuItem } from './play-board-actions';
 import { test, expect } from './test';
 import { nativeSteps } from '../src/play-sound-events';
 import { historyFixture } from './play-history-review-helpers';
@@ -180,9 +180,14 @@ for (const [label, sessionId, phase] of [
     await expect(page.locator('.database-table')).toContainText(
       'Library human',
     );
-    await page.locator('.database-table tbody tr').getByRole('checkbox').check();
+    await page
+      .locator('.database-table tbody tr')
+      .getByRole('checkbox')
+      .check();
     await expect(
-      page.locator('.library-batch-bar').getByRole('button', { name: 'Resume match', exact: true }),
+      page
+        .locator('.library-batch-bar')
+        .getByRole('button', { name: 'Resume match', exact: true }),
     ).toBeDisabled();
   });
 
@@ -230,7 +235,10 @@ for (const retry of [false, true])
       await page
         .getByRole('tab', { name: 'Match database', exact: true })
         .click();
-      await page.locator('.database-table tbody tr').getByRole('checkbox').check();
+      await page
+        .locator('.database-table tbody tr')
+        .getByRole('checkbox')
+        .check();
       await page
         .locator('.library-batch-bar')
         .getByRole('button', {
@@ -432,9 +440,7 @@ test('a paused match resumes from Paused Matches at its saved decision', async (
   ).toBeFocused();
   await expect(toolbar).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('paused-playing.png') });
-  await page
-    .getByRole('button', { name: 'Paused Matches', exact: true })
-    .click();
+  await (await playMenuItem(page, 'Paused Matches')).click();
   await expect(
     page.getByRole('tab', { name: 'Match database', exact: true }),
   ).toHaveAttribute('aria-selected', 'true');
@@ -455,9 +461,7 @@ test('a paused match resumes from Paused Matches at its saved decision', async (
   await matchRow.press('Enter');
   await expect(page.getByText('Match paused', { exact: true })).toBeVisible();
   expect(actions).toEqual(['pause']);
-  await page
-    .getByRole('button', { name: 'Paused Matches', exact: true })
-    .click();
+  await (await playMenuItem(page, 'Paused Matches')).click();
   await matchRow.getByRole('checkbox').check();
   await page
     .locator('.library-batch-bar')

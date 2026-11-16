@@ -11,3 +11,10 @@ export const doubleCube = (page: Page) =>
   page.locator('.play-board [data-cube][role="button"]');
 export const passDice = (page: Page) =>
   page.locator('.play-board [data-dice-action="pass"]');
+/** The menu in the match bar that holds the rarely used match actions. */
+export const playMenu = (page: Page) =>
+  page.getByRole('button', { name: 'More actions', exact: true });
+export async function playMenuItem(page: Page, name: string) {
+  await playMenu(page).click();
+  return page.locator('.play-menu').getByRole('button', { name, exact: true });
+}

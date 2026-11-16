@@ -64,6 +64,7 @@ const en = {
   reset: 'Reset turn',
   pass: 'No legal move — pass',
   passTurn: 'Pass',
+  moreActions: 'More actions',
   passReady: 'Click the dice pair to pass.',
   double: 'Double',
   take: 'Take double',
@@ -164,6 +165,7 @@ const de: Record<Key, string> = {
   reset: 'Zug zurücksetzen',
   pass: 'Kein legaler Zug — aussetzen',
   passTurn: 'Aussetzen',
+  moreActions: 'Weitere Aktionen',
   passReady: 'Klicke auf das Würfelpaar, um auszusetzen.',
   double: 'Doppeln',
   take: 'Doppel annehmen',
@@ -422,6 +424,7 @@ Object.assign(extra.es, {
   match_over: 'Partida terminada',
   pass: 'Sin movimientos legales — pasar',
   passTurn: 'Pasar',
+  moreActions: 'Más acciones',
   passReady: 'Haz clic en los dados para pasar el turno.',
   select:
     'Pasa el cursor sobre una ficha para ver su destino. Haz clic para moverla. Si puedes usar ambos dados, tiene prioridad el primero.',
@@ -449,6 +452,7 @@ Object.assign(extra.fr, {
   match_over: 'Match terminé',
   pass: 'Aucun coup légal — passer',
   passTurn: 'Passer',
+  moreActions: 'Autres actions',
   passReady: 'Cliquez sur les dés pour passer votre tour.',
   select:
     'Survolez un pion pour voir sa destination. Cliquez pour le déplacer. Si les deux dés sont jouables, le premier est prioritaire.',
@@ -477,6 +481,7 @@ Object.assign(extra.it, {
   match_over: 'Match terminato',
   pass: 'Nessuna mossa legale — passa',
   passTurn: 'Passa',
+  moreActions: 'Altre azioni',
   passReady: 'Fai clic sui dadi per passare il turno.',
   select:
     'Passa il puntatore su una pedina per vedere la destinazione. Fai clic per muoverla. Se entrambi i dadi sono giocabili, ha la precedenza il primo.',
@@ -504,6 +509,7 @@ Object.assign(extra.pl, {
   match_over: 'Mecz zakończony',
   pass: 'Brak legalnego ruchu — pasuj',
   passTurn: 'Pasuj',
+  moreActions: 'Więcej działań',
   passReady: 'Kliknij parę kości, aby spasować.',
   select:
     'Najedź na pionek, aby zobaczyć jego cel. Kliknij, aby go przesunąć. Jeśli można użyć obu kości, pierwsza ma pierwszeństwo.',

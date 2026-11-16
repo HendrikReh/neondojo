@@ -1,5 +1,10 @@
 import { test, expect } from './test';
-import { botDice, doubleCube } from './play-board-actions';
+import {
+  botDice,
+  doubleCube,
+  playMenu,
+  playMenuItem,
+} from './play-board-actions';
 import {
   historyFixture,
   historySessionId as id,
@@ -16,20 +21,14 @@ for (const width of [1440, 390])
     await page.reload();
     await page.getByRole('tab', { name: 'Playing', exact: true }).click();
     await point(13).click();
-    const toolbar = page.getByTestId('play-board-toolbar');
-    const resign = toolbar.getByRole('button', { name: 'Resign', exact: true });
+    // Resigning is a rare action, so it lives in the match menu.
+    await expect(
+      page
+        .getByTestId('play-board-toolbar')
+        .getByRole('button', { name: /^Resign/ }),
+    ).toHaveCount(0);
+    const resign = await playMenuItem(page, 'Resign game');
     await expect(resign).toBeVisible();
-    const hint = toolbar.getByRole('button', { name: 'Hint', exact: true });
-    await expect(resign).toHaveCSS(
-      'color',
-      await hint.evaluate((button) => getComputedStyle(button).color),
-    );
-    const undoBox = (await toolbar
-      .getByRole('button', { name: 'Undo step', exact: true })
-      .boundingBox())!;
-    const box = (await resign.boundingBox())!;
-    expect(box.y).toBeGreaterThanOrEqual(undoBox.y + undoBox.height);
-    await expect(resign.locator('.action-label')).toHaveText('Resign');
     await resign.click();
     const dialog = page.getByRole('dialog', {
       name: 'Resign this game',
@@ -49,7 +48,7 @@ for (const width of [1440, 390])
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
     await expect(page.locator('.play-selected-steps')).toHaveText('13/10');
-    await expect(resign).toBeFocused();
+    await expect(playMenu(page)).toBeFocused();
     expect(writes).toEqual([]);
   });
 
@@ -85,7 +84,7 @@ test('a selected resignation submits exactly one versioned action and shows nati
       },
     });
   });
-  await page.getByRole('button', { name: 'Resign', exact: true }).click();
+  await (await playMenuItem(page, 'Resign game')).click();
   const dialog = page.getByRole('dialog', {
     name: 'Resign this game',
     exact: true,
@@ -117,7 +116,7 @@ test('a declined offer keeps the selected level, error and unconfirmed turn unti
       },
     });
   });
-  await page.getByRole('button', { name: 'Resign', exact: true }).click();
+  await (await playMenuItem(page, 'Resign game')).click();
   const dialog = page.getByRole('dialog', {
     name: 'Resign this game',
     exact: true,
@@ -151,8 +150,7 @@ test('cancelling resignation restores the board controls before the roll', async
   });
   await page.reload();
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();
-  const roll = page.getByTestId('play-board-toolbar');
-  await roll.getByRole('button', { name: 'Resign', exact: true }).click();
+  await (await playMenuItem(page, 'Resign game')).click();
   const dialog = page.getByRole('dialog', {
     name: 'Resign this game',
     exact: true,
@@ -163,9 +161,7 @@ test('cancelling resignation restores the board controls before the roll', async
     .click();
   await expect(botDice(page).first()).toBeEnabled();
   await expect(doubleCube(page)).toBeEnabled();
-  await expect(
-    roll.getByRole('button', { name: 'Resign', exact: true }),
-  ).toBeFocused();
+  await expect(playMenu(page)).toBeFocused();
   expect(writes).toEqual([]);
 });
 
@@ -197,7 +193,13 @@ test('German resignation shows the active cube and its exact award', async ({
   });
   await page.reload();
   await page.locator('#workspace-tab-play').click();
-  await page.getByRole('button', { name: 'Aufgeben', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Weitere Aktionen', exact: true })
+    .click();
+  await page
+    .locator('.play-menu')
+    .getByRole('button', { name: 'Spiel aufgeben', exact: true })
+    .click();
   const dialog = page.getByRole('dialog', {
     name: 'Dieses Spiel aufgeben',
     exact: true,
@@ -243,7 +245,7 @@ for (const human of [0, 1])
     saved.position.gnubg_match_id = match.toString('base64').replace(/=+$/, '');
     await page.reload();
     await page.locator('#workspace-tab-play').click();
-    await page.getByRole('button', { name: 'Resign', exact: true }).click();
+    await (await playMenuItem(page, 'Resign game')).click();
     const dialog = page.getByRole('dialog', {
       name: 'Resign this game',
       exact: true,

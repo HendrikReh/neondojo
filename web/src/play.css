@@ -17,20 +17,19 @@
 }
 .play-match-heading {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   column-gap: 16px;
   row-gap: 6px;
-  margin: 12px 0 16px;
+  margin: 0 0 16px;
   padding: 8px 12px;
   border: 1px solid var(--ui-border);
   border-radius: 8px;
   background: var(--ui-surface);
 }
 .play-match-summary {
-  display: grid;
-  grid-template-columns: minmax(0, auto) auto minmax(0, 1fr);
-  justify-content: start;
+  display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 4px 12px;
   min-width: 0;
@@ -49,20 +48,56 @@
   font-weight: var(--font-weight-semibold);
 }
 .play-match-heading .play-match-engine {
-  grid-column: 1 / -1;
+  margin: 0;
   font-size: var(--font-size-meta);
+}
+.play-match-actions {
+  flex-wrap: nowrap;
+}
+/* The menu opens below its button and holds the rarely used match actions. */
+.play-menu-button {
+  anchor-name: --play-menu;
+}
+.play-menu {
+  position: fixed;
+  position-anchor: --play-menu;
+  inset: auto;
+  top: anchor(bottom);
+  right: anchor(right);
+  position-try-fallbacks: flip-block, flip-inline;
+  margin: 4px 0 0;
+  max-width: min(18rem, 90vw);
+  padding: 6px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  box-shadow: 0 8px 24px var(--ui-shadow);
+}
+.play-menu:popover-open {
+  display: grid;
+  gap: 4px;
+}
+.play-menu .action-button {
+  justify-content: flex-start;
+  border-color: transparent;
+  background: transparent;
+}
+/* Name, score and pip count sit together and stay readable beside the board. */
+.play-live-board > .board-shell > .player-bar {
+  justify-content: flex-start;
+  font-size: var(--font-size-subject);
+  font-weight: var(--font-weight-semibold);
+}
+.play-live-board > .board-shell > .player-bar small,
+.play-live-board > .board-shell > .player-bar > span:last-child {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-normal);
+  font-variant-numeric: tabular-nums;
 }
 @media (max-width: 1100px) {
   .play-match-heading {
     grid-template-columns: minmax(0, 1fr);
-  }
-}
-@media (max-width: 600px) {
-  .play-match-summary {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .play-match-status {
-    grid-column: 1 / -1;
   }
 }
 .play-header p,
@@ -742,7 +777,7 @@
 }
 .play-live-board > .board-shell > .player-bar {
   flex-wrap: wrap;
-  gap: 4px 8px;
+  gap: 4px 20px;
 }
 .play-live-board > .play-board-toolbar {
   grid-area: actions;
@@ -818,7 +853,7 @@
     --play-layout-gap: 28px;
     --play-workspace-padding: 16px;
     /* Leave space for the match header, player bars and the result line below the board. */
-    --play-artwork-width: min(58vw, calc((100dvh - 375px) * 1.35));
+    --play-artwork-width: min(58vw, calc((100dvh - 335px) * 1.35));
     max-width: calc(
       var(--play-artwork-width) + var(--play-history-width) +
         var(--play-layout-gap) + var(--play-board-gap) +
@@ -916,7 +951,6 @@
   }
 }
 
-.play-workspace .play-resign-button,
 .play-workspace .play-resign-confirm {
   border-color: #d7aaaa;
   min-height: 48px;

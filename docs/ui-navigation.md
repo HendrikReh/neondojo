@@ -195,6 +195,12 @@ names the current step, always shows its primary action (**Roll dice**,
 dice pair and the cube on the board remain a second way to trigger the same
 actions.
 
+During a match, one bar above the board replaces the page title. It shows the
+score, format, engine and turn status, then the play mode, **Pause match** and
+the **More actions** menu with **Resign game**, **Forfeit match**, **New
+match** and **Paused Matches**. Escape closes the menu and returns focus to
+its button.
+
 ## Study areas
 
 **Reports → Open report** opens a saved point match in a dedicated view.

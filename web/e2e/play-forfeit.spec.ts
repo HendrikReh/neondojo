@@ -1,4 +1,5 @@
 import { test, expect } from './test';
+import { playMenu } from './play-board-actions';
 import {
   historyFixture,
   historySessionId as id,
@@ -25,7 +26,8 @@ test('forfeit confirmation preserves a draft on cancel and records a match loss 
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();
   await point(13).click();
 
-  const trigger = page.getByRole('button', {
+  const menu = playMenu(page);
+  const trigger = page.locator('.play-menu').getByRole('button', {
     name: 'Forfeit match',
     exact: true,
   });
@@ -33,14 +35,16 @@ test('forfeit confirmation preserves a draft on cancel and records a match loss 
     name: 'Forfeit match',
     exact: true,
   });
+  await menu.click();
   await trigger.click();
   await expect(dialog).toContainText('recorded as a loss');
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
-  await expect(trigger).toBeFocused();
+  await expect(menu).toBeFocused();
   await expect(page.locator('.play-selected-steps')).toHaveText('13/10');
   expect(writes).toEqual([]);
 
+  await menu.click();
   await trigger.click();
   await dialog
     .getByRole('button', { name: 'Forfeit match', exact: true })

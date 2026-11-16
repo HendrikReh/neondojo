@@ -327,7 +327,7 @@ for (const theme of ['forest', 'bgblitz:bg-earth'])
     await hover();
     await expect(page.locator('[data-play-destination="10"]')).toBeVisible();
     await expect(page.locator('[data-play-destination="8"]')).toHaveCount(0);
-    await page.locator('.play-header h1').hover();
+    await page.locator('.play-match-format').hover();
     await expect(page.locator('[data-play-destination]')).toHaveCount(0);
     const pair = page.getByRole('button', { name: /^Swap dice order ·/ });
     await expect(pair).toHaveCount(1);

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from './test';
-import { rollDice } from './play-board-actions';
+import { rollDice, playMenuItem } from './play-board-actions';
 import {
   historyFixture,
   historySessionId as id,
@@ -298,9 +298,7 @@ test('match result can be acknowledged to access learning review', async ({
     .getByRole('button', { name: 'Back to board', exact: true })
     .click();
   await expect(page.getByRole('alertdialog')).toHaveCount(0);
-  await expect(
-    page.getByRole('button', { name: 'New match', exact: true }),
-  ).toBeEnabled();
+  await expect(await playMenuItem(page, 'New match')).toBeEnabled();
 });
 
 test('a finished match opens the new match setup directly', async ({

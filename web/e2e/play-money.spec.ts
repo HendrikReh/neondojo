@@ -1,4 +1,5 @@
 import { test, expect } from './test';
+import { playMenuItem } from './play-board-actions';
 test.use({ actionTimeout: 10000 });
 import { profileBackend } from './profile-backend';
 import { historyFixture } from './play-history-review-helpers';
@@ -16,7 +17,7 @@ test('Money game selection applies to the new session and leaves the profile def
     payload = r.request().postDataJSON();
     return r.fulfill({ status: 201, json: money });
   });
-  await page.getByRole('button', { name: 'New match', exact: true }).click();
+  await (await playMenuItem(page, 'New match')).click();
   await page
     .getByRole('combobox', { name: 'Match length', exact: true })
     .selectOption({ label: 'Money game' });
@@ -30,7 +31,7 @@ test('Money game selection applies to the new session and leaves the profile def
     '0 points',
   );
   expect(profile.calls.filter(({ method }) => method !== 'GET')).toEqual([]);
-  await page.getByRole('button', { name: 'New match', exact: true }).click();
+  await (await playMenuItem(page, 'New match')).click();
   await expect(
     page.getByRole('combobox', { name: 'Match length', exact: true }),
   ).toHaveValue('7');
@@ -72,7 +73,7 @@ test('starts a match while preserving conflicting profile changes for recovery',
     });
   });
 
-  await page.getByRole('button', { name: 'New match', exact: true }).click();
+  await (await playMenuItem(page, 'New match')).click();
   const setup = page.locator('.play-setup');
   await setup
     .getByRole('combobox', { name: 'Your checkers', exact: true })
@@ -99,7 +100,7 @@ test('starts a match while preserving conflicting profile changes for recovery',
       JSON.parse(localStorage.getItem('bgtutor.configuration-pending.v1')!),
     ),
   ).toEqual(pending);
-  await page.getByRole('button', { name: 'New match', exact: true }).click();
+  await (await playMenuItem(page, 'New match')).click();
   await expect(
     setup.getByRole('combobox', { name: 'Match length', exact: true }),
   ).toHaveValue('7');

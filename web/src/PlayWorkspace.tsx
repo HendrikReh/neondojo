@@ -112,7 +112,9 @@ export default function PlayWorkspace({
   const [pauseWarning, setPauseWarning] = useState(false);
   const autoMoneyReviews = useRef(new Set<string>());
   const [learningReviewOpen, setLearningReviewOpen] = useState(false);
-  const resignTrigger = useRef<HTMLButtonElement>(null);
+  const menuId = useId();
+  const menuTrigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
   const restoreResignFocus = useRef(false);
   const [resignOpen, setResignOpen] = useState(false);
   const forfeitTrigger = useRef<HTMLButtonElement>(null);
@@ -824,7 +826,7 @@ export default function PlayWorkspace({
                       ? 'match_over'
                       : null;
   const returnToTurnControl = restoreResignFocus.current
-    ? resignTrigger
+    ? menuTrigger
     : restoreHintFocus.current
       ? hintTrigger
       : undefined;
@@ -942,17 +944,10 @@ export default function PlayWorkspace({
       shortcut="H"
     />
   );
-  const resignButton = () => (
-    <ActionButton
-      ref={resignTrigger}
-      type="button"
-      className="play-resign-button"
-      disabled={uiBusy}
-      onClick={openResign}
-      icon="resign"
-      label={resignT('resign')}
-    />
-  );
+  const inMatch = Boolean(session) && !setup;
+  function closeMenu() {
+    menu.current?.hidePopover();
+  }
   const cubeDecisionOpen = interruption === 'cube';
   const resignationDeclined =
     error instanceof AppError &&
@@ -1126,43 +1121,17 @@ export default function PlayWorkspace({
   return (
     <div className="play-workspace" aria-busy={uiBusy}>
       <header className="play-header">
-        <h1>{t('title')}</h1>
-        <div className="play-actions">
-          <ActionButton
-            onClick={onOpenPausedMatches}
-            disabled={uiBusy}
-            icon="open"
-            label={libraryT('pausedMatches')}
-          />
-          {!setup && pauseButton() && (
-            <span
-              className="play-pause-slot"
-              aria-hidden={Boolean(interruption)}
-              inert={Boolean(interruption)}
-            >
-              {pauseButton()}
-            </span>
-          )}
-          {!setup && !interruption && forfeitButton()}
-          {!setup && paused && (
+        <h1 className={inMatch ? 'sr-only' : undefined}>{t('title')}</h1>
+        {!inMatch && (
+          <div className="play-actions">
             <ActionButton
-              ref={resumeTrigger}
-              className="primary"
-              onClick={resumeMatch}
+              onClick={onOpenPausedMatches}
               disabled={uiBusy}
-              icon="resume"
-              label={t('resumeMatch')}
+              icon="open"
+              label={libraryT('pausedMatches')}
             />
-          )}
-          {!setup && interruption !== 'match_over' && (
-            <ActionButton
-              onClick={openMatchSetup}
-              disabled={uiBusy}
-              icon="new-game"
-              label={t('newMatch')}
-            />
-          )}
-        </div>
+          </div>
+        )}
       </header>
       {!interruption &&
         !pauseWarning &&
@@ -1314,6 +1283,20 @@ export default function PlayWorkspace({
                   : appT('common.moneyGame')}{' '}
                 · {t('game')} {formatNumber(session.game_no)}
               </p>
+              <p className="play-engine play-match-engine">
+                <EngineLabel
+                  details={session.engine.version}
+                  tooltip={[
+                    session.engine.version,
+                    `${session.engine.plies}-ply`,
+                    feedbackMode !== 'competition' &&
+                      `${modeT('analysisDepth')}: ${session.analysis_plies ?? 2}-ply`,
+                    t(session.bearoff_direction === 'left' ? 'left' : 'right'),
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                />
+              </p>
               <p className="play-match-status" role="status">
                 {turnStatus()}
               </p>
@@ -1325,21 +1308,102 @@ export default function PlayWorkspace({
             >
               {modeControl}
             </div>
-            <p className="play-engine play-match-engine">
-              <EngineLabel
-                details={session.engine.version}
-                tooltip={[
-                  session.engine.version,
-                  `${session.engine.plies}-ply`,
-                  feedbackMode !== 'competition' &&
-                    `${modeT('analysisDepth')}: ${session.analysis_plies ?? 2}-ply`,
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
+            <div className="play-actions play-match-actions">
+              {pauseButton() && (
+                <span
+                  className="play-pause-slot"
+                  aria-hidden={Boolean(interruption)}
+                  inert={Boolean(interruption)}
+                >
+                  {pauseButton()}
+                </span>
+              )}
+              {paused && (
+                <ActionButton
+                  ref={resumeTrigger}
+                  className="primary"
+                  onClick={resumeMatch}
+                  disabled={uiBusy}
+                  icon="resume"
+                  label={t('resumeMatch')}
+                />
+              )}
+              <ActionButton
+                ref={menuTrigger}
+                type="button"
+                className="play-menu-button"
+                icon="more"
+                label={t('moreActions')}
+                compact
+                popoverTarget={menuId}
+                disabled={uiBusy}
               />
-              {' · '}
-              {session.bearoff_direction === 'left' ? t('left') : t('right')}
-            </p>
+              <div
+                id={menuId}
+                ref={menu}
+                popover="auto"
+                role="group"
+                aria-label={t('moreActions')}
+                className="play-menu"
+                onKeyDown={(event) => {
+                  if (event.key !== 'Escape') return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  closeMenu();
+                  menuTrigger.current?.focus();
+                }}
+              >
+                {showBoardActions && (
+                  <ActionButton
+                    type="button"
+                    icon="resign"
+                    label={resignT('confirmGame')}
+                    disabled={uiBusy}
+                    aria-haspopup="dialog"
+                    onClick={() => {
+                      closeMenu();
+                      openResign();
+                    }}
+                  />
+                )}
+                {canForfeit && !interruption && (
+                  <ActionButton
+                    type="button"
+                    icon="resign"
+                    label={resignT('forfeitMatch')}
+                    disabled={uiBusy || review.active}
+                    aria-haspopup="dialog"
+                    onClick={() => {
+                      closeMenu();
+                      setError(undefined);
+                      setForfeitOpen(true);
+                    }}
+                  />
+                )}
+                {interruption !== 'match_over' && (
+                  <ActionButton
+                    type="button"
+                    onClick={() => {
+                      closeMenu();
+                      openMatchSetup();
+                    }}
+                    disabled={uiBusy}
+                    icon="new-game"
+                    label={t('newMatch')}
+                  />
+                )}
+                <ActionButton
+                  type="button"
+                  onClick={() => {
+                    closeMenu();
+                    onOpenPausedMatches();
+                  }}
+                  disabled={uiBusy}
+                  icon="open"
+                  label={libraryT('pausedMatches')}
+                />
+              </div>
+            </div>
           </div>
           <div className="play-layout">
             <PlayHistory
@@ -1620,7 +1684,6 @@ export default function PlayWorkspace({
                         )}
                       </ActionButton>
                     )}
-                    {resignButton()}
                     {beforeRoll && !session.can_double && (
                       <p
                         id={doubleReasonId}
@@ -1992,7 +2055,7 @@ export default function PlayWorkspace({
                     anchor={boardAnchor}
                     heading={resignT('forfeitMatch')}
                     busy={uiBusy}
-                    returnFocus={forfeitTrigger}
+                    returnFocus={interruption ? forfeitTrigger : menuTrigger}
                     onClose={closeForfeit}
                   >
                     <p>{resignT('forfeitHelp')}</p>
