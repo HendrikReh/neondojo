@@ -221,9 +221,10 @@ dice pair and the cube on the board remain a second way to trigger the same
 actions.
 
 During a match, one bar above the board replaces the page title. It shows the
-score, format, engine and turn status, then the play mode, **Pause match** and
-the **More actions** menu with **Resign game**, **Forfeit match**, **New
-match** and **Paused Matches**. Escape closes the menu and returns focus to
+score, format, engine and turn status, then the play mode, **Resign game**,
+**Pause match** and the **More actions** menu with **Forfeit match**, **New
+match** and **Paused Matches**. After a finished money game, the result dialog
+offers **Next game**, **Pause match** and **End session**. Escape closes the menu and returns focus to
 its button.
 
 The **New match** form is a narrow card. Color and play mode are radio

@@ -324,3 +324,52 @@ for (const [width, height, locale] of [
     expect(requests).toHaveLength(3);
   });
 }
+
+test('a money session can be ended after a finished game', async ({ page }) => {
+  const { saved } = await historyFixture(page);
+  const { detail } = await import('./study-report-fixture');
+  Object.assign(saved, {
+    match_length: 0,
+    phase: 'game_over',
+    scores: [3, 6],
+    game_no: 3,
+    winner: 1,
+    review: detail().review,
+  });
+  const requests: unknown[] = [];
+  await page.route(`**/api/play/sessions/${saved.id}/actions`, (route) => {
+    requests.push(route.request().postDataJSON());
+    Object.assign(saved, {
+      version: saved.version + 1,
+      phase: 'match_over',
+      money_session_ended: true,
+    });
+    return route.fulfill({ json: saved });
+  });
+  await page.reload();
+  await page.getByRole('tab', { name: 'Playing', exact: true }).click();
+  const result = page.getByRole('alertdialog', {
+    name: 'Game finished',
+    exact: true,
+  });
+  // Resigning only applies to a game in progress.
+  await expect(
+    page.getByRole('button', { name: 'Resign game', exact: true }),
+  ).toHaveCount(0);
+  await result
+    .getByRole('button', { name: 'End session', exact: true })
+    .click();
+  const ended = page.getByRole('alertdialog', {
+    name: 'Session ended',
+    exact: true,
+  });
+  await expect(ended).toBeVisible();
+  await expect(
+    ended.getByRole('button', { name: 'New match', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'End session', exact: true }),
+  ).toHaveCount(0);
+  await expect(page.locator('.play-match-heading')).toContainText('3 : 6');
+  expect(requests).toEqual([{ version: 7, action: 'end_session' }]);
+});

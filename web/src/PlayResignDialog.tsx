@@ -16,6 +16,7 @@ export default function PlayResignDialog({
   busy,
   error,
   onConfirm,
+  onForfeit,
   onClose,
 }: {
   anchor: RefObject<HTMLDivElement | null>;
@@ -28,6 +29,8 @@ export default function PlayResignDialog({
   busy: boolean;
   error: ReactNode;
   onConfirm: (level: ResignLevel) => void;
+  /** Opens the match forfeit confirmation; only offered in point matches. */
+  onForfeit?: () => void;
   onClose: () => void;
 }) {
   const [level, setLevel] = useState<ResignLevel>(1);
@@ -108,6 +111,17 @@ export default function PlayResignDialog({
           disabled={busy}
           onClick={onClose}
         />
+        {/* A resignation that ends the match already carries this label. */}
+        {onForfeit && !endsMatch && (
+          <ActionButton
+            type="button"
+            icon="resign"
+            label={t('forfeitMatch')}
+            disabled={busy}
+            aria-haspopup="dialog"
+            onClick={onForfeit}
+          />
+        )}
         <ActionButton
           type="button"
           icon="resign"

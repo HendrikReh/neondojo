@@ -18,3 +18,8 @@ export async function playMenuItem(page: Page, name: string) {
   await playMenu(page).click();
   return page.locator('.play-menu').getByRole('button', { name, exact: true });
 }
+/** Resign game sits in the match bar beside Pause match. */
+export const resignGame = (page: Page) =>
+  page
+    .locator('.play-match-actions')
+    .getByRole('button', { name: 'Resign game', exact: true });

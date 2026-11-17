@@ -1,6 +1,6 @@
 import { test, expect } from './test';
 import { historyFixture } from './play-history-review-helpers';
-import { botDice, playMenuItem } from './play-board-actions';
+import { botDice, playMenuItem, resignGame } from './play-board-actions';
 
 test('the action panel confirms a turn by button and by Enter', async ({
   page,
@@ -173,7 +173,7 @@ test('a money session names resignations and its score without match wording', a
   await expect(page.getByRole('tooltip')).toContainText(
     'Analysis and pip counts stay hidden',
   );
-  await (await playMenuItem(page, 'Resign game')).click();
+  await resignGame(page).click();
   const dialog = page.getByRole('dialog', {
     name: 'Resign this game',
     exact: true,

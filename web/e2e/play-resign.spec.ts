@@ -1,10 +1,5 @@
 import { test, expect } from './test';
-import {
-  botDice,
-  doubleCube,
-  playMenu,
-  playMenuItem,
-} from './play-board-actions';
+import { botDice, doubleCube, resignGame } from './play-board-actions';
 import {
   historyFixture,
   historySessionId as id,
@@ -21,13 +16,13 @@ for (const width of [1440, 390])
     await page.reload();
     await page.getByRole('tab', { name: 'Playing', exact: true }).click();
     await point(13).click();
-    // Resigning is a rare action, so it lives in the match menu.
+    // Resigning sits in the match bar, outside the turn's action panel.
     await expect(
       page
         .getByTestId('play-board-toolbar')
         .getByRole('button', { name: /^Resign/ }),
     ).toHaveCount(0);
-    const resign = await playMenuItem(page, 'Resign game');
+    const resign = resignGame(page);
     await expect(resign).toBeVisible();
     await resign.click();
     const dialog = page.getByRole('dialog', {
@@ -48,7 +43,7 @@ for (const width of [1440, 390])
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
     await expect(page.locator('.play-selected-steps')).toHaveText('13/10');
-    await expect(playMenu(page)).toBeFocused();
+    await expect(resignGame(page)).toBeFocused();
     expect(writes).toEqual([]);
   });
 
@@ -84,7 +79,7 @@ test('a selected resignation submits exactly one versioned action and shows nati
       },
     });
   });
-  await (await playMenuItem(page, 'Resign game')).click();
+  await resignGame(page).click();
   const dialog = page.getByRole('dialog', {
     name: 'Resign this game',
     exact: true,
@@ -116,7 +111,7 @@ test('a declined offer keeps the selected level, error and unconfirmed turn unti
       },
     });
   });
-  await (await playMenuItem(page, 'Resign game')).click();
+  await resignGame(page).click();
   const dialog = page.getByRole('dialog', {
     name: 'Resign this game',
     exact: true,
@@ -150,7 +145,7 @@ test('cancelling resignation restores the board controls before the roll', async
   });
   await page.reload();
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();
-  await (await playMenuItem(page, 'Resign game')).click();
+  await resignGame(page).click();
   const dialog = page.getByRole('dialog', {
     name: 'Resign this game',
     exact: true,
@@ -161,7 +156,7 @@ test('cancelling resignation restores the board controls before the roll', async
     .click();
   await expect(botDice(page).first()).toBeEnabled();
   await expect(doubleCube(page)).toBeEnabled();
-  await expect(playMenu(page)).toBeFocused();
+  await expect(resignGame(page)).toBeFocused();
   expect(writes).toEqual([]);
 });
 
@@ -194,10 +189,7 @@ test('German resignation shows the active cube and its exact award', async ({
   await page.reload();
   await page.locator('#workspace-tab-play').click();
   await page
-    .getByRole('button', { name: 'Weitere Aktionen', exact: true })
-    .click();
-  await page
-    .locator('.play-menu')
+    .locator('.play-match-actions')
     .getByRole('button', { name: 'Spiel aufgeben', exact: true })
     .click();
   const dialog = page.getByRole('dialog', {
@@ -245,7 +237,7 @@ for (const human of [0, 1])
     saved.position.gnubg_match_id = match.toString('base64').replace(/=+$/, '');
     await page.reload();
     await page.locator('#workspace-tab-play').click();
-    await (await playMenuItem(page, 'Resign game')).click();
+    await resignGame(page).click();
     const dialog = page.getByRole('dialog', {
       name: 'Resign this game',
       exact: true,
@@ -295,3 +287,23 @@ for (const human of [0, 1])
       .click();
     expect(writes).toEqual([]);
   });
+
+test('the resign dialog leads to the match forfeit in a point match', async ({
+  page,
+}) => {
+  const { writes } = await historyFixture(page);
+  await resignGame(page).click();
+  await page
+    .getByRole('dialog', { name: 'Resign this game', exact: true })
+    .getByRole('button', { name: 'Forfeit match', exact: true })
+    .click();
+  const forfeit = page.getByRole('dialog', {
+    name: 'Forfeit match',
+    exact: true,
+  });
+  await expect(forfeit).toContainText('recorded as a loss');
+  await forfeit.getByRole('button', { name: 'Continue playing' }).click();
+  await expect(forfeit).toHaveCount(0);
+  await expect(resignGame(page)).toBeEnabled();
+  expect(writes).toEqual([]);
+});

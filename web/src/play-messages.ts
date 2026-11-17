@@ -18,6 +18,7 @@ const en = {
   matchPaused: 'Match paused',
   pauseDraftHelp: 'Unconfirmed checker steps will be discarded.',
   sessionEnded: 'Session ended',
+  endSession: 'End session',
   cubeDecision: 'Cube decision',
   cubeDecisionRequired: 'Take or pass the double to continue.',
   cubeBefore: 'Current cube:',
@@ -120,6 +121,7 @@ const de: Record<Key, string> = {
   matchPaused: 'Match pausiert',
   pauseDraftHelp: 'Unbestätigte Zugschritte werden beim Pausieren verworfen.',
   sessionEnded: 'Sitzung beendet',
+  endSession: 'Sitzung beenden',
   cubeDecision: 'Cube-Entscheidung',
   cubeDecisionRequired:
     'Nimm den Doppler an oder lehne ihn ab, um weiterzuspielen.',
@@ -625,24 +627,28 @@ Object.assign(extra.es, {
   matchPaused: 'Partida en pausa',
   pauseDraftHelp: 'Se descartarán los movimientos de fichas sin confirmar.',
   sessionEnded: 'Sesión finalizada',
+  endSession: 'Finalizar sesión',
 });
 Object.assign(extra.fr, {
   pauseMatch: 'Mettre le match en pause',
   matchPaused: 'Match en pause',
   pauseDraftHelp: 'Les déplacements de pions non confirmés seront annulés.',
   sessionEnded: 'Session terminée',
+  endSession: 'Terminer la session',
 });
 Object.assign(extra.it, {
   pauseMatch: 'Metti in pausa la partita',
   matchPaused: 'Match in pausa',
   pauseDraftHelp: 'I movimenti delle pedine non confermati verranno annullati.',
   sessionEnded: 'Sessione terminata',
+  endSession: 'Termina sessione',
 });
 Object.assign(extra.pl, {
   pauseMatch: 'Wstrzymaj mecz',
   matchPaused: 'Mecz wstrzymany',
   pauseDraftHelp: 'Niepotwierdzone ruchy pionków zostaną odrzucone.',
   sessionEnded: 'Sesja zakończona',
+  endSession: 'Zakończ sesję',
 });
 export function usePlayText() {
   const { locale } = useI18n();

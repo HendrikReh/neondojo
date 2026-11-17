@@ -118,6 +118,7 @@ export default function PlayWorkspace({
   const menuId = useId();
   const menuTrigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
+  const resignTrigger = useRef<HTMLButtonElement>(null);
   const restoreResignFocus = useRef(false);
   const [resignOpen, setResignOpen] = useState(false);
   const forfeitTrigger = useRef<HTMLButtonElement>(null);
@@ -829,7 +830,7 @@ export default function PlayWorkspace({
                       ? 'match_over'
                       : null;
   const returnToTurnControl = restoreResignFocus.current
-    ? menuTrigger
+    ? resignTrigger
     : restoreHintFocus.current
       ? hintTrigger
       : undefined;
@@ -908,6 +909,22 @@ export default function PlayWorkspace({
           setError(undefined);
           setForfeitOpen(true);
         }}
+      />
+    );
+  // Resigning sits beside Pause match so it is found without opening the menu.
+  const resignButton = () =>
+    session &&
+    !paused &&
+    session.phase !== 'game_over' &&
+    session.phase !== 'match_over' && (
+      <ActionButton
+        type="button"
+        ref={resignTrigger}
+        icon="resign"
+        label={resignT('confirmGame')}
+        disabled={uiBusy || !showBoardActions}
+        aria-haspopup="dialog"
+        onClick={openResign}
       />
     );
   const hasPauseDraft = steps.length > 0 && pending?.action !== 'move';
@@ -1339,6 +1356,7 @@ export default function PlayWorkspace({
                   aria-hidden={Boolean(interruption)}
                   inert={Boolean(interruption)}
                 >
+                  {resignButton()}
                   {pauseButton()}
                 </span>
               )}
@@ -1377,19 +1395,6 @@ export default function PlayWorkspace({
                   menuTrigger.current?.focus();
                 }}
               >
-                {showBoardActions && (
-                  <ActionButton
-                    type="button"
-                    icon="resign"
-                    label={resignT('confirmGame')}
-                    disabled={uiBusy}
-                    aria-haspopup="dialog"
-                    onClick={() => {
-                      closeMenu();
-                      openResign();
-                    }}
-                  />
-                )}
                 {canForfeit && !interruption && (
                   <ActionButton
                     type="button"
@@ -1890,6 +1895,14 @@ export default function PlayWorkspace({
                       )
                     }
                     onClose={closeResign}
+                    onForfeit={
+                      canForfeit
+                        ? () => {
+                            closeResign();
+                            setForfeitOpen(true);
+                          }
+                        : undefined
+                    }
                     onConfirm={(level) =>
                       action('resign', undefined, undefined, level)
                     }
@@ -2023,6 +2036,16 @@ export default function PlayWorkspace({
                                   {t('next_game')}
                                 </ActionButton>
                                 {pauseButton()}
+                                {moneyFinished && (
+                                  <ActionButton
+                                    disabled={uiBusy}
+                                    onClick={() => action('end_session')}
+                                    icon="confirm"
+                                    label={t('endSession')}
+                                  >
+                                    {t('endSession')}
+                                  </ActionButton>
+                                )}
                                 {forfeitButton()}
                               </>
                             ) : (
