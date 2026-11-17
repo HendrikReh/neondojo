@@ -168,7 +168,9 @@ async fn identical_engines_split_a_pair_with_multiple_games() {
     );
 }
 
-use super::{Competitor, DiceMode, MatchResult, SeriesConfig, runner::match_plan, summarize};
+use super::{
+    Competitor, DiceMode, MatchResult, SeriesConfig, runner::match_plan, student_t_975, summarize,
+};
 use axum::{
     body::Body,
     http::{Request, StatusCode},
@@ -208,14 +210,79 @@ fn seeds_follow_board_sides_and_pair_statistics_exclude_the_unpaired_match() {
     assert_eq!(stats.complete_pairs, 20);
     assert_eq!((stats.wins_a, stats.wins_b), (20, 20));
     assert_eq!(stats.win_rate_a, Some(0.5));
-    let [lower, upper] = stats.confidence_interval_a.unwrap();
-    assert!(lower < 0.5 && upper > 0.5);
+    // Every pair splits 1–1, so the pair means have no variance.
+    assert_eq!(stats.confidence_interval_a, Some([0.5, 0.5]));
     results.truncate(1);
     assert_eq!(summarize(config.mode, &results).win_rate_a, None);
     config.mode = DiceMode::Random;
     assert_ne!(match_plan(&config, 0).seed, match_plan(&config, 1).seed);
     assert!(!match_plan(&config, 1).swapped);
     assert_eq!(summarize(config.mode, &results).win_rate_a, Some(1.0));
+}
+
+/// Pairs as (A wins both legs, B wins both legs, split 1–1).
+fn paired_results(a_both: usize, b_both: usize, split: usize) -> Vec<MatchResult> {
+    let outcomes = std::iter::repeat_n([true, true], a_both)
+        .chain(std::iter::repeat_n([false, false], b_both))
+        .chain(std::iter::repeat_n([true, false], split));
+    outcomes
+        .flatten()
+        .enumerate()
+        .map(|(index, a_wins)| MatchResult {
+            match_index: index as i32,
+            seed: Uuid::nil(),
+            score_a: if a_wins { 5 } else { 2 },
+            score_b: if a_wins { 2 } else { 5 },
+            games: 3,
+        })
+        .collect()
+}
+
+fn assert_interval(results: &[MatchResult], expected: [f64; 2]) {
+    let [lower, upper] = summarize(DiceMode::Paired, results)
+        .confidence_interval_a
+        .unwrap();
+    assert!(
+        (lower - expected[0]).abs() < 1e-4,
+        "lower {lower} vs {}",
+        expected[0]
+    );
+    assert!(
+        (upper - expected[1]).abs() < 1e-4,
+        "upper {upper} vs {}",
+        expected[1]
+    );
+}
+
+#[test]
+fn student_t_quantile_matches_reference_values() {
+    // scipy.stats.t.ppf(0.975, df)
+    for (df, expected) in [
+        (19, 2.093_024_054_408_308_7),
+        (20, 2.085_963_447_265_864_4),
+        (50, 2.008_559_112_100_760_7),
+        (99, 1.984_216_951_586_417_2),
+        (999, 1.962_341_461_133_449_5),
+    ] {
+        assert!((student_t_975(df) - expected).abs() < 1e-4, "df {df}");
+    }
+}
+
+#[test]
+fn pair_interval_uses_the_empirical_variance_of_pair_means() {
+    // Reference: mean ± t(0.975, n−1) · s / √n with scipy, s the sample
+    // standard deviation of the pair means.
+    // 100 pairs: 23 won 2–0 by A, 16 by B, 61 split (a real GNUbg/Open Sage series).
+    assert_interval(&paired_results(23, 16, 61), [0.473_123_1, 0.596_876_9]);
+    assert_interval(&paired_results(8, 2, 10), [0.496_269_7, 0.803_730_3]);
+    // Bounds stay within [0, 1].
+    assert_interval(&paired_results(18, 0, 2), [0.877_974_1, 1.0]);
+    assert_interval(&paired_results(20, 0, 0), [1.0, 1.0]);
+    // Below 20 complete pairs no interval is shown.
+    assert_eq!(
+        summarize(DiceMode::Paired, &paired_results(10, 0, 9)).confidence_interval_a,
+        None
+    );
 }
 
 #[sqlx::test(migrations = "./migrations")]

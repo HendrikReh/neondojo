@@ -354,12 +354,9 @@ fn summarize(mode: DiceMode, results: &[MatchResult]) -> SeriesStatistics {
         .count() as i32;
     let wins_b = counted.len() as i32 - wins_a;
     let win_rate_a = (!counted.is_empty()).then(|| f64::from(wins_a) / counted.len() as f64);
-    // Independent observations are pair means in [0,1]. Hoeffding gives a
-    // conservative finite-sample interval even when every pair splits 1–1.
-    let confidence_interval_a = win_rate_a.filter(|_| complete_pairs >= 20).map(|rate| {
-        let radius = (40_f64.ln() / (2.0 * complete_pairs as f64)).sqrt();
-        [(rate - radius).max(0.0), (rate + radius).min(1.0)]
-    });
+    let confidence_interval_a = (complete_pairs >= MIN_PAIRS_FOR_INTERVAL)
+        .then(|| pair_mean_interval(counted))
+        .flatten();
     SeriesStatistics {
         wins_a,
         wins_b,
@@ -367,6 +364,55 @@ fn summarize(mode: DiceMode, results: &[MatchResult]) -> SeriesStatistics {
         complete_pairs: complete_pairs as i32,
         confidence_interval_a,
     }
+}
+
+const MIN_PAIRS_FOR_INTERVAL: usize = 20;
+
+/// Two-sided 95% Student-t interval for A's match win rate.
+///
+/// The independent observations are the pair means (0, ½ or 1), so the
+/// interval uses their sample variance. Swapping sides makes the two legs of a
+/// pair negatively correlated, which this variance captures. Bounds are
+/// clamped to [0, 1]. Returns `None` for fewer than two complete pairs.
+fn pair_mean_interval(counted: &[MatchResult]) -> Option<[f64; 2]> {
+    let means = counted
+        .chunks_exact(2)
+        .map(|pair| {
+            let wins = pair
+                .iter()
+                .filter(|result| result.score_a > result.score_b)
+                .count();
+            wins as f64 / 2.0
+        })
+        .collect::<Vec<_>>();
+    let n = means.len();
+    if n < 2 {
+        return None;
+    }
+    let mean = means.iter().sum::<f64>() / n as f64;
+    let variance = means
+        .iter()
+        .map(|value| (value - mean).powi(2))
+        .sum::<f64>()
+        / (n - 1) as f64;
+    let radius = student_t_975(n - 1) * (variance / n as f64).sqrt();
+    Some([(mean - radius).max(0.0), (mean + radius).min(1.0)])
+}
+
+/// 0.975 quantile of Student's t distribution with `df` degrees of freedom.
+///
+/// Cornish–Fisher expansion around the normal quantile (Abramowitz & Stegun
+/// 26.7.5). Its error is below 1e-4 for the 19 or more degrees of freedom a
+/// displayed interval requires.
+fn student_t_975(df: usize) -> f64 {
+    const Z: f64 = 1.959_963_984_540_054;
+    let n = df as f64;
+    let z2 = Z * Z;
+    let g1 = (z2 + 1.0) * Z / 4.0;
+    let g2 = ((5.0 * z2 + 16.0) * z2 + 3.0) * Z / 96.0;
+    let g3 = (((3.0 * z2 + 19.0) * z2 + 17.0) * z2 - 15.0) * Z / 384.0;
+    let g4 = ((((79.0 * z2 + 776.0) * z2 + 1482.0) * z2 - 1920.0) * z2 - 945.0) * Z / 92_160.0;
+    Z + g1 / n + g2 / (n * n) + g3 / (n * n * n) + g4 / (n * n * n * n)
 }
 
 #[derive(OpenApi)]
