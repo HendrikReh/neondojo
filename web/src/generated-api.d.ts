@@ -2726,12 +2726,22 @@ export interface components {
             gnubg_path: string;
             /**
              * Format: int32
-             * @description Host-local override. Null uses one GNUbg calculation thread. Omit on PUT to keep the saved value.
+             * @description Host-local override for playing. Null uses one GNUbg calculation thread. Omit on PUT to keep the saved value.
+             */
+            gnubg_play_threads?: number | null;
+            /**
+             * Format: int32
+             * @description Host-local override for analyses and engine duels. Null uses one GNUbg calculation thread. Omit on PUT to keep the saved value.
              */
             gnubg_threads?: number | null;
             /**
              * Format: int32
-             * @description Host-local override. Null uses four threads for analysis and two for play. Omit on PUT to keep the saved value.
+             * @description Host-local override for playing. Null uses two threads. Omit on PUT to keep the saved value.
+             */
+            open_sage_play_threads?: number | null;
+            /**
+             * Format: int32
+             * @description Host-local override for analyses and engine duels. Null uses four threads. Omit on PUT to keep the saved value.
              */
             open_sage_threads?: number | null;
             play_engine: string;

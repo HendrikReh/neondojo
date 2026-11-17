@@ -362,6 +362,13 @@ export default function SettingsDialog({
       gallery.scrollTop += Math.ceil(item.bottom - bottom);
   }, [boardGalleryVisible]);
   const engine = engines.find(({ id }) => id === 'gnubg');
+  const gnubgEdited = !!(
+    draft &&
+    initial &&
+    changedInstallationFields(initial, draft).some((field) =>
+      field.startsWith('gnubg_'),
+    )
+  );
   const selectedTheme = themes.find(({ id }) => id === draftTheme) ?? themes[0];
   const analysisPlies =
     engines
@@ -452,7 +459,16 @@ export default function SettingsDialog({
     setChecking(true);
     setCheck(null);
     try {
-      const result = await checkGnubg(path, abort.signal, draft.gnubg_threads);
+      // Playing and analysis may use different thread counts; check each one.
+      const threadCounts = [
+        ...new Set([
+          draft.gnubg_threads ?? null,
+          draft.gnubg_play_threads ?? null,
+        ]),
+      ];
+      let result = { version: '' };
+      for (const threads of threadCounts)
+        result = await checkGnubg(path, abort.signal, threads);
       if (!abort.signal.aborted && currentSession === session.current) {
         setCheck({ path, version: result.version });
       }
@@ -499,7 +515,9 @@ export default function SettingsDialog({
             version: installation.version,
             gnubg_path: installation.gnubg_path,
             gnubg_threads: installation.gnubg_threads,
+            gnubg_play_threads: installation.gnubg_play_threads,
             open_sage_threads: installation.open_sage_threads,
+            open_sage_play_threads: installation.open_sage_play_threads,
           };
           settings = { ...draft, ...savedInstallation };
           setDraft(settings);
@@ -1090,20 +1108,16 @@ export default function SettingsDialog({
                           className="settings-engine-status"
                           id={`${id}-check-status`}
                         >
-                          {engine?.version &&
-                            !check &&
-                            draft.gnubg_path === initial?.gnubg_path &&
-                            (draft.gnubg_threads ?? null) ===
-                              (initial?.gnubg_threads ?? null) && (
-                              <p>
-                                <EngineLabel
-                                  details={engine.version}
-                                  format={(version) =>
-                                    t('engineVersion', { version })
-                                  }
-                                />
-                              </p>
-                            )}
+                          {engine?.version && !check && !gnubgEdited && (
+                            <p>
+                              <EngineLabel
+                                details={engine.version}
+                                format={(version) =>
+                                  t('engineVersion', { version })
+                                }
+                              />
+                            </p>
+                          )}
                           {!engine?.available && <p>{t('unavailable')}</p>}
                           {check && 'version' in check && (
                             <p role="status" className="settings-success">
@@ -1120,12 +1134,7 @@ export default function SettingsDialog({
                               {t('checkError')} {diagnostic(check.error)}
                             </p>
                           )}
-                          {!check &&
-                            (draft.gnubg_path !== initial?.gnubg_path ||
-                              (draft.gnubg_threads ?? null) !==
-                                (initial?.gnubg_threads ?? null)) && (
-                              <p>{t('checkNeeded')}</p>
-                            )}
+                          {!check && gnubgEdited && <p>{t('checkNeeded')}</p>}
                           {checking && <p role="status">{t('checking')}</p>}
                         </div>
                         <p className="settings-help">{t('checkHelp')}</p>
@@ -1138,8 +1147,18 @@ export default function SettingsDialog({
                       <div className="settings-field-pair">
                         {(
                           [
-                            ['gnubg', 'gnubg_threads', 'gnubgThreads'],
-                            ['bgsage', 'open_sage_threads', 'sageThreads'],
+                            ['gnubg', 'gnubg_threads', 'gnubgAnalysisThreads'],
+                            ['gnubg', 'gnubg_play_threads', 'gnubgPlayThreads'],
+                            [
+                              'bgsage',
+                              'open_sage_threads',
+                              'sageAnalysisThreads',
+                            ],
+                            [
+                              'bgsage',
+                              'open_sage_play_threads',
+                              'sagePlayThreads',
+                            ],
                           ] as const
                         ).map(([provider, field, label]) => {
                           const { min } =

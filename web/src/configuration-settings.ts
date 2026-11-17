@@ -12,7 +12,9 @@ import type { UiAppearance } from './ui-appearance';
 const installationFields = [
   'gnubg_path',
   'gnubg_threads',
+  'gnubg_play_threads',
   'open_sage_threads',
+  'open_sage_play_threads',
 ] as const;
 
 export function changedInstallationFields(

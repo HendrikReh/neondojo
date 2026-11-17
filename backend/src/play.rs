@@ -604,7 +604,7 @@ async fn create_session(
         gnubg_path: pinned_path.clone(),
         engine_version: Some(rules_version),
         gnubg_threads: settings
-            .gnubg_threads
+            .gnubg_play_threads
             .filter(|_| settings.play_engine == "gnubg"),
         gnubg_move_filter: None,
         open_sage: None,
@@ -613,11 +613,8 @@ async fn create_session(
         &state,
         &settings.play_engine,
         &pinned_path,
-        settings.gnubg_threads,
-        crate::settings::sage_threads(
-            settings.open_sage_threads,
-            crate::settings::SAGE_PLAY_THREADS,
-        ),
+        settings.gnubg_play_threads,
+        settings.sage_play_threads(),
         settings.play_plies,
     )
     .await
@@ -627,10 +624,7 @@ async fn create_session(
         &settings.analysis_engine,
         &pinned_path,
         settings.gnubg_threads,
-        crate::settings::sage_threads(
-            settings.open_sage_threads,
-            crate::settings::SAGE_ANALYSIS_THREADS,
-        ),
+        settings.sage_analysis_threads(),
         settings.analysis_plies,
     )
     .await

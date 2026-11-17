@@ -56,7 +56,12 @@ describe('settings/profile boundary', () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
   it('applies a thread limit and preserves concurrent edits to the other engine', async () => {
-    const latest = { ...installed, version: 8, open_sage_threads: 8 };
+    const latest = {
+      ...installed,
+      version: 8,
+      open_sage_threads: 8,
+      open_sage_play_threads: 3,
+    };
     vi.stubGlobal(
       'fetch',
       vi.fn(async (_url, options) => {
@@ -67,8 +72,13 @@ describe('settings/profile boundary', () => {
     const saved = await saveInstallationSettings(installed, {
       ...installed,
       gnubg_threads: 3,
+      gnubg_play_threads: 2,
     });
-    expect(saved).toEqual({ ...latest, gnubg_threads: 3 });
+    expect(saved).toEqual({
+      ...latest,
+      gnubg_threads: 3,
+      gnubg_play_threads: 2,
+    });
   });
   it('projects the current configuration without changing the machine installation', () => {
     const config = structuredClone(defaultConfiguration);
