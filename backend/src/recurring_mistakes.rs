@@ -53,6 +53,9 @@ pub struct MistakesQuery {
     pub database_id: Option<Uuid>,
     pub game_plan: Option<GamePlan>,
     pub min_loss: Option<f64>,
+    /// Count only matches played without learning aids: imports and bot
+    /// matches in Competition mode without a hint.
+    pub independent_only: Option<bool>,
     /// A match name, such as the configured profile name, to translate into
     /// the player choice that covers it.
     pub resolve: Option<String>,
@@ -113,6 +116,9 @@ pub struct MistakePracticeRequest {
     pub game_plan: GamePlan,
     pub min_loss: Option<f64>,
     pub mistake_kind: MistakeKind,
+    /// Ask only from matches played without learning aids.
+    #[serde(default)]
+    pub independent_only: bool,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(deny_unknown_fields)]
@@ -292,13 +298,21 @@ async fn list(
         return Ok(Json(result));
     };
     let names = player_scope::names(&s.pool, &player).await?;
-    let (groups, decisions, matches) =
-        index::ensure_and_group(&s.pool, q.database_id, &names, q.game_plan, loss).await?;
+    let independent_only = q.independent_only.unwrap_or(false);
+    let (groups, decisions, matches) = index::ensure_and_group(
+        &s.pool,
+        q.database_id,
+        &names,
+        q.game_plan,
+        loss,
+        independent_only,
+    )
+    .await?;
     result.groups = groups;
     result.analyzed_decisions = decisions;
     result.analyzed_matches = matches;
     (result.player_matches, result.unanalyzed_matches) =
-        index::coverage(&s.pool, q.database_id, &names).await?;
+        index::coverage(&s.pool, q.database_id, &names, independent_only).await?;
     Ok(Json(result))
 }
 #[utoipa::path(post,path="/api/study/mistakes/practice",request_body=MistakePracticeRequest,responses((status=200,body=MistakePractice),(status=422,body=ErrorBody)),tag="Study")]
@@ -310,7 +324,17 @@ async fn practice(
     let (player, loss) = validate(Some(q.player), q.min_loss)?;
     let player = player.unwrap();
     let names = player_scope::names(&s.pool, &player).await?;
-    let rows = load(&s.pool, q.database_id, None, Some(&names)).await?;
+    let mut rows = load(&s.pool, q.database_id, None, Some(&names)).await?;
+    if q.independent_only {
+        let matches: Vec<Uuid> = rows
+            .iter()
+            .map(|row| row.question.position.match_uuid)
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
+        let independent = index::independent_matches(&s.pool, &matches).await?;
+        rows.retain(|row| independent.contains(&row.question.position.match_uuid));
+    }
     let items = select_practice_questions(rows, &names, q.game_plan, q.mistake_kind, loss);
     Ok(Json(MistakePractice { items }))
 }

@@ -15,6 +15,8 @@ test.each(['en', 'de', 'es', 'fr', 'pl', 'it'] as Locale[])(
           visible: true,
           theme: 'forest',
           onOpenPlayers: () => undefined,
+          independentOnly: false,
+          onIndependentOnly: () => undefined,
         }),
       }),
     );

@@ -24,6 +24,18 @@
   min-width: 160px;
   flex: 1;
 }
+.recurring-filters label.recurring-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 0 0 auto;
+  align-self: end;
+  min-height: 36px;
+}
+.recurring-filters label.recurring-toggle input {
+  width: auto;
+}
 .recurring-filters input,
 .recurring-filters select {
   width: 100%;

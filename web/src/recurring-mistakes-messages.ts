@@ -219,6 +219,22 @@ const entries = {
     'Odsetek błędów we wcześniejszej i późniejszej połowie meczów według daty. Widoczny, gdy każda połowa ma co najmniej 10 ocenialnych decyzji. Liczą się wszystkie przeanalizowane mecze: analizy importowane i obliczone oraz mecze rozegrane z Coachem lub Tutorem, więc zmiana może też wynikać z innego doboru meczów.',
     'Tasso di errore nella metà precedente e in quella recente dei match, per data. Mostrato se ogni metà ha almeno 10 decisioni valutabili. Contano tutti i match analizzati: analisi importate e calcolate e match giocati con Coach o Tutor; una variazione può quindi riflettere anche un diverso insieme di match.',
   ],
+  independentOnly: [
+    'Only matches played without learning aids',
+    'Nur Matches ohne Lernhilfen',
+    'Solo encuentros jugados sin ayudas',
+    'Seulement les matchs joués sans aide',
+    'Tylko mecze rozegrane bez pomocy',
+    'Solo match giocati senza aiuti',
+  ],
+  independentOnlyHelp: [
+    'Counts imported matches and bot matches played in Competition mode without a hint. Leaves out matches played with Training, Coach or Tutor.',
+    'Zählt importierte Matches und Bot-Matches im Wettkampfmodus ohne Hinweis. Lässt Matches mit Training, Coach oder Tutor aus.',
+    'Cuenta los encuentros importados y los jugados contra el bot en modo Competición sin pista. Omite los jugados con Entrenamiento, Coach o Tutor.',
+    'Compte les matchs importés et ceux joués contre le bot en mode Compétition sans indice. Écarte les matchs joués avec Entraînement, Coach ou Tutor.',
+    'Liczy mecze importowane i mecze z botem w trybie Rywalizacja bez podpowiedzi. Pomija mecze rozegrane z Treningiem, Coachem lub Tutorem.',
+    'Conta i match importati e quelli contro il bot in modalità Competizione senza suggerimento. Esclude i match giocati con Allenamento, Coach o Tutor.',
+  ],
   location: [
     'Game {game}, decision {decision}',
     'Spiel {game}, Entscheidung {decision}',

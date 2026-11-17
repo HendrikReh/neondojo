@@ -10370,6 +10370,15 @@
             }
           },
           {
+            "name": "independent_only",
+            "in": "query",
+            "description": "Count only matches played without learning aids: imports and bot\nmatches in Competition mode without a hint.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "name": "resolve",
             "in": "query",
             "description": "A match name, such as the configured profile name, to translate into\nthe player choice that covers it.",
@@ -17905,6 +17914,10 @@
           },
           "game_plan": {
             "$ref": "#/components/schemas/GamePlan"
+          },
+          "independent_only": {
+            "type": "boolean",
+            "description": "Ask only from matches played without learning aids."
           },
           "min_loss": {
             "type": [

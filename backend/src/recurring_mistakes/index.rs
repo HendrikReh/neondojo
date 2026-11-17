@@ -219,6 +219,12 @@ struct GroupRow {
     recent_decisions: Option<i64>,
 }
 
+/// A match played without learning aids: an import, or a bot match in
+/// Competition mode that used no hint, Coach, Tutor or Training feedback.
+/// The match database applies the same rule before it shows a PR.
+pub(super) const INDEPENDENT_MATCH: &str =
+    "(NOT m.play_assisted AND coalesce(m.play_mode,'competition')='competition')";
+
 /// Aggregate one player's indexed decisions into mistake groups.
 /// Returns the groups, the evaluable decisions and the matches they cover.
 pub(super) async fn groups(
@@ -227,30 +233,35 @@ pub(super) async fn groups(
     player: &[String],
     plan: Option<crate::game_plan::GamePlan>,
     min_loss: f64,
+    independent_only: bool,
 ) -> ApiResult<(Vec<super::MistakeGroup>, usize, usize)> {
     // The player's matches are split by date into an earlier and a recent
     // half, so each group can show whether its error rate is moving.
-    const SCOPED: &str = "WITH scoped AS (
+    let scoped = format!(
+        "WITH scoped AS (
             SELECT d.match_id,d.game_plan,d.opportunity,d.mistake_kind,d.equity_loss,d.played_on
             FROM decision_index d JOIN matches m ON m.id=d.match_id
             WHERE d.player_name=ANY($1) AND ($2::uuid IS NULL OR m.database_id=$2)
               AND ($3::text IS NULL OR d.game_plan=$3)
+              AND (NOT $4 OR {INDEPENDENT_MATCH})
         ), halves AS (
             SELECT match_id,ntile(2) OVER (ORDER BY min(played_on),match_id) AS half
             FROM scoped GROUP BY match_id
-        )";
+        )"
+    );
     let plan = plan.map(crate::position_game_plans::label);
     let (decisions, matches): (i64, i64) = sqlx::query_as(&format!(
-        "{SCOPED} SELECT count(*),count(DISTINCT match_id) FROM scoped"
+        "{scoped} SELECT count(*),count(DISTINCT match_id) FROM scoped"
     ))
     .bind(player)
     .bind(database)
     .bind(plan)
+    .bind(independent_only)
     .fetch_one(pool)
     .await
     .map_err(anyhow::Error::from)?;
     let rows: Vec<GroupRow> = sqlx::query_as(&format!(
-        "{SCOPED}, opportunities AS (
+        "{scoped}, opportunities AS (
             SELECT s.game_plan,s.opportunity AS kind,count(*) AS decisions,
                    count(*) FILTER (WHERE h.half=1) AS earlier_decisions,
                    count(*) FILTER (WHERE h.half=2) AS recent_decisions
@@ -262,7 +273,7 @@ pub(super) async fn groups(
                    count(*) FILTER (WHERE h.half=1) AS earlier_errors,
                    count(*) FILTER (WHERE h.half=2) AS recent_errors
             FROM scoped s JOIN halves h USING (match_id)
-            WHERE s.equity_loss>=$4 AND s.equity_loss>0 GROUP BY 1,2
+            WHERE s.equity_loss>=$5 AND s.equity_loss>0 GROUP BY 1,2
         )
         SELECT e.game_plan,e.kind,e.errors,e.matches,e.loss,e.earlier_errors,e.recent_errors,
                o.decisions,o.earlier_decisions,o.recent_decisions
@@ -272,6 +283,7 @@ pub(super) async fn groups(
     .bind(player)
     .bind(database)
     .bind(plan)
+    .bind(independent_only)
     .bind(min_loss)
     .fetch_all(pool)
     .await
@@ -322,22 +334,40 @@ pub(super) async fn coverage(
     pool: &PgPool,
     database: Option<Uuid>,
     player: &[String],
+    independent_only: bool,
 ) -> ApiResult<(usize, usize)> {
-    let (matches, unanalyzed): (i64, i64) = sqlx::query_as(
+    let (matches, unanalyzed): (i64, i64) = sqlx::query_as(&format!(
         "SELECT count(*),
                 count(*) FILTER (WHERE NOT EXISTS(
                     SELECT 1 FROM decision_index d WHERE d.match_id=m.id))
          FROM matches m
          WHERE NOT m.collection_only AND ($1::uuid IS NULL OR m.database_id=$1)
-           AND (lower(btrim(m.white))=ANY($2) OR lower(btrim(m.black))=ANY($2))",
-    )
+           AND (lower(btrim(m.white))=ANY($2) OR lower(btrim(m.black))=ANY($2))
+           AND (NOT $3 OR {INDEPENDENT_MATCH})"
+    ))
     .bind(database)
     .bind(player)
+    .bind(independent_only)
     .fetch_one(pool)
     .await
     .map_err(anyhow::Error::from)?;
     let count = |value: i64| usize::try_from(value).unwrap_or(0);
     Ok((count(matches), count(unanalyzed)))
+}
+
+/// Of the given matches, those played without learning aids.
+pub(super) async fn independent_matches(
+    pool: &PgPool,
+    matches: &[Uuid],
+) -> ApiResult<std::collections::HashSet<Uuid>> {
+    let ids: Vec<Uuid> = sqlx::query_scalar(&format!(
+        "SELECT m.id FROM matches m WHERE m.id=ANY($1) AND {INDEPENDENT_MATCH}"
+    ))
+    .bind(matches)
+    .fetch_all(pool)
+    .await
+    .map_err(anyhow::Error::from)?;
+    Ok(ids.into_iter().collect())
 }
 
 pub(super) async fn ensure_and_group(
@@ -346,7 +376,8 @@ pub(super) async fn ensure_and_group(
     player: &[String],
     plan: Option<crate::game_plan::GamePlan>,
     min_loss: f64,
+    independent_only: bool,
 ) -> ApiResult<(Vec<super::MistakeGroup>, usize, usize)> {
     ensure(pool, database, player).await?;
-    groups(pool, database, player, plan, min_loss).await
+    groups(pool, database, player, plan, min_loss, independent_only).await
 }

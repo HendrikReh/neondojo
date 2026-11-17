@@ -966,3 +966,53 @@ test('a cube question is answered by keyboard and explains score, outcomes and t
   await expect(dialog).toContainText('2 / 2');
   await expect(dialog.locator('.cube-outcomes')).toHaveCount(0);
 });
+
+test('the independent-play choice filters the statistics and practice and is shared with the overview', async ({
+  page,
+}) => {
+  const queries: (string | null)[] = [];
+  await page.route('**/api/study/mistakes?*', (r) => {
+    const params = new URL(r.request().url()).searchParams;
+    if (params.has('player')) queries.push(params.get('independent_only'));
+    return r.fulfill({
+      json: { ...result, groups: params.has('player') ? [group] : [] },
+    });
+  });
+  let practiceBody: Record<string, unknown> | undefined;
+  await page.route('**/api/study/mistakes/practice', (r) => {
+    practiceBody = r.request().postDataJSON();
+    return r.fulfill({ json: { items: [question(1)] } });
+  });
+  await open(page);
+  const mistakes = page.locator('#study-panel-mistakes');
+  await mistakes
+    .getByRole('combobox', { name: 'Player', exact: true })
+    .selectOption('Alice');
+  const toggle = mistakes.getByRole('checkbox', {
+    name: 'Only matches played without learning aids',
+    exact: true,
+  });
+  await expect(toggle).not.toBeChecked();
+  await expect.poll(() => queries.at(-1)).toBeNull();
+  await toggle.check();
+  await expect.poll(() => queries.at(-1)).toBe('true');
+  await mistakes
+    .getByRole('button', { name: 'Practice', exact: true })
+    .first()
+    .click();
+  await expect.poll(() => practiceBody?.independent_only).toBe(true);
+  await page.keyboard.press('Escape');
+
+  // The overview shows the same choice, and a reload keeps it.
+  await page.getByRole('tab', { name: 'Overview', exact: true }).click();
+  const overviewToggle = page
+    .locator('#study-panel-overview')
+    .getByRole('checkbox', {
+      name: 'Only matches played without learning aids',
+      exact: true,
+    });
+  await expect(overviewToggle).toBeChecked();
+  await page.reload();
+  await page.getByRole('tab', { name: 'Study', exact: true }).click();
+  await expect(overviewToggle).toBeChecked();
+});

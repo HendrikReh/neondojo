@@ -4413,6 +4413,8 @@ export interface components {
             /** Format: uuid */
             database_id?: string | null;
             game_plan: components["schemas"]["GamePlan"];
+            /** @description Ask only from matches played without learning aids. */
+            independent_only?: boolean;
             /** Format: double */
             min_loss?: number | null;
             mistake_kind: components["schemas"]["MistakeKind"];
@@ -12686,6 +12688,11 @@ export interface operations {
                 database_id?: string;
                 game_plan?: components["schemas"]["GamePlan"];
                 min_loss?: number;
+                /**
+                 * @description Count only matches played without learning aids: imports and bot
+                 *     matches in Competition mode without a hint.
+                 */
+                independent_only?: boolean;
                 /**
                  * @description A match name, such as the configured profile name, to translate into
                  *     the player choice that covers it.

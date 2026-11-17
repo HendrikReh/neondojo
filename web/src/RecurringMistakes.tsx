@@ -1,3 +1,4 @@
+import IndependentOnlyToggle from './IndependentOnlyToggle';
 import UnanalyzedMatches from './UnanalyzedMatches';
 import SearchPagination from './SearchPagination';
 import { lastSearchPage } from './useSearchPages';
@@ -28,6 +29,8 @@ export default function RecurringMistakes({
   theme,
   requestedPlayer,
   suggestedPlayer,
+  independentOnly,
+  onIndependentOnly,
   onOpenPlayers,
 }: {
   visible: boolean;
@@ -36,6 +39,8 @@ export default function RecurringMistakes({
   requestedPlayer?: { name: string; token: number };
   /** The overview's player; fills the choice only while it is still empty. */
   suggestedPlayer?: string;
+  independentOnly: boolean;
+  onIndependentOnly: (value: boolean) => void;
   onOpenPlayers: () => void;
 }) {
   const t = useMistakeText(),
@@ -86,6 +91,7 @@ export default function RecurringMistakes({
       ...(database ? { database_id: database } : {}),
       ...(plan ? { game_plan: plan } : {}),
       min_loss: minLoss,
+      ...(independentOnly ? { independent_only: true } : {}),
     };
     void loadMistakes(filters, abort.signal)
       .then((result) => {
@@ -109,7 +115,16 @@ export default function RecurringMistakes({
       abort.abort();
       generation.current++;
     };
-  }, [visible, player, database, plan, minLoss, valid, revision]);
+  }, [
+    visible,
+    player,
+    database,
+    plan,
+    minLoss,
+    valid,
+    revision,
+    independentOnly,
+  ]);
   useEffect(() => {
     if (!visible) return;
     const abort = new AbortController();
@@ -132,6 +147,7 @@ export default function RecurringMistakes({
       game_plan: group.game_plan,
       min_loss: minLoss,
       mistake_kind: group.mistake_kind,
+      ...(independentOnly ? { independent_only: true } : {}),
     });
   }
   const pageSize = 25;
@@ -207,6 +223,13 @@ export default function RecurringMistakes({
             }}
           />
         </label>
+        <IndependentOnlyToggle
+          checked={independentOnly}
+          onChange={(value) => {
+            setPractice(undefined);
+            onIndependentOnly(value);
+          }}
+        />
       </div>
       {!valid && <p role="alert">{t('invalidLoss')}</p>}
       {loading && valid && <p role="status">{t('loading')}</p>}

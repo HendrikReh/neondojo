@@ -1,3 +1,4 @@
+import IndependentOnlyToggle from './IndependentOnlyToggle';
 import UnanalyzedMatches from './UnanalyzedMatches';
 import { useEffect, useId, useRef, useState } from 'react';
 import ActionButton from './ActionButton';
@@ -35,6 +36,8 @@ type Props = {
   onOpenCards: () => void;
   /** Opens the full list for the player the overview shows, if any. */
   onOpenMistakes: (player: string) => void;
+  independentOnly: boolean;
+  onIndependentOnly: (value: boolean) => void;
   /** Reports the player whose mistakes the overview shows. */
   onPlayer: (player: string) => void;
   /** Opens the player database, where unrated matches are analyzed. */
@@ -66,6 +69,8 @@ function Overview({
   onOpenMistakes,
   onOpenPlayers,
   onPlayer,
+  independentOnly,
+  onIndependentOnly,
   onStudyDeck,
   configuredPlayer,
 }: Props & { configuredPlayer: string }) {
@@ -176,7 +181,10 @@ function Overview({
     setMistakes(undefined);
     if (!visible || !player) return;
     const abort = new AbortController();
-    void loadMistakes({ player }, abort.signal)
+    void loadMistakes(
+      { player, ...(independentOnly ? { independent_only: true } : {}) },
+      abort.signal,
+    )
       .then((data) => {
         if (!abort.signal.aborted)
           setMistakes({ player, result: { status: 'ready', data } });
@@ -186,7 +194,7 @@ function Overview({
           setMistakes({ player, result: { status: 'error', error } });
       });
     return () => abort.abort();
-  }, [visible, player]);
+  }, [visible, player, independentOnly]);
 
   useEffect(() => {
     if (player) onPlayer(player);
@@ -232,6 +240,7 @@ function Overview({
       player,
       game_plan: group.game_plan,
       mistake_kind: group.mistake_kind,
+      ...(independentOnly ? { independent_only: true } : {}),
     });
   }
 
@@ -419,6 +428,12 @@ function Overview({
                   setMistakes(undefined);
                   setManualPlayer(name);
                 }}
+              />
+            )}
+            {players.data.length > 0 && (
+              <IndependentOnlyToggle
+                checked={independentOnly}
+                onChange={onIndependentOnly}
               />
             )}
             <ActionButton

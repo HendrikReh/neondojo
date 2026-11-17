@@ -1,3 +1,4 @@
+import { useWorkspaceSession } from './useWorkspaceSession';
 import {
   useEffect,
   useRef,
@@ -37,6 +38,15 @@ export default function StudyWorkspace({
     name: string;
     token: number;
   }>();
+  // Whether mistake statistics leave out matches played with learning aids;
+  // the overview and the list share and remember the choice.
+  const [independentOnly, setIndependentOnly] = useWorkspaceSession(
+    'study.mistakes.independentOnly',
+    undefined,
+    false,
+    (stored) => (typeof stored === 'boolean' ? stored : undefined),
+    'layout',
+  );
   // The player the overview shows, offered to the list when it has none.
   const [overviewPlayer, setOverviewPlayer] = useState<string>();
   const tabs = useRef<Partial<Record<Area, HTMLButtonElement | null>>>({});
@@ -111,6 +121,8 @@ export default function StudyWorkspace({
           onOpenCards={() => openArea('cards')}
           onOpenPlayers={onOpenPlayers}
           onPlayer={setOverviewPlayer}
+          independentOnly={independentOnly}
+          onIndependentOnly={setIndependentOnly}
           onOpenMistakes={(name) => {
             if (name)
               setMistakePlayer((current) => ({
@@ -156,6 +168,8 @@ export default function StudyWorkspace({
           theme={props.theme}
           requestedPlayer={mistakePlayer}
           suggestedPlayer={overviewPlayer}
+          independentOnly={independentOnly}
+          onIndependentOnly={setIndependentOnly}
           onOpenPlayers={onOpenPlayers}
         />
       </div>

@@ -16,6 +16,8 @@ export type MistakeFilters = {
   database_id?: string;
   game_plan?: GamePlan;
   min_loss?: number;
+  /** Count only matches played without learning aids. */
+  independent_only?: boolean;
   /** A match name to translate into the player choice that covers it. */
   resolve?: string;
 };

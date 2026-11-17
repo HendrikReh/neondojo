@@ -1447,3 +1447,58 @@ async fn aliases_of_one_profile_count_as_one_player(pool: PgPool) {
     let asked = items[0]["reference"]["job_id"].as_str().unwrap();
     assert!(jobs.iter().any(|job| job.to_string() == asked));
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn independent_only_leaves_out_matches_played_with_learning_aids(pool: PgPool) {
+    let mut jobs = Vec::new();
+    for (file, loss) in [("coach.sgf", 0.2), ("alone.sgf", 0.12)] {
+        let sgf = format!("(;GM[6]PW[Alice]PB[Bob]MI[length:7]C[{file}];W[31hefe])");
+        let id = store::import_match(
+            &pool,
+            file,
+            "sgf",
+            sgf.as_bytes(),
+            &sgf,
+            &import::parse_sgf(&sgf).unwrap(),
+        )
+        .await
+        .unwrap()
+        .r#match
+        .id;
+        jobs.push((id, job(&pool, id, 0, None, &game1(loss)[..1]).await));
+    }
+    // The first match was played against the bot with Coach feedback.
+    sqlx::query("UPDATE matches SET play_mode='coach',play_assisted=true WHERE id=$1")
+        .bind(jobs[0].0)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let router = app(&pool);
+    for (query, matches, errors) in [("", 2, 2), ("&independent_only=true", 1, 1)] {
+        let (status, data) = call(
+            &router,
+            "GET",
+            &format!("/api/study/mistakes?player=Alice{query}"),
+            Value::Null,
+        )
+        .await;
+        assert_eq!(status, 200, "{data}");
+        assert_eq!(data["analyzed_matches"], matches, "{query}");
+        assert_eq!(data["player_matches"], matches, "{query}");
+        assert_eq!(data["groups"][0]["count"], errors, "{query}");
+    }
+    let (status, practice) = call(
+        &router,
+        "POST",
+        "/api/study/mistakes/practice",
+        json!({"player":"Alice","game_plan":"opening","mistake_kind":"checker","independent_only":true}),
+    )
+    .await;
+    assert_eq!(status, 200, "{practice}");
+    let items = practice["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(
+        items[0]["reference"]["job_id"].as_str().unwrap(),
+        jobs[1].1.to_string()
+    );
+}
