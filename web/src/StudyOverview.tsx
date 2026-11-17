@@ -35,6 +35,8 @@ type Props = {
   onOpenCards: () => void;
   /** Opens the full list for the player the overview shows, if any. */
   onOpenMistakes: (player: string) => void;
+  /** Reports the player whose mistakes the overview shows. */
+  onPlayer: (player: string) => void;
   /** Opens the player database, where unrated matches are analyzed. */
   onOpenPlayers: () => void;
   onStudyDeck: (id: string) => void;
@@ -63,6 +65,7 @@ function Overview({
   onOpenCards,
   onOpenMistakes,
   onOpenPlayers,
+  onPlayer,
   onStudyDeck,
   configuredPlayer,
 }: Props & { configuredPlayer: string }) {
@@ -96,7 +99,11 @@ function Overview({
       })
       .catch((error: unknown) => setLimitError(error));
   };
-  const [players, setPlayers] = useState<Result<string[]>>(loading);
+  const [players, setPlayers] = useState<
+    | { status: 'loading' }
+    | { status: 'error'; error: unknown }
+    | { status: 'ready'; data: string[]; resolved: string }
+  >(loading);
   const [mistakeRefresh, setMistakeRefresh] = useState(0);
   const [manualPlayer, setManualPlayer] = useState<string>();
   const [mistakes, setMistakes] = useState<{
@@ -138,21 +145,27 @@ function Overview({
     setPlayers(loading);
     if (!visible) return;
     const abort = new AbortController();
-    void loadMistakes({}, abort.signal)
-      .then(({ players }) => {
+    // The profile may name the player by an alias; the list shows the
+    // profile's display name, so the backend translates it.
+    void loadMistakes({ resolve: configuredPlayer.trim() }, abort.signal)
+      .then(({ players, resolved_player }) => {
         if (!abort.signal.aborted)
-          setPlayers({ status: 'ready', data: players });
+          setPlayers({
+            status: 'ready',
+            data: players,
+            resolved: resolved_player ?? '',
+          });
       })
       .catch((error: unknown) => {
         if (!abort.signal.aborted) setPlayers({ status: 'error', error });
       });
     return () => abort.abort();
-  }, [visible, mistakeRefresh]);
+  }, [visible, mistakeRefresh, configuredPlayer]);
 
   const player =
     players.status === 'ready'
       ? manualPlayer === undefined
-        ? defaultStudyPlayer(configuredPlayer, players.data)
+        ? players.resolved || defaultStudyPlayer(configuredPlayer, players.data)
         : players.data.includes(manualPlayer)
           ? manualPlayer
           : ''
@@ -174,6 +187,12 @@ function Overview({
       });
     return () => abort.abort();
   }, [visible, player]);
+
+  useEffect(() => {
+    if (player) onPlayer(player);
+    // Report the shown player; the callback identity is not a trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [player]);
 
   const playerMistakes =
     mistakes?.player === player ? mistakes.result : loading;

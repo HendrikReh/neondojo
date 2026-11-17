@@ -1404,6 +1404,17 @@ async fn aliases_of_one_profile_count_as_one_player(pool: PgPool) {
     .unwrap();
     assert_eq!(merged.rows_affected(), 1);
 
+    // A profile name that is only an alias resolves to the offered choice.
+    let (status, resolved) = call(
+        &router,
+        "GET",
+        "/api/study/mistakes?resolve=alicia",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{resolved}");
+    assert_eq!(resolved["resolved_player"], "Alice");
+    assert!(resolved["groups"].as_array().unwrap().is_empty());
     for player in ["Alice", "Alicia"] {
         let data = mistakes(player).await;
         assert_eq!(data["players"], json!(["Alice", "Bob"]), "{player}");

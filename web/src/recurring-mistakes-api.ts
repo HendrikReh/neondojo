@@ -16,6 +16,8 @@ export type MistakeFilters = {
   database_id?: string;
   game_plan?: GamePlan;
   min_loss?: number;
+  /** A match name to translate into the player choice that covers it. */
+  resolve?: string;
 };
 export type MistakeGroup = Schema['MistakeGroup'];
 export type MistakePage = Schema['Mistakes'];

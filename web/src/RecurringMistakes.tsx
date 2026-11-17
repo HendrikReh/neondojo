@@ -27,12 +27,15 @@ export default function RecurringMistakes({
   visible,
   theme,
   requestedPlayer,
+  suggestedPlayer,
   onOpenPlayers,
 }: {
   visible: boolean;
   theme: Theme;
   /** A player chosen elsewhere in Study; each new token applies it once. */
   requestedPlayer?: { name: string; token: number };
+  /** The overview's player; fills the choice only while it is still empty. */
+  suggestedPlayer?: string;
   onOpenPlayers: () => void;
 }) {
   const t = useMistakeText(),
@@ -60,6 +63,9 @@ export default function RecurringMistakes({
     setPlayer(requestedPlayer.name);
     // Only a new request applies; later edits of the filter stay the user's.
   }, [requestedToken]);
+  useEffect(() => {
+    if (visible && suggestedPlayer) setPlayer((own) => own || suggestedPlayer);
+  }, [visible, suggestedPlayer]);
   const minLoss = Number(loss),
     valid =
       loss.trim() !== '' &&

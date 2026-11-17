@@ -37,6 +37,8 @@ export default function StudyWorkspace({
     name: string;
     token: number;
   }>();
+  // The player the overview shows, offered to the list when it has none.
+  const [overviewPlayer, setOverviewPlayer] = useState<string>();
   const tabs = useRef<Partial<Record<Area, HTMLButtonElement | null>>>({});
   const token = props.requestedDeck?.token;
   useEffect(() => {
@@ -108,6 +110,7 @@ export default function StudyWorkspace({
           theme={props.theme}
           onOpenCards={() => openArea('cards')}
           onOpenPlayers={onOpenPlayers}
+          onPlayer={setOverviewPlayer}
           onOpenMistakes={(name) => {
             if (name)
               setMistakePlayer((current) => ({
@@ -152,6 +155,7 @@ export default function StudyWorkspace({
           visible={visible && area === 'mistakes'}
           theme={props.theme}
           requestedPlayer={mistakePlayer}
+          suggestedPlayer={overviewPlayer}
           onOpenPlayers={onOpenPlayers}
         />
       </div>

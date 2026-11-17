@@ -1,3 +1,4 @@
+import { interpolate } from './i18n-core';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import Board from './Board';
 import CheckerPracticeBoard, {
@@ -243,8 +244,11 @@ function MistakeQuestion({
   return (
     <div className="recurring-question">
       <p>
-        <strong>{t(item.kind)}</strong> · {item.reference.game_no}.
-        {item.reference.decision_no}
+        <strong>{t(item.kind)}</strong> ·{' '}
+        {interpolate(t('location'), {
+          game: item.reference.game_no,
+          decision: item.reference.decision_no,
+        })}
       </p>
       <p className="recurring-source">
         {/* Origin, engine, depth and method stay readable without hovering:

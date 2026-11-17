@@ -4465,6 +4465,8 @@ export interface components {
             /** @description All matches of the chosen player in the scope, under any alias. */
             player_matches: number;
             players: string[];
+            /** @description The entry of `players` that covers the name given as `resolve`. */
+            resolved_player?: string | null;
             /** @description Those of them without any analyzed decision, whatever the game plan. */
             unanalyzed_matches: number;
         };
@@ -12684,6 +12686,11 @@ export interface operations {
                 database_id?: string;
                 game_plan?: components["schemas"]["GamePlan"];
                 min_loss?: number;
+                /**
+                 * @description A match name, such as the configured profile name, to translate into
+                 *     the player choice that covers it.
+                 */
+                resolve?: string;
             };
             header?: never;
             path?: never;

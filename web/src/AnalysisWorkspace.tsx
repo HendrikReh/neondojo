@@ -633,7 +633,11 @@ export default function AnalysisWorkspace({
                   assessment={assessment}
                   current={moveIndex === index && !reviewedCubeMove}
                   buttonRef={moveIndex === index ? currentMove : undefined}
-                  onSelect={() => navigation.selectIndex(moveIndex)}
+                  onSelect={() => {
+                    // A checker move has no cube review; show its candidates.
+                    if (errors) onDetail('overview');
+                    navigation.selectIndex(moveIndex);
+                  }}
                 />
               </Fragment>
             ))}

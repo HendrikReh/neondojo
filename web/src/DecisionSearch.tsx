@@ -536,6 +536,7 @@ export default function DecisionSearch({
                                 details={hit.engine}
                                 tooltip={mistakeProvenance(hit, mistake)}
                               />
+                              {hit.depth && ` · ${hit.depth}`}
                             </td>
                           </SearchResultRow>
                         );

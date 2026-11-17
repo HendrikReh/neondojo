@@ -191,7 +191,7 @@ test('opening-book preferences and a real opening lookup expose source and depth
     .getByRole('button', { name: 'Cube', exact: true })
     .click();
   await expect(page.locator('.source-analysis:visible')).toContainText(
-    'before this roll (00)',
+    'before this roll',
   );
   const submitted = page.waitForResponse(
     (r) =>

@@ -10368,6 +10368,15 @@
               "type": "number",
               "format": "double"
             }
+          },
+          {
+            "name": "resolve",
+            "in": "query",
+            "description": "A match name, such as the configured profile name, to translate into\nthe player choice that covers it.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -18058,6 +18067,13 @@
             "items": {
               "type": "string"
             }
+          },
+          "resolved_player": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The entry of `players` that covers the name given as `resolve`."
           },
           "unanalyzed_matches": {
             "type": "integer",

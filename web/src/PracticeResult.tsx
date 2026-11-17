@@ -65,7 +65,7 @@ export default function PracticeResult({
         {t('loss')}:{' '}
         {formatNumber(result.equity_loss, {
           minimumFractionDigits: 3,
-          maximumFractionDigits: 6,
+          maximumFractionDigits: 3,
         })}
       </p>
       {cube && (

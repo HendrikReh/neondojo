@@ -277,7 +277,9 @@ fn parse_native_statistics(
     static LOSS: OnceLock<Regex> = OnceLock::new();
     let loss = LOSS.get_or_init(|| {
         Regex::new(
-        r"(?m)^Error total EMG \(MWC\)\s+(-\d+\.\d+)\s+\([^\n)]*\)\s+(-\d+\.\d+)\s+\([^\n)]*\)\s*$"
+        // The first value is the normalized loss; the bracket holds match
+        // winning chances in a match and points in a money game.
+        r"(?m)^Error total EMG \((?:MWC|Points)\)\s+(-\d+\.\d+)\s+\([^\n)]*\)\s+(-\d+\.\d+)\s+\([^\n)]*\)\s*$"
     ).unwrap()
     });
     let mut rows = loss.captures_iter(overall);
@@ -943,6 +945,32 @@ mod tests {
                 .unwrap(),
             -oracle_white
         );
+    }
+
+    #[tokio::test]
+    #[ignore = "requires local GNUbg with weights"]
+    async fn native_performance_statistics_cover_money_games() {
+        let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()));
+        // A money game: GNUbg reports its totals in points instead of MWC.
+        let source = "(;GM[6]MI[length:0];W[31xufe];B[42qusu])";
+        let game = engine.analyze_game(source, 1, 0).await.unwrap();
+        let statistics = game.statistics.expect("money-game native statistics");
+        assert_eq!(statistics[0].unforced_checker_moves, 1);
+        assert_eq!(statistics[1].unforced_checker_moves, 1);
+        // Independent CLI oracle, as for the point match above.
+        let temp = tempfile::tempdir().unwrap();
+        let native =
+            run_native_game_analysis(&engine, temp.path(), source, 1, "show statistics game\n")
+                .await;
+        let overall = native.split_once("Overall statistics").unwrap().1;
+        let row = overall
+            .lines()
+            .find(|line| line.starts_with("Error total EMG"))
+            .unwrap();
+        assert!(row.starts_with("Error total EMG (Points)"), "{row}");
+        let oracle_white: f64 = row.split_whitespace().nth(4).unwrap().parse().unwrap();
+        assert!(oracle_white < 0.0);
+        assert_eq!(statistics[0].normalized_equity_loss, -oracle_white);
     }
 
     #[tokio::test]

@@ -53,6 +53,9 @@ pub struct MistakesQuery {
     pub database_id: Option<Uuid>,
     pub game_plan: Option<GamePlan>,
     pub min_loss: Option<f64>,
+    /// A match name, such as the configured profile name, to translate into
+    /// the player choice that covers it.
+    pub resolve: Option<String>,
 }
 #[derive(Serialize, ToSchema)]
 pub struct MistakeGroup {
@@ -94,6 +97,9 @@ pub struct Mistakes {
     pub groups: Vec<MistakeGroup>,
     pub analyzed_decisions: usize,
     pub analyzed_matches: usize,
+    /// The entry of `players` that covers the name given as `resolve`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resolved_player: Option<String>,
     /// All matches of the chosen player in the scope, under any alias.
     pub player_matches: usize,
     /// Those of them without any analyzed decision, whatever the game plan.
@@ -270,7 +276,18 @@ async fn list(
         analyzed_matches: 0,
         player_matches: 0,
         unanalyzed_matches: 0,
+        resolved_player: None,
     };
+    if let Some(name) = validate(q.resolve, None)?.0 {
+        let shown = player_scope::display_names(&s.pool, vec![name]).await?;
+        result.resolved_player = shown.into_iter().next().and_then(|shown| {
+            result
+                .players
+                .iter()
+                .find(|player| player.to_lowercase() == shown.to_lowercase())
+                .cloned()
+        });
+    }
     let Some(player) = player else {
         return Ok(Json(result));
     };
