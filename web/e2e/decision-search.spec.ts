@@ -122,10 +122,14 @@ test('all analyzed decisions are filtered on the server, previewed and practiced
   await expect(preview).toContainText(
     'Played: Take · Best: Pass · Loss: 0.125',
   );
-  // A cube decision has no saved checker position to open.
+  // A cube decision has no saved checker position: it opens in its game by
+  // its number and cannot be bookmarked.
   await expect(
     preview.getByRole('button', { name: 'Open in Analysis' }),
-  ).toHaveCount(0);
+  ).toBeVisible();
+  await expect(
+    preview.locator('.saved-position-preview-actions button'),
+  ).toHaveCount(1);
 
   // The whole row selects, and the arrow keys move the preview.
   const second = table.getByRole('row').nth(2);

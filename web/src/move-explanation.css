@@ -18,6 +18,16 @@
   font-size: var(--font-size-panel);
 }
 
+.move-explanation h5 {
+  margin: 0 0 2px;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+}
+
+.move-explanation [data-explanation-favors='played'] {
+  color: var(--ui-muted);
+}
+
 .move-explanation ul,
 .evaluation-glossary ul {
   padding-left: 18px;

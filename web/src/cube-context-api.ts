@@ -81,3 +81,30 @@ export function properCubeOutcome(
   if (Math.min(take, pass) <= noDouble) return 'no_double';
   return takes ? 'double_take' : 'double_pass';
 }
+
+export type CubeChances = components['schemas']['CubeChances'];
+export type CubePosition = components['schemas']['Position'];
+
+/**
+ * Chances of a cube decision whose saved analysis has none, calculated now
+ * with the practice engine. They carry their own engine and depth.
+ */
+export async function calculateCubeChances(
+  position: CubePosition,
+  response: boolean,
+  signal?: AbortSignal,
+): Promise<CubeChances> {
+  const result = await request<CubeChances>('/cube-chances', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ position, response }),
+    signal,
+  });
+  if (
+    !Array.isArray(result?.probabilities) ||
+    result.probabilities.length !== 6 ||
+    !result.probabilities.every(fraction)
+  )
+    throw new AppError('error.invalidResponse');
+  return result;
+}

@@ -76,15 +76,43 @@ export default function MoveExplanation({
           .map((point) => formatNumber(point))
           .join(', '),
       });
-    const value =
-      difference.kind === 'gammon' || difference.kind === 'gammonLoss'
-        ? (number: number) => formatPercent(number, 1)
-        : (number: number) => formatNumber(number);
+    const percent = ['win', 'gammon', 'gammonLoss'].includes(difference.kind);
+    const value = (number: number) =>
+      percent ? formatPercent(number, 1) : formatNumber(number);
+    const pips = (number: number) =>
+      formatNumber(number, {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      });
     return t(difference.kind, {
       best: value(difference.best),
       played: value(difference.played),
+      ...(difference.kind === 'shots'
+        ? {
+            bestCost: pips(difference.bestCost),
+            playedCost: pips(difference.playedCost),
+          }
+        : {}),
     });
   };
+  const list = (favored: 'best' | 'played') => {
+    const items = differences.filter(
+      (difference) => difference.favors === favored,
+    );
+    return (
+      items.length > 0 && (
+        <div data-explanation-favors={favored}>
+          <h5>{t(favored === 'best' ? 'forBest' : 'forPlayed')}</h5>
+          <ul>
+            {items.map((difference) => (
+              <li key={difference.kind}>{describe(difference)}</li>
+            ))}
+          </ul>
+        </div>
+      )
+    );
+  };
+  const forBest = list('best');
   return (
     <section className="move-explanation" data-move-explanation>
       <h4>{t('title')}</h4>
@@ -95,11 +123,10 @@ export default function MoveExplanation({
         })}
       </p>
       {differences.length ? (
-        <ul>
-          {differences.map((difference) => (
-            <li key={difference.kind}>{describe(difference)}</li>
-          ))}
-        </ul>
+        <>
+          {forBest || <p>{t('onlyEvaluation')}</p>}
+          {list('played')}
+        </>
       ) : (
         <p>{t('same')}</p>
       )}

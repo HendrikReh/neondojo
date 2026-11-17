@@ -1490,6 +1490,77 @@
         }
       }
     },
+    "/api/cube-chances": {
+      "post": {
+        "tags": [
+          "Match analysis"
+        ],
+        "summary": "Calculate the cubeless chances of a cube decision whose saved analysis\nhas none. The result names its own engine and depth and is not stored.",
+        "operationId": "chances",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CubeChancesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CubeChances"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/cube-context": {
       "post": {
         "tags": [
@@ -14647,6 +14718,52 @@
           }
         }
       },
+      "CubeChances": {
+        "type": "object",
+        "description": "Cubeless chances of a saved cube decision, for the player who decides.",
+        "required": [
+          "engine",
+          "plies",
+          "probabilities"
+        ],
+        "properties": {
+          "engine": {
+            "type": "string"
+          },
+          "plies": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "probabilities": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "description": "Win, gammon and backgammon chances, then the three losing chances.",
+            "maxItems": 6,
+            "minItems": 6
+          }
+        }
+      },
+      "CubeChancesRequest": {
+        "type": "object",
+        "required": [
+          "position",
+          "response"
+        ],
+        "properties": {
+          "position": {
+            "$ref": "#/components/schemas/Position",
+            "description": "The position of the cube decision, with its match context and the\ndeciding player on roll."
+          },
+          "response": {
+            "type": "boolean",
+            "description": "True for take or pass, where the opponent doubled."
+          }
+        },
+        "additionalProperties": false
+      },
       "CubeContext": {
         "type": "object",
         "required": [
@@ -17912,7 +18029,9 @@
           "players",
           "groups",
           "analyzed_decisions",
-          "analyzed_matches"
+          "analyzed_matches",
+          "player_matches",
+          "unanalyzed_matches"
         ],
         "properties": {
           "analyzed_decisions": {
@@ -17929,11 +18048,21 @@
               "$ref": "#/components/schemas/MistakeGroup"
             }
           },
+          "player_matches": {
+            "type": "integer",
+            "description": "All matches of the chosen player in the scope, under any alias.",
+            "minimum": 0
+          },
           "players": {
             "type": "array",
             "items": {
               "type": "string"
             }
+          },
+          "unanalyzed_matches": {
+            "type": "integer",
+            "description": "Those of them without any analyzed decision, whatever the game plan.",
+            "minimum": 0
           }
         }
       },
@@ -18735,6 +18864,9 @@
         "required": [
           "blots",
           "hitting_rolls",
+          "hit_pips",
+          "deep_checkers",
+          "stacked_checkers",
           "points",
           "home_points",
           "longest_prime",
@@ -18750,6 +18882,16 @@
               "format": "int32"
             },
             "description": "The mover's single checkers on points 1 to 24, as point numbers."
+          },
+          "deep_checkers": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Checkers on the mover's 1 to 3 points while the opponent still has a\nchecker behind the mover's rearmost one; 0 once contact is over."
+          },
+          "hit_pips": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Pips the mover loses to hits, summed over the 36 opponent rolls when\neach roll hits the blot that costs most. Divide by 36 for the average."
           },
           "hitting_rolls": {
             "type": "integer",
@@ -18786,6 +18928,11 @@
               "format": "int32"
             },
             "description": "Points the mover holds with two or more checkers."
+          },
+          "stacked_checkers": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Checkers beyond the third on any point."
           }
         }
       },

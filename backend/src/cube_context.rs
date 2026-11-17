@@ -3,7 +3,12 @@
 
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
 use crate::import::ids::MatchId;
-use axum::{Json, Router, extract::rejection::JsonRejection, routing::post};
+use crate::practice::evaluation::CubeChances;
+use axum::{
+    Json, Router,
+    extract::{State, rejection::JsonRejection},
+    routing::post,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
 use utoipa::{OpenApi, ToSchema};
@@ -189,8 +194,37 @@ pub struct CubeContextRequest {
     pub doubler: i32,
 }
 
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CubeChancesRequest {
+    /// The position of the cube decision, with its match context and the
+    /// deciding player on roll.
+    pub position: crate::model::Position,
+    /// True for take or pass, where the opponent doubled.
+    pub response: bool,
+}
+
 pub fn routes() -> Router<AppState> {
-    Router::new().route("/api/cube-context", post(context))
+    Router::new()
+        .route("/api/cube-context", post(context))
+        .route("/api/cube-chances", post(chances))
+}
+
+/// Calculate the cubeless chances of a cube decision whose saved analysis
+/// has none. The result names its own engine and depth and is not stored.
+#[utoipa::path(post, path = "/api/cube-chances", request_body = CubeChancesRequest,
+    responses((status = 200, body = CubeChances), (status = 422, body = ErrorBody),
+              (status = 429, body = ErrorBody), (status = 503, body = ErrorBody),
+              (status = 504, body = ErrorBody)),
+    tag = "Match analysis")]
+async fn chances(
+    State(state): State<AppState>,
+    request: Result<Json<CubeChancesRequest>, JsonRejection>,
+) -> ApiResult<Json<CubeChances>> {
+    let Json(request) = request.map_err(|_| ApiError::invalid("Invalid cube chances request"))?;
+    crate::practice::evaluation::cube_chances(&state, &request.position, request.response)
+        .await
+        .map(Json)
 }
 
 /// Describe the score, cube and take point of a cube decision.
@@ -208,8 +242,15 @@ async fn context(
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(context),
-    components(schemas(CubeContextRequest, CubeContext, TakePoint, TakePointBasis))
+    paths(context, chances),
+    components(schemas(
+        CubeContextRequest,
+        CubeContext,
+        TakePoint,
+        TakePointBasis,
+        CubeChancesRequest,
+        CubeChances
+    ))
 )]
 pub struct CubeContextDoc;
 

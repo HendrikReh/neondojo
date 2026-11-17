@@ -37,6 +37,7 @@ import { AddCardsPanel } from './LearningPanel';
 import { type Job } from './api';
 import {
   canOpenReviewDecision,
+  findCubeDecisionByNumber,
   findCubeReviewDecision,
   type ReviewDecision,
 } from './review-decisions-api';
@@ -80,6 +81,7 @@ export default function AnalysisWorkspace({
   jobs,
   requestedAnalysis,
   onAnalysisRequestConsumed,
+  requestedCubeDecision,
   runningJobs = [],
   theme,
   defaultEngine = 'gnubg',
@@ -109,6 +111,13 @@ export default function AnalysisWorkspace({
   jobs: ReturnType<typeof useJobs>;
   requestedAnalysis?: Job;
   onAnalysisRequestConsumed?: (job: Job) => void;
+  /** A cube decision to show once its game is open; each token applies once. */
+  requestedCubeDecision?: {
+    matchId: string;
+    gameNo: number;
+    decisionNo: number;
+    token: number;
+  };
   runningJobs?: Job[];
   theme: Theme;
   defaultEngine?: MatchAnalysisEngine;
@@ -435,6 +444,46 @@ export default function AnalysisWorkspace({
       });
     }
   }
+  // Open a cube decision requested from the decision search once its match,
+  // game and displayed analysis are loaded. A handled token is not repeated,
+  // and newer navigation discards a lookup that is still running.
+  const handledCubeRequest = useRef(0);
+  const cubeRequestReady =
+    requestedCubeDecision &&
+    match?.id === requestedCubeDecision.matchId &&
+    game?.game_no === requestedCubeDecision.gameNo &&
+    sourceAvailable
+      ? catalog.analysisId
+      : undefined;
+  useEffect(() => {
+    const request = requestedCubeDecision;
+    if (
+      !request ||
+      !cubeRequestReady ||
+      handledCubeRequest.current === request.token
+    )
+      return;
+    const abort = new AbortController();
+    const started = navigation.intent();
+    void findCubeDecisionByNumber(
+      request.matchId,
+      request.gameNo,
+      request.decisionNo,
+      { analysisId: cubeRequestReady, signal: abort.signal },
+    )
+      .then((row) => {
+        if (abort.signal.aborted || navigation.intent() !== started) return;
+        handledCubeRequest.current = request.token;
+        if (row && canOpenReviewDecision(row)) {
+          onDetail('errors');
+          openReviewDecision(row);
+        }
+      })
+      .catch(() => undefined);
+    return () => abort.abort();
+    // The request token and the loaded analysis identify one lookup.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedCubeDecision?.token, cubeRequestReady]);
   const tabRefs = useRef<
     Partial<Record<AnalysisDetail, HTMLButtonElement | null>>
   >({});

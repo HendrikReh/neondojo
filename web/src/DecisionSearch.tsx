@@ -114,6 +114,7 @@ export default function DecisionSearch({
   onBookmarkChanged,
   theme,
   onOpenPosition,
+  onOpenCubeDecision,
 }: {
   visible: boolean;
   revision: number;
@@ -121,6 +122,12 @@ export default function DecisionSearch({
   onBookmarkChanged: () => void;
   theme: Theme;
   onOpenPosition: (id: string) => void;
+  /** Opens a cube decision, which has no position of its own, in its game. */
+  onOpenCubeDecision: (decision: {
+    matchId: string;
+    gameNo: number;
+    decisionNo: number;
+  }) => void;
 }) {
   const t = useDecisionSearchText();
   const p = usePositionText();
@@ -211,12 +218,25 @@ export default function DecisionSearch({
     items[0];
   const keys = items.map((item) => mistakeReferenceKey(item.reference));
   const direction = applied?.filters.direction ?? 'desc';
-  const openable = (hit: DecisionHit) => hit.position.id !== NIL_UUID;
+  // A checker decision has a stored position; a cube decision is found in
+  // its game by its number.
+  const hasPosition = (hit: DecisionHit) => hit.position.id !== NIL_UUID;
+  const openable = (hit: DecisionHit) =>
+    hasPosition(hit) || hit.position.match_uuid !== NIL_UUID;
+  function openHit(hit: DecisionHit) {
+    if (hasPosition(hit)) onOpenPosition(hit.position.id);
+    else if (openable(hit))
+      onOpenCubeDecision({
+        matchId: hit.position.match_uuid,
+        gameNo: hit.reference.game_no,
+        decisionNo: hit.reference.decision_no,
+      });
+  }
   function open(key: string) {
     const hit = items.find(
       (item) => mistakeReferenceKey(item.reference) === key,
     );
-    if (hit && openable(hit)) onOpenPosition(hit.position.id);
+    if (hit) openHit(hit);
   }
   const practicable = items.filter((item) => item.practicable).slice(0, 20);
   const score = (hit: DecisionHit) =>
@@ -550,17 +570,19 @@ export default function DecisionSearch({
                     </div>
                     {openable(preview) && (
                       <div className="saved-position-preview-actions">
-                        <PositionBookmarkButton
-                          positionId={preview.position.id}
-                          revision={bookmarkRevision}
-                          onChanged={onBookmarkChanged}
-                        />
+                        {hasPosition(preview) && (
+                          <PositionBookmarkButton
+                            positionId={preview.position.id}
+                            revision={bookmarkRevision}
+                            onChanged={onBookmarkChanged}
+                          />
+                        )}
                         <ActionButton
                           type="button"
                           icon="analysis"
                           className="primary"
                           label={t('openAnalysis')}
-                          onClick={() => onOpenPosition(preview.position.id)}
+                          onClick={() => openHit(preview)}
                         />
                       </div>
                     )}

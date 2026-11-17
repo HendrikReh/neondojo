@@ -75,6 +75,7 @@ export default function CubeReviewEvaluation({
           response={response}
           evaluation={evaluation}
           players={names}
+          position={decision.review_position}
         />
       )}
       {!evaluation && values.length > 0 && (

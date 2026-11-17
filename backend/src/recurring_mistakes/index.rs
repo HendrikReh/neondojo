@@ -31,7 +31,11 @@ fn version() -> String {
 }
 
 /// Bring the index up to date for one player's matches in the scope.
-pub(super) async fn ensure(pool: &PgPool, database: Option<Uuid>, player: &str) -> ApiResult<()> {
+pub(super) async fn ensure(
+    pool: &PgPool,
+    database: Option<Uuid>,
+    player: &[String],
+) -> ApiResult<()> {
     // Older imports gain their displayed analysis only once they are cataloged.
     // This is bounded per request and reports when a retry is needed.
     super::imported::catalog_legacy(pool, database, None, Some(player)).await?;
@@ -66,7 +70,7 @@ pub(super) async fn ensure(pool: &PgPool, database: Option<Uuid>, player: &str) 
          LEFT JOIN decision_index_matches x ON x.match_id=m.id
          WHERE NOT m.collection_only
            AND ($1::uuid IS NULL OR m.database_id=$1)
-           AND (lower(btrim(m.white))=$2 OR lower(btrim(m.black))=$2)",
+           AND (lower(btrim(m.white))=ANY($2) OR lower(btrim(m.black))=ANY($2))",
     )
     .bind(database)
     .bind(player)
@@ -220,7 +224,7 @@ struct GroupRow {
 pub(super) async fn groups(
     pool: &PgPool,
     database: Option<Uuid>,
-    player: &str,
+    player: &[String],
     plan: Option<crate::game_plan::GamePlan>,
     min_loss: f64,
 ) -> ApiResult<(Vec<super::MistakeGroup>, usize, usize)> {
@@ -229,7 +233,7 @@ pub(super) async fn groups(
     const SCOPED: &str = "WITH scoped AS (
             SELECT d.match_id,d.game_plan,d.opportunity,d.mistake_kind,d.equity_loss,d.played_on
             FROM decision_index d JOIN matches m ON m.id=d.match_id
-            WHERE d.player_name=$1 AND ($2::uuid IS NULL OR m.database_id=$2)
+            WHERE d.player_name=ANY($1) AND ($2::uuid IS NULL OR m.database_id=$2)
               AND ($3::text IS NULL OR d.game_plan=$3)
         ), halves AS (
             SELECT match_id,ntile(2) OVER (ORDER BY min(played_on),match_id) AS half
@@ -312,10 +316,34 @@ pub(super) async fn groups(
     Ok((groups, count(decisions), count(matches)))
 }
 
+/// The player's matches in the scope and how many of them have no indexed
+/// decision. Call after `ensure`, which brings the index up to date.
+pub(super) async fn coverage(
+    pool: &PgPool,
+    database: Option<Uuid>,
+    player: &[String],
+) -> ApiResult<(usize, usize)> {
+    let (matches, unanalyzed): (i64, i64) = sqlx::query_as(
+        "SELECT count(*),
+                count(*) FILTER (WHERE NOT EXISTS(
+                    SELECT 1 FROM decision_index d WHERE d.match_id=m.id))
+         FROM matches m
+         WHERE NOT m.collection_only AND ($1::uuid IS NULL OR m.database_id=$1)
+           AND (lower(btrim(m.white))=ANY($2) OR lower(btrim(m.black))=ANY($2))",
+    )
+    .bind(database)
+    .bind(player)
+    .fetch_one(pool)
+    .await
+    .map_err(anyhow::Error::from)?;
+    let count = |value: i64| usize::try_from(value).unwrap_or(0);
+    Ok((count(matches), count(unanalyzed)))
+}
+
 pub(super) async fn ensure_and_group(
     pool: &PgPool,
     database: Option<Uuid>,
-    player: &str,
+    player: &[String],
     plan: Option<crate::game_plan::GamePlan>,
     min_loss: f64,
 ) -> ApiResult<(Vec<super::MistakeGroup>, usize, usize)> {

@@ -45,9 +45,10 @@ fn view(board: &[i32; 26], player: i32) -> View {
     }
 }
 
-/// True if the opponent can hit a blot with some order and choice of checkers.
-/// `checkers[0]` is the opponent's bar; index `p` is the mover's point `p`.
-fn can_hit(own: &[i32; 25], checkers: &mut [i32; 25], dice: &[i32]) -> bool {
+/// True if the opponent can hit the blot on `blot` with some order and choice
+/// of checkers. `checkers[0]` is the opponent's bar; index `p` is the mover's
+/// point `p`.
+fn can_hit(own: &[i32; 25], checkers: &mut [i32; 25], dice: &[i32], blot: usize) -> bool {
     let sources: Vec<usize> = if checkers[0] > 0 {
         vec![0]
     } else {
@@ -72,12 +73,12 @@ fn can_hit(own: &[i32; 25], checkers: &mut [i32; 25], dice: &[i32]) -> bool {
             if target > 24 || own[target] >= 2 {
                 continue;
             }
-            if own[target] == 1 {
+            if target == blot {
                 return true;
             }
             checkers[source] -= 1;
             checkers[target] += 1;
-            let hit = !rest.is_empty() && can_hit(own, checkers, &rest);
+            let hit = !rest.is_empty() && can_hit(own, checkers, &rest, blot);
             checkers[target] -= 1;
             checkers[source] += 1;
             if hit {
@@ -88,14 +89,19 @@ fn can_hit(own: &[i32; 25], checkers: &mut [i32; 25], dice: &[i32]) -> bool {
     false
 }
 
-/// Of the 36 equally likely rolls, how many let the opponent hit a blot.
-fn hitting_rolls(view: &View) -> i32 {
-    if !view.own[1..].contains(&1) {
-        return 0;
+/// Of the 36 equally likely rolls, how many let the opponent hit a blot, and
+/// the pips the mover loses over all 36 rolls if the opponent always hits the
+/// blot that costs most. A checker hit on point `p` restarts from the bar and
+/// loses `25 - p` pips, so a blot deep in the opponent's home board is cheap.
+fn hitting_rolls(view: &View) -> (i32, i32) {
+    // Costliest blots first: the first one a roll can hit is its cost.
+    let blots: Vec<usize> = (1..=24).filter(|point| view.own[*point] == 1).collect();
+    if blots.is_empty() {
+        return (0, 0);
     }
     let mut checkers = view.opponent;
     checkers[0] = view.opponent_bar;
-    let mut rolls = 0;
+    let (mut rolls, mut pips) = (0, 0);
     for first in 1..=6 {
         for second in first..=6 {
             let dice: &[i32] = if first == second {
@@ -103,12 +109,17 @@ fn hitting_rolls(view: &View) -> i32 {
             } else {
                 &[first, second]
             };
-            if can_hit(&view.own, &mut checkers, dice) {
-                rolls += if first == second { 1 } else { 2 };
+            let weight = if first == second { 1 } else { 2 };
+            if let Some(blot) = blots
+                .iter()
+                .find(|blot| can_hit(&view.own, &mut checkers, dice, **blot))
+            {
+                rolls += weight;
+                pips += weight * (25 - *blot as i32);
             }
         }
     }
-    rolls
+    (rolls, pips)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, ToSchema)]
@@ -117,6 +128,14 @@ pub struct PlayFacts {
     pub blots: Vec<i32>,
     /// Opponent rolls out of 36 that can hit one of those blots.
     pub hitting_rolls: i32,
+    /// Pips the mover loses to hits, summed over the 36 opponent rolls when
+    /// each roll hits the blot that costs most. Divide by 36 for the average.
+    pub hit_pips: i32,
+    /// Checkers on the mover's 1 to 3 points while the opponent still has a
+    /// checker behind the mover's rearmost one; 0 once contact is over.
+    pub deep_checkers: i32,
+    /// Checkers beyond the third on any point.
+    pub stacked_checkers: i32,
     /// Points the mover holds with two or more checkers.
     pub points: Vec<i32>,
     /// Held points among the mover's home points 1 to 6.
@@ -144,9 +163,29 @@ fn facts(board: &[i32; 26], player: i32) -> PlayFacts {
             .map(|point| point as i32)
             .collect()
     };
+    let (hitting_rolls, hit_pips) = hitting_rolls(&view);
+    // The opponent moves upward, so its rearmost checker has the lowest point.
+    let rearmost_own = if view.own_bar > 0 {
+        25
+    } else {
+        (1..=24).rev().find(|p| view.own[*p] > 0).unwrap_or(0)
+    };
+    let rearmost_opponent = if view.opponent_bar > 0 {
+        0
+    } else {
+        (1..=24).find(|p| view.opponent[*p] > 0).unwrap_or(25)
+    };
+    let contact = rearmost_opponent < rearmost_own;
     PlayFacts {
         blots: point_numbers(&|point| view.own[point] == 1),
-        hitting_rolls: hitting_rolls(&view),
+        hitting_rolls,
+        hit_pips,
+        deep_checkers: if contact {
+            view.own[1..=3].iter().sum()
+        } else {
+            0
+        },
+        stacked_checkers: view.own[1..].iter().map(|count| (count - 3).max(0)).sum(),
         points: point_numbers(&held),
         home_points: (1..=6).filter(|point| held(*point)).count() as i32,
         longest_prime: longest,
@@ -251,6 +290,16 @@ mod tests {
         // any 1 (11 rolls), any 4 without a 1 (9 rolls) and 2-2 hit.
         assert_eq!(result.played.blots, vec![2, 5]);
         assert_eq!(result.played.hitting_rolls, 21);
+        assert_eq!(result.best.hit_pips, 0);
+        // The checkers on the 1 point reach the 2 point with a 1 (11 rolls,
+        // 23 pips each); the other ten hitting rolls take the 5 point for 20.
+        assert_eq!(result.played.hit_pips, 11 * 23 + 10 * 20);
+        // 8/2 puts a checker out of play; both plays keep five on the midpoint
+        // or the 6 point.
+        assert_eq!(result.best.deep_checkers, 0);
+        assert_eq!(result.played.deep_checkers, 1);
+        assert_eq!(result.best.stacked_checkers, 1 + 2);
+        assert_eq!(result.played.stacked_checkers, 2 + 1);
         assert_eq!(result.played.points, vec![6, 8, 13, 24]);
         assert_eq!(result.played.longest_prime, 1);
         assert_eq!(result.best.pips, 160);
@@ -282,7 +331,8 @@ mod tests {
         // Entering with a 5 hits (11 rolls). 4-1 and 3-2 enter with one die and
         // hit with the other (4 rolls). 1-1 only reaches the 4 point, and no
         // other double lands on the 5 point.
-        assert_eq!(hitting_rolls(&view), 15);
+        // Each hit sends the checker from the 5 point to the bar: 20 pips.
+        assert_eq!(hitting_rolls(&view), (15, 15 * 20));
         let facts = facts(&board, 0);
         assert_eq!(facts.opponent_on_bar, 1);
         assert_eq!(facts.opponent_pips, 25);

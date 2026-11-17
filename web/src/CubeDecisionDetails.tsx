@@ -1,12 +1,18 @@
 import { matchContext } from './boardMath';
 import { useSourceText } from './analysis-source-messages';
+import { useEffect, useRef, useState } from 'react';
+import ActionButton from './ActionButton';
 import {
+  calculateCubeChances,
   properCubeOutcome,
   tooGoodToDouble,
+  type CubeChances,
   type CubeEvaluation,
   type CubeOutcome,
+  type CubePosition,
 } from './cube-context-api';
 import { useCubeContextText } from './cube-context-messages';
+import EngineLabel from './EngineLabel';
 import { useI18n } from './i18n';
 import Tooltip from './Tooltip';
 import { useCubeContext } from './useCubeContext';
@@ -94,7 +100,10 @@ export default function CubeDecisionDetails({
   response,
   evaluation,
   players,
+  position,
 }: {
+  /** The decision's position; allows calculating chances that were not saved. */
+  position?: CubePosition | null;
   matchId?: string;
   /** Absolute color of the player who decides. */
   player: number;
@@ -105,7 +114,39 @@ export default function CubeDecisionDetails({
 }) {
   const text = useCubeContextText();
   const source = useSourceText();
-  const { formatDecision, formatEquity, formatPercent } = useI18n();
+  const { formatDecision, formatEquity, formatPercent, formatError } =
+    useI18n();
+  // Chances calculated on request belong to one position only.
+  const positionKey = position
+    ? `${position.position_id}:${position.gnubg_match_id}:${response}`
+    : '';
+  const [calculated, setCalculated] = useState<{
+    key: string;
+    state: 'loading' | CubeChances | { error: unknown };
+  }>();
+  const pending = useRef<AbortController | null>(null);
+  useEffect(() => () => pending.current?.abort(), [positionKey]);
+  const fresh = calculated?.key === positionKey ? calculated.state : undefined;
+  const freshChances =
+    fresh && fresh !== 'loading' && 'probabilities' in fresh
+      ? fresh
+      : undefined;
+  function calculate() {
+    if (!position) return;
+    pending.current?.abort();
+    const abort = new AbortController();
+    pending.current = abort;
+    setCalculated({ key: positionKey, state: 'loading' });
+    void calculateCubeChances(position, response, abort.signal)
+      .then((result) => {
+        if (!abort.signal.aborted)
+          setCalculated({ key: positionKey, state: result });
+      })
+      .catch((error: unknown) => {
+        if (!abort.signal.aborted)
+          setCalculated({ key: positionKey, state: { error } });
+      });
+  }
   const doubler = response ? 1 - player : player;
   const { context } = useCubeContext(matchId, doubler);
   const mwc = evaluation?.unit === 'mwc';
@@ -132,7 +173,7 @@ export default function CubeDecisionDetails({
       : evaluation.double_take >= evaluation.double_pass
         ? 'double_take'
         : 'double_pass';
-  const chances = evaluation?.probabilities;
+  const chances = evaluation?.probabilities ?? freshChances?.probabilities;
   // The taker is the opponent of the doubler; saved chances belong to `player`.
   const takerWins = chances ? (response ? chances[0] : chances[3]) : undefined;
   const takePoint = context?.take_point;
@@ -187,9 +228,40 @@ export default function CubeDecisionDetails({
               ))}
             </tbody>
           </table>
+        ) : position ? (
+          <div className="cube-chances-request">
+            {fresh === 'loading' ? (
+              <p role="status">{text('calculatingChances')}</p>
+            ) : (
+              <ActionButton
+                type="button"
+                icon="analysis"
+                label={text('calculateChances')}
+                onClick={calculate}
+              >
+                {text('calculateChances')}
+              </ActionButton>
+            )}
+            {fresh && fresh !== 'loading' && 'error' in fresh && (
+              <p role="alert">{formatError(fresh.error)}</p>
+            )}
+          </div>
         ) : (
           <p className="fineprint">{text('chancesUnavailable')}</p>
         ))}
+      {evaluation && !evaluation.probabilities && freshChances && (
+        <p className="fineprint" data-cube-chances-source>
+          <EngineLabel
+            details={freshChances.engine}
+            format={(engine) =>
+              text('calculatedChances', {
+                engine,
+                plies: freshChances.plies,
+              })
+            }
+          />
+        </p>
+      )}
       {context && (
         <p className="cube-take-point" data-take-point>
           {takePoint

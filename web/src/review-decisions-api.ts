@@ -57,6 +57,27 @@ export async function findCubeReviewDecision(
   return undefined;
 }
 
+/** The saved cube decision with this number in the game's decision sequence. */
+export async function findCubeDecisionByNumber(
+  matchId: string,
+  gameNo: number,
+  decisionNo: number,
+  options: { analysisId: string; signal: AbortSignal },
+): Promise<ReviewDecision | undefined> {
+  let after: string | null = null;
+  do {
+    const page = await reviewDecisions(
+      matchId,
+      { game_no: gameNo, player: '', kind: 'cube', errors_only: false },
+      { ...options, after, limit: 100 },
+    );
+    const row = page.items.find((item) => item.decision_no === decisionNo);
+    if (row) return row;
+    after = page.next_cursor ?? null;
+  } while (after);
+  return undefined;
+}
+
 export type ReviewEmptyReason = 'missing' | 'filtered' | 'clean';
 
 export async function reviewEmptyReason(

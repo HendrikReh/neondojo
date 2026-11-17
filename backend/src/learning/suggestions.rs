@@ -190,7 +190,14 @@ pub(super) async fn preview(
         {
             continue;
         }
-        let rows = match source::load(pool, Some(scope.database_id), None, Some(&name)).await {
+        let rows = match source::load(
+            pool,
+            Some(scope.database_id),
+            None,
+            Some(std::slice::from_ref(&name)),
+        )
+        .await
+        {
             Ok(rows) => rows,
             Err(ApiError(StatusCode::UNPROCESSABLE_ENTITY, message))
                 if message == source::TOO_BROAD =>
@@ -203,7 +210,7 @@ pub(super) async fn preview(
         let mut by_group: BTreeMap<Group, HashSet<Uuid>> = BTreeMap::new();
         for row in rows {
             if row.question.position.match_uuid != query.match_id
-                && row.in_scope(&name, None)
+                && row.in_scope(std::slice::from_ref(&name), None)
                 && row.meets_loss_threshold(query.min_loss)
             {
                 by_group

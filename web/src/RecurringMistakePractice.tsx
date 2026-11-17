@@ -376,6 +376,7 @@ function MistakeQuestion({
                         player: item.position.player,
                         response: item.kind === 'cube_response',
                         players: [item.players[0], item.players[1]],
+                        position: item.position,
                       }
                 }
                 storedSource={

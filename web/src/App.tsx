@@ -215,6 +215,14 @@ export default function App() {
     | { kind: 'bulk'; matches: LibraryMatch[]; unavailableCount: number }
   >();
   const [requestedAnalysis, setRequestedAnalysis] = useState<Job>();
+  // A cube decision chosen in the decision search; the analysis opens it once
+  // its game has loaded.
+  const [requestedCubeDecision, setRequestedCubeDecision] = useState<{
+    matchId: string;
+    gameNo: number;
+    decisionNo: number;
+    token: number;
+  }>();
   const [scopeRequest, setScopeRequest] = useState<{
     kind: AnnotationKind;
     token: number;
@@ -923,6 +931,7 @@ export default function App() {
           <AnalysisWorkspace
             active={view === 'analysis'}
             requestedAnalysis={requestedAnalysis}
+            requestedCubeDecision={requestedCubeDecision}
             onAnalysisRequestConsumed={(consumed) =>
               setRequestedAnalysis((pending) =>
                 pending === consumed ? undefined : pending,
@@ -1092,6 +1101,16 @@ export default function App() {
                   setDetail('overview');
                   openPosition(id);
                 }}
+                onOpenCubeDecision={(decision) => {
+                  cancelRestoration();
+                  setDetail('errors');
+                  setView('analysis');
+                  setRequestedCubeDecision((current) => ({
+                    ...decision,
+                    token: (current?.token ?? 0) + 1,
+                  }));
+                  void navigation.openMatch(decision.matchId, decision.gameNo);
+                }}
               />
             </div>
           )}
@@ -1147,6 +1166,7 @@ export default function App() {
             revision={deckRevision}
             onChanged={deckChanged}
             onStudyDeck={openStudyDeck}
+            onOpenPlayers={() => setView('players')}
           />
         </div>
         <div

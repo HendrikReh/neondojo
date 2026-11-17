@@ -144,7 +144,7 @@ struct PlayerPage {
     total: Option<i64>,
 }
 
-const DISPLAY_NAME: &str = "coalesce(nullif(concat_ws(' ',nullif(p.first_name,''),nullif(p.last_name,'')),''),p.source_name)";
+pub(crate) const DISPLAY_NAME: &str = "coalesce(nullif(concat_ws(' ',nullif(p.first_name,''),nullif(p.last_name,'')),''),p.source_name)";
 const MATCHING_ALIAS: &str =
     "FROM player_aliases a WHERE a.profile_id=p.id AND lower(a.name) LIKE $2";
 const MATCH_COUNT: &str = "(SELECT count(DISTINCT mp.match_id) FROM player_aliases a

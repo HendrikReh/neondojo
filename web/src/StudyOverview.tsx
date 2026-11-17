@@ -1,3 +1,4 @@
+import UnanalyzedMatches from './UnanalyzedMatches';
 import { useEffect, useId, useRef, useState } from 'react';
 import ActionButton from './ActionButton';
 import { useConfirmedConfiguration } from './ConfigurationProvider';
@@ -34,6 +35,8 @@ type Props = {
   onOpenCards: () => void;
   /** Opens the full list for the player the overview shows, if any. */
   onOpenMistakes: (player: string) => void;
+  /** Opens the player database, where unrated matches are analyzed. */
+  onOpenPlayers: () => void;
   onStudyDeck: (id: string) => void;
 };
 
@@ -59,6 +62,7 @@ function Overview({
   theme,
   onOpenCards,
   onOpenMistakes,
+  onOpenPlayers,
   onStudyDeck,
   configuredPlayer,
 }: Props & { configuredPlayer: string }) {
@@ -432,6 +436,10 @@ function Overview({
                 matches: playerMistakes.data.analyzed_matches,
               })}
             </p>
+            <UnanalyzedMatches
+              page={playerMistakes.data}
+              onOpenPlayers={onOpenPlayers}
+            />
             {groups.length ? (
               <MistakeGroupTable
                 groups={groups}

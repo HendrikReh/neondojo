@@ -437,13 +437,14 @@ async fn fresh_checker(
     .context("Invalid checker evaluation")
 }
 
-async fn fresh_cube(
+/// The engine's cube equities and chances from the doubler's view, with the
+/// engine name and depth that produced them.
+async fn cube_equities(
     engine: AnalysisEngine,
     plies: i32,
-    context: CubeContext,
-    answer: CubeAnswer,
-) -> Result<PracticeEvaluation> {
-    let (name, depth, equities) = match engine {
+    context: &CubeContext,
+) -> Result<(String, i32, CubeEquities)> {
+    Ok(match engine {
         AnalysisEngine::Gnubg(engine) => {
             engine
                 .analyze_cube_choices(&context.position_id, &context.match_id, plies)
@@ -465,7 +466,16 @@ async fn fresh_cube(
                 },
             )
         }
-    };
+    })
+}
+
+async fn fresh_cube(
+    engine: AnalysisEngine,
+    plies: i32,
+    context: CubeContext,
+    answer: CubeAnswer,
+) -> Result<PracticeEvaluation> {
+    let (name, depth, equities) = cube_equities(engine, plies, &context).await?;
     // Engines report the doubler's view; a response is graded from the taker's.
     let response = matches!(answer, CubeAnswer::Response(_));
     let sign = if response { -1.0 } else { 1.0 };
@@ -534,6 +544,69 @@ async fn evaluate_fresh(
     checked: CheckedAnswer,
     snapshot: Option<(i32, crate::settings::EngineSnapshot)>,
 ) -> ApiResult<PracticeEvaluation> {
+    with_practice_engine(state, snapshot, |engine, plies| async move {
+        match checked {
+            CheckedAnswer::Checker { board } => {
+                fresh_checker(engine, plies, position, &board).await
+            }
+            CheckedAnswer::Cube { context, answer } => {
+                fresh_cube(engine, plies, context, answer).await
+            }
+            CheckedAnswer::ForcedPass => Ok(PracticeEvaluation::forced_pass()),
+        }
+    })
+    .await
+}
+
+/// Cubeless chances of a saved cube decision, for the player who decides.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CubeChances {
+    pub engine: String,
+    pub plies: i32,
+    /// Win, gammon and backgammon chances, then the three losing chances.
+    #[schema(min_items = 6, max_items = 6)]
+    pub probabilities: [f64; 6],
+}
+
+/// Evaluate one cube decision now with the practice engine. Older analyses
+/// were saved without chances; this adds them without changing that analysis.
+pub(crate) async fn cube_chances(
+    state: &AppState,
+    position: &Position,
+    response: bool,
+) -> ApiResult<CubeChances> {
+    let context = practice::cube_context(position, response)
+        .map_err(|_| ApiError::invalid("The position does not permit this cube decision"))?;
+    with_practice_engine(state, None, |engine, plies| async move {
+        let (engine, plies, equities) = cube_equities(engine, plies, &context).await?;
+        let chances = equities
+            .probabilities
+            .context("The engine did not report winning chances")?;
+        Ok(CubeChances {
+            engine,
+            plies,
+            // Engines report the doubler's view; a response belongs to the taker.
+            probabilities: if response {
+                crate::engine::flip_probabilities(chances)
+            } else {
+                chances
+            },
+        })
+    })
+    .await
+}
+
+/// Run one on-demand evaluation: one at a time, bounded in time, with the
+/// engine and depth of the practice profile unless a snapshot is given.
+async fn with_practice_engine<T, F, Fut>(
+    state: &AppState,
+    snapshot: Option<(i32, crate::settings::EngineSnapshot)>,
+    work: F,
+) -> ApiResult<T>
+where
+    F: FnOnce(AnalysisEngine, i32) -> Fut,
+    Fut: std::future::Future<Output = Result<T>>,
+{
     let _permit = practice::EVALUATION.try_lock().map_err(|_| {
         ApiError(
             StatusCode::TOO_MANY_REQUESTS,
@@ -547,16 +620,7 @@ async fn evaluate_fresh(
                 Some(snapshot) => snapshot,
                 None => crate::settings::snapshot_for_practice(state).await?,
             };
-            let engine = snapshot.engine()?;
-            match checked {
-                CheckedAnswer::Checker { board } => {
-                    fresh_checker(engine, plies, position, &board).await
-                }
-                CheckedAnswer::Cube { context, answer } => {
-                    fresh_cube(engine, plies, context, answer).await
-                }
-                CheckedAnswer::ForcedPass => Ok(PracticeEvaluation::forced_pass()),
-            }
+            work(snapshot.engine()?, plies).await
         }),
     )
     .await

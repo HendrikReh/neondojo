@@ -27,6 +27,7 @@ mod history;
 mod imported;
 pub(crate) mod imported_projection;
 mod index;
+pub(crate) mod player_scope;
 mod search;
 pub(crate) mod source;
 use source::{SourceDecision, load, players};
@@ -93,6 +94,10 @@ pub struct Mistakes {
     pub groups: Vec<MistakeGroup>,
     pub analyzed_decisions: usize,
     pub analyzed_matches: usize,
+    /// All matches of the chosen player in the scope, under any alias.
+    pub player_matches: usize,
+    /// Those of them without any analyzed decision, whatever the game plan.
+    pub unanalyzed_matches: usize,
 }
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
@@ -263,21 +268,20 @@ async fn list(
         groups: vec![],
         analyzed_decisions: 0,
         analyzed_matches: 0,
+        player_matches: 0,
+        unanalyzed_matches: 0,
     };
     let Some(player) = player else {
         return Ok(Json(result));
     };
-    let (groups, decisions, matches) = index::ensure_and_group(
-        &s.pool,
-        q.database_id,
-        &player.to_lowercase(),
-        q.game_plan,
-        loss,
-    )
-    .await?;
+    let names = player_scope::names(&s.pool, &player).await?;
+    let (groups, decisions, matches) =
+        index::ensure_and_group(&s.pool, q.database_id, &names, q.game_plan, loss).await?;
     result.groups = groups;
     result.analyzed_decisions = decisions;
     result.analyzed_matches = matches;
+    (result.player_matches, result.unanalyzed_matches) =
+        index::coverage(&s.pool, q.database_id, &names).await?;
     Ok(Json(result))
 }
 #[utoipa::path(post,path="/api/study/mistakes/practice",request_body=MistakePracticeRequest,responses((status=200,body=MistakePractice),(status=422,body=ErrorBody)),tag="Study")]
@@ -288,20 +292,15 @@ async fn practice(
     let q = input.map_err(|e| ApiError::invalid(e.body_text()))?.0;
     let (player, loss) = validate(Some(q.player), q.min_loss)?;
     let player = player.unwrap();
-    let rows = load(&s.pool, q.database_id, None, Some(&player)).await?;
-    let items = select_practice_questions(
-        rows,
-        &player.to_lowercase(),
-        q.game_plan,
-        q.mistake_kind,
-        loss,
-    );
+    let names = player_scope::names(&s.pool, &player).await?;
+    let rows = load(&s.pool, q.database_id, None, Some(&names)).await?;
+    let items = select_practice_questions(rows, &names, q.game_plan, q.mistake_kind, loss);
     Ok(Json(MistakePractice { items }))
 }
 
 fn select_practice_questions(
     mut rows: Vec<SourceDecision>,
-    player: &str,
+    player: &[String],
     game_plan: GamePlan,
     mistake_kind: MistakeKind,
     min_loss: f64,

@@ -29,6 +29,8 @@ export default function PracticeResult({
     player: number;
     response: boolean;
     players: readonly [string, string];
+    /** Allows calculating chances that the saved analysis lacks. */
+    position?: components['schemas']['Position'];
   };
 }) {
   const t = useLearningText();
@@ -73,6 +75,7 @@ export default function PracticeResult({
           response={cube.response}
           evaluation={result.cube_evaluation}
           players={cube.players}
+          position={cube.position}
         />
       )}
       {checker && result.verdict !== 'best' && result.verdict !== 'forced' && (

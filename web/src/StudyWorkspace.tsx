@@ -19,10 +19,12 @@ type Area = 'overview' | 'cards' | 'reports' | 'mistakes' | 'practice';
 const areas: Area[] = ['overview', 'cards', 'reports', 'mistakes', 'practice'];
 export default function StudyWorkspace({
   onStudyDeck,
+  onOpenPlayers,
   requestedAssessment,
   ...props
 }: ComponentProps<typeof LearningWorkspace> & {
   onStudyDeck: (id: string) => void;
+  onOpenPlayers: () => void;
   requestedAssessment?: AssessmentEntry;
 }) {
   const t = useStudyText();
@@ -105,6 +107,7 @@ export default function StudyWorkspace({
           revision={props.revision}
           theme={props.theme}
           onOpenCards={() => openArea('cards')}
+          onOpenPlayers={onOpenPlayers}
           onOpenMistakes={(name) => {
             if (name)
               setMistakePlayer((current) => ({
@@ -149,6 +152,7 @@ export default function StudyWorkspace({
           visible={visible && area === 'mistakes'}
           theme={props.theme}
           requestedPlayer={mistakePlayer}
+          onOpenPlayers={onOpenPlayers}
         />
       </div>
       <div

@@ -1,3 +1,4 @@
+import UnanalyzedMatches from './UnanalyzedMatches';
 import SearchPagination from './SearchPagination';
 import { lastSearchPage } from './useSearchPages';
 import { useEffect, useRef, useState } from 'react';
@@ -26,11 +27,13 @@ export default function RecurringMistakes({
   visible,
   theme,
   requestedPlayer,
+  onOpenPlayers,
 }: {
   visible: boolean;
   theme: Theme;
   /** A player chosen elsewhere in Study; each new token applies it once. */
   requestedPlayer?: { name: string; token: number };
+  onOpenPlayers: () => void;
 }) {
   const t = useMistakeText(),
     planText = useGamePlanText(),
@@ -223,6 +226,7 @@ export default function RecurringMistakes({
                 {t('analyzed')}: {page.analyzed_decisions} /{' '}
                 {page.analyzed_matches}
               </p>
+              <UnanalyzedMatches page={page} onOpenPlayers={onOpenPlayers} />
               {!page.groups.length ? (
                 <p role="status">
                   {t(page.analyzed_decisions ? 'empty' : 'noCoverage')}

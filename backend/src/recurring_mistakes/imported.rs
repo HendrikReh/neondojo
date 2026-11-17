@@ -22,15 +22,15 @@ pub(super) async fn catalog_legacy(
     pool: &PgPool,
     database: Option<Uuid>,
     match_id: Option<Uuid>,
-    player: Option<&str>,
+    player: Option<&[String]>,
 ) -> ApiResult<()> {
     let (games, bytes): (i64,i64) = sqlx::query_as(&format!("{CHOSEN} SELECT count(*),coalesce(max(octet_length(m.original)::bigint+octet_length(m.sgf)::bigint),0)::bigint {LEGACY_FOREIGN} AND (NOT m.imported_analysis_loaded OR NOT m.moves_cataloged)"))
-        .bind(database).bind(match_id).bind(player.map(str::to_lowercase)).fetch_one(pool).await.map_err(anyhow::Error::from)?;
+        .bind(database).bind(match_id).bind(player.map(<[String]>::to_vec)).fetch_one(pool).await.map_err(anyhow::Error::from)?;
     if games > MAX_GAMES as i64 || bytes > MAX_SOURCE_BYTES {
         return Err(ApiError::invalid(TOO_BROAD));
     }
     let ids: Vec<Uuid> = sqlx::query_scalar(&format!("{CHOSEN} SELECT DISTINCT m.id {LEGACY_FOREIGN} AND (NOT m.imported_analysis_loaded OR NOT m.moves_cataloged) ORDER BY m.id LIMIT {}", MAX_LEGACY_SOURCES+1))
-        .bind(database).bind(match_id).bind(player.map(str::to_lowercase)).fetch_all(pool).await.map_err(anyhow::Error::from)?;
+        .bind(database).bind(match_id).bind(player.map(<[String]>::to_vec)).fetch_all(pool).await.map_err(anyhow::Error::from)?;
     let more = ids.len() > MAX_LEGACY_SOURCES;
     for id in ids.into_iter().take(MAX_LEGACY_SOURCES) {
         // Failure is propagated: incomplete legacy coverage must not look complete.
@@ -78,14 +78,14 @@ pub(super) async fn load(
     tx: &mut Transaction<'_, Postgres>,
     database: Option<Uuid>,
     match_id: Option<Uuid>,
-    player: Option<&str>,
+    player: Option<&[String]>,
     native_games: usize,
     native_decisions: usize,
 ) -> ApiResult<Imported> {
     let count: i64 = sqlx::query_scalar(&format!("{CHOSEN} SELECT count(*) {FOREIGN}"))
         .bind(database)
         .bind(match_id)
-        .bind(player.map(str::to_lowercase))
+        .bind(player.map(<[String]>::to_vec))
         .fetch_one(&mut **tx)
         .await
         .map_err(anyhow::Error::from)?;
@@ -93,14 +93,14 @@ pub(super) async fn load(
         return Err(ApiError::invalid(TOO_BROAD));
     }
     let games=sqlx::query_as(&format!("{CHOSEN} SELECT m.id AS match_id,g.game_no,m.format,m.white,m.black {FOREIGN} ORDER BY m.id,g.game_no"))
-        .bind(database).bind(match_id).bind(player.map(str::to_lowercase)).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
+        .bind(database).bind(match_id).bind(player.map(<[String]>::to_vec)).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
     let events:Vec<ImportedEvent>=sqlx::query_as(&format!("{CHOSEN} SELECT e.*,p.ply AS checker_ply FROM eligible m JOIN match_moves e ON e.match_uuid=m.id LEFT JOIN positions p ON p.id=e.position_uuid AND p.match_uuid=e.match_uuid AND p.game_no=e.game_no WHERE m.format IN ('xg','bgf','sgf') AND EXISTS(SELECT 1 FROM effective_analysis_selections selected WHERE selected.match_id=m.id AND selected.source='imported') ORDER BY m.id,e.game_no,e.move_no LIMIT {}",MAX_DECISIONS+1))
-        .bind(database).bind(match_id).bind(player.map(str::to_lowercase)).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
+        .bind(database).bind(match_id).bind(player.map(<[String]>::to_vec)).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
     if events.len() > MAX_DECISIONS {
         return Err(ApiError::invalid(TOO_BROAD));
     }
     let rows:Vec<ImportedRow>=sqlx::query_as(&format!("{CHOSEN} SELECT a.id,a.match_uuid AS match_id,a.position_uuid,a.game_no,a.source_move_no,a.kind,a.data FROM eligible m JOIN primary_imported_analyses a ON a.match_uuid=m.id WHERE m.format IN ('xg','bgf','sgf') AND a.kind IN ('checker','cube') AND EXISTS(SELECT 1 FROM effective_analysis_selections selected WHERE selected.match_id=m.id AND selected.source='imported') ORDER BY m.id,a.game_no,a.source_move_no,a.source_ordinal LIMIT {}",MAX_DECISIONS+1))
-        .bind(database).bind(match_id).bind(player.map(str::to_lowercase)).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
+        .bind(database).bind(match_id).bind(player.map(<[String]>::to_vec)).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
     if rows.len() + native_decisions > MAX_DECISIONS {
         return Err(ApiError::invalid(TOO_BROAD));
     }

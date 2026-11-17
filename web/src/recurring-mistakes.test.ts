@@ -14,6 +14,7 @@ test.each(['en', 'de', 'es', 'fr', 'pl', 'it'] as Locale[])(
         children: createElement(RecurringMistakes, {
           visible: true,
           theme: 'forest',
+          onOpenPlayers: () => undefined,
         }),
       }),
     );

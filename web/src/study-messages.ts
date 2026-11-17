@@ -384,6 +384,22 @@ const overview = {
     'Zakres analizy: {decisions, plural, one {# decyzja} few {# decyzje} many {# decyzji}} w {matches, plural, one {# meczu} few {# meczach} many {# meczach}}',
     'Copertura: {decisions, plural, one {# decisione} other {# decisioni}} in {matches, plural, one {# partita} other {# partite}}',
   ],
+  unanalyzed: [
+    '{missing} of {total, plural, one {# match} other {# matches}} of this player {missing, plural, one {is} other {are}} not analyzed and missing here.',
+    '{missing} von {total, plural, one {# Match} other {# Matches}} dieses Spielers {missing, plural, one {ist} other {sind}} nicht analysiert und {missing, plural, one {fehlt} other {fehlen}} hier.',
+    '{missing} de {total, plural, one {# partida} other {# partidas}} de este jugador no {missing, plural, one {está analizada y falta} other {están analizadas y faltan}} aquí.',
+    '{missing} sur {total, plural, one {# partie} other {# parties}} de ce joueur {missing, plural, one {n’est pas analysée et manque} other {ne sont pas analysées et manquent}} ici.',
+    '{missing} z {total, plural, one {# meczu} few {# meczów} many {# meczów}} tego gracza {missing, plural, one {nie jest przeanalizowany i tu go brakuje} few {nie są przeanalizowane i tu ich brakuje} many {nie jest przeanalizowanych i tu ich brakuje}}.',
+    '{missing} di {total, plural, one {# partita} other {# partite}} di questo giocatore {missing, plural, one {non è analizzata e manca} other {non sono analizzate e mancano}} qui.',
+  ],
+  openPlayers: [
+    'Analyze in Player database',
+    'In der Spielerdatenbank analysieren',
+    'Analizar en la base de jugadores',
+    'Analyser dans la base de joueurs',
+    'Analizuj w bazie graczy',
+    'Analizza nel database giocatori',
+  ],
   noRecurring: [
     'No mistake group spans at least two matches.',
     'Keine Fehlergruppe kommt in mindestens zwei Matches vor.',

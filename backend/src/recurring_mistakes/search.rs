@@ -190,7 +190,7 @@ impl DecisionHit {
 
 /// Shared WHERE clause; $1 player, $2 database, $3 kind, $4 mistake kind,
 /// $5 game plan, $6/$7 loss range, $8/$9 away scores, $10/$11 cube.
-const FILTER: &str = "d.player_name=$1
+const FILTER: &str = "d.player_name=ANY($1)
    AND ($2::uuid IS NULL OR m.database_id=$2)
    AND ($3::text IS NULL OR d.question_kind=$3)
    AND ($4::text IS NULL OR (d.equity_loss>0 AND d.mistake_kind=$4))
@@ -211,7 +211,7 @@ pub(super) async fn search(
 ) -> ApiResult<Json<DecisionSearchPage>> {
     let q = input.map_err(|e| ApiError::invalid(e.body_text()))?.0;
     let (player, min_loss) = validate(Some(q.player.clone()), q.min_loss.or(Some(0.0)))?;
-    let player = player.unwrap_or_default().to_lowercase();
+    let player = super::player_scope::names(&s.pool, &player.unwrap_or_default()).await?;
     if q.max_loss
         .is_some_and(|max| !max.is_finite() || max < min_loss)
     {

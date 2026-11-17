@@ -1352,3 +1352,87 @@ async fn decision_search_filters_by_type_score_cube_and_loss_with_stable_pages(p
         assert_eq!(search(invalid).await.0, 422, "{invalid}");
     }
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn aliases_of_one_profile_count_as_one_player(pool: PgPool) {
+    let mut jobs = Vec::new();
+    for (file, white, loss) in [("bot.sgf", "Alice", 0.12), ("online.sgf", "Alicia", 0.2)] {
+        let sgf = format!("(;GM[6]PW[{white}]PB[Bob]MI[length:7];W[31hefe])");
+        let id = store::import_match(
+            &pool,
+            file,
+            "sgf",
+            sgf.as_bytes(),
+            &sgf,
+            &import::parse_sgf(&sgf).unwrap(),
+        )
+        .await
+        .unwrap()
+        .r#match
+        .id;
+        jobs.push(job(&pool, id, 0, None, &game1(loss)[..1]).await);
+    }
+    let router = app(&pool);
+    let mistakes = |player: &'static str| {
+        let router = router.clone();
+        async move {
+            let (status, data) = call(
+                &router,
+                "GET",
+                &format!("/api/study/mistakes?player={player}"),
+                Value::Null,
+            )
+            .await;
+            assert_eq!(status, 200, "{data}");
+            data
+        }
+    };
+    // Two unrelated names are two players.
+    let separate = mistakes("Alice").await;
+    assert_eq!(separate["players"], json!(["Alice", "Alicia", "Bob"]));
+    assert_eq!(separate["analyzed_matches"], 1);
+    assert_eq!(separate["player_matches"], 1);
+
+    // Merging Alicia into Alice's profile, as the player database does.
+    let merged = sqlx::query(
+        "UPDATE player_aliases SET profile_id=(
+             SELECT profile_id FROM player_aliases WHERE name='Alice')
+         WHERE name='Alicia'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(merged.rows_affected(), 1);
+
+    for player in ["Alice", "Alicia"] {
+        let data = mistakes(player).await;
+        assert_eq!(data["players"], json!(["Alice", "Bob"]), "{player}");
+        assert_eq!(data["analyzed_matches"], 2, "{player}");
+        assert_eq!(data["analyzed_decisions"], 2, "{player}");
+        assert_eq!(data["groups"][0]["count"], 2, "{player}");
+        assert_eq!(data["player_matches"], 2, "{player}");
+        assert_eq!(data["unanalyzed_matches"], 0, "{player}");
+    }
+    let (status, found) = call(
+        &router,
+        "GET",
+        "/api/study/decisions?player=Alice",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{found}");
+    assert_eq!(found["total"], 2);
+    let (status, practice) = call(
+        &router,
+        "POST",
+        "/api/study/mistakes/practice",
+        json!({"player":"Alice","game_plan":separate["groups"][0]["game_plan"],"mistake_kind":"checker"}),
+    )
+    .await;
+    assert_eq!(status, 200, "{practice}");
+    // Both matches hold the same opening decision, which practice asks once.
+    let items = practice["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    let asked = items[0]["reference"]["job_id"].as_str().unwrap();
+    assert!(jobs.iter().any(|job| job.to_string() == asked));
+}

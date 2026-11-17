@@ -26,12 +26,13 @@ pub(crate) struct SourceDecision {
     pub(crate) original_match_state: Option<String>,
 }
 impl SourceDecision {
-    pub(crate) fn in_scope(&self, player: &str, plan: Option<GamePlan>) -> bool {
-        self.question.players[self.decision.player as usize]
-            .trim()
-            .to_lowercase()
-            == player
-            && plan.is_none_or(|p| p == self.plan)
+    /// `players` holds the lowercase names of one player's profile.
+    pub(crate) fn in_scope(&self, players: &[String], plan: Option<GamePlan>) -> bool {
+        players.contains(
+            &self.question.players[self.decision.player as usize]
+                .trim()
+                .to_lowercase(),
+        ) && plan.is_none_or(|p| p == self.plan)
     }
 
     pub(crate) fn meets_loss_threshold(&self, loss: f64) -> bool {
@@ -68,7 +69,7 @@ WITH eligible AS (
     WHERE NOT m.collection_only
       AND ($1::uuid IS NULL OR m.database_id=$1)
       AND ($2::uuid IS NULL OR m.id=$2)
-      AND ($3::text IS NULL OR lower(btrim(m.white))=$3 OR lower(btrim(m.black))=$3)
+      AND ($3::text[] IS NULL OR lower(btrim(m.white))=ANY($3) OR lower(btrim(m.black))=ANY($3))
       AND NOT EXISTS(
           SELECT 1 FROM play_sessions live
           WHERE live.library_match_id=m.id
@@ -105,7 +106,7 @@ pub(crate) async fn load(
     pool: &PgPool,
     database: Option<Uuid>,
     match_id: Option<Uuid>,
-    player: Option<&str>,
+    player: Option<&[String]>,
 ) -> ApiResult<Vec<SourceDecision>> {
     super::imported::catalog_legacy(pool, database, match_id, player).await?;
     let mut tx = read_snapshot(pool).await?;
@@ -178,17 +179,17 @@ async fn native_rows(
     tx: &mut Transaction<'_, Postgres>,
     database: Option<Uuid>,
     match_id: Option<Uuid>,
-    player: Option<&str>,
+    player: Option<&[String]>,
 ) -> ApiResult<(Vec<Game>, Vec<Row>)> {
     // A checkpoint belongs to a game, but the artifact belongs to the match.
     // Account for and transfer each match's source only once, even when hundreds
     // of its games have selected checkpoints.
-    let (games,bytes):(i64,i64)=sqlx::query_as(&format!("{CHOSEN} SELECT count(*),(SELECT coalesce(sum(octet_length(m.sgf)),0)::bigint FROM matches m WHERE m.id IN (SELECT match_id FROM chosen)) FROM chosen")).bind(database).bind(match_id).bind(player.map(str::to_lowercase)).fetch_one(&mut **tx).await.map_err(anyhow::Error::from)?;
+    let (games,bytes):(i64,i64)=sqlx::query_as(&format!("{CHOSEN} SELECT count(*),(SELECT coalesce(sum(octet_length(m.sgf)),0)::bigint FROM matches m WHERE m.id IN (SELECT match_id FROM chosen)) FROM chosen")).bind(database).bind(match_id).bind(player.map(<[String]>::to_vec)).fetch_one(&mut **tx).await.map_err(anyhow::Error::from)?;
     if games > MAX_GAMES as i64 || bytes > MAX_SOURCE_BYTES {
         return Err(ApiError::invalid(TOO_BROAD));
     }
-    let games:Vec<Game>=sqlx::query_as(&format!("{CHOSEN} SELECT c.*,CASE WHEN row_number() OVER (PARTITION BY c.match_id ORDER BY c.game_no)=1 THEN m.sgf ELSE '' END AS sgf,m.white,m.black FROM chosen c JOIN matches m ON m.id=c.match_id ORDER BY c.match_id,c.game_no LIMIT {}",MAX_GAMES+1)).bind(database).bind(match_id).bind(player.map(str::to_lowercase)).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
-    let rows:Vec<Row>=sqlx::query_as(&format!("{CHOSEN} SELECT a.job_id,a.game_no,a.decision_no,a.position_uuid,a.player,a.kind,a.equity_loss,a.data FROM chosen c JOIN move_analyses a ON a.job_id=c.job_id AND a.game_no=c.game_no ORDER BY c.match_id,c.game_no,a.decision_no LIMIT {}",MAX_DECISIONS+1)).bind(database).bind(match_id).bind(player.map(str::to_lowercase)).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
+    let games:Vec<Game>=sqlx::query_as(&format!("{CHOSEN} SELECT c.*,CASE WHEN row_number() OVER (PARTITION BY c.match_id ORDER BY c.game_no)=1 THEN m.sgf ELSE '' END AS sgf,m.white,m.black FROM chosen c JOIN matches m ON m.id=c.match_id ORDER BY c.match_id,c.game_no LIMIT {}",MAX_GAMES+1)).bind(database).bind(match_id).bind(player.map(<[String]>::to_vec)).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
+    let rows:Vec<Row>=sqlx::query_as(&format!("{CHOSEN} SELECT a.job_id,a.game_no,a.decision_no,a.position_uuid,a.player,a.kind,a.equity_loss,a.data FROM chosen c JOIN move_analyses a ON a.job_id=c.job_id AND a.game_no=c.game_no ORDER BY c.match_id,c.game_no,a.decision_no LIMIT {}",MAX_DECISIONS+1)).bind(database).bind(match_id).bind(player.map(<[String]>::to_vec)).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
     if rows.len() > MAX_DECISIONS {
         return Err(ApiError::invalid(TOO_BROAD));
     }
@@ -216,7 +217,7 @@ pub(super) async fn players(pool: &PgPool, database: Option<Uuid>) -> ApiResult<
     ))
     .bind(database)
     .bind(None::<Uuid>)
-    .bind(None::<String>)
+    .bind(None::<Vec<String>>)
     .fetch_all(pool)
     .await
     .map_err(anyhow::Error::from)?;
@@ -225,6 +226,7 @@ pub(super) async fn players(pool: &PgPool, database: Option<Uuid>) -> ApiResult<
             "Too many available players; choose a database to narrow this request",
         ));
     }
+    let names = super::player_scope::display_names(pool, names).await?;
     let mut unique = BTreeMap::new();
     for name in names {
         unique.entry(name.to_lowercase()).or_insert(name);

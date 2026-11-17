@@ -356,6 +356,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cube-chances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Calculate the cubeless chances of a cube decision whose saved analysis
+         *     has none. The result names its own engine and depth and is not stored.
+         */
+        post: operations["chances"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cube-context": {
         parameters: {
             query?: never;
@@ -3423,6 +3443,23 @@ export interface components {
             /** Format: uuid */
             seed?: string | null;
         };
+        /** @description Cubeless chances of a saved cube decision, for the player who decides. */
+        CubeChances: {
+            engine: string;
+            /** Format: int32 */
+            plies: number;
+            /** @description Win, gammon and backgammon chances, then the three losing chances. */
+            probabilities: number[];
+        };
+        CubeChancesRequest: {
+            /**
+             * @description The position of the cube decision, with its match context and the
+             *     deciding player on roll.
+             */
+            position: components["schemas"]["Position"];
+            /** @description True for take or pass, where the opponent doubled. */
+            response: boolean;
+        };
         CubeContext: {
             /** @description Points still needed by White and Black; absent in money play. */
             away?: number[] | null;
@@ -4425,7 +4462,11 @@ export interface components {
             analyzed_decisions: number;
             analyzed_matches: number;
             groups: components["schemas"]["MistakeGroup"][];
+            /** @description All matches of the chosen player in the scope, under any alias. */
+            player_matches: number;
             players: string[];
+            /** @description Those of them without any analyzed decision, whatever the game plan. */
+            unanalyzed_matches: number;
         };
         MoveAnalysis: components["schemas"]["Decision"] & {
             /** Format: int32 */
@@ -4646,6 +4687,18 @@ export interface components {
             blots: number[];
             /**
              * Format: int32
+             * @description Checkers on the mover's 1 to 3 points while the opponent still has a
+             *     checker behind the mover's rearmost one; 0 once contact is over.
+             */
+            deep_checkers: number;
+            /**
+             * Format: int32
+             * @description Pips the mover loses to hits, summed over the 36 opponent rolls when
+             *     each roll hits the blot that costs most. Divide by 36 for the average.
+             */
+            hit_pips: number;
+            /**
+             * Format: int32
              * @description Opponent rolls out of 36 that can hit one of those blots.
              */
             hitting_rolls: number;
@@ -4670,6 +4723,11 @@ export interface components {
             pips: number;
             /** @description Points the mover holds with two or more checkers. */
             points: number[];
+            /**
+             * Format: int32
+             * @description Checkers beyond the third on any point.
+             */
+            stacked_checkers: number;
         };
         PlayFeedbackRequest: {
             /** Format: uuid */
@@ -6830,6 +6888,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConfigurationErrorBody"];
+                };
+            };
+        };
+    };
+    chances: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CubeChancesRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CubeChances"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
