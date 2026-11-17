@@ -239,6 +239,18 @@ async fn analysis_snapshot(
     .await
 }
 
+/// The same verified Open Sage profile with cubeless evaluation. Starting the
+/// worker for its version runs the real capability check for that profile.
+pub(crate) async fn cubeless_sage(mut snapshot: EngineSnapshot) -> anyhow::Result<EngineSnapshot> {
+    let sage = snapshot
+        .open_sage
+        .as_mut()
+        .ok_or_else(|| anyhow::anyhow!("Missing verified Open Sage installation"))?;
+    sage.cubeless = true;
+    snapshot.engine_version = Some(SageEngine::new(sage.clone())?.version().await?);
+    Ok(snapshot)
+}
+
 pub(crate) async fn snapshot_for(
     state: &AppState,
     id: &str,

@@ -715,12 +715,15 @@ fn parse_sgf_context(
         }
         let mut crawford = false;
         let mut jacoby = false;
+        // GNUbg's "set cube use off", e.g. cubeless money duels.
+        let mut no_cube = false;
         if let Some(rules) = one(root, "RU")? {
             for rule in rules.split(':') {
                 match rule.trim() {
                     "" | "Crawford" | "Backgammon" | "Standard" => {}
                     "CrawfordGame" => crawford = true,
                     "Jacoby" => jacoby = true,
+                    "NoCube" => no_cube = true,
                     other => bail!("Unsupported backgammon rule/variant: {other}"),
                 }
             }
@@ -796,6 +799,10 @@ fn parse_sgf_context(
             let cube_before = cube;
             let owner_before = owner;
             if matches!(value, "double" | "take" | "drop") {
+                ensure!(
+                    !no_cube,
+                    "SGF cube action in a game played without the cube"
+                );
                 context.decision_ids.push((
                     ids::position_id(&board, player),
                     ids::match_id(

@@ -63,7 +63,7 @@ class Runtime:
         self.identity = {'artifact_fingerprint': 'test'}
         print('native diagnostic noise', flush=True)
     def dispatch(self, request):
-        return request['value']
+        return request['value'], request.get('cost')
 main({})
 """
         return subprocess.run([sys.executable, '-I', '-u', '-c', source], input=data,
@@ -75,6 +75,15 @@ main({})
         self.assertEqual([response['id'] for response in responses], [1, 2])
         self.assertEqual(responses[1]['result'], 42)
         self.assertIn(b'native diagnostic noise', result.stderr)
+
+    def test_engine_cost_travels_beside_the_result(self):
+        result = self.run_protocol(b'{"id":1,"operation":"initialize","profile":{}}\n'
+                                   b'{"id":2,"operation":"test","value":1,"cost":{"cpu_us":7,"wall_us":5}}\n'
+                                   b'{"id":3,"operation":"test","value":2}\n')
+        responses = [json.loads(line) for line in result.stdout.splitlines()]
+        self.assertNotIn('cost', responses[0])
+        self.assertEqual(responses[1], {'id': 2, 'result': 1, 'cost': {'cpu_us': 7, 'wall_us': 5}})
+        self.assertNotIn('cost', responses[2])
 
     def test_malformed_and_oversized_requests_terminate_worker(self):
         for payload in (b'not json\n', b'x' * 262145, b'{"id":-1}\n'):
@@ -94,6 +103,7 @@ class BatchTests(unittest.TestCase):
         spec.loader.exec_module(worker)
         self.runtime = worker.Runtime.__new__(worker.Runtime)
         self.runtime.batch_active = False
+        self.runtime.cubeless = False
         self.runtime.profile = {'plies': 2}
         self.runtime.identity = {'package_version': 'fixture', 'artifact_fingerprint': 'original'}
         self.runtime.check_identity = Mock(side_effect=lambda: dict(self.current_identity))
@@ -104,23 +114,41 @@ class BatchTests(unittest.TestCase):
         self.cube = {'operation': 'cube', 'board': [0] * 26,
                      'context': dict(cube_value=1, cube_owner='centered', away1=0, away2=0, is_crawford=False, jacoby=True)}
 
+    def test_cubeless_profile_keeps_only_fully_searched_candidates(self):
+        full = SimpleNamespace(eval_level='2-ply', board=[0] * 26, equity=.1,
+                               probs=SimpleNamespace(to_list=lambda: [.6, .1, .02, .1, .01]))
+        pruned = SimpleNamespace(eval_level='1-ply', board=[1] + [0] * 25, equity=.3,
+                                 probs=SimpleNamespace(to_list=lambda: [.6, .1, .02, .1, .01]))
+        self.runtime.analyzer.checker_play = lambda *args, **kwargs: SimpleNamespace(moves=[full, pruned])
+        checker = dict(self.cube, operation='checker', dice=[3, 1])
+        with patch.dict(sys.modules, {'bgsage.text_export': SimpleNamespace(compute_move_notation=lambda *args: '8/5 6/5')}):
+            with self.assertRaisesRegex(ValueError, 'below the requested depth'):
+                self.runtime.dispatch(checker)
+            self.runtime.cubeless = True
+            moves, _ = self.runtime.dispatch(checker)
+        self.assertEqual([move['board'] for move in moves], [[0] * 26])
+        with self.assertRaisesRegex(ValueError, 'no cube decisions'):
+            self.runtime.dispatch(self.cube)
+
     def test_rejects_cube_depth_below_profile(self):
         self.runtime.profile = {'plies': 3}
         with self.assertRaisesRegex(ValueError, 'below the requested depth'):
             self.runtime.dispatch(self.cube)
 
     def test_batch_checks_only_boundaries_and_later_single_request_is_protected(self):
-        self.assertEqual(self.runtime.dispatch({'operation': 'begin_batch'}), self.runtime.identity)
-        first = self.runtime.dispatch(self.cube)
-        self.assertEqual(self.runtime.dispatch(self.cube), first)
+        self.assertEqual(self.runtime.dispatch({'operation': 'begin_batch'}), (self.runtime.identity, None))
+        first, cost = self.runtime.dispatch(self.cube)
+        self.assertEqual(self.runtime.dispatch(self.cube)[0], first)
         self.assertEqual(self.runtime.check_identity.call_count, 1)
-        self.assertEqual(self.runtime.dispatch({'operation': 'end_batch'}), self.runtime.identity)
+        self.assertEqual(self.runtime.dispatch({'operation': 'end_batch'}), (self.runtime.identity, None))
         self.assertEqual(self.runtime.check_identity.call_count, 2)
-        self.assertEqual(self.runtime.dispatch(self.cube), first)
+        self.assertEqual(self.runtime.dispatch(self.cube)[0], first)
         self.assertEqual(self.runtime.check_identity.call_count, 4)
         self.current_identity['artifact_fingerprint'] = 'changed'
         with self.assertRaisesRegex(ValueError, 'changed'):
             self.runtime.dispatch(self.cube)
+        self.assertEqual(set(cost), {'cpu_us', 'wall_us'})
+        self.assertTrue(all(type(value) is int and value >= 0 for value in cost.values()))
 
     def test_changed_identity_is_rejected_at_each_boundary(self):
         for boundary in ('begin_batch', 'end_batch'):

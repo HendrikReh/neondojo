@@ -14702,7 +14702,6 @@
         "required": [
           "a",
           "b",
-          "match_length",
           "count"
         ],
         "properties": {
@@ -14712,17 +14711,32 @@
           "b": {
             "$ref": "#/components/schemas/Competitor"
           },
+          "block_games": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Games per stored block; required for cubeless money blocks.",
+            "maximum": 1000,
+            "minimum": 1
+          },
           "count": {
             "type": "integer",
             "format": "int32",
+            "description": "Matches or money blocks; pairs in paired mode.",
             "maximum": 1000,
             "minimum": 1
+          },
+          "format": {
+            "$ref": "#/components/schemas/DuelFormat"
           },
           "match_length": {
             "type": "integer",
             "format": "int32",
+            "description": "Point match length; 1–25 for matches, 0 or omitted for money blocks.",
             "maximum": 25,
-            "minimum": 1
+            "minimum": 0
           },
           "mode": {
             "$ref": "#/components/schemas/DiceMode"
@@ -15680,6 +15694,14 @@
           }
         }
       },
+      "DuelFormat": {
+        "type": "string",
+        "description": "What one duel unit plays: a point match with the cube, or a block of\nindependent cubeless money games without the Jacoby rule.",
+        "enum": [
+          "match",
+          "money_cubeless"
+        ]
+      },
       "DuplicateCard": {
         "type": "object",
         "required": [
@@ -16233,6 +16255,29 @@
           "match_id": {
             "type": "string",
             "format": "uuid"
+          }
+        }
+      },
+      "GameOutcomes": {
+        "type": "object",
+        "description": "Games won by one side, by value.",
+        "required": [
+          "single",
+          "gammon",
+          "backgammon"
+        ],
+        "properties": {
+          "backgammon": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "gammon": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "single": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -18092,6 +18137,46 @@
             "type": "integer",
             "description": "Those of them without any analyzed decision, whatever the game plan.",
             "minimum": 0
+          }
+        }
+      },
+      "MoneyStatistics": {
+        "type": "object",
+        "description": "Results of cubeless money blocks over the counted blocks.",
+        "required": [
+          "games",
+          "outcomes_a",
+          "outcomes_b"
+        ],
+        "properties": {
+          "confidence_interval": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "description": "95% interval for `points_per_game_a`, from 20 pairs or blocks."
+          },
+          "games": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "outcomes_a": {
+            "$ref": "#/components/schemas/GameOutcomes"
+          },
+          "outcomes_b": {
+            "$ref": "#/components/schemas/GameOutcomes"
+          },
+          "points_per_game_a": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Net points per game from A's perspective, between −3 and 3."
           }
         }
       },
@@ -21379,6 +21464,10 @@
           "artifact_fingerprint": {
             "type": "string"
           },
+          "cubeless": {
+            "type": "boolean",
+            "description": "Cubeless evaluation for cubeless money duels; absent means cubeful."
+          },
           "one_ply_verified": {
             "type": "boolean",
             "description": "Capability proven during installation verification; absent in legacy snapshots."
@@ -21720,13 +21809,25 @@
           "b": {
             "$ref": "#/components/schemas/Competitor"
           },
+          "block_games": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
           "count": {
             "type": "integer",
             "format": "int32"
           },
+          "format": {
+            "$ref": "#/components/schemas/DuelFormat",
+            "description": "Absent in series created before money blocks existed."
+          },
           "match_length": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "description": "0 for money blocks."
           },
           "mode": {
             "$ref": "#/components/schemas/DiceMode"
@@ -21833,7 +21934,41 @@
             "items": {
               "type": "number",
               "format": "double"
-            }
+            },
+            "description": "95% interval for A's match win rate; matches in paired mode only."
+          },
+          "cost_a": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SideCostSummary",
+                "description": "Engine work of A over the counted matches that recorded it."
+              }
+            ]
+          },
+          "cost_b": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SideCostSummary",
+                "description": "Engine work of B over the counted matches that recorded it."
+              }
+            ]
+          },
+          "money": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MoneyStatistics",
+                "description": "Cubeless money blocks only. `wins_a`/`wins_b` then count games won."
+              }
+            ]
           },
           "win_rate_a": {
             "type": [
@@ -21863,6 +21998,36 @@
           }
         },
         "additionalProperties": false
+      },
+      "SideCostSummary": {
+        "type": "object",
+        "description": "Engine work per checker turn. CPU time covers all engine threads; both\ninclude cube decisions but exclude process startup, replay and checks.",
+        "required": [
+          "measured_matches",
+          "moves",
+          "cpu_ms_per_move",
+          "wall_ms_per_move"
+        ],
+        "properties": {
+          "cpu_ms_per_move": {
+            "type": "number",
+            "format": "double"
+          },
+          "measured_matches": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Counted matches with a measurement for this side."
+          },
+          "moves": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Checker turns of this side in those matches, including forced moves."
+          },
+          "wall_ms_per_move": {
+            "type": "number",
+            "format": "double"
+          }
+        }
       },
       "SimilarHit": {
         "type": "object",

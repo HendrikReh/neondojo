@@ -7,11 +7,19 @@ import hashlib
 import json
 import math
 import os
+import resource
 import sys
+import time
 
 MAX_REQUEST = 262144
 MAX_RESPONSE = 2097152
 ADAPTER_VERSION = 1
+
+
+def process_cpu_us():
+    # RUSAGE_SELF covers every thread of this worker, including the native pool.
+    usage = resource.getrusage(resource.RUSAGE_SELF)
+    return round((usage.ru_utime + usage.ru_stime) * 1e6)
 
 
 def validate_profile(plies, threads):
@@ -52,12 +60,18 @@ class Runtime:
         import bgbot_cpp
         self.sage, self.native, self.integrity = bgsage, bgbot_cpp, integrity
         self.profile = profile
+        self.cubeless = profile.get('cubeless', False)
+        if type(self.cubeless) is not bool:
+            raise ValueError('Invalid Open Sage cubeless flag')
         self.batch_active = False
         self.identity = self.check_identity()
         expected = profile.get('artifact_fingerprint')
         if expected and expected != self.identity['artifact_fingerprint']:
             raise ValueError('Open Sage assets changed since submission; restore the saved installation')
-        self.analyzer = bgsage.BgBotAnalyzer(eval_level=f"{profile['plies']}ply", parallel_threads=profile['threads'])
+        # Cubeless money duels use Sage's cubeless checker path, which evaluates
+        # serially and searches only its filtered top candidates at full depth.
+        self.analyzer = bgsage.BgBotAnalyzer(eval_level=f"{profile['plies']}ply", cubeful=not self.cubeless,
+                                             parallel_threads=profile['threads'])
         # Exercise the real candidate path and observe its configured pool bound.
         from concurrent.futures import ThreadPoolExecutor
         from unittest.mock import patch
@@ -67,7 +81,7 @@ class Runtime:
             return ThreadPoolExecutor(*args, **kwargs)
         with patch('bgsage.analyzer.ThreadPoolExecutor', side_effect=pool):
             opening = self.analyzer.checker_play(list(bgsage.STARTING_BOARD), 3, 1, beaver=False)
-        serial = profile['plies'] == 1 and getattr(bgsage.analyzer, 'SERIAL_CUBEFUL_1PLY', False) is True
+        serial = self.cubeless or profile['plies'] == 1 and getattr(bgsage.analyzer, 'SERIAL_CUBEFUL_1PLY', False) is True
         integrity['validate_thread_budget'](profile['threads'], observed, serial=serial)
         if not opening.moves:
             raise ValueError('Open Sage capability check returned no candidates')
@@ -100,17 +114,19 @@ class Runtime:
                 raise ValueError('Integrity batch already active')
             self.verify()
             self.batch_active = True
-            return self.identity
+            return self.identity, None
         if operation == 'end_batch':
             if not self.batch_active:
                 raise ValueError('No active integrity batch')
             self.verify()
             self.batch_active = False
-            return self.identity
+            return self.identity, None
         if self.batch_active and operation not in ('checker', 'cube'):
             raise ValueError('Unsupported integrity batch operation')
         if not self.batch_active:
             self.verify()
+        # Engine work only: integrity checks before and after stay outside.
+        cpu_before, wall_before = process_cpu_us(), time.perf_counter_ns()
         if request['operation'] == 'identity':
             result = self.identity
         else:
@@ -137,6 +153,10 @@ class Runtime:
                     except Exception as error:
                         raise ValueError(f'Invalid checker evaluation: probabilities={move.probs.to_list()}, board={before}, dice={dice}, context={context}; {error}') from error
                     if move.eval_level != f"{self.profile['plies']}-ply":
+                        # The cubeless path prunes weaker candidates to 1-ply;
+                        # keep only fully searched ones, which include its choice.
+                        if self.cubeless and forced is None:
+                            continue
                         raise ValueError('Open Sage returned a candidate below the requested depth')
                     moves.append({'board': board(move.board), 'notation': compute_move_notation(before, move.board, *dice),
                                   'equity': move.equity, 'probabilities': probabilities(move.probs.to_list())})
@@ -163,6 +183,8 @@ class Runtime:
                 result = {'accept': offered.cubeful_equity <= continuation + 1e-9,
                           'continuation': continuation, 'offered': offered.cubeful_equity}
             elif request['operation'] == 'cube':
+                if self.cubeless:
+                    raise ValueError('A cubeless Open Sage profile makes no cube decisions')
                 result = self.analyzer.cube_action(before, **kwargs)
                 try:
                     self.integrity['validate_result'](result, probabilities)
@@ -174,9 +196,11 @@ class Runtime:
                           'probabilities': probabilities(result.probs.to_list())}
             else:
                 raise ValueError('Unsupported sidecar operation')
+        cost = {'cpu_us': process_cpu_us() - cpu_before,
+                'wall_us': (time.perf_counter_ns() - wall_before) // 1000}
         if not self.batch_active:
             self.verify()
-        return result
+        return result, cost
 
 
 def main(integrity):
@@ -200,10 +224,13 @@ def main(integrity):
                 if request['operation'] != 'initialize':
                     raise ValueError('Sidecar handshake required')
                 runtime = Runtime(request['profile'], integrity)
-                result = runtime.identity
+                result, cost = runtime.identity, None
             else:
-                result = runtime.dispatch(request)
-            response = json.dumps({'id': request_id, 'result': result}, allow_nan=False, separators=(',', ':'))
+                result, cost = runtime.dispatch(request)
+            envelope = {'id': request_id, 'result': result}
+            if cost is not None:
+                envelope['cost'] = cost
+            response = json.dumps(envelope, allow_nan=False, separators=(',', ':'))
             if len(response.encode()) + 1 > MAX_RESPONSE:
                 raise ValueError('Sidecar output exceeded its bound')
             protocol.write(response + '\n')

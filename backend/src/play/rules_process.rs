@@ -339,6 +339,7 @@ time.sleep(60)
             notation: None,
             resign_level: None,
             match_bots: None,
+            cubeless: false,
         }
     }
 

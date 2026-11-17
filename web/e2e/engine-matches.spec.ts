@@ -90,9 +90,7 @@ test('plays a seeded pair with the default dice mode and exports the return leg'
       path: testInfo.outputPath(`engine-matches-${width}.png`),
     });
   }
-  await results
-    .getByRole('button', { name: 'Repeat series …' })
-    .click();
+  await results.getByRole('button', { name: 'Repeat series …' }).click();
   await expect(setup.getByLabel('Dice mode')).toHaveValue('paired');
   await expect(seedInput).toBeVisible();
   await expect(seedInput).toHaveValue(seed);
@@ -109,6 +107,9 @@ test('plays a seeded pair with the default dice mode and exports the return leg'
     .last()
     .press('Enter');
   await expect(results.getByText('Completed · 2 / 2 Matches')).toBeVisible();
+  // Both GNUbg sides report their measured engine work.
+  await expect(results.getByText('CPU time per move')).toBeVisible();
+  await expect(results.getByText(/^Elapsed time A .+ · B .+$/)).toBeVisible();
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();
   await page
     .locator('.database-sidebar')
@@ -118,6 +119,59 @@ test('plays a seeded pair with the default dice mode and exports the return leg'
   await expect(rows).toHaveCount(3);
   await expect(rows.first()).toContainText('A gnubg 0-ply');
   await expect(rows.first()).toContainText('B gnubg 0-ply');
+});
+
+test('plays a paired block of cubeless money games', async ({ page }) => {
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Extras', exact: true }).click();
+  await page.locator('nav').getByText('Engine duels', { exact: true }).click();
+  const setup = page.getByRole('dialog', { name: 'New series' });
+  const results = page.getByRole('region', { name: 'Series results' });
+  await page.getByRole('button', { name: 'New series' }).click();
+  for (const side of ['Engine A', 'Engine B'])
+    await setup
+      .getByRole('group', { name: side })
+      .getByLabel('Playing strength')
+      .selectOption('0');
+  await setup
+    .getByRole('combobox', { name: 'Format' })
+    .selectOption('money_cubeless');
+  await expect(setup.getByLabel('Match length in points')).toBeHidden();
+  const blockGames = setup.getByRole('spinbutton', { name: 'Games per block' });
+  await expect(blockGames).toHaveValue('100');
+  await blockGames.fill('3');
+  await setup.getByRole('spinbutton', { name: 'Block pairs' }).fill('1');
+  await expect(
+    setup.getByText(
+      'Gammons and backgammons count; the Jacoby rule does not apply. Total games: 6',
+    ),
+  ).toBeVisible();
+  await setup.getByRole('button', { name: 'Start series' }).click();
+  await expect(setup).toBeHidden();
+  await expect(results.getByText('Completed · 2 / 2 Blocks')).toBeVisible({
+    timeout: 60000,
+  });
+  await expect(results.getByText('Game win rate')).toHaveCount(2);
+  await expect(results.getByText('Blocks counted')).toBeVisible();
+  // Identical engines with swapped sides cancel out exactly.
+  const points = results
+    .getByRole('term')
+    .filter({ hasText: 'Points per game for A' })
+    .locator('xpath=following-sibling::dd[1]');
+  await expect(points).toHaveText('0.000');
+  await expect(
+    results.getByRole('columnheader', { name: 'Points A–B' }),
+  ).toBeVisible();
+  await expect(results.getByRole('row', { name: /First leg/ })).toContainText(
+    '3',
+  );
+  await results.getByText('Series settings', { exact: true }).click();
+  await expect(
+    results.getByText(
+      'Money games without cube · Paired with sides swapped · Games per block 3',
+    ),
+  ).toBeVisible();
 });
 
 test('shows partial results and leaves raw engine errors collapsed', async ({
@@ -154,6 +208,18 @@ test('shows partial results and leaves raw engine errors collapsed', async ({
       wins_b: 16,
       win_rate_a: 0.6,
       confidence_interval_a: [0.3, 0.9],
+      cost_a: {
+        measured_matches: 40,
+        moves: 1200,
+        cpu_ms_per_move: 152.5,
+        wall_ms_per_move: 61.25,
+      },
+      cost_b: {
+        measured_matches: 12,
+        moves: 380,
+        cpu_ms_per_move: 1534,
+        wall_ms_per_move: 412.4,
+      },
     },
     matches: [],
   };
@@ -176,6 +242,15 @@ test('shows partial results and leaves raw engine errors collapsed', async ({
   await expect(results.getByText('60.0%', { exact: true })).toBeVisible();
   await expect(results.getByText('40.0%', { exact: true })).toBeVisible();
   await expect(results.getByText('30.0% – 90.0%')).toBeVisible();
+  const cost = results
+    .getByRole('term')
+    .filter({ hasText: 'CPU time per move' })
+    .locator('xpath=following-sibling::dd[1]');
+  await expect(cost).toContainText('A 152.5 ms · B 1.53s');
+  await expect(cost).toContainText('Elapsed time A 61.25 ms · B 412.4 ms');
+  await expect(cost).toContainText(
+    'Matches with measurement A 40 / 40 · B 12 / 40',
+  );
   await expect(results.getByText('20 / 25')).toBeVisible();
   await expect(results.getByText('41 / 50 Matches')).toBeVisible();
   await expect(

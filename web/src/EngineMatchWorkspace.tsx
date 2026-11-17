@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { formatBenchmarkDuration } from './benchmark-duration';
 import EngineLabel from './EngineLabel';
 import options from '../../shared/configuration-options.json' with { type: 'json' };
 import {
@@ -11,6 +12,7 @@ import {
   type Series,
   type SeriesDetails,
   type SeriesPage,
+  type SideCostSummary,
 } from './engine-match-api';
 import {
   engineMatchText,
@@ -23,12 +25,15 @@ import './engine-match.css';
 
 type Competitor = CreateSeries['a'];
 type Mode = NonNullable<CreateSeries['mode']>;
+type Format = NonNullable<CreateSeries['format']>;
 type Text = (key: EngineMatchLabel) => string;
 type SeriesDraft = {
   a: Competitor;
   b: Competitor;
+  format: Format;
   mode: Mode;
   length: string;
+  blockGames: string;
   count: string;
   seed: string;
 };
@@ -36,11 +41,19 @@ type SeriesDraft = {
 const initialDraft: SeriesDraft = {
   a: { engine_id: 'gnubg', plies: 1 },
   b: { engine_id: 'gnubg', plies: 0 },
+  format: 'match',
   mode: 'paired',
   length: '5',
+  blockGames: '100',
   count: '1',
   seed: '',
 };
+const MAX_BLOCK_GAMES = 1000;
+const isMoney = (config: { format?: Format }) =>
+  config.format === 'money_cubeless';
+/** Label for one stored unit (match or block), or a pair of them. */
+const unitLabel = (money: boolean, paired: boolean): EngineMatchLabel =>
+  money ? (paired ? 'blockPairs' : 'blocks') : paired ? 'pairs' : 'matches';
 
 const engineName = (id: string) =>
   id === 'gnubg' ? 'GNUbg' : id === 'bgsage' ? 'Open Sage' : id;
@@ -75,7 +88,7 @@ const progressLabel = (
   text: Text,
   number: (value: number) => string,
 ) =>
-  `${number(run.completed_matches)} / ${number(run.total_matches)} ${text('matches')}`;
+  `${number(run.completed_matches)} / ${number(run.total_matches)} ${text(isMoney(run.configuration) ? 'blocks' : 'matches')}`;
 
 function EngineChoice({
   side,
@@ -240,7 +253,8 @@ export default function EngineMatchWorkspace({
 
   const available = (engineId: string) =>
     engines?.some((engine) => engine.id === engineId && engine.available);
-  const { a, b, mode, length, count, seed } = draft;
+  const { a, b, format, mode, length, blockGames, count, seed } = draft;
+  const money = format === 'money_cubeless';
   const selectable = (side: Competitor) =>
     available(side.engine_id) &&
     engines &&
@@ -249,7 +263,9 @@ export default function EngineMatchWorkspace({
     !!available('gnubg') &&
     !!selectable(a) &&
     !!selectable(b) &&
-    validNumber(length, 25) &&
+    (money
+      ? validNumber(blockGames, MAX_BLOCK_GAMES)
+      : validNumber(length, 25)) &&
     validNumber(count, 1000);
   const selected =
     resultPage?.details.series.id === id ? resultPage?.details : undefined;
@@ -323,8 +339,12 @@ export default function EngineMatchWorkspace({
       setDraft({
         a: config.a,
         b: config.b,
+        format: config.format ?? 'match',
         mode: config.mode,
-        length: String(config.match_length),
+        length: isMoney(config)
+          ? initialDraft.length
+          : String(config.match_length),
+        blockGames: String(config.block_games ?? initialDraft.blockGames),
         count: String(config.count),
         seed: config.seed,
       });
@@ -342,8 +362,11 @@ export default function EngineMatchWorkspace({
       const run = await createSeries({
         a,
         b,
+        format,
         mode,
-        match_length: Number(length),
+        ...(money
+          ? { block_games: Number(blockGames) }
+          : { match_length: Number(length) }),
         count: Number(count),
         seed: seed.trim() || undefined,
       });
@@ -519,7 +542,13 @@ function SeriesSetup({
 }) {
   const { formatNumber, formatError } = useI18n();
   const advancedBody = useId();
-  const { a, b, mode, length, count, seed } = draft;
+  const formatHint = useId();
+  const { a, b, format, mode, length, blockGames, count, seed } = draft;
+  const money = format === 'money_cubeless';
+  const totalGames =
+    validNumber(blockGames, MAX_BLOCK_GAMES) && validNumber(count, 1000)
+      ? Number(blockGames) * Number(count) * (mode === 'paired' ? 2 : 1)
+      : undefined;
 
   return (
     <LibraryDialog native title={text('newSeries')} onClose={close} busy={busy}>
@@ -550,6 +579,25 @@ function SeriesSetup({
         </div>
         <div className="engine-match-rules">
           <label>
+            {text('format')}
+            <select
+              value={format}
+              aria-describedby={money ? formatHint : undefined}
+              onChange={(event) =>
+                setDraft({
+                  ...draft,
+                  format:
+                    event.target.value === 'money_cubeless'
+                      ? 'money_cubeless'
+                      : 'match',
+                })
+              }
+            >
+              <option value="match">{text('formatMatch')}</option>
+              <option value="money_cubeless">{text('formatMoney')}</option>
+            </select>
+          </label>
+          <label>
             {text('dice')}
             <select
               value={mode}
@@ -564,21 +612,37 @@ function SeriesSetup({
               <option value="random">{text('random')}</option>
             </select>
           </label>
+          {money ? (
+            <label>
+              {text('blockGames')}
+              <input
+                required
+                type="number"
+                min="1"
+                max={MAX_BLOCK_GAMES}
+                value={blockGames}
+                onChange={(event) =>
+                  setDraft({ ...draft, blockGames: event.target.value })
+                }
+              />
+            </label>
+          ) : (
+            <label>
+              {text('length')}
+              <input
+                required
+                type="number"
+                min="1"
+                max="25"
+                value={length}
+                onChange={(event) =>
+                  setDraft({ ...draft, length: event.target.value })
+                }
+              />
+            </label>
+          )}
           <label>
-            {text('length')}
-            <input
-              required
-              type="number"
-              min="1"
-              max="25"
-              value={length}
-              onChange={(event) =>
-                setDraft({ ...draft, length: event.target.value })
-              }
-            />
-          </label>
-          <label>
-            {text(mode === 'paired' ? 'pairs' : 'matches')}
+            {text(unitLabel(money, mode === 'paired'))}
             <input
               required
               type="number"
@@ -591,6 +655,13 @@ function SeriesSetup({
             />
           </label>
         </div>
+        {money && (
+          <p id={formatHint} className="engine-match-format-hint">
+            {text('formatMoneyHint')}
+            {totalGames !== undefined &&
+              ` ${text('totalGames')}: ${formatNumber(totalGames)}`}
+          </p>
+        )}
         <details
           className="engine-match-advanced"
           open={advancedOpen}
@@ -668,10 +739,32 @@ function SeriesResults({
   const { series, statistics, matches, next_offset, previous_offset } = details;
   const { configuration: config, engines } = series;
   const paired = config.mode === 'paired';
+  const moneyDuel = isMoney(config);
+  const money = statistics.money;
   const rate = statistics.win_rate_a;
   const interval = statistics.confidence_interval_a;
   const playing = active(series.status);
-  const counted = statistics.wins_a + statistics.wins_b;
+  // Stored units (matches or blocks) in the statistics: complete pairs only.
+  const counted = paired
+    ? statistics.complete_pairs * 2
+    : series.completed_matches;
+  const signed = (value: number) =>
+    formatNumber(value, {
+      signDisplay: 'exceptZero',
+      minimumFractionDigits: 3,
+      maximumFractionDigits: 3,
+    });
+  const share = (part: number) =>
+    money && money.games > 0 ? formatPercent(part / money.games, 1) : '—';
+  const costs = [statistics.cost_a ?? null, statistics.cost_b ?? null] as const;
+  const duration = (milliseconds: number) =>
+    formatBenchmarkDuration(milliseconds, formatNumber);
+  const perSide = (format: (cost: SideCostSummary) => string, missing = '—') =>
+    costs
+      .map(
+        (cost, side) => `${side ? 'B' : 'A'} ${cost ? format(cost) : missing}`,
+      )
+      .join(' · ');
   const stoppedEmpty = !playing && counted === 0 && matches.length === 0;
   const competitors = [
     { side: 'A', profile: config.a, rate, wins: statistics.wins_a },
@@ -731,7 +824,7 @@ function SeriesResults({
                     <strong>
                       {competitor.side} · {profile(competitor.profile)}
                     </strong>
-                    <span>{text('winRate')}</span>
+                    <span>{text(moneyDuel ? 'gameWinRate' : 'winRate')}</span>
                   </dt>
                   <dd>
                     {competitor.rate == null
@@ -740,7 +833,7 @@ function SeriesResults({
                   </dd>
                 </div>
                 <div className="engine-match-rate-count">
-                  <dt>{text('matchWins')}</dt>
+                  <dt>{text(moneyDuel ? 'gamesWon' : 'matchWins')}</dt>
                   <dd>{formatNumber(competitor.wins)}</dd>
                 </div>
               </dl>
@@ -753,8 +846,15 @@ function SeriesResults({
           </div>
           <dl className="engine-match-statistics">
             <div>
-              <dt>{text('matchesCounted')}</dt>
-              <dd>{formatNumber(counted)}</dd>
+              <dt>{text(moneyDuel ? 'blocksCounted' : 'matchesCounted')}</dt>
+              <dd>
+                {formatNumber(counted)}
+                {money && (
+                  <small>
+                    {text('games')} {formatNumber(money.games)}
+                  </small>
+                )}
+              </dd>
             </div>
             {paired && (
               <div>
@@ -762,6 +862,59 @@ function SeriesResults({
                 <dd>
                   {formatNumber(statistics.complete_pairs)} /{' '}
                   {formatNumber(config.count)}
+                </dd>
+              </div>
+            )}
+            {costs.some(Boolean) && (
+              <div>
+                <dt title={text('cpuPerMoveHint')}>{text('cpuPerMove')}</dt>
+                <dd>
+                  {perSide((cost) => duration(cost.cpu_ms_per_move))}
+                  <small>
+                    {text('wallPerMove')}{' '}
+                    {perSide((cost) => duration(cost.wall_ms_per_move))}
+                  </small>
+                  {costs.some((cost) => cost?.measured_matches !== counted) && (
+                    <small>
+                      {text(moneyDuel ? 'blocksMeasured' : 'costMeasured')}{' '}
+                      {perSide(
+                        (cost) =>
+                          `${formatNumber(cost.measured_matches)} / ${formatNumber(counted)}`,
+                        formatNumber(0),
+                      )}
+                    </small>
+                  )}
+                </dd>
+              </div>
+            )}
+            {money?.points_per_game_a != null && (
+              <div>
+                <dt>{text('pointsPerGame')}</dt>
+                <dd>
+                  {signed(money.points_per_game_a)}
+                  {money.confidence_interval && (
+                    <small>
+                      {text('interval')}:{' '}
+                      {money.confidence_interval.map(signed).join(' – ')} ·{' '}
+                      {text(
+                        money.confidence_interval[0] <= 0 &&
+                          money.confidence_interval[1] >= 0
+                          ? 'ppgInconclusive'
+                          : 'ppgClear',
+                      )}
+                    </small>
+                  )}
+                </dd>
+              </div>
+            )}
+            {money && money.games > 0 && (
+              <div>
+                <dt>{text('gammonShare')}</dt>
+                <dd>
+                  A {share(money.outcomes_a.gammon)} /{' '}
+                  {share(money.outcomes_a.backgammon)} · B{' '}
+                  {share(money.outcomes_b.gammon)} /{' '}
+                  {share(money.outcomes_b.backgammon)}
                 </dd>
               </div>
             )}
@@ -786,8 +939,9 @@ function SeriesResults({
       <details className="engine-match-settings">
         <summary>{text('seriesSettings')}</summary>
         <p>
-          {text(config.mode)} · {text('length')}{' '}
-          {formatNumber(config.match_length)}
+          {moneyDuel
+            ? `${text('formatMoney')} · ${text(config.mode)} · ${text('blockGames')} ${formatNumber(config.block_games ?? 0)}`
+            : `${text(config.mode)} · ${text('length')} ${formatNumber(config.match_length)}`}
         </p>
         <p>
           {text('seed')} <code>{config.seed}</code> · {series.dice_version}
@@ -822,9 +976,9 @@ function SeriesResults({
           <table>
             <thead>
               <tr>
-                <th>{text(paired ? 'pairs' : 'matches')}</th>
+                <th>{text(unitLabel(moneyDuel, paired))}</th>
                 <th>{text('white')}</th>
-                <th>{text('score')}</th>
+                <th>{text(moneyDuel ? 'points' : 'score')}</th>
                 <th>{text('games')}</th>
                 <th>{text('seed')}</th>
                 <th>SGF</th>

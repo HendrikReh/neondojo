@@ -3435,10 +3435,22 @@ export interface components {
         CreateSeries: {
             a: components["schemas"]["Competitor"];
             b: components["schemas"]["Competitor"];
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Games per stored block; required for cubeless money blocks.
+             */
+            block_games?: number | null;
+            /**
+             * Format: int32
+             * @description Matches or money blocks; pairs in paired mode.
+             */
             count: number;
-            /** Format: int32 */
-            match_length: number;
+            format?: components["schemas"]["DuelFormat"];
+            /**
+             * Format: int32
+             * @description Point match length; 1–25 for matches, 0 or omitted for money blocks.
+             */
+            match_length?: number;
             mode?: components["schemas"]["DiceMode"];
             /** Format: uuid */
             seed?: string | null;
@@ -3765,6 +3777,12 @@ export interface components {
             plies: number;
             rolls: components["schemas"]["DiceEvaluation"][];
         };
+        /**
+         * @description What one duel unit plays: a point match with the cube, or a block of
+         *     independent cubeless money games without the Jacoby rule.
+         * @enum {string}
+         */
+        DuelFormat: "match" | "money_cubeless";
         DuplicateCard: {
             card: components["schemas"]["CardQuestion"];
             /** Format: int64 */
@@ -3914,6 +3932,15 @@ export interface components {
             job_id?: string | null;
             /** Format: uuid */
             match_id: string;
+        };
+        /** @description Games won by one side, by value. */
+        GameOutcomes: {
+            /** Format: int64 */
+            backgammon: number;
+            /** Format: int64 */
+            gammon: number;
+            /** Format: int64 */
+            single: number;
         };
         /** @enum {string} */
         GamePlan: "opening" | "pure_race" | "racing" | "attacking" | "priming" | "anchoring";
@@ -4471,6 +4498,20 @@ export interface components {
             resolved_player?: string | null;
             /** @description Those of them without any analyzed decision, whatever the game plan. */
             unanalyzed_matches: number;
+        };
+        /** @description Results of cubeless money blocks over the counted blocks. */
+        MoneyStatistics: {
+            /** @description 95% interval for `points_per_game_a`, from 20 pairs or blocks. */
+            confidence_interval?: number[] | null;
+            /** Format: int64 */
+            games: number;
+            outcomes_a: components["schemas"]["GameOutcomes"];
+            outcomes_b: components["schemas"]["GameOutcomes"];
+            /**
+             * Format: double
+             * @description Net points per game from A's perspective, between −3 and 3.
+             */
+            points_per_game_a?: number | null;
         };
         MoveAnalysis: components["schemas"]["Decision"] & {
             /** Format: int32 */
@@ -5460,6 +5501,8 @@ export interface components {
             /** Format: int32 */
             adapter_version: number;
             artifact_fingerprint: string;
+            /** @description Cubeless evaluation for cubeless money duels; absent means cubeful. */
+            cubeless?: boolean;
             /** @description Capability proven during installation verification; absent in legacy snapshots. */
             one_ply_verified?: boolean;
             package_version: string;
@@ -5560,8 +5603,15 @@ export interface components {
             a: components["schemas"]["Competitor"];
             b: components["schemas"]["Competitor"];
             /** Format: int32 */
-            count: number;
+            block_games?: number | null;
             /** Format: int32 */
+            count: number;
+            /** @description Absent in series created before money blocks existed. */
+            format?: components["schemas"]["DuelFormat"];
+            /**
+             * Format: int32
+             * @description 0 for money blocks.
+             */
             match_length: number;
             mode: components["schemas"]["DiceMode"];
             /** Format: uuid */
@@ -5589,7 +5639,11 @@ export interface components {
         SeriesStatistics: {
             /** Format: int32 */
             complete_pairs: number;
+            /** @description 95% interval for A's match win rate; matches in paired mode only. */
             confidence_interval_a?: number[] | null;
+            cost_a?: null | components["schemas"]["SideCostSummary"];
+            cost_b?: null | components["schemas"]["SideCostSummary"];
+            money?: null | components["schemas"]["MoneyStatistics"];
             /** Format: double */
             win_rate_a?: number | null;
             /** Format: int32 */
@@ -5599,6 +5653,26 @@ export interface components {
         };
         SetAutoSync: {
             enabled: boolean;
+        };
+        /**
+         * @description Engine work per checker turn. CPU time covers all engine threads; both
+         *     include cube decisions but exclude process startup, replay and checks.
+         */
+        SideCostSummary: {
+            /** Format: double */
+            cpu_ms_per_move: number;
+            /**
+             * Format: int32
+             * @description Counted matches with a measurement for this side.
+             */
+            measured_matches: number;
+            /**
+             * Format: int64
+             * @description Checker turns of this side in those matches, including forced moves.
+             */
+            moves: number;
+            /** Format: double */
+            wall_ms_per_move: number;
         };
         SimilarHit: {
             black: string;

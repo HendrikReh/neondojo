@@ -1,4 +1,4 @@
-use super::SageSnapshot;
+use super::{EngineCost, SageSnapshot};
 use crate::engine_process::{reap_child, terminate_and_reap};
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
@@ -132,7 +132,7 @@ impl Worker {
 
     async fn initialize(profile: &SageSnapshot) -> Result<Self> {
         let mut worker = Self::start(profile).await?;
-        let identity = worker
+        let (identity, _) = worker
             .exchange(json!({"operation":"initialize", "profile":profile}))
             .await?;
         validate_identity(profile, &identity)?;
@@ -153,7 +153,7 @@ impl Worker {
         Ok(())
     }
 
-    async fn exchange(&mut self, mut request: Value) -> Result<Value> {
+    async fn exchange(&mut self, mut request: Value) -> Result<(Value, Option<EngineCost>)> {
         let id = self.next_id;
         self.next_id = id.checked_add(1).context("Sidecar request ID exhausted")?;
         request["id"] = json!(id);
@@ -183,18 +183,24 @@ impl Worker {
         if let Some(error) = response.get("error").and_then(Value::as_str) {
             anyhow::bail!("Open Sage: {error}");
         }
-        response
+        let cost = response
+            .get("cost")
+            .map(|cost| serde_json::from_value::<EngineCost>(cost.clone()))
+            .transpose()
+            .context("Invalid Open Sage engine cost")?;
+        let result = response
             .get("result")
             .cloned()
-            .context("Open Sage response omitted result")
+            .context("Open Sage response omitted result")?;
+        Ok((result, cost))
     }
 
-    async fn validated_exchange(&mut self, payload: Value) -> Result<Value> {
-        let result = self.exchange(payload.clone()).await?;
+    async fn validated_exchange(&mut self, payload: Value) -> Result<(Value, Option<EngineCost>)> {
+        let (result, cost) = self.exchange(payload.clone()).await?;
         // Framing alone is insufficient: reject invalid typed results before
         // either a single request or a game block can reuse this worker.
         validate_payload(&self.profile, &payload, &result)?;
-        Ok(result)
+        Ok((result, cost))
     }
 }
 
@@ -225,7 +231,11 @@ impl VerifiedBatch {
         })
     }
 
-    pub(super) async fn request(&mut self, payload: Value, timeout: Duration) -> Result<Value> {
+    pub(super) async fn request_costed(
+        &mut self,
+        payload: Value,
+        timeout: Duration,
+    ) -> Result<(Value, Option<EngineCost>)> {
         let mut worker = self.worker.take().context("Open Sage batch was aborted")?;
         ensure!(
             matches!(payload["operation"].as_str(), Some("checker" | "cube")),
@@ -259,6 +269,16 @@ pub(super) async fn request(
     timeout: Duration,
     slot: Slot,
 ) -> Result<Value> {
+    Ok(request_costed(profile, payload, timeout, slot).await?.0)
+}
+
+/// A single request together with the engine cost the worker measured.
+pub(super) async fn request_costed(
+    profile: &SageSnapshot,
+    payload: Value,
+    timeout: Duration,
+    slot: Slot,
+) -> Result<(Value, Option<EngineCost>)> {
     ensure!(
         matches!(
             payload["operation"].as_str(),
@@ -290,7 +310,7 @@ pub(super) async fn probe(profile: &SageSnapshot) -> Result<Value> {
         tokio::time::timeout(Duration::from_secs(120), async {
             cache.reap_other_runtimes().await?;
             let mut worker = Worker::start(profile).await?;
-            let identity = worker
+            let (identity, _) = worker
                 .exchange(json!({"operation":"initialize", "profile":profile}))
                 .await?;
             worker.shutdown().await?;
@@ -516,6 +536,7 @@ for line in sys.stdin:
                     plies: 2,
                     adapter_version: 1,
                     one_ply_verified: false,
+                    cubeless: false,
                 },
                 directory,
             }
@@ -689,7 +710,7 @@ for line in sys.stdin:
         let mut batch = VerifiedBatch::begin(&fake.profile).await.unwrap();
         let cancelled = tokio::time::timeout(
             Duration::from_millis(100),
-            batch.request(
+            batch.request_costed(
                 json!({"operation":"checker", "force_board":vec![0; 26]}),
                 Duration::from_secs(30),
             ),

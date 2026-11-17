@@ -113,6 +113,15 @@ fn scores_cube_ownership_crawford_and_jacoby_are_encoded() {
 }
 
 #[test]
+fn cubeless_sessions_import_without_jacoby_and_reject_cube_actions() {
+    let m = parse_sgf("(;GM[6]MI[length:0]RU[NoCube];W[31hefe];B[42qusu])").unwrap();
+    assert_eq!(m.positions.len(), 2);
+    // Without the Jacoby rule the Match ID marks Jacoby as off.
+    assert_eq!(match_bits(&m.positions[0].match_id, 66, 1), 1);
+    assert!(parse_sgf("(;GM[6]MI[length:0]RU[NoCube];W[double];B[take];W[31hefe])").is_err());
+}
+
+#[test]
 fn setup_bar_hits_bearing_off_and_multigame_reset() {
     let m = parse_sgf("(;GM[6]AE[a:y]AW[y]AB[x];W[11yxxwwvvu];B[11yaabbccd])").unwrap();
     assert_eq!(m.positions[0].notation, "bar/24* 24/23 23/22 22/21");

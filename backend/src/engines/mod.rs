@@ -24,6 +24,9 @@ pub struct SageSnapshot {
     /// Capability proven during installation verification; absent in legacy snapshots.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub one_ply_verified: bool,
+    /// Cubeless evaluation for cubeless money duels; absent means cubeful.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cubeless: bool,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -113,10 +116,15 @@ impl SageEngine {
             "Open Sage Python path must be absolute"
         );
         let version = format!(
-            "Open Sage {}; model {}; {}ply cubeful; threads {}; adapter {}",
+            "Open Sage {}; model {}; {}ply {}; threads {}; adapter {}",
             snapshot.package_version,
             snapshot.artifact_fingerprint,
             snapshot.plies,
+            if snapshot.cubeless {
+                "cubeless"
+            } else {
+                "cubeful"
+            },
             snapshot.threads,
             snapshot.adapter_version
         );
@@ -176,6 +184,7 @@ impl SageEngine {
             plies,
             adapter_version: 1,
             one_ply_verified: plies == 1,
+            cubeless: false,
         };
         let identity = process::probe(&snapshot).await?;
         snapshot.package_version = identity["package_version"]
@@ -231,6 +240,18 @@ impl SageEngine {
             .await
     }
 
+    /// Checker candidates plus the engine cost the worker measured for them.
+    pub async fn checker_boards_costed(
+        &self,
+        position_id: &str,
+        match_id: &str,
+        dice: Option<[i32; 2]>,
+        force_board: Option<[i32; 26]>,
+    ) -> Result<(Vec<SageCheckerCandidate>, Option<EngineCost>)> {
+        self.checker_boards_costed_with_batch(position_id, match_id, dice, force_board, None)
+            .await
+    }
+
     async fn checker_boards_with_batch(
         &self,
         position_id: &str,
@@ -239,6 +260,20 @@ impl SageEngine {
         force_board: Option<[i32; 26]>,
         batch: Option<&mut process::VerifiedBatch>,
     ) -> Result<Vec<SageCheckerCandidate>> {
+        Ok(self
+            .checker_boards_costed_with_batch(position_id, match_id, dice, force_board, batch)
+            .await?
+            .0)
+    }
+
+    async fn checker_boards_costed_with_batch(
+        &self,
+        position_id: &str,
+        match_id: &str,
+        dice: Option<[i32; 2]>,
+        force_board: Option<[i32; 26]>,
+        batch: Option<&mut process::VerifiedBatch>,
+    ) -> Result<(Vec<SageCheckerCandidate>, Option<EngineCost>)> {
         let context = context::Context::decode(match_id)?;
         ensure!(
             !context.pending_double,
@@ -251,7 +286,7 @@ impl SageEngine {
             "Invalid checker dice"
         );
         let payload = json!({"operation":"checker", "board":board, "context":context, "dice":dice, "force_board":force_board.map(|board| context::to_sage(&board, context.player))});
-        let result = self.request_with_batch(payload, batch).await?;
+        let (result, cost) = self.request_with_batch(payload, batch).await?;
         let mut candidates: Vec<SageCheckerCandidate> = serde_json::from_value(result)?;
         ensure!(
             !candidates.is_empty(),
@@ -277,7 +312,7 @@ impl SageEngine {
             candidate.board = context::from_sage(&candidate.board, context.player)?;
         }
         candidates.sort_by(|a, b| b.equity.total_cmp(&a.equity));
-        Ok(candidates)
+        Ok((candidates, cost))
     }
 
     pub async fn analyze(
@@ -361,15 +396,37 @@ impl SageEngine {
         self.cube_with_batch(position_id, match_id, None).await
     }
 
+    /// Cube evaluation plus the engine cost the worker measured for it.
+    pub async fn cube_costed(
+        &self,
+        position_id: &str,
+        match_id: &str,
+    ) -> Result<(SageCubeEvaluation, Option<EngineCost>)> {
+        self.cube_costed_with_batch(position_id, match_id, None)
+            .await
+    }
+
     async fn cube_with_batch(
         &self,
         position_id: &str,
         match_id: &str,
         batch: Option<&mut process::VerifiedBatch>,
     ) -> Result<SageCubeEvaluation> {
+        Ok(self
+            .cube_costed_with_batch(position_id, match_id, batch)
+            .await?
+            .0)
+    }
+
+    async fn cube_costed_with_batch(
+        &self,
+        position_id: &str,
+        match_id: &str,
+        batch: Option<&mut process::VerifiedBatch>,
+    ) -> Result<(SageCubeEvaluation, Option<EngineCost>)> {
         let context = context::Context::decode(match_id)?;
         let board = context.board(position_id, match_id)?;
-        let value = self
+        let (value, cost) = self
             .request_with_batch(
                 json!({"operation":"cube", "board":board, "context":context}),
                 batch,
@@ -379,19 +436,36 @@ impl SageEngine {
         for equity in [result.no_double, result.take, result.pass] {
             validate_evaluation(equity, &result.probabilities)?;
         }
-        Ok(result)
+        Ok((result, cost))
     }
 
     async fn request_with_batch(
         &self,
         payload: serde_json::Value,
         batch: Option<&mut process::VerifiedBatch>,
-    ) -> Result<serde_json::Value> {
+    ) -> Result<(serde_json::Value, Option<EngineCost>)> {
         let timeout = Duration::from_secs(180);
         match batch {
-            Some(batch) => batch.request(payload, timeout).await,
-            None => process::request(&self.snapshot, payload, timeout, self.slot).await,
+            Some(batch) => batch.request_costed(payload, timeout).await,
+            None => process::request_costed(&self.snapshot, payload, timeout, self.slot).await,
         }
+    }
+}
+
+/// Measured engine work for one or more decisions, excluding process startup,
+/// state replay and integrity checks. CPU time covers every thread of the
+/// engine process (`getrusage(RUSAGE_SELF)`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct EngineCost {
+    pub cpu_us: u64,
+    pub wall_us: u64,
+}
+
+impl std::ops::AddAssign for EngineCost {
+    fn add_assign(&mut self, other: Self) {
+        self.cpu_us = self.cpu_us.saturating_add(other.cpu_us);
+        self.wall_us = self.wall_us.saturating_add(other.wall_us);
     }
 }
 

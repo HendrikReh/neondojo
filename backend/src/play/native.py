@@ -6,6 +6,8 @@ GenerateMoves; unlike stronger hint profiles it also avoids expensive searches.
 """
 import json
 import base64
+import resource
+import time
 import gnubg
 
 with open('request.json', encoding='utf-8') as f:
@@ -28,6 +30,14 @@ action = request['action']
 resignation_declined = False
 external_bot = request.get('external_bot', False)
 match_bots = request.get('match_bots')
+# Cubeless money duels: no cube, no Jacoby rule, cubeless bot evaluation.
+cubeless = request.get('cubeless', False)
+assert type(cubeless) is bool
+assert not cubeless or match_bots is not None and request['match_length'] == 0
+if cubeless:
+    # A global setting: it applies before 'new session' (saved as RU[NoCube])
+    # and is restored again for every loaded checkpoint.
+    command('set cube use off')
 assert type(external_bot) is bool
 assert type(human) is int and human in (0, 1)
 assert type(plies) is int and 0 <= plies <= 2
@@ -36,7 +46,9 @@ if request['new']:
     length = request['match_length']
     assert type(length) is int and 0 <= length <= 25
     assert action == 'opening_roll'
-    if length == 0:
+    if cubeless:
+        command('set jacoby off')
+    elif length == 0:
         command('set jacoby on')
     if match_bots is not None:
         command('set rng file dice.txt')
@@ -65,7 +77,8 @@ else:
 def configure_player(player, depth):
     for kind in ('chequerplay', 'cubedecision'):
         for suffix in ('type evaluation', 'evaluation plies %d' % depth,
-                       'evaluation cubeful on', 'evaluation deterministic on',
+                       'evaluation cubeful %s' % ('off' if cubeless else 'on'),
+                       'evaluation deterministic on',
                        'evaluation noise 0'):
             command('set player %d %s %s' % (player, kind, suffix))
 
@@ -134,6 +147,12 @@ for _ in range(3):
     command('decline')
 assert gnubg.posinfo()['gamestate'] != 1 or not gnubg.posinfo()['resigned'], 'Bot resignation did not resolve'
 
+def process_cpu_us():
+    usage = resource.getrusage(resource.RUSAGE_SELF)
+    return round((usage.ru_utime + usage.ru_stime) * 1e6)
+
+bot_costs = [{'cpu_us': 0, 'wall_us': 0} for _ in range(2)]
+
 # A native bot acts only on its own turn. Leave the other player human so GNUbg
 # yields at the next decision, including an external engine's cube response.
 if match_bots is not None and action != 'opening_roll':
@@ -149,7 +168,12 @@ if match_bots is not None and action != 'opening_roll':
             break
         before = gnubg.gnubgid()
         command('set player %d gnubg' % turn)
+        # Engine duel cost: process CPU time of all GNUbg threads and wall time
+        # of this native decision step only, without startup or SGF replay.
+        cpu_before, wall_before = process_cpu_us(), time.perf_counter_ns()
         gnubg.nextturn()
+        bot_costs[turn]['cpu_us'] += process_cpu_us() - cpu_before
+        bot_costs[turn]['wall_us'] += (time.perf_counter_ns() - wall_before) // 1000
         for _ in range(3):
             pending = gnubg.posinfo()
             if pending['gamestate'] != 1 or not pending['resigned']:
@@ -261,7 +285,7 @@ result = {'resignation_declined': resignation_declined, 'native_id': native_id, 
           'dice': list(position['dice']) if position['dice'][0] else [],
           'phase': phase, 'legal_moves': legal_moves, 'history': history,
           'scores': scores, 'game_no': len(games), 'winner': winner,
-          'can_double': phase == 'roll' and not cube['crawford']
+          'can_double': phase == 'roll' and not cubeless and not cube['crawford']
               and cube['cubeowner'] in (-1, position['turn'])
               and (cube['matchto'] == 0 or cube['cube'] < cube['matchto'] - scores[position['turn']])}
 if match_bots is not None:
@@ -270,5 +294,6 @@ if match_bots is not None:
     if phase == 'move':
         rolls.append(list(position['dice']))
     result['match_rolls'] = rolls
+    result['bot_costs'] = bot_costs
 with open('snapshot.json', 'w', encoding='utf-8') as f:
     json.dump(result, f, allow_nan=False)

@@ -5,7 +5,7 @@ use super::{
 };
 use crate::{
     engine::Engine,
-    engines::{SageCheckerCandidate, SageEngine},
+    engines::{EngineCost, SageCheckerCandidate, SageEngine},
 };
 use anyhow::{Context, Result, ensure};
 use std::collections::HashMap;
@@ -78,15 +78,21 @@ fn resulting_board(
     crate::import::sgf::apply_checker_turn(&before, player, dice, &steps)
 }
 
-async fn chosen_move(
-    bot: &SageEngine,
-    snapshot: &NativeSnapshot,
-) -> Result<(Option<String>, Vec<SageCheckerCandidate>)> {
+/// The chosen move, Sage's candidates and the engine cost of the evaluation.
+type CheckerChoice = (
+    Option<String>,
+    Vec<SageCheckerCandidate>,
+    Option<EngineCost>,
+);
+
+async fn chosen_move(bot: &SageEngine, snapshot: &NativeSnapshot) -> Result<CheckerChoice> {
     let (position, context) = snapshot
         .native_id
         .split_once(':')
         .context("Invalid native ID")?;
-    let mut candidates = bot.checker_boards(position, context, None, None).await?;
+    let (mut candidates, cost) = bot
+        .checker_boards_costed(position, context, None, None)
+        .await?;
     let best = candidates
         .first()
         .context("Open Sage returned no chosen move")?;
@@ -100,13 +106,13 @@ async fn chosen_move(
             best.board == before,
             "Open Sage did not confirm forced pass"
         );
-        return Ok((None, candidates));
+        return Ok((None, candidates, cost));
     }
     let mut legal = HashMap::new();
     for choice in &snapshot.legal_moves {
         let board = resulting_board(&snapshot.board, snapshot.player, &snapshot.dice, choice)?;
         if board == best.board {
-            return Ok((Some(choice.notation.clone()), candidates));
+            return Ok((Some(choice.notation.clone()), candidates, cost));
         }
         legal.entry(board).or_insert(choice.notation.as_str());
     }
@@ -141,13 +147,15 @@ async fn chosen_move(
         candidate.notation = notation.to_owned();
         true
     });
-    Ok((Some(candidates[0].notation.clone()), candidates))
+    Ok((Some(candidates[0].notation.clone()), candidates, cost))
 }
 
 pub(super) struct ChosenAction {
     pub action: &'static str,
     pub notation: Option<String>,
     pub checker: Option<Vec<SageCheckerCandidate>>,
+    /// Engine work for this decision, when the worker reported it.
+    pub cost: Option<EngineCost>,
 }
 
 pub(super) async fn choose(bot: &SageEngine, snapshot: &NativeSnapshot) -> Result<ChosenAction> {
@@ -157,16 +165,20 @@ pub(super) async fn choose(bot: &SageEngine, snapshot: &NativeSnapshot) -> Resul
         .context("Invalid native ID")?;
     let mut notation = None;
     let mut checker = None;
+    // A roll without a cube option consults no engine and costs nothing.
+    let mut cost = Some(EngineCost::default());
     let action = match snapshot.phase {
         PlayPhase::Move => {
-            let (chosen, candidates) = chosen_move(bot, snapshot).await?;
+            let (chosen, candidates, measured) = chosen_move(bot, snapshot).await?;
+            cost = measured;
             notation = chosen;
             checker = Some(candidates);
             if notation.is_some() { "move" } else { "pass" }
         }
         PlayPhase::Roll => {
             if snapshot.can_double {
-                let cube = bot.cube(position, context).await?;
+                let (cube, measured) = bot.cube_costed(position, context).await?;
+                cost = measured;
                 let (best, _, _) = crate::match_analysis::cube_options(
                     "no double",
                     cube.no_double,
@@ -180,7 +192,8 @@ pub(super) async fn choose(bot: &SageEngine, snapshot: &NativeSnapshot) -> Resul
             }
         }
         PlayPhase::DoubleResponse => {
-            let cube = bot.cube(position, context).await?;
+            let (cube, measured) = bot.cube_costed(position, context).await?;
+            cost = measured;
             crate::match_analysis::cube_options("take", -cube.no_double, -cube.take, -cube.pass)
                 .context("Missing cube response options")?
                 .0
@@ -191,6 +204,7 @@ pub(super) async fn choose(bot: &SageEngine, snapshot: &NativeSnapshot) -> Resul
         action,
         notation,
         checker,
+        cost,
     })
 }
 
@@ -229,6 +243,7 @@ pub(super) async fn advance(
             notation,
             resign_level,
             match_bots: None,
+            cubeless: false,
         };
         let process = RulesProcess::start(rules, previous.map(|(sgf, _)| sgf)).await?;
         let (mut process, mut snapshot, mut sgf) = process.execute(&request).await?;
@@ -260,6 +275,7 @@ pub(super) async fn advance(
                 notation: notation.as_deref(),
                 resign_level: None,
                 match_bots: None,
+                cubeless: false,
             };
             (process, snapshot, sgf) = process.execute(&request).await?;
         }
@@ -288,6 +304,7 @@ pub(super) async fn benchmark_checker_turn(
             notation: None,
             resign_level: None,
             match_bots: None,
+            cubeless: false,
         };
         let process = RulesProcess::start(rules, Some(previous.0)).await?;
         let (process, before, _) = process.execute(&request).await?;
@@ -295,7 +312,7 @@ pub(super) async fn benchmark_checker_turn(
             before.player == bot_player && before.dice == dice,
             "Benchmark checkpoint differs from reference"
         );
-        let (notation, _) = chosen_move(bot, &before).await?;
+        let (notation, _, _) = chosen_move(bot, &before).await?;
         request.action = if notation.is_some() { "move" } else { "pass" };
         request.notation = notation.as_deref();
         request.native_id = &before.native_id;

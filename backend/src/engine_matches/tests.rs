@@ -27,12 +27,18 @@ async fn mixed_duels_retain_checker_evaluations_for_both_sides(pool: sqlx::PgPoo
         } else {
             [&engines[1], &engines[0]]
         };
-        let finished = engine_match::play(&rules, bots, [2, 2], 3, |game| {
-            Ok(GameDice {
-                opening: dice::opening(Uuid::nil(), game)?,
-                turns: dice::turns(Uuid::nil(), game),
-            })
-        })
+        let finished = engine_match::play(
+            &rules,
+            bots,
+            [2, 2],
+            DuelUnit::Match { length: 3 },
+            |game| {
+                Ok(GameDice {
+                    opening: dice::opening(Uuid::nil(), game)?,
+                    turns: dice::turns(Uuid::nil(), game),
+                })
+            },
+        )
         .await
         .unwrap();
         let records = crate::imported_analysis::extract(&finished.sgf).unwrap();
@@ -134,15 +140,48 @@ async fn identical_engines_split_a_pair_with_multiple_games() {
             turns: dice::turns(seed, game),
         })
     };
-    let first = engine_match::play(&rules, [&engine_a, &engine_b], [0, 0], 5, schedule)
-        .await
-        .unwrap();
-    let second = engine_match::play(&rules, [&engine_b, &engine_a], [0, 0], 5, schedule)
-        .await
-        .unwrap();
+    let first = engine_match::play(
+        &rules,
+        [&engine_a, &engine_b],
+        [0, 0],
+        DuelUnit::Match { length: 5 },
+        schedule,
+    )
+    .await
+    .unwrap();
+    let second = engine_match::play(
+        &rules,
+        [&engine_b, &engine_a],
+        [0, 0],
+        DuelUnit::Match { length: 5 },
+        schedule,
+    )
+    .await
+    .unwrap();
     assert!(first.games > 1);
     assert_eq!(first.scores, second.scores);
     assert_eq!(first.games, second.games);
+    let measured = first
+        .costs
+        .map(|side| side.expect("GNUbg reports its engine cost"));
+    let checker_turns = crate::import::sgf::parse_sgf_source_moves(&first.sgf)
+        .unwrap()
+        .1
+        .iter()
+        .filter(|turn| turn.kind == "checker")
+        .count();
+    assert_eq!(
+        measured
+            .iter()
+            .map(|side| side.moves as usize)
+            .sum::<usize>(),
+        checker_turns
+    );
+    assert!(
+        measured
+            .iter()
+            .all(|side| side.cost.cpu_us > 0 && side.cost.wall_us > 0)
+    );
     let archived = crate::import::parse_sgf(&first.sgf).unwrap();
     assert_eq!(archived.games.len(), first.games as usize);
     let metadata = crate::databases::source_metadata(&first.sgf);
@@ -168,9 +207,89 @@ async fn identical_engines_split_a_pair_with_multiple_games() {
     );
 }
 
+#[tokio::test]
+#[ignore = "requires local GNUbg with embedded Python"]
+async fn cubeless_money_block_plays_independent_games_without_cube_or_jacoby() {
+    let rules = Engine::new(std::env::var("GNUBG_BIN").unwrap_or_else(|_| "gnubg".into()));
+    rules.check_installation().await.unwrap();
+    let gnubg = AnalysisEngine::Gnubg(rules.clone());
+    let seed = Uuid::from_u128(29);
+    let schedule = |game| {
+        Ok(GameDice {
+            opening: dice::opening(seed, game)?,
+            turns: dice::turns(seed, game),
+        })
+    };
+    let unit = DuelUnit::MoneyCubeless { games: 12 };
+    let first = engine_match::play(&rules, [&gnubg, &gnubg], [0, 0], unit, schedule)
+        .await
+        .unwrap();
+    let second = engine_match::play(&rules, [&gnubg, &gnubg], [0, 0], unit, schedule)
+        .await
+        .unwrap();
+    assert_eq!(first.games, 12);
+    let outcomes = first.outcomes.unwrap();
+    assert_eq!(outcomes.iter().flatten().sum::<i32>(), 12);
+    assert_eq!(
+        first.scores,
+        outcomes.map(|side| side[0] + 2 * side[1] + 3 * side[2])
+    );
+    // Deterministic engines replay the same dice identically.
+    assert_eq!(
+        (first.scores, first.sgf.len()),
+        (second.scores, second.sgf.len())
+    );
+    assert!(first.sgf.contains("RU[NoCube]"), "{}", &first.sgf[..300]);
+    assert!(!first.sgf.contains("Jacoby"), "gammons must count");
+    let turns = crate::import::sgf::parse_sgf_source_moves(&first.sgf)
+        .unwrap()
+        .1;
+    assert!(turns.iter().all(|turn| turn.kind == "checker"));
+    let archived = crate::import::parse_sgf(&first.sgf).unwrap();
+    assert_eq!(archived.games.len(), 12);
+    assert!(first.costs.iter().all(Option::is_some));
+}
+
+#[tokio::test]
+#[ignore = "requires local GNUbg and BGTUTOR_SAGE_PYTHON"]
+async fn cubeless_open_sage_plays_a_money_block_against_gnubg() {
+    let python = std::env::var("BGTUTOR_SAGE_PYTHON").unwrap();
+    let mut profile = crate::engines::SageSnapshot {
+        cubeless: true,
+        ..crate::engines::SageEngine::probe(python, 2).await.unwrap()
+    };
+    profile.plies = 2;
+    let sage = crate::engines::SageEngine::new(profile).unwrap();
+    assert!(sage.version().await.unwrap().contains("2ply cubeless"));
+    let sage = AnalysisEngine::OpenSage(sage);
+    let rules = Engine::new(std::env::var("GNUBG_BIN").unwrap_or_else(|_| "gnubg".into()));
+    let gnubg = AnalysisEngine::Gnubg(rules.clone());
+    let seed = Uuid::from_u128(31);
+    let schedule = |game| {
+        Ok(GameDice {
+            opening: dice::opening(seed, game)?,
+            turns: dice::turns(seed, game),
+        })
+    };
+    let unit = DuelUnit::MoneyCubeless { games: 3 };
+    for bots in [[&gnubg, &sage], [&sage, &gnubg]] {
+        let finished = engine_match::play(&rules, bots, [0, 2], unit, schedule)
+            .await
+            .unwrap();
+        assert_eq!(finished.outcomes.unwrap().iter().flatten().sum::<i32>(), 3);
+        let turns = crate::import::sgf::parse_sgf_source_moves(&finished.sgf)
+            .unwrap()
+            .1;
+        assert!(turns.iter().all(|turn| turn.kind == "checker"));
+        assert!(finished.costs.iter().all(Option::is_some));
+    }
+}
+
 use super::{
-    Competitor, DiceMode, MatchResult, SeriesConfig, runner::match_plan, student_t_975, summarize,
+    Competitor, DiceMode, DuelFormat, GameOutcomes, MatchCost, MatchResult, SeriesConfig,
+    SideCostSummary, runner::match_plan, student_t_975, summarize,
 };
+use crate::play::engine_match::DuelUnit;
 use axum::{
     body::Body,
     http::{Request, StatusCode},
@@ -186,6 +305,8 @@ fn seeds_follow_board_sides_and_pair_statistics_exclude_the_unpaired_match() {
     let mut config = SeriesConfig {
         a: profile.clone(),
         b: profile,
+        format: DuelFormat::Match,
+        block_games: None,
         mode: DiceMode::default(),
         match_length: 5,
         count: 20,
@@ -204,20 +325,28 @@ fn seeds_follow_board_sides_and_pair_statistics_exclude_the_unpaired_match() {
             score_a: if index % 2 == 0 { 5 } else { 3 },
             score_b: if index % 2 == 0 { 3 } else { 5 },
             games: 5,
+            cost: Default::default(),
+            outcomes: None,
         })
         .collect::<Vec<_>>();
-    let stats = summarize(config.mode, &results);
+    let stats = summarize(DuelFormat::Match, config.mode, &results);
     assert_eq!(stats.complete_pairs, 20);
     assert_eq!((stats.wins_a, stats.wins_b), (20, 20));
     assert_eq!(stats.win_rate_a, Some(0.5));
     // Every pair splits 1–1, so the pair means have no variance.
     assert_eq!(stats.confidence_interval_a, Some([0.5, 0.5]));
     results.truncate(1);
-    assert_eq!(summarize(config.mode, &results).win_rate_a, None);
+    assert_eq!(
+        summarize(DuelFormat::Match, config.mode, &results).win_rate_a,
+        None
+    );
     config.mode = DiceMode::Random;
     assert_ne!(match_plan(&config, 0).seed, match_plan(&config, 1).seed);
     assert!(!match_plan(&config, 1).swapped);
-    assert_eq!(summarize(config.mode, &results).win_rate_a, Some(1.0));
+    assert_eq!(
+        summarize(DuelFormat::Match, config.mode, &results).win_rate_a,
+        Some(1.0)
+    );
 }
 
 /// Pairs as (A wins both legs, B wins both legs, split 1–1).
@@ -234,12 +363,14 @@ fn paired_results(a_both: usize, b_both: usize, split: usize) -> Vec<MatchResult
             score_a: if a_wins { 5 } else { 2 },
             score_b: if a_wins { 2 } else { 5 },
             games: 3,
+            cost: Default::default(),
+            outcomes: None,
         })
         .collect()
 }
 
 fn assert_interval(results: &[MatchResult], expected: [f64; 2]) {
-    let [lower, upper] = summarize(DiceMode::Paired, results)
+    let [lower, upper] = summarize(DuelFormat::Match, DiceMode::Paired, results)
         .confidence_interval_a
         .unwrap();
     assert!(
@@ -280,9 +411,264 @@ fn pair_interval_uses_the_empirical_variance_of_pair_means() {
     assert_interval(&paired_results(20, 0, 0), [1.0, 1.0]);
     // Below 20 complete pairs no interval is shown.
     assert_eq!(
-        summarize(DiceMode::Paired, &paired_results(10, 0, 9)).confidence_interval_a,
+        summarize(
+            DuelFormat::Match,
+            DiceMode::Paired,
+            &paired_results(10, 0, 9)
+        )
+        .confidence_interval_a,
         None
     );
+}
+
+#[test]
+fn engine_cost_is_summed_per_side_over_measured_counted_matches() {
+    let mut results = paired_results(1, 1, 1);
+    // Legacy matches without a measurement stay out of the cost summary.
+    results[0].cost = MatchCost {
+        cpu_us_a: Some(3_000_000),
+        wall_us_a: Some(1_000_000),
+        moves_a: Some(20),
+        cpu_us_b: Some(500_000),
+        wall_us_b: Some(400_000),
+        moves_b: Some(25),
+    };
+    results[1].cost = MatchCost {
+        cpu_us_a: Some(1_000_000),
+        wall_us_a: Some(1_000_000),
+        moves_a: Some(20),
+        ..Default::default()
+    };
+    // The unpaired last match is not counted in paired mode.
+    results.push(MatchResult {
+        match_index: 6,
+        seed: Uuid::nil(),
+        score_a: 5,
+        score_b: 0,
+        games: 1,
+        cost: MatchCost {
+            cpu_us_a: Some(9_000_000_000),
+            wall_us_a: Some(9_000_000_000),
+            moves_a: Some(1),
+            ..Default::default()
+        },
+        outcomes: None,
+    });
+    let stats = summarize(DuelFormat::Match, DiceMode::Paired, &results);
+    assert_eq!(
+        stats.cost_a,
+        Some(SideCostSummary {
+            measured_matches: 2,
+            moves: 40,
+            cpu_ms_per_move: 100.0,
+            wall_ms_per_move: 50.0,
+        })
+    );
+    assert_eq!(
+        stats.cost_b,
+        Some(SideCostSummary {
+            measured_matches: 1,
+            moves: 25,
+            cpu_ms_per_move: 20.0,
+            wall_ms_per_move: 16.0,
+        })
+    );
+    assert_eq!(
+        summarize(
+            DuelFormat::Match,
+            DiceMode::Paired,
+            &paired_results(1, 0, 0)
+        )
+        .cost_a,
+        None
+    );
+}
+
+/// Two paired cubeless money blocks of 10 games each per pair index.
+fn money_pairs(pairs: i32) -> Vec<MatchResult> {
+    let points = |side: [i32; 3]| side[0] + 2 * side[1] + 3 * side[2];
+    (0..pairs)
+        .flat_map(|i| {
+            let a1 = [4 + i % 3, i32::from(i % 5 == 0), i32::from(i % 7 == 0)];
+            let gammon_b1 = i32::from(i % 2 == 0);
+            let b1 = [10 - a1.iter().sum::<i32>() - gammon_b1, gammon_b1, 0];
+            let a2 = [5 - i % 2, 0, 0];
+            let (gammon_b2, backgammon_b2) = (i32::from(i % 3 == 0), i32::from(i % 4 == 0));
+            let b2 = [
+                10 - a2.iter().sum::<i32>() - gammon_b2 - backgammon_b2,
+                gammon_b2,
+                backgammon_b2,
+            ];
+            [(a1, b1), (a2, b2)]
+        })
+        .enumerate()
+        .map(|(index, (a, b))| MatchResult {
+            match_index: index as i32,
+            seed: Uuid::nil(),
+            score_a: points(a),
+            score_b: points(b),
+            games: 10,
+            cost: Default::default(),
+            outcomes: Some([a, b].concat()),
+        })
+        .collect()
+}
+
+#[test]
+fn money_blocks_report_points_per_game_with_a_pair_interval() {
+    // Reference: scipy t interval over the 20 pair means of net points per game.
+    let stats = summarize(
+        DuelFormat::MoneyCubeless,
+        DiceMode::Paired,
+        &money_pairs(20),
+    );
+    let money = stats.money.unwrap();
+    assert_eq!(money.games, 400);
+    assert_eq!(money.points_per_game_a, Some(-0.0625));
+    let [lower, upper] = money.confidence_interval.unwrap();
+    assert!((lower - -0.131_616_095_196_110_9).abs() < 1e-4, "{lower}");
+    assert!((upper - 0.006_616_095_196_110_88).abs() < 1e-4, "{upper}");
+    assert_eq!(
+        (money.outcomes_a, money.outcomes_b),
+        (
+            GameOutcomes {
+                single: 189,
+                gammon: 4,
+                backgammon: 3
+            },
+            GameOutcomes {
+                single: 182,
+                gammon: 17,
+                backgammon: 5
+            },
+        )
+    );
+    // Games won replace match wins; the match win-rate interval does not apply.
+    assert_eq!((stats.wins_a, stats.wins_b), (196, 204));
+    assert_eq!(stats.win_rate_a, Some(0.49));
+    assert_eq!(stats.confidence_interval_a, None);
+    // Without enough pairs there is no interval; an unpaired leg is not counted.
+    let mut few = money_pairs(19);
+    few.truncate(37);
+    let money = summarize(DuelFormat::MoneyCubeless, DiceMode::Paired, &few)
+        .money
+        .unwrap();
+    assert_eq!(money.games, 360);
+    assert_eq!(money.confidence_interval, None);
+    // Without pairing every block is an observation.
+    let random = summarize(
+        DuelFormat::MoneyCubeless,
+        DiceMode::Random,
+        &money_pairs(10),
+    );
+    assert!(random.money.unwrap().confidence_interval.is_some());
+}
+
+#[test]
+fn saved_configuration_selects_a_validated_duel_unit() {
+    let legacy: SeriesConfig = serde_json::from_value(serde_json::json!({
+        "a": {"engine_id": "gnubg", "plies": 2},
+        "b": {"engine_id": "gnubg", "plies": 2},
+        "match_length": 7, "count": 3, "mode": "paired", "seed": Uuid::nil(),
+    }))
+    .unwrap();
+    assert_eq!(legacy.format, DuelFormat::Match);
+    assert_eq!(legacy.unit().unwrap(), DuelUnit::Match { length: 7 });
+    let mut money = legacy.clone();
+    money.format = DuelFormat::MoneyCubeless;
+    money.match_length = 0;
+    money.block_games = Some(1000);
+    assert_eq!(
+        money.unit().unwrap(),
+        DuelUnit::MoneyCubeless { games: 1000 }
+    );
+    for (length, games) in [(5, Some(100)), (0, None), (0, Some(0)), (0, Some(1001))] {
+        money.match_length = length;
+        money.block_games = games;
+        assert!(money.unit().is_err(), "{length} {games:?}");
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires isolated PostgreSQL and local GNUbg with embedded Python"]
+async fn cubeless_money_series_stores_blocks_and_points_per_game(pool: sqlx::PgPool) {
+    let rules = Engine::new(std::env::var("GNUBG_BIN").unwrap_or_else(|_| "gnubg".into()));
+    let router = crate::api::router(crate::api::AppState::new(pool.clone(), rules));
+    let create = |body: serde_json::Value| {
+        Request::post("/api/engine-matches")
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    };
+    let side = serde_json::json!({"engine_id": "gnubg", "plies": 0});
+    for invalid in [
+        serde_json::json!({"format": "money_cubeless", "count": 1}),
+        serde_json::json!({"format": "money_cubeless", "block_games": 1001, "count": 1}),
+        serde_json::json!({"format": "money_cubeless", "block_games": 4, "match_length": 5, "count": 1}),
+        serde_json::json!({"format": "match", "block_games": 4, "match_length": 5, "count": 1}),
+    ] {
+        let mut body = invalid.clone();
+        body["a"] = side.clone();
+        body["b"] = side.clone();
+        let response = router.clone().oneshot(create(body)).await.unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{invalid}"
+        );
+    }
+    let response = router
+        .clone()
+        .oneshot(create(serde_json::json!({
+            "a": side, "b": side, "format": "money_cubeless", "block_games": 4,
+            "count": 1, "seed": Uuid::from_u128(5),
+        })))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let body = read_json(response).await;
+    assert_eq!(body["configuration"]["block_games"], 4);
+    assert_eq!(body["configuration"]["match_length"], 0);
+    let id = body["id"].as_str().unwrap().to_owned();
+    while super::runner::run_one(&pool).await.unwrap() {}
+    let detail = Request::get(format!("/api/engine-matches/{id}"))
+        .body(Body::empty())
+        .unwrap();
+    let body = read_json(router.clone().oneshot(detail).await.unwrap()).await;
+    assert_eq!(body["series"]["status"], "completed", "{body}");
+    let statistics = &body["statistics"];
+    assert_eq!(statistics["money"]["games"], 8, "{body}");
+    // Identical deterministic engines with swapped sides cancel out exactly.
+    assert_eq!(statistics["money"]["points_per_game_a"], 0.0);
+    assert_eq!(statistics["confidence_interval_a"], serde_json::Value::Null);
+    assert_eq!(
+        statistics["wins_a"].as_i64().unwrap() + statistics["wins_b"].as_i64().unwrap(),
+        8
+    );
+    assert_eq!(body["matches"][0]["games"], 4);
+    let library = Request::get(format!(
+        "/api/library/matches?database_id={}",
+        super::ENGINE_DUELS_DATABASE_ID
+    ))
+    .body(Body::empty())
+    .unwrap();
+    let library = read_json(router.clone().oneshot(library).await.unwrap()).await;
+    let archived = library["items"].as_array().unwrap();
+    assert_eq!(archived.len(), 2, "{library}");
+    for entry in archived {
+        assert_eq!(entry["game_count"], 4, "{entry}");
+        // A money session has no final match result.
+        assert_eq!(entry["result_state"], "unknown", "{entry}");
+        assert_eq!(entry["match_length"], 0, "{entry}");
+    }
+    let sgf: String = sqlx::query_scalar(
+        "SELECT sgf FROM engine_match_results WHERE run_id=$1 AND match_index=0",
+    )
+    .bind(Uuid::parse_str(&id).unwrap())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(sgf.contains("EV[Duel GNUbg 0-ply vs. GNUbg 0-ply (money, cubeless)]"));
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -312,6 +698,13 @@ async fn series_api_persists_results_recovers_expired_claim_and_cancels(pool: sq
     assert_eq!(body["series"]["completed_matches"], 2);
     assert_eq!(body["statistics"]["wins_a"], 1);
     assert_eq!(body["statistics"]["wins_b"], 1);
+    for side in ["cost_a", "cost_b"] {
+        let cost = &body["statistics"][side];
+        assert_eq!(cost["measured_matches"], 2, "{body}");
+        assert!(cost["moves"].as_i64().unwrap() > 0);
+        assert!(cost["cpu_ms_per_move"].as_f64().unwrap() > 0.0);
+        assert!(cost["wall_ms_per_move"].as_f64().unwrap() > 0.0);
+    }
     assert_eq!(body["matches"][0]["seed"], body["matches"][1]["seed"]);
     let sgf = Request::get(format!("/api/engine-matches/{id}/matches/1/sgf"))
         .body(Body::empty())
@@ -436,14 +829,31 @@ async fn open_sage_and_gnubg_complete_both_legs() {
             turns: dice::turns(seed, game),
         })
     };
-    let first = engine_match::play(&rules, [&gnubg, &sage], [0, 2], 1, schedule)
-        .await
-        .unwrap();
-    let second = engine_match::play(&rules, [&sage, &gnubg], [2, 0], 1, schedule)
-        .await
-        .unwrap();
+    let first = engine_match::play(
+        &rules,
+        [&gnubg, &sage],
+        [0, 2],
+        DuelUnit::Match { length: 1 },
+        schedule,
+    )
+    .await
+    .unwrap();
+    let second = engine_match::play(
+        &rules,
+        [&sage, &gnubg],
+        [2, 0],
+        DuelUnit::Match { length: 1 },
+        schedule,
+    )
+    .await
+    .unwrap();
     assert_eq!(first.games, 1);
     assert_eq!(second.games, 1);
+    // Both the native GNUbg side and the external Open Sage side are measured.
+    for side in first.costs.iter().chain(&second.costs) {
+        let side = side.expect("each engine reports its cost");
+        assert!(side.moves > 0 && side.cost.cpu_us > 0 && side.cost.wall_us > 0);
+    }
     let first = crate::import::sgf::parse_sgf_source_moves(&first.sgf)
         .unwrap()
         .1;
@@ -476,18 +886,26 @@ async fn mixed_duel_preserves_legal_moves_for_retained_seed() {
             engine_id: "bgsage".into(),
             plies: 3,
         },
+        format: DuelFormat::Match,
         match_length: 5,
+        block_games: None,
         count: 100,
         mode: DiceMode::Paired,
         seed: Uuid::parse_str("8c0a1bb0-90c3-444b-871a-492bcaca83ff").unwrap(),
     };
     let seed = match_plan(&config, 64).seed;
-    engine_match::play(&rules, [&gnubg, &sage], [3, 3], 5, |game| {
-        Ok(GameDice {
-            opening: dice::opening(seed, game)?,
-            turns: dice::turns(seed, game),
-        })
-    })
+    engine_match::play(
+        &rules,
+        [&gnubg, &sage],
+        [3, 3],
+        DuelUnit::Match { length: 5 },
+        |game| {
+            Ok(GameDice {
+                opening: dice::opening(seed, game)?,
+                turns: dice::turns(seed, game),
+            })
+        },
+    )
     .await
     .unwrap();
 }

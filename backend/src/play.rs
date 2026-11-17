@@ -279,6 +279,9 @@ struct NativeRequest<'a> {
     resign_level: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     match_bots: Option<[Option<i32>; 2]>,
+    /// Cubeless money duel without the Jacoby rule; requires `match_bots`.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    cubeless: bool,
 }
 #[derive(Deserialize)]
 struct NativeSnapshot {
@@ -299,6 +302,9 @@ struct NativeSnapshot {
     resignation_declined: bool,
     #[serde(default)]
     match_rolls: Vec<[u8; 2]>,
+    /// GNUbg engine work per native player during this step's bot turns.
+    #[serde(default)]
+    bot_costs: Option<[crate::engines::EngineCost; 2]>,
 }
 
 pub(crate) fn routes() -> Router<AppState> {
@@ -1404,6 +1410,7 @@ async fn native(
         notation,
         resign_level,
         match_bots: None,
+        cubeless: false,
     };
     let engine = session.rules_engine(path)?;
     run_native(&engine, &request, previous.map(|(sgf, _)| sgf)).await
@@ -1429,6 +1436,7 @@ pub(crate) async fn benchmark_checker_turn(
         notation: None,
         resign_level: None,
         match_bots: None,
+        cubeless: false,
     };
     let (snapshot, _) = run_native(engine, &request, Some(previous.0)).await?;
     ensure!(

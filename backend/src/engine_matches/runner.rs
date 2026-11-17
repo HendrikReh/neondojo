@@ -3,7 +3,7 @@ use crate::{
     api::AppState,
     engine::Engine,
     import::{parse_sgf, sgf::escape_value},
-    play::engine_match::{self, GameDice},
+    play::engine_match::{self, DuelUnit, GameDice, SideCost},
     store::{MatchImport, insert_match_import},
 };
 use anyhow::{Context, Result, bail, ensure};
@@ -97,11 +97,15 @@ async fn execute(pool: &PgPool, series: &Series, token: Uuid) -> Result<()> {
     let a = series.engines.a.engine()?;
     let b = series.engines.b.engine()?;
     let configuration = &series.configuration;
-    let length = configuration.match_length;
+    let unit = configuration.unit()?;
     let event = escape_value(&format!(
-        "Duel {} vs. {}",
+        "Duel {} vs. {}{}",
         competitor_label(&configuration.a)?,
         competitor_label(&configuration.b)?,
+        match unit {
+            DuelUnit::Match { .. } => "",
+            DuelUnit::MoneyCubeless { .. } => " (money, cubeless)",
+        },
     ));
     for index in series.completed_matches..series.total_matches {
         let plan = match_plan(configuration, index);
@@ -111,7 +115,7 @@ async fn execute(pool: &PgPool, series: &Series, token: Uuid) -> Result<()> {
             bots.swap(0, 1);
             depths.swap(0, 1);
         }
-        let finished = engine_match::play(&rules, bots, depths, length, |game| {
+        let finished = engine_match::play(&rules, bots, depths, unit, |game| {
             Ok(GameDice {
                 opening: dice::opening(plan.seed, game)?,
                 turns: dice::turns(plan.seed, game),
@@ -119,13 +123,35 @@ async fn execute(pool: &PgPool, series: &Series, token: Uuid) -> Result<()> {
         })
         .await?;
         let mut scores = finished.scores;
+        let mut costs = finished.costs;
+        let mut outcomes = finished.outcomes;
         if plan.swapped {
             scores.swap(0, 1);
+            costs.swap(0, 1);
+            if let Some(outcomes) = outcomes.as_mut() {
+                outcomes.swap(0, 1);
+            }
         }
-        ensure!(
-            (scores[0] >= length) ^ (scores[1] >= length),
-            "Missing native match winner"
-        );
+        let [cost_a, cost_b] = costs.map(|side| side.map(stored_cost).transpose());
+        let (cost_a, cost_b) = (cost_a?, cost_b?);
+        match unit {
+            DuelUnit::Match { length } => ensure!(
+                (scores[0] >= length) ^ (scores[1] >= length) && outcomes.is_none(),
+                "Missing native match winner"
+            ),
+            DuelUnit::MoneyCubeless { games } => {
+                let counts = outcomes.context("Missing cubeless money game results")?;
+                let points = |side: [i32; 3]| side[0] + 2 * side[1] + 3 * side[2];
+                ensure!(
+                    finished.games == games
+                        && counts.iter().flatten().sum::<i32>() == games
+                        && scores == counts.map(points),
+                    "Inconsistent cubeless money block result"
+                );
+            }
+        }
+        // Stored as A single, gammon, backgammon, then B; only for money blocks.
+        let stored_outcomes = outcomes.map(|counts| counts.concat());
         let a_name = format!(
             "A {} {}-ply",
             configuration.a.engine_id, configuration.a.plies
@@ -158,12 +184,25 @@ async fn execute(pool: &PgPool, series: &Series, token: Uuid) -> Result<()> {
             updated.rows_affected() == 1,
             "Engine match checkpoint lost its lease"
         );
-        sqlx::query("INSERT INTO engine_match_results(run_id,match_index,seed,score_a,score_b,games,sgf) VALUES($1,$2,$3,$4,$5,$6,$7)")
+        sqlx::query("INSERT INTO engine_match_results(run_id,match_index,seed,score_a,score_b,games,sgf,cpu_us_a,wall_us_a,moves_a,cpu_us_b,wall_us_b,moves_b,outcomes) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)")
             .bind(series.id).bind(index).bind(plan.seed).bind(scores[0]).bind(scores[1])
-            .bind(finished.games).bind(sgf).execute(&mut *tx).await?;
+            .bind(finished.games).bind(sgf)
+            .bind(cost_a.map(|cost| cost.0)).bind(cost_a.map(|cost| cost.1)).bind(cost_a.map(|cost| cost.2))
+            .bind(cost_b.map(|cost| cost.0)).bind(cost_b.map(|cost| cost.1)).bind(cost_b.map(|cost| cost.2))
+            .bind(stored_outcomes)
+            .execute(&mut *tx).await?;
         tx.commit().await?;
     }
     Ok(())
+}
+
+/// Database form of one side's cost: CPU µs, wall µs and checker turns.
+fn stored_cost(side: SideCost) -> Result<(i64, i64, i32)> {
+    Ok((
+        i64::try_from(side.cost.cpu_us).context("Engine CPU time exceeds storage range")?,
+        i64::try_from(side.cost.wall_us).context("Engine wall time exceeds storage range")?,
+        side.moves,
+    ))
 }
 
 fn competitor_label(side: &Competitor) -> Result<String> {

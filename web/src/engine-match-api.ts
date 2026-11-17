@@ -6,6 +6,7 @@ export type CreateSeries = Schemas['CreateSeries'];
 export type Series = Schemas['Series'];
 export type SeriesDetails = Schemas['SeriesDetails'];
 export type SeriesPage = Schemas['SeriesPage'];
+export type SideCostSummary = Schemas['SideCostSummary'];
 const path = '/engine-matches';
 
 export const listSeries = (signal?: AbortSignal, before?: string) =>

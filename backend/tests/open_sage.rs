@@ -9,6 +9,7 @@ fn snapshot() -> SageSnapshot {
         plies: 2,
         adapter_version: 1,
         one_ply_verified: false,
+        cubeless: false,
     }
 }
 
