@@ -2,7 +2,7 @@
 
 BG Tutor is a local backgammon application for importing matches, finding positions, analyzing decisions with GNU Backgammon (GNUbg) or Open Sage, playing against an engine, and practicing your own mistakes. Its headless Rust backend uses Tokio, Axum, PostgreSQL, and SQLx. The React and TypeScript client connects through REST and server-sent events (SSE).
 
-[Quick start](#quick-start) · [Restart on port 8787](#restart-bg-tutor-locally-on-port-8787) · [Analyze a match](#analyze-your-first-match) · [Import formats](#import-formats) · [Playing](#playing-against-gnubg) · [Study](#study) · [HedgeHog comparison](#hedgehog-comparison) · [API](#api-reference) · [Verification](#verification) · [Repository guidance](AGENTS.md)
+[User guide](docs/user-guide/README.md) · [Quick start](#quick-start) · [Restart on port 8787](#restart-bg-tutor-locally-on-port-8787) · [Analyze a match](#analyze-your-first-match) · [Import formats](#import-formats) · [Playing](#playing-against-gnubg) · [Study](#study) · [HedgeHog comparison](#hedgehog-comparison) · [API](#api-reference) · [Verification](#verification) · [Repository guidance](AGENTS.md)
 
 ## Quick start
 
