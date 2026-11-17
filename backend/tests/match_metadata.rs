@@ -191,8 +191,21 @@ fn native_result() -> Value {
 
 async fn analysis(pool: &PgPool, id: Uuid, game_no: Option<i32>, result: Value, order: i32) {
     let games = if game_no.is_some() { 1 } else { 2 };
+    let job = Uuid::new_v4();
     sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,completed_games,game_no,result,created_at) VALUES($1,$2,'match',2,'completed',$6,$6,$3,$4,now()+$5*interval '1 second')")
-        .bind(Uuid::new_v4()).bind(id).bind(game_no).bind(result).bind(order).bind(games).execute(pool).await.unwrap();
+        .bind(job).bind(id).bind(game_no).bind(result).bind(order).bind(games).execute(pool).await.unwrap();
+    // The analysis catalog offers a job once its games have checkpoints.
+    for game in game_no.map_or(1..=2, |game| game..=game) {
+        sqlx::query(
+            "INSERT INTO match_analysis_games(job_id,game_no,summary)
+             VALUES($1,$2,'{\"completed_games\":1,\"total_games\":1}')",
+        )
+        .bind(job)
+        .bind(game)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
 }
 
 fn assert_unknown_pr(value: &Value) {

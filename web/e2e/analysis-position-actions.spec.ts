@@ -1,6 +1,4 @@
-import {
-  openMatchAnalysisOptions,
-} from './analysis-controls';
+import { openMatchAnalysisOptions } from './analysis-controls';
 import { test, expect, type Page } from './test';
 import type { BookLookup } from '../src/source-analysis-api';
 async function fixture(
@@ -121,7 +119,7 @@ for (const [width, height, locale] of [
       'false',
     );
     await openMatchAnalysisOptions(page);
-    // Wait for the estimate above the toolbar to finish loading and wrap.
+    // The estimate loads once the options are open.
     const estimate = page.getByRole('status', {
       name:
         locale === 'de' ? 'Geschätzte Analysezeit' : 'Analysis time estimate',
@@ -132,11 +130,17 @@ for (const [width, height, locale] of [
         ? 'Kein abgeschlossener Benchmark'
         : 'No completed benchmark',
     );
+    // The options float over the inspector; at 1800px they cover the opening
+    // book until they are closed.
+    await page.keyboard.press('Escape');
+    await expect(estimate).toBeHidden();
     await expect(page.locator('.position-code button')).toHaveCount(0);
     const artwork = page.locator('.board-panel .board');
     const comparison = page.locator('.board-panel .board-decision-comparison');
     await page.locator('.analysis-book-reference summary').click();
-    const bestCandidate = page.locator('.analysis-book-reference .candidate-marker-best');
+    const bestCandidate = page.locator(
+      '.analysis-book-reference .candidate-marker-best',
+    );
     const tooltip = page.getByRole('tooltip');
     const searchLabel =
       locale === 'de' ? 'Diese Stellung suchen' : 'Search this position';
@@ -189,7 +193,9 @@ for (const [width, height, locale] of [
     expect(s.height).toBe(buttonSize);
     await expect(search.locator('.action-icon')).toHaveCSS('width', '16px');
     await expect(bookmark.locator('.action-icon')).toHaveCSS('width', '16px');
-    await expect(toolbar.locator('[data-action-icon="similar"]')).toHaveCount(0);
+    await expect(toolbar.locator('[data-action-icon="similar"]')).toHaveCount(
+      0,
+    );
     expect(s.y + s.height).toBeLessThanOrEqual(board.y);
     expect(s.x + s.width).toBeLessThanOrEqual(width);
     await page.mouse.move(1, 1);
@@ -242,7 +248,9 @@ async function openSimilarSearch(page: Page, positionId: string) {
   ).toBe(true);
   await page.getByRole('tab', { name: 'Positions', exact: true }).click();
   const pane = page.getByRole('tabpanel', { name: 'Positions', exact: true });
-  await pane.getByRole('button', { name: 'Search positions', exact: true }).click();
+  await pane
+    .getByRole('button', { name: 'Search positions', exact: true })
+    .click();
   await pane.locator(`tr[data-position-id="${positionId}"]`).click();
   await pane
     .getByRole('button', { name: 'Find similar positions', exact: true })

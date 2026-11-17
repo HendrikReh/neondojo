@@ -177,6 +177,11 @@ test('money games continue with the score and keep each saved game report', asyn
   await next.click();
   await expect(page.locator('.play-match-heading')).toContainText('0 : 3');
   await expect(page.locator('.play-match-heading')).toContainText('Game 2');
+  // The opening roll and the first turn follow on their own. Wait for them:
+  // a reply that arrives later would overwrite the finished game below.
+  await expect(
+    page.getByRole('button', { name: 'Roll dice', exact: true }),
+  ).toBeVisible();
   Object.assign(saved, {
     version: saved.version + 1,
     phase: 'game_over',

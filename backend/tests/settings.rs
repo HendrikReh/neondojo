@@ -89,7 +89,8 @@ async fn defaults_use_injected_engine_and_survive_new_app_states(pool: PgPool) {
     assert_eq!(engines[1]["name"], "Open Sage");
     assert_eq!(engines[1]["available"], false);
     assert_eq!(engines[1]["version"], Value::Null);
-    assert_eq!(engines[1]["plies"], json!([2]));
+    // 1-ply needs an installation verified for it; the others are offered.
+    assert_eq!(engines[1]["plies"], json!([2, 3, 4]));
     assert!(engines[0]["max_parallel_threads"].is_null());
     let cpu_threads = std::thread::available_parallelism()
         .ok()
@@ -1227,7 +1228,9 @@ async fn playing_mode_defaults_roundtrip_and_invalid_thresholds_are_atomic(pool:
         .await;
         assert_eq!(status, 201, "{session}");
         assert_eq!(session["play_mode"], mode);
-        assert_eq!(session["tutor_threshold"], 0.123);
+        // A new match starts from the Error threshold of the analysis
+        // configuration, not from the legacy setting saved above.
+        assert_eq!(session["tutor_threshold"], 0.02);
         assert_eq!(session["training_auto_analysis"], false);
     }
     for threshold in [0.0, -0.1, 1.001] {

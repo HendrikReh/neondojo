@@ -52,6 +52,36 @@ async fn ready(app: axum::Router, mut session: Value) -> Value {
     }
     session
 }
+/// Point a session's pinned engines at another binary. Sessions pin their
+/// rules, bot and analysis engines in the saved state; the column only
+/// serves sessions saved before those snapshots existed.
+/// Returns the path that was pinned before, to restore it.
+async fn pin_engine_path(pool: &PgPool, id: uuid::Uuid, path: &str) -> String {
+    let previous: String = sqlx::query_scalar(
+        "SELECT coalesce(state#>>'{engine_snapshots,rules,gnubg_path}',gnubg_path)
+         FROM play_sessions WHERE id=$1",
+    )
+    .bind(id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE play_sessions SET gnubg_path=$2,
+             state=CASE WHEN state ? 'engine_snapshots' THEN
+                 jsonb_set(jsonb_set(jsonb_set(state,
+                     '{engine_snapshots,rules,gnubg_path}',to_jsonb($2::text)),
+                     '{engine_snapshots,bot,gnubg_path}',to_jsonb($2::text)),
+                     '{engine_snapshots,analysis,gnubg_path}',to_jsonb($2::text))
+             ELSE state END
+         WHERE id=$1",
+    )
+    .bind(id)
+    .bind(path)
+    .execute(pool)
+    .await
+    .unwrap();
+    previous
+}
 fn engine() -> Engine {
     Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()))
 }
@@ -512,11 +542,7 @@ async fn saved_configuration_concurrent_actions_and_native_failure_are_atomic(po
     assert_eq!(current["engine"], s["engine"]);
     assert_eq!(current["human_name"], s["human_name"]);
     assert_eq!(current["bearoff_direction"], s["bearoff_direction"]);
-    sqlx::query("UPDATE play_sessions SET gnubg_path='/missing/pinned-engine' WHERE id=$1")
-        .bind(id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    let pinned = pin_engine_path(&pool, id, "/missing/pinned-engine").await;
     let (status, _) = call(
         resumed.clone(),
         "POST",
@@ -525,6 +551,8 @@ async fn saved_configuration_concurrent_actions_and_native_failure_are_atomic(po
     )
     .await;
     assert_eq!(status, 503);
+    // The saved session exposes its pinned engines; compare it unchanged.
+    pin_engine_path(&pool, id, &pinned).await;
     assert_eq!(
         call(
             resumed,
@@ -1101,11 +1129,7 @@ async fn concurrent_opening_actions_are_fenced_and_native_failure_preserves_pend
             .fetch_one(&pool)
             .await
             .unwrap();
-    sqlx::query("UPDATE play_sessions SET gnubg_path='/missing/pinned-opening-engine' WHERE id=$1")
-        .bind(id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    let pinned = pin_engine_path(&pool, id, "/missing/pinned-opening-engine").await;
     let (status, _) = call(
         app.clone(),
         "POST",
@@ -1114,6 +1138,8 @@ async fn concurrent_opening_actions_are_fenced_and_native_failure_preserves_pend
     )
     .await;
     assert_eq!(status, 503);
+    // The saved session exposes its pinned engines; compare it unchanged.
+    pin_engine_path(&pool, id, &pinned).await;
     assert_eq!(call(app.clone(), "GET", &uri, Value::Null).await.1, pending);
     let checkpoint: (String, String) =
         sqlx::query_as("SELECT sgf,native_id FROM play_sessions WHERE id=$1")
@@ -1122,12 +1148,7 @@ async fn concurrent_opening_actions_are_fenced_and_native_failure_preserves_pend
             .await
             .unwrap();
     assert_eq!(checkpoint, (row.1, row.2));
-    sqlx::query("UPDATE play_sessions SET gnubg_path=$1 WHERE id=$2")
-        .bind(row.0)
-        .bind(id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    pin_engine_path(&pool, id, &row.0).await;
     let (a, b) = tokio::join!(
         call(
             app.clone(),
@@ -1243,11 +1264,7 @@ async fn pausing_and_resuming_preserves_the_checkpoint_and_library_identity(pool
     assert_eq!(status, 200, "{copied}");
     let copy_id = copied["results"][0]["created_id"].as_str().unwrap();
     // Pause and resume must work with only the saved checkpoint.
-    sqlx::query("UPDATE play_sessions SET gnubg_path='/missing/gnubg' WHERE id=$1")
-        .bind(session_id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    pin_engine_path(&pool, session_id, "/missing/gnubg").await;
     let checkpoint = || {
         sqlx::query_as::<_, (String, String)>("SELECT sgf,native_id FROM play_sessions WHERE id=$1")
             .bind(session_id)
@@ -2643,13 +2660,7 @@ async fn changing_play_modes_is_durable_atomic_and_never_advances_native_state(p
             .fetch_one(&pool)
             .await
             .unwrap();
-    sqlx::query(
-        "UPDATE play_sessions SET gnubg_path='/missing/never-invoke-for-mode-switch' WHERE id=$1",
-    )
-    .bind(id)
-    .execute(&pool)
-    .await
-    .unwrap();
+    pin_engine_path(&pool, id, "/missing/never-invoke-for-mode-switch").await;
     let mut current = session.clone();
     for mode in ["coach", "tutor", "training", "competition"] {
         let (status, next) = call(
@@ -3185,6 +3196,9 @@ async fn live_tutor_threshold_rechecks_pending_warning_without_playing_or_changi
     .await;
     assert_eq!(status, 200, "{warning}");
     assert_eq!(warning["pending_decision"]["warning"], true);
+    // Break the pinned engines first: the saved state compared below holds
+    // their paths.
+    pin_engine_path(&pool, id, "/missing/threshold-must-not-run-native-engine").await;
     let before: (Value, String, String) =
         sqlx::query_as("SELECT state,sgf,native_id FROM play_sessions WHERE id=$1")
             .bind(id)
@@ -3192,8 +3206,6 @@ async fn live_tutor_threshold_rechecks_pending_warning_without_playing_or_changi
             .await
             .unwrap();
     assert!(before.0["pending_decision"]["loss"].as_f64().unwrap() < 1.0);
-    sqlx::query("UPDATE play_sessions SET gnubg_path='/missing/threshold-must-not-run-native-engine' WHERE id=$1")
-        .bind(id).execute(&pool).await.unwrap();
     let mut current = warning;
     for (threshold, warns) in [(1.0, false), (0.000001, true)] {
         let (status, next) = call(
@@ -4059,11 +4071,7 @@ async fn money_next_game_preserves_checkpoint_on_report_failure_and_migrates_leg
         .fetch_one(&pool)
         .await
         .unwrap();
-    sqlx::query("UPDATE play_sessions SET gnubg_path='/unavailable' WHERE id=$1")
-        .bind(session_id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    let pinned = pin_engine_path(&pool, session_id, "/unavailable").await;
     for action in ["next_game", "end_session"] {
         assert_eq!(
             call(
@@ -4077,6 +4085,8 @@ async fn money_next_game_preserves_checkpoint_on_report_failure_and_migrates_leg
             503
         );
     }
+    // The saved session exposes its pinned engines; compare it unchanged.
+    pin_engine_path(&pool, session_id, &pinned).await;
     assert_eq!(
         call(app.clone(), "GET", &uri, Value::Null).await.1,
         finished
@@ -4091,12 +4101,7 @@ async fn money_next_game_preserves_checkpoint_on_report_failure_and_migrates_leg
         .unwrap(),
         0
     );
-    sqlx::query("UPDATE play_sessions SET gnubg_path=$2 WHERE id=$1")
-        .bind(session_id)
-        .bind(path)
-        .execute(&pool)
-        .await
-        .unwrap();
+    pin_engine_path(&pool, session_id, &path).await;
     let (status, mut legacy) = call(
         app.clone(),
         "POST",
@@ -4281,11 +4286,7 @@ async fn money_end_session_keeps_final_score_sgf_and_all_game_reports(pool: PgPo
     )
     .await
     .1;
-    sqlx::query("UPDATE play_sessions SET gnubg_path='/unavailable' WHERE id=$1")
-        .bind(session_id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    pin_engine_path(&pool, session_id, "/unavailable").await;
     let original: (String, String) =
         sqlx::query_as("SELECT sgf,native_id FROM play_sessions WHERE id=$1")
             .bind(session_id)

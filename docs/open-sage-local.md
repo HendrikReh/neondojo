@@ -88,6 +88,10 @@ BGTUTOR_SAGE_PYTHON=/path/to/venv/bin/python cargo test -p bgtutor sage_executes
 OPEN_SAGE_TEST_PYTHON=/path/to/venv/bin/python cargo test -p bgtutor --test open_sage_play -- --ignored
 ```
 
+`BGTUTOR_SAGE_PYTHON` und `OPEN_SAGE_TEST_PYTHON` erwarten den Interpreter der Fork-Installation (lokal `local-data/open-sage-fork-2e71bee/venv/bin/python`). Mit dem ursprünglichen Wheel scheitert `native_checker_cube_and_match_analysis` am oben beschriebenen 1-ply-Threadbudget, und `open_sage_settings` erwartet die Tiefen 1 bis 4. `fork_depths_are_pinned_and_old_installation_remains_usable` braucht zusätzlich `OPEN_SAGE_ORIGINAL_PYTHON` mit dem Interpreter des ursprünglichen Wheels (`local-data/open-sage/venv/bin/python`).
+
+Die Testziele laufen einzeln und mit `--test-threads=1`. Ein gemeinsamer Aufruf von `cargo test --workspace -- --include-ignored` mit gesetzten Sage-Variablen lässt die Prozess-Tests in `engines::process` scheitern, weil sie sich den globalen Worker mit den echten Sage-Tests teilen.
+
 ## Verwendung in BG Tutor
 
 1. Die gehashte Umgebung installieren. Für diese lokale Umsetzung liegt sie dauerhaft unter `local-data/open-sage/venv` im Hauptrepository; dieses Verzeichnis ist von Git ausgeschlossen. Es wurden keine Pakete oder Gewichte in den Quellcode kopiert.
