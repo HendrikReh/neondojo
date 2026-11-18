@@ -88,13 +88,13 @@ BGTUTOR_SAGE_PYTHON=/path/to/venv/bin/python cargo test -p bgtutor sage_executes
 OPEN_SAGE_TEST_PYTHON=/path/to/venv/bin/python cargo test -p bgtutor --test open_sage_play -- --ignored
 ```
 
-BG Tutor verwendet ausschließlich die Fork-Installation. `BGTUTOR_SAGE_PYTHON` und `OPEN_SAGE_TEST_PYTHON` erwarten deren Interpreter (lokal `local-data/open-sage-fork-optimized-5b146c7/venv/bin/python`). Mit dem ursprünglichen Wheel scheitert `native_checker_cube_and_match_analysis` am oben beschriebenen 1-ply-Threadbudget, und `open_sage_settings` erwartet die Tiefen 1 bis 4. Kein Test benötigt das ursprüngliche Wheel.
+BG Tutor verwendet ausschließlich die Fork-Installation. `BGTUTOR_SAGE_PYTHON` und `OPEN_SAGE_TEST_PYTHON` erwarten deren Interpreter (lokal `local-data/open-sage-fork-340fc53/venv/bin/python`). Mit dem ursprünglichen Wheel scheitert `native_checker_cube_and_match_analysis` am oben beschriebenen 1-ply-Threadbudget, und `open_sage_settings` erwartet die Tiefen 1 bis 4. Kein Test benötigt das ursprüngliche Wheel.
 
 Die Testziele laufen einzeln und mit `--test-threads=1`. Ein gemeinsamer Aufruf von `cargo test --workspace -- --include-ignored` mit gesetzten Sage-Variablen lässt die Prozess-Tests in `engines::process` scheitern, weil sie sich den globalen Worker mit den echten Sage-Tests teilen.
 
 ## Verwendung in BG Tutor
 
-1. Die Fork-Umgebung installieren. Für diese lokale Umsetzung liegt sie dauerhaft unter `local-data/open-sage-fork-optimized-5b146c7/venv` im Hauptrepository; `local-data/` ist von Git ausgeschlossen. Es wurden keine Pakete oder Gewichte in den Quellcode kopiert.
+1. Die Fork-Umgebung installieren. Für diese lokale Umsetzung liegt sie dauerhaft unter `local-data/open-sage-fork-340fc53/venv` im Hauptrepository; `local-data/` ist von Git ausgeschlossen. Es wurden keine Pakete oder Gewichte in den Quellcode kopiert.
 2. Backend und Frontend aus dem Hauptrepository bauen und gemäß [README](../README.md#restart-bg-tutor-locally-on-port-8787) starten. Vor der ersten Anwendung von Migration `0041_open_sage.sql` die Benutzerdatenbank sichern. Die Migration ergänzt lokale Installationsmetadaten und Provider-Indizes; vorhandene Jobs bleiben GNUbg-kompatibel. Datenbank- und Browsertests verwenden weiterhin eigene Testdatenbanken.
 3. Unter **Einstellungen → Analyse → Engines auf diesem Rechner → Lokale Open-Sage-Installation** den absoluten Pfad zum venv-Interpreter eintragen und **Prüfen und speichern** wählen. Danach Analyse-Engine und Spiel-Engine getrennt wählen und den Entwurf anwenden.
 4. Unter **Einstellungen → Analyse → Engines auf diesem Rechner** die Rechenlimits **Open-Sage-Threads für Analysen** und **Open-Sage-Threads beim Spielen** jeweils von 2 bis zur ermittelten Zahl verfügbarer logischer CPUs einstellen. Bei **Standard** verwendet Open Sage 4 Threads für Analysen und Duelle und 2 beim Spielen. Neue Sitzungen, Aufträge und Duellserien speichern den jeweils gültigen Wert. Die Engine prüft das konfigurierte Limit mit einer echten Stellungsbewertung. Der geprüfte serielle 1-ply-Checkerpfad bleibt seriell.
@@ -318,6 +318,27 @@ vom bisherigen Fork, auch wenn die Paketversion gleich bleibt. Frühere
 Aufträge und Spielsitzungen benötigen weiterhin ihre gespeicherte
 Installation. Die Testumgebung und die Rohdaten des Vergleichs befinden
 sich lokal unter `local-data/benchmarks/*-sage-cube-reuse/`.
+
+## Post-Crawford-Cube – 18. November 2026
+
+Bis Commit `5b146c7` bewertete Open Sage „kein Doppel“ für den Zurückliegenden
+nach Crawford zu niedrig. In 15 Positionen aus Engine-Duellen (3-away oder
+4-away gegen 1-away, Cube zentriert) lag „kein Doppel“ bei 2-ply 0,058 bis
+0,184 unter „Doppel/Take“. GNUbg (`hint` und Rollout mit 1296 Spielen) und
+Open Sages eigener Rollout bewerten beide Aktionen dort gleich. Die
+Empfehlung lautete trotzdem „doppeln“, aber die Analyse verbuchte für
+„kein Doppel“ einen Fehler. Der Fork behebt das in PR #9: `cl2cf_match`
+bewertet einen Cube, den der Zurückliegende noch drehen kann, als einmal
+verdoppelt.
+
+Der aktive Build aus `340fc5346f1938d505f99f22101e059a30e9cfc6` liegt unter
+`local-data/open-sage-fork-340fc53/` mit `src/`, `wheels/`, `requirements.lock`,
+`provenance.json`, `probe-1ply-2ply.json` (bestanden) und `venv/`. Der
+Sage-Wheel hat SHA256
+`a9a264d1436f613dfdbecc7ec1bb5c624f8f6589ed26e09eaaaddc306bd1c00d`, der
+Laufzeit-Fingerprint in BG Tutor lautet `7c9a021a…`. Analysen, die vorher mit
+`5b146c7` liefen, behalten ihre Installation und ihre Werte. Für korrigierte
+Post-Crawford-Cube-Werte müssen sie neu analysiert werden.
 
 ## Warm-up für Partien
 
