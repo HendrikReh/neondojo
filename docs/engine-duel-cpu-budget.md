@@ -87,5 +87,5 @@ For third-party engines, a small protocol would be needed (position, dice, match
 
 ## Cubeless money blocks
 
-Implemented as duel format `money_cubeless`, following the suggestion that cubeless money games give a variance that is easy to state: about 1.35 points per game, so a 95% interval of roughly ±2.7/√N points per game. Checker play is compared without cube skill, which suits budget comparisons. The README describes the format; measured CPU time per move applies to it unchanged. Note that Open Sage's cubeless path runs serially with a narrower full-depth search, so its CPU time per move is far lower than in cubeful match play at the same nominal depth.
+Implemented as duel format `money_cubeless`, following the suggestion that cubeless money games give a variance that is easy to state: about 1.35 points per game, so a 95% interval of roughly ±2.7/√N points per game. Checker play is compared without cube skill, which suits budget comparisons. The [Extras reference](reference/extras.md#engine-duels) describes the format; measured CPU time per move applies to it unchanged. Note that Open Sage's cubeless path runs serially with a narrower full-depth search, so its CPU time per move is far lower than in cubeful match play at the same nominal depth.
 
