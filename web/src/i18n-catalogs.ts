@@ -157,6 +157,12 @@ export const de = {
   'analysis.combinations': '36 Würfe. 21 Kombinationen.',
   'analysis.rollTitle': 'Wurf {first}–{second}: {move}',
   'analysis.probability': '{value} Wahrscheinlichkeit',
+  'analysis.deleteDice': 'Würfel-Equity löschen',
+  'analysis.deleteDicePrompt':
+    'Diese gespeicherte Würfel-Equity dauerhaft löschen?',
+  'analysis.deletingDice': 'Würfel-Equity wird gelöscht…',
+  'analysis.diceDeleted':
+    'Würfel-Equity gelöscht. Wähle Würfel-Equity erneut oder nutze „Würfel-Equity neu berechnen …“, um sie zu berechnen.',
   'analysis.rolled': 'Gewürfelt',
   'analysis.rolledLegend':
     'Umrandet: der Wurf auf dem Brett. Wähle eine Zelle, um ihren besten Zug auf dem Brett zu sehen.',
@@ -388,6 +394,11 @@ export const en = {
   'analysis.combinations': '36 rolls. 21 combinations.',
   'analysis.rollTitle': 'Roll {first}–{second}: {move}',
   'analysis.probability': '{value} probability',
+  'analysis.deleteDice': 'Delete dice equity',
+  'analysis.deleteDicePrompt': 'Permanently delete this saved dice equity?',
+  'analysis.deletingDice': 'Deleting dice equity…',
+  'analysis.diceDeleted':
+    'Dice equity deleted. Select Dice equity again or use Recalculate dice equity … to calculate it.',
   'analysis.rolled': 'Rolled',
   'analysis.rolledLegend':
     'Outlined: the roll on the board. Select a cell to show its best play on the board.',
@@ -614,6 +625,12 @@ export const es = {
   'analysis.combinations': '36 tiradas. 21 combinaciones.',
   'analysis.rollTitle': 'Tirada {first}–{second}: {move}',
   'analysis.probability': '{value} de probabilidad',
+  'analysis.deleteDice': 'Eliminar equidad de los dados',
+  'analysis.deleteDicePrompt':
+    '¿Eliminar permanentemente esta equidad de los dados guardada?',
+  'analysis.deletingDice': 'Eliminando equidad de los dados…',
+  'analysis.diceDeleted':
+    'Equidad de los dados eliminada. Vuelve a seleccionar Equidad de los dados o usa Recalcular equidad de los dados … para calcularla.',
   'analysis.rolled': 'Tirada actual',
   'analysis.rolledLegend':
     'Con contorno: la tirada del tablero. Selecciona una celda para ver su mejor jugada en el tablero.',
@@ -842,6 +859,12 @@ export const fr = {
   'analysis.combinations': '36 jets. 21 combinaisons.',
   'analysis.rollTitle': 'Jet {first}–{second} : {move}',
   'analysis.probability': 'Probabilité : {value}',
+  'analysis.deleteDice': 'Supprimer l’équité des dés',
+  'analysis.deleteDicePrompt':
+    'Supprimer définitivement cette équité des dés enregistrée ?',
+  'analysis.deletingDice': 'Suppression de l’équité des dés…',
+  'analysis.diceDeleted':
+    'Équité des dés supprimée. Sélectionnez à nouveau Équité des dés ou utilisez Recalculer l’équité des dés … pour la calculer.',
   'analysis.rolled': 'Jet joué',
   'analysis.rolledLegend':
     'Encadré : le jet du plateau. Sélectionnez une case pour afficher son meilleur coup sur le plateau.',
@@ -1072,6 +1095,11 @@ export const pl = {
   'analysis.combinations': '36 rzutów. 21 kombinacji.',
   'analysis.rollTitle': 'Rzut {first}–{second}: {move}',
   'analysis.probability': 'Prawdopodobieństwo: {value}',
+  'analysis.deleteDice': 'Usuń equity rzutów',
+  'analysis.deleteDicePrompt': 'Trwale usunąć zapisane equity rzutów?',
+  'analysis.deletingDice': 'Usuwanie equity rzutów…',
+  'analysis.diceDeleted':
+    'Usunięto equity rzutów. Wybierz ponownie Equity rzutów lub użyj Przelicz equity kości …, aby je obliczyć.',
   'analysis.rolled': 'Wyrzucono',
   'analysis.rolledLegend':
     'Obramowanie: rzut na planszy. Wybierz pole, aby zobaczyć jego najlepszy ruch na planszy.',
@@ -1300,6 +1328,12 @@ export const it = {
   'analysis.combinations': '36 lanci. 21 combinazioni.',
   'analysis.rollTitle': 'Lancio {first}–{second}: {move}',
   'analysis.probability': 'Probabilità: {value}',
+  'analysis.deleteDice': 'Elimina equity dei dadi',
+  'analysis.deleteDicePrompt':
+    'Eliminare definitivamente questa equity dei dadi salvata?',
+  'analysis.deletingDice': 'Eliminazione equity dei dadi…',
+  'analysis.diceDeleted':
+    'Equity dei dadi eliminata. Seleziona di nuovo Equity dei dadi o usa Ricalcola l’equity dei dadi … per calcolarla.',
   'analysis.rolled': 'Lancio attuale',
   'analysis.rolledLegend':
     'Con bordo: il lancio sul tavoliere. Seleziona una casella per vedere la sua mossa migliore sul tavoliere.',

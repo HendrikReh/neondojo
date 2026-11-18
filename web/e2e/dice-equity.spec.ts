@@ -243,6 +243,86 @@ test('dice equity ignores a saved result from another engine', async ({
   await expect(grid).toHaveCount(36, { timeout: distributionTimeout });
 });
 
+test('deleting dice equity asks first and waits for an explicit recalculation', async ({
+  page,
+}) => {
+  const submissions: unknown[] = [];
+  page.on('request', (request) => {
+    if (
+      request.method() === 'POST' &&
+      new URL(request.url()).pathname === '/api/jobs'
+    )
+      submissions.push(request.postDataJSON());
+  });
+  await openPosition(page);
+  const dice = page.getByRole('tab', { name: 'Dice equity', exact: true });
+  await dice.click();
+  const panel = page.locator('.analysis-panel');
+  const grid = panel.locator('.dice-grid button');
+  await expect(grid).toHaveCount(36, { timeout: distributionTimeout });
+  expect(submissions).toHaveLength(1);
+  const remove = panel.getByRole('button', {
+    name: 'Delete dice equity',
+    exact: true,
+  });
+  const dialog = page.getByRole('dialog', { name: 'Delete dice equity' });
+
+  await remove.click();
+  await expect(dialog).toContainText(
+    'Permanently delete this saved dice equity?',
+  );
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(grid).toHaveCount(36);
+
+  // A refused deletion keeps the result and reports the server's reason.
+  await page.route('**/api/positions/*/jobs/*', (route) =>
+    route.request().method() === 'DELETE'
+      ? route.fulfill({
+          status: 409,
+          json: {
+            error: 'The dice equity calculation is still queued or running',
+          },
+        })
+      : route.continue(),
+  );
+  await remove.click();
+  await dialog
+    .getByRole('button', { name: 'Delete dice equity', exact: true })
+    .click();
+  await expect(dialog.getByRole('alert')).toContainText('still queued');
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(grid).toHaveCount(36);
+  await page.unroute('**/api/positions/*/jobs/*');
+
+  await remove.click();
+  const deleted = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'DELETE' &&
+      /\/api\/positions\/[^/]+\/jobs\/[^/]+$/.test(
+        new URL(response.url()).pathname,
+      ),
+  );
+  const restored = page.waitForResponse((response) =>
+    /\/api\/positions\/[^/]+\/jobs$/.test(new URL(response.url()).pathname),
+  );
+  await dialog
+    .getByRole('button', { name: 'Delete dice equity', exact: true })
+    .click();
+  expect((await deleted).status()).toBe(204);
+  await restored;
+  await expect(dialog).toHaveCount(0);
+  await expect(grid).toHaveCount(0);
+  await expect(
+    panel.getByRole('status').filter({ hasText: 'Dice equity deleted.' }),
+  ).toBeVisible();
+  expect(submissions).toHaveLength(1);
+
+  await dice.click();
+  await expect.poll(() => submissions.length).toBe(2);
+  await expect(grid).toHaveCount(36, { timeout: distributionTimeout });
+});
+
 test('reselecting dice equity retries a failed submission once', async ({
   page,
 }) => {

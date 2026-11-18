@@ -150,7 +150,26 @@ export default function AnalysisPanel({
     rollChoice && rollChoice.positionId === positionId
       ? rollChoice.roll
       : (rolled ?? '1-1');
-  const { jobs, restoring, failure, submitting, run } = positionJobs;
+  const { jobs, restoring, failure, submitting, run, removeDice } =
+    positionJobs;
+  // After a deletion, the tab waits for an explicit request instead of recalculating.
+  const [deletedDice, setDeletedDice] = useState<{
+    positionId?: string;
+    engine: MatchAnalysisEngine;
+  }>();
+  const diceDeleted =
+    !!deletedDice &&
+    deletedDice.positionId === positionId &&
+    deletedDice.engine === configuredEngine;
+  const [diceDeletion, setDiceDeletion] = useState<{
+    positionId?: string;
+    jobId: string;
+    label: string;
+    busy?: boolean;
+    error?: unknown;
+  }>();
+  const deletionTarget =
+    diceDeletion?.positionId === positionId ? diceDeletion : undefined;
   const diceJob = jobs.dice;
   const latestJob = view === 'dice' ? diceJob : jobs.analysis;
   const pending = Object.values(jobs).some(
@@ -170,11 +189,18 @@ export default function AnalysisPanel({
     void run('dice', defaultPlies);
   });
   useEffect(() => {
-    if (view === 'dice' && canRequestDice && !diceJob && !diceFailed)
+    if (
+      view === 'dice' &&
+      canRequestDice &&
+      !diceJob &&
+      !diceFailed &&
+      !diceDeleted
+    )
       requestMissingDice();
-  }, [view, canRequestDice, diceJob, diceFailed]);
+  }, [view, canRequestDice, diceJob, diceFailed, diceDeleted]);
   const chooseDice = () => {
     setView('dice');
+    setDeletedDice(undefined);
     onPreview?.(null);
     if (canRequestDice && !distribution && diceFailed)
       void run('dice', defaultPlies);
@@ -186,6 +212,7 @@ export default function AnalysisPanel({
     onShowResults?.();
     if (settings.kind === 'dice') {
       setView('dice');
+      setDeletedDice(undefined);
       onPreview?.(null);
       setDicePlies(settings.plies);
       void run('dice', settings.plies);
@@ -193,6 +220,24 @@ export default function AnalysisPanel({
       setView('analysis');
       setCheckerPlies(settings.plies);
       void run('analysis', settings.plies);
+    }
+  };
+  const confirmDiceDeletion = async () => {
+    const target = deletionTarget;
+    if (!target || target.busy) return;
+    setDiceDeletion({ ...target, busy: true, error: undefined });
+    setDeletedDice({ positionId: target.positionId, engine: configuredEngine });
+    onPreview?.(null);
+    try {
+      await removeDice(target.jobId);
+      setDiceDeletion(undefined);
+    } catch (error) {
+      setDeletedDice(undefined);
+      setDiceDeletion((current) =>
+        current?.jobId === target.jobId
+          ? { ...target, busy: false, error }
+          : current,
+      );
     }
   };
   const best = distribution?.rolls.find(
@@ -327,6 +372,21 @@ export default function AnalysisPanel({
               </span>
               <span>{t('analysis.combinations')}</span>
               <strong>Ø {formatEquity(distribution.mean_equity)}</strong>
+              <ActionButton
+                icon="delete"
+                label={t('analysis.deleteDice')}
+                compact
+                type="button"
+                disabled={blocked || !diceJob}
+                onClick={() =>
+                  diceJob &&
+                  setDiceDeletion({
+                    positionId,
+                    jobId: diceJob.id,
+                    label: `${distribution.engine} · ${distribution.plies}-ply`,
+                  })
+                }
+              />
             </div>
             <div className="dice-grid">
               {Array.from({ length: 36 }, (_, i) => {
@@ -403,8 +463,47 @@ export default function AnalysisPanel({
             <span className="empty-symbol">⚄</span>
             <h3>{t('analysis.diceEmptyHeading')}</h3>
             <p>{t('analysis.diceEmptyDescription')}</p>
+            {diceDeleted && <p role="status">{t('analysis.diceDeleted')}</p>}
           </div>
         ) : null)}
+      {deletionTarget && (
+        <LibraryDialog
+          title={t('analysis.deleteDice')}
+          onClose={() => setDiceDeletion(undefined)}
+          busy={deletionTarget.busy}
+          native
+        >
+          <p>{t('analysis.deleteDicePrompt')}</p>
+          <p>
+            <strong>{deletionTarget.label}</strong>
+          </p>
+          {!!deletionTarget.error && (
+            <p className="error" role="alert">
+              {formatError(deletionTarget.error)}
+            </p>
+          )}
+          {deletionTarget.busy && (
+            <p role="status">{t('analysis.deletingDice')}</p>
+          )}
+          <div className="library-dialog-actions">
+            <ActionButton
+              icon="cancel"
+              label={library('cancel')}
+              type="button"
+              disabled={deletionTarget.busy}
+              onClick={() => setDiceDeletion(undefined)}
+            />
+            <ActionButton
+              icon="delete"
+              className="danger"
+              label={t('analysis.deleteDice')}
+              type="button"
+              disabled={deletionTarget.busy}
+              onClick={() => void confirmDiceDeletion()}
+            />
+          </div>
+        </LibraryDialog>
+      )}
       {view === 'observed' &&
         (stats ? (
           <div className="observed">

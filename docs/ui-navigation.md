@@ -455,4 +455,6 @@ cell previews that roll's best play on the board with its dice; **Reset
 preview** and the left and right arrow keys work as for candidate previews.
 After a submission or engine failure, selecting **Dice equity** again retries
 once. Use **Analysis options → Recalculate dice equity …** to choose a different
-depth explicitly.
+depth explicitly. **Delete dice equity** removes the displayed finished
+calculation after a confirmation and does not start a new one until
+**Dice equity** is selected again.

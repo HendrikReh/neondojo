@@ -26,6 +26,13 @@ that play on the board with its dice, like a candidate preview; **Reset preview*
 returns to the recorded move. Selecting another position starts again on its
 roll.
 
+**Delete dice equity** beside **Ø** permanently deletes the displayed
+calculation after a confirmation. A queued or running calculation cannot be
+deleted. If an older calculation of the same engine remains, the grid shows it.
+Otherwise the tab stays empty instead of recalculating; select **Dice equity**
+again or use **Recalculate dice equity …** to calculate it. Checker analyses are
+deleted in **Displayed analysis** instead.
+
 The position pane shows each result with its source and recorded depth. To
 choose a depth and calculate again, use **Recalculate position …** or
 **Recalculate dice equity …** in the header's **Analysis options**.

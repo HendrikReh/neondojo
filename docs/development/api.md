@@ -30,6 +30,7 @@ Existing cursor clients can continue to use `after` on its own.
 | GET          | `/api/positions/{id}/analysis-result` | Exact selected result for this occurrence; null for missing scope. |
 | GET          | `/api/matches/{id}/analysis-statistics` | Selected native or imported statistics; missing depth/coverage remain unknown. |
 | GET          | `/api/positions/{id}/jobs` | Discover persisted position calculation jobs without browser storage. |
+| DELETE       | `/api/positions/{id}/jobs/{job_id}` | Delete one finished dice equity job of the position. Queued or running jobs return 409; checker analyses return 422 and are deleted through the analysis catalog. |
 | GET          | `/api/matches/{id}/games`                                        | Game catalog with starting scores, Crawford status and move counts.                                                                                                           |
 | GET          | `/api/matches/{id}/dice?game_no=`                                | Observed roll frequencies, optionally for one game.                                                                                                                           |
 | GET          | `/api/matches/{id}/games/{game_no}/decisions`, `/api/moves/{id}` | Stable game and move IDs and recorded actions with their pre-action positions.                                                                                                |

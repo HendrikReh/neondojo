@@ -670,3 +670,115 @@ async fn imported_primary_is_stable_and_original_records_are_preserved(pool: PgP
     assert_eq!(originals[0]["evaluated"], false);
     assert_eq!(originals[1]["evaluated"], true);
 }
+
+async fn dice_job(pool: &PgPool, position: Uuid, plies: i32, status: &str) -> Job {
+    let job = store::create_job(pool, position, "dice", plies)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE jobs SET status=$2,result=$3 WHERE id=$1")
+        .bind(job.id)
+        .bind(status)
+        .bind(
+            (status == "completed").then(
+                || json!({"engine":"Dice engine","plies":plies,"mean_equity":0.1,"rolls":[]}),
+            ),
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+    store::get_job(pool, job.id).await.unwrap().unwrap()
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn deleting_dice_equity_removes_only_that_finished_dice_job(pool: PgPool) {
+    let (app, id, p) = setup(&pool).await;
+    let older = dice_job(&pool, p[0], 1, "completed").await;
+    let latest = dice_job(&pool, p[0], 2, "completed").await;
+    let failed = dice_job(&pool, p[0], 3, "failed").await;
+    let running = dice_job(&pool, p[0], 4, "running").await;
+    let checker = position_job(&pool, p[0], 2).await;
+    let path = |position: Uuid, job: Uuid| format!("/api/positions/{position}/jobs/{job}");
+
+    // Checker analyses stay in the catalog, active calculations stay intact,
+    // and a job is addressed only through its own position.
+    assert_eq!(
+        request(&app, "DELETE", &path(p[0], checker.id), Value::Null)
+            .await
+            .0,
+        422
+    );
+    assert_eq!(
+        request(&app, "DELETE", &path(p[0], running.id), Value::Null)
+            .await
+            .0,
+        409
+    );
+    assert_eq!(
+        request(&app, "DELETE", &path(p[1], latest.id), Value::Null)
+            .await
+            .0,
+        404
+    );
+    assert_eq!(
+        request(&app, "DELETE", &path(p[0], Uuid::new_v4()), Value::Null)
+            .await
+            .0,
+        404
+    );
+    assert_eq!(
+        request(
+            &app,
+            "DELETE",
+            &path(Uuid::new_v4(), latest.id),
+            Value::Null
+        )
+        .await
+        .0,
+        404
+    );
+
+    let (status, response) = request(&app, "DELETE", &path(p[0], latest.id), Value::Null).await;
+    assert_eq!(status, 204, "{response}");
+    assert_eq!(get(&app, &format!("/api/jobs/{}", latest.id)).await.0, 404);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM job_events WHERE job_id=$1")
+            .bind(latest.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        request(&app, "DELETE", &path(p[0], latest.id), Value::Null)
+            .await
+            .0,
+        404
+    );
+    assert_eq!(
+        request(&app, "DELETE", &path(p[0], failed.id), Value::Null)
+            .await
+            .0,
+        204
+    );
+    for job in [older.id, running.id, checker.id] {
+        assert_eq!(get(&app, &format!("/api/jobs/{job}")).await.0, 200);
+    }
+
+    sqlx::query("INSERT INTO play_sessions(id,state,gnubg_path,sgf,native_id,library_match_id) VALUES($1,$2,'/unavailable','','saved',$3)")
+        .bind(Uuid::new_v4()).bind(json!({"play_mode":"competition","phase":"human_move","match_length":7})).bind(id).execute(&pool).await.unwrap();
+    assert_eq!(
+        request(&app, "DELETE", &path(p[0], older.id), Value::Null)
+            .await
+            .0,
+        422
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM jobs WHERE id=$1")
+            .bind(older.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        1
+    );
+}
