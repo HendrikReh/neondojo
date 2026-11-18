@@ -1,10 +1,12 @@
 # Changelog
 
-All notable changes to BG Tutor are recorded in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions will follow [Semantic Versioning](https://semver.org/) once releases are tagged.
-
-BG Tutor has no tagged release yet. The backend crate (`backend/Cargo.toml`) and the web client (`web/package.json`) both carry version `0.1.0`. Everything since the first commit on 2026-11-08 is listed under [Unreleased](#unreleased). The backend applies pending database migrations at startup; the latest is `0079_xg_ply_convention`.
+All notable changes to BG Tutor are recorded in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow [Semantic Versioning](https://semver.org/). Each release is tagged as `v<version>`, and the version matches `backend/Cargo.toml` and `web/package.json`. The backend applies pending database migrations at startup.
 
 ## [Unreleased]
+
+## [0.1.0] - 2026-11-18
+
+First tagged release. It covers everything since the first commit on 2026-11-08. The latest migration in this release is `0079_xg_ply_convention`.
 
 ### Upgrade notes
 
@@ -96,4 +98,5 @@ BG Tutor has no tagged release yet. The backend crate (`backend/Cargo.toml`) and
 - An illustrated English user guide, reference pages for each workspace, and development guides for the API, architecture and verification. [#4](https://github.com/HendrikReh/bgtutor/pull/4) · [#5](https://github.com/HendrikReh/bgtutor/pull/5) · [#6](https://github.com/HendrikReh/bgtutor/pull/6) · [#7](https://github.com/HendrikReh/bgtutor/pull/7)
 - The local restart procedure on port 8787 and the local Open Sage setup.
 
-[Unreleased]: https://github.com/HendrikReh/bgtutor/commits/main
+[Unreleased]: https://github.com/HendrikReh/bgtutor/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/HendrikReh/bgtutor/releases/tag/v0.1.0
