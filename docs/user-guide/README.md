@@ -687,7 +687,7 @@ The thresholds must increase strictly, be greater than 0 and be at most 1. When 
 
 #### Engines on this computer
 
-Expand **Engines on this computer** to set the GNUbg executable and the Open Sage Python environment, and the maximum number of threads per engine. **Check installation** and **Verify and save** run a real position evaluation before a setting is accepted. BG Tutor never falls back to another engine on its own. A missing engine is reported as unavailable.
+Expand **Engines on this computer** to set the GNUbg executable and the Open Sage Python environment, and the maximum number of threads per engine, separately for analysis (including engine duels) and for playing. **Check installation** and **Verify and save** run a real position evaluation before a setting is accepted. BG Tutor never falls back to another engine on its own. A missing engine is reported as unavailable.
 
 ---
 

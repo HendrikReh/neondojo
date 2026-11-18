@@ -345,8 +345,7 @@ async fn create(
     .map_err(|error| {
         ApiError::invalid(format!("GNUbg play installation check failed: {error:#}"))
     })?;
-    let sage_threads =
-        settings::sage_threads(settings.open_sage_threads, settings::SAGE_ANALYSIS_THREADS);
+    let sage_threads = settings.sage_analysis_threads();
     let snapshot = |side: &Competitor| {
         let path = path.clone();
         let version = version.clone();

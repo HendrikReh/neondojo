@@ -86,7 +86,9 @@ function parseSettings(value: unknown): AppSettings {
     typeof value.play_plies !== 'number' ||
     typeof value.gnubg_path !== 'string' ||
     !isThreadLimit(value.gnubg_threads, 'gnubg') ||
+    !isThreadLimit(value.gnubg_play_threads, 'gnubg') ||
     !isThreadLimit(value.open_sage_threads, 'bgsage') ||
+    !isThreadLimit(value.open_sage_play_threads, 'bgsage') ||
     (value.analysis_engine === 'bgsage' &&
       !configurationOptions.engine_profiles.bgsage.analysis.includes(
         value.analysis_plies,

@@ -58,34 +58,43 @@ pub(super) async fn verify_settings(
     proposed: &AppSettings,
 ) -> anyhow::Result<()> {
     let mut profiles = Vec::new();
-    for (engine, plies, default_threads) in [
+    for (engine, plies, threads) in [
         (
             &proposed.analysis_engine,
             proposed.analysis_plies,
-            SAGE_ANALYSIS_THREADS,
+            proposed.sage_analysis_threads(),
         ),
         (
             &proposed.play_engine,
             proposed.play_plies,
-            SAGE_PLAY_THREADS,
+            proposed.sage_play_threads(),
         ),
     ] {
         if engine == "bgsage" {
-            profiles.push((
-                plies,
-                sage_threads(proposed.open_sage_threads, default_threads),
-            ));
+            profiles.push((plies, threads));
         }
     }
-    if proposed.open_sage_threads != current.open_sage_threads
-        && let Some(threads) = proposed.open_sage_threads
+    // A host override also applies when Sage is selected later, including in duels.
+    let changed: Vec<u32> = [
+        (proposed.open_sage_threads, current.open_sage_threads),
+        (
+            proposed.open_sage_play_threads,
+            current.open_sage_play_threads,
+        ),
+    ]
+    .into_iter()
+    .filter(|(proposed, saved)| proposed != saved)
+    .filter_map(|(proposed, _)| proposed)
+    .map(|threads| sage_threads(Some(threads), SAGE_ANALYSIS_THREADS))
+    .collect();
+    if !changed.is_empty()
         && let Some(installation) = load(pool).await?.snapshot
     {
-        // A host override also applies when Sage is selected later, including in duels.
-        let threads = sage_threads(Some(threads), SAGE_ANALYSIS_THREADS);
-        profiles.push((2, threads));
-        if installation.one_ply_verified {
-            profiles.push((1, threads));
+        for threads in changed {
+            profiles.push((2, threads));
+            if installation.one_ply_verified {
+                profiles.push((1, threads));
+            }
         }
     }
     profiles.sort_unstable();

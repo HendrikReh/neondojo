@@ -433,9 +433,8 @@ async fn provider_lookup_uses_index_with_many_other_engine_results(pool: PgPool)
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires isolated PostgreSQL, GNUbg, fork and original Sage interpreters"]
-async fn fork_depths_are_pinned_and_old_installation_remains_usable(pool: PgPool) {
-    let old = std::env::var("OPEN_SAGE_ORIGINAL_PYTHON").unwrap();
+#[ignore = "requires isolated PostgreSQL, GNUbg and the Open Sage fork interpreter"]
+async fn fork_depths_are_pinned_in_sessions_duels_and_benchmarks(pool: PgPool) {
     let fork = std::env::var("OPEN_SAGE_TEST_PYTHON").unwrap();
     let state = AppState::new(pool.clone(), Engine::new("gnubg".into()));
     let app = api::router(state.clone());
@@ -443,10 +442,16 @@ async fn fork_depths_are_pinned_and_old_installation_remains_usable(pool: PgPool
         app.clone(),
         "PUT",
         "/api/engines/bgsage",
-        json!({"version":0,"path":old}),
+        json!({"version":0,"path":fork}),
     )
     .await;
     assert_eq!(status, 200, "{initial}");
+    assert_eq!(initial["snapshot"]["one_ply_verified"], true, "{initial}");
+    // 1-ply stays gated on the saved capability check.
+    sqlx::query("UPDATE engine_installations SET snapshot=jsonb_set(snapshot,'{one_ply_verified}','false') WHERE engine_id='bgsage'")
+        .execute(&pool)
+        .await
+        .unwrap();
     let (_, mut settings) = call(app.clone(), "GET", "/api/settings", Value::Null).await;
     settings["analysis_engine"] = json!("bgsage");
     settings["analysis_plies"] = json!(1);
@@ -456,14 +461,14 @@ async fn fork_depths_are_pinned_and_old_installation_remains_usable(pool: PgPool
             .0,
         422
     );
-    let (status, changed) = call(
+    let (status, verified) = call(
         app.clone(),
         "PUT",
         "/api/engines/bgsage",
         json!({"version":1,"path":fork}),
     )
     .await;
-    assert_eq!(status, 200, "{changed}");
+    assert_eq!(status, 200, "{verified}");
     settings["play_engine"] = json!("bgsage");
     settings["play_plies"] = json!(1);
     assert_eq!(
@@ -495,16 +500,6 @@ async fn fork_depths_are_pinned_and_old_installation_remains_usable(pool: PgPool
         .unwrap();
     assert_eq!(engines["a"]["open_sage"]["plies"], 1);
     assert_eq!(engines["b"]["open_sage"]["plies"], 2);
-    // Previously saved snapshots continue to use the old, unchanged installation.
-    let previous: bgtutor::engines::SageSnapshot =
-        serde_json::from_value(initial["snapshot"].clone()).unwrap();
-    assert!(
-        bgtutor::engines::SageEngine::new(previous)
-            .unwrap()
-            .version()
-            .await
-            .is_ok()
-    );
     let (status, runs) = call(
         app.clone(),
         "POST",

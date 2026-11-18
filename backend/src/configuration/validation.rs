@@ -555,22 +555,20 @@ pub(crate) async fn resources(
                 message: "The configured GNUbg installation is unavailable".into(),
             });
         }
-        for (path, selected, plies, default_threads) in [
+        for (path, selected, plies, threads) in [
             (
                 "analysis.engine",
                 &config.analysis.engine,
                 config.analysis.plies,
-                crate::settings::SAGE_ANALYSIS_THREADS,
+                settings.sage_analysis_threads(),
             ),
             (
                 "play.engine",
                 &config.play.engine,
                 config.play.plies,
-                crate::settings::SAGE_PLAY_THREADS,
+                settings.sage_play_threads(),
             ),
         ] {
-            let threads =
-                crate::settings::sage_threads(settings.open_sage_threads, default_threads);
             if *selected == ConfigurationEngine::OpenSage
                 && crate::settings::open_sage::verified_profile(&state.pool, plies, threads)
                     .await

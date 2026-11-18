@@ -426,32 +426,33 @@ test('saves separate engine thread limits and restores them when reopened', asyn
   const { dialog } = await openSettings(page);
   await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
   await dialog.getByText('Engines on this computer', { exact: true }).click();
-  await expect(
-    dialog.getByRole('combobox', { name: 'GNUbg threads', exact: true }),
-  ).toHaveAccessibleDescription(/Configurable range 1–7/);
-  await expect(
-    dialog.getByRole('combobox', { name: 'Open Sage threads', exact: true }),
-  ).toHaveAccessibleDescription(/Configurable range 2–9/);
-  for (const [label, max] of [
-    ['GNUbg threads', 7],
-    ['Open Sage threads', 9],
-  ] as const) {
+  const fields = [
+    ['GNUbg threads for analysis', 1, 7, '3'],
+    ['GNUbg threads for playing', 1, 7, '2'],
+    ['Open Sage threads for analysis', 2, 9, '6'],
+    ['Open Sage threads for playing', 2, 9, '4'],
+  ] as const;
+  for (const [label, min, max] of fields) {
     const field = dialog.getByRole('combobox', { name: label, exact: true });
+    await expect(field).toHaveAccessibleDescription(
+      new RegExp(`Configurable range ${min}–${max}`),
+    );
     await expect(field.locator('option').last()).toHaveAttribute(
       'value',
       String(max),
     );
   }
-  await dialog
-    .getByRole('combobox', { name: 'GNUbg threads', exact: true })
-    .selectOption('3');
-  await dialog
-    .getByRole('combobox', { name: 'Open Sage threads', exact: true })
-    .selectOption('6');
+  for (const [label, , , value] of fields)
+    await dialog
+      .getByRole('combobox', { name: label, exact: true })
+      .selectOption(value);
   expect(backend.writes).toHaveLength(0);
   await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(
-    dialog.getByRole('combobox', { name: 'GNUbg threads', exact: true }),
+    dialog.getByRole('combobox', {
+      name: 'GNUbg threads for analysis',
+      exact: true,
+    }),
   ).toHaveValue('3');
   await expect(
     dialog.getByRole('button', { name: 'Apply', exact: true }),
@@ -465,18 +466,18 @@ test('saves separate engine thread limits and restores them when reopened', asyn
   expect(backend.writes).toEqual([
     expect.objectContaining({
       gnubg_threads: 3,
+      gnubg_play_threads: 2,
       open_sage_threads: 6,
+      open_sage_play_threads: 4,
     }),
   ]);
   await openSettings(page);
   await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
   await dialog.getByText('Engines on this computer', { exact: true }).click();
-  await expect(
-    dialog.getByRole('combobox', { name: 'GNUbg threads', exact: true }),
-  ).toHaveValue('3');
-  await expect(
-    dialog.getByRole('combobox', { name: 'Open Sage threads', exact: true }),
-  ).toHaveValue('6');
+  for (const [label, , , value] of fields)
+    await expect(
+      dialog.getByRole('combobox', { name: label, exact: true }),
+    ).toHaveValue(value);
 });
 
 test('English default, alphabetical languages, draft cancellation, focus trap and restore', async ({

@@ -142,9 +142,28 @@ describe('settings API', () => {
   });
 
   it('reads saved thread counts without imposing a client-side maximum', async () => {
-    const saved = { ...settings, gnubg_threads: 64, open_sage_threads: 64 };
+    const saved = {
+      ...settings,
+      gnubg_threads: 64,
+      gnubg_play_threads: 32,
+      open_sage_threads: 64,
+      open_sage_play_threads: 32,
+    };
     vi.stubGlobal('fetch', async () => Response.json(saved));
     expect(await loadSettings()).toEqual(saved);
+  });
+
+  it('rejects playing thread counts below the engine minimum', async () => {
+    for (const invalid of [
+      { gnubg_play_threads: 0 },
+      { open_sage_play_threads: 1 },
+      { open_sage_play_threads: 2.5 },
+    ]) {
+      vi.stubGlobal('fetch', async () =>
+        Response.json({ ...settings, ...invalid }),
+      );
+      await expect(loadSettings()).rejects.toMatchObject({ status: 200 });
+    }
   });
 
   it('rejects an invalid detected parallel thread maximum', async () => {
