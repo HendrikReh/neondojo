@@ -121,6 +121,10 @@ pub(crate) fn routes() -> Router<AppState> {
             get(results::position_result),
         )
         .route("/api/positions/{id}/jobs", get(results::position_jobs))
+        .route(
+            "/api/positions/{id}/jobs/{job_id}",
+            delete(results::delete_position_job),
+        )
 }
 
 async fn entry_on(
@@ -353,7 +357,8 @@ async fn update_selection(
         delete_analysis,
         update_selection,
         results::position_result,
-        results::position_jobs
+        results::position_jobs,
+        results::delete_position_job
     ),
     components(schemas(
         AnalysisSource,

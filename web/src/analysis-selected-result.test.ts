@@ -101,6 +101,7 @@ it('offers an explicit action for a completed calculation while keeping the sele
           },
           run: async () => {},
           refresh: () => {},
+          removeDice: async () => {},
           submitting: false,
           restoring: false,
           error: undefined,

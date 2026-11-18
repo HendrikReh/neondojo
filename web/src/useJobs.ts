@@ -212,9 +212,34 @@ export function useJobs(
       if (mounted.current) setPending(new Set(submissions.current));
     }
   }
+  /** Delete one finished dice calculation; errors reach the caller's dialog. */
+  async function removeDice(jobId: string) {
+    if (!positionId) return;
+    await request<void>(
+      `${positionJobsPath(positionId)}/${encodeURIComponent(jobId)}`,
+      { method: 'DELETE' },
+    );
+    const selected = current.current;
+    if (
+      !mounted.current ||
+      selected.positionId !== positionId ||
+      selected.engineId !== engineId
+    )
+      return;
+    setState((previous) => {
+      if (previous?.scope !== selected || previous.jobs.dice?.id !== jobId)
+        return previous;
+      const jobs = { ...previous.jobs };
+      delete jobs.dice;
+      return { ...previous, jobs };
+    });
+    // An older calculation of the same engine may remain and become current.
+    setRevision((value) => value + 1);
+  }
   return {
     jobs: state?.scope === scope ? state.jobs : {},
     run,
+    removeDice,
     refresh: () => setRevision((value) => value + 1),
     submitting: !!positionId && pending.has(positionId),
     error: state?.scope === scope ? state.error : undefined,

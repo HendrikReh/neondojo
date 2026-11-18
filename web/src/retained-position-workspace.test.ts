@@ -104,6 +104,7 @@ function props(
     jobs: {
       jobs: {},
       refresh: () => {},
+      removeDice: async () => {},
       ...{ completedAnalysis: undefined },
       error: null,
       submitting: false,

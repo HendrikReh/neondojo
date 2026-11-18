@@ -1887,6 +1887,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/positions/{id}/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete one finished dice equity calculation of a position. Checker analyses
+         *     belong to the analysis catalog and are deleted there.
+         */
+        delete: operations["delete_position_job"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/positions/{id}/opening-book": {
         parameters: {
             query?: never;
@@ -11688,6 +11708,52 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_position_job: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dice equity deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The calculation is still queued or running */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -101,6 +101,7 @@ it('integrates the match header with identity and loading fields while omitting 
     jobs: {
       jobs: {},
       refresh: () => {},
+      removeDice: async () => {},
       ...{ completedAnalysis: undefined },
       error: null,
       submitting: false,

@@ -12,6 +12,7 @@ use crate::{
 use axum::{
     Json,
     extract::{Path, Query, State},
+    http::StatusCode,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -138,4 +139,45 @@ pub(super) async fn position_jobs(
     let jobs=sqlx::query_as("SELECT DISTINCT ON (j.kind) j.* FROM jobs j JOIN positions p ON p.id=j.position_uuid JOIN matches m ON m.id=p.match_uuid AND m.source_revision=j.source_revision WHERE p.id=$1 AND j.kind IN ('analysis','dice') AND ($2::text IS NULL OR coalesce(j.engine_snapshot->>'engine_id','gnubg')=$2) ORDER BY j.kind,j.created_at DESC,j.id DESC LIMIT 2")
         .bind(id).bind(query.engine_id.as_ref().map(MatchAnalysisEngine::id)).fetch_all(&state.pool).await.map_err(anyhow::Error::from)?;
     Ok(Json(jobs))
+}
+
+/// Delete one finished dice equity calculation of a position. Checker analyses
+/// belong to the analysis catalog and are deleted there.
+#[utoipa::path(delete,path="/api/positions/{id}/jobs/{job_id}",params(("id"=Uuid,Path),("job_id"=Uuid,Path)),responses((status=204,description="Dice equity deleted"),(status=404,body=ErrorBody),(status=409,body=ErrorBody,description="The calculation is still queued or running"),(status=422,body=ErrorBody)),tag="Jobs")]
+pub(super) async fn delete_position_job(
+    State(state): State<AppState>,
+    Path((id, job_id)): Path<(Uuid, Uuid)>,
+) -> ApiResult<StatusCode> {
+    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
+    // Hold the owning match like job submission so a match cascade cannot interleave.
+    let owner = crate::position_retention::lock_owner(&mut tx, id)
+        .await?
+        .ok_or_else(ApiError::missing)?;
+    crate::play::require_review_available_on(&mut *tx, owner).await?;
+    let job: Option<(String, String)> =
+        sqlx::query_as("SELECT kind,status FROM jobs WHERE id=$1 AND position_uuid=$2 FOR UPDATE")
+            .bind(job_id)
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(anyhow::Error::from)?;
+    let (kind, status) = job.ok_or_else(ApiError::missing)?;
+    if kind != "dice" {
+        return Err(ApiError::invalid(
+            "Only dice equity can be deleted here; delete checker analyses in the analysis catalog",
+        ));
+    }
+    if status != "completed" && status != "failed" {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            "The dice equity calculation is still queued or running".into(),
+        ));
+    }
+    sqlx::query("DELETE FROM jobs WHERE id=$1")
+        .bind(job_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    Ok(StatusCode::NO_CONTENT)
 }

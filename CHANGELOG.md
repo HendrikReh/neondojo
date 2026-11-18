@@ -6,6 +6,7 @@ All notable changes to BG Tutor are recorded in this file. The format follows [K
 
 ### Added
 
+- **Delete dice equity.** **Checker → Dice equity** can permanently delete the displayed finished calculation after a confirmation. The tab then shows an older calculation of the same engine or stays empty until you request a new one. `DELETE /api/positions/{id}/jobs/{job_id}` deletes finished dice equity jobs only. [Analysis workspace](docs/reference/analysis.md#analysis-workspace)
 - **Open engine duels in Analysis.** Each result row in **Extras → Engine duels** has an **Analysis** action next to the SGF download. It opens the archived library entry, also after a move to another database, and saves a deleted entry again under **Engine Duels**. [Engine duels](docs/reference/extras.md#engine-duels)
 
 ### Fixed
