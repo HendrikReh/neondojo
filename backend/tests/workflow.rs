@@ -32,7 +32,7 @@ async fn json_call(
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL and GNUbg; see README"]
+#[ignore = "requires PostgreSQL and GNUbg; see docs/development/testing.md"]
 async fn imports_searches_analyzes_and_replays_sse(pool: PgPool) {
     let state = api::AppState::new(
         pool.clone(),

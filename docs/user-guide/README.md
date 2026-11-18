@@ -780,7 +780,7 @@ Shortcuts are ignored while you type in a text field. When a dialog is open, onl
 | *Apply* reports a conflict | Another browser window saved newer settings. **Apply** retries your changed settings against the newer version. If a profile conflict remains, load the server version or save your changes as a new profile in **Settings → Profiles**. |
 | A benchmark is running and other work waits | This is intended. Engine work resumes when the benchmark finishes or is cancelled. |
 
-For installation and server details, see the [project README](../../README.md).
+For installation and server details, see the [project README](../../README.md). Detailed behavior is described in the [reference](../reference/).
 
 ---
 

@@ -84,7 +84,7 @@ python3 -m unittest discover -s tools -p 'test_*open_sage*.py'
 cargo test -p bgtutor engines:: --lib
 BGTUTOR_SAGE_PYTHON=/path/to/venv/bin/python cargo test -p bgtutor --test open_sage -- --ignored
 BGTUTOR_SAGE_PYTHON=/path/to/venv/bin/python cargo test -p bgtutor sage_executes_reference_checker_turns_using_gnubg_rules --lib -- --ignored
-# Nur gegen einen isolierten PostgreSQL-Testserver, siehe README:
+# Nur gegen einen isolierten PostgreSQL-Testserver, siehe docs/development/testing.md:
 OPEN_SAGE_TEST_PYTHON=/path/to/venv/bin/python cargo test -p bgtutor --test open_sage_play -- --ignored
 ```
 
