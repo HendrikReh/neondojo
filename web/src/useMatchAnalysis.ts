@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { mergeJob, request, terminal, type Job } from './api';
+import { jobEngine, mergeJob, request, terminal, type Job } from './api';
 import {
   submitMatchAnalysis,
   type MatchAnalysisEngine,
@@ -40,7 +40,7 @@ export function useMatchAnalysis(
     const belongs = (job: Job) =>
       job.match_uuid === matchId &&
       (job.game_no ?? undefined) === gameNo &&
-      (job.engine_snapshot?.engine_id ?? 'gnubg') === engineId;
+      jobEngine(job) === engineId;
     function receive(incoming: Job) {
       if (abort.signal.aborted || !belongs(incoming)) return;
       setStored((previous) => ({

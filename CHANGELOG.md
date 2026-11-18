@@ -7,6 +7,7 @@ All notable changes to BG Tutor are recorded in this file. The format follows [K
 ### Fixed
 
 - **Dice equity follows the board.** The grid starts on the roll shown on the board and outlines it, instead of always starting on 1-1. Selecting a cell shows that roll's best play on the board with its dice, and selecting another position starts again on its roll. [Analysis workspace](docs/reference/analysis.md#analysis-workspace)
+- **Dice equity uses the active engine.** A saved result from another engine is no longer shown in place of a calculation with the active analysis engine. **Show calculated result** and the wait for a running position calculation also follow the active engine. [Analysis workspace](docs/reference/analysis.md#analysis-workspace)
 
 ### Documentation
 

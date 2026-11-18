@@ -72,6 +72,10 @@ export const terminal = (job: Job) =>
   job.status === 'completed' || job.status === 'failed';
 // SSE and polling can finish out of order. A terminal state for the same job
 // is authoritative even if its persisted timestamp moved backwards.
+/** Jobs without an engine snapshot predate engine selection and ran with GNUbg. */
+export function jobEngine(job: Pick<Job, 'engine_snapshot'>) {
+  return job.engine_snapshot?.engine_id ?? 'gnubg';
+}
 export function mergeJob(previous: Job | undefined, incoming: Job): Job {
   if (
     previous?.id === incoming.id &&

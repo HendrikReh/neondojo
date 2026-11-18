@@ -1,4 +1,4 @@
-import type { Job } from './api';
+import { jobEngine, type Job } from './api';
 import { useI18n } from './i18n';
 import { useStatisticsText } from './review-statistics-messages';
 
@@ -28,8 +28,7 @@ export default function AnalysisRunningJobs({
               );
         const context = t('analysis.jobContext', {
           scope,
-          engine:
-            job.engine_snapshot?.engine_id === 'bgsage' ? 'Open Sage' : 'GNUbg',
+          engine: jobEngine(job) === 'bgsage' ? 'Open Sage' : 'GNUbg',
           plies: formatNumber(job.plies),
         });
         return (
