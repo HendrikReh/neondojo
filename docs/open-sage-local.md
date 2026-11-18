@@ -340,6 +340,28 @@ Laufzeit-Fingerprint in BG Tutor lautet `7c9a021a…`. Analysen, die vorher mit
 `5b146c7` liefen, behalten ihre Installation und ihre Werte. Für korrigierte
 Post-Crawford-Cube-Werte müssen sie neu analysiert werden.
 
+Am 18. November 2026 wurden 101 lokale Matches mit Open Sage 2-ply neu
+analysiert. Alle 101 Jobs wurden abgeschlossen. Laut Engine-Snapshot liefen
+sie mit `7c9a021a…`, die Laufzeit betrug etwa zwei Minuten. Verglichen wurden
+6.452 Cube-Entscheidungen der vorherigen Analysen (`5b741451…`, Build
+`5b146c7`). Gepaart wurde über Match, Spiel, Entscheidung und Spieler:
+
+| Spiele | Entscheidungen | Andere beste Aktion | Cube-Fehler alt − neu | Fehler größer |
+| --- | ---: | ---: | ---: | ---: |
+| Post-Crawford | 77 | 27 | 1,507 | 0 |
+| Übrige | 6.375 | 0 | 0,026 | 16 |
+
+Nur in Post-Crawford-Spielen verschob sich „kein Doppel“ um mehr als 0,03,
+und dort in allen 77 Entscheidungen. In den übrigen Spielen blieben die
+Abweichungen klein: Bei „kein Doppel“ lag der Median bei 0,0003, bei
+„Doppel/Take“ das Maximum bei 0,03. Die beste Aktion änderte sich dort
+nirgends. Die Ursache dieser Restabweichungen ist nicht untersucht. Der
+Build `340fc53` unterscheidet sich von `5b146c7` nicht nur durch den Fix.
+Insgesamt sank der Cube-Fehler von 4,302 auf 2,769. Die Zahl der
+Cube-Fehler über 0,02 sank von 68 auf 50. Bei den Zugentscheidungen blieb
+der Gesamtfehler praktisch gleich (14,419 gegenüber 14,422). Die vorherigen
+Analysen sind weiterhin gespeichert.
+
 ## Warm-up für Partien
 
 Beim Anlegen, Öffnen oder Fortsetzen einer aktiven Open-Sage-Partie kann BG Tutor
