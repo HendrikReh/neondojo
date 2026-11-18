@@ -173,7 +173,7 @@ async fn execute(pool: &PgPool, series: &Series, token: Uuid) -> Result<()> {
             Ok::<_, anyhow::Error>((sgf, imported))
         })
         .await??;
-        let filename = format!("Engine duel {} #{}.sgf", series.id, index + 1);
+        let filename = archive_filename(series.id, index);
         let archive =
             MatchImport::prepare(&filename, "sgf", sgf.as_bytes(), &sgf, &imported).await?;
         let mut tx = pool.begin().await?;
@@ -194,6 +194,11 @@ async fn execute(pool: &PgPool, series: &Series, token: Uuid) -> Result<()> {
         tx.commit().await?;
     }
     Ok(())
+}
+
+/// Library filename of one archived duel match or money block.
+pub(super) fn archive_filename(series: Uuid, index: i32) -> String {
+    format!("Engine duel {series} #{}.sgf", index + 1)
 }
 
 /// Database form of one side's cost: CPU µs, wall µs and checker turns.

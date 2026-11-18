@@ -1,4 +1,4 @@
-import { request } from './api';
+import { request, type Match } from './api';
 import type { components } from './generated-api';
 
 type Schemas = components['schemas'];
@@ -30,3 +30,8 @@ export const cancelSeries = (id: string) =>
   });
 export const seriesSgf = (id: string, index: number) =>
   `/api${path}/${encodeURIComponent(id)}/matches/${index}/sgf`;
+/** Library entry of a played match or block; restored under Engine Duels if deleted. */
+export const seriesLibraryMatch = (id: string, index: number) =>
+  request<Match>(`${path}/${encodeURIComponent(id)}/matches/${index}/library`, {
+    method: 'POST',
+  });

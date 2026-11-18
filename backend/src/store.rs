@@ -43,6 +43,29 @@ pub async fn import_match_in_database(
     Ok(result)
 }
 
+/// Library entry archived from exactly these source bytes, preferring `preferred` when it was copied.
+pub(crate) async fn library_match_by_source(
+    pool: &PgPool,
+    bytes: &[u8],
+    preferred: Uuid,
+) -> Result<Option<MatchSummary>> {
+    let hash = format!("{:x}", Sha256::digest(bytes));
+    // One indexed (database_id, sha256) probe per library database also finds moved entries.
+    Ok(sqlx::query_as(
+        "SELECT m.id,true AS source_available,m.filename,m.format,m.white,m.black,m.match_length,m.position_count,m.created_at
+         FROM databases d
+         CROSS JOIN LATERAL (SELECT id,filename,format,white,black,match_length,position_count,created_at,collection_only
+               FROM matches WHERE database_id=d.id AND sha256=$1) m
+         WHERE NOT d.collection_only AND NOT m.collection_only AND d.id<>$3
+         ORDER BY d.id=$2 DESC,m.created_at,m.id LIMIT 1",
+    )
+    .bind(hash)
+    .bind(preferred)
+    .bind(crate::play::PAUSED_MATCHES_DATABASE_ID)
+    .fetch_optional(pool)
+    .await?)
+}
+
 pub(crate) struct MatchImport<'a> {
     filename: &'a str,
     format: &'a str,

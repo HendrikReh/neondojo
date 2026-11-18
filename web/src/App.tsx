@@ -1179,6 +1179,7 @@ export default function App() {
             visible={view === 'extras'}
             tool={extrasTool}
             setTool={setExtrasTool}
+            onOpenMatch={openMatch}
             defaultPlies={analysisPlies}
             playPlies={settings?.play_plies}
           />

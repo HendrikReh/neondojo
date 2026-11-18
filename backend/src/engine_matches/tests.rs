@@ -909,3 +909,78 @@ async fn mixed_duel_preserves_legal_moves_for_retained_seed() {
     .await
     .unwrap();
 }
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires isolated PostgreSQL"]
+async fn library_match_finds_moved_entries_and_restores_deleted_ones(pool: sqlx::PgPool) {
+    let router = crate::api::router(crate::api::AppState::new(
+        pool.clone(),
+        Engine::new("gnubg".into()),
+    ));
+    let run = Uuid::new_v4();
+    let sgf = include_str!("../../tests/fixtures/game-results-match.sgf");
+    sqlx::query("INSERT INTO engine_match_runs(id,configuration,engines,dice_version,status,total_matches,completed_matches) VALUES($1,'{}','{}','test','completed',1,1)")
+        .bind(run).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO engine_match_results(run_id,match_index,seed,score_a,score_b,games,sgf) VALUES($1,0,$2,7,3,2,$3)")
+        .bind(run).bind(Uuid::nil()).bind(sgf).execute(&pool).await.unwrap();
+    let open = |index: i32| {
+        let router = router.clone();
+        async move {
+            router
+                .oneshot(
+                    Request::post(format!("/api/engine-matches/{run}/matches/{index}/library"))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap()
+        }
+    };
+    let library_entries = || async {
+        sqlx::query_as::<_, (Uuid, Uuid)>(
+            "SELECT id,database_id FROM matches ORDER BY created_at,id",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap()
+    };
+
+    // A result archived before automatic saving gets its Engine Duels entry on first open.
+    let response = open(0).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let restored = read_json(response).await;
+    assert_eq!(restored["filename"], format!("Engine duel {run} #1.sgf"));
+    let id = Uuid::parse_str(restored["id"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        library_entries().await,
+        [(id, super::ENGINE_DUELS_DATABASE_ID)]
+    );
+
+    // Repeated opens and moved entries reuse the existing match.
+    assert_eq!(read_json(open(0).await).await["id"], restored["id"]);
+    let default = crate::databases::default_database_id(&pool).await.unwrap();
+    sqlx::query("UPDATE matches SET database_id=$2 WHERE id=$1")
+        .bind(id)
+        .bind(default)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(read_json(open(0).await).await["id"], restored["id"]);
+    assert_eq!(library_entries().await, [(id, default)]);
+
+    // A deleted library entry is restored under Engine Duels.
+    sqlx::query("DELETE FROM matches WHERE id=$1")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let again = read_json(open(0).await).await;
+    assert_ne!(again["id"], restored["id"]);
+    assert_eq!(library_entries().await.len(), 1);
+    assert_eq!(
+        library_entries().await[0].1,
+        super::ENGINE_DUELS_DATABASE_ID
+    );
+
+    assert_eq!(open(1).await.status(), StatusCode::NOT_FOUND);
+}

@@ -3796,6 +3796,58 @@
         }
       }
     },
+    "/api/engine-matches/{id}/matches/{index}/library": {
+      "post": {
+        "tags": [
+          "Engine matches"
+        ],
+        "summary": "Library entry of one played match or money block, for opening it in Analysis.",
+        "description": "Finds the archived entry by its exact source, also after it was moved to another\ndatabase. An entry deleted from the library is restored under Engine Duels.",
+        "operationId": "library_match",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "index",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchSummary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/engine-matches/{id}/matches/{index}/sgf": {
       "get": {
         "tags": [

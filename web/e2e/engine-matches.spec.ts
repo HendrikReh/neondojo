@@ -110,6 +110,17 @@ test('plays a seeded pair with the default dice mode and exports the return leg'
   // Both GNUbg sides report their measured engine work.
   await expect(results.getByText('CPU time per move')).toBeVisible();
   await expect(results.getByText(/^Elapsed time A .+ · B .+$/)).toBeVisible();
+  // The return leg opens from its existing library entry without archiving a copy.
+  await results
+    .getByRole('row', { name: /Return leg/ })
+    .getByRole('button', { name: 'Analysis', exact: true })
+    .click();
+  await expect(
+    page.getByRole('tab', { name: 'Analysis', exact: true }),
+  ).toHaveAttribute('aria-selected', 'true');
+  const analysis = page.locator('#workspace-panel-analysis');
+  await expect(analysis.getByText(/A gnubg 1-ply/).first()).toBeVisible();
+  await expect(analysis.getByText(/B gnubg 1-ply/).first()).toBeVisible();
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();
   await page
     .locator('.database-sidebar')
