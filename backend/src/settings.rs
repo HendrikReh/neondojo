@@ -254,7 +254,11 @@ pub(crate) async fn snapshot_for_practice(
     let settings = load(state).await?;
     // Practice answers stay quick: at most GNUbg 3-ply (its native 2-ply) or
     // Open Sage 2-ply.
-    let cap = if settings.analysis_engine == "gnubg" { 3 } else { 2 };
+    let cap = if settings.analysis_engine == "gnubg" {
+        3
+    } else {
+        2
+    };
     let plies = settings.analysis_plies.min(cap);
     Ok((
         plies,

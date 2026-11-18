@@ -88,15 +88,35 @@ async fn gnubg_depths_move_to_the_shared_convention(pool: PgPool) {
     let legacy_job = Uuid::new_v4();
     let sage_job = Uuid::new_v4();
     for (id, kind, plies, snapshot, result) in [
-        (analysis_job, "analysis", 2, Some(&gnubg_snapshot),
-            json!({"engine": "GNU Backgammon 1.08", "plies": 2, "candidates": [candidate(2), candidate(0)]})),
-        (dice_job, "dice", 0, Some(&gnubg_snapshot),
+        (
+            analysis_job,
+            "analysis",
+            2,
+            Some(&gnubg_snapshot),
+            json!({"engine": "GNU Backgammon 1.08", "plies": 2, "candidates": [candidate(2), candidate(0)]}),
+        ),
+        (
+            dice_job,
+            "dice",
+            0,
+            Some(&gnubg_snapshot),
             json!({"engine": "GNU Backgammon 1.08", "plies": 0, "mean_equity": 0.0,
-                   "rolls": [{"dice": [1, 1], "weight": 1, "probability": 0.0277, "best": candidate(0)}]})),
-        (legacy_job, "analysis", 1, None,
-            json!({"engine": "GNU Backgammon 1.08", "plies": 1, "candidates": [candidate(1)]})),
-        (sage_job, "analysis", 2, Some(&sage_snapshot),
-            json!({"engine": "Open Sage", "plies": 2, "candidates": [candidate(2)]})),
+                   "rolls": [{"dice": [1, 1], "weight": 1, "probability": 0.0277, "best": candidate(0)}]}),
+        ),
+        (
+            legacy_job,
+            "analysis",
+            1,
+            None,
+            json!({"engine": "GNU Backgammon 1.08", "plies": 1, "candidates": [candidate(1)]}),
+        ),
+        (
+            sage_job,
+            "analysis",
+            2,
+            Some(&sage_snapshot),
+            json!({"engine": "Open Sage", "plies": 2, "candidates": [candidate(2)]}),
+        ),
     ] {
         sqlx::query("INSERT INTO jobs(id,position_uuid,kind,plies,status,engine_snapshot,result) VALUES($1,$2,$3,$4,'completed',$5,$6)")
             .bind(id).bind(position_id).bind(kind).bind(plies).bind(snapshot).bind(result)
@@ -117,7 +137,9 @@ async fn gnubg_depths_move_to_the_shared_convention(pool: PgPool) {
     sqlx::query("INSERT INTO match_analysis_games(job_id,game_no,summary) VALUES($1,1,$2)")
         .bind(match_job)
         .bind(json!({"plies": 2, "performance_rating": {"profile": profile}}))
-        .execute(&pool).await.unwrap();
+        .execute(&pool)
+        .await
+        .unwrap();
     sqlx::query("INSERT INTO move_analyses(job_id,position_uuid,game_no,decision_no,player,kind,equity_loss,data) VALUES($1,$2,1,1,0,'checker',0,$3),($1,$2,1,2,0,'cube',0,$4)")
         .bind(match_job).bind(position_id)
         .bind(json!({"kind": "checker", "checker_candidates": [candidate(2), candidate(0)]}))
@@ -147,14 +169,19 @@ async fn gnubg_depths_move_to_the_shared_convention(pool: PgPool) {
 
     sqlx::migrate!("./migrations").run(&pool).await.unwrap();
 
-    let settings: (i32, i32) =
-        sqlx::query_as("SELECT analysis_plies,play_plies FROM app_settings")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let settings: (i32, i32) = sqlx::query_as("SELECT analysis_plies,play_plies FROM app_settings")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(settings, (3, 1));
 
-    let job = |id| json_of(&pool, "SELECT jsonb_build_object('plies',plies,'result',result) FROM jobs WHERE id=$1", id);
+    let job = |id| {
+        json_of(
+            &pool,
+            "SELECT jsonb_build_object('plies',plies,'result',result) FROM jobs WHERE id=$1",
+            id,
+        )
+    };
     let analysis = job(analysis_job).await;
     assert_eq!(analysis["plies"], 3);
     assert_eq!(analysis["result"]["plies"], 3);
@@ -162,7 +189,10 @@ async fn gnubg_depths_move_to_the_shared_convention(pool: PgPool) {
     assert_eq!(analysis["result"]["candidates"][1]["plies"], 1);
     assert_eq!(analysis["result"]["candidates"][1]["notation"], "8/5 6/5");
     let dice = job(dice_job).await;
-    assert_eq!((dice["plies"].clone(), dice["result"]["plies"].clone()), (json!(1), json!(1)));
+    assert_eq!(
+        (dice["plies"].clone(), dice["result"]["plies"].clone()),
+        (json!(1), json!(1))
+    );
     assert_eq!(dice["result"]["rolls"][0]["best"]["plies"], 1);
     assert_eq!(job(legacy_job).await["plies"], 2);
     let sage = job(sage_job).await;
@@ -172,46 +202,96 @@ async fn gnubg_depths_move_to_the_shared_convention(pool: PgPool) {
     assert_eq!(matched["plies"], 3);
     let shifted = "GNU Backgammon 1.08; 3-ply cubeful deterministic";
     assert_eq!(matched["result"]["performance_rating"]["profile"], shifted);
-    let active: Vec<i32> = sqlx::query_scalar("SELECT plies FROM jobs WHERE engine_config='same' ORDER BY plies")
-        .fetch_all(&pool).await.unwrap();
+    let active: Vec<i32> =
+        sqlx::query_scalar("SELECT plies FROM jobs WHERE engine_config='same' ORDER BY plies")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
     assert_eq!(active, [2, 3]);
 
-    let game = json_of(&pool, "SELECT summary FROM match_analysis_games WHERE job_id=$1", match_job).await;
+    let game = json_of(
+        &pool,
+        "SELECT summary FROM match_analysis_games WHERE job_id=$1",
+        match_job,
+    )
+    .await;
     assert_eq!(game["plies"], 3);
     assert_eq!(game["performance_rating"]["profile"], shifted);
-    let moves: Vec<Value> = sqlx::query_scalar("SELECT data FROM move_analyses WHERE job_id=$1 ORDER BY decision_no")
-        .bind(match_job).fetch_all(&pool).await.unwrap();
+    let moves: Vec<Value> =
+        sqlx::query_scalar("SELECT data FROM move_analyses WHERE job_id=$1 ORDER BY decision_no")
+            .bind(match_job)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
     assert_eq!(moves[0]["checker_candidates"][0]["plies"], 3);
     assert_eq!(moves[0]["checker_candidates"][1]["plies"], 1);
-    assert_eq!(moves[1], json!({"kind": "cube", "cube_evaluation": {"unit": "cubeful"}}));
+    assert_eq!(
+        moves[1],
+        json!({"kind": "cube", "cube_evaluation": {"unit": "cubeful"}})
+    );
 
-    let configuration = json_of(&pool, "SELECT configuration FROM engine_match_runs WHERE id=$1", run).await;
-    assert_eq!(configuration["a"]["plies"], 3, "Open Sage already used the convention");
+    let configuration = json_of(
+        &pool,
+        "SELECT configuration FROM engine_match_runs WHERE id=$1",
+        run,
+    )
+    .await;
+    assert_eq!(
+        configuration["a"]["plies"], 3,
+        "Open Sage already used the convention"
+    );
     assert_eq!(configuration["b"]["plies"], 3);
     assert_eq!(configuration["count"], 2);
 
-    let state = json_of(&pool, "SELECT state FROM play_sessions WHERE id=$1", session).await;
+    let state = json_of(
+        &pool,
+        "SELECT state FROM play_sessions WHERE id=$1",
+        session,
+    )
+    .await;
     assert_eq!(state["engine"]["plies"], 1);
     // Sessions saved before the depth was recorded analysed at GNUbg's native 2-ply.
     assert_eq!(state["analysis_plies"], 3);
 
-    let gnubg = json_of(&pool, "SELECT data FROM imported_analyses WHERE id=$1", gnubg_import).await;
+    let gnubg = json_of(
+        &pool,
+        "SELECT data FROM imported_analyses WHERE id=$1",
+        gnubg_import,
+    )
+    .await;
     assert_eq!(gnubg["depth_plies"], 1);
     assert_eq!(gnubg["depth"], "1-ply cubeful");
     assert_eq!(gnubg["candidates"][0]["depth"], "3-ply cubeful");
     assert_eq!(gnubg["candidates"][0]["depth_plies"], 3);
     assert_eq!(gnubg["candidates"][1]["depth"], "1-ply cubeless");
-    assert_eq!(gnubg["candidates"][0]["raw"], gnubg_record["candidates"][0]["raw"]);
+    assert_eq!(
+        gnubg["candidates"][0]["raw"],
+        gnubg_record["candidates"][0]["raw"]
+    );
     assert_eq!(gnubg["raw"], gnubg_record["raw"]);
-    let xg = json_of(&pool, "SELECT data FROM imported_analyses WHERE id=$1", xg_import).await;
+    let xg = json_of(
+        &pool,
+        "SELECT data FROM imported_analyses WHERE id=$1",
+        xg_import,
+    )
+    .await;
     assert_eq!(xg, xg_record);
 
-    let native_card = json_of(&pool, "SELECT payload FROM learning_cards WHERE id=$1", card).await;
+    let native_card = json_of(
+        &pool,
+        "SELECT payload FROM learning_cards WHERE id=$1",
+        card,
+    )
+    .await;
     assert_eq!(native_card["solution"]["plies"], 3);
     assert_eq!(native_card["solution"]["candidates"][0]["plies"], 3);
     assert_eq!(native_card["solution"]["decision"], Value::Null);
-    let source_card = json_of(&pool, "SELECT payload FROM learning_cards WHERE id=$1", imported_card).await;
+    let source_card = json_of(
+        &pool,
+        "SELECT payload FROM learning_cards WHERE id=$1",
+        imported_card,
+    )
+    .await;
     assert_eq!(source_card["solution"]["plies"], 1);
     assert_eq!(source_card["solution"]["imported"]["depth_plies"], 1);
 }
-

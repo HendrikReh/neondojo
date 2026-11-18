@@ -805,7 +805,12 @@ mod tests {
         assert_eq!(first.depth_plies, Some(1));
         assert_eq!(first.depth.as_deref(), Some("1-ply cubeful"));
         assert_eq!(first.candidates[0].depth_plies, Some(1));
-        assert!(first.candidates[0].raw["value"].as_str().unwrap().contains(" 0C "));
+        assert!(
+            first.candidates[0].raw["value"]
+                .as_str()
+                .unwrap()
+                .contains(" 0C ")
+        );
         assert_eq!(first.source_move_no, 1);
         assert_eq!(first.checker_ply, Some(1));
         assert_eq!(first.candidates[0].notation, "24/18 13/11");
