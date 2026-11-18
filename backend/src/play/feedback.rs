@@ -551,7 +551,8 @@ mod tests {
     }
     #[tokio::test]
     #[ignore = "requires native GNUbg"]
-    async fn original_cube_relevance_and_loss_match_native_game_statistics_at_one_and_three_plies() {
+    async fn original_cube_relevance_and_loss_match_native_game_statistics_at_one_and_three_plies()
+    {
         let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()));
         let source = "(;GM[6]MI[length:7];AE[a:y]AW[f]AB[s]PL[W];W[21fddc])";
         let imported = crate::import::parse_sgf(source).unwrap();
