@@ -919,7 +919,7 @@ async fn events(
 #[openapi(
     info(
         title = "BG Tutor API",
-        version = "0.1.0",
+        version = "0.2.0",
         description = "Local headless backgammon library with GNUbg and Open Sage analysis. No authentication; bind to loopback."
     ),
     paths(
