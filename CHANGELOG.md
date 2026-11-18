@@ -4,6 +4,10 @@ All notable changes to BG Tutor are recorded in this file. The format follows [K
 
 ## [Unreleased]
 
+### Documentation
+
+- The local Open Sage setup names fork build `340fc53` as the active installation and documents its fix for post-Crawford cube decisions. Up to fork commit `5b146c7`, Open Sage undervalued "no double" for the trailing player after Crawford. Analyses run with `5b146c7` keep their values and need a new analysis for corrected cube values. [Local Open Sage setup](docs/open-sage-local.md)
+
 ## [0.1.0] - 2026-11-18
 
 First tagged release. It covers everything since the first commit on 2026-11-08. The latest migration in this release is `0079_xg_ply_convention`.
