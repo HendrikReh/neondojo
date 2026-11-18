@@ -509,7 +509,7 @@ This is your personal collection of decisions. You add positions with **Save pos
 - **More filters** are grouped into **Match**, **Position**, **Analysis**, and **Tags and comments**. They include the position ID, roll, score, Crawford, cube, equity loss and more. One die matches either die of the roll, and a pair matches in either order.
 - Applied filters appear as chips. Remove a chip to update the results immediately.
 - **Show played moves** reveals the recorded decision. It starts switched off, so the answers stay hidden while you study.
-- Select a row to see a large preview with the equity loss, decks, tags and notes. **Open analysis**, or **Enter** or a double-click, opens the exact decision in Analysis. The icon beside it finds **similar positions**.
+- Select a row to see a large preview with the equity loss, decks, tags and notes. **Open analysis**, or **Enter** or a double-click, opens the exact decision in Analysis. The icon beside it finds **similar positions** ([details](../reference/library.md#similar-positions)).
 - Select rows with the checkboxes, up to 200, and use **Add to deck** or **Remove from collection**. Removing offers **Undo**.
 
 ### All analyzed decisions

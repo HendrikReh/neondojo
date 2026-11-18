@@ -97,7 +97,7 @@ Open <http://127.0.0.1:5173>. Vite forwards `/api` to `http://127.0.0.1:8787` by
 | --- | --- | --- |
 | Players | [User guide](docs/user-guide/README.md) | Guided tour of every workspace, learning paths by level, keyboard reference, troubleshooting and glossary |
 | Detailed behavior | [Analysis](docs/reference/analysis.md) | Analysis workspace, candidate and cube review, displayed and imported analysis, opening books, game plans, error statistics, notes, time estimates and analysis jobs |
-| | [Match library, positions and players](docs/reference/library.md) | Match databases, import formats, saved positions and searches, player database |
+| | [Match library, positions and players](docs/reference/library.md) | Match databases, import formats, saved positions and searches, similar positions and their practice, player database |
 | | [Playing](docs/reference/playing.md) | Matches against GNUbg or Open Sage, resigning, game results, feedback modes and the play API |
 | | [Study](docs/reference/study.md) | Overview, reports, AI assessment, recurring mistakes, flashcards and Anki |
 | | [Settings, engines and profiles](docs/reference/settings.md) | Settings, engine installations and threads, configuration profiles, themes and languages |
