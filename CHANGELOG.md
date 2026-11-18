@@ -4,19 +4,24 @@ All notable changes to BG Tutor are recorded in this file. The format follows [K
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-18
+
+Adds two features and fixes dice equity and Open Sage fork recognition. This release has no new database migration; the latest migration is still `0079_xg_ply_convention`.
+
 ### Added
 
-- **Delete dice equity.** **Checker → Dice equity** can permanently delete the displayed finished calculation after a confirmation. The tab then shows an older calculation of the same engine or stays empty until you request a new one. `DELETE /api/positions/{id}/jobs/{job_id}` deletes finished dice equity jobs only. [Analysis workspace](docs/reference/analysis.md#analysis-workspace)
-- **Open engine duels in Analysis.** Each result row in **Extras → Engine duels** has an **Analysis** action next to the SGF download. It opens the archived library entry, also after a move to another database, and saves a deleted entry again under **Engine Duels**. [Engine duels](docs/reference/extras.md#engine-duels)
+- **Delete dice equity.** **Checker → Dice equity** can permanently delete the displayed finished calculation after a confirmation. The tab then shows an older calculation of the same engine or stays empty until you request a new one. `DELETE /api/positions/{id}/jobs/{job_id}` deletes finished dice equity jobs only. [#17](https://github.com/HendrikReh/bgtutor/pull/17) · [Analysis workspace](docs/reference/analysis.md#analysis-workspace)
+- **Open engine duels in Analysis.** Each result row in **Extras → Engine duels** has an **Analysis** action next to the SGF download. It opens the archived library entry, also after a move to another database, and saves a deleted entry again under **Engine Duels**. [#14](https://github.com/HendrikReh/bgtutor/pull/14) · [Engine duels](docs/reference/extras.md#engine-duels)
 
 ### Fixed
 
-- **Dice equity follows the board.** The grid starts on the roll shown on the board and outlines it, instead of always starting on 1-1. Selecting a cell shows that roll's best play on the board with its dice, and selecting another position starts again on its roll. [Analysis workspace](docs/reference/analysis.md#analysis-workspace)
-- **Dice equity uses the active engine.** A saved result from another engine is no longer shown in place of a calculation with the active analysis engine. **Show calculated result** and the wait for a running position calculation also follow the active engine. [Analysis workspace](docs/reference/analysis.md#analysis-workspace)
+- **Dice equity follows the board.** The grid starts on the roll shown on the board and outlines it, instead of always starting on 1-1. Selecting a cell shows that roll's best play on the board with its dice, and selecting another position starts again on its roll. [#12](https://github.com/HendrikReh/bgtutor/pull/12) · [Analysis workspace](docs/reference/analysis.md#analysis-workspace)
+- **Dice equity uses the active engine.** A saved result from another engine is no longer shown in place of a calculation with the active analysis engine. **Show calculated result** and the wait for a running position calculation also follow the active engine. [#13](https://github.com/HendrikReh/bgtutor/pull/13) · [Analysis workspace](docs/reference/analysis.md#analysis-workspace)
+- **Open Sage fork `340fc53` is recognized.** **Extras → Versions** and `GET /api/engines` name the repository and source commit of fork build `340fc53`, as they already did for earlier documented builds. [#16](https://github.com/HendrikReh/bgtutor/pull/16) · [Version information](docs/reference/extras.md#version-information)
 
 ### Documentation
 
-- The local Open Sage setup names fork build `340fc53` as the active installation and documents its fix for post-Crawford cube decisions. Up to fork commit `5b146c7`, Open Sage undervalued "no double" for the trailing player after Crawford. Analyses run with `5b146c7` keep their values and need a new analysis for corrected cube values. [Local Open Sage setup](docs/open-sage-local.md)
+- The local Open Sage setup names fork build `340fc53` as the active installation and documents its fix for post-Crawford cube decisions. Up to fork commit `5b146c7`, Open Sage undervalued "no double" for the trailing player after Crawford. Analyses run with `5b146c7` keep their values and need a new analysis for corrected cube values. The setup also records the results of re-analyzing affected matches with `340fc53`. [#11](https://github.com/HendrikReh/bgtutor/pull/11) · [#15](https://github.com/HendrikReh/bgtutor/pull/15) · [Local Open Sage setup](docs/open-sage-local.md)
 
 ## [0.1.0] - 2026-11-18
 
@@ -112,5 +117,6 @@ First tagged release. It covers everything since the first commit on 2026-11-08.
 - An illustrated English user guide, reference pages for each workspace, and development guides for the API, architecture and verification. [#4](https://github.com/HendrikReh/bgtutor/pull/4) · [#5](https://github.com/HendrikReh/bgtutor/pull/5) · [#6](https://github.com/HendrikReh/bgtutor/pull/6) · [#7](https://github.com/HendrikReh/bgtutor/pull/7)
 - The local restart procedure on port 8787 and the local Open Sage setup.
 
-[Unreleased]: https://github.com/HendrikReh/bgtutor/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/HendrikReh/bgtutor/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/HendrikReh/bgtutor/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/HendrikReh/bgtutor/releases/tag/v0.1.0
