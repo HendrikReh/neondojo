@@ -443,7 +443,7 @@ recognized Open Sage forks. **Copy version information** copies the report.
 ## Dice equity
 
 Selecting **Dice equity** in the position evaluation loads the latest saved
-calculation for the current position. If one is still running, the tab waits
+calculation for the current position from the active analysis engine. If one is still running, the tab waits
 for it. A missing calculation starts with the active engine and profile depth
 and evaluates the 21 dice pairs used by the 36-cell grid.
 Changing position requests missing results while this tab is visible.

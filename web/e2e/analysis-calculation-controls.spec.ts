@@ -161,7 +161,7 @@ test('the previous engine result survives a pending rerun and position restorati
     };
     return route.fulfill({ status: 202, json: nextJob });
   });
-  await page.route('**/api/positions/*/jobs', async (route) => {
+  await page.route('**/api/positions/*/jobs*', async (route) => {
     const response = await route.fetch();
     const jobs = await response.json();
     await route.fulfill({ json: nextJob ? [nextJob, ...jobs] : jobs });

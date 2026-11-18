@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
-import { mergeJob, type Job } from './api';
+import { jobEngine, mergeJob, type Job } from './api';
+import { positionJobsPath } from './useJobs';
 
 const running: Job = {
   id: 'job',
@@ -55,4 +56,18 @@ it('accepts a later retry state and a newly submitted job', () => {
   expect(mergeJob(running, retry)).toBe(retry);
   const next: Job = { ...running, id: 'new-job' };
   expect(mergeJob({ ...running, status: 'completed' }, next)).toBe(next);
+});
+
+it('position jobs are requested and attributed per engine', () => {
+  expect(positionJobsPath('a/b')).toBe('/positions/a%2Fb/jobs');
+  expect(positionJobsPath('position', 'bgsage')).toBe(
+    '/positions/position/jobs?engine_id=bgsage',
+  );
+  expect(jobEngine(running)).toBe('gnubg');
+  expect(jobEngine({ engine_snapshot: null })).toBe('gnubg');
+  expect(
+    jobEngine({
+      engine_snapshot: { engine_id: 'bgsage', gnubg_path: 'gnubg' },
+    }),
+  ).toBe('bgsage');
 });

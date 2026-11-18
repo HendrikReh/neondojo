@@ -78,7 +78,7 @@ test('opening dice equity calculates missing results and reuses saved results ac
   });
   let restoring = false;
   await page.route(
-    `**/api/positions/${submissions[0].position_id}/jobs`,
+    `**/api/positions/${submissions[0].position_id}/jobs*`,
     async (route) => {
       restoring = true;
       await restoreGate;
@@ -102,7 +102,7 @@ test('opening dice equity calculates missing results and reuses saved results ac
   });
   let secondRestoring = false;
   await page.route(
-    `**/api/positions/${submissions[1].position_id}/jobs`,
+    `**/api/positions/${submissions[1].position_id}/jobs*`,
     async (route) => {
       secondRestoring = true;
       await secondRestoreGate;
@@ -190,6 +190,57 @@ test('dice equity starts on the board roll and previews a selected roll on the b
     /^4 · 2/,
   ]);
   await expect(board).toHaveAttribute('aria-label', /dice 4 and 2/);
+});
+
+test('dice equity ignores a saved result from another engine', async ({
+  page,
+}) => {
+  const submissions: { kind: string; engine_id?: string }[] = [];
+  page.on('request', (request) => {
+    if (
+      request.method() === 'POST' &&
+      new URL(request.url()).pathname === '/api/jobs'
+    )
+      submissions.push(request.postDataJSON());
+  });
+  await openPosition(page);
+  const dice = page.getByRole('tab', { name: 'Dice equity', exact: true });
+  await dice.click();
+  const grid = page.locator('.analysis-panel .dice-grid button');
+  await expect(grid).toHaveCount(36, { timeout: distributionTimeout });
+  expect(submissions).toEqual([
+    expect.objectContaining({ kind: 'dice', engine_id: 'gnubg' }),
+  ]);
+  // Present the saved GNUbg result as Open Sage's once. GNUbg must not reuse it.
+  const restored: string[] = [];
+  page.on('request', (request) => {
+    if (/\/api\/positions\/[^/]+\/jobs$/.test(new URL(request.url()).pathname))
+      restored.push(request.url());
+  });
+  await page.route(
+    '**/api/positions/*/jobs*',
+    async (route) => {
+      const response = await route.fetch();
+      const jobs: { engine_snapshot?: Record<string, unknown> | null }[] =
+        await response.json();
+      await route.fulfill({
+        response,
+        json: jobs.map((job) => ({
+          ...job,
+          engine_snapshot: { ...job.engine_snapshot, engine_id: 'bgsage' },
+        })),
+      });
+    },
+    { times: 1 },
+  );
+  await page.reload();
+  await dice.click();
+  await expect.poll(() => submissions.length).toBe(2);
+  expect(submissions[1]).toMatchObject({ kind: 'dice', engine_id: 'gnubg' });
+  expect(restored.length).toBeGreaterThan(0);
+  for (const url of restored)
+    expect(new URL(url).searchParams.get('engine_id')).toBe('gnubg');
+  await expect(grid).toHaveCount(36, { timeout: distributionTimeout });
 });
 
 test('reselecting dice equity retries a failed submission once', async ({

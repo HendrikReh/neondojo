@@ -11,7 +11,8 @@ Arrow keys and Home/End also navigate the detail tabs. The app restores the last
 The desktop **Checker** places move history on the left and position evaluation beside the board. Long lists scroll independently and keep the current move visible. Dedicated tabs include **Statistics**, **Cube**, **Notes**, and **Study cards**. The header shows the players, match ID and length, saved score, date, event, and PR per player. Date and event come from saved metadata and show `n/a` when unavailable. PR is shown with one decimal throughout the app. The header also shows the round and location when saved. Match PR updates when a complete native match analysis finishes.
 
 In **Checker → Dice equity**, BG Tutor checks the selected position for a saved
-result or a queued or running job. If none exists, it starts a calculation with
+result or a queued or running job from the active analysis engine. Results from
+another engine are not reused. If none exists, it starts a calculation with
 the engine and search depth from the active analysis profile. Selecting another
 position does the same while **Dice equity** is visible. After a submission or
 engine failure, select **Dice equity** again to retry.

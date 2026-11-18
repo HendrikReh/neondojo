@@ -1,20 +1,32 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { request, terminal, mergeJob, type Job } from './api';
+import { request, terminal, mergeJob, jobEngine, type Job } from './api';
 import type { components } from './generated-api';
 import type { MatchAnalysisEngine } from './useMatchAnalysis';
 
 export type Jobs = Partial<Record<'analysis' | 'dice', Job>>;
-export function positionJobsPath(positionId: string) {
-  return `/positions/${encodeURIComponent(positionId)}/jobs`;
+export function positionJobsPath(
+  positionId: string,
+  engineId?: MatchAnalysisEngine,
+) {
+  const path = `/positions/${encodeURIComponent(positionId)}/jobs`;
+  return engineId
+    ? `${path}?${new URLSearchParams({ engine_id: engineId })}`
+    : path;
 }
 
-/** Submission and progress only. Displayed checker results belong to the catalog. */
+/**
+ * Submission and progress only, for the active engine. Displayed checker
+ * results belong to the catalog, which lists every engine's saved results.
+ */
 export function useJobs(
   positionId: string | undefined,
   engineId: MatchAnalysisEngine,
   onAccepted?: (job: Job) => void,
 ) {
-  const scope = useMemo(() => ({ positionId }), [positionId]);
+  const scope = useMemo(
+    () => ({ positionId, engineId }),
+    [positionId, engineId],
+  );
   const current = useRef(scope);
   current.current = scope;
   const [revision, setRevision] = useState(0);
@@ -41,6 +53,7 @@ export function useJobs(
     const timers: ReturnType<typeof setInterval>[] = [];
     const belongs = (job: Job) =>
       job.position_uuid === positionId &&
+      jobEngine(job) === engineId &&
       (job.kind === 'analysis' || job.kind === 'dice');
     function receive(job: Job) {
       if (abort.signal.aborted || current.current !== scope || !belongs(job))
@@ -100,7 +113,7 @@ export function useJobs(
       }, 3000);
       timers.push(timer);
     }
-    void request<Job[]>(positionJobsPath(positionId), {
+    void request<Job[]>(positionJobsPath(positionId, engineId), {
       signal: abort.signal,
     }).then(
       (jobs) => {
@@ -141,7 +154,7 @@ export function useJobs(
       streams.forEach((stream) => stream.close());
       timers.forEach(clearInterval);
     };
-  }, [positionId, scope, revision]);
+  }, [positionId, engineId, scope, revision]);
 
   async function run(kind: 'analysis' | 'dice', plies: number) {
     if (!positionId || submissions.current.has(positionId)) return;
@@ -165,7 +178,12 @@ export function useJobs(
       });
       onAccepted?.(job);
       const selected = current.current;
-      if (!mounted.current || selected.positionId !== positionId) return;
+      if (
+        !mounted.current ||
+        selected.positionId !== positionId ||
+        selected.engineId !== engineId
+      )
+        return;
       setState((previous) => ({
         scope: selected,
         jobs: {
@@ -177,7 +195,11 @@ export function useJobs(
       setRevision((value) => value + 1);
     } catch (error) {
       const selected = current.current;
-      if (mounted.current && selected.positionId === positionId)
+      if (
+        mounted.current &&
+        selected.positionId === positionId &&
+        selected.engineId === engineId
+      )
         setState((previous) => ({
           scope: selected,
           jobs: previous?.scope === selected ? previous.jobs : {},
