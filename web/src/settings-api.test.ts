@@ -148,16 +148,19 @@ describe('settings API', () => {
       gnubg_play_threads: 32,
       open_sage_threads: 64,
       open_sage_play_threads: 32,
+      parallel_analysis_jobs: 12,
     };
     vi.stubGlobal('fetch', async () => Response.json(saved));
     expect(await loadSettings()).toEqual(saved);
   });
 
-  it('rejects playing thread counts below the engine minimum', async () => {
+  it('rejects thread and parallel job limits below their minimum', async () => {
     for (const invalid of [
       { gnubg_play_threads: 0 },
       { open_sage_play_threads: 1 },
       { open_sage_play_threads: 2.5 },
+      { parallel_analysis_jobs: 0 },
+      { parallel_analysis_jobs: '2' },
     ]) {
       vi.stubGlobal('fetch', async () =>
         Response.json({ ...settings, ...invalid }),

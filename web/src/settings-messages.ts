@@ -62,6 +62,10 @@ const en = {
   configurableThreadRange: 'Configurable range {min}–{max}.',
   threadsHelp:
     'Analysis threads apply to new analyses and engine duels, playing threads to new games. By default GNUbg uses 1 thread for both. Open Sage uses 4 for analysis and duels and 2 for playing.',
+  parallelAnalysisJobs: 'Simultaneous analysis jobs',
+  defaultParallelJobs: 'Default (1)',
+  parallelAnalysisJobsHelp:
+    'Position, dice equity and match analyses that may run at the same time on this computer. Open Sage runs one analysis at a time. Each job uses its own analysis threads, so jobs × threads should stay within the logical CPUs. Engine duels and games do not count.',
   checkNeeded: 'The edited GNUbg settings have not been checked yet.',
   engineVersion: 'Detected version: {version}',
   unavailable: 'Not available',
@@ -158,6 +162,10 @@ export const settingsMessages: Record<Locale, Messages> = {
     configurableThreadRange: 'Einstellbarer Bereich {min}–{max}.',
     threadsHelp:
       'Analyse-Threads gelten für neue Analysen und Engine-Duelle, Spiel-Threads für neue Partien. Standardmäßig nutzt GNUbg jeweils 1 Thread. Open Sage nutzt 4 für Analysen und Duelle und 2 beim Spielen.',
+    parallelAnalysisJobs: 'Gleichzeitige Analyse-Jobs',
+    defaultParallelJobs: 'Standard (1)',
+    parallelAnalysisJobsHelp:
+      'Positions-, Würfel-Equity- und Matchanalysen, die auf diesem Rechner gleichzeitig laufen dürfen. Open Sage rechnet jeweils nur eine Analyse. Jeder Job nutzt eigene Analyse-Threads; Jobs × Threads sollte die logischen CPUs nicht übersteigen. Engine-Duelle und Partien zählen nicht mit.',
     checkNeeded:
       'Die geänderten GNUbg-Einstellungen wurden noch nicht geprüft.',
     engineVersion: 'Erkannte Version: {version}',
@@ -252,6 +260,10 @@ export const settingsMessages: Record<Locale, Messages> = {
     configurableThreadRange: 'Intervalo configurable {min}–{max}.',
     threadsHelp:
       'Los hilos de análisis se aplican a nuevos análisis y duelos de motores; los de juego, a nuevas partidas. GNUbg usa 1 hilo por defecto en ambos casos. Open Sage usa 4 para análisis y duelos y 2 para jugar.',
+    parallelAnalysisJobs: 'Trabajos de análisis simultáneos',
+    defaultParallelJobs: 'Predeterminado (1)',
+    parallelAnalysisJobsHelp:
+      'Análisis de posiciones, de equity de dados y del encuentro que pueden ejecutarse a la vez en este equipo. Open Sage ejecuta un análisis cada vez. Cada trabajo usa sus propios hilos de análisis, así que trabajos × hilos no debería superar las CPU lógicas. Los duelos de motores y las partidas no cuentan.',
     checkNeeded: 'Los ajustes modificados de GNUbg aún no se han comprobado.',
     engineVersion: 'Versión detectada: {version}',
     unavailable: 'No disponible',
@@ -345,6 +357,10 @@ export const settingsMessages: Record<Locale, Messages> = {
     configurableThreadRange: 'Plage configurable de {min} à {max}.',
     threadsHelp:
       'Les threads d’analyse s’appliquent aux nouvelles analyses et confrontations entre moteurs, ceux de jeu aux nouvelles parties. Par défaut, GNUbg utilise 1 thread dans les deux cas. Open Sage en utilise 4 pour les analyses et les confrontations, et 2 pour jouer.',
+    parallelAnalysisJobs: 'Analyses simultanées',
+    defaultParallelJobs: 'Par défaut (1)',
+    parallelAnalysisJobsHelp:
+      'Analyses de position, d’équité des dés et de match pouvant s’exécuter en même temps sur cet ordinateur. Open Sage exécute une analyse à la fois. Chaque analyse utilise ses propres threads d’analyse : analyses × threads ne devrait pas dépasser les CPU logiques. Les confrontations entre moteurs et les parties ne comptent pas.',
     checkNeeded:
       'Les paramètres modifiés de GNUbg n’ont pas encore été vérifiés.',
     engineVersion: 'Version détectée : {version}',
@@ -439,6 +455,10 @@ export const settingsMessages: Record<Locale, Messages> = {
     configurableThreadRange: 'Intervallo configurabile {min}–{max}.',
     threadsHelp:
       'I thread di analisi si applicano a nuove analisi e sfide tra motori, quelli di gioco a nuove partite. Per impostazione predefinita GNUbg usa 1 thread in entrambi i casi. Open Sage ne usa 4 per analisi e sfide e 2 per giocare.',
+    parallelAnalysisJobs: 'Analisi simultanee',
+    defaultParallelJobs: 'Predefinito (1)',
+    parallelAnalysisJobsHelp:
+      'Analisi di posizioni, equity dei dadi e del match che possono essere eseguite contemporaneamente su questo computer. Open Sage esegue un’analisi alla volta. Ogni analisi usa i propri thread di analisi, quindi analisi × thread non dovrebbe superare le CPU logiche. Sfide tra motori e partite non vengono conteggiate.',
     checkNeeded:
       'Le impostazioni modificate di GNUbg non sono ancora state verificate.',
     engineVersion: 'Versione rilevata: {version}',
@@ -530,6 +550,10 @@ export const settingsMessages: Record<Locale, Messages> = {
     configurableThreadRange: 'Zakres ustawień {min}–{max}.',
     threadsHelp:
       'Wątki analizy dotyczą nowych analiz i pojedynków silników, a wątki gry — nowych partii. Domyślnie GNUbg używa 1 wątku w obu przypadkach. Open Sage używa 4 do analiz i pojedynków oraz 2 do gry.',
+    parallelAnalysisJobs: 'Równoczesne analizy',
+    defaultParallelJobs: 'Domyślnie (1)',
+    parallelAnalysisJobsHelp:
+      'Analizy pozycji, equity kości i meczu, które mogą działać jednocześnie na tym komputerze. Open Sage wykonuje jedną analizę naraz. Każda analiza używa własnych wątków analizy, więc analizy × wątki nie powinny przekraczać logicznych procesorów. Pojedynki silników i partie nie są liczone.',
     checkNeeded: 'Zmienione ustawienia GNUbg nie zostały jeszcze sprawdzone.',
     engineVersion: 'Wykryta wersja: {version}',
     unavailable: 'Niedostępny',

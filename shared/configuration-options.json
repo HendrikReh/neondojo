@@ -44,6 +44,11 @@
       "min": 2
     }
   },
+  "parallel_analysis_jobs": {
+    "min": 1,
+    "max": 8,
+    "default": 1
+  },
   "engine_profiles": {
     "gnubg": {
       "analysis": [

@@ -8,40 +8,109 @@ use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use std::time::Duration;
+use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+/// Runs queued benchmarks and up to the configured number of analysis jobs at
+/// the same time. Each job runs in its own task and keeps its own lease,
+/// heartbeat and checkpoints. Stopping the worker aborts running tasks; their
+/// leases expire and the jobs are recovered like after a restart.
 pub async fn worker(state: AppState, stop: CancellationToken) {
+    let mut running = JoinSet::new();
+    let mut benchmark = None;
     loop {
-        tokio::select! {
-            _ = stop.cancelled() => break,
-            result = async {
-                let Ok(_access) = state.backup.requests.try_read() else {
-                    return Ok(false);
-                };
-                run_one(&state).await
-            } => {
-                match result {
-                    Ok(true) => continue,
-                    Ok(false) => {},
-                    Err(error) => tracing::error!(%error, "Job worker error"),
-                }
-            }
+        if let Err(error) = fill(&state, &mut running, &mut benchmark).await {
+            tracing::error!(%error, "Job worker error");
         }
         tokio::select! {
             _ = stop.cancelled() => break,
+            Some(finished) = running.join_next_with_id(), if !running.is_empty() => {
+                let id = match &finished {
+                    Ok((id, _)) => *id,
+                    Err(error) => error.id(),
+                };
+                if benchmark == Some(id) {
+                    benchmark = None;
+                }
+                match finished {
+                    Ok((_, Ok(true))) => continue,
+                    Ok((_, Ok(false))) => {},
+                    Ok((_, Err(error))) => tracing::error!(%error, "Job worker error"),
+                    // A panicking job releases its slot; its lease expires.
+                    Err(error) => tracing::error!(%error, "Job task failed"),
+                }
+            }
             _ = state.wake.notified() => {},
             _ = tokio::time::sleep(Duration::from_secs(1)) => {},
         }
     }
+    running.shutdown().await;
 }
 
+/// Starts work until all slots are busy. A benchmark takes one slot and has
+/// priority: while it is queued or running, no new analysis job starts.
+async fn fill(
+    state: &AppState,
+    running: &mut JoinSet<Result<bool>>,
+    benchmark: &mut Option<tokio::task::Id>,
+) -> Result<()> {
+    if benchmark.is_some() {
+        return Ok(());
+    }
+    let slots = crate::settings::load_analysis_job_slots(&state.pool).await?;
+    if crate::benchmarks::has_queued(&state.pool).await? {
+        if running.len() < slots
+            && let Ok(access) = state.backup.requests.clone().try_read_owned()
+        {
+            let state = state.clone();
+            let task = running.spawn(async move {
+                let _access = access;
+                crate::benchmarks::run_one(&state).await
+            });
+            *benchmark = Some(task.id());
+        }
+        return Ok(());
+    }
+    while running.len() < slots {
+        let Ok(access) = state.backup.requests.clone().try_read_owned() else {
+            break;
+        };
+        let Some(claimed) = claim(state).await? else {
+            break;
+        };
+        let state = state.clone();
+        running.spawn(async move {
+            let _access = access;
+            run_claimed(&state, claimed).await
+        });
+    }
+    Ok(())
+}
+
+/// Runs one queued benchmark or analysis job to completion.
 pub async fn run_one(state: &AppState) -> Result<bool> {
     if crate::benchmarks::run_one(state).await? {
         return Ok(true);
     }
+    let Some(claimed) = claim(state).await? else {
+        return Ok(false);
+    };
+    run_claimed(state, claimed).await
+}
+
+struct Claimed {
+    job: Job,
+    token: Uuid,
+}
+
+async fn claim(state: &AppState) -> Result<Option<Claimed>> {
     let token = Uuid::new_v4();
     let mut tx = state.pool.begin().await?;
+    // Serialize claims so concurrent claimers observe each other's running rows.
+    sqlx::query("SELECT pg_advisory_xact_lock(91432302)")
+        .execute(&mut *tx)
+        .await?;
     let expired: Vec<Uuid> = sqlx::query_scalar("UPDATE jobs SET status=CASE WHEN attempts>=3 THEN 'failed' ELSE 'queued' END, error=CASE WHEN attempts>=3 THEN 'Worker lease expired after 3 attempts' ELSE NULL END, lease_token=NULL, lease_until=NULL, progress=CASE WHEN kind='match' THEN progress ELSE 0 END, updated_at=now() WHERE status='running' AND lease_until<now() RETURNING id")
         .fetch_all(&mut *tx).await?;
     for id in expired {
@@ -52,7 +121,9 @@ pub async fn run_one(state: &AppState) -> Result<bool> {
         sqlx::query("INSERT INTO job_events(job_id,event,data) SELECT id,status,jsonb_build_object('status',status,'progress',progress,'error',error,'completed_games',completed_games,'total_games',total_games) FROM jobs WHERE id=$1")
             .bind(id).execute(&mut *tx).await?;
     }
-    let job = sqlx::query_as::<_, Job>("UPDATE jobs SET status='running',lease_token=$1,lease_until=now()+interval '120 seconds',attempts=attempts+1,updated_at=now() WHERE id=(SELECT id FROM jobs WHERE status='queued' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *")
+    // Open Sage analyses share one sidecar process; run them one at a time
+    // and let GNUbg jobs use the remaining slots.
+    let job = sqlx::query_as::<_, Job>("UPDATE jobs SET status='running',lease_token=$1,lease_until=now()+interval '120 seconds',attempts=attempts+1,updated_at=now() WHERE id=(SELECT id FROM jobs WHERE status='queued' AND (coalesce(engine_snapshot->>'engine_id','gnubg')<>'bgsage' OR NOT EXISTS(SELECT 1 FROM jobs WHERE status='running' AND engine_snapshot->>'engine_id'='bgsage')) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *")
         .bind(token).fetch_optional(&mut *tx).await?;
     if let Some(ref job) = job {
         sqlx::query("UPDATE match_analysis_timing SET active_started_at=NULL,active_elapsed_ms=0 WHERE job_id=$1")
@@ -66,7 +137,11 @@ pub async fn run_one(state: &AppState) -> Result<bool> {
             .await?;
     }
     tx.commit().await?;
-    let Some(job) = job else { return Ok(false) };
+    Ok(job.map(|job| Claimed { job, token }))
+}
+
+async fn run_claimed(state: &AppState, claimed: Claimed) -> Result<bool> {
+    let Claimed { job, token } = claimed;
     let result = execute_with_heartbeat(state, &job, token).await;
     let (status, data, error) = match result {
         Ok(data) => ("completed", Some(data), None),
@@ -197,6 +272,58 @@ async fn progress(pool: &PgPool, id: Uuid, token: Uuid, progress: i32) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[sqlx::test(migrations = "./migrations")]
+    #[ignore = "requires PostgreSQL"]
+    async fn claims_run_one_open_sage_job_at_a_time(pool: PgPool) {
+        let sgf = "(;GM[6]FF[4]PW[Alice]PB[Bob]MI[length:7][game:0][ws:0][bs:0];W[31hefe])";
+        let imported = store::import_match(
+            &pool,
+            "claims.sgf",
+            "sgf",
+            sgf.as_bytes(),
+            sgf,
+            &crate::import::parse_sgf(sgf).unwrap(),
+        )
+        .await
+        .unwrap();
+        let position: Uuid =
+            sqlx::query_scalar("SELECT id FROM positions WHERE match_uuid=$1 LIMIT 1")
+                .bind(imported.r#match.id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        // Two Open Sage jobs are queued before one GNUbg job.
+        for (offset, plies, engine) in [(3, 1, "bgsage"), (2, 2, "bgsage"), (1, 0, "gnubg")] {
+            sqlx::query("INSERT INTO jobs(id,position_uuid,kind,plies,status,engine_snapshot,created_at) VALUES($1,$2,'analysis',$3,'queued',jsonb_build_object('engine_id',$4::text,'gnubg_path','gnubg'),now()-make_interval(secs=>$5))")
+                .bind(Uuid::new_v4())
+                .bind(position)
+                .bind(plies)
+                .bind(engine)
+                .bind(f64::from(offset))
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+        let state = AppState::new(pool.clone(), crate::engine::Engine::new("gnubg".into()));
+        let first = claim(&state).await.unwrap().expect("first Open Sage job");
+        assert_eq!(first.job.plies, 1);
+        let second = claim(&state)
+            .await
+            .unwrap()
+            .expect("GNUbg job passes the waiting Sage job");
+        assert_eq!(second.job.plies, 0);
+        assert!(claim(&state).await.unwrap().is_none());
+        sqlx::query(
+            "UPDATE jobs SET status='completed',lease_token=NULL,lease_until=NULL WHERE id=$1",
+        )
+        .bind(first.job.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let third = claim(&state).await.unwrap().expect("second Open Sage job");
+        assert_eq!(third.job.plies, 2);
+    }
     #[sqlx::test(migrations = "./migrations")]
     #[ignore = "requires PostgreSQL"]
     async fn heartbeat_does_not_deadlock_a_checkpoint_holding_the_job_lock(pool: PgPool) {

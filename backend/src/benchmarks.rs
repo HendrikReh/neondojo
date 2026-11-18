@@ -197,6 +197,14 @@ async fn status(State(state): State<AppState>) -> ApiResult<Json<BenchmarkStatus
 
 /// During an exclusive measurement, availability is the already validated
 /// installation snapshot. Starting a second probe would contaminate the run.
+pub(crate) async fn has_queued(pool: &sqlx::PgPool) -> anyhow::Result<bool> {
+    Ok(
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM benchmark_runs WHERE status='queued')")
+            .fetch_one(pool)
+            .await?,
+    )
+}
+
 pub(crate) async fn running_engine_version(
     pool: &sqlx::PgPool,
     path: &str,

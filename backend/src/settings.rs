@@ -46,6 +46,9 @@ pub struct AppSettings {
     /// Host-local override for playing. Null uses two threads. Omit on PUT to keep the saved value.
     #[schema(minimum = 2)]
     pub open_sage_play_threads: Option<i32>,
+    /// Host-local limit for simultaneously running analysis jobs. Null runs one job at a time. Omit on PUT to keep the saved value.
+    #[schema(minimum = 1, maximum = 8)]
+    pub parallel_analysis_jobs: Option<i32>,
     #[serde(default = "default_bearoff_direction")]
     pub bearoff_direction: String,
 }
@@ -62,6 +65,8 @@ struct SettingsUpdate {
     open_sage_threads: Option<Option<i32>>,
     #[serde(default, deserialize_with = "thread_override")]
     open_sage_play_threads: Option<Option<i32>>,
+    #[serde(default, deserialize_with = "thread_override")]
+    parallel_analysis_jobs: Option<Option<i32>>,
 }
 
 // Missing fields keep their saved values. Explicit null restores the default.
@@ -93,6 +98,21 @@ impl AppSettings {
     pub(crate) fn sage_play_threads(&self) -> u32 {
         sage_threads(self.open_sage_play_threads, SAGE_PLAY_THREADS)
     }
+}
+
+/// Number of analysis jobs the worker may run at the same time.
+pub(crate) fn analysis_job_slots(configured: Option<i32>) -> usize {
+    let (minimum, maximum, default) = crate::configuration::parallel_analysis_jobs();
+    let slots = configured.unwrap_or(default).clamp(minimum, maximum);
+    usize::try_from(slots).unwrap_or(1)
+}
+
+pub(crate) async fn load_analysis_job_slots(pool: &sqlx::PgPool) -> anyhow::Result<usize> {
+    let configured: Option<Option<i32>> =
+        sqlx::query_scalar("SELECT parallel_analysis_jobs FROM app_settings WHERE singleton=true")
+            .fetch_optional(pool)
+            .await?;
+    Ok(analysis_job_slots(configured.flatten()))
 }
 
 fn default_bearoff_direction() -> String {
@@ -389,6 +409,7 @@ async fn put_settings(
         gnubg_play_threads,
         open_sage_threads,
         open_sage_play_threads,
+        parallel_analysis_jobs,
     }) = payload.map_err(|e| ApiError::invalid(e.body_text()))?;
     validate(&settings)?;
     let current = load(&state).await?;
@@ -400,6 +421,18 @@ async fn put_settings(
     settings.open_sage_threads = open_sage_threads.unwrap_or(current.open_sage_threads);
     settings.open_sage_play_threads =
         open_sage_play_threads.unwrap_or(current.open_sage_play_threads);
+    settings.parallel_analysis_jobs =
+        parallel_analysis_jobs.unwrap_or(current.parallel_analysis_jobs);
+    if settings.parallel_analysis_jobs != current.parallel_analysis_jobs
+        && let Some(jobs) = settings.parallel_analysis_jobs
+    {
+        let (minimum, maximum, _) = crate::configuration::parallel_analysis_jobs();
+        if !(minimum..=maximum).contains(&jobs) {
+            return Err(ApiError::invalid(format!(
+                "parallel_analysis_jobs must be between {minimum} and {maximum}"
+            )));
+        }
+    }
     // Existing settings and submitted jobs can outlive a change in CPU availability.
     for (engine, proposed, saved) in [
         ("gnubg", settings.gnubg_threads, current.gnubg_threads),
@@ -446,11 +479,12 @@ async fn put_settings(
     crate::configuration::store::lock(&mut tx)
         .await
         .map_err(anyhow::Error::from)?;
-    let saved: Option<AppSettings> = sqlx::query_as("UPDATE app_settings SET version=version+1,player_name=$2,analysis_engine=$3,analysis_plies=$4,play_engine=$5,play_plies=$6,gnubg_path=$7,gnubg_version=$8,bearoff_direction=$9,default_play_mode=$10,tutor_threshold=$11,training_auto_analysis=$12,gnubg_threads=$13,open_sage_threads=$14,gnubg_play_threads=$15,open_sage_play_threads=$16 WHERE singleton=true AND version=$1 RETURNING *")
+    let saved: Option<AppSettings> = sqlx::query_as("UPDATE app_settings SET version=version+1,player_name=$2,analysis_engine=$3,analysis_plies=$4,play_engine=$5,play_plies=$6,gnubg_path=$7,gnubg_version=$8,bearoff_direction=$9,default_play_mode=$10,tutor_threshold=$11,training_auto_analysis=$12,gnubg_threads=$13,open_sage_threads=$14,gnubg_play_threads=$15,open_sage_play_threads=$16,parallel_analysis_jobs=$17 WHERE singleton=true AND version=$1 RETURNING *")
         .bind(settings.version).bind(settings.player_name).bind(settings.analysis_engine).bind(settings.analysis_plies)
         .bind(settings.play_engine).bind(settings.play_plies).bind(settings.gnubg_path).bind(version).bind(settings.bearoff_direction).bind(settings.default_play_mode).bind(settings.tutor_threshold).bind(settings.training_auto_analysis)
         .bind(settings.gnubg_threads).bind(settings.open_sage_threads)
         .bind(settings.gnubg_play_threads).bind(settings.open_sage_play_threads)
+        .bind(settings.parallel_analysis_jobs)
         .fetch_optional(&mut *tx).await.map_err(anyhow::Error::from)?;
     let saved = saved.ok_or_else(conflict)?;
     crate::configuration::store::legacy_app(&mut tx, &saved)

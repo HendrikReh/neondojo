@@ -2744,6 +2744,11 @@ export interface components {
              * @description Host-local override for analyses and engine duels. Null uses four threads. Omit on PUT to keep the saved value.
              */
             open_sage_threads?: number | null;
+            /**
+             * Format: int32
+             * @description Host-local limit for simultaneously running analysis jobs. Null runs one job at a time. Omit on PUT to keep the saved value.
+             */
+            parallel_analysis_jobs?: number | null;
             play_engine: string;
             /** Format: int32 */
             play_plies: number;

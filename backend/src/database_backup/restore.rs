@@ -93,7 +93,8 @@ async fn preserve_host_settings(connection: &mut PgConnection, binary: &str) -> 
              gnubg_threads=(SELECT gnubg_threads FROM backup_local_app),
              open_sage_threads=(SELECT open_sage_threads FROM backup_local_app),
              gnubg_play_threads=(SELECT gnubg_play_threads FROM backup_local_app),
-             open_sage_play_threads=(SELECT open_sage_play_threads FROM backup_local_app)",
+             open_sage_play_threads=(SELECT open_sage_play_threads FROM backup_local_app),
+             parallel_analysis_jobs=(SELECT parallel_analysis_jobs FROM backup_local_app)",
     )
     .bind(binary)
     .execute(&mut *connection)
@@ -231,7 +232,7 @@ pub(super) async fn replace(state: &AppState, mut input: Prepared) -> ApiResult<
     sqlx::query(
         "CREATE TEMP TABLE backup_local_app ON COMMIT DROP AS
         SELECT gnubg_path,gnubg_version,gnubg_threads,open_sage_threads,
-            gnubg_play_threads,open_sage_play_threads FROM public.app_settings",
+            gnubg_play_threads,open_sage_play_threads,parallel_analysis_jobs FROM public.app_settings",
     )
     .execute(&mut *tx)
     .await

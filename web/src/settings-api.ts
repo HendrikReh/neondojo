@@ -62,6 +62,14 @@ function isThreadLimit(value: unknown, engine: 'gnubg' | 'bgsage') {
   );
 }
 
+function isParallelJobLimit(value: unknown) {
+  const { min } = configurationOptions.parallel_analysis_jobs;
+  return (
+    value == null ||
+    (typeof value === 'number' && Number.isSafeInteger(value) && value >= min)
+  );
+}
+
 function parseSettings(value: unknown): AppSettings {
   if (
     !isObject(value) ||
@@ -89,6 +97,7 @@ function parseSettings(value: unknown): AppSettings {
     !isThreadLimit(value.gnubg_play_threads, 'gnubg') ||
     !isThreadLimit(value.open_sage_threads, 'bgsage') ||
     !isThreadLimit(value.open_sage_play_threads, 'bgsage') ||
+    !isParallelJobLimit(value.parallel_analysis_jobs) ||
     (value.analysis_engine === 'bgsage' &&
       !configurationOptions.engine_profiles.bgsage.analysis.includes(
         value.analysis_plies,

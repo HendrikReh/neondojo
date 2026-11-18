@@ -15,6 +15,7 @@ const installationFields = [
   'gnubg_play_threads',
   'open_sage_threads',
   'open_sage_play_threads',
+  'parallel_analysis_jobs',
 ] as const;
 
 export function changedInstallationFields(

@@ -106,6 +106,17 @@ pub(crate) fn available_cpu_threads() -> Option<i32> {
         .and_then(|count| i32::try_from(count.get()).ok())
 }
 
+/// Inclusive range and default for simultaneously running analysis jobs.
+pub(crate) fn parallel_analysis_jobs() -> (i32, i32, i32) {
+    let option = |name: &str| {
+        OPTIONS["parallel_analysis_jobs"][name]
+            .as_i64()
+            .and_then(|number| i32::try_from(number).ok())
+            .expect("parallel analysis job option is a valid integer")
+    };
+    (option("min"), option("max"), option("default"))
+}
+
 pub(crate) fn engine_min_threads(engine: &str) -> i32 {
     OPTIONS["engine_threads"][engine]["min"]
         .as_i64()

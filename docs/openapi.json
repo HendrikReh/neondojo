@@ -12106,6 +12106,16 @@
             "description": "Host-local override for analyses and engine duels. Null uses four threads. Omit on PUT to keep the saved value.",
             "minimum": 2
           },
+          "parallel_analysis_jobs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Host-local limit for simultaneously running analysis jobs. Null runs one job at a time. Omit on PUT to keep the saved value.",
+            "maximum": 8,
+            "minimum": 1
+          },
           "play_engine": {
             "type": "string"
           },

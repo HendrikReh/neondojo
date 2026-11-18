@@ -446,6 +446,18 @@ test('saves separate engine thread limits and restores them when reopened', asyn
     await dialog
       .getByRole('combobox', { name: label, exact: true })
       .selectOption(value);
+  const parallelJobs = dialog.getByRole('combobox', {
+    name: 'Simultaneous analysis jobs',
+    exact: true,
+  });
+  await expect(parallelJobs).toHaveAccessibleDescription(
+    /Open Sage runs one analysis at a time/,
+  );
+  await expect(parallelJobs.locator('option').last()).toHaveAttribute(
+    'value',
+    '8',
+  );
+  await parallelJobs.selectOption('3');
   expect(backend.writes).toHaveLength(0);
   await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(
@@ -469,6 +481,7 @@ test('saves separate engine thread limits and restores them when reopened', asyn
       gnubg_play_threads: 2,
       open_sage_threads: 6,
       open_sage_play_threads: 4,
+      parallel_analysis_jobs: 3,
     }),
   ]);
   await openSettings(page);
@@ -478,6 +491,12 @@ test('saves separate engine thread limits and restores them when reopened', asyn
     await expect(
       dialog.getByRole('combobox', { name: label, exact: true }),
     ).toHaveValue(value);
+  await expect(
+    dialog.getByRole('combobox', {
+      name: 'Simultaneous analysis jobs',
+      exact: true,
+    }),
+  ).toHaveValue('3');
 });
 
 test('English default, alphabetical languages, draft cancellation, focus trap and restore', async ({
