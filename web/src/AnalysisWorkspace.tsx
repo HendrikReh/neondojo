@@ -366,17 +366,28 @@ export default function AnalysisWorkspace({
     },
     [setBoardView],
   );
+  const previewDice = selectedPreview?.dice;
+  // A Dice equity preview shows its own roll; everything else uses the recorded one.
+  const previewPosition = useMemo(
+    () =>
+      position && previewDice
+        ? { ...position, dice: [...previewDice] }
+        : position,
+    [position, previewDice],
+  );
   const preview = useMemo(
     () =>
-      position ? projectMove(position, selectedPreview?.notation) : undefined,
-    [position, selectedPreview?.notation],
+      previewPosition
+        ? projectMove(previewPosition, selectedPreview?.notation)
+        : undefined,
+    [previewPosition, selectedPreview?.notation],
   );
   const effectiveView = preview?.ok
     ? (selectedPreview?.view ?? boardView)
     : 'before';
   useBoardReviewShortcuts(
     active && !!selectedPreview && !notesSuspended,
-    '.candidate-preview-button',
+    '.candidate-preview-button, .dice-grid button',
     onBoardView,
     preview?.ok === true,
   );
@@ -414,7 +425,7 @@ export default function AnalysisWorkspace({
         ?.querySelector('.move-history-cube.current')
         ?.scrollIntoView({ block: 'nearest' });
   }, [reviewedCubeMove]);
-  const boardPosition = cubeBoard ?? position;
+  const boardPosition = cubeBoard ?? previewPosition;
   const checkerReview =
     reviewingCheckers &&
     reviewRow?.kind === 'checker' &&
@@ -702,7 +713,7 @@ export default function AnalysisWorkspace({
                     <BoardReviewControls
                       view={effectiveView}
                       preview={preview}
-                      position={position}
+                      position={previewPosition ?? position}
                       selected={selectedPreview}
                       onView={onBoardView}
                       onPlayed={() => {

@@ -859,6 +859,14 @@ progress::-webkit-progress-value {
 .dice-grid .selected {
   border-color: var(--ui-accent);
 }
+.dice-grid .rolled {
+  outline: 1px dashed var(--ui-text);
+  outline-offset: 1px;
+}
+.roll-detail-rolled {
+  color: var(--ui-muted);
+  font-size: var(--font-size-micro);
+}
 .dice-grid b {
   font-size: var(--font-size-table);
 }

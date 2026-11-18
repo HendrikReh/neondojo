@@ -149,6 +149,14 @@ const entries = {
     'Resetuj podgląd',
     'Reimposta anteprima',
   ],
+  roll: [
+    'Roll {first}–{second} · {move}',
+    'Wurf {first}–{second} · {move}',
+    'Tirada {first}–{second} · {move}',
+    'Jet {first}–{second} · {move}',
+    'Rzut {first}–{second} · {move}',
+    'Lancio {first}–{second} · {move}',
+  ],
   candidate: [
     'Candidate {rank} · {move}',
     'Kandidat {rank} · {move}',

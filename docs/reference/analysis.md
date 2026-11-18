@@ -18,8 +18,12 @@ engine failure, select **Dice equity** again to retry.
 
 The grid shows the best play's equity for each of the 36 rolls. Cells at or
 above the weighted mean **Ø** use the success color, cells below it the
-warning color. The grid starts on 1-1. Select a cell to see that roll's best
-play, its equity and its probability below the grid.
+warning color. The grid starts on the roll shown on the board, which stays
+outlined, or on 1-1 when the position has no roll. Below the grid, the selected
+roll shows its best play, equity and probability. Selecting a cell also shows
+that play on the board with its dice, like a candidate preview; **Reset preview**
+returns to the recorded move. Selecting another position starts again on its
+roll.
 
 The position pane shows each result with its source and recorded depth. To
 choose a depth and calculate again, use **Recalculate position …** or

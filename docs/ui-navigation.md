@@ -448,6 +448,9 @@ for it. A missing calculation starts with the active engine and profile depth
 and evaluates the 21 dice pairs used by the 36-cell grid.
 Changing position requests missing results while this tab is visible.
 Running jobs keep their captured depth and configuration.
+The grid starts on the roll shown on the board and outlines it. Selecting a
+cell previews that roll's best play on the board with its dice; **Reset
+preview** and the left and right arrow keys work as for candidate previews.
 After a submission or engine failure, selecting **Dice equity** again retries
 once. Use **Analysis options → Recalculate dice equity …** to choose a different
 depth explicitly.
