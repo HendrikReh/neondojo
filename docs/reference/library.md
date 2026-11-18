@@ -95,6 +95,45 @@ Saved imported decisions are validated once into a derived index before filterin
 
 The checkbox in the table header selects the current page. Select up to 200 positions to show the selection count, **Add to deck**, and **Clear selection** in the toolbar above the table. The three-dot button opens **More selection actions** next to the selection controls and contains **Remove from collection**. The add dialog checks how many positions have a usable answer in their selected analysis. Its add button shows the number ready for transfer. If none are ready and a selected position needs analysis, **Open analysis** opens the first such position and keeps the selection for your return. The transfer reports each position as added, updated, already in the deck, requiring analysis, or unavailable. Study answers require a validated result from the selected analysis, including comparable imported checker analysis. Missing numeric depth remains unknown. Existing cards retain their saved solution and provenance; explicitly adding an existing question may refresh its solution while preserving review history. Identical questions share FSRS review history. After a transfer, **Study this deck** beside the outcome opens a fresh study view of the receiving deck. Choosing decks and the Anki export live in **Study**. A deck can hold 1,000 cards. If a batch would exceed that limit, the entire batch is rejected.
 
+## Similar positions
+
+In **Positions**, the icon beside **Open analysis** in the preview, **Find similar positions**, opens **Similar positions** for that checker decision. The heading names the source match, game and move. **Back to saved positions** returns to the collection.
+
+The search ranks checker occurrences across the library by how far their boards are apart. The distance is the smallest number of checker-pips needed to turn one arrangement into the other. For each side it compares how many checkers lie beyond each point, from the bar down to the 1-point, so a checker on the bar or one already borne off counts at its full distance. Boards are compared from the perspective of the player on roll, so the same arrangement with the colors reversed has distance 0. The result holds up to 50 occurrences, nearest first, with 25 per page.
+
+By default the search leaves out the other occurrences in the source match, its copies and other imports of the same original file. Positions from an unfinished Competition match are always excluded, and searching from such a position is rejected. These options narrow or widen the search:
+
+| Option | Effect |
+| --- | --- |
+| **Same dice** | Keeps occurrences with the same unordered dice pair. |
+| **Same match score** | Keeps occurrences with the same match length, the same score from the mover's perspective and the same Crawford state. For a money-game source the option is **Money games only** and keeps money games. |
+| **Same cube value and owner** | Keeps occurrences with the same cube value and the same ownership relative to the player on roll. |
+| **Include current match** | Adds the source match and its copies. |
+
+The table shows the match, the player on roll, game, move, the score as away values from the mover's side or money game, the cube value and owner, the played move, the loss and the distance. The loss comes from the match's displayed native analysis and shows a dash without one. Select a row to preview its board. **Open analysis** opens that occurrence in Analysis.
+
+### Practice similar positions
+
+**Practice results** opens **Practice similar positions** with every result of the current search, in list order. Each question names the match, game and move and shows the match length or the money-game Jacoby setting.
+
+- Play a complete checker move and choose **Check my move**. GNUbg evaluates the position at the default analysis depth from **Settings → Analysis** and returns the best play, your move, both equities and the normalized equity loss. Scoring saves no analysis job and leaves the displayed analysis unchanged.
+- **Reveal answer** shows the best play from the match's displayed analysis without scoring it. It reports an error if that analysis has no supported checker answer for the position.
+- After a check, **Your move** and **Best play** switch the arrow preview on the board.
+- **Next**, or **Finish** on the last question, moves on. While a check is running, the same button is **Skip position**. Skipped and revealed positions are not scored.
+
+Scoring and revealing are rejected while the source match is an unfinished Competition match. When the round ends, it shows the average equity loss of the scored moves and how many positions were scored. **Retry missed moves** starts a new round with every scored move that lost equity.
+
+A round with at least one scored move is saved as a summary with its completion time, number of positions, scored moves, moves with a loss, total loss and whether it was a retry. The individual positions and moves are not stored. If saving fails, **Retry save** sends the same round again. Repeating a save with the same summary is safe, and a different summary under the same round ID returns HTTP 409.
+
+**Study → Practice history** lists the saved rounds in their own section, newest first, 25 at a time, with **Load older rounds**. Each row shows the completion time, **Practice** or **Retry**, scored moves out of positions and the average loss. The chart plots the average loss of each round over time and marks retries separately. Its trend line is a rolling average of up to 5, 10 or 20 practice rounds, without retries, and appears from the second practice round. Left/Right and Home/End move between the rounds in the chart.
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| GET | `/api/positions/{id}/similar` | Up to 50 nearest checker occurrences. Optional `same_dice`, `same_score`, `same_cube` and `include_current_match`. |
+| POST | `/api/positions/{id}/practice-score` | Score a complete checker move given as up to four `steps`; an empty list is a forced pass. |
+| POST | `/api/positions/{id}/practice-answer` | Reveal the best play from the displayed analysis. |
+| GET / POST | `/api/study/similar-practice` | List saved rounds with the `before` cursor, or save a round summary under its stable `id`. |
+
 ## Player database
 
 Open **Player database** to find players by display name or imported alias. The result table shows match and game counts. It starts with the players who have the most matches and shows the first profile until you select another. Click a column heading to sort by name, matches or games, and click it again to reverse the order; match and game counts start with the highest value, and players with equal counts follow by name. `GET /api/players` takes the same order as `sort` (`name`, `matches`, `games`) and `direction` (`asc`, `desc`); an `after` cursor continues the default name order only. When an alias accounts for a hit, its name and source appear under the player name. Select a row to see the profile and its matches alongside the results. The profile header lists the player's other imported names and shows the PR per analysis profile above the matches; the analysis depth is visible, and the tooltip names the full engine profile. The match list shows the opponent, the score with the player's points first, the player's PR in that match, the match format, event and round, database, date and game count. Missing values show as a dash. Click a match row, or press Enter on it, to open the match; click the opponent's name to switch to that player's profile. Below the matches, from two fully analyzed matches on, the profile shows a chart of the PR per match with the average of the last ten matches, weighted by rated decisions. Dashed lines show the same average for checker play and for the cube. The checker value divides the saved checker losses by the unforced checker plays; the cube value divides the remaining loss by the close cube decisions. Filter by database above the table and change pages below it. Both tables scroll independently.
