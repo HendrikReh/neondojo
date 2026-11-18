@@ -2,7 +2,7 @@
 
 BG Tutor is a local backgammon workbench. You can play against an engine, import and analyze matches, search your library for positions, and turn your own mistakes into practice material. Everything runs on your own computer. Your matches, notes and learning progress stay in your local database.
 
-This guide walks through every workspace in the header and each of its tabs. Each chapter starts with what a newcomer needs and ends with details for stronger players.
+This guide walks through every workspace in the header and each of its tabs. Each chapter starts with what a newcomer needs and ends with details for stronger players. Exact rules, limits and edge cases are in the [reference](../reference/); a *Details* link at the end of a section leads to the matching part.
 
 | Level | You are … | Start with |
 | --- | --- | --- |
@@ -98,7 +98,7 @@ flowchart LR
 
 **Navigation style:** The current tab is shown with the accent color and an underline. Buttons with an icon show a tooltip when you hover over them or focus them with **Tab**. If a button has a keyboard shortcut, the tooltip names it.
 
-**What BG Tutor remembers:** Each browser tab keeps its own database selection, search filters, sort order, study deck and analysis filters. Column choices, column widths and board sizes are stored in the browser. The selected match, game and move are restored after a reload.
+**What BG Tutor remembers:** Each browser tab keeps its own database selection, search filters, sort order, study deck and analysis filters. Column choices, column widths and board sizes are stored in the browser. The selected match, game and move are restored after a reload. Details: [Configuration profiles](../reference/settings.md#configuration-profiles)
 
 ### The typical workflow
 
@@ -161,6 +161,8 @@ flowchart TD
 >
 > **Advanced:** Use **Coach** for normal practice and play a **Competition** match from time to time. Only matches played without learning aids count when you tick **Only matches played without learning aids** in Study.
 
+Details: [Playing feedback modes](../reference/playing.md#playing-feedback-modes)
+
 ### The match screen
 
 ![A match in progress in Coach mode with the match bar, move history, board and action panel](images/playing-match.webp)
@@ -196,6 +198,8 @@ flowchart TD
 
 > **Pro:** The bot's strength in **Settings → Playing** is independent of the analysis depth used for feedback. Learning reviews report a *first-attempt PR*, computed from your original choices at the positions you actually reached. This PR is separate from GNUbg's rating of the moves you finally played.
 
+Details: [Playing against GNUbg](../reference/playing.md#playing-against-gnubg)
+
 ---
 
 ## 3. Analysis
@@ -204,7 +208,7 @@ flowchart TD
 
 ![The Analysis welcome panel with Open match and Import match](images/analysis-welcome.webp)
 
-Select **Open match** to go to the Match database, select **Import match**, or drop a file on the panel. Supported formats are **MAT, XG, SGF, BGF** and **OGXM**.
+Select **Open match** to go to the Match database, select **Import match**, or drop a file on the panel. See [Importing](#importing) for the supported formats.
 
 ### Screen layout
 
@@ -227,6 +231,8 @@ Select **Open match** to go to the Match database, select **Import match**, or d
 
 **Resizing the board:** Drag the divider beside the board, or focus it and use **Left**/**Right**. Hold **Shift** for larger steps. Double-click the divider to make the board as large as the window allows, and press **Enter** to restore the default size. Each tab remembers its own board width.
 
+Details: [Analysis workspace](../reference/analysis.md#analysis-workspace)
+
 ### Checker
 
 The Checker tab shows the move history, the board and the evaluation of the selected move side by side.
@@ -244,6 +250,8 @@ The Checker tab shows the move history, the board and the evaluation of the sele
 - **Opening book** expands a reference from BackgammonDB or the XG Opening Book, if one is configured.
 
 > **Novice:** You don't need to read every column. Compare the **Loss** of your move with the grade colors. Then switch to **Arrows** and look at what the best move does differently on the board.
+
+Details: [Candidate comparison and decision review](../reference/analysis.md#candidate-comparison-and-decision-review)
 
 #### Compare moves
 
@@ -283,15 +291,9 @@ If no saved result exists, BG Tutor starts the calculation automatically with th
 
 BG Tutor numbers depths the same way for GNUbg and Open Sage, like XG: 1-ply is the raw evaluation. GNUbg's own manual calls that level 0-ply, so BG Tutor's 3-ply is GNUbg's 2-ply.
 
-| Depth (GNUbg) | Speed | Typical use |
-| --- | --- | --- |
-| 1-ply | instant | quick checks, fast bot play |
-| 2-ply | fast | quick reviews |
-| **3-ply** *(default)* | moderate | standard match review |
-| 4-ply | slow | close decisions |
-| 5-ply | very slow | deep study of key positions and full-match analysis on fast machines |
+> **Pro:** Every job keeps the engine version, depth and move filter it started with, even if you change Settings while it is running.
 
-> **Pro:** New GNUbg jobs at 3-ply and 5-ply pass up to the 14 best 1-ply candidates to the next search level. Every job keeps the engine version, depth and filter it started with, even if you change Settings while it is running.
+Details: [Analysis time estimates](../reference/analysis.md#analysis-time-estimates) · [Analysis jobs](../reference/analysis.md#analysis-jobs) · [Settings and engines](../reference/settings.md#settings-and-engines) · [Ply convention](../reference/settings.md#ply-convention)
 
 ### Displayed analysis and new calculations
 
@@ -311,6 +313,8 @@ flowchart TD
 - **Load more analyses** shows older results in the same list.
 - **Delete analysis** permanently removes the selected result after confirmation. Deleting imported values never changes the original match file.
 
+Details: [Imported analysis and opening books](../reference/analysis.md#imported-analysis-and-opening-books)
+
 ### Statistics
 
 ![Statistics tab with decisions, normalized equity loss, native PR and an error breakdown per player](images/analysis-statistics.webp)
@@ -326,13 +330,15 @@ Click any count to open the matching decisions in the **Checker** or **Cube** ta
 
 **Compare saved analyses** puts any two saved analyses side by side, for example XG and GNUbg 3-ply. The displayed analysis does not change.
 
-> **Pro:** Native PR is calculated as 500 × normalized equity loss ÷ the number of unforced checker decisions plus close or actual cube decisions. GNUbg counts decisions differently from XG, so PR values from the two programs are not directly comparable. PR requires a complete native analysis. Imported analyses don't supply native PR.
+> **Pro:** GNUbg counts decisions differently from XG, so PR values from the two programs are not directly comparable. PR requires a complete native analysis. Imported analyses don't supply native PR.
+
+Details: [Checker and cube error statistics](../reference/analysis.md#checker-and-cube-error-statistics) · [How PR is calculated](../reference/library.md#table-and-metadata)
 
 ### Cube
 
 ![Cube tab reviewing a doubling decision with the cube evaluation on the right](images/analysis-cube.webp)
 
-The Cube tab reviews **doubling decisions only**. Use **Previous error** and **Next error** above the board, or press **E** / **Shift+E**, to step through them. Filter by player, severity and game. **Inaccuracies only** hides decisions below the *Questionable* threshold. The eraser button resets the filters.
+The Cube tab reviews **doubling decisions only**. Use **Previous error** and **Next error** above the board, or press **E** / **Shift+E**, to step through them. Filter by player, severity and game. **Inaccuracies only** hides decisions below the *Questionable* threshold. **Reset filters** (the eraser button) restores the default filters.
 
 For each decision you see:
 
@@ -346,6 +352,8 @@ For each decision you see:
 
 > **Advanced:** Compare the game winning chances with the take point. If your chances are well above the take point, it is a take. Gammon chances and later cube use shift the real decision. The engine's equities include both, so check them before you rely on the simple rule.
 
+Details: [Cube context, take point and move explanations](../reference/analysis.md#cube-context-take-point-and-move-explanations)
+
 ### Notes
 
 ![Notes tab with Match, Game and Position scopes, tags and a comment field](images/analysis-notes.webp)
@@ -353,6 +361,8 @@ For each decision you see:
 Choose **Match**, **Game** or **Position** and add **tags** and a **comment**. Press **Enter** or **Add tag** after each tag. A note can have up to 30 tags of 64 characters each and a comment of up to 20,000 characters. Select **Save notes** to store them. Unsaved drafts survive switching tabs. If someone else saved a newer version, BG Tutor reports a conflict and keeps your draft.
 
 **Cube and move notes** lists game notes and recorded actions such as doubles, takes, passes and accepted resignations. Each entry shows the board immediately before the action. You can search tags and comments from the [Match database](#search-and-filters) with **Notes**.
+
+Details: [Tags and comments](../reference/analysis.md#tags-and-comments)
 
 ### Study cards
 
@@ -367,6 +377,8 @@ Use this tab to turn analyzed positions into flashcards.
 
 A card is identified by its board, its full match context and its question type. Adding the same decision to another deck reuses the card and its review progress.
 
+Details: [Create and manage decks](../reference/study.md#create-and-manage-decks)
+
 ---
 
 ## 4. Study
@@ -380,6 +392,8 @@ A card is identified by its board, its full match context and its question type.
 - **Next step** starts the deck that holds the card that has been due longest. If no cards are due, it recommends your costliest mistake group.
 - **Due flashcards** shows today's due reviews and new cards. **New cards per day** limits how many cards you see for the first time each day, 10 by default. Set it to 0 to pause new cards. Due reviews are always offered.
 - **My recurring mistakes** shows the top mistake groups for a player. **Open mistake overview** opens the full list.
+
+Details: [Study](../reference/study.md#study)
 
 ### Flashcards & Anki
 
@@ -428,6 +442,8 @@ A legal answer that loses less than 0.040 equity counts as **playable**.
 >
 > **Advanced:** Rate **after** you have read the explanation. The rating is for your memory, while the check grades your play. BG Tutor keeps the two separate.
 
+Details: [Flashcards and Anki](../reference/study.md#flashcards-and-anki)
+
 ### Reports
 
 ![Reports archive with money sessions and match reports](images/study-reports.webp)
@@ -438,6 +454,8 @@ A **learning review** records your decisions in a game or match from Playing. Mo
 - **AI assessment** (optional, point matches only) writes a summary covering ten topics, up to three key decisions and practice tasks. It is created only when you start it. An OpenAI API key must be configured on the backend. Personal names, notes and raw SGF are left out of the request.
 
 Use **Left**/**Right** to switch between the report tabs and **Escape** to return to the archive.
+
+Details: [Reports](../reference/study.md#reports) · [AI assessment](../reference/study.md#ai-assessment)
 
 ### My recurring mistakes
 
@@ -459,7 +477,9 @@ Choose a **Player**, and optionally a **Database**, a **Game plan** and a **Mini
 
 > **Advanced:** Focus on the groups with the highest *equity loss per 100 decisions* that appear in at least two matches. A rare blunder costs less in the long run than a small error that you repeat in every match.
 >
-> **Pro:** Each match contributes only the decisions of its **displayed analysis**. Decisions from different analyses are never combined. XG, GNUbg SGF and BGBlitz imports keep their own units and depth. Match-winning-chance values and unknown units are left out of the loss calculation.
+> **Pro:** Each match contributes only the decisions of its **displayed analysis**. Decisions from different analyses are never combined.
+
+Details: [My recurring mistakes](../reference/study.md#my-recurring-mistakes)
 
 ### Practice history
 
@@ -483,7 +503,7 @@ This is your personal collection of decisions. You add positions with **Save pos
 - **More filters** are grouped into **Match**, **Position**, **Analysis**, and **Tags and comments**. They include the position ID, roll, score, Crawford, cube, equity loss and more. One die matches either die of the roll, and a pair matches in either order.
 - Applied filters appear as chips. Remove a chip to update the results immediately.
 - **Show played moves** reveals the recorded decision. It starts switched off, so the answers stay hidden while you study.
-- Select a row to see a large preview with the equity loss, decks, tags and notes. **Open analysis**, or **Enter** or a double-click, opens the exact decision in Analysis. The icon beside it finds **similar positions**.
+- Select a row to see a large preview with the equity loss, decks, tags and notes. **Open analysis**, or **Enter** or a double-click, opens the exact decision in Analysis. The icon beside it finds **similar positions** ([details](../reference/library.md#similar-positions)).
 - Select rows with the checkboxes, up to 200, and use **Add to deck** or **Remove from collection**. Removing offers **Undo**.
 
 ### All analyzed decisions
@@ -498,6 +518,8 @@ This view searches **every** checker and cube decision of one player in the disp
 4. **Practice results** turns up to 20 errors on the current page into a practice round.
 
 > **Pro:** Use **More filters** to narrow the search to a score, for example *2-away / 4-away*, or to a cube value and owner. This lets you build a drill set for a specific match situation, such as double-match-point or post-Crawford positions.
+
+Details: [Saved positions and searches](../reference/library.md#saved-positions-and-searches)
 
 ---
 
@@ -529,11 +551,15 @@ BG Tutor creates four **system databases** automatically. They cannot be deleted
 
 You can create, rename, describe and delete your own databases. **Empty database** is available for *Unsorted*, *Bot Matches* and *Engine Duels*. It requires confirmation, and saved positions, flashcards and their review history are kept.
 
+Details: [Match databases](../reference/library.md#match-databases)
+
 ### Importing
 
 Select **Import match**, or drop files on the Analysis welcome panel. Supported formats are **MAT** (Jellyfish/GNUbg), **XG** (eXtreme Gammon), **SGF** (GNUbg), **BGF** (BGBlitz) and **OGXM**. Each file is imported separately, and duplicates and errors are reported per file. Analyses stored in the file are kept as *imported analysis* with their original depth and units.
 
-Unsupported content is rejected: XG1 files, edited starting positions, beavers, raccoons, automatic doubles and other variants.
+Unsupported content is rejected, for example XG1 files, edited starting positions, beavers and other variants.
+
+Details: [Import formats](../reference/library.md#import-formats)
 
 ### Search and filters
 
@@ -552,7 +578,7 @@ Click a column heading to sort ascending, and click it again to sort descending.
 | --- | --- | --- |
 | **Open match** | 1 match | Opens it in Analysis. **Enter** or a double-click does the same. |
 | **Resume match** | 1 paused or unfinished bot match | Continues it in Playing. |
-| **Analyze selected matches …** | 1 or more | Uses one engine and depth for all of them and shows a time estimate. **Bulk analysis** above the list shows the progress. |
+| **Analyze selected matches …** | 1 or more | Uses one engine and depth for all of them. For a single match the dialog also shows a time estimate. **Bulk analysis** above the list shows the progress. |
 | **Edit match details** | 1 match | Display name, played date, event, round, venue and result. |
 | **Copy** / **Move** | up to 100 | Copies get new IDs and keep their notes and analyses. Moves keep their IDs. |
 | **Tags** | up to 100 | Edit the tags of the selected matches. |
@@ -562,6 +588,8 @@ Click a column heading to sort ascending, and click it again to sort descending.
 > **Novice:** After importing your first match, select it and choose **Analyze selected matches …** at the default 3-ply. If you keep the dialog open until the analysis finishes, BG Tutor opens **Statistics** for the match. If you close it, the analysis continues in the background.
 >
 > **Pro:** The **ID** column is a stable match number. It survives renames and moves, and copies receive new numbers. Use **Position ID** together with the **Database**, **Game** and **Move** columns to find out how often, and in which matches, a reference position occurred.
+
+Details: [Filtering and navigating matches](../reference/library.md#filtering-and-navigating-matches) · [Bulk actions and exports](../reference/library.md#bulk-actions-and-exports)
 
 ---
 
@@ -580,6 +608,8 @@ The Player database lists everyone who appears in your matches.
 
 > **Advanced:** Merge the profiles of your own online usernames first. Then your PR trend, *My recurring mistakes* and *All analyzed decisions* cover all your matches.
 
+Details: [Player database](../reference/library.md#player-database)
+
 ---
 
 ## 8. Extras
@@ -596,6 +626,8 @@ The benchmark measures how fast your computer runs the engines on a fixed refere
 
 **Comparison** shows the median and range of the last three runs for each engine and depth. BG Tutor uses these results for the time estimates of analyses. While a benchmark runs, other engine work waits.
 
+Details: [Engine benchmark](../reference/extras.md#engine-benchmark)
+
 ### Engine duels
 
 ![Engine duels with the series list and the results of a running series](images/extras-duels.webp)
@@ -606,6 +638,8 @@ Engine duels let two engines play each other many times so you can compare their
 - **Paired with sides swapped** (default) plays every set of dice twice, with the engines on opposite sides. This reduces the luck factor considerably.
 - Results show each side's **match win rate**, the matches won, the **CPU time per move**, and a **95 % confidence interval** once the sample is large enough. The interval tells you whether the result could still be 50 %.
 - Each completed match is saved in **Match database → Engine Duels** and can be downloaded as SGF. **Repeat series …** runs the same settings and seed again.
+
+Details: [Engine duels](../reference/extras.md#engine-duels)
 
 ### Database backup
 
@@ -630,11 +664,15 @@ sequenceDiagram
 
 > **Novice:** Export a backup regularly, and always before you restore another backup or move to a new computer.
 
+Details: [Database backup](../reference/extras.md#database-backup)
+
 ### Versions
 
 ![Versions shows the BG Tutor build and the availability of GNUbg and Open Sage](images/extras-versions.webp)
 
 **Versions** shows the BG Tutor build and the versions of GNU Backgammon and Open Sage, and whether they are available. **Technical details** shows the full commit and the engine version output. **Copy version information** copies a report you can attach to a bug report.
+
+Details: [Version information](../reference/extras.md#version-information)
 
 ---
 
@@ -649,6 +687,8 @@ The **Profile** button in the header shows the active configuration profile. It 
 - choose **Manage profiles** to open **Settings → Profiles**.
 
 A profile stores engines, default depths, error thresholds, playing defaults, language, sound, appearance, board artwork and opening-book references. Engine paths belong to each computer and are not part of a profile.
+
+Details: [Configuration profiles](../reference/settings.md#configuration-profiles)
 
 ### Settings
 
@@ -669,6 +709,8 @@ Select the gear in the header. Choose a category on the left. **Apply** saves yo
 </tr>
 </table>
 
+Details: [Settings and engines](../reference/settings.md#settings-and-engines) · [Themes and language](../reference/settings.md#themes-and-language)
+
 #### Error grades
 
 The error thresholds in **Settings → Analysis** decide how a move is graded in the move history, the statistics, the Cube review and the feedback during play. They are measured in **normalized equity loss**. The defaults are:
@@ -680,16 +722,11 @@ The error thresholds in **Settings → Analysis** decide how a move is graded in
 | Blunder | 0.080 |
 | Large Blunder | 0.120 |
 
-```mermaid
-flowchart LR
-  G["0.000<br/>good"] --> Q["≥ 0.005<br/>Questionable"] --> E["≥ 0.020<br/>Error"] --> B["≥ 0.080<br/>Blunder"] --> L["≥ 0.120<br/>Large Blunder"]
-```
-
-The thresholds must increase strictly, be greater than 0 and be at most 1. When you change them, existing analyses are graded again from their stored losses. *Inaccuracies* in Statistics counts all four grades together. The **Error** threshold also decides when Coach and Tutor intervene in new matches. The settings screenshot above shows a customized *Blunder* value of 0.050.
+Each value is the lower bound of its grade, and the four values must increase. When you change them, existing analyses are graded again from their stored losses. *Inaccuracies* in Statistics counts all four grades together. The **Error** threshold also decides when Coach and Tutor intervene in new matches. The settings screenshot above shows a customized *Blunder* value of 0.050.
 
 #### Engines on this computer
 
-Expand **Engines on this computer** to set the GNUbg executable and the Open Sage Python environment, and the maximum number of threads per engine, separately for analysis (including engine duels) and for playing. **Simultaneous analysis jobs** lets several analyses run at the same time; Open Sage still runs one analysis at a time. **Check installation** and **Verify and save** run a real position evaluation before a setting is accepted. BG Tutor never falls back to another engine on its own. A missing engine is reported as unavailable.
+Expand **Engines on this computer** to set the GNUbg executable and the Open Sage Python environment, and the maximum number of threads per engine, separately for analysis (including engine duels) and for playing. **Simultaneous analysis jobs** lets several analyses run at the same time; Open Sage still runs one analysis at a time. **Check installation** and **Verify and save** run a real position evaluation before a setting is accepted. BG Tutor never falls back to another engine on its own. A missing engine is reported as unavailable. See also [Local Open Sage setup](../open-sage-local.md).
 
 ---
 
@@ -782,7 +819,7 @@ Shortcuts are ignored while you type in a text field. When a dialog is open, onl
 | *Apply* reports a conflict | Another browser window saved newer settings. **Apply** retries your changed settings against the newer version. If a profile conflict remains, load the server version or save your changes as a new profile in **Settings → Profiles**. |
 | A benchmark is running and other work waits | This is intended. Engine work resumes when the benchmark finishes or is cancelled. |
 
-For installation and server details, see the [project README](../../README.md).
+For installation and server details, see the [project README](../../README.md). Detailed behavior is described in the [reference](../reference/).
 
 ---
 

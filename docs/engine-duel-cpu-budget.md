@@ -6,7 +6,7 @@ Status: step 1 (measurement, option A) is implemented; options B–D are proposa
 
 Engine duels currently pair `Competitor { engine_id, plies }` profiles ([engine_matches.rs](../backend/src/engine_matches.rs)). That compares labels, not effort:
 
-- Ply counting differed. GNUbg 0-ply is a static evaluation, while XG calls the same thing 1-ply. Since migration 0079, BG Tutor uses the XG convention for both engines and converts only when it talks to GNUbg ([Ply convention](../README.md#ply-convention)). Duels from before 0079 ran a GNUbg side labelled N-ply at today's N+1-ply. Open Sage only offers 1–4-ply.
+- Ply counting differed. GNUbg 0-ply is a static evaluation, while XG calls the same thing 1-ply. Since migration 0079, BG Tutor uses the XG convention for both engines and converts only when it talks to GNUbg ([Ply convention](reference/settings.md#ply-convention)). Duels from before 0079 ran a GNUbg side labelled N-ply at today's N+1-ply. Open Sage only offers 1–4-ply.
 - The work per ply differs. Move filters and pruning decide how many candidates are searched deeper. GNUbg duels currently use GNUbg's default move filter, while analysis uses Top14. Open Sage passes no filter.
 - Engines can be tuned differently, for example deeper for cube decisions and races than for normal checker play, with or without bear-off databases. A single depth setting for both sides cannot express that.
 - Thread counts are global per engine. GNUbg defaults to 1, Open Sage uses at least 2 in duels.
@@ -87,5 +87,5 @@ For third-party engines, a small protocol would be needed (position, dice, match
 
 ## Cubeless money blocks
 
-Implemented as duel format `money_cubeless`, following the suggestion that cubeless money games give a variance that is easy to state: about 1.35 points per game, so a 95% interval of roughly ±2.7/√N points per game. Checker play is compared without cube skill, which suits budget comparisons. The README describes the format; measured CPU time per move applies to it unchanged. Note that Open Sage's cubeless path runs serially with a narrower full-depth search, so its CPU time per move is far lower than in cubeful match play at the same nominal depth.
+Implemented as duel format `money_cubeless`, following the suggestion that cubeless money games give a variance that is easy to state: about 1.35 points per game, so a 95% interval of roughly ±2.7/√N points per game. Checker play is compared without cube skill, which suits budget comparisons. The [Extras reference](reference/extras.md#engine-duels) describes the format; measured CPU time per move applies to it unchanged. Note that Open Sage's cubeless path runs serially with a narrower full-depth search, so its CPU time per move is far lower than in cubeful match play at the same nominal depth.
 

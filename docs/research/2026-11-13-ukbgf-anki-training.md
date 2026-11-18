@@ -19,7 +19,7 @@ Die Artikel beschreiben einen persönlichen Trainingsablauf. Experimente mit Tex
 | Analyse übernimmt ausgewählte Fehler in Decks. Positionsvorschläge berücksichtigen Equity-Verlust und wiederkehrende Fehler. Suche und Export beziehen bereits Tags und Kommentare aus Quellnotizen. | Tags an der Lernkarte ergänzen und vorhandene Quellnotizen im jeweiligen Kontext weiter nutzen. |
 | Wiederkehrende Fehler liefern gruppierte Übungen. Bestimmte Cube-Runden enthalten bereits passende Gegenbeispiele. Ähnliche Stellungen lassen sich aktiv üben, der bisherige Verlauf speichert aggregierte Rundenwerte. | Die Bausteine für thematische Übungen und später für Tests an unbekannten Stellungen verwenden. |
 
-[README, Flashcards und Anki](../../README.md#flashcards-and-anki) · [README, Study](../../README.md#study) · [Kartenabfrage](../../backend/src/learning/search.rs) · [Ähnliche Stellungen](../../web/src/SimilarPositionPractice.tsx)
+[Referenz, Flashcards und Anki](../reference/study.md#flashcards-and-anki) · [Referenz, Study](../reference/study.md#study) · [Kartenabfrage](../../backend/src/learning/search.rs) · [Ähnliche Stellungen](../../web/src/SimilarPositionPractice.tsx)
 
 ## Empfohlene Reihenfolge
 
