@@ -25,7 +25,13 @@ import {
 } from './configuration-model';
 import { useBenchmarkText } from './benchmark-messages';
 import ActionButton from './ActionButton';
-import { ANALYSIS_PLIES, isAnalysisDepth } from './analysis-depth';
+import {
+  ANALYSIS_PLIES,
+  depthLabel,
+  isAnalysisDepth,
+  PLAY_PLIES,
+  preferredDepth,
+} from './analysis-depth';
 import {
   useEffect,
   useId,
@@ -435,6 +441,20 @@ export default function SettingsDialog({
     ? configurationOptions.engine_profiles[draft.play_engine].play
     : [];
   const rememberedDepths = useRef<Record<string, number>>({});
+  /** GNUbg's three named profiles are its 1- to 3-ply searches. */
+  function depthOptionLabel(
+    ply: number,
+    engine: string,
+    names: readonly [
+      SettingsMessageKey,
+      SettingsMessageKey,
+      SettingsMessageKey,
+    ],
+  ) {
+    const depth = depthLabel(ply, engine);
+    const name = engine === 'gnubg' ? names[ply - 1] : undefined;
+    return name ? t(name, { depth }) : depth;
+  }
 
   function resetThresholds(values: ErrorThresholds, language: Locale) {
     initialThresholds.current = values;
@@ -775,7 +795,8 @@ export default function SettingsDialog({
               area === 'analysis' ? draft.analysis_plies : draft.play_plies;
             const options = configurationOptions.engine_profiles[value][area];
             const remembered =
-              rememberedDepths.current[`${area}-${value}`] ?? 2;
+              rememberedDepths.current[`${area}-${value}`] ??
+              preferredDepth(value);
             const depth = options.includes(remembered)
               ? remembered
               : options[0];
@@ -1039,11 +1060,11 @@ export default function SettingsDialog({
                             value={ply}
                             disabled={!analysisPlies.includes(ply)}
                           >
-                            {draft.analysis_engine === 'bgsage' ||
-                            ply === 3 ||
-                            ply === 4
-                              ? `${ply}-ply`
-                              : t((['fast', 'deep', 'thorough'] as const)[ply])}
+                            {depthOptionLabel(ply, draft.analysis_engine, [
+                              'fast',
+                              'deep',
+                              'thorough',
+                            ])}
                           </option>
                         ))}
                       </select>
@@ -1339,23 +1360,17 @@ export default function SettingsDialog({
                           update({ play_plies: Number(event.target.value) })
                         }
                       >
-                        {[0, 1, 2].map((ply) => (
+                        {PLAY_PLIES.map((ply) => (
                           <option
                             key={ply}
                             value={ply}
                             disabled={!playPlies.includes(ply)}
                           >
-                            {draft.play_engine === 'bgsage'
-                              ? `${ply}-ply`
-                              : t(
-                                  (
-                                    [
-                                      'strength0',
-                                      'strength1',
-                                      'strength2',
-                                    ] as const
-                                  )[ply],
-                                )}
+                            {depthOptionLabel(ply, draft.play_engine, [
+                              'strengthQuick',
+                              'strengthStronger',
+                              'strengthStrongest',
+                            ])}
                           </option>
                         ))}
                       </select>

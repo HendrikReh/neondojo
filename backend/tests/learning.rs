@@ -370,7 +370,7 @@ async fn learning_summary_counts_unique_due_cards(pool: PgPool) {
         },
         "players": ["White", "Black"], "prompt": "Answer", "played": position.notation,
         "source": { "kind": "analysis", "job_id": Uuid::nil(), "match_id": Uuid::nil(), "game_no": 1 },
-        "solution": { "engine": "Fixture", "plies": 0, "candidates": [] }
+        "solution": { "engine": "Fixture", "plies": 1, "candidates": [] }
     });
     let future_at: chrono::DateTime<chrono::Utc> = sqlx::query_scalar(
         "WITH inserted AS (
@@ -829,7 +829,7 @@ async fn card_game_plan_filter_is_applied_before_practice_selection(pool: PgPool
         "player":p.player,"dice":p.dice,"board":p.board,"position_id":p.position_id,"gnubg_match_id":p.match_id,"notation":p.notation},
         "players":["White","Black"],"prompt":"Answer","played":p.notation,
         "source":{"kind":"match","job_id":Uuid::nil(),"match_id":Uuid::nil(),"game_no":1},
-        "solution":{"engine":"Fixture","plies":0,"candidates":[]}
+        "solution":{"engine":"Fixture","plies":1,"candidates":[]}
     });
     sqlx::query("INSERT INTO learning_cards(id,signature,payload) VALUES($1,$2,$3)")
         .bind(id)
@@ -940,7 +940,7 @@ async fn cards_share_identity_and_preserve_atomic_fsrs_reviews(pool: PgPool) {
         app.clone(),
         "POST",
         "/api/jobs",
-        json!({"position_id":position.id,"kind":"analysis","plies":0}),
+        json!({"position_id":position.id,"kind":"analysis","plies":1}),
     )
     .await;
     assert!(jobs::run_one(&state).await.unwrap());
@@ -1131,7 +1131,7 @@ async fn match_cards_include_cube_offers_responses_and_recover_original_boards(p
         app.clone(),
         "POST",
         &format!("/api/matches/{}/analysis", imported.r#match.id),
-        json!({"plies":0}),
+        json!({"plies":1}),
     )
     .await;
     assert!(jobs::run_one(&state).await.unwrap());
@@ -1312,7 +1312,7 @@ async fn deck_size_limit_rolls_back_addition_and_bounds_exports(pool: PgPool) {
         app.clone(),
         "POST",
         "/api/jobs",
-        json!({"position_id":p.id,"kind":"analysis","plies":0}),
+        json!({"position_id":p.id,"kind":"analysis","plies":1}),
     )
     .await;
     assert!(jobs::run_one(&state).await.unwrap());
@@ -1419,7 +1419,7 @@ async fn anki_exports_update_monotonically_for_annotations_and_locales(pool: PgP
         app.clone(),
         "POST",
         "/api/jobs",
-        json!({"position_id":p.id,"kind":"analysis","plies":0}),
+        json!({"position_id":p.id,"kind":"analysis","plies":1}),
     )
     .await;
     assert!(jobs::run_one(&state).await.unwrap());
@@ -1573,7 +1573,7 @@ async fn blocked_export_reads_current_content_after_acquiring_all_card_locks(poo
             app.clone(),
             "POST",
             "/api/jobs",
-            json!({"position_id":position.id,"kind":"analysis","plies":0}),
+            json!({"position_id":position.id,"kind":"analysis","plies":1}),
         )
         .await;
         assert!(jobs::run_one(&state).await.unwrap());

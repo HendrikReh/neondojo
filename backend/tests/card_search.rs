@@ -316,7 +316,7 @@ async fn cube_notes_use_actual_events_after_virtual_no_double_decisions(pool: Pg
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO jobs(id,match_uuid,kind,plies,status) VALUES($1,$2,'match',0,'completed')",
+        "INSERT INTO jobs(id,match_uuid,kind,plies,status) VALUES($1,$2,'match',1,'completed')",
     )
     .bind(job)
     .bind(match_id)

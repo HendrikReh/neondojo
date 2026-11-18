@@ -577,7 +577,7 @@ struct JobRequest {
     engine_id: Option<MatchAnalysisEngine>,
     /// Verified search depth of the selected engine. Omitted uses saved analysis depth.
     #[serde(default)]
-    #[schema(minimum = 0, maximum = 4)]
+    #[schema(minimum = 1, maximum = 5)]
     plies: Option<i32>,
 }
 
@@ -598,9 +598,6 @@ async fn create_job(
         return Err(ApiError::invalid(
             "Depth is not verified for the selected engine",
         ));
-    }
-    if !(0..=4).contains(&plies) {
-        return Err(ApiError::invalid("plies must be 0..4"));
     }
     store::get_position(&state.pool, request.position_id)
         .await?
@@ -644,7 +641,7 @@ struct MatchAnalysisRequest {
     engine_id: Option<MatchAnalysisEngine>,
     /// Verified checker and cube depth of the selected engine. Omitted uses saved analysis depth.
     #[serde(default)]
-    #[schema(minimum = 0, maximum = 4)]
+    #[schema(minimum = 1, maximum = 5)]
     plies: Option<i32>,
 }
 
@@ -674,9 +671,6 @@ async fn create_match_analysis(
         return Err(ApiError::invalid(
             "Depth is not verified for the selected engine",
         ));
-    }
-    if !(0..=4).contains(&plies) {
-        return Err(ApiError::invalid("plies must be 0..4"));
     }
     let games = validate_game(&state, id, request.game_no).await?;
     let total = if request.game_no.is_some() {

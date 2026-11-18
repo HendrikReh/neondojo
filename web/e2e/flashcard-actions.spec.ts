@@ -34,7 +34,7 @@ test('search results add, move, remove and delete selected cards', async ({
   expect(positions).toHaveLength(2);
   for (const position of positions) {
     const job = await page.request.post('/api/jobs', {
-      data: { position_id: position.id, kind: 'analysis', plies: 0 },
+      data: { position_id: position.id, kind: 'analysis', plies: 1 },
     });
     await expect(job).toBeOK();
     const { id } = await job.json();

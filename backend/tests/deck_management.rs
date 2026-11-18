@@ -202,7 +202,7 @@ async fn positions(pool: &PgPool) -> Vec<Position> {
         .items;
     // All questions in this fixture share one completed match analysis, as the
     // saved catalog selection is per match rather than an implicit per-position fallback.
-    let job = store::create_match_job(pool, imported.r#match.id, 0, 1)
+    let job = store::create_match_job(pool, imported.r#match.id, 1, 1)
         .await
         .unwrap();
     sqlx::query("UPDATE jobs SET status='completed',completed_games=1,result=$2 WHERE id=$1")

@@ -60,11 +60,11 @@ test('a delayed initial settings response cannot replace a newer saved profile',
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
   const configuration = structuredClone(defaultConfiguration);
   configuration.general.locale = 'de';
-  configuration.analysis.plies = 1;
+  configuration.analysis.plies = 2;
   const profiles = await profileBackend(page, { configuration });
   const original = {
     ...(await (await page.request.get('/api/settings')).json()),
-    analysis_plies: 1,
+    analysis_plies: 2,
   };
   let dialogOpening = false,
     release = () => {},
@@ -100,22 +100,22 @@ test('a delayed initial settings response cannot replace a newer saved profile',
   await dialog.getByRole('button', { name: 'Analyse', exact: true }).click();
   await dialog
     .getByLabel('Standardprofil für Analysen', { exact: true })
-    .selectOption('2');
+    .selectOption('3');
   await applyAndCloseSettings(dialog, 'de');
   await openMatchAnalysisOptions(page);
   await expect(
     page
       .locator('.workspace-analysis-command')
       .getByLabel('Match-Analysetiefe', { exact: true }),
-  ).toHaveValue('2');
-  expect(profiles.state.current_configuration.analysis.plies).toBe(2);
+  ).toHaveValue('3');
+  expect(profiles.state.current_configuration.analysis.plies).toBe(3);
   release();
   await page.unrouteAll({ behavior: 'wait' });
   await expect(
     page
       .locator('.workspace-analysis-command')
       .getByLabel('Match-Analysetiefe', { exact: true }),
-  ).toHaveValue('2');
+  ).toHaveValue('3');
 });
 
 test('inspector tabs support arrow, Home and End navigation', async ({

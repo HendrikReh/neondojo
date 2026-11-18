@@ -187,7 +187,7 @@ async fn gnubg_game_jobs_evaluate_all_fourteen_opening_candidates_at_depth(pool:
     .unwrap();
     let state = api::AppState::new(pool.clone(), engine);
     let app = api::router(state.clone());
-    for plies in [2, 4] {
+    for plies in [3, 5] {
         let (status, submitted) = call(
             app.clone(),
             "POST",
@@ -266,10 +266,10 @@ async fn full_match_analysis_is_persisted_paginated_and_replayable(pool: PgPool)
     let (status, empty) = call(app.clone(), "GET", &endpoint, Value::Null).await;
     assert_eq!(status, 200);
     assert!(empty.is_null());
-    let (status, value) = call(app.clone(), "POST", &endpoint, json!({"plies": 0})).await;
+    let (status, value) = call(app.clone(), "POST", &endpoint, json!({"plies": 1})).await;
     assert_eq!(status, 202, "{value}");
     let job: Job = serde_json::from_value(value).unwrap();
-    let (_, duplicate) = call(app.clone(), "POST", &endpoint, json!({"plies": 0})).await;
+    let (_, duplicate) = call(app.clone(), "POST", &endpoint, json!({"plies": 1})).await;
     assert_eq!(duplicate["id"], job.id.to_string());
     assert!(jobs::run_one(&state).await.unwrap());
     let (_, done) = call(app.clone(), "GET", &endpoint, Value::Null).await;
@@ -412,7 +412,7 @@ async fn full_match_analysis_is_persisted_paginated_and_replayable(pool: PgPool)
         );
     }
     assert_eq!(
-        call(app, "POST", &endpoint, json!({"plies":5})).await.0,
+        call(app, "POST", &endpoint, json!({"plies":6})).await.0,
         422
     );
 }
@@ -468,7 +468,7 @@ async fn heartbeat_renews_lease_during_a_long_game(pool: PgPool) {
     )
     .await
     .unwrap();
-    let job = store::create_match_job(&pool, imported.r#match.id, 0, 1)
+    let job = store::create_match_job(&pool, imported.r#match.id, 1, 1)
         .await
         .unwrap();
     let state = api::AppState::new(

@@ -29,6 +29,9 @@ import {
   type CheckerStep,
 } from '../src/play-state';
 
+/** GNUbg writes its own level (one below BG Tutor's 1-ply = raw net) into the SGF. */
+const gnubgLevel = (plies: number) => plies - 1;
+
 test.skip(
   !process.env.BGTUTOR_FULL_MATCH_TEST,
   'Requires a disposable real GNUbg play service',
@@ -335,7 +338,7 @@ async function playToEnd(page: Page, initial: PlaySession) {
   ).text();
   expect(source).toContain(`BTSESSION[${state.id}]`);
   expect(source).toContain('RE[');
-  expect(source).toContain(`${state.engine.plies}C 0 1 0.000000`);
+  expect(source).toContain(`${gnubgLevel(state.engine.plies)}C 0 1 0.000000`);
   // Leave the mandatory match-result dialog via a real page reload before
   // browsing the archive; background tabs remain correctly modal-blocked.
   await page.reload();
@@ -351,7 +354,7 @@ async function playToEnd(page: Page, initial: PlaySession) {
     page.locator('.library-batch-bar').getByRole('button', { name: 'Resume match', exact: true }),
   ).toBeDisabled();
   expect(sgf).toContain('RE[');
-  expect(sgf).toContain(`${state.engine.plies}C 0 1 0.000000`);
+  expect(sgf).toContain(`${gnubgLevel(state.engine.plies)}C 0 1 0.000000`);
   writeFileSync(
     test.info().outputPath(`full-match-${state.bearoff_direction}.sgf`),
     sgf,
@@ -456,8 +459,8 @@ for (const config of [
 }
 
 for (const config of [
-  { human: 0, direction: 'right', plies: 2, theme: 'forest' },
-  { human: 1, direction: 'left', plies: 0, theme: 'bgblitz:bg-earth' },
+  { human: 0, direction: 'right', plies: 3, theme: 'forest' },
+  { human: 1, direction: 'left', plies: 1, theme: 'bgblitz:bg-earth' },
 ]) {
   test(`complete native match with per-die hover ${config.human}/${config.direction}/${config.plies}ply`, async ({
     page,
@@ -541,15 +544,15 @@ for (const config of [
   {
     human: 0,
     direction: 'right',
-    plies: 2,
+    plies: 3,
     response: 'Take double',
     points: 2,
   },
-  { human: 1, direction: 'left', plies: 0, response: 'Pass double', points: 1 },
+  { human: 1, direction: 'left', plies: 1, response: 'Pass double', points: 1 },
   {
     human: 0,
     direction: 'right',
-    plies: 1,
+    plies: 2,
     response: 'Pass double',
     points: 1,
   },
@@ -589,7 +592,7 @@ for (const config of [
     expect(state.game_no).toBe(2);
     expect(state.engine.plies).toBe(config.plies);
     await reloadUnchanged(page, state);
-    const marker = `${config.plies}C 0 1 0.000000`;
+    const marker = `${gnubgLevel(config.plies)}C 0 1 0.000000`;
     let sgf = await (
       await page.request.get(`/api/play/sessions/${state.id}/sgf`)
     ).text();
@@ -607,7 +610,7 @@ for (const config of [
     }
     expect(
       sgf.split('(;').at(-1),
-      `Native next-game bot search depth must be actual${config.plies}C, not only metadata`,
+      `Native next-game bot search depth must be actual${gnubgLevel(config.plies)}C, not only metadata`,
     ).toContain(marker);
     await test
       .info()

@@ -39,7 +39,7 @@ async fn setup(pool: &PgPool) -> (api::AppState, axum::Router, Uuid) {
 }
 
 fn summary() -> Value {
-    json!({"engine":"GNU Backgammon fixture", "plies":0,"total_games":3,"completed_games":1,"total_moves":2,"analyzed_moves":2,"players":[
+    json!({"engine":"GNU Backgammon fixture", "plies":1,"total_games":3,"completed_games":1,"total_moves":2,"analyzed_moves":2,"players":[
         {"player":0,"checker_decisions":1,"cube_decisions":1,"forced_moves":0,"unavailable":0,"doubtful":1,"bad":1,"very_bad":0,"checker_equity_loss":0.04,"cube_equity_loss":0.08},
         {"player":1,"checker_decisions":1,"cube_decisions":0,"forced_moves":1,"unavailable":0,"doubtful":0,"bad":0,"very_bad":0,"checker_equity_loss":0.0,"cube_equity_loss":0.0}
     ],"performance_rating":null})
@@ -65,7 +65,7 @@ async fn decision(
 #[ignore = "requires PostgreSQL"]
 async fn statistics_use_checkpoint_coverage_and_preserve_authoritative_summary(pool: PgPool) {
     let (_, app, match_id) = setup(&pool).await;
-    let job = store::create_match_job(&pool, match_id, 0, 3)
+    let job = store::create_match_job(&pool, match_id, 1, 3)
         .await
         .unwrap();
     let uri = format!("/api/jobs/{}/statistics", job.id);
@@ -133,7 +133,7 @@ async fn statistics_use_checkpoint_coverage_and_preserve_authoritative_summary(p
 #[ignore = "requires PostgreSQL"]
 async fn statistics_scope_empty_checkpoint_missing_and_wrong_kind(pool: PgPool) {
     let (_, app, match_id) = setup(&pool).await;
-    let job = store::create_match_job_scoped(&pool, match_id, 0, 1, Some(3))
+    let job = store::create_match_job_scoped(&pool, match_id, 1, 1, Some(3))
         .await
         .unwrap();
     sqlx::query("INSERT INTO match_analysis_games(job_id,game_no) VALUES($1,3)")
@@ -164,7 +164,7 @@ async fn statistics_scope_empty_checkpoint_missing_and_wrong_kind(pool: PgPool) 
         .unwrap();
     let other = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO jobs(id,position_uuid,kind,plies,status) VALUES($1,$2,'analysis',0,'queued')",
+        "INSERT INTO jobs(id,position_uuid,kind,plies,status) VALUES($1,$2,'analysis',1,'queued')",
     )
     .bind(other)
     .bind(position)
@@ -181,7 +181,7 @@ async fn statistics_scope_empty_checkpoint_missing_and_wrong_kind(pool: PgPool) 
 #[ignore = "requires PostgreSQL and GNUbg"]
 async fn native_statistics_are_persisted_per_game_without_averaging_pr(pool: PgPool) {
     let (state, app, match_id) = setup(&pool).await;
-    let job = store::create_match_job(&pool, match_id, 0, 3)
+    let job = store::create_match_job(&pool, match_id, 1, 3)
         .await
         .unwrap();
     assert!(jobs::run_one(&state).await.unwrap());
@@ -245,7 +245,7 @@ async fn native_statistics_are_persisted_per_game_without_averaging_pr(pool: PgP
 #[ignore = "requires PostgreSQL"]
 async fn severity_filters_intersect_and_cursor_is_bound_to_severity(pool: PgPool) {
     let (_, app, match_id) = setup(&pool).await;
-    let job = store::create_match_job(&pool, match_id, 0, 3)
+    let job = store::create_match_job(&pool, match_id, 1, 3)
         .await
         .unwrap();
     let none = decision(&pool, &job, 1, 1, 0, "checker", "none", 0.0).await;
@@ -367,7 +367,7 @@ fn openapi_documents_statistics_and_severity_values() {
 #[ignore = "requires PostgreSQL"]
 async fn statistics_read_legacy_source_catalog_without_writes(pool: PgPool) {
     let (_, app, match_id) = setup(&pool).await;
-    let job = store::create_match_job_scoped(&pool, match_id, 0, 1, Some(3))
+    let job = store::create_match_job_scoped(&pool, match_id, 1, 1, Some(3))
         .await
         .unwrap();
     sqlx::query("DELETE FROM match_games WHERE match_uuid=$1")
@@ -404,7 +404,7 @@ fn breakdown(checker: [i32; 4], cube: [i32; 4], player: i32) -> Value {
 async fn typed_errors_use_all_checkpointed_games_and_preserve_legacy_json(pool: PgPool) {
     let (_, _, match_id) = setup(&pool).await;
     let (app, profile) = profile_support::initialized(&pool, false).await;
-    let job = store::create_match_job(&pool, match_id, 0, 3)
+    let job = store::create_match_job(&pool, match_id, 1, 3)
         .await
         .unwrap();
     // Legacy checkpoint with no saved summary, plus a modern saved checkpoint.
@@ -571,7 +571,7 @@ async fn typed_errors_use_all_checkpointed_games_and_preserve_legacy_json(pool: 
 #[ignore = "requires PostgreSQL"]
 async fn legacy_cube_only_checkpoint_needs_declared_durable_coverage(pool: PgPool) {
     let (_, app, match_id) = setup(&pool).await;
-    let job = store::create_match_job_scoped(&pool, match_id, 0, 1, Some(2))
+    let job = store::create_match_job_scoped(&pool, match_id, 1, 1, Some(2))
         .await
         .unwrap();
     let cube = decision(&pool, &job, 2, 1, 1, "cube", "bad", 0.08).await;
@@ -618,7 +618,7 @@ async fn legacy_cube_only_checkpoint_needs_declared_durable_coverage(pool: PgPoo
 #[ignore = "requires PostgreSQL"]
 async fn statistics_review_guard_works_with_a_single_connection_pool(pool: PgPool) {
     let (_, _, match_id) = setup(&pool).await;
-    let job = store::create_match_job(&pool, match_id, 0, 3)
+    let job = store::create_match_job(&pool, match_id, 1, 3)
         .await
         .unwrap();
     let single = sqlx::postgres::PgPoolOptions::new()

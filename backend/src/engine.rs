@@ -60,6 +60,26 @@ fn reported_threads(output: &str) -> Option<i32> {
     })
 }
 
+/// Deepest GNUbg evaluation BG Tutor offers, in BG Tutor's ply convention.
+pub(crate) const GNUBG_MAX_PLIES: i32 = 5;
+
+/// BG Tutor stores, shows and compares every depth in the XG / Open Sage
+/// convention, where 1-ply is the raw neural-net evaluation. GNUbg counts that
+/// evaluation as 0-ply. This is the only conversion into GNUbg's native level;
+/// apply it where a command or request is written for GNUbg.
+pub(crate) fn gnubg_plies(plies: i32) -> Result<i32> {
+    ensure!(
+        (1..=GNUBG_MAX_PLIES).contains(&plies),
+        "GNUbg depth must be 1..{GNUBG_MAX_PLIES} ply"
+    );
+    Ok(plies - 1)
+}
+
+/// The inverse of [`gnubg_plies`] for depths GNUbg reports in its output.
+pub(crate) fn plies_from_gnubg(native: i32) -> i32 {
+    native + 1
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum GnubgMoveFilter {
@@ -67,8 +87,9 @@ pub enum GnubgMoveFilter {
 }
 
 impl GnubgMoveFilter {
+    /// Pruned analysis at GNUbg's native 2- and 4-ply levels.
     pub(crate) fn for_analysis(engine_id: &str, plies: i32) -> Option<Self> {
-        (engine_id == "gnubg" && matches!(plies, 2 | 4)).then_some(Self::Top14)
+        (engine_id == "gnubg" && matches!(gnubg_plies(plies), Ok(2 | 4))).then_some(Self::Top14)
     }
 }
 
@@ -91,7 +112,8 @@ pub struct Candidate {
     /// Win, win gammon (including backgammon), win backgammon,
     /// loss, lose gammon (including backgammon), lose backgammon.
     pub probabilities: Vec<f64>,
-    /// Depth actually used for this candidate, when recorded by the engine.
+    /// Depth actually used for this candidate, when recorded by the engine,
+    /// in BG Tutor's ply convention (1-ply is the raw evaluation).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plies: Option<i32>,
 }
@@ -186,7 +208,8 @@ impl Engine {
         scope: &str,
         plies: i32,
     ) -> Option<i32> {
-        let stages: &[i32] = match (plies, self.move_filter) {
+        let native = gnubg_plies(plies).ok()?;
+        let stages: &[i32] = match (native, self.move_filter) {
             (2, Some(GnubgMoveFilter::Top14)) => &[0],
             (4, Some(GnubgMoveFilter::Top14)) => &[0, 2],
             _ => return None,
@@ -194,7 +217,7 @@ impl Engine {
         let count = 14;
         for stage in stages {
             commands.push_str(&format!(
-                "set {scope} movefilter {plies} {stage} {count} 0 0\n"
+                "set {scope} movefilter {native} {stage} {count} 0 0\n"
             ));
         }
         Some(count)
@@ -225,8 +248,9 @@ impl Engine {
                         version.starts_with("GNU Backgammon "),
                         "Executable is not GNUbg"
                     );
+                    // 1-ply is the raw neural-net evaluation.
                     let analysis = self
-                        .analyze("4HPwATDgc/ABMA", "cInlAAAAAAAE", 0, None)
+                        .analyze("4HPwATDgc/ABMA", "cInlAAAAAAAE", 1, None)
                         .await?;
                     ensure!(
                         !analysis.candidates.is_empty(),
@@ -443,13 +467,13 @@ impl Engine {
         plies: i32,
         dice: Option<[i32; 2]>,
     ) -> Result<Analysis> {
-        ensure!((0..=4).contains(&plies), "plies must be 0..4");
+        let native = gnubg_plies(plies)?;
         ensure!(
             valid_id(position_id, 14) && valid_id(match_id, 12),
             "Invalid GNUbg ID"
         );
         let mut commands = format!(
-            "set display off\nset gnubgid {position_id}:{match_id}\nset evaluation chequerplay evaluation plies {plies}\nset evaluation cubedecision evaluation plies {plies}\nset output digits 6\n"
+            "set display off\nset gnubgid {position_id}:{match_id}\nset evaluation chequerplay evaluation plies {native}\nset evaluation cubedecision evaluation plies {native}\nset output digits 6\n"
         );
         if let Some([a, b]) = dice {
             ensure!((1..=6).contains(&a) && (1..=6).contains(&b), "Invalid dice");
@@ -534,10 +558,12 @@ impl Engine {
             .context("GNUbg did not report its version")?;
         static DEPTH: OnceLock<Regex> = OnceLock::new();
         let depth = DEPTH.get_or_init(|| Regex::new(r"(?m)^\s*(\d+)-ply cubeless equity").unwrap());
-        let effective = depth
-            .captures(&output)
-            .context("GNUbg did not report its cube evaluation depth")?[1]
-            .parse::<i32>()?;
+        let effective = plies_from_gnubg(
+            depth
+                .captures(&output)
+                .context("GNUbg did not report its cube evaluation depth")?[1]
+                .parse::<i32>()?,
+        );
         ensure!(
             effective == plies,
             "GNUbg used a different cube evaluation depth"
@@ -583,7 +609,7 @@ pub(crate) fn decision_hint_commands(
     match_id: &str,
     plies: i32,
 ) -> Result<String> {
-    ensure!((0..=4).contains(&plies), "plies must be 0..4");
+    let native = gnubg_plies(plies)?;
     ensure!(
         valid_id(position_id, 14) && valid_id(match_id, 12),
         "Invalid GNUbg ID"
@@ -592,9 +618,9 @@ pub(crate) fn decision_hint_commands(
         "set display off\nset gnubgid {position_id}:{match_id}\nset output mwc off\nset output digits 6\n"
     );
     for kind in ["chequerplay", "cubedecision"] {
-        commands.push_str(&format!("set evaluation {kind} evaluation plies {plies}\nset evaluation {kind} evaluation cubeful on\nset evaluation {kind} evaluation deterministic on\nset evaluation {kind} evaluation noise 0\n"));
+        commands.push_str(&format!("set evaluation {kind} evaluation plies {native}\nset evaluation {kind} evaluation cubeful on\nset evaluation {kind} evaluation deterministic on\nset evaluation {kind} evaluation noise 0\n"));
     }
-    for depth in 1..=plies {
+    for depth in 1..=native {
         for previous in 0..depth {
             commands.push_str(&format!(
                 "set evaluation movefilter {depth} {previous} 10000 0 0\n"
@@ -674,7 +700,8 @@ pub fn valid_id(value: &str, length: usize) -> bool {
 }
 
 /// GNUbg uses the same rows for hints and game exports, marking the played
-/// move with an asterisk in the game export.
+/// move with an asterisk in the game export. Reported depths are converted to
+/// BG Tutor's ply convention.
 pub(crate) fn parse_checker_candidates(output: &str) -> Result<Vec<(Candidate, bool)>> {
     static PATTERN: OnceLock<Regex> = OnceLock::new();
     let pattern = PATTERN.get_or_init(|| {
@@ -708,7 +735,7 @@ pub(crate) fn parse_checker_candidates(output: &str) -> Result<Vec<(Candidate, b
                     path: None,
                     equity,
                     probabilities,
-                    plies: Some(captures[3].parse()?),
+                    plies: Some(plies_from_gnubg(captures[3].parse()?)),
                 },
                 captures.get(1).is_some(),
             ));
@@ -745,10 +772,9 @@ pub(crate) fn parse_full_checker_hints(output: &str, plies: i32) -> Result<(Vec<
 }
 
 fn parse_pass(output: &str, plies: i32) -> Result<Candidate> {
-    let prefix = if plies == 0 {
-        "static:".to_owned()
-    } else {
-        format!("{plies} ply:")
+    let prefix = match gnubg_plies(plies)? {
+        0 => "static:".to_owned(),
+        native => format!("{native} ply:"),
     };
     let row = output
         .lines()
@@ -796,7 +822,9 @@ mod tests {
         assert!(super::parse_hints("No game in progress").is_err());
         assert!(super::parse_full_checker_hints(output, 2).is_err());
         let single = output.split("    2.").next().unwrap();
-        assert_eq!(super::parse_full_checker_hints(single, 2).unwrap().1, 0);
+        // GNUbg's native 0-ply is BG Tutor's 1-ply raw evaluation.
+        assert_eq!(super::parse_full_checker_hints(single, 1).unwrap().1, 1);
+        assert_eq!(hints[0].plies, Some(1));
     }
 
     #[cfg(unix)]
@@ -899,7 +927,7 @@ mod tests {
     async fn real_gnubg_finds_opening_31() {
         let engine = super::Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()));
         let result = engine
-            .analyze("4HPwATDgc/ABMA", "cInlAAAAAAAE", 0, None)
+            .analyze("4HPwATDgc/ABMA", "cInlAAAAAAAE", 1, None)
             .await
             .unwrap();
         assert_eq!(result.candidates[0].notation, "8/5 6/5");
@@ -927,7 +955,7 @@ mod tests {
     async fn real_gnubg_evaluates_a_forced_pass() {
         let engine = super::Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()));
         let result = engine
-            .analyze("Y54pATDg28EBYA", "cAlnAQAAAAAE", 0, None)
+            .analyze("Y54pATDg28EBYA", "cAlnAQAAAAAE", 1, None)
             .await
             .unwrap();
         assert_eq!(result.candidates.len(), 1);

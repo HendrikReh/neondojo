@@ -9,7 +9,7 @@ test.describe.configure({ timeout: 360_000 });
 
 async function openPosition(page: Page) {
   const configuration = structuredClone(defaultConfiguration);
-  configuration.analysis.plies = 0;
+  configuration.analysis.plies = 1;
   const profile = await profileBackend(page, { configuration });
   await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
   await page.goto('/');
@@ -50,7 +50,7 @@ test('opening dice equity calculates missing results and reuses saved results ac
     timeout: distributionTimeout,
   });
   expect(submissions).toHaveLength(1);
-  expect(submissions[0]).toMatchObject({ kind: 'dice', plies: 0 });
+  expect(submissions[0]).toMatchObject({ kind: 'dice', plies: 1 });
   await page.getByRole('tab', { name: 'Candidate moves', exact: true }).click();
   await dice.click();
   await expect(page.locator('.dice-grid button')).toHaveCount(36);
@@ -120,7 +120,7 @@ test('opening dice equity calculates missing results and reuses saved results ac
   const calculation = await openPositionCalculation(page, true);
   await calculation
     .getByLabel('Search depth', { exact: true })
-    .selectOption('1');
+    .selectOption('2');
   expect(submissions).toHaveLength(2);
   await calculation
     .getByRole('button', { name: 'Dice equity', exact: true })
@@ -131,10 +131,10 @@ test('opening dice equity calculates missing results and reuses saved results ac
   });
   expect(submissions[2]).toMatchObject({
     position_id: submissions[0].position_id,
-    plies: 1,
+    plies: 2,
   });
   const updatedProfile = structuredClone(profile.state.current_configuration);
-  updatedProfile.analysis.plies = 1;
+  updatedProfile.analysis.plies = 2;
   profile.updateRemote(updatedProfile);
   await page.reload();
   await dice.click();

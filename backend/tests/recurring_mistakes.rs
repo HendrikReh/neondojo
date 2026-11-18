@@ -109,7 +109,7 @@ async fn transfer_balances_unseen_cube_responses_and_records_first_pass(pool: Pg
         job(
             &pool,
             imported.r#match.id,
-            0,
+            1,
             None,
             &[
                 (2, decision(1, 1, "double", "double", 0.0)),
@@ -229,7 +229,7 @@ async fn mistake_rates_count_correct_and_subthreshold_decisions_with_the_same_be
     .unwrap()
     .r#match
     .id;
-    job(&pool, id, 0, None, &decisions).await;
+    job(&pool, id, 1, None, &decisions).await;
     let router = app(&pool);
     for (query, errors, rate, loss_per_100) in [
         ("", 1, 1.0 / 3.0, 4.0),
@@ -268,7 +268,7 @@ async fn mistake_rates_count_correct_and_subthreshold_decisions_with_the_same_be
 #[sqlx::test(migrations = "./migrations")]
 async fn active_practice_scores_all_three_decisions_without_writing_learning_state(pool: PgPool) {
     let id = source(&pool).await;
-    let saved = job(&pool, id, 0, Some(1), &game1(0.125)).await;
+    let saved = job(&pool, id, 1, Some(1), &game1(0.125)).await;
     let router = app(&pool);
     let endpoint = "/api/study/mistakes/attempt";
     for (number, answer, best, loss) in [
@@ -308,7 +308,7 @@ async fn active_practice_scores_all_three_decisions_without_writing_learning_sta
     }
     let wrong = json!({"reference":{"job_id":saved,"game_no":1,"decision_no":1},"answer":{"kind":"cube_offer","action":"double"}});
     assert_eq!(call(&router, "POST", endpoint, wrong).await.0, 422);
-    let newer = job(&pool, id, 2, Some(1), &game1(0.25)).await;
+    let newer = job(&pool, id, 3, Some(1), &game1(0.25)).await;
     assert_ne!(saved, newer);
     let stale = json!({"reference":{"job_id":saved,"game_no":1,"decision_no":2},"answer":{"kind":"cube_offer","action":"double"}});
     assert_eq!(call(&router, "POST", endpoint, stale).await.0, 404);
@@ -319,12 +319,12 @@ async fn active_practice_scores_all_three_decisions_without_writing_learning_sta
 #[ignore = "requires PostgreSQL"]
 async fn selects_persisted_game_before_filters_without_mixing_other_game_sources(pool: PgPool) {
     let id = source(&pool).await;
-    let deep = job(&pool, id, 3, Some(1), &game1(0.1)).await;
-    job(&pool, id, 0, None, &game1(0.9)).await;
+    let deep = job(&pool, id, 4, Some(1), &game1(0.1)).await;
+    job(&pool, id, 1, None, &game1(0.9)).await;
     job(
         &pool,
         id,
-        2,
+        3,
         Some(2),
         &[
             (2, decision(1, 1, "double", "no double", 0.2)),
@@ -429,7 +429,7 @@ async fn selects_persisted_game_before_filters_without_mixing_other_game_sources
 #[ignore = "requires PostgreSQL"]
 async fn excludes_uncheckpointed_stale_incomplete_and_competition_sources(pool: PgPool) {
     let id = source(&pool).await;
-    let j = job(&pool, id, 2, None, &game1(0.2)).await;
+    let j = job(&pool, id, 3, None, &game1(0.2)).await;
     let router = app(&pool);
     for condition in [
         "DELETE FROM match_analysis_games WHERE job_id=$1",
@@ -524,7 +524,7 @@ async fn no_double_is_preroll_and_malformed_or_forced_evaluations_are_excluded(p
     let j = job(
         &pool,
         id,
-        0,
+        1,
         None,
         &[
             (1, decision(1, 0, "no double", "double", 0.2)),
@@ -595,7 +595,7 @@ async fn missed_double_practice_mixes_correct_rolls_and_keeps_answers_hidden(poo
     let saved = job(
         &pool,
         imported.id,
-        0,
+        1,
         None,
         &[
             (2, decision(1, 0, "no double", "double", 0.2)),
@@ -720,7 +720,7 @@ async fn take_and_pass_rounds_mix_both_best_actions_and_score_the_responder(pool
     .await
     .unwrap()
     .r#match;
-    job(&pool, imported.id, 0, None, &decisions).await;
+    job(&pool, imported.id, 1, None, &decisions).await;
     let router = app(&pool);
     let (_, stats) = call(
         &router,
@@ -834,7 +834,7 @@ async fn occurrence_counts_are_complete_but_practice_is_distinct_and_limited_to_
     .unwrap()
     .r#match
     .id;
-    job(&pool, id, 0, None, &rows).await;
+    job(&pool, id, 1, None, &rows).await;
     let router = app(&pool);
     let (_, v) = call(
         &router,
@@ -878,7 +878,7 @@ async fn occurrence_counts_are_complete_but_practice_is_distinct_and_limited_to_
 #[ignore = "requires PostgreSQL"]
 async fn player_choices_and_selected_player_do_not_scan_unrelated_large_sources(pool: PgPool) {
     let id = source(&pool).await;
-    job(&pool, id, 0, None, &game1(0.2)).await;
+    job(&pool, id, 1, None, &game1(0.2)).await;
     let sgf = SOURCE.replace("Alice", "Carol");
     let other = store::import_match(
         &pool,
@@ -892,7 +892,7 @@ async fn player_choices_and_selected_player_do_not_scan_unrelated_large_sources(
     .unwrap()
     .r#match
     .id;
-    job(&pool, other, 0, None, &game1(0.2)).await;
+    job(&pool, other, 1, None, &game1(0.2)).await;
     sqlx::query("UPDATE matches SET sgf=repeat('x',67108865) WHERE id=$1")
         .bind(other)
         .execute(&pool)
@@ -930,8 +930,8 @@ async fn equal_depth_ties_use_timestamp_then_uuid_and_invalid_winner_never_falls
     pool: PgPool,
 ) {
     let id = source(&pool).await;
-    let first = job(&pool, id, 2, None, &game1(0.1)).await;
-    let second = job(&pool, id, 2, None, &game1(0.2)).await;
+    let first = job(&pool, id, 3, None, &game1(0.1)).await;
+    let second = job(&pool, id, 3, None, &game1(0.2)).await;
     sqlx::query("UPDATE jobs SET created_at=CASE WHEN id=$1 THEN '2026-01-01'::timestamptz ELSE '2026-01-02'::timestamptz END WHERE id=ANY($2)").bind(first).bind(vec![first,second]).execute(&pool).await.unwrap();
     let router = app(&pool);
     let (_, newest) = call(
@@ -993,7 +993,7 @@ async fn equal_depth_ties_use_timestamp_then_uuid_and_invalid_winner_never_falls
 #[ignore = "requires PostgreSQL"]
 async fn database_and_exact_names_scope_native_sources_without_opponent_leaks(pool: PgPool) {
     let id = source(&pool).await;
-    job(&pool, id, 0, None, &game1(0.2)).await;
+    job(&pool, id, 1, None, &game1(0.2)).await;
     let db = Uuid::new_v4();
     sqlx::query("INSERT INTO databases(id,name) VALUES($1,'Other')")
         .bind(db)
@@ -1013,7 +1013,7 @@ async fn database_and_exact_names_scope_native_sources_without_opponent_leaks(po
     .unwrap()
     .r#match
     .id;
-    job(&pool, other, 0, None, &game1(0.4)).await;
+    job(&pool, other, 1, None, &game1(0.4)).await;
     sqlx::query("UPDATE matches SET database_id=$2 WHERE id=$1")
         .bind(other)
         .bind(db)
@@ -1115,7 +1115,7 @@ async fn native_source_bytes_are_counted_once_per_match_and_keep_every_game(pool
     let decisions = (1..=3)
         .map(|game| (game, decision(1, 0, "8/5 6/5", "6/3 6/5", 0.2)))
         .collect::<Vec<_>>();
-    job(&pool, id, 0, None, &decisions).await;
+    job(&pool, id, 1, None, &decisions).await;
     let router = app(&pool);
     let (status, groups) = call(
         &router,
@@ -1164,13 +1164,13 @@ async fn card_suggestions_span_games_and_save_only_selected_decisions(pool: PgPo
     .unwrap()
     .r#match
     .id;
-    job(&pool, history, 1, Some(1), &game1(0.08)).await;
+    job(&pool, history, 2, Some(1), &game1(0.08)).await;
     let mut selected_decisions = game1(0.12);
     selected_decisions.extend([
         (2, decision(1, 1, "double", "no double", 0.25)),
         (2, decision(2, 0, "drop", "take", 0.35)),
     ]);
-    let first = job(&pool, match_id, 1, None, &selected_decisions).await;
+    let first = job(&pool, match_id, 2, None, &selected_decisions).await;
     let router = app(&pool);
     let (status, deck) = call(&router, "POST", "/api/decks", json!({"name":"Suggestions"})).await;
     assert_eq!(status, 201, "{deck}");
@@ -1241,7 +1241,7 @@ async fn card_suggestions_span_games_and_save_only_selected_decisions(pool: PgPo
     let replacement = job(
         &pool,
         match_id,
-        2,
+        3,
         Some(2),
         &[
             (2, decision(1, 1, "double", "no double", 0.25)),
@@ -1265,7 +1265,7 @@ async fn decision_search_filters_by_type_score_cube_and_loss_with_stable_pages(p
     let saved = job(
         &pool,
         id,
-        2,
+        3,
         Some(1),
         &[
             (1, decision(1, 0, "8/5 6/5", "6/3 6/5", 0.03)),
@@ -1370,7 +1370,7 @@ async fn aliases_of_one_profile_count_as_one_player(pool: PgPool) {
         .unwrap()
         .r#match
         .id;
-        jobs.push(job(&pool, id, 0, None, &game1(loss)[..1]).await);
+        jobs.push(job(&pool, id, 1, None, &game1(loss)[..1]).await);
     }
     let router = app(&pool);
     let mistakes = |player: &'static str| {
@@ -1465,7 +1465,7 @@ async fn independent_only_leaves_out_matches_played_with_learning_aids(pool: PgP
         .unwrap()
         .r#match
         .id;
-        jobs.push((id, job(&pool, id, 0, None, &game1(loss)[..1]).await));
+        jobs.push((id, job(&pool, id, 1, None, &game1(loss)[..1]).await));
     }
     // The first match was played against the bot with Coach feedback.
     sqlx::query("UPDATE matches SET play_mode='coach',play_assisted=true WHERE id=$1")

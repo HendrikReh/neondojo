@@ -34,7 +34,7 @@ const question = (n: number) => ({
   position: { ...position, id: `position-${n}` },
   players: ['Alice', 'Bob'],
   engine: 'gnubg',
-  plies: 2,
+  plies: 3,
 });
 const group = {
   game_plan: 'priming',
@@ -60,7 +60,7 @@ const answer = {
   played: '8/5 6/5',
   equity_loss: 0.12,
   engine: 'gnubg',
-  plies: 2,
+  plies: 3,
 };
 async function open(page: Page, locale = 'en') {
   await page.addInitScript(
@@ -157,7 +157,7 @@ test('checks checker moves, cube offers and cube replies in the practice dialog'
           chosen_equity: 0,
           best_equity: 0.125,
           equity_loss: 0.125,
-          provenance: { kind: 'recomputed', engine: 'GNUbg', plies: 2 },
+          provenance: { kind: 'recomputed', engine: 'GNUbg', plies: 3 },
         },
       },
     });
@@ -298,7 +298,7 @@ test('both cube response groups open a round with correct takes and passes', asy
           chosen_equity: bestEquity,
           best_equity: bestEquity,
           equity_loss: 0,
-          provenance: { kind: 'stored', engine: 'GNUbg', plies: 2 },
+          provenance: { kind: 'stored', engine: 'GNUbg', plies: 3 },
         },
       },
     });
@@ -911,7 +911,7 @@ test('a cube question is answered by keyboard and explains score, outcomes and t
           chosen_equity: 0.9,
           best_equity: 0.9,
           equity_loss: 0,
-          provenance: { kind: 'stored', engine: 'gnubg', plies: 2 },
+          provenance: { kind: 'stored', engine: 'gnubg', plies: 3 },
           cube_evaluation: {
             unit: 'cubeful',
             no_double: 0.7,

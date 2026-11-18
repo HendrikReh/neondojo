@@ -186,7 +186,7 @@ async fn selected_native_checkpoint_wins_and_recomputes_documented_thresholds(po
     let (app, id, p) = setup(&pool).await;
     imported(&pool, id, p[0], 1, 0.2, "cubeful").await;
     hint(&pool, p[0], true).await;
-    let job = store::create_match_job(&pool, id, 0, 2).await.unwrap();
+    let job = store::create_match_job(&pool, id, 1, 2).await.unwrap();
     native(&pool, &job, p[0], 1, 0.0, "evaluated").await;
     assert_eq!(
         get(&app, &uri(id, 1, Some(job.id))).await.0,
@@ -219,7 +219,7 @@ async fn selected_native_checkpoint_wins_and_recomputes_documented_thresholds(po
         assert_eq!(item["source"], "native");
         assert_eq!(item["engine"], "GNU Backgammon fixture");
         assert_eq!(item["job_id"], job.id.to_string());
-        assert_eq!(item["depth_plies"], 0);
+        assert_eq!(item["depth_plies"], 1);
     }
 }
 
@@ -230,7 +230,7 @@ async fn absent_invalid_or_incomparable_equities_remain_unknown(pool: PgPool) {
     imported(&pool, id, p[0], 1, 0.2, "mwc").await;
     imported(&pool, id, p[1], 1, 0.2, "unknown").await;
     hint(&pool, p[0], false).await;
-    let job = store::create_match_job(&pool, id, 0, 2).await.unwrap();
+    let job = store::create_match_job(&pool, id, 1, 2).await.unwrap();
     native(&pool, &job, p[0], 1, 0.0, "unavailable").await;
     native(&pool, &job, p[1], 1, 0.0, "evaluated").await;
     checkpoint(&pool, &job, 1).await;
@@ -248,7 +248,7 @@ async fn absent_invalid_or_incomparable_equities_remain_unknown(pool: PgPool) {
 #[ignore = "requires PostgreSQL"]
 async fn invalid_best_answer_or_mismatched_actual_move_is_unknown(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
-    let job = store::create_match_job(&pool, id, 0, 2).await.unwrap();
+    let job = store::create_match_job(&pool, id, 1, 2).await.unwrap();
     native(&pool, &job, p[0], 1, 0.08, "evaluated").await;
     checkpoint(&pool, &job, 1).await;
     for patch in [
@@ -279,7 +279,7 @@ async fn invalid_best_answer_or_mismatched_actual_move_is_unknown(pool: PgPool) 
 #[ignore = "requires PostgreSQL"]
 async fn a_forced_label_on_a_playable_position_cannot_imply_zero_loss(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
-    let job = store::create_match_job(&pool, id, 0, 2).await.unwrap();
+    let job = store::create_match_job(&pool, id, 1, 2).await.unwrap();
     native(&pool, &job, p[0], 1, 0.0, "forced").await;
     checkpoint(&pool, &job, 1).await;
     let (_, data) = get(&app, &uri(id, 1, Some(job.id))).await;
@@ -296,7 +296,7 @@ async fn genuine_forced_native_decision_has_explicit_zero_loss(pool: PgPool) {
     let source = include_str!("fixtures/analysis-game1.sgf");
     let id = import_source(&pool, source).await;
     let position:Uuid=sqlx::query_scalar("SELECT id FROM positions WHERE match_uuid=$1 AND notation='Cannot move' ORDER BY ordinal LIMIT 1").bind(id).fetch_one(&pool).await.unwrap();
-    let job = store::create_match_job(&pool, id, 0, 1).await.unwrap();
+    let job = store::create_match_job(&pool, id, 1, 1).await.unwrap();
     native(&pool, &job, position, 1, 0.0, "forced").await;
     sqlx::query("UPDATE move_analyses SET data=data || '{\"best\":\"Cannot move\",\"played_equity\":null,\"best_equity\":null}'::jsonb WHERE job_id=$1").bind(job.id).execute(&pool).await.unwrap();
     checkpoint(&pool, &job, 1).await;
@@ -403,7 +403,7 @@ async fn actual_gnubg_game_results_assess_every_saved_checker_decision(pool: PgP
         pool.clone(),
         Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into())),
     );
-    let job = store::create_match_job(&pool, id, 0, 1).await.unwrap();
+    let job = store::create_match_job(&pool, id, 1, 1).await.unwrap();
     assert!(jobs::run_one(&state).await.unwrap());
     let saved: Job = sqlx::query_as("SELECT * FROM jobs WHERE id=$1")
         .bind(job.id)
@@ -451,7 +451,7 @@ async fn automatic_selection_respects_scope_and_explicit_selection_never_borrows
     assert_eq!(data["items"][0]["job_id"], job.id.to_string(), "{data}");
     let (_, game2) = get(&app, &uri(id, 2, None)).await;
     assert_eq!(game2["items"], json!([]));
-    let selected = store::create_match_job(&pool, id, 0, 2).await.unwrap();
+    let selected = store::create_match_job(&pool, id, 1, 2).await.unwrap();
     assert_eq!(
         get(&app, &uri(id, 1, Some(selected.id))).await.0,
         422,
@@ -482,7 +482,7 @@ async fn automatic_selection_respects_scope_and_explicit_selection_never_borrows
 #[ignore = "requires PostgreSQL"]
 async fn invalid_game_job_identity_and_scope_are_rejected(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
-    let job = store::create_match_job_scoped(&pool, id, 0, 1, Some(1))
+    let job = store::create_match_job_scoped(&pool, id, 1, 1, Some(1))
         .await
         .unwrap();
     native(&pool, &job, p[0], 1, 0.08, "evaluated").await;

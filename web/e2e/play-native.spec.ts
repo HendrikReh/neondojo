@@ -13,8 +13,8 @@ test.skip(
   'Requires disposable PostgreSQL/backend with actual GNUbg',
 );
 for (const config of [
-  { human: 0, direction: 'right', plies: 2, theme: 'forest' },
-  { human: 1, direction: 'left', plies: 0, theme: 'bgblitz:bg-earth' },
+  { human: 0, direction: 'right', plies: 3, theme: 'forest' },
+  { human: 1, direction: 'left', plies: 1, theme: 'bgblitz:bg-earth' },
 ]) {
   test(`real native bot ${config.human}/${config.direction}/${config.plies}-ply`, async ({
     page,

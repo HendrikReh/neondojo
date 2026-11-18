@@ -52,23 +52,23 @@
   "engine_profiles": {
     "gnubg": {
       "analysis": [
-        0,
         1,
         2,
         3,
-        4
+        4,
+        5
       ],
       "play": [
-        0,
         1,
-        2
+        2,
+        3
       ],
       "duel": [
-        0,
         1,
         2,
         3,
-        4
+        4,
+        5
       ]
     },
     "bgsage": {

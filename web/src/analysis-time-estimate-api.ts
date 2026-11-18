@@ -1,4 +1,5 @@
 import { request } from './api';
+import { isAnalysisDepth } from './analysis-depth';
 
 import type { components } from './generated-api';
 
@@ -43,8 +44,7 @@ function parseEstimate(value: unknown): AnalysisTimeEstimateResult {
     !(value.game_no === null || integer(value.game_no, 1)) ||
     !nonempty(value.engine_id) ||
     !(value.engine_version === null || nonempty(value.engine_version)) ||
-    !integer(value.plies, 0) ||
-    value.plies > 4 ||
+    !isAnalysisDepth(value.plies) ||
     !integer(value.position_count, 0) ||
     !(value.estimated_ms === null || positive(value.estimated_ms)) ||
     ![

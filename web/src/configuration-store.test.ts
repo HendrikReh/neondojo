@@ -212,7 +212,7 @@ describe('configuration writing', () => {
     }));
     h.releaseMutation();
     await restoring;
-    expect(h.store.getSnapshot().current?.analysis.plies).toBe(2);
+    expect(h.store.getSnapshot().current?.analysis.plies).toBe(3);
     expect(h.store.getSnapshot().current?.general.player_name).toBe(
       'Newer local edit',
     );
@@ -232,7 +232,7 @@ describe('configuration writing', () => {
     const saved = structuredClone(h.store.getSnapshot().activeProfile!);
     h.calls.length = 0;
     await h.store.restoreProfileField(saved, 'analysis.plies');
-    expect(h.store.getSnapshot().current?.analysis.plies).toBe(2);
+    expect(h.store.getSnapshot().current?.analysis.plies).toBe(3);
     expect(h.store.getSnapshot().current?.appearance.board_theme).toBe(
       'walnut',
     );
@@ -292,7 +292,7 @@ describe('configuration writing', () => {
     }));
     h.release();
     await resetting;
-    expect(h.store.getSnapshot().current?.analysis.plies).toBe(2);
+    expect(h.store.getSnapshot().current?.analysis.plies).toBe(3);
     expect(h.store.getSnapshot().current?.general.player_name).toBe(
       'Concurrent edit',
     );

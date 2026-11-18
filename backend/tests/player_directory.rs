@@ -260,7 +260,7 @@ async fn ratings_weight_decisions_and_keep_analysis_profiles_separate(pool: PgPo
         PlayerPerformanceRating,
     };
     let app = api::router(AppState::new(pool.clone(), Engine::new("gnubg".into())));
-    for (length, plies, decisions, loss) in [(7, 0, 10, 0.02), (5, 0, 30, 0.14), (3, 2, 20, 0.12)] {
+    for (length, plies, decisions, loss) in [(7, 1, 10, 0.02), (5, 1, 30, 0.14), (3, 3, 20, 0.12)] {
         let sgf = format!("(;GM[6]PW[Anna]PB[Bob]MI[length:{length}];W[31hefe])");
         let parsed = import::parse_sgf(&sgf).unwrap();
         let match_id =
@@ -318,8 +318,8 @@ async fn ratings_weight_decisions_and_keep_analysis_profiles_separate(pool: PgPo
     assert_eq!(
         profile["ratings"],
         json!([
-            {"profile":"GNUbg; 0-ply cubeful deterministic","value":2.0,"match_count":2},
-            {"profile":"GNUbg; 2-ply cubeful deterministic","value":3.0,"match_count":1}
+            {"profile":"GNUbg; 1-ply cubeful deterministic","value":2.0,"match_count":2},
+            {"profile":"GNUbg; 3-ply cubeful deterministic","value":3.0,"match_count":1}
         ])
     );
 }

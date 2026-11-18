@@ -134,7 +134,7 @@ async fn legacy_play_results_project_at_final_event_without_mutating_checkpoint(
     let source = "(;GM[6]MI[length:7][ws:2][bs:1]CV[2]CO[b];W[31hefe];B[double];W[drop])\n(;GM[6]MI[length:7][ws:2][bs:3];B[31qtst])";
     let id = Uuid::new_v4();
     let session = json!({"id":id,"version":7,"human_player":0,"human_name":"Human","match_length":7,
-        "bearoff_direction":"clockwise","engine":{"id":"gnubg","version":"fixture","plies":0},
+        "bearoff_direction":"clockwise","engine":{"id":"gnubg","version":"fixture","plies":1},
         "position":{"id":id,"match_uuid":id,"ordinal":0,"game_no":2,"ply":1,"player":0,"dice":[],"board":[],"position_id":"","gnubg_match_id":"","notation":""},
         "phase":"roll","can_double":false,"legal_moves":[],"history":[
             {"player":0,"dice":[3,1],"notation":"8/5 6/5"},

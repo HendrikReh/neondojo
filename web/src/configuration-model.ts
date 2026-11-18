@@ -137,14 +137,14 @@ export const defaultConfiguration: ProfileConfiguration = {
   general: { player_name: '', locale: 'en', play_sounds: true },
   analysis: {
     engine: 'gnubg',
-    plies: 2,
+    plies: 3,
     scope: 'game',
     search_filter: 'engine_default',
     error_thresholds: defaultErrorThresholds,
   },
   play: {
     engine: 'gnubg',
-    plies: 0,
+    plies: 1,
     default_mode: 'coach',
     tutor_threshold: 0.04,
     training_auto_analysis: true,

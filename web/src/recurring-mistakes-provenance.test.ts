@@ -41,8 +41,8 @@ test('unknown imported depth does not become a zero-ply evaluation', () => {
       text,
     ),
   ).toBe('Imported BGBlitz · BGBlitz source · Unknown depth');
-  expect(mistakeProvenance({ engine: 'GNUbg', plies: 0 }, text)).toBe(
-    'GNUbg · 0 ply',
+  expect(mistakeProvenance({ engine: 'GNUbg', plies: 1 }, text)).toBe(
+    'GNUbg · 1 ply',
   );
 });
 test('different imported records with the same game and move reset question state', () => {

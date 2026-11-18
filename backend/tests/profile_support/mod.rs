@@ -45,8 +45,8 @@ pub fn config() -> Value {
     ];
     json!({"schema_version":1,
         "general":{"player_name":"Client value ignored","locale":"de","play_sounds":false},
-        "analysis":{"engine":"gnubg","plies":0,"scope":"game","search_filter":"engine_default"},
-        "play":{"engine":"gnubg","plies":0,"default_mode":"coach","tutor_threshold":0.04,"training_auto_analysis":true,"human_player":0,"match_length":7},
+        "analysis":{"engine":"gnubg","plies":1,"scope":"game","search_filter":"engine_default"},
+        "play":{"engine":"gnubg","plies":1,"default_mode":"coach","tutor_threshold":0.04,"training_auto_analysis":true,"human_player":0,"match_length":7},
         "appearance":{"ui_theme":"graphite","mode":"system","board_theme":"walnut","bearoff_direction":"right","board_view":"arrows"},
         "opening_book":{"provider":"off","path":"/unused/client/book","xg_path":"/unused/client/xg"},
         "library":{"database_id":"00000000-0000-0000-0000-000000000001","filters":{"q":"","player":"","date_from":"","date_to":"","date_field":"played","tag":"","comment":"","position_id":"","tournament":"","round":"","match_name":"","match_type":"","result":"","match_points_min":"","match_points_max":""},"sort":"created_at","direction":"desc","visible_columns":columns,"column_order":columns,"column_widths":null},

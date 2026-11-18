@@ -116,7 +116,7 @@ async fn all_four_formats_are_atomic_and_engine_failures_are_persisted(pool: PgP
         imported.push(result.r#match.id);
     }
     // A BGF source reaches the real native checker/cube analysis worker, too.
-    let bgf_job = store::create_match_job(&pool, imported[3], 0, 1)
+    let bgf_job = store::create_match_job(&pool, imported[3], 1, 1)
         .await
         .unwrap();
     assert!(jobs::run_one(&state).await.unwrap());
@@ -137,7 +137,7 @@ async fn all_four_formats_are_atomic_and_engine_failures_are_persisted(pool: PgP
         .unwrap()
         .items
         .remove(0);
-    let job = store::create_job(&pool, position.id, "analysis", 0)
+    let job = store::create_job(&pool, position.id, "analysis", 1)
         .await
         .unwrap();
     let broken_state = AppState::new(
@@ -158,7 +158,7 @@ async fn all_four_formats_are_atomic_and_engine_failures_are_persisted(pool: PgP
         "failed"
     );
     // Expired leases stop after the third attempt instead of looping forever.
-    let retried = store::create_job(&pool, position.id, "analysis", 0)
+    let retried = store::create_job(&pool, position.id, "analysis", 1)
         .await
         .unwrap();
     sqlx::query("UPDATE jobs SET status='running',attempts=3,lease_until=now()-interval '1 second' WHERE id=$1").bind(retried.id).execute(&pool).await.unwrap();
@@ -169,11 +169,11 @@ async fn all_four_formats_are_atomic_and_engine_failures_are_persisted(pool: PgP
 
     // Deterministically simulate the worker completing the conflicting row
     // after INSERT ON CONFLICT, before create_job's follow-up SELECT.
-    let existing = store::create_job(&pool, position.id, "analysis", 0)
+    let existing = store::create_job(&pool, position.id, "analysis", 1)
         .await
         .unwrap();
     sqlx::raw_sql(&format!("CREATE FUNCTION complete_conflicting_job() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN UPDATE jobs SET status='completed' WHERE id='{}'::uuid; RETURN NULL; END $$; CREATE TRIGGER complete_after_insert AFTER INSERT ON jobs FOR EACH STATEMENT EXECUTE FUNCTION complete_conflicting_job();",existing.id)).execute(&pool).await.unwrap();
-    let replacement = store::create_job(&pool, position.id, "analysis", 0)
+    let replacement = store::create_job(&pool, position.id, "analysis", 1)
         .await
         .unwrap();
     assert_ne!(replacement.id, existing.id);

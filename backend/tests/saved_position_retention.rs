@@ -387,13 +387,13 @@ async fn database_deletion_uses_the_same_retention_and_internal_hosts_are_protec
             &pool,
             "POST",
             &format!("/api/matches/{host}/analysis"),
-            json!({"plies":0})
+            json!({"plies":1})
         )
         .await
         .0,
         422
     );
-    assert!(store::create_match_job(&pool, host, 0, 1).await.is_err());
+    assert!(store::create_match_job(&pool, host, 1, 1).await.is_err());
     let parsed = import::parse_sgf(SOURCE).unwrap();
     assert!(
         store::import_match_in_database(
@@ -412,8 +412,8 @@ async fn database_deletion_uses_the_same_retention_and_internal_hosts_are_protec
 
 async fn hint(pool: &PgPool, position: Uuid) -> Uuid {
     let id = Uuid::new_v4();
-    let result = json!({"engine":"GNUbg fixture","plies":0,"candidates":[{"rank":1,"notation":"8/5 6/5","equity":0.12,"probabilities":[0.6,0.1,0.01,0.4,0.05,0.005]}]});
-    sqlx::query("INSERT INTO jobs(id,position_uuid,kind,plies,status,result) VALUES($1,$2,'analysis',0,'completed',$3)").bind(id).bind(position).bind(result).execute(pool).await.unwrap();
+    let result = json!({"engine":"GNUbg fixture","plies":1,"candidates":[{"rank":1,"notation":"8/5 6/5","equity":0.12,"probabilities":[0.6,0.1,0.01,0.4,0.05,0.005]}]});
+    sqlx::query("INSERT INTO jobs(id,position_uuid,kind,plies,status,result) VALUES($1,$2,'analysis',1,'completed',$3)").bind(id).bind(position).bind(result).execute(pool).await.unwrap();
     id
 }
 
@@ -534,7 +534,7 @@ async fn retained_notes_analyses_and_existing_cards_remain_usable_without_resett
     .unwrap();
     assert_eq!(imported, (owner(&pool, position).await, 1));
     assert!(
-        store::create_job(&pool, position, "analysis", 0)
+        store::create_job(&pool, position, "analysis", 1)
             .await
             .is_ok()
     );
@@ -547,7 +547,7 @@ async fn deletion_without_saved_positions_removes_the_entire_source_and_busy_job
 ) {
     let (source, positions) = imported(&pool).await;
     save(&pool, positions[0].id).await;
-    let job = store::create_job(&pool, positions[0].id, "analysis", 0)
+    let job = store::create_job(&pool, positions[0].id, "analysis", 1)
         .await
         .unwrap();
     let (_, result) = call(
@@ -613,13 +613,13 @@ async fn native_decisions_survive_only_for_saved_positions_without_fabricating_m
             ..Default::default()
         },
     ];
-    let result = json!({"engine":"GNUbg","plies":0,"total_games":2,"completed_games":2,"total_moves":3,"analyzed_moves":3,"players":players,
-        "performance_rating":{"method":"gnubg_emg_500_v1","profile":"GNUbg; 0-ply cubeful deterministic","games":2,"players":[
+    let result = json!({"engine":"GNUbg","plies":1,"total_games":2,"completed_games":2,"total_moves":3,"analyzed_moves":3,"players":players,
+        "performance_rating":{"method":"gnubg_emg_500_v1","profile":"GNUbg; 1-ply cubeful deterministic","games":2,"players":[
             {"player":0,"value":2.5,"normalized_equity_loss":0.005,"unforced_checker_moves":1,"close_cube_decisions":0},
             {"player":1,"value":4.0,"normalized_equity_loss":0.008,"unforced_checker_moves":1,"close_cube_decisions":0}]}});
     assert!(bgtutor::match_analysis::match_performance_rating(&result).is_some());
     let job = Uuid::new_v4();
-    sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,completed_games,result) VALUES($1,$2,'match',0,'completed',2,2,$3)").bind(job).bind(source).bind(&result).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,completed_games,result) VALUES($1,$2,'match',1,'completed',2,2,$3)").bind(job).bind(source).bind(&result).execute(&pool).await.unwrap();
     let snapshot = json!({"engine_id":"gnubg","gnubg_path":"/fixture/native-gnubg","engine_version":"GNUbg original"});
     sqlx::query(
         "UPDATE jobs SET engine_config='original-native-profile',engine_snapshot=$2 WHERE id=$1",
@@ -660,7 +660,7 @@ async fn native_decisions_survive_only_for_saved_positions_without_fabricating_m
     assert_eq!(retained_selection, (format!("job:{job}"), 7, 7));
     let retained = store::get_job(&pool, job).await.unwrap().unwrap();
     assert_eq!(retained.match_uuid, Some(host));
-    assert_eq!(retained.plies, 0);
+    assert_eq!(retained.plies, 1);
     assert_eq!(retained.result.as_ref().unwrap()["engine"], "GNUbg");
     assert!(
         bgtutor::match_analysis::match_performance_rating(retained.result.as_ref().unwrap())

@@ -78,7 +78,7 @@ mod tests {
         let mut session = serde_json::from_value::<PlaySession>(json!({
             "id": id, "version": 4, "human_player": human, "human_name": "Human",
             "match_length": 7, "bearoff_direction": "right",
-            "engine": {"id": "gnubg", "version": "test", "plies": 0},
+            "engine": {"id": "gnubg", "version": "test", "plies": 1},
             "position": {
                 "id": id, "match_uuid": id, "ordinal": 0, "game_no": 2, "ply": 0,
                 "player": human, "dice": [3, 1], "board": vec![0; 26],

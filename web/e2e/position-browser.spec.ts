@@ -373,7 +373,7 @@ test('deck memberships refresh on later result pages and retain existing column 
   ).decks;
   const job = await (
     await page.request.post('/api/jobs', {
-      data: { position_id: target.id, kind: 'analysis', plies: 0 },
+      data: { position_id: target.id, kind: 'analysis', plies: 1 },
     })
   ).json();
   await expect

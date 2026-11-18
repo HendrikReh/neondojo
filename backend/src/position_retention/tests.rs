@@ -63,7 +63,7 @@ async fn waiting_bookmark_reads_saves_and_new_position_jobs_follow_the_retained_
     }
     let submit_pool = pool.clone();
     let mut submitted =
-        tokio::spawn(async move { store::create_job(&submit_pool, position, "analysis", 0).await });
+        tokio::spawn(async move { store::create_job(&submit_pool, position, "analysis", 1).await });
     for bookmark in &mut bookmarks {
         assert!(
             tokio::time::timeout(std::time::Duration::from_millis(100), bookmark)

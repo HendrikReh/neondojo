@@ -32,7 +32,7 @@ test('match suggestions preview boards and add only the checked cards', async ({
   ).toBeVisible();
 
   const queued = await page.request.post(`/api/matches/${match.id}/analysis`, {
-    data: { engine_id: 'gnubg', plies: 0 },
+    data: { engine_id: 'gnubg', plies: 1 },
   });
   await expect(queued).toBeOK();
   const job = await queued.json();

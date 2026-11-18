@@ -166,7 +166,7 @@ async fn play_create_resume_actions_and_atomic_failures(pool: PgPool) {
         assert_eq!(status, 201, "{session}");
         session = ready(app.clone(), session).await;
         assert_eq!(session["human_player"], human);
-        assert_eq!(session["engine"]["plies"], 0);
+        assert_eq!(session["engine"]["plies"], 1);
         assert_eq!(
             session["engine"]["version"],
             engine().version().await.unwrap()
@@ -666,7 +666,7 @@ async fn creation_pins_actual_executable_profile_name_direction_and_sgf_names(po
         .execute(&pool)
         .await
         .unwrap();
-    sqlx::query("UPDATE app_settings SET play_plies=2,player_name=$1,bearoff_direction='left'")
+    sqlx::query("UPDATE app_settings SET play_plies=3,player_name=$1,bearoff_direction='left'")
         .bind("Test ] \\ name")
         .execute(&pool)
         .await
@@ -680,7 +680,7 @@ async fn creation_pins_actual_executable_profile_name_direction_and_sgf_names(po
     .await;
     assert_eq!(status, 201, "{s}");
     s = ready(app.clone(), s).await;
-    assert_eq!(s["engine"]["plies"], 2);
+    assert_eq!(s["engine"]["plies"], 3);
     assert_eq!(s["human_name"], "Test ] \\ name");
     assert_eq!(s["bearoff_direction"], "left");
     let id = uuid::Uuid::parse_str(s["id"].as_str().unwrap()).unwrap();
@@ -717,7 +717,7 @@ async fn creation_pins_actual_executable_profile_name_direction_and_sgf_names(po
         .unwrap();
     assert!(
         sgf.contains("2C 0 1 0.000000"),
-        "Bot must use its captured 2-ply profile: {sgf}"
+        "Bot must use its captured 3-ply (GNUbg-native 2-ply) profile: {sgf}"
     );
     // Seed the finishing scenario in a fresh session: the previous session's
     // played decisions are already archived and must never be rewritten by a
@@ -758,7 +758,7 @@ async fn creation_pins_actual_executable_profile_name_direction_and_sgf_names(po
     .await;
     assert_eq!(status, 200, "{next}");
     let next = ready(app.clone(), next).await;
-    assert_eq!(next["engine"]["plies"], 2);
+    assert_eq!(next["engine"]["plies"], 3);
     let sgf: String = sqlx::query_scalar("SELECT sgf FROM play_sessions WHERE id=$1")
         .bind(id)
         .fetch_one(&pool)
@@ -1399,7 +1399,7 @@ async fn bot_sessions_are_library_matches_from_creation(pool: PgPool) {
             app.clone(),
             method,
             &format!("/api/matches/{match_id}/analysis"),
-            json!({"plies":0}),
+            json!({"plies":1}),
         )
         .await;
         assert_eq!(status, 422, "{body}");
@@ -1506,7 +1506,7 @@ async fn bot_library_preserves_identity_management_and_detaches_deleted_matches(
     assert!(!moves.is_empty());
     let first = positions[0].0;
     sqlx::query("INSERT INTO annotations(id,position_uuid,tags,comment,version) VALUES($1,$2,ARRAY['kept'],'my note',1)").bind(uuid::Uuid::new_v4()).bind(first).execute(&pool).await.unwrap();
-    let job = bgtutor::store::create_match_job(&pool, match_id, 0, 1)
+    let job = bgtutor::store::create_match_job(&pool, match_id, 1, 1)
         .await
         .unwrap();
     sqlx::query("UPDATE jobs SET status='completed' WHERE id=$1")
@@ -1836,7 +1836,7 @@ async fn bot_analysis_submission_uses_game_catalog_after_waiting_for_source_lock
     let task_pool = pool.clone();
     let submission =
         tokio::spawn(
-            async move { bgtutor::store::create_match_job(&task_pool, match_id, 0, 1).await },
+            async move { bgtutor::store::create_match_job(&task_pool, match_id, 1, 1).await },
         );
     tokio::task::yield_now().await;
     growth.commit().await.unwrap();
@@ -1963,8 +1963,8 @@ async fn coach_commits_checker_feedback_and_restores_it_after_reload(pool: PgPoo
     assert_eq!(initial["play_mode"], "coach");
     assert_eq!(initial["tutor_threshold"], 0.03);
     assert_eq!(initial["error_thresholds"], thresholds);
-    assert_eq!(initial["analysis_plies"], 2);
-    assert_eq!(initial["engine"]["plies"], 0);
+    assert_eq!(initial["analysis_plies"], 3);
+    assert_eq!(initial["engine"]["plies"], 1);
     let mut session = ready(app.clone(), initial).await;
     let uri = format!("/api/play/sessions/{}", session["id"].as_str().unwrap());
     if session["phase"] == "roll" {
@@ -2103,7 +2103,7 @@ async fn routine_no_double_rolls_without_acknowledgment(pool: PgPool) {
         )
         .await;
         session["play_mode"] = json!(mode);
-        session["analysis_plies"] = json!(0);
+        session["analysis_plies"] = json!(1);
         session["position"]["position_id"] = json!("4P8PAAABAAAAAA");
         session["position"]["gnubg_match_id"] = json!("MAGgAAAAAAAE");
         replace_native(
@@ -2145,7 +2145,7 @@ async fn feedback_cube_responses_preserve_native_units_for_both_colors(pool: PgP
                 json!({"play_mode":"coach","human_player":human,"match_length":5}),
             )
             .await;
-            state["analysis_plies"] = json!(0);
+            state["analysis_plies"] = json!(1);
             state["phase"] = json!("double_response");
             // MatchID's move, turn and doubled fields come from GNUbg's ID;
             // toggle the absolute color fields to mirror the offered cube.
@@ -2201,7 +2201,7 @@ async fn tutor_warns_neutrally_retries_first_attempt_and_native_failure_preserve
 ) {
     let app = api::router(AppState::new(pool.clone(), engine()));
     call(app.clone(), "GET", "/api/settings", Value::Null).await;
-    sqlx::query("UPDATE app_settings SET analysis_plies=0")
+    sqlx::query("UPDATE app_settings SET analysis_plies=1")
         .execute(&pool)
         .await
         .unwrap();
@@ -2347,7 +2347,7 @@ async fn completed_competition_review_is_persisted_and_uses_native_statistics(po
     .await;
     let id = uuid::Uuid::parse_str(session["id"].as_str().unwrap()).unwrap();
     sqlx::query(
-        "UPDATE play_sessions SET state=jsonb_set(state,'{analysis_plies}','0') WHERE id=$1",
+        "UPDATE play_sessions SET state=jsonb_set(state,'{analysis_plies}','1') WHERE id=$1",
     )
     .bind(id)
     .execute(&pool)
@@ -2383,7 +2383,7 @@ async fn completed_competition_review_is_persisted_and_uses_native_statistics(po
     .await;
     assert_eq!(status, 200, "{reviewed}");
     assert!(reviewed["review"].is_object());
-    assert_eq!(reviewed["review"]["analysis_plies"], 0);
+    assert_eq!(reviewed["review"]["analysis_plies"], 1);
     assert_eq!(reviewed["review"]["assisted"], false);
     assert_eq!(
         reviewed["review"]["independent_first_attempt_count"],
@@ -2450,7 +2450,7 @@ async fn training_manual_hint_records_assistance_and_auto_training_reveals_full_
 ) {
     let app = api::router(AppState::new(pool.clone(), engine()));
     call(app.clone(), "GET", "/api/settings", Value::Null).await;
-    sqlx::query("UPDATE app_settings SET analysis_plies=0")
+    sqlx::query("UPDATE app_settings SET analysis_plies=1")
         .execute(&pool)
         .await
         .unwrap();
@@ -2559,7 +2559,7 @@ async fn competition_position_analysis_and_existing_job_reads_are_blocked_until_
             app.clone(),
             "POST",
             "/api/jobs",
-            json!({"position_id":position,"kind":kind,"plies":0}),
+            json!({"position_id":position,"kind":kind,"plies":1}),
         )
         .await;
         assert_eq!(status, 422, "{result}");
@@ -2635,7 +2635,7 @@ async fn competition_position_analysis_and_existing_job_reads_are_blocked_until_
     .await;
     assert_eq!(status, 200, "{page}");
     assert!(page["items"].as_array().unwrap().is_empty(), "{page}");
-    let job = bgtutor::store::create_job(&pool, position, "analysis", 0)
+    let job = bgtutor::store::create_job(&pool, position, "analysis", 1)
         .await
         .unwrap();
     for path in [
@@ -2766,7 +2766,7 @@ async fn changing_play_modes_is_durable_atomic_and_never_advances_native_state(p
 async fn mode_switch_preserves_tutor_attempts_reveal_and_competition_retry_choice(pool: PgPool) {
     let app = api::router(AppState::new(pool.clone(), engine()));
     call(app.clone(), "GET", "/api/settings", Value::Null).await;
-    sqlx::query("UPDATE app_settings SET analysis_plies=0")
+    sqlx::query("UPDATE app_settings SET analysis_plies=1")
         .execute(&pool)
         .await
         .unwrap();
@@ -2902,7 +2902,7 @@ async fn completed_mixed_mode_review_keeps_competition_play_and_original_learnin
 ) {
     let app = api::router(AppState::new(pool.clone(), engine()));
     call(app.clone(), "GET", "/api/settings", Value::Null).await;
-    sqlx::query("UPDATE app_settings SET analysis_plies=0")
+    sqlx::query("UPDATE app_settings SET analysis_plies=1")
         .execute(&pool)
         .await
         .unwrap();
@@ -3144,7 +3144,7 @@ async fn live_tutor_threshold_rechecks_pending_warning_without_playing_or_changi
 ) {
     let app = api::router(AppState::new(pool.clone(), engine()));
     let (_, defaults) = call(app.clone(), "GET", "/api/settings", Value::Null).await;
-    sqlx::query("UPDATE app_settings SET analysis_plies=0")
+    sqlx::query("UPDATE app_settings SET analysis_plies=1")
         .execute(&pool)
         .await
         .unwrap();

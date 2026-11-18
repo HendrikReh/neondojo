@@ -265,6 +265,8 @@ struct Saved {
     native_id: String,
     paused_from_database_id: Option<Uuid>,
 }
+/// One request to the GNUbg adapter. Depths are BG Tutor plies here and are
+/// written as GNUbg-native levels in `request.json`.
 #[derive(Clone, Copy, Serialize)]
 struct NativeRequest<'a> {
     new: bool,
@@ -272,16 +274,37 @@ struct NativeRequest<'a> {
     accept_resignation: Option<bool>,
     human_player: i32,
     match_length: i32,
+    #[serde(serialize_with = "native_plies")]
     plies: i32,
     native_id: &'a str,
     action: &'a str,
     notation: Option<&'a str>,
     resign_level: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "native_bot_plies"
+    )]
     match_bots: Option<[Option<i32>; 2]>,
     /// Cubeless money duel without the Jacoby rule; requires `match_bots`.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     cubeless: bool,
+}
+
+fn native_plies<S: serde::Serializer>(plies: &i32, serializer: S) -> Result<S::Ok, S::Error> {
+    let native = crate::engine::gnubg_plies(*plies).map_err(serde::ser::Error::custom)?;
+    serializer.serialize_i32(native)
+}
+
+fn native_bot_plies<S: serde::Serializer>(
+    bots: &Option<[Option<i32>; 2]>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    let native = bots
+        .map(|bots| bots.map(|depth| depth.map(crate::engine::gnubg_plies).transpose()))
+        .map(|[a, b]| Ok::<_, anyhow::Error>([a?, b?]))
+        .transpose()
+        .map_err(serde::ser::Error::custom)?;
+    native.serialize(serializer)
 }
 #[derive(Deserialize)]
 struct NativeSnapshot {

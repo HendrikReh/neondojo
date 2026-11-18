@@ -252,7 +252,7 @@ function MistakeQuestion({
       </p>
       <p className="recurring-source">
         {/* Origin, engine, depth and method stay readable without hovering:
-            an imported rollout and a 0-ply evaluation are not the same evidence. */}
+            an imported rollout and a 1-ply evaluation are not the same evidence. */}
         {t('source')}: {mistakeProvenance(item, t)}
       </p>
       <p className="study-context">

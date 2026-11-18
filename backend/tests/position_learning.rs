@@ -100,9 +100,9 @@ async fn bulk_reports_each_input_and_maps_repeated_identities_without_fake_answe
     let positions = positions(&pool, SOURCE).await;
     let analyzed = &positions[0];
     let unanalysed = &positions[1];
-    let job = native_analysis(&pool, analyzed.id, 0, "native best play").await;
+    let job = native_analysis(&pool, analyzed.id, 1, "native best play").await;
     let same_identity = alias(&pool, analyzed.id).await;
-    native_analysis(&pool, same_identity, 0, "alias best play").await;
+    native_analysis(&pool, same_identity, 1, "alias best play").await;
     sqlx::query("INSERT INTO analysis_selections(match_id,analysis_id) VALUES($1,$2)")
         .bind(analyzed.match_uuid)
         .bind(format!("job:{job}"))
@@ -227,7 +227,7 @@ async fn bulk_strictly_validates_bounded_requests_and_missing_decks(pool: PgPool
 #[ignore = "requires PostgreSQL"]
 async fn bulk_preserves_fsrs_history_and_only_versions_changed_native_payloads(pool: PgPool) {
     let position = positions(&pool, SOURCE).await.remove(0);
-    native_analysis(&pool, position.id, 0, "first native answer").await;
+    native_analysis(&pool, position.id, 1, "first native answer").await;
     let app = app(&pool);
     let deck = create_deck(&app).await;
     let legacy = format!("/api/decks/{deck}/cards");
@@ -338,7 +338,7 @@ async fn bulk_keeps_dice_score_and_cube_contexts_as_distinct_questions(pool: PgP
         "(;GM[6]PW[Alice]PB[Bob]MI[length:7][ws:0][bs:0]CV[2]CO[w];W[31hefe])",
     ] {
         let position = positions(&pool, source).await.remove(0);
-        native_analysis(&pool, position.id, 0, "native best").await;
+        native_analysis(&pool, position.id, 1, "native best").await;
         selected.push(position);
     }
     assert!(
@@ -394,7 +394,7 @@ async fn bulk_reuses_one_selected_match_solution_without_individual_override(poo
         sqlx::query("INSERT INTO move_analyses(job_id,position_uuid,game_no,decision_no,player,kind,equity_loss,data) VALUES($1,$2,$3,$4,$5,'checker',0.08,$6)")
             .bind(match_job).bind(position.id).bind(position.game_no).bind(decision_no).bind(position.player).bind(data).execute(&pool).await.unwrap();
     }
-    native_analysis(&pool, positions[1].id, 0, "individual native best").await;
+    native_analysis(&pool, positions[1].id, 1, "individual native best").await;
     let app = app(&pool);
     let deck = create_deck(&app).await;
     let (status, result) = call(
@@ -477,7 +477,7 @@ async fn bulk_rejects_unprojectable_imported_analysis_and_empty_native_candidate
 async fn bulk_deck_limit_rolls_back_memberships_and_shared_payload_refreshes(pool: PgPool) {
     let positions = independent_positions(&pool).await;
     for position in &positions {
-        native_analysis(&pool, position.id, 0, "original native answer").await;
+        native_analysis(&pool, position.id, 1, "original native answer").await;
     }
     let app = app(&pool);
     let deck = create_deck(&app).await;
@@ -532,8 +532,8 @@ async fn bulk_deck_limit_rolls_back_memberships_and_shared_payload_refreshes(poo
 #[ignore = "requires PostgreSQL"]
 async fn bulk_propagates_unexpected_database_errors_and_rolls_back_valid_writes(pool: PgPool) {
     let positions = independent_positions(&pool).await;
-    native_analysis(&pool, positions[0].id, 0, "valid native answer").await;
-    native_analysis(&pool, positions[1].id, 0, "reject transaction").await;
+    native_analysis(&pool, positions[0].id, 1, "valid native answer").await;
+    native_analysis(&pool, positions[1].id, 1, "reject transaction").await;
     sqlx::query("ALTER TABLE learning_cards ADD CONSTRAINT reject_test_write CHECK (payload->'solution'->'candidates'->0->>'notation' <> 'reject transaction')").execute(&pool).await.unwrap();
     let app = app(&pool);
     let deck = create_deck(&app).await;
@@ -567,7 +567,7 @@ async fn bulk_propagates_unexpected_database_errors_and_rolls_back_valid_writes(
 async fn bulk_and_legacy_imports_share_stable_lock_order_and_card_identity(pool: PgPool) {
     let positions = independent_positions(&pool).await;
     for position in &positions {
-        native_analysis(&pool, position.id, 0, "native best").await;
+        native_analysis(&pool, position.id, 1, "native best").await;
     }
     let app = app(&pool);
     let a = create_deck(&app).await;
@@ -708,7 +708,7 @@ async fn bulk_does_not_fall_back_from_the_selected_individual_hint_with_an_empty
     pool: PgPool,
 ) {
     let position = positions(&pool, SOURCE).await.remove(0);
-    native_analysis(&pool, position.id, 0, "older native best").await;
+    native_analysis(&pool, position.id, 1, "older native best").await;
     let selected = native_analysis(&pool, position.id, 2, "   ").await;
     let app = app(&pool);
     let deck = create_deck(&app).await;
@@ -740,7 +740,7 @@ async fn bulk_does_not_fall_back_from_the_selected_individual_hint_with_an_empty
 #[ignore = "requires PostgreSQL"]
 async fn catalog_cards_use_explicit_selection_without_engine_or_depth_override(pool: PgPool) {
     let position = positions(&pool, SOURCE).await.remove(0);
-    let selected = native_analysis(&pool, position.id, 0, "selected shallow answer").await;
+    let selected = native_analysis(&pool, position.id, 1, "selected shallow answer").await;
     let deeper = native_analysis(&pool, position.id, 4, "unselected deep answer").await;
     let app = app(&pool);
     let deck = create_deck(&app).await;
@@ -757,7 +757,7 @@ async fn catalog_cards_use_explicit_selection_without_engine_or_depth_override(p
         .await
         .unwrap();
     assert_eq!(payload["source"]["job_id"], selected.to_string());
-    assert_eq!(payload["solution"]["plies"], 0);
+    assert_eq!(payload["solution"]["plies"], 1);
     let (status, response) = call(
         app,
         "PUT",
@@ -910,7 +910,7 @@ async fn catalog_imported_readiness_filters_match_card_creation(pool: PgPool) {
 async fn catalog_batch_cards_reject_unavailable_selected_decisions(pool: PgPool) {
     let position = positions(&pool, SOURCE).await.remove(0);
     let job = Uuid::new_v4();
-    sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,completed_games,result) VALUES($1,$2,'match',0,'completed',1,1,'{\"engine\":\"Test native engine\"}')").bind(job).bind(position.match_uuid).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,completed_games,result) VALUES($1,$2,'match',1,'completed',1,1,'{\"engine\":\"Test native engine\"}')").bind(job).bind(position.match_uuid).execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO match_analysis_games(job_id,game_no) VALUES($1,1)")
         .bind(job)
         .execute(&pool)

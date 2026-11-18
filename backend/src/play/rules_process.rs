@@ -333,7 +333,7 @@ time.sleep(60)
             accept_resignation: None,
             human_player: 0,
             match_length: 11,
-            plies: 0,
+            plies: 1,
             native_id: "checkpoint",
             action: "inspect",
             notation: None,

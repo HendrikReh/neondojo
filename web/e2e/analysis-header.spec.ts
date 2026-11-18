@@ -177,7 +177,7 @@ test('header PR refreshes after full match completion and stays unknown for a si
   await openMatchAnalysisOptions(page);
   await page
     .getByLabel('Match analysis depth', { exact: true })
-    .selectOption('0');
+    .selectOption('1');
   const gameMetadata = page.waitForResponse(
     (r) =>
       new URL(r.url()).pathname === metadataPath &&

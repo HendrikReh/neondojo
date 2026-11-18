@@ -53,7 +53,7 @@ export async function historyFixture(
     human_name: 'Human',
     match_length: 7,
     bearoff_direction: human ? 'left' : 'right',
-    engine: { id: 'gnubg', version: 'GNU Backgammon 1.08.003', plies: 2 },
+    engine: { id: 'gnubg', version: 'GNU Backgammon 1.08.003', plies: 3 },
     position: {
       ...items[1].after,
       player: human,

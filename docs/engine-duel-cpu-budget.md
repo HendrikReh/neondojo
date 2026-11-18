@@ -6,7 +6,7 @@ Status: step 1 (measurement, option A) is implemented; options B–D are proposa
 
 Engine duels currently pair `Competitor { engine_id, plies }` profiles ([engine_matches.rs](../backend/src/engine_matches.rs)). That compares labels, not effort:
 
-- Ply counting differs. GNUbg 0-ply is a static evaluation, while XG calls the same thing 1-ply. Open Sage only offers 1–4-ply.
+- Ply counting differed. GNUbg 0-ply is a static evaluation, while XG calls the same thing 1-ply. Since migration 0079, BG Tutor uses the XG convention for both engines and converts only when it talks to GNUbg ([Ply convention](reference/settings.md#ply-convention)). Duels from before 0079 ran a GNUbg side labelled N-ply at today's N+1-ply. Open Sage only offers 1–4-ply.
 - The work per ply differs. Move filters and pruning decide how many candidates are searched deeper. GNUbg duels currently use GNUbg's default move filter, while analysis uses Top14. Open Sage passes no filter.
 - Engines can be tuned differently, for example deeper for cube decisions and races than for normal checker play, with or without bear-off databases. A single depth setting for both sides cannot express that.
 - Thread counts are global per engine. GNUbg defaults to 1, Open Sage uses at least 2 in duels.

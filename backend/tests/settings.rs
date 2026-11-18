@@ -73,7 +73,7 @@ async fn defaults_use_injected_engine_and_survive_new_app_states(pool: PgPool) {
     assert_eq!(status, 200, "{settings}");
     assert_eq!(
         settings,
-        json!({"version":0,"player_name":"","analysis_engine":"gnubg","analysis_plies":2,"play_engine":"gnubg","play_plies":0,"gnubg_path":"/missing/injected-gnubg","gnubg_threads":null,"gnubg_play_threads":null,"open_sage_threads":null,"open_sage_play_threads":null,"parallel_analysis_jobs":null,"bearoff_direction":"right","default_play_mode":"coach","tutor_threshold":0.04,"training_auto_analysis":true})
+        json!({"version":0,"player_name":"","analysis_engine":"gnubg","analysis_plies":3,"play_engine":"gnubg","play_plies":1,"gnubg_path":"/missing/injected-gnubg","gnubg_threads":null,"gnubg_play_threads":null,"open_sage_threads":null,"open_sage_play_threads":null,"parallel_analysis_jobs":null,"bearoff_direction":"right","default_play_mode":"coach","tutor_threshold":0.04,"training_auto_analysis":true})
     );
     let second = api::router(AppState::new(pool.clone(), Engine::new("different".into())));
     assert_eq!(
@@ -84,7 +84,7 @@ async fn defaults_use_injected_engine_and_survive_new_app_states(pool: PgPool) {
     assert_eq!(engines[0]["id"], "gnubg");
     assert_eq!(engines[0]["available"], false);
     assert_eq!(engines[0]["version"], Value::Null);
-    assert_eq!(engines[0]["plies"], json!([0, 1, 2, 3, 4]));
+    assert_eq!(engines[0]["plies"], json!([1, 2, 3, 4, 5]));
     assert_eq!(engines[1]["id"], "bgsage");
     assert_eq!(engines[1]["name"], "Open Sage");
     assert_eq!(engines[1]["available"], false);
@@ -103,17 +103,17 @@ async fn defaults_use_injected_engine_and_survive_new_app_states(pool: PgPool) {
     assert!(schema["components"]["schemas"]["AppSettings"].is_object());
     for name in ["JobRequest", "MatchAnalysisRequest", "Job"] {
         assert_eq!(
-            schema["components"]["schemas"][name]["properties"]["plies"]["maximum"], 4,
+            schema["components"]["schemas"][name]["properties"]["plies"]["maximum"], 5,
             "{name}"
         );
     }
     assert_eq!(
         schema["components"]["schemas"]["AppSettings"]["properties"]["analysis_plies"]["maximum"],
-        4
+        5
     );
     assert_eq!(
         schema["components"]["schemas"]["AppSettings"]["properties"]["play_plies"]["maximum"],
-        2
+        3
     );
 }
 
@@ -139,12 +139,12 @@ async fn explicit_position_engine_does_not_depend_on_the_saved_default(pool: PgP
             app.clone(),
             "POST",
             "/api/jobs",
-            json!({"position_id": position.id, "kind": kind, "engine_id": "gnubg", "plies": 0}),
+            json!({"position_id": position.id, "kind": kind, "engine_id": "gnubg", "plies": 1}),
         )
         .await;
         assert_eq!(status, 202, "{job}");
         assert_eq!(job["engine_snapshot"]["engine_id"], "gnubg");
-        assert_eq!(job["plies"], 0);
+        assert_eq!(job["plies"], 1);
     }
 }
 
@@ -241,7 +241,7 @@ async fn thread_settings_are_validated_and_pinned_in_new_jobs(pool: PgPool) {
         json!(gnu_threads)
     );
 
-    let side = json!({"engine_id":"gnubg","plies":0});
+    let side = json!({"engine_id":"gnubg","plies":1});
     let (status, duel) = call(
         app.clone(),
         "POST",
@@ -290,15 +290,15 @@ async fn analysis_depth_applies_to_position_dice_game_and_match_jobs(pool: PgPoo
     ] {
         let (status, default) = call(app.clone(), "POST", uri, body.clone()).await;
         assert_eq!(status, 202, "{default}");
-        assert_eq!(default["plies"], 2);
-        for plies in 0..=4 {
+        assert_eq!(default["plies"], 3);
+        for plies in 1..=5 {
             let mut explicit = body.clone();
             explicit["plies"] = json!(plies);
             let (status, job) = call(app.clone(), "POST", uri, explicit).await;
             assert_eq!(status, 202, "{job}");
             assert_eq!(job["plies"], plies);
         }
-        for plies in [-1, 5] {
+        for plies in [-1, 0, 6] {
             let mut invalid = body.clone();
             invalid["plies"] = json!(plies);
             assert_eq!(call(app.clone(), "POST", uri, invalid).await.0, 422);
@@ -315,6 +315,10 @@ async fn depth_migration_changes_only_untouched_defaults_and_preserves_old_jobs(
         .unwrap()
         .items
         .remove(0);
+    // These checks replay an earlier migration; restore the depth constraints
+    // that applied before 0079 moved GNUbg depths to the shared convention.
+    sqlx::raw_sql("ALTER TABLE jobs DROP CONSTRAINT jobs_plies_check; ALTER TABLE jobs ADD CONSTRAINT jobs_plies_check CHECK (plies BETWEEN 0 AND 4); ALTER TABLE app_settings DROP CONSTRAINT app_settings_analysis_plies_check; ALTER TABLE app_settings ADD CONSTRAINT app_settings_analysis_plies_check CHECK (analysis_plies BETWEEN 0 AND 4); ALTER TABLE app_settings DROP CONSTRAINT app_settings_play_plies_check; ALTER TABLE app_settings ADD CONSTRAINT app_settings_play_plies_check CHECK (play_plies BETWEEN 0 AND 2);")
+        .execute(&pool).await.unwrap();
     let old = store::create_job(&pool, position.id, "analysis", 0)
         .await
         .unwrap();
@@ -424,6 +428,10 @@ async fn four_ply_migration_preserves_saved_profiles_and_completed_jobs(pool: Pg
         .unwrap()
         .items
         .remove(0);
+    // These checks replay an earlier migration; restore the depth constraints
+    // that applied before 0079 moved GNUbg depths to the shared convention.
+    sqlx::raw_sql("ALTER TABLE jobs DROP CONSTRAINT jobs_plies_check; ALTER TABLE jobs ADD CONSTRAINT jobs_plies_check CHECK (plies BETWEEN 0 AND 4); ALTER TABLE app_settings DROP CONSTRAINT app_settings_analysis_plies_check; ALTER TABLE app_settings ADD CONSTRAINT app_settings_analysis_plies_check CHECK (analysis_plies BETWEEN 0 AND 4); ALTER TABLE app_settings DROP CONSTRAINT app_settings_play_plies_check; ALTER TABLE app_settings ADD CONSTRAINT app_settings_play_plies_check CHECK (play_plies BETWEEN 0 AND 2);")
+        .execute(&pool).await.unwrap();
     for plies in 0..=3 {
         let old = store::create_job(&pool, position.id, "analysis", plies)
             .await
@@ -483,7 +491,8 @@ async fn four_ply_migration_preserves_saved_profiles_and_completed_jobs(pool: Pg
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(default, 2);
+    // 0020 left the default alone; 0079 later made it 3-ply (GNUbg-native 2).
+    assert_eq!(default, 3);
     assert!(
         store::create_job(&pool, position.id, "analysis", 4)
             .await
@@ -551,9 +560,11 @@ async fn validates_installation_updates_atomically_and_rejects_stale_writes(pool
     for (field, value) in [
         ("analysis_engine", json!("bgsage")),
         ("play_engine", json!("unknown")),
-        ("analysis_plies", json!(5)),
+        ("analysis_plies", json!(6)),
+        ("analysis_plies", json!(0)),
         ("analysis_plies", json!(-1)),
-        ("play_plies", json!(3)),
+        ("play_plies", json!(4)),
+        ("play_plies", json!(0)),
         ("play_plies", json!(-1)),
         ("player_name", json!("a\nname")),
         ("player_name", json!("x".repeat(121))),
@@ -614,7 +625,7 @@ async fn configured_relative_gnubg_path_is_shared_by_analysis_play_and_benchmark
     assert_eq!(status, 200, "{saved}");
 
     let analysis = Engine::new(saved["gnubg_path"].as_str().unwrap().into())
-        .analyze("4HPwATDgc/ABMA", "cInlAAAAAAAE", 0, None)
+        .analyze("4HPwATDgc/ABMA", "cInlAAAAAAAE", 1, None)
         .await
         .unwrap();
     assert!(!analysis.candidates.is_empty());
@@ -638,7 +649,7 @@ async fn configured_relative_gnubg_path_is_shared_by_analysis_play_and_benchmark
         app,
         "POST",
         "/api/benchmarks",
-        json!({"engine_id":"gnubg","plies":[0]}),
+        json!({"engine_id":"gnubg","plies":[1]}),
     )
     .await;
     assert_eq!(status, 202, "{benchmark}");
@@ -668,7 +679,7 @@ async fn play_latency_uses_the_saved_play_depth_and_installation(pool: PgPool) {
     let executable = absolute_binary();
     assert_eq!(queued["engine_path"], executable.to_str().unwrap());
 
-    sqlx::query("UPDATE app_settings SET play_plies=0,gnubg_path='/missing/after-queueing'")
+    sqlx::query("UPDATE app_settings SET play_plies=1,gnubg_path='/missing/after-queueing'")
         .execute(&pool)
         .await
         .unwrap();
@@ -717,14 +728,14 @@ async fn jobs_use_saved_defaults_snapshot_installations_and_deduplicate_by_confi
         json!({"position_id":position.id,"kind":"analysis"}),
     )
     .await;
-    assert_eq!(old["plies"], 2);
+    assert_eq!(old["plies"], 3);
     let endpoint = format!("/api/matches/{}/analysis", imported.r#match.id);
-    let (_, old_full) = call(app.clone(), "POST", &endpoint, json!({"plies":0})).await;
+    let (_, old_full) = call(app.clone(), "POST", &endpoint, json!({"plies":1})).await;
     let (_, old_game) = call(
         app.clone(),
         "POST",
         &endpoint,
-        json!({"plies":0,"game_no":1}),
+        json!({"plies":1,"game_no":1}),
     )
     .await;
     let temp = tempfile::tempdir().unwrap();
@@ -732,17 +743,17 @@ async fn jobs_use_saved_defaults_snapshot_installations_and_deduplicate_by_confi
     std::os::unix::fs::symlink(absolute_binary(), &alternative).unwrap();
     let (_, mut settings) = call(app.clone(), "GET", "/api/settings", Value::Null).await;
     settings["gnubg_path"] = json!(alternative.to_str().unwrap());
-    settings["analysis_plies"] = json!(1);
+    settings["analysis_plies"] = json!(2);
     let (status, saved) = call(app.clone(), "PUT", "/api/settings", settings).await;
     assert_eq!(status, 200, "{saved}");
     let (_, explicit) = call(
         app.clone(),
         "POST",
         "/api/jobs",
-        json!({"position_id":position.id,"kind":"analysis","plies":0}),
+        json!({"position_id":position.id,"kind":"analysis","plies":1}),
     )
     .await;
-    assert_eq!(explicit["plies"], 0);
+    assert_eq!(explicit["plies"], 1);
     assert_ne!(
         old["id"], explicit["id"],
         "old installation must not deduplicate a new job"
@@ -751,7 +762,7 @@ async fn jobs_use_saved_defaults_snapshot_installations_and_deduplicate_by_confi
         app.clone(),
         "POST",
         "/api/jobs",
-        json!({"position_id":position.id,"kind":"analysis","plies":0}),
+        json!({"position_id":position.id,"kind":"analysis","plies":1}),
     )
     .await;
     assert_eq!(explicit["id"], duplicate["id"]);
@@ -762,25 +773,25 @@ async fn jobs_use_saved_defaults_snapshot_installations_and_deduplicate_by_confi
         json!({"position_id":position.id,"kind":"analysis"}),
     )
     .await;
-    assert_eq!(default["plies"], 1);
+    assert_eq!(default["plies"], 2);
     let (_, full) = call(app.clone(), "POST", &endpoint, json!({})).await;
-    assert_eq!(full["plies"], 1);
-    let (_, full_explicit) = call(app.clone(), "POST", &endpoint, json!({"plies":0})).await;
+    assert_eq!(full["plies"], 2);
+    let (_, full_explicit) = call(app.clone(), "POST", &endpoint, json!({"plies":1})).await;
     let (_, game_explicit) = call(
         app.clone(),
         "POST",
         &endpoint,
-        json!({"plies":0,"game_no":1}),
+        json!({"plies":1,"game_no":1}),
     )
     .await;
     assert_ne!(old_full["id"], full_explicit["id"]);
     assert_ne!(old_game["id"], game_explicit["id"]);
-    let (_, full_duplicate) = call(app.clone(), "POST", &endpoint, json!({"plies":0})).await;
+    let (_, full_duplicate) = call(app.clone(), "POST", &endpoint, json!({"plies":1})).await;
     let (_, game_duplicate) = call(
         app.clone(),
         "POST",
         &endpoint,
-        json!({"plies":0,"game_no":1}),
+        json!({"plies":1,"game_no":1}),
     )
     .await;
     assert_eq!(full_explicit["id"], full_duplicate["id"]);
@@ -796,7 +807,7 @@ async fn jobs_use_saved_defaults_snapshot_installations_and_deduplicate_by_confi
         app.clone(),
         "POST",
         "/api/jobs",
-        json!({"position_id":position.id,"kind":"analysis","plies":0}),
+        json!({"position_id":position.id,"kind":"analysis","plies":1}),
     )
     .await;
     assert_eq!(unchanged_config["id"], explicit["id"]);
@@ -910,7 +921,7 @@ async fn worker_runs_up_to_the_configured_number_of_analysis_jobs(pool: PgPool) 
         .execute(&pool)
         .await
         .unwrap();
-    for plies in [0, 1, 2] {
+    for plies in [1, 2, 3] {
         let (status, job) = call(
             app.clone(),
             "POST",
@@ -959,19 +970,21 @@ async fn worker_runs_up_to_the_configured_number_of_analysis_jobs(pool: PgPool) 
 #[cfg(unix)]
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL and GNUbg with weights"]
-async fn three_ply_native_jobs_preserve_real_search_depth(pool: PgPool) {
-    native_jobs_preserve_real_search_depth(pool, 3).await;
-}
-
-#[cfg(unix)]
-#[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL and GNUbg with weights"]
 async fn four_ply_native_jobs_preserve_real_search_depth(pool: PgPool) {
     native_jobs_preserve_real_search_depth(pool, 4).await;
 }
 
 #[cfg(unix)]
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL and GNUbg with weights"]
+async fn five_ply_native_jobs_preserve_real_search_depth(pool: PgPool) {
+    native_jobs_preserve_real_search_depth(pool, 5).await;
+}
+
+#[cfg(unix)]
 async fn native_jobs_preserve_real_search_depth(pool: PgPool, plies: i32) {
+    // GNUbg's own output names its native level, one below BG Tutor's.
+    let native_plies = plies - 1;
     let evidence = tempfile::tempdir().unwrap();
     let quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
     let native = quote(absolute_binary().to_str().unwrap());
@@ -1013,14 +1026,14 @@ async fn native_jobs_preserve_real_search_depth(pool: PgPool, plies: i32) {
     assert!(
         std::fs::read_to_string(&output_log)
             .unwrap()
-            .contains(&format!("Cubeful {plies}-ply"))
+            .contains(&format!("Cubeful {native_plies}-ply"))
     );
     let game = engine.analyze_game(sgf, 1, plies).await.unwrap();
     assert_eq!(game.decisions.len(), 1);
     assert!(
         std::fs::read_to_string(&export_log)
             .unwrap()
-            .contains(&format!("{plies}-ply"))
+            .contains(&format!("{native_plies}-ply"))
     );
 
     let state = AppState::new(pool.clone(), engine);
@@ -1065,11 +1078,11 @@ async fn native_jobs_preserve_real_search_depth(pool: PgPool, plies: i32) {
             assert!(
                 std::fs::read_to_string(&export_log)
                     .unwrap()
-                    .contains(&format!("{plies}-ply"))
+                    .contains(&format!("{native_plies}-ply"))
             );
         } else {
             let native_output = std::fs::read_to_string(&output_log).unwrap();
-            assert!(native_output.contains(&format!("Cubeful {plies}-ply")));
+            assert!(native_output.contains(&format!("Cubeful {native_plies}-ply")));
             if kind == "dice" {
                 assert_eq!(done["result"]["rolls"].as_array().unwrap().len(), 21);
                 assert_eq!(native_output.matches("Setting GNUbg ID").count(), 21);
@@ -1279,7 +1292,7 @@ async fn snapshot_rejects_output_if_the_version_changes_during_evaluation() {
     let result = snapshot
         .engine()
         .unwrap()
-        .analyze("4HPwATDgc/ABMA", "cInlAAAAAAAE", 0, None)
+        .analyze("4HPwATDgc/ABMA", "cInlAAAAAAAE", 1, None)
         .await;
     assert!(
         result.is_err(),

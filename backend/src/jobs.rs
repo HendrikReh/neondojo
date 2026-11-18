@@ -294,7 +294,7 @@ mod tests {
                 .await
                 .unwrap();
         // Two Open Sage jobs are queued before one GNUbg job.
-        for (offset, plies, engine) in [(3, 1, "bgsage"), (2, 2, "bgsage"), (1, 0, "gnubg")] {
+        for (offset, plies, engine) in [(3, 1, "bgsage"), (2, 2, "bgsage"), (1, 3, "gnubg")] {
             sqlx::query("INSERT INTO jobs(id,position_uuid,kind,plies,status,engine_snapshot,created_at) VALUES($1,$2,'analysis',$3,'queued',jsonb_build_object('engine_id',$4::text,'gnubg_path','gnubg'),now()-make_interval(secs=>$5))")
                 .bind(Uuid::new_v4())
                 .bind(position)
@@ -312,7 +312,7 @@ mod tests {
             .await
             .unwrap()
             .expect("GNUbg job passes the waiting Sage job");
-        assert_eq!(second.job.plies, 0);
+        assert_eq!(second.job.plies, 3);
         assert!(claim(&state).await.unwrap().is_none());
         sqlx::query(
             "UPDATE jobs SET status='completed',lease_token=NULL,lease_until=NULL WHERE id=$1",
@@ -338,7 +338,7 @@ mod tests {
         )
         .await
         .unwrap();
-        let job = store::create_match_job(&pool, imported.r#match.id, 0, 1)
+        let job = store::create_match_job(&pool, imported.r#match.id, 1, 1)
             .await
             .unwrap();
         let token = Uuid::new_v4();

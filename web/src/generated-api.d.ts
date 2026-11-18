@@ -2718,7 +2718,8 @@ export interface components {
             analysis_engine: string;
             /**
              * Format: int32
-             * @default 2
+             * @description Depth in BG Tutor's ply convention; 1-ply is the raw evaluation.
+             * @default 3
              */
             analysis_plies: number;
             bearoff_direction?: string;
@@ -2750,7 +2751,11 @@ export interface components {
              */
             parallel_analysis_jobs?: number | null;
             play_engine: string;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Depth in BG Tutor's ply convention; 1-ply is the raw evaluation.
+             * @default 1
+             */
             play_plies: number;
             player_name: string;
             training_auto_analysis?: boolean;
@@ -3005,7 +3010,8 @@ export interface components {
             path?: string | null;
             /**
              * Format: int32
-             * @description Depth actually used for this candidate, when recorded by the engine.
+             * @description Depth actually used for this candidate, when recorded by the engine,
+             *     in BG Tutor's ply convention (1-ply is the raw evaluation).
              */
             plies?: number | null;
             /**
@@ -4115,7 +4121,10 @@ export interface components {
             kind: components["schemas"]["JobKind"];
             /** Format: uuid */
             match_uuid?: string | null;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Depth in BG Tutor's ply convention; 1-ply is the raw evaluation.
+             */
             plies: number;
             /** Format: uuid */
             position_uuid?: string | null;

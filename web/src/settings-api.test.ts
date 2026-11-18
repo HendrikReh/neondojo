@@ -14,9 +14,9 @@ const settings: AppSettings = {
   version: 7,
   player_name: 'Zoë',
   analysis_engine: 'gnubg',
-  analysis_plies: 0,
+  analysis_plies: 1,
   play_engine: 'gnubg',
-  play_plies: 2,
+  play_plies: 3,
   gnubg_path: '/usr/local/bin/gnubg',
 };
 
@@ -65,7 +65,7 @@ describe('settings API', () => {
     );
     await expect(loadSettings()).rejects.toBeInstanceOf(SettingsApiError);
   });
-  it.each([3, 4])(
+  it.each([4, 5])(
     'accepts a %i-ply analysis profile while retaining the separate play profile',
     async (plies) => {
       vi.stubGlobal('fetch', async () =>
@@ -74,8 +74,13 @@ describe('settings API', () => {
       expect((await loadSettings()).analysis_plies).toBe(plies);
     },
   );
-  it('rejects analysis depth five and unsupported play depth three', async () => {
-    for (const invalid of [{ analysis_plies: 5 }, { play_plies: 3 }]) {
+  it('rejects analysis depth six and the former GNUbg zero-ply and play depth four', async () => {
+    for (const invalid of [
+      { analysis_plies: 6 },
+      { analysis_plies: 0 },
+      { play_plies: 4 },
+      { play_plies: 0 },
+    ]) {
       vi.stubGlobal('fetch', async () =>
         Response.json({ ...settings, ...invalid }),
       );
@@ -127,7 +132,7 @@ describe('settings API', () => {
         name: 'GNU Backgammon',
         available: true,
         version: '1.08',
-        plies: [0, 1, 2],
+        plies: [1, 2, 3],
       },
       {
         id: 'bgsage',

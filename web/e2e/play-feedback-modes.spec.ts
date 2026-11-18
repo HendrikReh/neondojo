@@ -27,9 +27,9 @@ function saved(mode = 'coach', pending: unknown = null) {
     human_name: 'Learner',
     match_length: 7,
     bearoff_direction: 'right',
-    engine: { id: 'gnubg', version: 'GNU Backgammon native', plies: 0 },
+    engine: { id: 'gnubg', version: 'GNU Backgammon native', plies: 1 },
     play_mode: mode,
-    analysis_plies: 2,
+    analysis_plies: 3,
     tutor_threshold: 0.04,
     training_auto_analysis: true,
     pending_decision: pending,
@@ -100,9 +100,9 @@ test('Coach is the default mode and all four profiles are selectable', async ({
         version: 0,
         player_name: 'Learner',
         analysis_engine: 'gnubg',
-        analysis_plies: 2,
+        analysis_plies: 3,
         play_engine: 'gnubg',
-        play_plies: 0,
+        play_plies: 1,
         gnubg_path: 'gnubg',
         default_play_mode: 'coach',
         tutor_threshold: 0.04,
@@ -251,7 +251,7 @@ test('Competition hides pip counts and live feedback', async ({ page }) => {
   await expect(engine).toHaveText('GNU Backgammon 1.08.003');
   await engine.hover();
   await expect(page.getByRole('tooltip')).toHaveText(
-    'GNU Backgammon 1.08.003 20261108 · 0-ply · Bear off to the right',
+    'GNU Backgammon 1.08.003 20261108 · 1-ply · Bear off to the right',
   );
   await expect(page.getByTestId('play-feedback')).toHaveCount(0);
   await expect(
@@ -314,7 +314,7 @@ test('completed review identifies the original and corrected choices with help s
       },
     ],
     review: {
-      analysis_plies: 2,
+      analysis_plies: 3,
       assisted: true,
       first_attempt_loss: 0.09,
       final_choice_loss: 0,
@@ -345,9 +345,9 @@ test('Analysis thresholds and the default play mode apply to new matches', async
     version: 0,
     player_name: 'Learner',
     analysis_engine: 'gnubg',
-    analysis_plies: 2,
+    analysis_plies: 3,
     play_engine: 'gnubg',
-    play_plies: 0,
+    play_plies: 1,
     gnubg_path: 'gnubg',
     default_play_mode: 'coach',
     tutor_threshold: 0.04,
@@ -379,8 +379,8 @@ test('Analysis thresholds and the default play mode apply to new matches', async
     return response.json();
   });
   expect(configuration.current_configuration.analysis.error_thresholds.error).toBe(0.025);
-  expect(configuration.current_configuration.analysis.plies).toBe(2);
-  expect(configuration.current_configuration.play.plies).toBe(0);
+  expect(configuration.current_configuration.analysis.plies).toBe(3);
+  expect(configuration.current_configuration.play.plies).toBe(1);
   expect(configuration.active_profile.configuration.analysis.error_thresholds.error).toBe(
     0.02,
   );

@@ -6,7 +6,7 @@ import type { components } from '../src/generated-api';
 
 type BenchmarkHistory = components['schemas']['BenchmarkHistory'];
 type BenchmarkRun = components['schemas']['BenchmarkRun'];
-const depths = [0, 1, 2, 3, 4];
+const depths = [1, 2, 3, 4, 5];
 const benchmarkTimeout = 90 * 60_000;
 
 test('uses native benchmarks at every depth for both analysis scopes without starting work', async ({

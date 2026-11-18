@@ -322,7 +322,7 @@ mod tests {
         let job = store::create_match_job_scoped_with_snapshot(
             &pool,
             imported.r#match.id,
-            0,
+            1,
             1,
             None,
             Some(&snapshot),
@@ -372,7 +372,7 @@ mod tests {
     fn rating_summary() -> MatchAnalysisSummary {
         MatchAnalysisSummary {
             engine: "GNU Backgammon test".into(),
-            plies: 0,
+            plies: 1,
             total_games: 2,
             completed_games: 0,
             total_moves: 0,
@@ -505,14 +505,14 @@ mod tests {
         )
         .await
         .unwrap();
-        let job = store::create_match_job_scoped(&pool, imported.r#match.id, 0, 1, Some(2))
+        let job = store::create_match_job_scoped(&pool, imported.r#match.id, 1, 1, Some(2))
             .await
             .unwrap();
         let token = Uuid::new_v4();
         sqlx::query("UPDATE jobs SET status='running',attempts=1,lease_token=$2,lease_until=now()+interval '120 seconds' WHERE id=$1").bind(job.id).bind(token).execute(&pool).await.unwrap();
         let mut summary = MatchAnalysisSummary {
             engine: engine.version().await.unwrap(),
-            plies: 0,
+            plies: 1,
             total_games: 1,
             completed_games: 0,
             total_moves: 1,
@@ -526,7 +526,7 @@ mod tests {
                 },
             ],
         };
-        let game = engine.analyze_game(sgf, 2, 0).await.unwrap();
+        let game = engine.analyze_game(sgf, 2, 1).await.unwrap();
         let error = checkpoint(&pool, &job, Uuid::new_v4(), &game, &mut summary, None)
             .await
             .unwrap_err();
@@ -585,14 +585,14 @@ mod tests {
         let imported = store::import_match(&pool, "resume.mat", "mat", mat, &sgf, &parsed)
             .await
             .unwrap();
-        let job = store::create_match_job(&pool, imported.r#match.id, 0, 2)
+        let job = store::create_match_job(&pool, imported.r#match.id, 1, 2)
             .await
             .unwrap();
         let token = Uuid::new_v4();
         sqlx::query("UPDATE jobs SET status='running',attempts=1,lease_token=$2,lease_until=now()+interval '120 seconds' WHERE id=$1").bind(job.id).bind(token).execute(&pool).await.unwrap();
         let mut summary = MatchAnalysisSummary {
             engine: engine.version().await.unwrap(),
-            plies: 0,
+            plies: 1,
             total_games: 2,
             completed_games: 0,
             total_moves: 4,
@@ -606,7 +606,7 @@ mod tests {
                 },
             ],
         };
-        let first = engine.analyze_game(&sgf, 1, 0).await.unwrap();
+        let first = engine.analyze_game(&sgf, 1, 1).await.unwrap();
         checkpoint(&pool, &job, token, &first, &mut summary, None)
             .await
             .unwrap();
@@ -616,7 +616,7 @@ mod tests {
                 .fetch_all(&pool)
                 .await
                 .unwrap();
-        let second = engine.analyze_game(&sgf, 2, 0).await.unwrap();
+        let second = engine.analyze_game(&sgf, 2, 1).await.unwrap();
         let mut stale = summary.clone();
         assert!(
             checkpoint(&pool, &job, Uuid::new_v4(), &second, &mut stale, None)
@@ -738,7 +738,7 @@ mod tests {
         let job = store::create_match_job_scoped_with_snapshot(
             &pool,
             imported.r#match.id,
-            0,
+            1,
             2,
             None,
             Some(&snapshot),
@@ -749,7 +749,7 @@ mod tests {
         sqlx::query("UPDATE jobs SET status='running',attempts=1,lease_token=$2,lease_until=now()+interval '120 seconds' WHERE id=$1").bind(job.id).bind(token).execute(&pool).await.unwrap();
         let mut summary = MatchAnalysisSummary {
             engine: version,
-            plies: 0,
+            plies: 1,
             total_games: 2,
             completed_games: 0,
             total_moves: 2,
@@ -766,7 +766,7 @@ mod tests {
         let game = snapshot
             .engine()
             .unwrap()
-            .analyze_game(sgf, 1, 0)
+            .analyze_game(sgf, 1, 1)
             .await
             .unwrap();
         checkpoint(&pool, &job, token, &game, &mut summary, None)

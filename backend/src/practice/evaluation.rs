@@ -113,10 +113,11 @@ impl PracticeProvenance {
 
 fn proven_checker_depth(solution: &SavedEvaluation<'_>) -> Option<i32> {
     // GNUbg's move filter may finish candidates early and older cards omit
-    // per-candidate depths. Open Sage verifies each returned candidate depth.
+    // per-candidate depths; its 1-ply raw evaluation has no filter. Open Sage
+    // verifies each returned candidate depth.
     let plies = solution.plies?;
     if solution.native
-        && (plies == 0
+        && (plies == 1
             || solution.engine.starts_with("Open Sage ")
                 && solution.engine.contains(&format!("; {plies}ply cubeful;")))
     {

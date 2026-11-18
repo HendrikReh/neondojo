@@ -262,7 +262,7 @@ test('full match analysis starts and preserves conflicting local settings', asyn
   const dialog = await openFullMatchAnalysis(page);
   await dialog
     .getByLabel('Match-Analysetiefe', { exact: true })
-    .selectOption('0');
+    .selectOption('1');
   const submitted = page.waitForResponse(
     (response) =>
       response.request().method() === 'POST' &&
@@ -278,7 +278,7 @@ test('full match analysis starts and preserves conflicting local settings', asyn
   expect(response.status()).toBe(202);
   expect(response.request().postDataJSON()).toMatchObject({
     engine_id: 'gnubg',
-    plies: 0,
+    plies: 1,
   });
   await expect(page.getByRole('tabpanel', { name: 'Statistik', exact: true }))
     .toHaveAttribute('data-job-id', (await response.json()).id, { timeout: 30_000 });
@@ -294,7 +294,7 @@ test('manual checker selection wins during a delayed review response', async ({ 
   await page.goto('/');
   await page.getByLabel('Matchdatei').setInputFiles('../backend/tests/fixtures/WC2014.mat');
   const dialog = await openFullMatchAnalysis(page);
-  await dialog.getByLabel('Match-Analysetiefe', { exact: true }).selectOption('0');
+  await dialog.getByLabel('Match-Analysetiefe', { exact: true }).selectOption('1');
   await submitFullMatchAnalysis(page, dialog);
   await expect(page.locator('.match-analysis-progress')).toContainText('Matchanalyse abgeschlossen');
   await page.getByRole('tab', { name: 'Statistik', exact: true }).click();

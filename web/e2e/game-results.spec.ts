@@ -120,7 +120,7 @@ test('playing shows each completed game result at its history boundary', async (
     human_name: 'Hendrik',
     match_length: 7,
     bearoff_direction: 'right',
-    engine: { id: 'gnubg', version: 'GNU Backgammon native', plies: 0 },
+    engine: { id: 'gnubg', version: 'GNU Backgammon native', plies: 1 },
     play_mode: 'competition',
     position,
     phase: 'match_over',

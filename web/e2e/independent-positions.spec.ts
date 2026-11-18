@@ -67,7 +67,7 @@ async function setup(page: Page, learn = false) {
   if (learn) {
     native = await (
       await page.request.post(`/api/matches/${match.id}/analysis`, {
-        data: { game_no: 2, plies: 0 },
+        data: { game_no: 2, plies: 1 },
       })
     ).json();
     await expect
@@ -79,7 +79,7 @@ async function setup(page: Page, learn = false) {
       .toBe('completed');
     const hint = await (
       await page.request.post('/api/jobs', {
-        data: { position_id: position.id, kind: 'analysis', plies: 0 },
+        data: { position_id: position.id, kind: 'analysis', plies: 1 },
       })
     ).json();
     await expect
@@ -218,7 +218,7 @@ test('deleting a source match retains an independent study position, notes, anal
   ).toContainText(String(f.metadata.match_no));
   const positionDepth = (await openPositionCalculation(page))
     .getByLabel('Search depth', { exact: true });
-  await positionDepth.selectOption('1');
+  await positionDepth.selectOption('2');
   const accepted = page.waitForResponse(
     (r) =>
       new URL(r.url()).pathname === '/api/jobs' &&
@@ -228,7 +228,7 @@ test('deleting a source match retains an independent study position, notes, anal
     .getByRole('button', { name: 'Analyze position', exact: true })
     .click();
   const job = await (await accepted).json();
-  expect(job.plies).toBe(1);
+  expect(job.plies).toBe(2);
   await expect
     .poll(
       async () =>

@@ -327,7 +327,7 @@ async fn paginated_imports_have_provenance_filtering_and_scope_bound_cursors(poo
 #[ignore = "requires PostgreSQL"]
 async fn pending_and_empty_jobs_do_not_fall_back_to_imports(pool: PgPool) {
     let (id, _) = imported(&pool).await;
-    let job = store::create_match_job(&pool, id, 0, 2).await.unwrap();
+    let job = store::create_match_job(&pool, id, 1, 2).await.unwrap();
     let router = app(&pool);
     let uri = format!("/api/matches/{id}/review-decisions?job_id={}", job.id);
     let (status, _) = call(&router, "GET", &uri, Value::Null).await;
@@ -583,7 +583,7 @@ async fn native_forced_and_unavailable_rows_keep_status_and_never_become_errors(
     .unwrap()
     .r#match
     .id;
-    let job = store::create_match_job(&pool, id, 0, 1).await.unwrap();
+    let job = store::create_match_job(&pool, id, 1, 1).await.unwrap();
     sqlx::query("UPDATE jobs SET status='running' WHERE id=$1")
         .bind(job.id)
         .execute(&pool)

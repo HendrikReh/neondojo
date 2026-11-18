@@ -8,9 +8,9 @@ const initialSettings = {
   version: 3,
   player_name: 'Appearance Player',
   analysis_engine: 'gnubg',
-  analysis_plies: 2,
+  analysis_plies: 3,
   play_engine: 'gnubg',
-  play_plies: 1,
+  play_plies: 2,
   gnubg_path: '/opt/bin/gnubg',
 };
 
@@ -64,7 +64,7 @@ async function setup(page: Page, boardTheme = 'walnut') {
           name: 'GNU Backgammon',
           available: true,
           version: 'GNUbg 1.08',
-          plies: [0, 1, 2, 3, 4],
+          plies: [1, 2, 3, 4, 5],
         },
       ],
     }),

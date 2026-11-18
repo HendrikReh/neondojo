@@ -16,7 +16,7 @@ for (const confirmed of [false, true]) {
       const profile = await profileBackend(page);
       const config = profile.state.current_configuration;
       config.play.match_length = 3;
-      config.analysis.plies = 0;
+      config.analysis.plies = 1;
       await page.goto('/');
       await expect(
         page.getByRole('button', { name: /^Profile: Standard/ }),
@@ -63,7 +63,7 @@ for (const confirmed of [false, true]) {
     expect(job.status()).toBe(202);
     expect(job.request().postDataJSON()).toMatchObject({
       engine_id: 'gnubg',
-      plies: confirmed ? 0 : 2,
+      plies: confirmed ? 1 : 3,
     });
     await expect(
       page.locator(
@@ -78,7 +78,7 @@ for (const confirmed of [false, true]) {
     expect(entire.status()).toBe(202);
     expect(entire.request().postDataJSON()).toMatchObject({
       engine_id: 'gnubg',
-      plies: confirmed ? 0 : 2,
+      plies: confirmed ? 1 : 3,
     });
 
     await page.getByRole('tab', { name: 'Playing', exact: true }).click();

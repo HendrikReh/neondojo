@@ -28,7 +28,7 @@ test('shows the running app and engine versions under Extras', async ({
                 name: 'GNUbg',
                 available: true,
                 version: gnubgVersion,
-                plies: [0, 1, 2, 3, 4],
+                plies: [1, 2, 3, 4, 5],
               },
               {
                 id: 'bgsage',

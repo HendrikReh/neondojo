@@ -30,7 +30,7 @@ test('the catalog shows saved match candidates without recalculating the positio
   });
   const { match } = await (await imported).json();
   const started = await page.request.post(`/api/matches/${match.id}/analysis`, {
-    data: { engine_id: 'gnubg', plies: 0 },
+    data: { engine_id: 'gnubg', plies: 1 },
   });
   expect(started.ok()).toBeTruthy();
   const job = await started.json();
@@ -86,7 +86,7 @@ test('imported GNUbg analysis remains available independently from new engine jo
   const tooltip = page.getByRole('tooltip');
   await expect(importedEngine).toHaveText('GNU Backgammon 1.05.002');
   await importedEngine.hover();
-  await expect(tooltip).toContainText('0-ply');
+  await expect(tooltip).toContainText('1-ply');
   await page.keyboard.press('Escape');
   await expect(page.locator('.source-analysis:visible')).toContainText('0.014');
   await (
@@ -104,7 +104,7 @@ test('imported GNUbg analysis remains available independently from new engine jo
   ).toBeVisible();
   await selectImported(page);
   await importedEngine.focus();
-  await expect(tooltip).toContainText('0-ply');
+  await expect(tooltip).toContainText('1-ply');
   await page.keyboard.press('Escape');
   const catalog = await (
     await page.request.get(
@@ -179,7 +179,7 @@ test('opening-book preferences and a real opening lookup expose source and depth
   const tooltip = page.getByRole('tooltip');
   await expect(bookEngine).toHaveText(/^GNU Backgammon [\d.]+$/);
   await bookEngine.hover();
-  await expect(tooltip).toContainText('BackgammonDB · 3-ply');
+  await expect(tooltip).toContainText('BackgammonDB · 4-ply');
   await page.keyboard.press('Escape');
   await expect(
     page.locator('.source-analysis:visible .candidates tbody tr'),
@@ -251,7 +251,7 @@ test('opening-book navigation explicitly applies or preserves an engine draft', 
   const profile = settings.getByLabel('Default analysis profile', {
     exact: true,
   });
-  await profile.selectOption('1');
+  await profile.selectOption('2');
   await settings
     .getByRole('button', { name: 'Manage opening books', exact: true })
     .click();
@@ -260,7 +260,7 @@ test('opening-book navigation explicitly applies or preserves an engine draft', 
   await guard
     .getByRole('button', { name: 'Keep editing', exact: true })
     .click();
-  await expect(profile).toHaveValue('1');
+  await expect(profile).toHaveValue('2');
   await settings
     .getByRole('button', { name: 'Manage opening books', exact: true })
     .click();
@@ -275,11 +275,11 @@ test('opening-book navigation explicitly applies or preserves an engine draft', 
     books.getByLabel('Opening-book source', { exact: true }),
   ).toBeVisible();
   await books.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(profile).toHaveValue('1');
+  await expect(profile).toHaveValue('2');
   await expect(
     settings.getByRole('button', { name: 'Manage opening books', exact: true }),
   ).toBeFocused();
-  await profile.selectOption('0');
+  await profile.selectOption('1');
   await settings
     .getByRole('button', { name: 'Manage opening books', exact: true })
     .click();
@@ -289,7 +289,7 @@ test('opening-book navigation explicitly applies or preserves an engine draft', 
   await expect(books).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(books).not.toBeVisible();
-  await expect(profile).toHaveValue('1');
+  await expect(profile).toHaveValue('2');
   await settings
     .getByRole('button', { name: 'Manage opening books', exact: true })
     .click();

@@ -27,7 +27,7 @@ test('flashcard browsing previews the selected question without changing learnin
   // Cards come from the match's displayed analysis and from saved positions.
   const job = await (
     await page.request.post(`/api/matches/${imported.match.id}/analysis`, {
-      data: { plies: 0 },
+      data: { plies: 1 },
     })
   ).json();
   await expect
@@ -189,7 +189,7 @@ test('more cards preserve the preview and a late page cannot survive a deck roun
   expect(positions.length).toBe(52);
   const job = await (
     await page.request.post(`/api/matches/${imported.match.id}/analysis`, {
-      data: { plies: 0 },
+      data: { plies: 1 },
     })
   ).json();
   await expect

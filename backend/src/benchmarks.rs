@@ -69,9 +69,13 @@ fn reference_for(
         value.process_strategy = "persistent-worker-atomic-game-verified-at-both-boundaries".into();
         value.timing_scope = "cold-worker-startup-once-plus-full-game-pipeline".into();
         value.move_filter = format!("all-cubeful-{plies}ply-candidates-played-board-included");
-    } else if let Some(GnubgMoveFilter::Top14) = move_filter {
-        value.id = format!("gnubg-match-v3-{plies}ply-top14");
-        value.move_filter = format!("gnubg-{plies}ply-top14");
+    } else if let Some(GnubgMoveFilter::Top14) = move_filter
+        && let Ok(native) = crate::engine::gnubg_plies(plies)
+    {
+        // Protocol ids name GNUbg's native filter level, so saved runs keep
+        // their identity: BG Tutor 3-ply is gnubg-match-v3-2ply-top14.
+        value.id = format!("gnubg-match-v3-{native}ply-top14");
+        value.move_filter = format!("gnubg-{native}ply-top14");
     }
     reference
 }
@@ -250,7 +254,7 @@ async fn create(
             .any(|(i, p)| request.plies[..i].contains(p))
     {
         return Err(ApiError::invalid(
-            "Select an available engine and distinct analysis depths from 0 to 4",
+            "Select an available engine and distinct analysis depths it supports",
         ));
     }
     let runs = enqueue(

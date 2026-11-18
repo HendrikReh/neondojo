@@ -14,7 +14,7 @@ function pending(): PlaySession {
     human_name: 'Player',
     match_length: 7,
     bearoff_direction: 'right',
-    engine: { id: 'gnubg', version: 'GNU Backgammon 1.08.003', plies: 2 },
+    engine: { id: 'gnubg', version: 'GNU Backgammon 1.08.003', plies: 3 },
     position: {
       id,
       match_uuid: id,

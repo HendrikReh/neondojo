@@ -29,7 +29,11 @@ import type { PositionAnalysisResult } from './analysis-catalog-api';
 import { useAnalysisCatalogText } from './analysis-catalog-messages';
 import { useCandidateText } from './candidate-messages';
 import './analysis-sources.css';
-import { DEFAULT_ANALYSIS_PLIES } from './analysis-depth';
+import {
+  ANALYSIS_PLIES,
+  DEFAULT_ANALYSIS_PLIES,
+  depthLabel,
+} from './analysis-depth';
 import type { SourceAnalysis } from './source-analysis-api';
 
 const noImportedRecords: SourceAnalysis[] = [];
@@ -439,6 +443,7 @@ export default function AnalysisPanel({
                 <div className="analysis-controls">
                   <PositionAnalysisDepth
                     plies={settings.plies}
+                    engine={configuredEngine}
                     supportedPlies={supportedPlies}
                     onChange={(plies) => setCalculation({ ...settings, plies })}
                   />
@@ -551,10 +556,12 @@ export function SelectedAnalysisResult({
 
 export function PositionAnalysisDepth({
   plies = DEFAULT_ANALYSIS_PLIES,
+  engine,
   supportedPlies,
   onChange,
 }: {
   plies?: number;
+  engine?: string;
   supportedPlies: readonly number[];
   onChange: (plies: number) => void;
 }) {
@@ -567,21 +574,22 @@ export function PositionAnalysisDepth({
         value={plies}
         onChange={(event) => onChange(Number(event.target.value))}
       >
-        <option value={0} disabled={!supportedPlies.includes(0)}>
-          {t('analysis.fast')}
-        </option>
-        <option value={1} disabled={!supportedPlies.includes(1)}>
-          1-ply
-        </option>
-        <option value={2} disabled={!supportedPlies.includes(2)}>
-          {t('analysis.accurate')}
-        </option>
-        <option value={3} disabled={!supportedPlies.includes(3)}>
-          3-ply
-        </option>
-        <option value={4} disabled={!supportedPlies.includes(4)}>
-          4-ply
-        </option>
+        {ANALYSIS_PLIES.map((ply) => {
+          const depth = depthLabel(ply, engine);
+          return (
+            <option
+              key={ply}
+              value={ply}
+              disabled={!supportedPlies.includes(ply)}
+            >
+              {ply === 1
+                ? t('analysis.fast', { depth })
+                : ply === DEFAULT_ANALYSIS_PLIES
+                  ? t('analysis.accurate', { depth })
+                  : depth}
+            </option>
+          );
+        })}
       </select>
     </label>
   );

@@ -767,8 +767,10 @@ impl Book {
                 })
                 .transpose()
         };
-        let top_ply = plies("topPly")?;
-        let cube_ply = plies("cubePly")?;
+        // BackgammonDB records GNUbg's native levels; BG Tutor shows its own
+        // convention, so GNUbg's regular 3-ply book reads as 4-ply.
+        let top_ply = plies("topPly")?.map(crate::engine::plies_from_gnubg);
+        let cube_ply = plies("cubePly")?.map(crate::engine::plies_from_gnubg);
         let status = BookStatus {
             available: true,
             path: path.to_owned(),
@@ -1351,7 +1353,8 @@ mod tests {
             let result = lookup(&config, &p, None).await.unwrap();
             assert!(result.hit, "{:?}", result.reason);
             let checker = result.checker.unwrap();
-            assert_eq!(checker.plies, Some(3));
+            // The fixture records GNUbg's native topPly 3.
+            assert_eq!(checker.plies, Some(4));
             assert_eq!(checker.candidates[0].notation, "8/5 6/5");
             assert_eq!(checker.candidates[0].equity, 0.219);
             assert_eq!(

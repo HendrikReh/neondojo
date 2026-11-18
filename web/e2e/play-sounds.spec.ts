@@ -21,7 +21,7 @@ function fixture(human = 0): PlaySession {
     human_name: 'Player',
     match_length: 7,
     bearoff_direction: human === 0 ? 'right' : 'left',
-    engine: { id: 'gnubg', version: 'GNU Backgammon 1.08.003', plies: 2 },
+    engine: { id: 'gnubg', version: 'GNU Backgammon 1.08.003', plies: 3 },
     position: {
       id,
       match_uuid: id,
@@ -236,9 +236,9 @@ test('sound setting cancels, saves, survives reload and applies to ongoing games
     version: 1,
     player_name: 'Player',
     analysis_engine: 'gnubg',
-    analysis_plies: 2,
+    analysis_plies: 3,
     play_engine: 'gnubg',
-    play_plies: 1,
+    play_plies: 2,
     gnubg_path: '/test/gnubg',
     bearoff_direction: 'right',
   };
@@ -382,9 +382,9 @@ test('muting while a recording loads prevents delayed playback after decode', as
     version: 1,
     player_name: 'Player',
     analysis_engine: 'gnubg',
-    analysis_plies: 2,
+    analysis_plies: 3,
     play_engine: 'gnubg',
-    play_plies: 1,
+    play_plies: 2,
     gnubg_path: '/test/gnubg',
     bearoff_direction: 'right',
   };

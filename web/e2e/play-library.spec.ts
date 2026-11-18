@@ -17,7 +17,7 @@ const saved = (sessionId = id) => ({
   human_name: 'Library human',
   match_length: 7,
   bearoff_direction: 'left',
-  engine: { id: 'gnubg', version: 'GNU Backgammon 1.08.003', plies: 2 },
+  engine: { id: 'gnubg', version: 'GNU Backgammon 1.08.003', plies: 3 },
   position: {
     id: sessionId,
     match_uuid: sessionId,

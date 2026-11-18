@@ -21,7 +21,7 @@ async function completedFullJob(page: Page, matchId: string) {
 
   if (!job || job.status === 'failed') {
     const submitted = await page.request.post(analysisUrl, {
-      data: { plies: 0 },
+      data: { plies: 1 },
     });
     await expect(submitted).toBeOK();
     job = await submitted.json();
@@ -99,7 +99,7 @@ test('one game owns its move list, board boundaries and native analysis; full ma
   await openMatchAnalysisOptions(page);
   await expect(page.getByLabel('Angezeigte Analyse', { exact: true })).toBeVisible();
   const depth = page.getByLabel('Match-Analysetiefe', { exact: true });
-  await depth.selectOption('0');
+  await depth.selectOption('1');
   const scoped = page.waitForResponse(
     (r) =>
       r.request().method() === 'POST' &&
@@ -113,7 +113,7 @@ test('one game owns its move list, board boundaries and native analysis; full ma
   const response = await scoped;
   expect(response.request().postDataJSON()).toEqual({
     engine_id: 'gnubg',
-    plies: 0,
+    plies: 1,
     game_no: 2,
   });
   const job = await response.json();
@@ -153,12 +153,12 @@ test('one game owns its move list, board boundaries and native analysis; full ma
       new URL(r.url()).pathname === `/api/matches/${match.id}/analysis`,
   );
   const dialog = await openFullMatchAnalysis(page);
-  await dialog.getByLabel('Match-Analysetiefe', { exact: true }).selectOption('0');
+  await dialog.getByLabel('Match-Analysetiefe', { exact: true }).selectOption('1');
   await submitFullMatchAnalysis(page, dialog);
   const fullResponse = await full;
   expect(fullResponse.request().postDataJSON()).toEqual({
     engine_id: 'gnubg',
-    plies: 0,
+    plies: 1,
   });
   const fullJob = await fullResponse.json();
   expect(fullJob.game_no).toBeNull();

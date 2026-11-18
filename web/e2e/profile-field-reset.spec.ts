@@ -94,7 +94,7 @@ for (const width of [1440, 390]) {
     await depth.click();
     await expect(depth).toHaveCount(0);
     await expect(dialog.locator('tbody tr')).toHaveCount(2);
-    expect(backend.state.current_configuration.analysis.plies).toBe(2);
+    expect(backend.state.current_configuration.analysis.plies).toBe(3);
     expect(backend.state.current_configuration.appearance.board_theme).toBe(
       'walnut',
     );
@@ -153,7 +153,7 @@ test('failed field reset retains all changes and can be retried explicitly', asy
   await reset(page, 'Analysis · Search depth (ply)').click();
   await expect(dialog.getByRole('alert')).toHaveCount(0);
   await expect(dialog.locator('tbody tr')).toHaveCount(1);
-  expect(backend.state.current_configuration.analysis.plies).toBe(2);
+  expect(backend.state.current_configuration.analysis.plies).toBe(3);
   expect(backend.state.current_configuration.appearance.board_theme).toBe(
     'walnut',
   );

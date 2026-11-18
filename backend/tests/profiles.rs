@@ -52,7 +52,7 @@ async fn profiles_create_switch_save_rename_and_delete_with_exact_snapshots(pool
     let mut training = initial["current_configuration"].clone();
     training["appearance"]["mode"] = json!("dark");
     training["general"]["player_name"] = json!("Training");
-    training["analysis"]["plies"] = json!(0);
+    training["analysis"]["plies"] = json!(1);
     let state = create(&app, &initial, " Training ", training.clone()).await;
     let training_profile = state["active_profile"].clone();
     assert_eq!(training_profile["name"], "Training");
@@ -229,13 +229,13 @@ async fn profile_activation_preserves_queued_and_recovered_job_snapshots(pool: P
     )
     .await;
     assert_eq!(code, 202, "{old}");
-    assert_eq!(old["plies"], 2);
+    assert_eq!(old["plies"], 3);
     let old_id: uuid::Uuid = serde_json::from_value(old["id"].clone()).unwrap();
     let before:Value=sqlx::query_scalar("SELECT jsonb_build_object('engine_snapshot',engine_snapshot,'engine_config',engine_config,'plies',plies) FROM jobs WHERE id=$1").bind(old_id).fetch_one(&pool).await.unwrap();
     let mut config = initial["current_configuration"].clone();
-    config["analysis"]["plies"] = json!(0);
+    config["analysis"]["plies"] = json!(1);
     let state = create(&app, &initial, "Fast", config).await;
-    assert_eq!(state["current_configuration"]["analysis"]["plies"], 0);
+    assert_eq!(state["current_configuration"]["analysis"]["plies"], 1);
     let (code, new) = call(
         app.clone(),
         "POST",
@@ -244,7 +244,7 @@ async fn profile_activation_preserves_queued_and_recovered_job_snapshots(pool: P
     )
     .await;
     assert_eq!(code, 202, "{new}");
-    assert_eq!(new["plies"], 0);
+    assert_eq!(new["plies"], 1);
     assert_ne!(old["id"], new["id"]);
     // Lease recovery changes execution state, never the captured configuration.
     sqlx::query(
