@@ -136,8 +136,8 @@ statistics. Switching tabs keeps the selected game and move.
 Drag the divider beside the board to resize it in **Checker**, **Statistics**,
 **Cube**, **Notes**, or **Study cards**. The divider also accepts Left/Right
 arrows, with Shift for larger steps. Double-click the divider or press End
-to set the board to its maximum width for the current window. Enter restores
-the default width. The profile stores separate widths
+to set the board to its maximum width for the current window. Home sets the
+minimum width and Enter restores the default width. The browser stores separate widths
 for **Checker**, **Cube**, **Statistics**, **Notes**, and **Study cards**.
 On wide screens, the move history has room for more rows. **Statistics** uses
 larger table text and side-by-side player summaries when there is room.
@@ -179,7 +179,7 @@ BG Tutor reads the breakdown from stored decisions for fully checkpointed games,
 
 ## Tags and comments
 
-Open **Analysis → Notes** and select **Match** or **Position** to edit its tags and comment. **Cube and move notes** also opens game notes and recorded actions such as doubles, takes, drops and accepted resignations, with the board immediately before each action. A pending double displays the offered cube value in the center. Games without checker moves can have notes too. Checker move notes use the same annotation as the corresponding position.
+Open **Analysis → Notes** and select **Match**, **Game** or **Position** to edit its tags and comment. **Cube and move notes** also opens game notes and recorded actions such as doubles, takes, drops and accepted resignations, with the board immediately before each action. A pending double displays the offered cube value in the center. Games without checker moves can have notes too. Checker move notes use the same annotation as the corresponding position.
 
 **Save notes** writes to PostgreSQL. Drafts survive navigation and dialog changes during the current session. If another edit has been saved, BG Tutor shows a version conflict and keeps the draft. Tags are normalized and limited to 30 per note and 64 characters each. Comments are displayed as text and can contain up to 20,000 characters.
 
