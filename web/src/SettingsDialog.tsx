@@ -126,6 +126,63 @@ function profilePreferences(current: ProfileConfiguration) {
   };
 }
 
+function ParallelJobsField({
+  id,
+  value,
+  onChange,
+  t,
+}: {
+  id: string;
+  value: number | null;
+  onChange: (value: number | null) => void;
+  t: ReturnType<typeof useSettingsText>;
+}) {
+  const { min, max } = configurationOptions.parallel_analysis_jobs;
+  const retained = value != null && (value < min || value > max);
+  const labelId = `${id}-parallel-jobs-label`;
+  const helpId = `${id}-parallel-jobs-help`;
+  return (
+    <>
+      <label className="settings-field settings-parallel-jobs">
+        <span className="settings-thread-label">
+          <span id={labelId}>{t('parallelAnalysisJobs')}</span>
+          <span className="settings-help">
+            {t('configurableThreadRange', { min, max })}
+            {retained && <> {t('retainedThreadCount', { count: value })}</>}
+          </span>
+        </span>
+        <select
+          value={value ?? ''}
+          aria-labelledby={labelId}
+          aria-describedby={helpId}
+          onChange={(event) =>
+            onChange(
+              event.target.value === '' ? null : Number(event.target.value),
+            )
+          }
+        >
+          <option value="">{t('defaultParallelJobs')}</option>
+          {retained && (
+            <option value={value} disabled>
+              {value}
+            </option>
+          )}
+          {Array.from({ length: max - min + 1 }, (_, index) => min + index).map(
+            (jobs) => (
+              <option key={jobs} value={jobs}>
+                {jobs}
+              </option>
+            ),
+          )}
+        </select>
+      </label>
+      <p className="settings-help" id={helpId}>
+        {t('parallelAnalysisJobsHelp')}
+      </p>
+    </>
+  );
+}
+
 function parseThreshold(value: string): number {
   const decimal = value.trim().replace(',', '.');
   return /^(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)$/.test(decimal)
@@ -518,6 +575,7 @@ export default function SettingsDialog({
             gnubg_play_threads: installation.gnubg_play_threads,
             open_sage_threads: installation.open_sage_threads,
             open_sage_play_threads: installation.open_sage_play_threads,
+            parallel_analysis_jobs: installation.parallel_analysis_jobs,
           };
           settings = { ...draft, ...savedInstallation };
           setDraft(settings);
@@ -1224,6 +1282,14 @@ export default function SettingsDialog({
                       <p className="settings-help" id={`${id}-threads-help`}>
                         {t('threadsHelp')}
                       </p>
+                      <ParallelJobsField
+                        id={id}
+                        value={draft.parallel_analysis_jobs ?? null}
+                        onChange={(parallel_analysis_jobs) =>
+                          update({ parallel_analysis_jobs })
+                        }
+                        t={t}
+                      />
                     </div>
                   </details>
                   {Boolean(engineCatalogError) && (

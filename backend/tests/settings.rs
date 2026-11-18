@@ -73,7 +73,7 @@ async fn defaults_use_injected_engine_and_survive_new_app_states(pool: PgPool) {
     assert_eq!(status, 200, "{settings}");
     assert_eq!(
         settings,
-        json!({"version":0,"player_name":"","analysis_engine":"gnubg","analysis_plies":2,"play_engine":"gnubg","play_plies":0,"gnubg_path":"/missing/injected-gnubg","gnubg_threads":null,"gnubg_play_threads":null,"open_sage_threads":null,"open_sage_play_threads":null,"bearoff_direction":"right","default_play_mode":"coach","tutor_threshold":0.04,"training_auto_analysis":true})
+        json!({"version":0,"player_name":"","analysis_engine":"gnubg","analysis_plies":2,"play_engine":"gnubg","play_plies":0,"gnubg_path":"/missing/injected-gnubg","gnubg_threads":null,"gnubg_play_threads":null,"open_sage_threads":null,"open_sage_play_threads":null,"parallel_analysis_jobs":null,"bearoff_direction":"right","default_play_mode":"coach","tutor_threshold":0.04,"training_auto_analysis":true})
     );
     let second = api::router(AppState::new(pool.clone(), Engine::new("different".into())));
     assert_eq!(
@@ -191,6 +191,23 @@ async fn thread_settings_are_validated_and_pinned_in_new_jobs(pool: PgPool) {
     for (field, threads) in configured {
         assert_eq!(updated[field], json!(threads), "{field}");
     }
+    let mut jobs = updated.clone();
+    for invalid in [0, 9] {
+        jobs["parallel_analysis_jobs"] = json!(invalid);
+        let (status, rejected) = call(app.clone(), "PUT", "/api/settings", jobs.clone()).await;
+        assert_eq!(status, 422, "{invalid}: {rejected}");
+    }
+    jobs["parallel_analysis_jobs"] = json!(3);
+    let (status, parallel) = call(app.clone(), "PUT", "/api/settings", jobs).await;
+    assert_eq!(status, 200, "{parallel}");
+    assert_eq!(parallel["parallel_analysis_jobs"], 3);
+    let mut kept = parallel.clone();
+    kept.as_object_mut()
+        .unwrap()
+        .remove("parallel_analysis_jobs");
+    let (status, updated) = call(app.clone(), "PUT", "/api/settings", kept).await;
+    assert_eq!(status, 200, "{updated}");
+    assert_eq!(updated["parallel_analysis_jobs"], 3);
     let (status, after) = call(app.clone(), "POST", &endpoint, json!({})).await;
     assert_eq!(status, 202, "{after}");
     assert_ne!(after["id"], before["id"]);
@@ -239,11 +256,13 @@ async fn thread_settings_are_validated_and_pinned_in_new_jobs(pool: PgPool) {
     for (field, _) in configured {
         reset[field] = Value::Null;
     }
+    reset["parallel_analysis_jobs"] = Value::Null;
     let (status, cleared) = call(app, "PUT", "/api/settings", reset).await;
     assert_eq!(status, 200, "{cleared}");
     for (field, _) in configured {
         assert!(cleared[field].is_null(), "{field}");
     }
+    assert!(cleared["parallel_analysis_jobs"].is_null());
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -852,6 +871,89 @@ fn fixture_engine(script: &str) -> (tempfile::TempDir, Engine) {
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
     let engine = Engine::new(path.to_string_lossy().into_owned());
     (temp, engine)
+}
+
+#[cfg(unix)]
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL and GNUbg with weights"]
+async fn worker_runs_up_to_the_configured_number_of_analysis_jobs(pool: PgPool) {
+    let evidence = tempfile::tempdir().unwrap();
+    let quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
+    let native = quote(absolute_binary().to_str().unwrap());
+    let directory = quote(evidence.path().to_str().unwrap());
+    // Each evaluation records how many evaluations are active when it starts.
+    let script = format!(
+        "#!/bin/sh\nif [ \"$1\" = --version ]; then exec {native} \"$@\"; fi\ntouch {directory}/active.$$\nls {directory} | grep -c '^active\\.' >>{directory}/counts\nsleep 1\n{native} \"$@\"\nstatus=$?\nrm -f {directory}/active.$$\nexit \"$status\"\n"
+    );
+    let (_wrapper, engine) = fixture_engine(&script);
+    let state = AppState::new(pool.clone(), engine);
+    let app = api::router(state.clone());
+    let sgf = "(;GM[6]FF[4]PW[Alice]PB[Bob]MI[length:7][game:0][ws:0][bs:0];W[31hefe])";
+    let imported = store::import_match(
+        &pool,
+        "parallel.sgf",
+        "sgf",
+        sgf.as_bytes(),
+        sgf,
+        &import::parse_sgf(sgf).unwrap(),
+    )
+    .await
+    .unwrap();
+    let position = store::positions(&pool, Some(imported.r#match.id), None, None, 10)
+        .await
+        .unwrap()
+        .items
+        .remove(0);
+    let (status, _) = call(app.clone(), "GET", "/api/settings", Value::Null).await;
+    assert_eq!(status, 200);
+    sqlx::query("UPDATE app_settings SET parallel_analysis_jobs=2 WHERE singleton=true")
+        .execute(&pool)
+        .await
+        .unwrap();
+    for plies in [0, 1, 2] {
+        let (status, job) = call(
+            app.clone(),
+            "POST",
+            "/api/jobs",
+            json!({"position_id":position.id,"kind":"analysis","engine_id":"gnubg","plies":plies}),
+        )
+        .await;
+        assert_eq!(status, 202, "{job}");
+    }
+    let stop = tokio_util::sync::CancellationToken::new();
+    let worker = tokio::spawn(jobs::worker(state.clone(), stop.clone()));
+    let mut most_running = 0;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(90);
+    loop {
+        let (running, open): (i64, i64) = sqlx::query_as(
+            "SELECT count(*) FILTER (WHERE status='running'), count(*) FILTER (WHERE status IN ('queued','running')) FROM jobs",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        most_running = most_running.max(running);
+        if open == 0 {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "jobs did not finish");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    stop.cancel();
+    worker.await.unwrap();
+    let failed: Vec<String> =
+        sqlx::query_scalar("SELECT coalesce(error,'') FROM jobs WHERE status<>'completed'")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert!(failed.is_empty(), "{failed:?}");
+    assert_eq!(most_running, 2);
+    let counts = std::fs::read_to_string(evidence.path().join("counts")).unwrap();
+    let most_active = counts
+        .lines()
+        .filter_map(|line| line.trim().parse::<u32>().ok())
+        .max()
+        .unwrap();
+    assert_eq!(most_active, 2, "{counts}");
 }
 
 #[cfg(unix)]

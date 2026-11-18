@@ -92,14 +92,15 @@ const TABLES: &[&str] = &[
 ];
 
 pub(crate) struct Access {
-    pub(crate) requests: RwLock<()>,
+    /// Shared so background tasks can hold an owned read guard while they run.
+    pub(crate) requests: Arc<RwLock<()>>,
     transfer: Arc<Semaphore>,
 }
 
 impl Default for Access {
     fn default() -> Self {
         Self {
-            requests: RwLock::new(()),
+            requests: Arc::new(RwLock::new(())),
             transfer: Arc::new(Semaphore::new(1)),
         }
     }

@@ -73,11 +73,13 @@ describe('settings/profile boundary', () => {
       ...installed,
       gnubg_threads: 3,
       gnubg_play_threads: 2,
+      parallel_analysis_jobs: 4,
     });
     expect(saved).toEqual({
       ...latest,
       gnubg_threads: 3,
       gnubg_play_threads: 2,
+      parallel_analysis_jobs: 4,
     });
   });
   it('projects the current configuration without changing the machine installation', () => {
