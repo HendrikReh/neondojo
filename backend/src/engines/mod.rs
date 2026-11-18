@@ -46,6 +46,9 @@ impl SageSnapshot {
             "5b741451d4f49e69eaa1063fc44f5de67d9e2a528cf9b75f32733136d55b352b" => {
                 "5b146c7d86fa965f2185e3871f3c56df030fd76f"
             }
+            "7c9a021a3f29b55462d91220c33b00aa247cd4b65a74cbb45db7cb57b6295092" => {
+                "340fc5346f1938d505f99f22101e059a30e9cfc6"
+            }
             _ => return None,
         };
         Some(EngineFork {
@@ -576,5 +579,52 @@ impl AnalysisEngine {
 impl From<Engine> for AnalysisEngine {
     fn from(engine: Engine) -> Self {
         Self::Gnubg(engine)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SageSnapshot;
+
+    fn snapshot(artifact_fingerprint: &str) -> SageSnapshot {
+        SageSnapshot {
+            python: "python".into(),
+            package_version: "2.0.20260907".into(),
+            artifact_fingerprint: artifact_fingerprint.into(),
+            threads: 4,
+            plies: 2,
+            adapter_version: 1,
+            one_ply_verified: true,
+            cubeless: false,
+        }
+    }
+
+    #[test]
+    fn known_fork_names_the_documented_builds() {
+        for (fingerprint, revision) in [
+            (
+                "e76f82a04e35c3180e5837a76ce0f6f6b9ecfe459816284a2d25dc51e28d13d3",
+                "2e71beed9c24b5bbc7564c03374d6d588ff24119",
+            ),
+            (
+                "5b741451d4f49e69eaa1063fc44f5de67d9e2a528cf9b75f32733136d55b352b",
+                "5b146c7d86fa965f2185e3871f3c56df030fd76f",
+            ),
+            (
+                "7c9a021a3f29b55462d91220c33b00aa247cd4b65a74cbb45db7cb57b6295092",
+                "340fc5346f1938d505f99f22101e059a30e9cfc6",
+            ),
+        ] {
+            let fork = snapshot(fingerprint)
+                .known_fork()
+                .unwrap_or_else(|| panic!("{fingerprint} is not recognized"));
+            assert_eq!(fork.repository, "HendrikReh/bgsage");
+            assert_eq!(fork.revision, revision);
+        }
+    }
+
+    #[test]
+    fn known_fork_ignores_unknown_builds() {
+        assert!(snapshot(&"a".repeat(64)).known_fork().is_none());
     }
 }
