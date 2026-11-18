@@ -6,6 +6,8 @@ export interface PreviewCandidate {
   notation: string;
   rank: number;
   source: string;
+  /** A hypothetical roll for the same position, as in Dice equity; omitted means the recorded roll. */
+  dice?: [number, number];
 }
 
 export function candidatePreviewNotation(

@@ -18,7 +18,10 @@ import { useI18n } from './i18n';
 import { useOpeningBook } from './useOpeningBook';
 import { useSourceText } from './analysis-source-messages';
 import SourceAnalysisView from './SourceAnalysisView';
-import type { PreviewCandidate } from './candidate-preview';
+import {
+  candidatePreviewNotation,
+  type PreviewCandidate,
+} from './candidate-preview';
 import type { BoardView } from './move-preview';
 import CandidateTable from './CandidateTable';
 import PositionComparison from './PositionComparison';
@@ -37,6 +40,16 @@ import {
 import type { SourceAnalysis } from './source-analysis-api';
 
 const noImportedRecords: SourceAnalysis[] = [];
+
+/** Unordered roll key such as `3-6`; undefined unless both dice are valid. */
+function rollKey(dice: readonly number[] | undefined) {
+  if (
+    dice?.length !== 2 ||
+    dice.some((die) => !Number.isInteger(die) || die < 1 || die > 6)
+  )
+    return undefined;
+  return `${Math.min(dice[0], dice[1])}-${Math.max(dice[0], dice[1])}`;
+}
 
 export default function AnalysisPanel({
   positionJobs,
@@ -127,7 +140,16 @@ export default function AnalysisPanel({
   useEffect(() => {
     setCalculation(undefined);
   }, [active, positionId, configuredEngine]);
-  const [selectedRoll, setSelectedRoll] = useState('1-1');
+  // The grid starts on the roll shown on the board; a choice applies to its position only.
+  const rolled = rollKey(position?.dice);
+  const [rollChoice, setRollChoice] = useState<{
+    positionId?: string;
+    roll: string;
+  }>();
+  const selectedRoll =
+    rollChoice && rollChoice.positionId === positionId
+      ? rollChoice.roll
+      : (rolled ?? '1-1');
   const { jobs, restoring, failure, submitting, run } = positionJobs;
   const diceJob = jobs.dice;
   const latestJob = view === 'dice' ? diceJob : jobs.analysis;
@@ -164,6 +186,7 @@ export default function AnalysisPanel({
     onShowResults?.();
     if (settings.kind === 'dice') {
       setView('dice');
+      onPreview?.(null);
       setDicePlies(settings.plies);
       void run('dice', settings.plies);
     } else {
@@ -173,7 +196,7 @@ export default function AnalysisPanel({
     }
   };
   const best = distribution?.rolls.find(
-    (r) => r.dice.join('-') === selectedRoll,
+    (r) => rollKey(r.dice) === selectedRoll,
   );
   return (
     <section className="analysis-panel">
@@ -309,30 +332,41 @@ export default function AnalysisPanel({
               {Array.from({ length: 36 }, (_, i) => {
                 const a = Math.floor(i / 6) + 1,
                   b = (i % 6) + 1;
+                const key = `${Math.min(a, b)}-${Math.max(a, b)}`;
                 const roll = distribution.rolls.find(
-                  (r) =>
-                    r.dice[0] === Math.min(a, b) &&
-                    r.dice[1] === Math.max(a, b),
+                  (r) => rollKey(r.dice) === key,
                 );
+                const title = roll
+                  ? t('analysis.rollTitle', {
+                      first: a,
+                      second: b,
+                      move: formatDecision(roll.best.notation),
+                    })
+                  : undefined;
                 return (
                   <Tooltip
                     as="button"
                     key={i}
                     text={
-                      roll
-                        ? t('analysis.rollTitle', {
-                            first: a,
-                            second: b,
-                            move: formatDecision(roll.best.notation),
-                          })
-                        : undefined
+                      title && key === rolled
+                        ? `${title} · ${t('analysis.rolled')}`
+                        : title
                     }
-                    className={`${roll && roll.best.equity >= distribution.mean_equity ? 'above' : 'below'} ${selectedRoll === [Math.min(a, b), Math.max(a, b)].join('-') ? 'selected' : ''}`}
-                    onClick={() =>
-                      setSelectedRoll(
-                        [Math.min(a, b), Math.max(a, b)].join('-'),
-                      )
-                    }
+                    aria-pressed={selectedRoll === key}
+                    className={`${roll && roll.best.equity >= distribution.mean_equity ? 'above' : 'below'}${selectedRoll === key ? ' selected' : ''}${key === rolled ? ' rolled' : ''}`}
+                    onClick={() => {
+                      setRollChoice({ positionId, roll: key });
+                      onPreview?.(
+                        roll
+                          ? {
+                              notation: candidatePreviewNotation(roll.best),
+                              rank: roll.best.rank,
+                              source: `${distribution.engine} · ${distribution.plies}-ply`,
+                              dice: [a, b],
+                            }
+                          : null,
+                      );
+                    }}
                   >
                     <span>
                       {a} · {b}
@@ -347,6 +381,11 @@ export default function AnalysisPanel({
                 <strong>{best.dice.join('–')}</strong>
                 <span>{formatDecision(best.best.notation)}</span>
                 <b>{formatEquity(best.best.equity)}</b>
+                {rollKey(best.dice) === rolled && (
+                  <span className="roll-detail-rolled">
+                    {t('analysis.rolled')}
+                  </span>
+                )}
                 <small>
                   {t('analysis.probability', {
                     value: formatPercent(best.probability, 2),
@@ -356,6 +395,7 @@ export default function AnalysisPanel({
             )}
             <p className="fineprint">
               {t('analysis.distributionMethod', { plies: distribution.plies })}
+              {rolled && ` ${t('analysis.rolledLegend')}`}
             </p>
           </div>
         ) : !pending && !positionJobs.error && !diceJob ? (

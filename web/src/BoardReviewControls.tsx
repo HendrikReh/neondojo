@@ -62,10 +62,16 @@ export default function BoardReviewControls({
             onClick={onPlayed}
           />
           <strong>
-            {l('candidate', {
-              rank: selected.rank,
-              move: formatDecision(selected.notation, position),
-            })}
+            {selected.dice
+              ? l('roll', {
+                  first: selected.dice[0],
+                  second: selected.dice[1],
+                  move: formatDecision(selected.notation, position),
+                })
+              : l('candidate', {
+                  rank: selected.rank,
+                  move: formatDecision(selected.notation, position),
+                })}
           </strong>
           <small>
             <EngineLabel details={selected.source} />

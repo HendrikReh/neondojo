@@ -157,6 +157,9 @@ export const de = {
   'analysis.combinations': '36 Würfe. 21 Kombinationen.',
   'analysis.rollTitle': 'Wurf {first}–{second}: {move}',
   'analysis.probability': '{value} Wahrscheinlichkeit',
+  'analysis.rolled': 'Gewürfelt',
+  'analysis.rolledLegend':
+    'Umrandet: der Wurf auf dem Brett. Wähle eine Zelle, um ihren besten Zug auf dem Brett zu sehen.',
   'analysis.distributionMethod':
     'Grün: über der mittleren Equity. Pasch zählt 1/36, andere Kombinationen 2/36. {plies}-ply.',
   'analysis.diceEmptyHeading': 'Was bringt der nächste Wurf?',
@@ -385,6 +388,9 @@ export const en = {
   'analysis.combinations': '36 rolls. 21 combinations.',
   'analysis.rollTitle': 'Roll {first}–{second}: {move}',
   'analysis.probability': '{value} probability',
+  'analysis.rolled': 'Rolled',
+  'analysis.rolledLegend':
+    'Outlined: the roll on the board. Select a cell to show its best play on the board.',
   'analysis.distributionMethod':
     'Green: above mean equity. Doubles count 1/36, other combinations 2/36. {plies}-ply.',
   'analysis.diceEmptyHeading': 'What will the next roll bring?',
@@ -608,6 +614,9 @@ export const es = {
   'analysis.combinations': '36 tiradas. 21 combinaciones.',
   'analysis.rollTitle': 'Tirada {first}–{second}: {move}',
   'analysis.probability': '{value} de probabilidad',
+  'analysis.rolled': 'Tirada actual',
+  'analysis.rolledLegend':
+    'Con contorno: la tirada del tablero. Selecciona una celda para ver su mejor jugada en el tablero.',
   'analysis.distributionMethod':
     'Verde: por encima de la equidad media. Los dobles cuentan 1/36; otras combinaciones, 2/36. {plies}-ply.',
   'analysis.diceEmptyHeading': '¿Qué traerá la próxima tirada?',
@@ -833,6 +842,9 @@ export const fr = {
   'analysis.combinations': '36 jets. 21 combinaisons.',
   'analysis.rollTitle': 'Jet {first}–{second} : {move}',
   'analysis.probability': 'Probabilité : {value}',
+  'analysis.rolled': 'Jet joué',
+  'analysis.rolledLegend':
+    'Encadré : le jet du plateau. Sélectionnez une case pour afficher son meilleur coup sur le plateau.',
   'analysis.distributionMethod':
     'Vert : au-dessus de l’équité moyenne. Les doubles comptent pour 1/36, les autres combinaisons pour 2/36. {plies}-ply.',
   'analysis.diceEmptyHeading': 'Que réserve le prochain jet ?',
@@ -1060,6 +1072,9 @@ export const pl = {
   'analysis.combinations': '36 rzutów. 21 kombinacji.',
   'analysis.rollTitle': 'Rzut {first}–{second}: {move}',
   'analysis.probability': 'Prawdopodobieństwo: {value}',
+  'analysis.rolled': 'Wyrzucono',
+  'analysis.rolledLegend':
+    'Obramowanie: rzut na planszy. Wybierz pole, aby zobaczyć jego najlepszy ruch na planszy.',
   'analysis.distributionMethod':
     'Zielony: powyżej średniej equity. Duble liczą się jako 1/36, inne kombinacje jako 2/36. {plies}-ply.',
   'analysis.diceEmptyHeading': 'Co przyniesie następny rzut?',
@@ -1285,6 +1300,9 @@ export const it = {
   'analysis.combinations': '36 lanci. 21 combinazioni.',
   'analysis.rollTitle': 'Lancio {first}–{second}: {move}',
   'analysis.probability': 'Probabilità: {value}',
+  'analysis.rolled': 'Lancio attuale',
+  'analysis.rolledLegend':
+    'Con bordo: il lancio sul tavoliere. Seleziona una casella per vedere la sua mossa migliore sul tavoliere.',
   'analysis.distributionMethod':
     'Verde: sopra l’equity media. I doppi valgono 1/36, le altre combinazioni 2/36. {plies}-ply.',
   'analysis.diceEmptyHeading': 'Cosa porterà il prossimo lancio?',

@@ -142,6 +142,56 @@ test('opening dice equity calculates missing results and reuses saved results ac
   expect(submissions).toHaveLength(3);
 });
 
+test('dice equity starts on the board roll and previews a selected roll on the board', async ({
+  page,
+}) => {
+  await openPosition(page);
+  await page.getByRole('tab', { name: 'Dice equity', exact: true }).click();
+  const grid = page.locator('.analysis-panel .dice-grid');
+  await expect(grid.getByRole('button')).toHaveCount(36, {
+    timeout: distributionTimeout,
+  });
+  // The recorded 3-1 is outlined and selected in both of its cells.
+  await expect(grid.locator('button.rolled')).toHaveText([/^1 · 3/, /^3 · 1/]);
+  await expect(grid.locator('button[aria-pressed="true"]')).toHaveText([
+    /^1 · 3/,
+    /^3 · 1/,
+  ]);
+  const detail = page.locator('.analysis-panel .roll-detail');
+  await expect(detail).toContainText('1–3');
+  await expect(detail).toContainText('Rolled');
+  const board = page.locator('#analysis-board-panel svg.board');
+  await expect(board).toHaveAttribute('aria-label', /dice 3 and 1/);
+
+  await grid.getByRole('button', { name: /^5 · 5/ }).click();
+  await expect(detail).toContainText('5–5');
+  await expect(detail).not.toContainText('Rolled');
+  const selection = page.locator(
+    '#analysis-board-panel .board-review-selection',
+  );
+  await expect(selection).toContainText('Roll 5–5');
+  await expect(board).toHaveAttribute('aria-label', /dice 5 and 5/);
+  // The footer keeps the recorded move.
+  await expect(page.locator('.board-navigation')).toContainText('8/5 6/5');
+
+  await selection.getByRole('button', { name: 'Reset preview' }).click();
+  await expect(selection).toHaveCount(0);
+  await expect(board).toHaveAttribute('aria-label', /dice 3 and 1/);
+
+  await grid.getByRole('button', { name: /^6 · 6/ }).click();
+  await page.getByRole('button', { name: 'Next move', exact: true }).click();
+  await expect(page.locator('.board-navigation')).toContainText('8/4 6/4');
+  await expect(grid.getByRole('button')).toHaveCount(36, {
+    timeout: distributionTimeout,
+  });
+  await expect(selection).toHaveCount(0);
+  await expect(grid.locator('button[aria-pressed="true"]')).toHaveText([
+    /^2 · 4/,
+    /^4 · 2/,
+  ]);
+  await expect(board).toHaveAttribute('aria-label', /dice 4 and 2/);
+});
+
 test('reselecting dice equity retries a failed submission once', async ({
   page,
 }) => {
