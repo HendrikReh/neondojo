@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { depthLabel } from './analysis-depth';
+import type { Match } from './api';
 import { formatBenchmarkDuration } from './benchmark-duration';
 import EngineLabel from './EngineLabel';
 import options from '../../shared/configuration-options.json' with { type: 'json' };
@@ -8,6 +9,7 @@ import {
   createSeries,
   listSeries,
   loadSeries,
+  seriesLibraryMatch,
   seriesSgf,
   type CreateSeries,
   type Series,
@@ -163,8 +165,10 @@ function EngineChoice({
 
 export default function EngineMatchWorkspace({
   visible,
+  onOpenMatch,
 }: {
   visible: boolean;
+  onOpenMatch: (match: Match) => void;
 }) {
   const { locale, formatNumber, formatError } = useI18n();
   const text: Text = (key) => engineMatchText(locale, key);
@@ -187,6 +191,9 @@ export default function EngineMatchWorkspace({
     details: SeriesDetails;
   }>();
   const [action, setAction] = useState(false);
+  const [opening, setOpening] = useState<number>();
+  // Only the latest open request may navigate, and only while this view is shown.
+  const openRequest = useRef(0);
   const [error, setError] = useState<unknown>();
   const [loadError, setLoadError] = useState<unknown>();
   const [engineError, setEngineError] = useState<unknown>();
@@ -202,6 +209,12 @@ export default function EngineMatchWorkspace({
     setupTrigger.current = null;
     if (visible) trigger?.focus({ preventScroll: true });
   }, [setupOpen, visible]);
+
+  useEffect(() => {
+    if (visible) return;
+    openRequest.current += 1;
+    setOpening(undefined);
+  }, [visible]);
 
   useEffect(() => {
     if (!visible) return;
@@ -300,6 +313,20 @@ export default function EngineMatchWorkspace({
     }
   }
 
+  async function openInAnalysis(runId: string, matchIndex: number) {
+    const request = ++openRequest.current;
+    setOpening(matchIndex);
+    setError(undefined);
+    try {
+      const match = await seriesLibraryMatch(runId, matchIndex);
+      if (request === openRequest.current) onOpenMatch(match);
+    } catch (reason) {
+      if (request === openRequest.current) setError(reason);
+    } finally {
+      if (request === openRequest.current) setOpening(undefined);
+    }
+  }
+
   async function cancelRun(runId: string) {
     if (action) return;
     setAction(true);
@@ -326,6 +353,8 @@ export default function EngineMatchWorkspace({
 
   const chooseSeries = (runId: string) => {
     if (runId === id) return;
+    openRequest.current += 1;
+    setOpening(undefined);
     setSelection(runId);
     setResultPage(undefined);
     setOffset(0);
@@ -479,6 +508,10 @@ export default function EngineMatchWorkspace({
                 text={text}
                 profile={profile}
                 busy={action}
+                opening={opening}
+                onOpen={(matchIndex) =>
+                  void openInAnalysis(selected.series.id, matchIndex)
+                }
                 onCancel={() => void cancelRun(selected.series.id)}
                 onReuse={(trigger) =>
                   openSetup(trigger, selected.series.configuration)
@@ -724,6 +757,8 @@ function SeriesResults({
   text,
   profile,
   busy,
+  opening,
+  onOpen,
   onCancel,
   onReuse,
 }: {
@@ -733,6 +768,9 @@ function SeriesResults({
   text: Text;
   profile: (side: Competitor) => string;
   busy: boolean;
+  /** Index of the match whose library entry is being opened. */
+  opening: number | undefined;
+  onOpen: (matchIndex: number) => void;
   onCancel: () => void;
   onReuse: (trigger: HTMLButtonElement) => void;
 }) {
@@ -982,7 +1020,9 @@ function SeriesResults({
                 <th>{text(moneyDuel ? 'points' : 'score')}</th>
                 <th>{text('games')}</th>
                 <th>{text('seed')}</th>
-                <th>SGF</th>
+                <th>
+                  <span className="sr-only">{text('actions')}</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -1017,7 +1057,18 @@ function SeriesResults({
                     <td className="engine-match-seed">
                       <code>{match.seed}</code>
                     </td>
-                    <td>
+                    <td className="engine-match-actions">
+                      <button
+                        type="button"
+                        title={text('openInAnalysis')}
+                        aria-disabled={opening !== undefined || undefined}
+                        aria-busy={opening === match.match_index || undefined}
+                        onClick={() => {
+                          if (opening === undefined) onOpen(match.match_index);
+                        }}
+                      >
+                        {text('analysis')}
+                      </button>
                       <a
                         href={seriesSgf(series.id, match.match_index)}
                         download

@@ -4,6 +4,10 @@ All notable changes to BG Tutor are recorded in this file. The format follows [K
 
 ## [Unreleased]
 
+### Added
+
+- **Open engine duels in Analysis.** Each result row in **Extras → Engine duels** has an **Analysis** action next to the SGF download. It opens the archived library entry, also after a move to another database, and saves a deleted entry again under **Engine Duels**. [Engine duels](docs/reference/extras.md#engine-duels)
+
 ### Fixed
 
 - **Dice equity follows the board.** The grid starts on the roll shown on the board and outlines it, instead of always starting on 1-1. Selecting a cell shows that roll's best play on the board with its dice, and selecting another position starts again on its roll. [Analysis workspace](docs/reference/analysis.md#analysis-workspace)

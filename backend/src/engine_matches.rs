@@ -10,7 +10,9 @@ pub use runner::worker;
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     engine::{Engine, resolve_binary},
+    model::MatchSummary,
     settings::{self, EngineSnapshot},
+    store,
 };
 use axum::{
     Json, Router,
@@ -267,6 +269,10 @@ pub(crate) fn routes() -> Router<AppState> {
         .route("/api/engine-matches/{id}", get(details))
         .route("/api/engine-matches/{id}/cancel", post(cancel))
         .route("/api/engine-matches/{id}/matches/{index}/sgf", get(sgf))
+        .route(
+            "/api/engine-matches/{id}/matches/{index}/library",
+            post(library_match),
+        )
 }
 
 #[utoipa::path(get, path="/api/engine-matches", params(("before"=Option<Uuid>, Query)), responses((status=200, body=SeriesPage)), tag="Engine matches")]
@@ -462,20 +468,22 @@ async fn cancel(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResul
     Ok(Json(load(&state.pool, id).await?))
 }
 
+async fn stored_sgf(pool: &PgPool, id: Uuid, index: i32) -> ApiResult<String> {
+    sqlx::query_scalar("SELECT sgf FROM engine_match_results WHERE run_id=$1 AND match_index=$2")
+        .bind(id)
+        .bind(index)
+        .fetch_optional(pool)
+        .await
+        .map_err(anyhow::Error::from)?
+        .ok_or_else(ApiError::missing)
+}
+
 #[utoipa::path(get, path="/api/engine-matches/{id}/matches/{index}/sgf", params(("id"=Uuid, Path),("index"=i32, Path)), responses((status=200, body=String),(status=404, body=ErrorBody)), tag="Engine matches")]
 async fn sgf(
     State(state): State<AppState>,
     Path((id, index)): Path<(Uuid, i32)>,
 ) -> ApiResult<impl IntoResponse> {
-    let source: String = sqlx::query_scalar(
-        "SELECT sgf FROM engine_match_results WHERE run_id=$1 AND match_index=$2",
-    )
-    .bind(id)
-    .bind(index)
-    .fetch_optional(&state.pool)
-    .await
-    .map_err(anyhow::Error::from)?
-    .ok_or_else(ApiError::missing)?;
+    let source = stored_sgf(&state.pool, id, index).await?;
     Ok((
         [
             (header::CONTENT_TYPE, "application/x-go-sgf".to_string()),
@@ -486,6 +494,39 @@ async fn sgf(
         ],
         source,
     ))
+}
+
+/// Library entry of one played match or money block, for opening it in Analysis.
+///
+/// Finds the archived entry by its exact source, also after it was moved to another
+/// database. An entry deleted from the library is restored under Engine Duels.
+#[utoipa::path(post, path="/api/engine-matches/{id}/matches/{index}/library", params(("id"=Uuid, Path),("index"=i32, Path)), responses((status=200, body=MatchSummary),(status=404, body=ErrorBody)), tag="Engine matches")]
+async fn library_match(
+    State(state): State<AppState>,
+    Path((id, index)): Path<(Uuid, i32)>,
+) -> ApiResult<Json<MatchSummary>> {
+    let source = stored_sgf(&state.pool, id, index).await?;
+    if let Some(entry) =
+        store::library_match_by_source(&state.pool, source.as_bytes(), ENGINE_DUELS_DATABASE_ID)
+            .await?
+    {
+        return Ok(Json(entry));
+    }
+    let parse_source = source.clone();
+    let imported = tokio::task::spawn_blocking(move || crate::import::parse_sgf(&parse_source))
+        .await
+        .map_err(anyhow::Error::from)??;
+    let restored = store::import_match_in_database(
+        &state.pool,
+        &runner::archive_filename(id, index),
+        "sgf",
+        source.as_bytes(),
+        &source,
+        &imported,
+        ENGINE_DUELS_DATABASE_ID,
+    )
+    .await?;
+    Ok(Json(restored.r#match))
 }
 
 fn summarize(format: DuelFormat, mode: DiceMode, results: &[MatchResult]) -> SeriesStatistics {
@@ -655,7 +696,7 @@ fn student_t_975(df: usize) -> f64 {
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(list, create, details, cancel, sgf),
+    paths(list, create, details, cancel, sgf, library_match),
     components(schemas(
         CreateSeries,
         Competitor,

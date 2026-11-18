@@ -793,6 +793,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/engine-matches/{id}/matches/{index}/library": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Library entry of one played match or money block, for opening it in Analysis.
+         * @description Finds the archived entry by its exact source, also after it was moved to another
+         *     database. An entry deleted from the library is restored under Engine Duels.
+         */
+        post: operations["library_match"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/engine-matches/{id}/matches/{index}/sgf": {
         parameters: {
             query?: never;
@@ -8576,6 +8597,36 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Series"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    library_match: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchSummary"];
                 };
             };
             404: {

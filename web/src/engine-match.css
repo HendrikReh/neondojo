@@ -238,6 +238,30 @@
   margin-top: 5px;
 }
 
+.engine-match-actions {
+  white-space: nowrap;
+}
+
+.engine-match-actions button {
+  padding: 0;
+  margin-inline-end: 12px;
+  border: 0;
+  color: var(--ui-accent);
+  background: transparent;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-size: inherit;
+}
+
+.engine-match-actions button[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.engine-match-actions button[aria-busy='true'] {
+  cursor: progress;
+}
+
 .engine-match-history table td a {
   color: var(--ui-accent);
   text-decoration: underline;

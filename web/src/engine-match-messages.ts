@@ -498,6 +498,23 @@ const labels = {
     'Pagina successiva',
     'Następna strona',
   ],
+  actions: ['Actions', 'Aktionen', 'Acciones', 'Actions', 'Azioni', 'Akcje'],
+  analysis: [
+    'Analysis',
+    'Analyse',
+    'Análisis',
+    'Analyse',
+    'Analisi',
+    'Analiza',
+  ],
+  openInAnalysis: [
+    'Open in analysis',
+    'In der Analyse öffnen',
+    'Abrir en el análisis',
+    'Ouvrir dans l’analyse',
+    'Apri nell’analisi',
+    'Otwórz w analizie',
+  ],
   olderSeries: [
     'Load older series',
     'Ältere Serien laden',

@@ -418,9 +418,11 @@ Engine duels lists series beside the selected result on wide desktop windows.
 seed under **Advanced**. Series continue when leaving the tool. Results show
 progress and both match win rates in one card with a share bar. When the sample
 supports a confidence interval, a note says whether it includes 50%. Paired
-matches are grouped by pair. **Repeat series …** reopens setup with the
-settings and seed of the selected series. A series that stopped without a
-counted match shows its status and diagnostic without empty result tables.
+matches are grouped by pair. Each result row offers **Analysis**, which opens
+the match in the Analysis workspace, and an SGF download. **Repeat series …**
+reopens setup with the settings and seed of the selected series. A series that
+stopped without a counted match shows its status and diagnostic without empty
+result tables.
 
 Database backup shows the scope of a restore before file selection. BG Tutor
 automatically checks each selected archive and compares its schema with the

@@ -1,4 +1,5 @@
 import { useRef, type KeyboardEvent } from 'react';
+import type { Match } from './api';
 import BenchmarkWorkspace from './BenchmarkWorkspace';
 import { useBenchmarkText } from './benchmark-messages';
 import DatabaseBackupWorkspace from './DatabaseBackupWorkspace';
@@ -44,12 +45,14 @@ export default function ExtrasWorkspace({
   playPlies,
   tool,
   setTool,
+  onOpenMatch,
 }: {
   visible: boolean;
   defaultPlies: number;
   playPlies: number | undefined;
   tool: ExtrasTool;
   setTool: (tool: ExtrasTool) => void;
+  onOpenMatch: (match: Match) => void;
 }) {
   const benchmark = useBenchmarkText();
   const { locale } = useI18n();
@@ -70,7 +73,12 @@ export default function ExtrasWorkspace({
         playPlies={playPlies}
       />
     ),
-    matches: <EngineMatchWorkspace visible={visible && tool === 'matches'} />,
+    matches: (
+      <EngineMatchWorkspace
+        visible={visible && tool === 'matches'}
+        onOpenMatch={onOpenMatch}
+      />
+    ),
     backup: <DatabaseBackupWorkspace />,
     versions: visible && tool === 'versions' && <VersionInfo />,
   };
