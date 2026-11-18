@@ -1,6 +1,6 @@
 import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
 import type { components } from './generated-api';
-import { isAnalysisDepth } from './analysis-depth';
+import type { DepthEngine } from './analysis-depth';
 import { isPlayMode, type PlayMode } from './play-mode-messages';
 
 type Schema = components['schemas'];
@@ -88,8 +88,6 @@ function parseSettings(value: unknown): AppSettings {
         value.tutor_threshold > 1)) ||
     (value.training_auto_analysis !== undefined &&
       typeof value.training_auto_analysis !== 'boolean') ||
-    !isAnalysisDepth(value.analysis_plies) ||
-    ![0, 1, 2].includes(Number(value.play_plies)) ||
     typeof value.analysis_plies !== 'number' ||
     typeof value.play_plies !== 'number' ||
     typeof value.gnubg_path !== 'string' ||
@@ -98,14 +96,12 @@ function parseSettings(value: unknown): AppSettings {
     !isThreadLimit(value.open_sage_threads, 'bgsage') ||
     !isThreadLimit(value.open_sage_play_threads, 'bgsage') ||
     !isParallelJobLimit(value.parallel_analysis_jobs) ||
-    (value.analysis_engine === 'bgsage' &&
-      !configurationOptions.engine_profiles.bgsage.analysis.includes(
-        value.analysis_plies,
-      )) ||
-    (value.play_engine === 'bgsage' &&
-      !configurationOptions.engine_profiles.bgsage.play.includes(
-        value.play_plies,
-      ))
+    !configurationOptions.engine_profiles[
+      value.analysis_engine as DepthEngine
+    ].analysis.includes(value.analysis_plies) ||
+    !configurationOptions.engine_profiles[
+      value.play_engine as DepthEngine
+    ].play.includes(value.play_plies)
   ) {
     throw new SettingsApiError(200, '');
   }

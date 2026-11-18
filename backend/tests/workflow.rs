@@ -105,7 +105,7 @@ async fn imports_searches_analyzes_and_replays_sse(pool: PgPool) {
         app.clone(),
         "POST",
         "/api/jobs",
-        serde_json::json!({"position_id": pos.id,"kind":"analysis","plies":0}),
+        serde_json::json!({"position_id": pos.id,"kind":"analysis","plies":1}),
     )
     .await;
     assert_eq!(status, 202);
@@ -175,10 +175,10 @@ async fn imports_searches_analyzes_and_replays_sse(pool: PgPool) {
     assert_eq!(status, 422);
 
     // Duplicate active jobs converge; a stale worker lease is reclaimed exactly once.
-    let dice_job = bgtutor::store::create_job(&pool, pos.id, "dice", 0)
+    let dice_job = bgtutor::store::create_job(&pool, pos.id, "dice", 1)
         .await
         .unwrap();
-    let duplicate = bgtutor::store::create_job(&pool, pos.id, "dice", 0)
+    let duplicate = bgtutor::store::create_job(&pool, pos.id, "dice", 1)
         .await
         .unwrap();
     assert_eq!(dice_job.id, duplicate.id);

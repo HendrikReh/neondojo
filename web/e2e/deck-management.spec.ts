@@ -368,7 +368,7 @@ test('rename keeps a later-page preview and a pending study answer, and modal ke
             candidates: [],
             decision: null,
             engine: 'GNUbg',
-            plies: 0,
+            plies: 1,
           },
           notes: '',
           tags: [],
@@ -458,7 +458,7 @@ test('real renamed decks update position membership and Anki; deleting one share
   ).items[0];
   const job = await (
     await page.request.post('/api/jobs', {
-      data: { position_id: position.id, kind: 'analysis', plies: 0 },
+      data: { position_id: position.id, kind: 'analysis', plies: 1 },
     })
   ).json();
   await expect
@@ -645,7 +645,7 @@ test('deck search, card moves and shared membership removal work in Study', asyn
   ).items[0];
   const job = await (
     await page.request.post('/api/jobs', {
-      data: { position_id: position.id, kind: 'analysis', plies: 0 },
+      data: { position_id: position.id, kind: 'analysis', plies: 1 },
     })
   ).json();
   await expect

@@ -122,7 +122,7 @@ pub(crate) async fn play(
             accept_resignation: None,
             human_player: 0,
             match_length: length,
-            plies: 0,
+            plies: 1,
             native_id: "",
             action: "opening_roll",
             notation: None,

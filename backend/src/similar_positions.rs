@@ -573,7 +573,7 @@ mod tests {
         )
         .await;
         assert_eq!(status, 200, "{value}");
-        assert_eq!(value["depth"], "2-ply");
+        assert_eq!(value["depth"], "3-ply");
         assert_ne!(value["best"], value["played"]);
         let loss = value["equity_loss"].as_f64().unwrap();
         assert!(loss > 0.0, "{value}");
@@ -610,7 +610,7 @@ mod tests {
         assert!(crate::jobs::run_one(&state).await.unwrap());
         let completed = store::get_job(&pool, job.id).await.unwrap().unwrap();
         assert_eq!(completed.status, "completed", "{:?}", completed.error);
-        let newer = store::create_job(&pool, id, "analysis", 0).await.unwrap();
+        let newer = store::create_job(&pool, id, "analysis", 1).await.unwrap();
         assert!(crate::jobs::run_one(&state).await.unwrap());
         let newer = store::get_job(&pool, newer.id).await.unwrap().unwrap();
         assert_eq!(newer.status, "completed", "{:?}", newer.error);

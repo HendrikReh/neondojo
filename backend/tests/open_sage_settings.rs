@@ -336,7 +336,7 @@ async fn jobs_pin_provider_across_settings_changes_and_dice_keep_36_weight(pool:
     assert_eq!(status, 202, "{dice}");
     let mut settings = saved;
     settings["analysis_engine"] = json!("gnubg");
-    settings["analysis_plies"] = json!(0);
+    settings["analysis_plies"] = json!(1);
     settings["open_sage_threads"] = Value::Null;
     assert_eq!(
         call(app.clone(), "PUT", "/api/settings", settings).await.0,

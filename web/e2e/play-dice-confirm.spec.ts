@@ -56,7 +56,7 @@ for (const config of [
       human_name: 'Player',
       match_length: 7,
       bearoff_direction: config.direction,
-      engine: { id: 'gnubg', version: 'GNU Backgammon 1.08.003', plies: 2 },
+      engine: { id: 'gnubg', version: 'GNU Backgammon 1.08.003', plies: 3 },
       position: {
         id,
         match_uuid: id,
@@ -231,7 +231,7 @@ for (const mode of ['double', 'double_archive', 'single_usable'] as const)
       human_name: 'Player',
       match_length: 7,
       bearoff_direction: 'right',
-      engine: { id: 'gnubg', version: 'GNU Backgammon 1.08.003', plies: 2 },
+      engine: { id: 'gnubg', version: 'GNU Backgammon 1.08.003', plies: 3 },
       position: {
         id,
         match_uuid: id,

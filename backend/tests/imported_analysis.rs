@@ -77,7 +77,7 @@ async fn source_analysis_is_persisted_exactly_and_copied_independently(pool: PgP
     .await;
     assert_eq!(status, 200, "{records}");
     assert_eq!(records[0]["candidates"][0]["equity"], 0.013766);
-    assert_eq!(records[0]["depth_plies"], 0);
+    assert_eq!(records[0]["depth_plies"], 1);
     let bytes: Vec<u8> = sqlx::query_scalar("SELECT original FROM matches WHERE id=$1")
         .bind(id)
         .fetch_one(&pool)
@@ -148,7 +148,7 @@ async fn engine_reanalysis_does_not_overwrite_imported_analysis(pool: PgPool) {
     let id = imported(&pool).await;
     let before:Vec<Value>=sqlx::query_scalar("SELECT data FROM imported_analyses WHERE match_uuid=$1 ORDER BY game_no,source_move_no,kind").bind(id).fetch_all(&pool).await.unwrap();
     assert!(!before.is_empty());
-    let job = store::create_match_job(&pool, id, 0, 1).await.unwrap();
+    let job = store::create_match_job(&pool, id, 1, 1).await.unwrap();
     let state = AppState::new(
         pool.clone(),
         Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into())),
@@ -347,7 +347,7 @@ async fn library_distinguishes_imported_analysis_from_native_job_status_and_pr(p
     }
 
     let job = Uuid::new_v4();
-    sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games) VALUES($1,$2,'match',0,'queued',1)").bind(job).bind(id).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games) VALUES($1,$2,'match',1,'queued',1)").bind(job).bind(id).execute(&pool).await.unwrap();
     // An active whole-match job shows its progress. Once it stops without a
     // durable result, the imported analysis is the displayed one again.
     for (native_status, expected) in [

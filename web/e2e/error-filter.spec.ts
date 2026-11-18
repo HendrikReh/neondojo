@@ -23,7 +23,7 @@ test('error review restores the configured threshold and navigates all decisions
   const dialog = await openFullMatchAnalysis(page);
   await dialog
     .getByLabel('Match analysis depth', { exact: true })
-    .selectOption('0');
+    .selectOption('1');
   await submitFullMatchAnalysis(page, dialog);
   await expect(page.locator('.match-analysis-progress')).toContainText(
     'Match analysis complete',

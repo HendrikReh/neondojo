@@ -182,7 +182,7 @@ async fn selected_game_analysis_is_isolated_deduplicated_and_recoverable(pool: P
         app.clone(),
         "POST",
         &endpoint,
-        json!({"plies":0,"game_no":4}),
+        json!({"plies":1,"game_no":4}),
     )
     .await;
     assert_eq!(status, 202, "{value}");
@@ -193,7 +193,7 @@ async fn selected_game_analysis_is_isolated_deduplicated_and_recoverable(pool: P
         app.clone(),
         "POST",
         &endpoint,
-        json!({"plies":0,"game_no":4}),
+        json!({"plies":1,"game_no":4}),
     )
     .await;
     assert_eq!(duplicate["id"], job.id.to_string());

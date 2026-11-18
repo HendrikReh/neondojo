@@ -223,7 +223,7 @@ test('file, book and native candidates preview explicitly and source changes res
   // The selector names engine and depth; the origin is in its details.
   await expect(
     page.getByLabel('Displayed analysis', { exact: true }),
-  ).toContainText('GNU Backgammon 1.05.002 · 0-ply');
+  ).toContainText('GNU Backgammon 1.05.002 · 1-ply');
   const imported = page.locator('.analysis-panel > .source-analysis');
   await imported.getByRole('button', { name: /^Preview move 2:/ }).click();
   await expect(page.locator('.board-review-selection')).toContainText(

@@ -18,8 +18,8 @@ test.beforeEach(async ({ page }) => {
   expect(current.status()).toBe(200);
   const state = await current.json();
   const configuration = state.current_configuration;
-  configuration.analysis.plies = 0;
-  configuration.play.plies = 0;
+  configuration.analysis.plies = 1;
+  configuration.play.plies = 1;
   configuration.general.play_sounds = false;
   const updated = await page.request.put('/api/configuration', {
     data: { expected_revision: state.revision, configuration },

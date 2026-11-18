@@ -13,12 +13,12 @@ const settings = {
   version: 1,
   player_name: 'Player',
   analysis_engine: 'gnubg',
-  analysis_plies: 2,
+  analysis_plies: 3,
   play_engine: 'gnubg',
-  play_plies: 1,
+  play_plies: 2,
   gnubg_path: '/usr/bin/gnubg',
 };
-const run = (id: string, status = 'completed', plies = 0) => ({
+const run = (id: string, status = 'completed', plies = 1) => ({
   id,
   status,
   plies,
@@ -91,7 +91,7 @@ async function backend(page: Page, savedSettings = settings) {
           name: 'GNU Backgammon',
           available: true,
           version: 'GNUbg 1.08',
-          plies: [0, 1, 2, 3, 4],
+          plies: [1, 2, 3, 4, 5],
         },
         {
           id: 'bgsage',
@@ -150,7 +150,8 @@ async function open(page: Page) {
 test('play-turn latency starts independently and has its own history metric', async ({
   page,
 }, testInfo) => {
-  const api = await backend(page, { ...settings, analysis_plies: 0, play_plies: 0 });
+  // GNUbg-only defaults, so Open Sage must fall back to its own depth.
+  const api = await backend(page, { ...settings, analysis_plies: 5, play_plies: 3 });
   await page.setViewportSize({ width: 1800, height: 1169 });
   await page.route('**/api/engines', (route) =>
     route.fulfill({
@@ -160,7 +161,7 @@ test('play-turn latency starts independently and has its own history metric', as
           name: 'GNU Backgammon',
           available: true,
           version: 'GNUbg 1.08',
-          plies: [0, 1, 2, 3, 4],
+          plies: [1, 2, 3, 4, 5],
         },
         {
           id: 'bgsage',
@@ -174,7 +175,7 @@ test('play-turn latency starts independently and has its own history metric', as
   );
   let playStarts = 0;
   const playRun = {
-    ...run('play-completed', 'completed', settings.play_plies),
+    ...run('play-completed', 'completed', 1),
     engine_id: 'bgsage',
     engine_name: 'Open Sage',
     reference: null,
@@ -220,26 +221,26 @@ test('play-turn latency starts independently and has its own history metric', as
     name: 'Play-turn latency',
     exact: true,
   });
-  await expect(depth(0)).toBeChecked();
+  await expect(depth(5)).toBeChecked();
   await depth(1).check();
   await depth(1).uncheck();
   await playMode.click();
-  await playingDepth.selectOption('0');
+  await playingDepth.selectOption('3');
   await page.getByRole('button', { name: 'Match analysis', exact: true }).click();
 
   await engine.selectOption('bgsage');
-  await expect(depth(0)).toBeDisabled();
+  await expect(depth(5)).toBeDisabled();
   await expect(depth(2)).toBeChecked();
   await expect(
     page.getByText('2-ply selected because the requested depth is unavailable.'),
   ).toBeVisible();
   await depth(3).check();
   await engine.selectOption('gnubg');
-  await expect(depth(0)).toBeChecked();
+  await expect(depth(5)).toBeChecked();
   await expect(depth(2)).not.toBeChecked();
   await expect(depth(3)).not.toBeChecked();
   await playMode.click();
-  await expect(playingDepth).toHaveValue('0');
+  await expect(playingDepth).toHaveValue('3');
   await engine.selectOption('bgsage');
   await expect(playingDepth).toHaveValue('2');
   await expect(
@@ -259,7 +260,7 @@ test('play-turn latency starts independently and has its own history metric', as
   ).toBeHidden();
   await playingDepth.selectOption('1');
   await engine.selectOption('gnubg');
-  await expect(playingDepth).toHaveValue('0');
+  await expect(playingDepth).toHaveValue('3');
   await engine.selectOption('bgsage');
   await expect(playingDepth).toHaveValue('1');
   await page.getByRole('button', { name: 'Measure play-turn latency' }).click();
@@ -309,9 +310,9 @@ test('Extras shows reference, saved history and only the saved default ply', asy
   const api = await backend(page);
   await open(page);
   await expect(
-    page.getByRole('checkbox', { name: '2-ply', exact: true }),
+    page.getByRole('checkbox', { name: '3-ply', exact: true }),
   ).toBeChecked();
-  for (const ply of [0, 1, 3, 4])
+  for (const ply of [1, 2, 4, 5])
     await expect(
       page.getByRole('checkbox', { name: `${ply}-ply`, exact: true }),
     ).not.toBeChecked();
@@ -352,7 +353,7 @@ test('Extras shows reference, saved history and only the saved default ply', asy
     path: '/tmp/bgtutor-benchmark-desktop.png',
     fullPage: true,
   });
-  await page.getByRole('checkbox', { name: '2-ply', exact: true }).uncheck();
+  await page.getByRole('checkbox', { name: '3-ply', exact: true }).uncheck();
   await expect(
     page.getByRole('button', { name: 'Start benchmark', exact: true }),
   ).toBeDisabled();
@@ -362,13 +363,13 @@ test('multiple plies queue, cancel explicitly and keep running across navigation
 }) => {
   const api = await backend(page);
   await open(page);
-  await page.getByRole('checkbox', { name: '0-ply', exact: true }).check();
+  await page.getByRole('checkbox', { name: '1-ply', exact: true }).check();
   await page
     .getByRole('button', { name: 'Start benchmark', exact: true })
     .click();
   await expect
     .poll(() => api.starts)
-    .toEqual([{ engine_id: 'gnubg', plies: [0, 2] }]);
+    .toEqual([{ engine_id: 'gnubg', plies: [1, 3] }]);
   const active = page.locator('.benchmark-active');
   await expect(active).toContainText('3 / 10 games');
   await expect(active).toContainText('Waiting for engine availability');
@@ -387,7 +388,7 @@ test('multiple plies queue, cancel explicitly and keep running across navigation
     .getByRole('button', { name: 'Cancel run', exact: true })
     .first()
     .click();
-  await expect.poll(() => api.cancels).toEqual(['new-0']);
+  await expect.poll(() => api.cancels).toEqual(['new-1']);
   await expect(page.locator('.benchmark-history')).toContainText('Cancelled');
 });
 test('Settings benchmark link leaves drafts unapplied and opens the same view', async ({
@@ -400,7 +401,7 @@ test('Settings benchmark link leaves drafts unapplied and opens the same view', 
   await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
   await dialog
     .getByLabel('Default analysis profile', { exact: true })
-    .selectOption('4');
+    .selectOption('5');
   await dialog
     .getByRole('button', { name: 'Open benchmark', exact: true })
     .click();
@@ -413,10 +414,10 @@ test('Settings benchmark link leaves drafts unapplied and opens the same view', 
     page.getByRole('tab', { name: 'Extras', exact: true }),
   ).toHaveAttribute('aria-selected', 'true');
   await expect(
-    page.getByRole('checkbox', { name: '2-ply', exact: true }),
+    page.getByRole('checkbox', { name: '3-ply', exact: true }),
   ).toBeChecked();
   await expect(
-    page.getByRole('checkbox', { name: '4-ply', exact: true }),
+    page.getByRole('checkbox', { name: '5-ply', exact: true }),
   ).not.toBeChecked();
   expect(api.writes).toEqual([]);
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -440,7 +441,7 @@ test('active history stays usable while engine catalog is blocked, then refreshe
           name: 'GNU Backgammon',
           available: !active,
           version: active ? null : 'GNUbg 1.08',
-          plies: [0, 1, 2, 3, 4],
+          plies: [1, 2, 3, 4, 5],
         },
       ],
     });

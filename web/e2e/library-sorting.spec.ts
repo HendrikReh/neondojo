@@ -59,7 +59,7 @@ test('numeric IDs and every data column sort through the API and reset paged sel
     expect(saved.ok(), await saved.text()).toBe(true);
   }
   const analysis = await page.request.post(`/api/matches/${ids[0]}/analysis`, {
-    data: { plies: 0 },
+    data: { plies: 1 },
   });
   expect(analysis.status()).toBe(202);
   const job = await analysis.json();

@@ -66,7 +66,7 @@ async fn initialization_imports_browser_values_and_keeps_backend_authority(pool:
     assert_eq!(state["active_profile"]["name"], "Standard");
     assert_eq!(state["current_configuration"]["general"]["locale"], "de");
     assert_eq!(state["current_configuration"]["general"]["player_name"], "");
-    assert_eq!(state["current_configuration"]["analysis"]["plies"], 2);
+    assert_eq!(state["current_configuration"]["analysis"]["plies"], 3);
     assert_eq!(
         state["current_configuration"]["appearance"]["board_theme"],
         "walnut"

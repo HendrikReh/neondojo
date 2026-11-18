@@ -70,7 +70,7 @@ function fixtures() {
     match_length: 7,
     scores: [7, 3],
     bearoff_direction: 'right',
-    engine: { id: 'gnubg', version: 'saved engine', plies: 0 },
+    engine: { id: 'gnubg', version: 'saved engine', plies: 1 },
     phase: 'match_over',
     can_double: false,
     legal_moves: [],
@@ -81,7 +81,7 @@ function fixtures() {
     play_mode: 'competition',
     decisions: [],
     review: {
-      analysis_plies: 2,
+      analysis_plies: 3,
       assisted: false,
       first_attempt_loss: 0.3,
       first_attempt_count: 4,

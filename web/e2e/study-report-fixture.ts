@@ -13,13 +13,13 @@ export const summary = (reportId = id, name = 'Hendrik · GNUbg') => ({
   play_mode: 'tutor',
   first_attempt_rating: 4.5,
   assisted: true,
-  analysis_plies: 2,
+  analysis_plies: 3,
 });
 export function detail(reportId = id) {
   return {
     id: reportId,
     human_name: 'Hendrik',
-    engine: { id: 'gnubg', version: 'GNUbg', plies: 2 },
+    engine: { id: 'gnubg', version: 'GNUbg', plies: 3 },
     version: 1,
     match_length: 7,
     scores: [7, 3],
@@ -43,7 +43,7 @@ export function detail(reportId = id) {
     ],
     review: {
       assisted: true,
-      analysis_plies: 2,
+      analysis_plies: 3,
       first_attempt_loss: 0.12,
       first_attempt_rating: 4.5,
       first_attempt_count: 3,

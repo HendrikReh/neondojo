@@ -134,7 +134,7 @@ async fn restores_data_and_keeps_target_installation_settings(pool: PgPool) {
     sqlx::query("INSERT INTO match_games(id,match_uuid,game_no,position_count,white_score,black_score,crawford) VALUES(gen_random_uuid(),$1,1,1,0,0,false)")
         .bind(source_id).execute(&pool).await.unwrap();
     let selected_job = uuid::Uuid::new_v4();
-    for (job, depth, loss) in [(selected_job, 0, 0.125), (uuid::Uuid::new_v4(), 2, 0.25)] {
+    for (job, depth, loss) in [(selected_job, 1, 0.125), (uuid::Uuid::new_v4(), 3, 0.25)] {
         sqlx::query(
             "INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,completed_games,result)
              VALUES($1,$2,'match',$3,'completed',1,1,$4)",

@@ -33,7 +33,7 @@ const entries = Array.from({ length: 50 }, (_, index) => ({
   white_pr: 3.25,
   black_pr: 4.15,
   pr_method: 'gnubg_emg_500_v1',
-  pr_profile: 'GNUbg 2-ply',
+  pr_profile: 'GNUbg 3-ply',
   analysis_status: index === 1 ? 'imported' : 'completed',
   source_available: index !== 3,
   tags:
@@ -149,7 +149,7 @@ test('tracks selected matches after closing the dialog and reloading the page', 
           name: 'GNUbg',
           available: true,
           version: '1',
-          plies: [0, 2],
+          plies: [1, 3],
         },
         {
           id: 'bgsage',

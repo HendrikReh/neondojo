@@ -23,7 +23,7 @@ test('a selected analysis can be deleted while a deeper result remains available
   });
   const { match } = await (await imported).json();
   const saved: string[] = [];
-  for (const plies of [2, 4]) {
+  for (const plies of [3, 5]) {
     const response = await page.request.post(
       `/api/matches/${match.id}/analysis`,
       {
@@ -48,7 +48,7 @@ test('a selected analysis can be deleted while a deeper result remains available
   const selection = page.getByLabel('Displayed analysis');
   await selection.selectOption(`job:${old}`);
   await expect(selection.locator('option:checked')).toContainText(
-    /GNU Backgammon.*2-ply.*Game 1/,
+    /GNU Backgammon.*3-ply.*Game 1/,
   );
   await expect(selection.locator('option:checked')).not.toContainText(
     'Calculated',
@@ -62,7 +62,7 @@ test('a selected analysis can be deleted while a deeper result remains available
     name: 'Delete analysis',
     exact: true,
   });
-  await expect(dialog).toContainText(/GNU Backgammon.*2-ply.*Game 1/);
+  await expect(dialog).toContainText(/GNU Backgammon.*3-ply.*Game 1/);
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(selection).toHaveValue(`job:${old}`);
   expect((await page.request.get(`/api/jobs/${old}`)).ok()).toBeTruthy();
@@ -77,7 +77,7 @@ test('a selected analysis can be deleted while a deeper result remains available
   await expect(dialog).toHaveCount(0);
   await expect(selection.locator(`option[value="job:${old}"]`)).toHaveCount(0);
   await expect(selection.locator('option:checked')).toContainText(
-    /Automatic.*GNU Backgammon.*4-ply/,
+    /Automatic.*GNU Backgammon.*5-ply/,
   );
   expect((await page.request.get(`/api/jobs/${old}`)).status()).toBe(404);
   expect((await page.request.get(`/api/jobs/${deeper}`)).status()).toBe(200);
@@ -107,7 +107,7 @@ test('one saved choice drives every view and remains strict across games and rel
   const start = async (game_no?: number) => {
     const response = await page.request.post(
       `/api/matches/${match.id}/analysis`,
-      { data: { engine_id: 'gnubg', plies: 0, game_no } },
+      { data: { engine_id: 'gnubg', plies: 1, game_no } },
     );
     expect(response.ok(), await response.text()).toBeTruthy();
     const job = await response.json();

@@ -94,7 +94,7 @@ describe('restoring individual profile settings', () => {
     current.general.player_name = 'Keep me';
     const previous = structuredClone(current);
     const result = restoreConfigurationField(saved, current, 'analysis.plies');
-    expect(result.analysis.plies).toBe(2);
+    expect(result.analysis.plies).toBe(3);
     expect(result.general.player_name).toBe('Keep me');
     expect(current).toEqual(previous);
     expect(saved).toEqual(defaultConfiguration);

@@ -529,7 +529,7 @@ test('a native full-match analysis supplies GNUbg PR to the match overview', asy
   const { match } = await (await imported).json();
   const response = await page.request.post(
     `/api/matches/${match.id}/analysis`,
-    { data: { plies: 0 } },
+    { data: { plies: 1 } },
   );
   expect(response.status()).toBe(202);
   const job = await response.json();

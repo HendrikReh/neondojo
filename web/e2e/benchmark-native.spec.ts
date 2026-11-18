@@ -47,7 +47,7 @@ test('native play-turn latency uses the saved playing depth and persists', async
 });
 
 // Explicit opt-in: creates one retained measurement in the configured backend.
-test('native zero-ply benchmark completes and survives a page reload', async ({
+test('native 1-ply benchmark completes and survives a page reload', async ({
   page,
 }) => {
   test.skip(
@@ -66,10 +66,10 @@ test('native zero-ply benchmark completes and survives a page reload', async ({
   await expect(
     page.getByRole('button', { name: 'Start benchmark', exact: true }),
   ).toBeEnabled();
-  for (const ply of [0, 1, 2, 3, 4]) {
+  for (const ply of [1, 2, 3, 4, 5]) {
     await page
       .getByRole('checkbox', { name: `${ply}-ply`, exact: true })
-      .setChecked(ply === 0);
+      .setChecked(ply === 1);
   }
   const started = page.waitForResponse(
     (response) =>

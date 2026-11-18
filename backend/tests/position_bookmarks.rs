@@ -112,7 +112,7 @@ async fn removal_is_idempotent_and_retains_source_notes_analysis_and_learning_ca
         .execute(&pool)
         .await
         .unwrap();
-    let job = store::create_job(&pool, id, "analysis", 0).await.unwrap();
+    let job = store::create_job(&pool, id, "analysis", 1).await.unwrap();
     let source = store::get_position(&pool, id).await.unwrap().unwrap();
     assert_eq!(request(&pool, "PUT", &path).await.0, 200);
     assert_eq!(request(&pool, "DELETE", &path).await, (204, Value::Null));
@@ -290,7 +290,7 @@ async fn imported_positions_notes_analysis_and_cards_never_implicitly_enter_the_
     let (match_id, positions) = imported(&pool).await;
     let id = positions[0].id;
     sqlx::query("INSERT INTO annotations(id,position_uuid,tags,comment,version) VALUES($1,$2,ARRAY['study'],'interesting decision',1)").bind(Uuid::new_v4()).bind(id).execute(&pool).await.unwrap();
-    let job = store::create_job(&pool, id, "analysis", 0).await.unwrap();
+    let job = store::create_job(&pool, id, "analysis", 1).await.unwrap();
     sqlx::query("UPDATE jobs SET status='completed',result=$2 WHERE id=$1")
         .bind(job.id)
         .bind(json!({"candidates":[{"notation":"8/5 6/5"}]}))

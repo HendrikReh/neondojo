@@ -19,7 +19,7 @@ fn bits(value: &Value, offset: usize, width: usize) -> u32 {
 async fn checkpoint(pool: &PgPool, sgf: &str, history: Value) -> (Uuid, Value) {
     let id = Uuid::new_v4();
     let session = json!({"id":id,"version":7,"human_player":0,"human_name":"Human","match_length":5,
-        "bearoff_direction":"clockwise","engine":{"id":"gnubg","version":"fixture","plies":0},
+        "bearoff_direction":"clockwise","engine":{"id":"gnubg","version":"fixture","plies":1},
         "position":{"id":id,"match_uuid":id,"ordinal":0,"game_no":1,"ply":0,"player":0,"dice":[],"board":[],"position_id":"","gnubg_match_id":"","notation":""},
         "phase":"roll","can_double":false,"legal_moves":[],"history":history,"scores":[0,0],"game_no":1,"winner":null});
     sqlx::query("INSERT INTO play_sessions(id,version,state,gnubg_path,sgf,native_id,library_archived) VALUES($1,7,$2,'/missing/native', $3,'unchanged',true)")

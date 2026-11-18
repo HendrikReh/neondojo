@@ -22,8 +22,8 @@ test('plays a seeded pair with the default dice mode and exports the return leg'
   await expect(
     engineA.getByRole('combobox', { name: 'Engine A' }),
   ).toBeFocused();
-  await engineA.getByLabel('Playing strength').selectOption('0');
-  await engineB.getByLabel('Playing strength').selectOption('0');
+  await engineA.getByLabel('Playing strength').selectOption('1');
+  await engineB.getByLabel('Playing strength').selectOption('1');
   await setup.getByLabel('Match length in points').fill('1');
   await page.keyboard.press('Escape');
   await expect(newSeries).toBeFocused();
@@ -41,15 +41,15 @@ test('plays a seeded pair with the default dice mode and exports the return leg'
     timeout: 30000,
   });
   await expect(
-    results.getByText('A · GNUbg 0-ply', { exact: true }),
+    results.getByText('A · GNUbg 1-ply', { exact: true }),
   ).toBeVisible();
   await expect(
-    results.getByText('B · GNUbg 0-ply', { exact: true }),
+    results.getByText('B · GNUbg 1-ply', { exact: true }),
   ).toBeVisible();
   await expect(results.getByText('50.0%', { exact: true })).toHaveCount(2);
   await expect(results.getByText('Matches counted')).toBeVisible();
   const pairedSeries = archive
-    .getByRole('button', { name: /GNUbg 0-ply.*GNUbg 0-ply.*Completed/ })
+    .getByRole('button', { name: /GNUbg 1-ply.*GNUbg 1-ply.*Completed/ })
     .first();
   await expect(pairedSeries).toHaveAttribute('aria-current', 'true');
   const first = results.getByRole('row', { name: /First leg/ });
@@ -103,7 +103,7 @@ test('plays a seeded pair with the default dice mode and exports the return leg'
     results.getByRole('row', { name: /First leg|Return leg/ }),
   ).toHaveCount(0);
   await archive
-    .getByRole('button', { name: /GNUbg 0-ply.*GNUbg 0-ply.*Completed/ })
+    .getByRole('button', { name: /GNUbg 1-ply.*GNUbg 1-ply.*Completed/ })
     .last()
     .press('Enter');
   await expect(results.getByText('Completed · 2 / 2 Matches')).toBeVisible();
@@ -117,8 +117,8 @@ test('plays a seeded pair with the default dice mode and exports the return leg'
     .click();
   const rows = page.locator('.database-table tbody tr');
   await expect(rows).toHaveCount(3);
-  await expect(rows.first()).toContainText('A gnubg 0-ply');
-  await expect(rows.first()).toContainText('B gnubg 0-ply');
+  await expect(rows.first()).toContainText('A gnubg 1-ply');
+  await expect(rows.first()).toContainText('B gnubg 1-ply');
 });
 
 test('plays a paired block of cubeless money games', async ({ page }) => {
@@ -133,7 +133,7 @@ test('plays a paired block of cubeless money games', async ({ page }) => {
     await setup
       .getByRole('group', { name: side })
       .getByLabel('Playing strength')
-      .selectOption('0');
+      .selectOption('1');
   await setup
     .getByRole('combobox', { name: 'Format' })
     .selectOption('money_cubeless');
@@ -268,7 +268,7 @@ test('shows the retained diagnostic for a cancelled series', async ({
   page,
 }) => {
   const id = '20000000-0000-0000-0000-000000000000';
-  const side = { engine_id: 'gnubg', plies: 0 };
+  const side = { engine_id: 'gnubg', plies: 1 };
   const snapshot = { engine_id: 'gnubg', gnubg_path: '' };
   const series = {
     id,
@@ -305,7 +305,7 @@ test('shows the retained diagnostic for a cancelled series', async ({
   await page.locator('nav').getByText('Engine duels', { exact: true }).click();
   const results = page.getByRole('region', { name: 'Series results' });
   await expect(results.getByText('Cancelled · 0 / 2 Matches')).toBeVisible();
-  await expect(results.getByText('A · GNUbg 0-ply')).toHaveCount(0);
+  await expect(results.getByText('A · GNUbg 1-ply')).toHaveCount(0);
   await expect(results.getByText('Matches counted')).toHaveCount(0);
   await expect(
     results.getByRole('button', { name: 'Repeat series …' }),

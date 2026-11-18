@@ -42,7 +42,7 @@ async fn real_native_analysis_flows_into_answer_hidden_checker_and_cube_practice
     .unwrap();
     let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()));
     let state = api::AppState::new(pool.clone(), engine);
-    let oracle = state.engine.analyze_game(source, 1, 0).await.unwrap();
+    let oracle = state.engine.analyze_game(source, 1, 1).await.unwrap();
     let opening_loss = oracle
         .decisions
         .iter()
@@ -54,7 +54,7 @@ async fn real_native_analysis_flows_into_answer_hidden_checker_and_cube_practice
         "the opening split is a substantial blunder"
     );
     let app = api::router(state.clone());
-    let job = store::create_match_job(&pool, imported.r#match.id, 0, 2)
+    let job = store::create_match_job(&pool, imported.r#match.id, 1, 2)
         .await
         .unwrap();
     assert!(jobs::run_one(&state).await.unwrap());
@@ -98,7 +98,7 @@ async fn real_native_analysis_flows_into_answer_hidden_checker_and_cube_practice
                 assert_eq!(status, 200, "{answer}");
                 assert!(answer["equity_loss"].as_f64().unwrap() > 0.0);
                 assert!(answer["engine"].as_str().unwrap().contains("GNU"));
-                assert_eq!(answer["plies"], 0);
+                assert_eq!(answer["plies"], 1);
                 if question["kind"] == "checker" && name == "Alice" {
                     checker_seen = true;
                     assert_eq!(question["position"]["dice"], json!([3, 1]));

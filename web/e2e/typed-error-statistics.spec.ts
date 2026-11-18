@@ -27,10 +27,10 @@ for (const scope of ['match', 'game'] as const) {
     await openMatchAnalysisOptions(page);
     if (scope === 'match') {
       const dialog = await openFullMatchAnalysis(page);
-      await dialog.getByLabel('Match analysis depth', { exact: true }).selectOption('0');
+      await dialog.getByLabel('Match analysis depth', { exact: true }).selectOption('1');
       await submitFullMatchAnalysis(page, dialog);
     } else {
-      await page.getByLabel('Match analysis depth', { exact: true }).selectOption('0');
+      await page.getByLabel('Match analysis depth', { exact: true }).selectOption('1');
       await page.getByRole('button', { name: 'Analyze game', exact: true }).click();
     }
     await expect(page.locator('.match-analysis-progress')).toContainText(

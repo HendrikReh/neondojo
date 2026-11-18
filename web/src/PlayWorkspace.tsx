@@ -1331,7 +1331,7 @@ export default function PlayWorkspace({
                     session.engine.version,
                     `${session.engine.plies}-ply`,
                     feedbackMode !== 'competition' &&
-                      `${modeT('analysisDepth')}: ${session.analysis_plies ?? 2}-ply`,
+                      `${modeT('analysisDepth')}: ${session.analysis_plies ?? defaultConfiguration.analysis.plies}-ply`,
                     t(session.bearoff_direction === 'left' ? 'left' : 'right'),
                   ]
                     .filter(Boolean)

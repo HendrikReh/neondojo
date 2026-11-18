@@ -10,7 +10,7 @@ function state(mode = 'competition') {
     match_length: 7,
     bearoff_direction: 'right',
     play_mode: mode,
-    engine: { id: 'gnubg', version: 'GNU Backgammon native', plies: 0 },
+    engine: { id: 'gnubg', version: 'GNU Backgammon native', plies: 1 },
     phase: 'double_response',
     position: {
       id,

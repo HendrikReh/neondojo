@@ -70,7 +70,7 @@ async fn imported(pool: &PgPool) -> (Uuid, Vec<Uuid>) {
 }
 async fn checkpoint(pool: &PgPool, id: Uuid, game: i32) {
     let job = Uuid::new_v4();
-    sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,result,game_no,total_games,completed_games) VALUES($1,$2,'match',0,'completed','{}',$3,1,1)").bind(job).bind(id).bind(game).execute(pool).await.unwrap();
+    sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,result,game_no,total_games,completed_games) VALUES($1,$2,'match',1,'completed','{}',$3,1,1)").bind(job).bind(id).bind(game).execute(pool).await.unwrap();
     sqlx::query("INSERT INTO match_analysis_games(job_id,game_no) VALUES($1,$2)")
         .bind(job)
         .bind(game)

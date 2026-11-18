@@ -171,12 +171,12 @@ const entries = {
     'PR (performance rating): perdita media di equity per decisione × 500. Più basso è meglio; circa 5 è livello esperto e circa 10 un forte giocatore di circolo.',
   ],
   ply: [
-    'Ply: how many rolls the engine looks ahead. 0-ply is the neural network’s direct estimate; 2-ply averages over the opponent’s and the player’s next roll.',
-    'Ply: wie viele Würfe die Engine vorausrechnet. 0-ply ist die direkte Schätzung des neuronalen Netzes; 2-ply mittelt über den nächsten Wurf des Gegners und den eigenen.',
-    'Ply: cuántas tiradas calcula el motor por adelantado. 0-ply es la estimación directa de la red neuronal; 2-ply promedia la siguiente tirada del rival y la propia.',
-    'Ply : nombre de lancers anticipés par le moteur. 0-ply est l’estimation directe du réseau de neurones ; 2-ply fait la moyenne sur le prochain lancer de l’adversaire puis du joueur.',
-    'Ply: ile rzutów naprzód liczy silnik. 0-ply to bezpośrednia ocena sieci neuronowej; 2-ply uśrednia następny rzut przeciwnika i własny.',
-    'Ply: quanti tiri in avanti calcola il motore. 0-ply è la stima diretta della rete neurale; 2-ply fa la media sul prossimo tiro dell’avversario e sul proprio.',
+    'Ply: the engine’s search depth. 1-ply is the neural network’s direct estimate; 3-ply averages over the opponent’s and the player’s next roll.',
+    'Ply: die Suchtiefe der Engine. 1-ply ist die direkte Schätzung des neuronalen Netzes; 3-ply mittelt über den nächsten Wurf des Gegners und den eigenen.',
+    'Ply: la profundidad de búsqueda del motor. 1-ply es la estimación directa de la red neuronal; 3-ply promedia la siguiente tirada del rival y la propia.',
+    'Ply : profondeur de recherche du moteur. 1-ply est l’estimation directe du réseau de neurones ; 3-ply fait la moyenne sur le prochain lancer de l’adversaire puis du joueur.',
+    'Ply: głębokość przeszukiwania silnika. 1-ply to bezpośrednia ocena sieci neuronowej; 3-ply uśrednia następny rzut przeciwnika i własny.',
+    'Ply: la profondità di ricerca del motore. 1-ply è la stima diretta della rete neurale; 3-ply fa la media sul prossimo tiro dell’avversario e sul proprio.',
   ],
 } satisfies Record<string, [string, string, string, string, string, string]>;
 type Key = keyof typeof entries;

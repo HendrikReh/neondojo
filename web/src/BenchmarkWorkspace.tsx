@@ -4,7 +4,11 @@ import BenchmarkComparison, {
 import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
 import { useEffect, useRef, useState } from 'react';
 import EngineLabel from './EngineLabel';
-import { ANALYSIS_PLIES } from './analysis-depth';
+import {
+  ANALYSIS_PLIES,
+  PLAY_PLIES,
+  preferredDepth as enginePreferredDepth,
+} from './analysis-depth';
 import { formatBenchmarkDuration } from './benchmark-duration';
 import { useI18n } from './i18n';
 import { loadEngines, type EngineInfo } from './settings-api';
@@ -20,8 +24,9 @@ import {
 import { useBenchmarkText } from './benchmark-messages';
 import './benchmark.css';
 
-function preferredDepth(depths: readonly number[]) {
-  return depths.includes(2) ? 2 : depths[0];
+function preferredDepth(engineId: string, depths: readonly number[]) {
+  const preferred = enginePreferredDepth(engineId);
+  return depths.includes(preferred) ? preferred : depths[0];
 }
 
 export default function BenchmarkWorkspace({
@@ -123,7 +128,7 @@ export default function BenchmarkWorkspace({
     .sort((a, b) => a - b);
   const analysisFallback =
     requestedAnalysisDepths.length > 0 && compatiblePlies.length === 0
-      ? preferredDepth(availableAnalysisDepths)
+      ? preferredDepth(engineId, availableAnalysisDepths)
       : undefined;
   const selected =
     analysisFallback === undefined ? compatiblePlies : [analysisFallback];
@@ -134,11 +139,12 @@ export default function BenchmarkWorkspace({
       ? configurationOptions.engine_profiles.bgsage.play
       : configurationOptions.engine_profiles.gnubg.play
   ).filter((ply) => engine?.plies.includes(ply));
-  const requestedPlayDepth = playDepthsByEngine[engineId] ?? playPlies ?? 2;
+  const requestedPlayDepth =
+    playDepthsByEngine[engineId] ?? playPlies ?? enginePreferredDepth(engineId);
   const playDepthSupported = supportedPlayDepths.includes(requestedPlayDepth);
   const playFallback = playDepthSupported
     ? undefined
-    : preferredDepth(supportedPlayDepths);
+    : preferredDepth(engineId, supportedPlayDepths);
   const selectedPlayDepth = playDepthSupported
     ? requestedPlayDepth
     : playFallback;
@@ -300,7 +306,7 @@ export default function BenchmarkWorkspace({
                   }));
                 }}
               >
-                {[0, 1, 2].map((ply) => (
+                {PLAY_PLIES.map((ply) => (
                   <option
                     key={ply}
                     value={ply}

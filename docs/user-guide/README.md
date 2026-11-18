@@ -281,15 +281,17 @@ If no saved result exists, BG Tutor starts the calculation automatically with th
 - **Recalculate position …** and **Recalculate dice equity …** calculate only the current position at the depth you choose.
 - Analyses run as background jobs. They keep running when you switch tabs or close the dialog. Progress and remaining time appear in the header.
 
-| Depth | Speed | Typical use |
-| --- | --- | --- |
-| 0-ply | instant | quick checks, fast bot play |
-| 1-ply | fast | quick reviews |
-| **2-ply** *(default)* | moderate | standard match review |
-| 3-ply | slow | close decisions |
-| 4-ply | very slow | deep study of key positions and full-match analysis on fast machines |
+BG Tutor numbers depths the same way for GNUbg and Open Sage, like XG: 1-ply is the raw evaluation. GNUbg's own manual calls that level 0-ply, so BG Tutor's 3-ply is GNUbg's 2-ply.
 
-> **Pro:** New GNUbg jobs at 2-ply and 4-ply pass up to the 14 best 0-ply candidates to the next search level. Every job keeps the engine version, depth and filter it started with, even if you change Settings while it is running.
+| Depth (GNUbg) | Speed | Typical use |
+| --- | --- | --- |
+| 1-ply | instant | quick checks, fast bot play |
+| 2-ply | fast | quick reviews |
+| **3-ply** *(default)* | moderate | standard match review |
+| 4-ply | slow | close decisions |
+| 5-ply | very slow | deep study of key positions and full-match analysis on fast machines |
+
+> **Pro:** New GNUbg jobs at 3-ply and 5-ply pass up to the 14 best 1-ply candidates to the next search level. Every job keeps the engine version, depth and filter it started with, even if you change Settings while it is running.
 
 ### Displayed analysis and new calculations
 
@@ -322,7 +324,7 @@ The Statistics tab shows the selected analysis for each player:
 
 Click any count to open the matching decisions in the **Checker** or **Cube** tab. A count in the game overview filters to that game.
 
-**Compare saved analyses** puts any two saved analyses side by side, for example XG and GNUbg 2-ply. The displayed analysis does not change.
+**Compare saved analyses** puts any two saved analyses side by side, for example XG and GNUbg 3-ply. The displayed analysis does not change.
 
 > **Pro:** Native PR is calculated as 500 × normalized equity loss ÷ the number of unforced checker decisions plus close or actual cube decisions. GNUbg counts decisions differently from XG, so PR values from the two programs are not directly comparable. PR requires a complete native analysis. Imported analyses don't supply native PR.
 
@@ -557,7 +559,7 @@ Click a column heading to sort ascending, and click it again to sort descending.
 | **Export** | up to 50 | Original file or SGF. Several matches are exported as a ZIP. |
 | **Delete** | up to 100 | Requires confirmation and skips matches that are being analyzed. Saved positions and flashcards survive. |
 
-> **Novice:** After importing your first match, select it and choose **Analyze selected matches …** at the default 2-ply. If you keep the dialog open until the analysis finishes, BG Tutor opens **Statistics** for the match. If you close it, the analysis continues in the background.
+> **Novice:** After importing your first match, select it and choose **Analyze selected matches …** at the default 3-ply. If you keep the dialog open until the analysis finishes, BG Tutor opens **Statistics** for the match. If you close it, the analysis continues in the background.
 >
 > **Pro:** The **ID** column is a stable match number. It survives renames and moves, and copies receive new numbers. Use **Position ID** together with the **Database**, **Game** and **Move** columns to find out how often, and in which matches, a reference position occurred.
 
@@ -702,13 +704,13 @@ flowchart LR
   end
   subgraph A["Advanced"]
     direction TB
-    A1["Import your online and tournament matches"] --> A2["Analyze them at 2-ply (bulk)"]
+    A1["Import your online and tournament matches"] --> A2["Analyze them at 3-ply (bulk)"]
     A2 --> A3["My recurring mistakes:<br/>pick the costliest group"] --> A4["Practice the group,<br/>then play Coach or Competition"]
     A4 --> A5["Check the trend<br/>(Earlier → recent, PR chart)"]
   end
   subgraph P["Professional"]
     direction TB
-    P1["Analyze key matches at 3- or 4-ply"] --> P2["Compare moves: XG vs GNUbg vs Open Sage"]
+    P1["Analyze key matches at 4- or 5-ply"] --> P2["Compare moves: XG vs GNUbg vs Open Sage"]
     P2 --> P3["All analyzed decisions:<br/>filter by score and cube"] --> P4["Build topic decks with tags;<br/>sync with Anki"]
     P4 --> P5["Transfer practice after 7–14 days"]
   end
@@ -792,7 +794,7 @@ For installation and server details, see the [project README](../../README.md).
 | **Equity loss / normalized equity loss** | How much worse a decision is than the best one. *Normalized* makes match-play values comparable with money play. |
 | **Error grades** | *Questionable*, *Error*, *Blunder* and *Large Blunder*, defined by the [thresholds](#error-grades). |
 | **PR (performance rating)** | 500 × normalized equity loss per decision. Lower is better. Strong experts average in the low single digits. GNUbg and XG count decisions differently, so compare PR values from the same source. |
-| **Ply** | Search depth. 0-ply evaluates each resulting position directly, and each additional ply looks ahead one more roll. |
+| **Ply** | Search depth. 1-ply evaluates each resulting position directly, and each additional ply looks ahead one more roll. BG Tutor uses this XG convention for every engine; GNUbg calls the same levels one lower. |
 | **Cubeful / cubeless** | Whether the evaluation takes the doubling cube into account. |
 | **MWC** | Match winning chances, the probability of winning the match. Used instead of equity in some analyses. |
 | **Take point** | The winning chance at which taking a double breaks even. It is 25 % in money play without gammons, and depends on the score in match play. |

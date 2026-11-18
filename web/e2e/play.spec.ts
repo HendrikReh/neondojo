@@ -17,7 +17,7 @@ function session(human = 0, direction = 'right') {
     engine: {
       id: 'gnubg',
       version: 'GNU Backgammon 1.08.003 native',
-      plies: 2,
+      plies: 3,
     },
     position: {
       id,
@@ -216,9 +216,9 @@ test('Settings persists the chosen bear-off direction for new matches', async ({
     version: 1,
     player_name: 'Player',
     analysis_engine: 'gnubg',
-    analysis_plies: 2,
+    analysis_plies: 3,
     play_engine: 'gnubg',
-    play_plies: 1,
+    play_plies: 2,
     gnubg_path: '/test/gnubg',
     bearoff_direction: 'right',
   };

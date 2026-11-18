@@ -106,7 +106,7 @@ test('the recommendation starts the highest-ranked mistake group and returns foc
             kind: 'cube_offer',
             players,
             engine: 'GNUbg',
-            plies: 2,
+            plies: 3,
             position: {
               id: 'position',
               match_uuid: 'match',
@@ -140,7 +140,7 @@ test('the recommendation starts the highest-ranked mistake group and returns foc
           played: 'no double',
           equity_loss: 0.125,
           engine: 'GNUbg',
-          plies: 2,
+          plies: 3,
         },
         evaluation: {
           verdict: 'best',
@@ -149,7 +149,7 @@ test('the recommendation starts the highest-ranked mistake group and returns foc
           chosen_equity: 0.125,
           best_equity: 0.125,
           equity_loss: 0,
-          provenance: { kind: 'recomputed', engine: 'GNUbg', plies: 2 },
+          provenance: { kind: 'recomputed', engine: 'GNUbg', plies: 3 },
         },
       },
     });

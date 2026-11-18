@@ -35,7 +35,7 @@ async function fixture(
   ).items[0];
   const job = await (
     await page.request.post('/api/jobs', {
-      data: { position_id: position.id, kind: 'analysis', plies: 0 },
+      data: { position_id: position.id, kind: 'analysis', plies: 1 },
     })
   ).json();
   await expect
@@ -324,7 +324,7 @@ test('analysis statistics and the move history use shared typography', async ({
   const dialog = await openFullMatchAnalysis(page);
   await dialog
     .getByLabel('Match analysis depth', { exact: true })
-    .selectOption('0');
+    .selectOption('1');
   await submitFullMatchAnalysis(page, dialog);
   await expect(page.locator('.match-analysis-progress')).toContainText(
     'Match analysis complete',

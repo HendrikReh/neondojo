@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
-import { DEFAULT_ANALYSIS_PLIES } from './analysis-depth';
+import {
+  ANALYSIS_PLIES,
+  DEFAULT_ANALYSIS_PLIES,
+  depthLabel,
+  preferredDepth,
+} from './analysis-depth';
 import { useI18n } from './i18n';
 import { loadEngines, type EngineInfo } from './settings-api';
 import { useSettingsText } from './settings-messages';
@@ -52,10 +57,11 @@ export function useMatchAnalysisOptions({
   const supportedPlies = configurationOptions.engine_profiles[
     engineId
   ].analysis.filter((depth) => !engine || engine.plies.includes(depth));
+  const fallbackPlies = preferredDepth(engineId);
   const plies = supportedPlies.includes(requestedPlies)
     ? requestedPlies
-    : supportedPlies.includes(DEFAULT_ANALYSIS_PLIES)
-      ? DEFAULT_ANALYSIS_PLIES
+    : supportedPlies.includes(fallbackPlies)
+      ? fallbackPlies
       : (supportedPlies[0] ?? requestedPlies);
   return {
     engineId,
@@ -126,21 +132,22 @@ export function MatchAnalysisFields({
           disabled={disabled || !analysisConfigured}
           onChange={(event) => onPlies(Number(event.target.value))}
         >
-          <option value={0} disabled={!supportedPlies.includes(0)}>
-            {t('matchAnalysis.fast')}
-          </option>
-          <option value={1} disabled={!supportedPlies.includes(1)}>
-            1-Ply
-          </option>
-          <option value={2} disabled={!supportedPlies.includes(2)}>
-            {t('matchAnalysis.thorough')}
-          </option>
-          <option value={3} disabled={!supportedPlies.includes(3)}>
-            3-ply
-          </option>
-          <option value={4} disabled={!supportedPlies.includes(4)}>
-            4-ply
-          </option>
+          {ANALYSIS_PLIES.map((ply) => {
+            const depth = depthLabel(ply, engineId);
+            return (
+              <option
+                key={ply}
+                value={ply}
+                disabled={!supportedPlies.includes(ply)}
+              >
+                {ply === 1
+                  ? t('matchAnalysis.fast', { depth })
+                  : ply === DEFAULT_ANALYSIS_PLIES
+                    ? t('matchAnalysis.thorough', { depth })
+                    : depth}
+              </option>
+            );
+          })}
         </select>
       </label>
     </>

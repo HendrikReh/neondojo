@@ -84,10 +84,10 @@ async function openMatch(p: Page, locale = 'en') {
   await expect(p.locator('.analysis-workspace .board')).toBeVisible();
   return match;
 }
-test('starts GNUbg 4-ply for the selected game with an Open Sage profile', async ({
+test('starts GNUbg 5-ply for the selected game with an Open Sage profile', async ({
   page,
 }) => {
-  // A real 4-ply game analysis; other specs allow the same three minutes.
+  // A real GNUbg 5-ply (its own 4-ply) game analysis; other specs allow the same three minutes.
   test.setTimeout(240_000);
   await page.setViewportSize({ width: 1800, height: 1169 });
   const config = structuredClone(defaultConfiguration);
@@ -101,7 +101,7 @@ test('starts GNUbg 4-ply for the selected game with an Open Sage profile', async
           name: 'GNUbg',
           available: true,
           version: null,
-          plies: [0, 1, 2, 3, 4],
+          plies: [1, 2, 3, 4, 5],
         },
         {
           id: 'bgsage',
@@ -128,19 +128,19 @@ test('starts GNUbg 4-ply for the selected game with an Open Sage profile', async
       url.pathname === `/api/matches/${match.id}/analysis/estimate` &&
       url.searchParams.get('game_no') === '2' &&
       url.searchParams.get('engine_id') === 'gnubg' &&
-      url.searchParams.get('plies') === '4'
+      url.searchParams.get('plies') === '5'
     );
   });
-  await depth.selectOption('4');
+  await depth.selectOption('5');
   expect(await (await estimateResponse).json()).toMatchObject({
     game_no: 2,
     engine_id: 'gnubg',
-    plies: 4,
+    plies: 5,
   });
   await engine.selectOption('bgsage');
   await expect(depth).toHaveValue('2');
   await engine.selectOption('gnubg');
-  await depth.selectOption('4');
+  await depth.selectOption('5');
   await page.screenshot({ path: '/tmp/bgtutor-analysis-engine-desktop.png' });
   const accepted = page.waitForResponse(
     (response) =>
@@ -154,7 +154,7 @@ test('starts GNUbg 4-ply for the selected game with an Open Sage profile', async
   const job = await response.json();
   expect(job).toMatchObject({
     game_no: 2,
-    plies: 4,
+    plies: 5,
     engine_snapshot: { engine_id: 'gnubg' },
   });
   expect(profile.calls.filter(({ method }) => method !== 'GET')).toEqual([]);
@@ -208,7 +208,7 @@ test('shows benchmark basis before any job and follows game, scope and depth', a
   await expect(estimate(page)).toContainText(
     'Estimated analysis time: approx. 40s',
   );
-  await expect(estimate(page)).toContainText('1,000 checker moves · 2 Ply');
+  await expect(estimate(page)).toContainText('1,000 checker moves · 3 Ply');
   await expect(estimate(page)).toContainText('GNU Backgammon 1.08.003');
   await expect(estimate(page)).toContainText('Nov 10, 2026');
   await expect(estimate(page)).toContainText('Queueing excluded');
@@ -232,11 +232,11 @@ test('shows benchmark basis before any job and follows game, scope and depth', a
     .toBe(false);
   await dialog
     .getByLabel('Match analysis depth', { exact: true })
-    .selectOption('4');
+    .selectOption('5');
   await expect(estimate(page)).toContainText(
     'Estimated analysis time: approx. 40s',
   );
-  await expect(estimate(page)).toContainText('4 Ply');
+  await expect(estimate(page)).toContainText('5 Ply');
   expect(starts).toEqual([]);
   await page.screenshot({
     path: '/tmp/bgtutor-analysis-estimate-desktop.png',
@@ -264,7 +264,7 @@ test('invalidates immediately and ignores late depth responses', async ({
   });
   let held = false;
   await page.route('**/api/matches/*/analysis/estimate?*', async (r) => {
-    if (new URL(r.request().url()).searchParams.get('plies') === '3') {
+    if (new URL(r.request().url()).searchParams.get('plies') === '4') {
       held = true;
       await gate;
       await r
@@ -280,14 +280,14 @@ test('invalidates immediately and ignores late depth responses', async ({
   await expect(estimate(page)).toContainText('approx. 40s');
   await page
     .getByLabel('Match analysis depth', { exact: true })
-    .selectOption('3');
+    .selectOption('4');
   await expect(estimate(page)).toContainText('Estimating duration');
   await expect(estimate(page)).not.toContainText('40s');
   await expect.poll(() => held).toBe(true);
   await page
     .getByLabel('Match analysis depth', { exact: true })
-    .selectOption('4');
-  await expect(estimate(page)).toContainText('4 Ply');
+    .selectOption('5');
+  await expect(estimate(page)).toContainText('5 Ply');
   release();
   await done;
   await page.evaluate(
@@ -296,7 +296,7 @@ test('invalidates immediately and ignores late depth responses', async ({
         requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
       ),
   );
-  await expect(estimate(page)).toContainText('4 Ply');
+  await expect(estimate(page)).toContainText('5 Ply');
   await expect(estimate(page)).not.toContainText('3m');
 });
 for (const reason of [
@@ -441,7 +441,7 @@ async function mountEstimateHarness(page: Page) {
           },
           catalog: catalogFixture(),
           gameNo: 1,
-          defaultPlies: 2,
+          defaultPlies: 3,
           configured: true,
           analysisInstallationKey: installationKey,
         }),
@@ -451,7 +451,7 @@ async function mountEstimateHarness(page: Page) {
             onClick: () =>
               store.updateCurrent((c: typeof config) => ({
                 ...c,
-                analysis: { ...c.analysis, plies: 3 },
+                analysis: { ...c.analysis, plies: 4 },
               })),
           },
           'Unsaved engine edit',
@@ -540,7 +540,7 @@ test('hides pre-start estimate during submission and queued engine work', async 
     game_no: 1,
     kind: 'match',
     status: 'queued',
-    plies: 2,
+    plies: 3,
     progress: 0,
     attempts: 0,
     completed_games: 0,

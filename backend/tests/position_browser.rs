@@ -235,7 +235,7 @@ async fn similar_practice_reveals_the_saved_checker_answer(pool: PgPool) {
     assert_eq!(status, 200, "{answer}");
     assert_eq!(answer["best"], "8/5 6/5");
     assert_eq!(answer["engine"], "Saved GNU Backgammon hint");
-    let match_job = native(&pool, match_id, position, 1, 0.0, "completed").await;
+    let match_job = native(&pool, match_id, position, 2, 0.0, "completed").await;
     sqlx::query("UPDATE move_analyses SET data=data || $1 WHERE job_id=$2")
         .bind(json!({"decision_no":1,"checker_no":1,"player":0,"kind":"checker","played":"8/5 6/5","dice":[3,1]}))
         .bind(match_job)
@@ -249,7 +249,7 @@ async fn similar_practice_reveals_the_saved_checker_answer(pool: PgPool) {
         .unwrap();
     let (status, answer) = call(app.clone(), "POST", &uri, None).await;
     assert_eq!(status, 200, "{answer}");
-    assert_eq!(answer["engine"], "GNU Backgammon 1");
+    assert_eq!(answer["engine"], "GNU Backgammon 2");
     assert_eq!(answer["best"], "8/5 6/5");
     let (status, _) = call(
         app,
@@ -334,7 +334,7 @@ async fn similar_practice_scores_complete_moves_outside_the_hint_list(pool: PgPo
     assert_eq!(status, 200, "{score}");
     assert_eq!(score["best"], "8/5 6/5");
     assert_eq!(score["played"], "8/7 8/5");
-    assert_eq!(score["depth"], "2-ply");
+    assert_eq!(score["depth"], "3-ply");
     let loss = score["equity_loss"].as_f64().unwrap();
     assert!(loss > 0.1);
     assert!(
@@ -841,9 +841,9 @@ async fn native(
 #[ignore = "requires PostgreSQL"]
 async fn native_loss_and_readiness_use_one_latest_completed_full_match(pool: PgPool) {
     let (app, id, positions) = setup(&pool).await;
-    native(&pool, id, &positions[0], 0, 0.5, "completed").await;
-    let authoritative = native(&pool, id, &positions[0], 1, 0.09, "completed").await;
-    native(&pool, id, &positions[0], 2, 0.9, "running").await;
+    native(&pool, id, &positions[0], 1, 0.5, "completed").await;
+    let authoritative = native(&pool, id, &positions[0], 2, 0.09, "completed").await;
+    native(&pool, id, &positions[0], 3, 0.9, "running").await;
     sqlx::query("INSERT INTO jobs(id,position_uuid,kind,plies,status,result) VALUES($1,$2,'analysis',2,'completed',$3)")
         .bind(Uuid::new_v4()).bind(positions[1].id).bind(json!({"engine":"GNU Backgammon hint","plies":2,"candidates":[{"rank":1,"notation":"best","equity":0.2,"probabilities":[]}]})).execute(&pool).await.unwrap();
     let ready = search(app.clone(), json!({"analysis_state":"ready","sort":"loss"})).await;
@@ -956,8 +956,8 @@ async fn filters_are_database_scoped_and_do_not_merge_copied_positions(pool: PgP
 #[ignore = "requires PostgreSQL"]
 async fn loss_pagination_covers_known_losses_and_unknowns_once(pool: PgPool) {
     let (app, id, positions) = setup(&pool).await;
-    native(&pool, id, &positions[0], 1, 0.04, "completed").await;
-    native(&pool, id, &positions[1], 1, 0.16, "completed").await;
+    native(&pool, id, &positions[0], 2, 0.04, "completed").await;
+    native(&pool, id, &positions[1], 2, 0.16, "completed").await;
     let filters = encoded(&definition(json!({"sort":"loss"})));
     let mut after = String::new();
     let mut ids = vec![];
@@ -1056,7 +1056,7 @@ async fn readiness_keeps_stale_explicit_hint_unavailable_without_using_older_ans
     let (app, match_id, positions) = setup(&pool).await;
     for (plies, candidates) in [
         (
-            0,
+            1,
             json!([{"rank":1,"notation":"best","equity":0.1,"probabilities":[]}]),
         ),
         (2, json!([])),
@@ -1094,7 +1094,7 @@ async fn readiness_keeps_stale_explicit_hint_unavailable_without_using_older_ans
 #[ignore = "requires PostgreSQL"]
 async fn an_empty_selected_individual_hint_blocks_match_solution_fallback(pool: PgPool) {
     let (app, id, positions) = setup(&pool).await;
-    native(&pool, id, &positions[0], 1, 0.08, "completed").await;
+    native(&pool, id, &positions[0], 2, 0.08, "completed").await;
     let selected = Uuid::new_v4();
     sqlx::query("INSERT INTO jobs(id,position_uuid,kind,plies,status,result) VALUES($1,$2,'analysis',2,'completed',$3)")
         .bind(selected).bind(positions[0].id)
@@ -1121,8 +1121,8 @@ async fn unavailable_selected_native_decisions_do_not_become_zero_loss_or_fall_b
     pool: PgPool,
 ) {
     let (app, id, positions) = setup(&pool).await;
-    native(&pool, id, &positions[0], 0, 0.08, "completed").await;
-    let unknown = native(&pool, id, &positions[0], 2, 0.0, "completed").await;
+    native(&pool, id, &positions[0], 1, 0.08, "completed").await;
+    let unknown = native(&pool, id, &positions[0], 3, 0.0, "completed").await;
     sqlx::query("UPDATE move_analyses SET data=$2 WHERE job_id=$1").bind(unknown)
         .bind(json!({"best":"","evaluation_status":"unavailable","played_equity":null,"best_equity":null,"equity_loss":0.0}))
         .execute(&pool).await.unwrap();

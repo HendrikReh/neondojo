@@ -22,8 +22,9 @@ pub(crate) fn default_threshold() -> f64 {
 pub(crate) fn default_auto_analysis() -> bool {
     true
 }
+/// Sessions saved before the depth was recorded used GNUbg's native 2-ply.
 pub(crate) fn default_analysis_plies() -> i32 {
-    2
+    3
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -361,7 +362,8 @@ pub(super) async fn analyze_decision(
         session.analysis_plies,
     )?;
     if !matches!(session.phase, PlayPhase::Move) {
-        tokio::fs::write(directory.path().join("cube.py"),format!("import gnubg,json\nv=gnubg.cfevaluate(gnubg.board(),gnubg.cubeinfo(),{{'cubeful':1,'plies':{},'deterministic':1,'noise':0.0,'prune':1}})\njson.dump(list(v[:4]),open('cube.json','w'),allow_nan=False)\n",session.analysis_plies)).await?;
+        let native = crate::engine::gnubg_plies(session.analysis_plies)?;
+        tokio::fs::write(directory.path().join("cube.py"),format!("import gnubg,json\nv=gnubg.cfevaluate(gnubg.board(),gnubg.cubeinfo(),{{'cubeful':1,'plies':{native},'deterministic':1,'noise':0.0,'prune':1}})\njson.dump(list(v[:4]),open('cube.json','w'),allow_nan=False)\n")).await?;
         commands.push_str("load python cube.py\n");
     }
     commands.push_str("hint 10000\n");
@@ -480,7 +482,7 @@ pub(super) async fn analyze_decision(
 mod tests {
     use super::*;
     fn session(mode: PlayMode) -> PlaySession {
-        serde_json::from_value(serde_json::json!({"id":Uuid::new_v4(),"version":0,"human_player":0,"human_name":"Human","match_length":5,"bearoff_direction":"right","engine":{"id":"gnubg","version":"test","plies":0},"position":{"id":Uuid::new_v4(),"match_uuid":Uuid::new_v4(),"ordinal":0,"game_no":1,"ply":0,"player":0,"dice":[3,1],"board":vec![0;26],"position_id":"","gnubg_match_id":"","notation":""},"phase":"move","can_double":false,"legal_moves":[],"history":[],"scores":[0,0],"game_no":1,"winner":null,"play_mode":mode})).unwrap()
+        serde_json::from_value(serde_json::json!({"id":Uuid::new_v4(),"version":0,"human_player":0,"human_name":"Human","match_length":5,"bearoff_direction":"right","engine":{"id":"gnubg","version":"test","plies":1},"position":{"id":Uuid::new_v4(),"match_uuid":Uuid::new_v4(),"ordinal":0,"game_no":1,"ply":0,"player":0,"dice":[3,1],"board":vec![0;26],"position_id":"","gnubg_match_id":"","notation":""},"phase":"move","can_double":false,"legal_moves":[],"history":[],"scores":[0,0],"game_no":1,"winner":null,"play_mode":mode})).unwrap()
     }
     fn alternatives() -> Vec<PlayAlternative> {
         vec![
@@ -506,10 +508,10 @@ mod tests {
     }
     #[tokio::test]
     #[ignore = "requires native GNUbg"]
-    async fn feedback_evaluates_every_legal_move_at_two_plies() {
+    async fn feedback_evaluates_every_legal_move_at_three_plies() {
         let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()));
         let mut state = session(PlayMode::Training);
-        state.analysis_plies = 2;
+        state.analysis_plies = 3;
         state.engine.version = engine.version().await.unwrap();
         state.position.position_id = "4HPwATDgc/ABMA".into();
         state.position.gnubg_match_id = "cInlAAAAAAAE".into();
@@ -525,17 +527,17 @@ mod tests {
             .collect();
         let alternatives = analyze_decision(&state, engine.binary()).await.unwrap();
         assert_eq!(alternatives.len(), state.legal_moves.len());
-        // Each alternative is independently evaluated by a native 2-ply hint
+        // Each alternative is independently evaluated by a GNUbg-native 2-ply hint
         // whose filter retains all plays; no 0-ply tail may enter the ranking.
         assert!(alternatives.len() > 5);
     }
     #[tokio::test]
     #[ignore = "requires native GNUbg"]
-    async fn forced_single_checker_play_keeps_zero_native_denominator_at_two_plies() {
+    async fn forced_single_checker_play_keeps_zero_native_denominator_at_three_plies() {
         let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()));
         let mut state = session(PlayMode::Coach);
         state.engine.version = engine.version().await.unwrap();
-        state.analysis_plies = 2;
+        state.analysis_plies = 3;
         state.position.position_id = "4P8PAAABAAAAAA".into();
         state.position.gnubg_match_id = "MAGnADAAAAAE".into();
         state.legal_moves = vec![PlayMove {
@@ -549,11 +551,11 @@ mod tests {
     }
     #[tokio::test]
     #[ignore = "requires native GNUbg"]
-    async fn original_cube_relevance_and_loss_match_native_game_statistics_at_zero_and_two_plies() {
+    async fn original_cube_relevance_and_loss_match_native_game_statistics_at_one_and_three_plies() {
         let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()));
         let source = "(;GM[6]MI[length:7];AE[a:y]AW[f]AB[s]PL[W];W[21fddc])";
         let imported = crate::import::parse_sgf(source).unwrap();
-        for depth in [0, 2] {
+        for depth in [1, 3] {
             let mut state = session(PlayMode::Training);
             state.phase = PlayPhase::Roll;
             state.can_double = true;

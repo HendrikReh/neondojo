@@ -43,21 +43,21 @@ it('shows the ranked candidates from the selected game analysis', () => {
         notation: '24/18 13/10',
         equity: 0.2,
         probabilities: [0.6, 0.2, 0, 0.4, 0.1, 0],
-        plies: 2,
+        plies: 3,
       },
       {
         rank: 2,
         notation: '24/15',
         equity: 0.1,
         probabilities: [0.55, 0.2, 0, 0.45, 0.1, 0],
-        plies: 0,
+        plies: 1,
       },
       {
         rank: 3,
         notation: '13/7 6/3',
         equity: -0.1,
         probabilities: [0.45, 0.1, 0, 0.55, 0.1, 0],
-        plies: 2,
+        plies: 3,
       },
     ],
   };
@@ -65,14 +65,14 @@ it('shows the ranked candidates from the selected game analysis', () => {
     analysis_id: 'job:game',
     position_id: 'opening',
     engine: 'GNU Backgammon',
-    depth: '2-ply',
+    depth: '3-ply',
     records: [],
     decision,
   };
   const html = render(result);
   expect(html).toContain('candidate-comparison-table');
   expect(html).toContain('24/15');
-  expect(html).toContain('0-ply');
+  expect(html).toContain('1-ply');
   expect(html).toContain('data-candidate-played="true"');
 
   const { checker_candidates: _, ...legacy } = decision;

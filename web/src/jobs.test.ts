@@ -7,7 +7,7 @@ const running: Job = {
   completed_games: 0,
   total_games: 0,
   kind: 'analysis',
-  plies: 0,
+  plies: 1,
   status: 'running',
   progress: 20,
   attempts: 1,

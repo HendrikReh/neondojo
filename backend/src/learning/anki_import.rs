@@ -140,7 +140,9 @@ pub(super) fn read_package(bytes: &[u8]) -> anyhow::Result<Vec<(CardContent, BTr
                     content
                         .solution
                         .plies
-                        .is_some_and(|plies| (0..=4).contains(&plies))
+                        // Decks exported before migration 0079 may carry
+                        // GNUbg's native 0-ply; current depths are 1..5.
+                        .is_some_and(|plies| (0..=5).contains(&plies))
                 }
                 && !content.solution.engine.trim().is_empty(),
             "Invalid decision metadata"

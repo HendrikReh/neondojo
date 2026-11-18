@@ -20,8 +20,8 @@ test('native sessions retain their snapshot across complete profile activation',
   let state = await read();
   const configuration = structuredClone(state.current_configuration);
   configuration.opening_book.provider = 'off';
-  configuration.analysis.plies = 0;
-  configuration.play.plies = 0;
+  configuration.analysis.plies = 1;
+  configuration.play.plies = 1;
   configuration.play.default_mode = 'coach';
   configuration.appearance.bearoff_direction = 'right';
   configuration.appearance.board_theme = 'forest';
@@ -52,11 +52,11 @@ test('native sessions retain their snapshot across complete profile activation',
   });
   expect(startedA.ok(), await startedA.text()).toBe(true);
   const sessionA = await startedA.json();
-  expect(sessionA.engine.plies).toBe(0);
+  expect(sessionA.engine.plies).toBe(1);
   expect(sessionA.play_mode).toBe('coach');
   expect(sessionA.bearoff_direction).toBe('right');
   const changed = structuredClone(state.current_configuration);
-  changed.play.plies = 1;
+  changed.play.plies = 2;
   changed.play.default_mode = 'training';
   changed.play.tutor_threshold = 0.1;
   changed.appearance.bearoff_direction = 'left';
@@ -87,7 +87,7 @@ test('native sessions retain their snapshot across complete profile activation',
   });
   expect(startedB.ok(), await startedB.text()).toBe(true);
   const sessionB = await startedB.json();
-  expect(sessionB.engine.plies).toBe(1);
+  expect(sessionB.engine.plies).toBe(2);
   expect(sessionB.play_mode).toBe('training');
   expect(sessionB.bearoff_direction).toBe('left');
   const activatedA = await request.post(
@@ -104,7 +104,7 @@ test('native sessions retain their snapshot across complete profile activation',
   );
   expect(activatedA.ok(), await activatedA.text()).toBe(true);
   state = await activatedA.json();
-  expect(state.current_configuration.play.plies).toBe(0);
+  expect(state.current_configuration.play.plies).toBe(1);
   expect(state.dirty).toBe(false);
   const stillB = await (
     await request.get(`/api/play/sessions/${sessionB.id}`)
@@ -122,7 +122,7 @@ test('native sessions retain their snapshot across complete profile activation',
   // independently captured native sessions retain their engine snapshots.
   state = await read();
   const modified = structuredClone(state.current_configuration);
-  modified.play.plies = 2;
+  modified.play.plies = 3;
   modified.appearance.board_theme = 'walnut';
   const applied = await request.put('/api/configuration', {
     data: { expected_revision: state.revision, configuration: modified },
@@ -147,7 +147,7 @@ test('native sessions retain their snapshot across complete profile activation',
     .click();
   await expect(changes.locator('tbody tr')).toHaveCount(1);
   state = await read();
-  expect(state.current_configuration.play.plies).toBe(0);
+  expect(state.current_configuration.play.plies).toBe(1);
   expect(state.current_configuration.appearance.board_theme).toBe('walnut');
   expect(state.active_profile).toEqual(profileA);
   expect(
@@ -163,7 +163,7 @@ test('native sessions retain their snapshot across complete profile activation',
       name: new RegExp(`Profile: Native A ${suffix}`),
     }),
   ).toContainText('modified');
-  expect((await read()).current_configuration.play.plies).toBe(0);
+  expect((await read()).current_configuration.play.plies).toBe(1);
   await page
     .getByRole('button', { name: new RegExp(`Profile: Native A ${suffix}`) })
     .click();

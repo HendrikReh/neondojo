@@ -34,7 +34,7 @@ async function openMatch(
   const analyzed = await page.request.post(
     `/api/matches/${imported.match.id}/analysis`,
     {
-      data: { engine_id: 'gnubg', plies: 0 },
+      data: { engine_id: 'gnubg', plies: 1 },
     },
   );
   expect(analyzed.status()).toBe(202);
@@ -66,8 +66,8 @@ async function openMatch(
           equity_loss: [0, 0.045, 0.092, 0.188][index],
           source: 'native',
           engine: 'Reference GNUbg',
-          depth: '2-ply',
-          depth_plies: 2,
+          depth: '3-ply',
+          depth_plies: 3,
           job_id: null,
         })),
       },
@@ -133,7 +133,7 @@ for (const theme of ['graphite', 'club', 'paper'])
       const assessedRow = rows.nth(2);
       await assessedRow.focus();
       const tooltip = page.getByRole('tooltip');
-      const assessment = /Reference GNUbg.*2-ply/;
+      const assessment = /Reference GNUbg.*3-ply/;
       await expect(tooltip).toBeVisible();
       await expect(tooltip).toContainText(assessment);
       await expect(assessedRow).toHaveAccessibleDescription(assessment);

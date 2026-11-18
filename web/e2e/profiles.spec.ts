@@ -8,7 +8,7 @@ test('leads with the active profile and compares the selected profile before sav
 }, info) => {
   const backend = await profileBackend(page);
   const current = structuredClone(backend.state.current_configuration);
-  current.analysis.plies = 3;
+  current.analysis.plies = 4;
   current.library.column_widths = { comment: 340 };
   current.library.filters.q = 'VeryLongSearchValue'.repeat(12);
   backend.updateRemote(current);
@@ -92,7 +92,7 @@ test('leads with the active profile and compares the selected profile before sav
     .getByRole('button', { name: 'Save in profile', exact: true })
     .click();
   await expect(active).toContainText('Changes from saved profile · 0');
-  expect(backend.profiles[0].configuration.analysis.plies).toBe(3);
+  expect(backend.profiles[0].configuration.analysis.plies).toBe(4);
 });
 
 test('profile timestamps follow App language independently of browser locale', async ({

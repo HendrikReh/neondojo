@@ -34,7 +34,7 @@ test('imported candidates come first and position progress stays in the workspac
   await expect(importedEngine).toHaveText('GNU Backgammon 1.05.002', {
     timeout: 30_000,
   });
-  await expect(importedEngine).toHaveAttribute('aria-description', /0-ply/);
+  await expect(importedEngine).toHaveAttribute('aria-description', /1-ply/);
   await expect(panel.getByLabel('Search depth', { exact: true })).toBeHidden();
   await expect(
     page.getByLabel('Displayed analysis', { exact: true }),
@@ -100,7 +100,7 @@ test('imported candidates come first and position progress stays in the workspac
 
   await recalculate.click();
   expect(submitted).toBe(0);
-  await dialog.getByLabel('Search depth', { exact: true }).selectOption('1');
+  await dialog.getByLabel('Search depth', { exact: true }).selectOption('2');
   await dialog
     .getByRole('button', { name: 'Analyze position', exact: true })
     .click();
@@ -108,7 +108,7 @@ test('imported candidates come first and position progress stays in the workspac
   await expect(
     header.getByRole('progressbar', { name: 'Analysis progress' }),
   ).toHaveAttribute('value', '25');
-  await expect(importedEngine).toHaveAttribute('aria-description', /0-ply/);
+  await expect(importedEngine).toHaveAttribute('aria-description', /1-ply/);
   await page.getByRole('tab', { name: 'Notes', exact: true }).click();
   await page.getByRole('button', { name: 'Next move', exact: true }).click();
   await expect(
@@ -142,10 +142,10 @@ test('the previous engine result survives a pending rerun and position restorati
       .getByRole('button', { name: 'Analyze position', exact: true })
       .click();
   await open();
-  await dialog.getByLabel('Search depth', { exact: true }).selectOption('0');
+  await dialog.getByLabel('Search depth', { exact: true }).selectOption('1');
   await start();
   await expect(result).toHaveText(/^GNU Backgammon [\d.]+$/);
-  await expect(result).toHaveAttribute('aria-description', /0-ply/);
+  await expect(result).toHaveAttribute('aria-description', /1-ply/);
   let nextJob: Record<string, unknown>;
   await page.route('**/api/jobs', async (route) => {
     if (route.request().method() !== 'POST') return route.continue();
@@ -173,16 +173,16 @@ test('the previous engine result survives a pending rerun and position restorati
     route.fulfill({ contentType: 'text/event-stream', body: '' }),
   );
   await open();
-  await dialog.getByLabel('Search depth', { exact: true }).selectOption('1');
+  await dialog.getByLabel('Search depth', { exact: true }).selectOption('2');
   await start();
   const progress = page
     .locator('.analysis-commandbar')
     .getByRole('progressbar', { name: 'Analysis progress' });
   await expect(progress).toHaveAttribute('value', '20');
-  await expect(result).toHaveAttribute('aria-description', /0-ply/);
+  await expect(result).toHaveAttribute('aria-description', /1-ply/);
   await page.reload();
   await expect(progress).toHaveAttribute('value', '20');
-  await expect(result).toHaveAttribute('aria-description', /0-ply/);
+  await expect(result).toHaveAttribute('aria-description', /1-ply/);
 });
 
 test('only the header starts the selected game and the library starts the entire match', async ({
@@ -251,7 +251,7 @@ test('reload resumes native bulk match analysis without submitting new jobs', as
   });
   expect(created.ok(), await created.text()).toBe(true);
   const origin = await created.json();
-  const plies = 2;
+  const plies = 3;
   const matchIds: string[] = [];
   const fixtures = [
     {
@@ -429,7 +429,7 @@ test('automatically opens match statistics with the engine that produced them', 
   await expect(selection).toHaveValue('');
   const matchId = await page.locator('.analysis-heading').getAttribute('data-match-id');
   const gameResponse = await page.request.post(`/api/matches/${matchId}/analysis`, {
-    data: { engine_id: 'gnubg', plies: 0, game_no: 1 },
+    data: { engine_id: 'gnubg', plies: 1, game_no: 1 },
   });
   expect(gameResponse.ok()).toBe(true);
   const gameJob = await gameResponse.json();
@@ -440,7 +440,7 @@ test('automatically opens match statistics with the engine that produced them', 
   const engine = dialog.getByLabel('Analysis engine', { exact: true });
   await expect(engine).toHaveValue('bgsage');
   await engine.selectOption('gnubg');
-  await dialog.getByLabel('Match analysis depth', { exact: true }).selectOption('0');
+  await dialog.getByLabel('Match analysis depth', { exact: true }).selectOption('1');
   const [response] = await Promise.all([
     page.waitForResponse((response) =>
       response.request().method() === 'POST' &&

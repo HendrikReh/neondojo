@@ -25,9 +25,9 @@ const initialSettings = {
   version: 3,
   player_name: 'Settings Player',
   analysis_engine: 'gnubg',
-  analysis_plies: 0,
+  analysis_plies: 1,
   play_engine: 'gnubg',
-  play_plies: 1,
+  play_plies: 2,
   gnubg_path: '/opt/bin/gnubg',
 };
 
@@ -81,7 +81,7 @@ async function settingsBackend(
           available: true,
           version: 'GNUbg 1.08',
           max_parallel_threads: 7,
-          plies: [0, 1, 2, 3, 4],
+          plies: [1, 2, 3, 4, 5],
         },
         {
           id: 'bgsage',
@@ -564,7 +564,7 @@ test('real artwork previews, independent profiles and settings persist only afte
   await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
   await dialog
     .getByLabel('Default analysis profile', { exact: true })
-    .selectOption('2');
+    .selectOption('3');
   await expect(
     dialog
       .getByLabel('Analysis engine', { exact: true })
@@ -573,7 +573,7 @@ test('real artwork previews, independent profiles and settings persist only afte
   await dialog.getByRole('button', { name: 'Playing', exact: true }).click();
   await expect(
     dialog.getByLabel('Strength for future games', { exact: true }),
-  ).toHaveValue('1');
+  ).toHaveValue('2');
   await dialog.getByRole('button', { name: 'Board', exact: true }).click();
   const archive = themes.find(({ id }) => id.startsWith('bgblitz:'));
   if (archive) {
@@ -599,8 +599,8 @@ test('real artwork previews, independent profiles and settings persist only afte
   expect(backend.writes).toHaveLength(1);
   expect(backend.writes[0]).toMatchObject({
     version: 3,
-    analysis_plies: 2,
-    play_plies: 1,
+    analysis_plies: 3,
+    play_plies: 2,
   });
   await openSettings(page);
   await page
@@ -609,7 +609,7 @@ test('real artwork previews, independent profiles and settings persist only afte
     .click();
   await expect(
     page.getByLabel('Default analysis profile', { exact: true }),
-  ).toHaveValue('2');
+  ).toHaveValue('3');
 });
 
 test('installation failures and save conflicts retain drafts and do not apply preferences', async ({
@@ -699,13 +699,13 @@ test('load errors offer retry and the mobile dialog has reachable actions', asyn
   ).toBe(true);
 });
 
-for (const plies of [3, 4]) {
-  test(`two-ply defaults and ${plies}-ply selections persist through settings and submit real analysis`, async ({
+for (const plies of [4, 5]) {
+  test(`GNUbg 3-ply defaults and ${plies}-ply selections persist through settings and submit real analysis`, async ({
     page,
   }) => {
     test.setTimeout(300000);
     page.setDefaultTimeout(10000);
-    const backend = await settingsBackend(page, 2);
+    const backend = await settingsBackend(page, 3);
     await page.goto('/');
     await page.getByLabel('Match file', { exact: true }).setInputFiles({
       name: 'depth.sgf',
@@ -718,18 +718,18 @@ for (const plies of [3, 4]) {
     const initialPositionCalculation = await openPositionCalculation(page);
     await expect(
       initialPositionCalculation.getByLabel('Search depth', { exact: true }),
-    ).toHaveValue('2');
+    ).toHaveValue('3');
     await page.keyboard.press('Escape');
     await openMatchAnalysisOptions(page);
     await expect(
       page.getByLabel('Match analysis depth', { exact: true }),
-    ).toHaveValue('2');
+    ).toHaveValue('3');
     const { dialog } = await openSettings(page);
     await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
     const profile = dialog.getByLabel('Default analysis profile', {
       exact: true,
     });
-    await expect(profile).toHaveValue('2');
+    await expect(profile).toHaveValue('3');
     await profile.selectOption(String(plies));
     await applyAndCloseSettings(dialog);
     expect(backend.writes.at(-1)?.analysis_plies).toBe(plies);
@@ -763,7 +763,7 @@ for (const plies of [3, 4]) {
     await expect(
       page.locator('.analysis-panel .candidates tbody tr').first(),
     ).toBeVisible();
-    if (plies === 4) {
+    if (plies === 5) {
       for (const scope of ['dice', 'game', 'match']) {
         const submitted = page.waitForResponse(
           (response) =>
@@ -787,7 +787,7 @@ for (const plies of [3, 4]) {
         const response = await submitted;
         expect(response.status()).toBe(202);
         const request = response.request().postDataJSON();
-        expect(request.plies).toBe(4);
+        expect(request.plies).toBe(5);
         if (scope === 'dice') expect(request.kind).toBe('dice');
         else expect(request.game_no).toBe(scope === 'game' ? 1 : undefined);
         const job = await response.json();
@@ -802,7 +802,7 @@ for (const plies of [3, 4]) {
         const completed = await (
           await page.request.get(`/api/jobs/${job.id}`)
         ).json();
-        expect(completed.result.plies).toBe(4);
+        expect(completed.result.plies).toBe(5);
         if (scope === 'dice') expect(completed.result.rolls).toHaveLength(21);
         else expect(completed.completed_games).toBe(1);
       }

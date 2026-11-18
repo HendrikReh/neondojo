@@ -32,7 +32,7 @@ async function createDeck(page: Page, checkerOnlyAtScore?: number) {
   );
   const job = await json<Schema['Job']>(
     await page.request.post(`/api/matches/${imported.match.id}/analysis`, {
-      data: { plies: 0, engine_id: 'gnubg' },
+      data: { plies: 1, engine_id: 'gnubg' },
     }),
   );
   await expect

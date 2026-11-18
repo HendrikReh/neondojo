@@ -28,10 +28,12 @@ pub struct AppSettings {
     pub version: i64,
     pub player_name: String,
     pub analysis_engine: String,
-    #[schema(minimum = 0, maximum = 4, default = 2)]
+    /// Depth in BG Tutor's ply convention; 1-ply is the raw evaluation.
+    #[schema(minimum = 1, maximum = 5, default = 3)]
     pub analysis_plies: i32,
     pub play_engine: String,
-    #[schema(minimum = 0, maximum = 2)]
+    /// Depth in BG Tutor's ply convention; 1-ply is the raw evaluation.
+    #[schema(minimum = 1, maximum = 3, default = 1)]
     pub play_plies: i32,
     pub gnubg_path: String,
     /// Host-local override for analyses and engine duels. Null uses one GNUbg calculation thread. Omit on PUT to keep the saved value.
@@ -250,7 +252,10 @@ pub(crate) async fn snapshot_for_practice(
     state: &AppState,
 ) -> anyhow::Result<(i32, EngineSnapshot)> {
     let settings = load(state).await?;
-    let plies = settings.analysis_plies.min(2);
+    // Practice answers stay quick: at most GNUbg 3-ply (its native 2-ply) or
+    // Open Sage 2-ply.
+    let cap = if settings.analysis_engine == "gnubg" { 3 } else { 2 };
+    let plies = settings.analysis_plies.min(cap);
     Ok((
         plies,
         analysis_snapshot(state, &settings, None, plies).await?,
@@ -570,7 +575,7 @@ async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo
             available: version.is_some(),
             version,
             fork: None,
-            plies: vec![0, 1, 2, 3, 4],
+            plies: crate::configuration::engine_depths("gnubg", "analysis"),
             max_parallel_threads: gnubg_parallel_limit,
         },
         EngineInfo {

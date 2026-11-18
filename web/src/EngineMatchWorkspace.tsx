@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { depthLabel } from './analysis-depth';
 import { formatBenchmarkDuration } from './benchmark-duration';
 import EngineLabel from './EngineLabel';
 import options from '../../shared/configuration-options.json' with { type: 'json' };
@@ -39,8 +40,8 @@ type SeriesDraft = {
 };
 
 const initialDraft: SeriesDraft = {
-  a: { engine_id: 'gnubg', plies: 1 },
-  b: { engine_id: 'gnubg', plies: 0 },
+  a: { engine_id: 'gnubg', plies: 2 },
+  b: { engine_id: 'gnubg', plies: 1 },
   format: 'match',
   mode: 'paired',
   length: '5',
@@ -151,7 +152,7 @@ function EngineChoice({
           )}
           {depths.map((depth) => (
             <option value={depth} key={depth}>
-              {number(depth)}-ply
+              {depthLabel(depth, value.engine_id)}
             </option>
           ))}
         </select>

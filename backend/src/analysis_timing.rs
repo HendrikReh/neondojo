@@ -318,7 +318,7 @@ mod tests {
         )
         .await
         .unwrap();
-        let job = store::create_match_job(&pool, imported.r#match.id, 0, 1)
+        let job = store::create_match_job(&pool, imported.r#match.id, 1, 1)
             .await
             .unwrap();
         let token = Uuid::new_v4();

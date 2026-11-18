@@ -5574,8 +5574,8 @@
                 "null"
               ],
               "format": "int32",
-              "maximum": 4,
-              "minimum": 0
+              "maximum": 5,
+              "minimum": 1
             }
           },
           {
@@ -12057,9 +12057,10 @@
           "analysis_plies": {
             "type": "integer",
             "format": "int32",
-            "default": 2,
-            "maximum": 4,
-            "minimum": 0
+            "description": "Depth in BG Tutor's ply convention; 1-ply is the raw evaluation.",
+            "default": 3,
+            "maximum": 5,
+            "minimum": 1
           },
           "bearoff_direction": {
             "type": "string"
@@ -12122,8 +12123,10 @@
           "play_plies": {
             "type": "integer",
             "format": "int32",
-            "maximum": 2,
-            "minimum": 0
+            "description": "Depth in BG Tutor's ply convention; 1-ply is the raw evaluation.",
+            "default": 1,
+            "maximum": 3,
+            "minimum": 1
           },
           "player_name": {
             "type": "string"
@@ -13114,7 +13117,7 @@
               "null"
             ],
             "format": "int32",
-            "description": "Depth actually used for this candidate, when recorded by the engine."
+            "description": "Depth actually used for this candidate, when recorded by the engine,\nin BG Tutor's ply convention (1-ply is the raw evaluation)."
           },
           "probabilities": {
             "type": "array",
@@ -16843,8 +16846,9 @@
           "plies": {
             "type": "integer",
             "format": "int32",
-            "maximum": 4,
-            "minimum": 0
+            "description": "Depth in BG Tutor's ply convention; 1-ply is the raw evaluation.",
+            "maximum": 5,
+            "minimum": 1
           },
           "position_uuid": {
             "type": [
@@ -17034,8 +17038,8 @@
             ],
             "format": "int32",
             "description": "Verified search depth of the selected engine. Omitted uses saved analysis depth.",
-            "maximum": 4,
-            "minimum": 0
+            "maximum": 5,
+            "minimum": 1
           },
           "position_id": {
             "type": "string",
@@ -17404,8 +17408,8 @@
             ],
             "format": "int32",
             "description": "Verified checker and cube depth of the selected engine. Omitted uses saved analysis depth.",
-            "maximum": 4,
-            "minimum": 0
+            "maximum": 5,
+            "minimum": 1
           }
         }
       },

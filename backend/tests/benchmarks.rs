@@ -86,7 +86,15 @@ async fn play_latency_migration_preserves_existing_analysis_history(pool: PgPool
     all.run(&pool).await.unwrap();
     let after: Vec<Value> = sqlx::query_scalar("SELECT to_jsonb(r) - 'play_reference' - 'completed_turns' - 'average_turn_ms' - 'engine_snapshot' - 'startup_elapsed_ms' FROM benchmark_runs r ORDER BY queue_no")
         .fetch_all(&pool).await.unwrap();
-    assert_eq!(after, before);
+    // Migration 0079 moves GNUbg's native 2-ply to the shared 3-ply.
+    let expected: Vec<Value> = before
+        .into_iter()
+        .map(|mut run| {
+            run["plies"] = json!(run["plies"].as_i64().unwrap() + 1);
+            run
+        })
+        .collect();
+    assert_eq!(after, expected);
     let app = api::router(AppState::new(pool, engine()));
     let (status, history) = call(app, "GET", "/api/benchmarks", Value::Null).await;
     assert_eq!(status, 200, "{history}");
@@ -176,7 +184,7 @@ async fn reference_and_openapi_describe_the_fixed_workload(pool: PgPool) {
 #[ignore = "requires PostgreSQL and GNUbg"]
 async fn runs_are_append_only_snapshots_and_cancellation_survives_reload(pool: PgPool) {
     let app = api::router(AppState::new(pool.clone(), engine()));
-    let body = json!({"engine_id":"gnubg","plies":[0,2]});
+    let body = json!({"engine_id":"gnubg","plies":[1,3]});
     let (status, first) = call(app.clone(), "POST", "/api/benchmarks", body.clone()).await;
     assert_eq!(status, 202, "{first}");
     assert_eq!(first.as_array().unwrap().len(), 2);
@@ -225,11 +233,11 @@ async fn rejects_invalid_depths_and_unavailable_engines_without_partial_runs(poo
     let app = api::router(AppState::new(pool, Engine::new("/missing/gnubg".into())));
     for body in [
         json!({"engine_id":"gnubg","plies":[]}),
-        json!({"engine_id":"gnubg","plies":[0,0]}),
+        json!({"engine_id":"gnubg","plies":[1,1]}),
         json!({"engine_id":"gnubg","plies":[-1]}),
-        json!({"engine_id":"gnubg","plies":[5]}),
+        json!({"engine_id":"gnubg","plies":[6]}),
         json!({"engine_id":"bgsage","plies":[0]}),
-        json!({"engine_id":"gnubg","plies":[0]}),
+        json!({"engine_id":"gnubg","plies":[1]}),
         json!({}),
     ] {
         let (status, result) = call(app.clone(), "POST", "/api/benchmarks", body).await;
@@ -248,7 +256,7 @@ async fn native_zero_ply_run_completes_all_games_and_moves(pool: PgPool) {
         app.clone(),
         "POST",
         "/api/benchmarks",
-        json!({"engine_id":"gnubg","plies":[0]}),
+        json!({"engine_id":"gnubg","plies":[1]}),
     )
     .await;
     assert_eq!(status, 202, "{runs}");
@@ -281,7 +289,7 @@ async fn interrupted_runs_do_not_resume_and_queued_runs_keep_their_snapshots(poo
         app.clone(),
         "POST",
         "/api/benchmarks",
-        json!({"engine_id":"gnubg","plies":[0,1]}),
+        json!({"engine_id":"gnubg","plies":[1,2]}),
     )
     .await;
     let id = uuid::Uuid::parse_str(runs[0]["id"].as_str().unwrap()).unwrap();
@@ -321,7 +329,7 @@ async fn changed_engine_fails_without_a_partial_timing(pool: PgPool) {
         app.clone(),
         "POST",
         "/api/benchmarks",
-        json!({"engine_id":"gnubg","plies":[0]}),
+        json!({"engine_id":"gnubg","plies":[1]}),
     )
     .await;
     assert_eq!(status, 202);
@@ -396,9 +404,9 @@ os.execv(real,[real]+sys.argv[1:])
             "/api/benchmarks"
         },
         if play {
-            json!({"engine_id":"gnubg","plies":0})
+            json!({"engine_id":"gnubg","plies":1})
         } else {
-            json!({"engine_id":"gnubg","plies":[0]})
+            json!({"engine_id":"gnubg","plies":[1]})
         },
     )
     .await;
@@ -433,7 +441,7 @@ os.execv(real,[real]+sys.argv[1:])
         app.clone(),
         "POST",
         "/api/benchmarks",
-        json!({"engine_id":"gnubg","plies":[0]}),
+        json!({"engine_id":"gnubg","plies":[1]}),
     )
     .await;
     assert_eq!(busy, 409);
@@ -481,7 +489,7 @@ async fn expired_worker_is_failed_without_resuming_or_publishing_partial_times(p
         app.clone(),
         "POST",
         "/api/benchmarks",
-        json!({"engine_id":"gnubg","plies":[0]}),
+        json!({"engine_id":"gnubg","plies":[1]}),
     )
     .await;
     assert_eq!(status, 202);

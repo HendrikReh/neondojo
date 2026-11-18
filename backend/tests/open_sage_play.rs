@@ -102,9 +102,9 @@ async fn sage_full_game_both_colors_restores_pinned_engines_and_has_no_gnubg_pr(
         // Settings changes affect future sessions only, including review engine.
         let (_, mut settings) = call(app.clone(), "GET", "/api/settings", Value::Null).await;
         settings["play_engine"] = json!("gnubg");
-        settings["play_plies"] = json!(0);
+        settings["play_plies"] = json!(1);
         settings["analysis_engine"] = json!("gnubg");
-        settings["analysis_plies"] = json!(0);
+        settings["analysis_plies"] = json!(1);
         assert_eq!(
             call(app.clone(), "PUT", "/api/settings", settings).await.0,
             200
@@ -309,9 +309,9 @@ async fn bot_and_hint_engines_are_independent_in_both_directions(pool: PgPool) {
     for (bot, analysis) in [("bgsage", "gnubg"), ("gnubg", "bgsage")] {
         let (_, mut settings) = call(app.clone(), "GET", "/api/settings", Value::Null).await;
         settings["play_engine"] = json!(bot);
-        settings["play_plies"] = json!(if bot == "bgsage" { 2 } else { 0 });
+        settings["play_plies"] = json!(if bot == "bgsage" { 2 } else { 1 });
         settings["analysis_engine"] = json!(analysis);
-        settings["analysis_plies"] = json!(if analysis == "bgsage" { 2 } else { 0 });
+        settings["analysis_plies"] = json!(if analysis == "bgsage" { 2 } else { 1 });
         assert_eq!(
             call(app.clone(), "PUT", "/api/settings", settings).await.0,
             200

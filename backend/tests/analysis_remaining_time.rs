@@ -22,7 +22,7 @@ async fn setup(pool: &PgPool) -> (axum::Router, Uuid) {
     )
     .await
     .unwrap();
-    let job = store::create_match_job(pool, imported.r#match.id, 0, 1)
+    let job = store::create_match_job(pool, imported.r#match.id, 1, 1)
         .await
         .unwrap();
     (
@@ -228,7 +228,7 @@ async fn timing_calibration_uses_saved_job_installation_and_plies(pool: PgPool) 
                 .method("POST")
                 .uri("/api/benchmarks")
                 .header("content-type", "application/json")
-                .body(Body::from(r#"{"engine_id":"gnubg","plies":[0]}"#))
+                .body(Body::from(r#"{"engine_id":"gnubg","plies":[1]}"#))
                 .unwrap(),
         )
         .await
@@ -252,7 +252,7 @@ async fn timing_calibration_uses_saved_job_installation_and_plies(pool: PgPool) 
         engine_version: Some(run["engine_version"].as_str().unwrap().into()),
     };
     let job =
-        store::create_match_job_scoped_with_snapshot(&pool, match_id, 0, 1, None, Some(&snapshot))
+        store::create_match_job_scoped_with_snapshot(&pool, match_id, 1, 1, None, Some(&snapshot))
             .await
             .unwrap();
     // The worker and GET must never derive a running job's basis from current settings.

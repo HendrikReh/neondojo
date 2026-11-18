@@ -66,7 +66,7 @@ test('independent native engines, immutable sessions and desktop settings', asyn
   ).json();
   const sage = engines.find((engine) => engine.id === 'bgsage');
   expect(sage?.available).toBe(true);
-  for (const plies of [0, 1, 2, 3, 4]) {
+  for (const plies of [1, 2, 3, 4, 5]) {
     await expect(
       dialog
         .getByLabel('Default analysis profile', { exact: true })
@@ -98,7 +98,7 @@ test('independent native engines, immutable sessions and desktop settings', asyn
   expect(first.engine_snapshots.analysis.engine_id).toBe('bgsage');
   const state = await (await page.request.get('/api/configuration')).json();
   state.current_configuration.analysis.engine = 'gnubg';
-  state.current_configuration.analysis.plies = 0;
+  state.current_configuration.analysis.plies = 1;
   state.current_configuration.play.engine = 'bgsage';
   state.current_configuration.play.plies = 2;
   const changed = await page.request.put('/api/configuration', {
@@ -202,9 +202,9 @@ test.afterEach(async ({ request }) => {
   const state = await (await request.get('/api/configuration')).json();
   if (!state.current_configuration) return;
   state.current_configuration.analysis.engine = 'gnubg';
-  state.current_configuration.analysis.plies = 2;
+  state.current_configuration.analysis.plies = 3;
   state.current_configuration.play.engine = 'gnubg';
-  state.current_configuration.play.plies = 0;
+  state.current_configuration.play.plies = 1;
   const response = await request.put('/api/configuration', {
     data: {
       expected_revision: state.revision,

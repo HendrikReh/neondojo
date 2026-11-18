@@ -53,8 +53,8 @@ async fn position(pool: &PgPool, name: &str, dice_move: &str, score: i32) -> Pos
 }
 
 async fn analyze(pool: &PgPool, position: Uuid) {
-    let result = json!({"engine":"Native test analysis","plies":0,"candidates":[{"rank":1,"notation":"13/10 6/5","equity":0.123,"probabilities":[0.6,0.1,0.01,0.4,0.05,0.005]}]});
-    sqlx::query("INSERT INTO jobs(id,position_uuid,kind,plies,status,result) VALUES($1,$2,'analysis',0,'completed',$3)")
+    let result = json!({"engine":"Native test analysis","plies":1,"candidates":[{"rank":1,"notation":"13/10 6/5","equity":0.123,"probabilities":[0.6,0.1,0.01,0.4,0.05,0.005]}]});
+    sqlx::query("INSERT INTO jobs(id,position_uuid,kind,plies,status,result) VALUES($1,$2,'analysis',1,'completed',$3)")
         .bind(Uuid::new_v4()).bind(position).bind(result).execute(pool).await.unwrap();
 }
 

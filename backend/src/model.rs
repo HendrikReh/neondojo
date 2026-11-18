@@ -119,7 +119,8 @@ pub struct Job {
     pub completed_games: i32,
     #[schema(value_type=JobKind)]
     pub kind: String,
-    #[schema(minimum = 0, maximum = 4)]
+    /// Depth in BG Tutor's ply convention; 1-ply is the raw evaluation.
+    #[schema(minimum = 1, maximum = 5)]
     pub plies: i32,
     #[schema(value_type=JobStatus)]
     pub status: String,

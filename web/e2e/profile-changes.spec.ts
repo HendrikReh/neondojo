@@ -71,7 +71,7 @@ for (const { locale, width, labels } of [
     await expect(dialog.getByRole('columnheader')).toHaveText(labels.columns);
     await expect(dialog.locator('tbody tr')).toHaveCount(3);
     for (const [field, saved, current] of [
-      [labels.depth, '2', '4'],
+      [labels.depth, '3', '4'],
       [labels.sounds, labels.on, labels.off],
       [labels.board, 'Forest', 'Walnut'],
     ]) {

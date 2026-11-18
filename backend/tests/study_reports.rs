@@ -25,7 +25,7 @@ async fn get(app: &axum::Router, uri: &str) -> (u16, Value) {
 fn snapshot(id: Uuid) -> Value {
     json!({
         "id":id,"version":3,"human_player":0,"human_name":"Archive learner",
-        "match_length":7,"bearoff_direction":"right","engine":{"id":"gnubg","version":"saved engine","plies":0},
+        "match_length":7,"bearoff_direction":"right","engine":{"id":"gnubg","version":"saved engine","plies":1},
         "phase":"match_over","can_double":false,"legal_moves":[],"history":[],"scores":[7,3],"game_no":2,"winner":0,
         "position":{"id":id,"match_uuid":id,"ordinal":0,"game_no":2,"ply":0,"player":0,"dice":[],"board":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"position_id":"4HPwATDgc/ABMA","gnubg_match_id":"cAgAAAAAAAAA","notation":""},
         "play_mode":"tutor","review":{"analysis_plies":2,"games":[],"assisted":true,"first_attempt_loss":0.12,"final_choice_loss":0.02,"first_attempt_count":3,"retry_count":1,"first_attempt_rating":4.5,"first_attempt_rating_decisions":3,"first_attempt_rating_method":"emg500","first_attempt_rating_profile":"saved-profile","independent_first_attempt_count":2,"assisted_first_attempt_count":1}

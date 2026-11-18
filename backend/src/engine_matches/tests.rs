@@ -143,7 +143,7 @@ async fn identical_engines_split_a_pair_with_multiple_games() {
     let first = engine_match::play(
         &rules,
         [&engine_a, &engine_b],
-        [0, 0],
+        [1, 1],
         DuelUnit::Match { length: 5 },
         schedule,
     )
@@ -152,7 +152,7 @@ async fn identical_engines_split_a_pair_with_multiple_games() {
     let second = engine_match::play(
         &rules,
         [&engine_b, &engine_a],
-        [0, 0],
+        [1, 1],
         DuelUnit::Match { length: 5 },
         schedule,
     )
@@ -221,10 +221,10 @@ async fn cubeless_money_block_plays_independent_games_without_cube_or_jacoby() {
         })
     };
     let unit = DuelUnit::MoneyCubeless { games: 12 };
-    let first = engine_match::play(&rules, [&gnubg, &gnubg], [0, 0], unit, schedule)
+    let first = engine_match::play(&rules, [&gnubg, &gnubg], [1, 1], unit, schedule)
         .await
         .unwrap();
-    let second = engine_match::play(&rules, [&gnubg, &gnubg], [0, 0], unit, schedule)
+    let second = engine_match::play(&rules, [&gnubg, &gnubg], [1, 1], unit, schedule)
         .await
         .unwrap();
     assert_eq!(first.games, 12);
@@ -273,7 +273,7 @@ async fn cubeless_open_sage_plays_a_money_block_against_gnubg() {
     };
     let unit = DuelUnit::MoneyCubeless { games: 3 };
     for bots in [[&gnubg, &sage], [&sage, &gnubg]] {
-        let finished = engine_match::play(&rules, bots, [0, 2], unit, schedule)
+        let finished = engine_match::play(&rules, bots, [1, 2], unit, schedule)
             .await
             .unwrap();
         assert_eq!(finished.outcomes.unwrap().iter().flatten().sum::<i32>(), 3);
@@ -300,7 +300,7 @@ use tower::ServiceExt;
 fn seeds_follow_board_sides_and_pair_statistics_exclude_the_unpaired_match() {
     let profile = Competitor {
         engine_id: "gnubg".into(),
-        plies: 0,
+        plies: 1,
     };
     let mut config = SeriesConfig {
         a: profile.clone(),
@@ -600,7 +600,7 @@ async fn cubeless_money_series_stores_blocks_and_points_per_game(pool: sqlx::PgP
             .body(Body::from(body.to_string()))
             .unwrap()
     };
-    let side = serde_json::json!({"engine_id": "gnubg", "plies": 0});
+    let side = serde_json::json!({"engine_id": "gnubg", "plies": 1});
     for invalid in [
         serde_json::json!({"format": "money_cubeless", "count": 1}),
         serde_json::json!({"format": "money_cubeless", "block_games": 1001, "count": 1}),
@@ -668,7 +668,7 @@ async fn cubeless_money_series_stores_blocks_and_points_per_game(pool: sqlx::PgP
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert!(sgf.contains("EV[Duel GNUbg 0-ply vs. GNUbg 0-ply (money, cubeless)]"));
+    assert!(sgf.contains("EV[Duel GNUbg 1-ply vs. GNUbg 1-ply (money, cubeless)]"));
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -678,7 +678,7 @@ async fn series_api_persists_results_recovers_expired_claim_and_cancels(pool: sq
     let router = crate::api::router(crate::api::AppState::new(pool.clone(), rules));
     let create = || {
         Request::post("/api/engine-matches").header("content-type", "application/json")
-        .body(Body::from(r#"{"a":{"engine_id":"gnubg","plies":0},"b":{"engine_id":"gnubg","plies":0},"match_length":1,"count":1,"seed":"00000000-0000-0000-0000-000000000000"}"#)).unwrap()
+        .body(Body::from(r#"{"a":{"engine_id":"gnubg","plies":1},"b":{"engine_id":"gnubg","plies":1},"match_length":1,"count":1,"seed":"00000000-0000-0000-0000-000000000000"}"#)).unwrap()
     };
     let response = router.clone().oneshot(create()).await.unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
@@ -743,9 +743,9 @@ async fn series_api_persists_results_recovers_expired_claim_and_cancels(pool: sq
     assert_ne!(matches[0]["white"], matches[1]["white"]);
     for result in body["matches"].as_array().unwrap() {
         let (player, white, black) = if result["match_index"] == 1 {
-            ("B gnubg 0-ply", "score_b", "score_a")
+            ("B gnubg 1-ply", "score_b", "score_a")
         } else {
-            ("A gnubg 0-ply", "score_a", "score_b")
+            ("A gnubg 1-ply", "score_a", "score_b")
         };
         let match_entry = matches
             .iter()
@@ -755,7 +755,7 @@ async fn series_api_persists_results_recovers_expired_claim_and_cancels(pool: sq
         assert_eq!(match_entry["black_score"], result[black]);
         assert_eq!(
             match_entry["tournament"],
-            "Duel GNUbg 0-ply vs. GNUbg 0-ply"
+            "Duel GNUbg 1-ply vs. GNUbg 1-ply"
         );
         assert_eq!(match_entry["result_state"], "completed");
         assert_eq!(match_entry["game_count"], result["games"]);
@@ -832,7 +832,7 @@ async fn open_sage_and_gnubg_complete_both_legs() {
     let first = engine_match::play(
         &rules,
         [&gnubg, &sage],
-        [0, 2],
+        [1, 2],
         DuelUnit::Match { length: 1 },
         schedule,
     )
@@ -841,7 +841,7 @@ async fn open_sage_and_gnubg_complete_both_legs() {
     let second = engine_match::play(
         &rules,
         [&sage, &gnubg],
-        [2, 0],
+        [2, 1],
         DuelUnit::Match { length: 1 },
         schedule,
     )

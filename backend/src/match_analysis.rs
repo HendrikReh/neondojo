@@ -172,7 +172,7 @@ impl Engine {
         plies: i32,
         timeout: Option<std::time::Duration>,
     ) -> Result<AnalyzedGame> {
-        ensure!((0..=4).contains(&plies), "plies must be 0..4");
+        let native = crate::engine::gnubg_plies(plies)?;
         ensure!(
             (1..=game_count(sgf)?).contains(&game_no),
             "Game number outside match"
@@ -186,7 +186,7 @@ impl Engine {
             "set confirm default yes\nset confirm new no\nset display off\nset analysis moves on\nset analysis cube on\nset analysis luck off\nset analysis player 0 analyse on\nset analysis player 1 analyse on\nset output mwc off\nset output digits 6\nset export moves number 10000\nset export include statistics on\n",
         );
         for kind in ["chequerplay", "cubedecision"] {
-            commands.push_str(&format!("set analysis {kind} type evaluation\nset analysis {kind} evaluation plies {plies}\nset analysis {kind} evaluation cubeful on\nset analysis {kind} evaluation deterministic on\nset analysis {kind} evaluation noise 0\n"));
+            commands.push_str(&format!("set analysis {kind} type evaluation\nset analysis {kind} evaluation plies {native}\nset analysis {kind} evaluation cubeful on\nset analysis {kind} evaluation deterministic on\nset analysis {kind} evaluation noise 0\n"));
         }
         self.append_move_filter(&mut commands, "analysis", plies);
         for mark in ["verybad", "bad", "doubtful", "unmarked"] {
@@ -910,7 +910,7 @@ mod tests {
         let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()));
         // Two legal opening moves; the second player's pre-roll cube choice is trivial.
         let source = "(;GM[6]MI[length:7];W[31xufe];B[42qusu])";
-        let game = engine.analyze_game(source, 1, 0).await.unwrap();
+        let game = engine.analyze_game(source, 1, 1).await.unwrap();
         let value = serde_json::to_value(game).unwrap();
         assert_eq!(value["statistics"][0]["unforced_checker_moves"], 1);
         assert_eq!(value["statistics"][1]["unforced_checker_moves"], 1);
@@ -953,7 +953,7 @@ mod tests {
         let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()));
         // A money game: GNUbg reports its totals in points instead of MWC.
         let source = "(;GM[6]MI[length:0];W[31xufe];B[42qusu])";
-        let game = engine.analyze_game(source, 1, 0).await.unwrap();
+        let game = engine.analyze_game(source, 1, 1).await.unwrap();
         let statistics = game.statistics.expect("money-game native statistics");
         assert_eq!(statistics[0].unforced_checker_moves, 1);
         assert_eq!(statistics[1].unforced_checker_moves, 1);
@@ -978,7 +978,7 @@ mod tests {
     async fn native_performance_statistics_cover_cube_only_and_forced_checker_games() {
         let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()));
         let source = "(;GM[6]MI[length:7];W[31hefe])\n(;GM[6]MI[length:7]AE[a:y]AW[f]AB[s]PL[W]RE[W+1];W[double];B[drop])";
-        let cube = engine.analyze_game(source, 2, 0).await.unwrap();
+        let cube = engine.analyze_game(source, 2, 1).await.unwrap();
         let native = cube
             .statistics
             .as_ref()
@@ -993,7 +993,7 @@ mod tests {
             "(;GM[6]MI[length:7][ws:6][bs:0]RU[Crawford:CrawfordGame]AE[a:y]AW[f]AB[s]PL[W];W[66fz])",
             "(;GM[6]MI[length:7][ws:6][bs:0]RU[Crawford:CrawfordGame]AE[a:y]AW[y]AB[s][s]PL[W];W[66])",
         ] {
-            let game = engine.analyze_game(source, 1, 0).await.unwrap();
+            let game = engine.analyze_game(source, 1, 1).await.unwrap();
             let native = game.statistics.as_ref().expect("forced native statistics");
             assert_eq!(native[0].total_checker_moves, 1);
             assert_eq!(native[0].unforced_checker_moves, 0);
@@ -1051,7 +1051,7 @@ mod tests {
                 "path": "24/18 13/11",
                 "equity": 0.013766,
                 "probabilities": [0.507359, 0.133160, 0.006572, 0.492641, 0.140604, 0.005944],
-                "plies": 0
+                "plies": 1
             })
         );
         assert_eq!(candidates[1]["notation"], "24/16");
@@ -1113,7 +1113,7 @@ mod tests {
         let mut total = 0;
         let mut game_two_drop = None;
         for game_no in 1..=10 {
-            let result = engine.analyze_game(MATCH, game_no, 0).await.unwrap();
+            let result = engine.analyze_game(MATCH, game_no, 1).await.unwrap();
             let checker: Vec<_> = result
                 .decisions
                 .iter()
@@ -1165,7 +1165,7 @@ mod tests {
     async fn real_gnubg_includes_actual_play_beyond_top_five_and_normalizes_dice() {
         let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()));
         let sgf = "(;FF[4]GM[6]MI[length:7][game:0][ws:0][bs:0]PW[Jörg\nMove number 1: trick]PB[李  Müller]RU[Crawford];W[13hehg]C[Move number 99: pretend])";
-        let game = engine.analyze_game(sgf, 1, 0).await.unwrap();
+        let game = engine.analyze_game(sgf, 1, 1).await.unwrap();
         assert_eq!(game.decisions.len(), 1);
         let actual = &game.decisions[0];
         assert_eq!(actual.dice, Some([1, 3]));
@@ -1211,7 +1211,7 @@ mod tests {
         for source in [xg, mat] {
             let mut total = 0;
             for game_no in 1..=10 {
-                let game = engine.analyze_game(&source, game_no, 0).await.unwrap();
+                let game = engine.analyze_game(&source, game_no, 1).await.unwrap();
                 total += game
                     .decisions
                     .iter()
@@ -1269,7 +1269,7 @@ mod tests {
             ("(;GM[6]AE[a:y]AW[f]AB[s]PL[W]CV[2]CO[w];W[66fz])", 2),
             ("(;GM[6]AE[a:y]AW[f]AB[s]PL[W]CV[2]CO[b];W[66fz])", 1),
         ] {
-            let game = engine.analyze_game(source, 1, 0).await.unwrap();
+            let game = engine.analyze_game(source, 1, 1).await.unwrap();
             assert_eq!(game.decisions.len(), count, "{source}");
             let checker = game.decisions.last().unwrap();
             assert_eq!(checker.kind, "checker");
@@ -1288,7 +1288,7 @@ mod tests {
 (;GM[6]MI[length:7][game:2][ws:1][bs:0])";
         assert_eq!(parse_sgf(source).unwrap().positions.len(), 1);
         assert_eq!(game_count(source).unwrap(), 3);
-        let game = engine.analyze_game(source, 2, 0).await.unwrap();
+        let game = engine.analyze_game(source, 2, 1).await.unwrap();
         assert_eq!(game.decisions.len(), 2);
         assert!(
             game.decisions
@@ -1297,7 +1297,7 @@ mod tests {
         );
         assert_eq!(game.decisions[0].played, "double");
         assert_eq!(game.decisions[1].played, "drop");
-        let empty = engine.analyze_game(source, 3, 0).await.unwrap();
+        let empty = engine.analyze_game(source, 3, 1).await.unwrap();
         assert!(empty.decisions.is_empty());
         assert!(parse_sgf("(;GM[6])").is_err());
         assert!(parse_sgf("(;GM[6];W[double];B[drop])").is_err());
@@ -1310,9 +1310,9 @@ mod tests {
 (;GM[6]AE[a:y]AW[f]AB[s]PL[W]RE[W+1];W[double];B[drop])
 (;GM[6])";
         assert_eq!(parse_sgf(source).unwrap().positions.len(), 1);
-        let cube = engine.analyze_game(source, 2, 0).await.unwrap();
+        let cube = engine.analyze_game(source, 2, 1).await.unwrap();
         assert_eq!(cube.decisions.len(), 2);
-        let empty = engine.analyze_game(source, 3, 0).await.unwrap();
+        let empty = engine.analyze_game(source, 3, 1).await.unwrap();
         assert!(empty.decisions.is_empty());
     }
     #[tokio::test]
@@ -1327,10 +1327,10 @@ mod tests {
             let imported = parse_sgf(source).unwrap();
             let p = imported.positions.last().unwrap();
             let independent = engine
-                .analyze(&p.position_id, &p.match_id, 0, None)
+                .analyze(&p.position_id, &p.match_id, 1, None)
                 .await
                 .unwrap();
-            let native = engine.analyze_game(source, 1, 0).await.unwrap();
+            let native = engine.analyze_game(source, 1, 1).await.unwrap();
             let checker = native
                 .decisions
                 .iter()
@@ -1343,7 +1343,7 @@ mod tests {
             );
         }
         let cube_only = "(;GM[6]MI[length:7];W[31hefe])(;GM[6]MI[length:7][ws:2][bs:3]AE[a:y]AW[e]AB[s]PL[B]CV[2]CO[b];B[double];W[drop])";
-        let native = engine.analyze_game(cube_only, 2, 0).await.unwrap();
+        let native = engine.analyze_game(cube_only, 2, 1).await.unwrap();
         assert_eq!(native.decisions.len(), 2);
         assert_eq!(native.decisions[0].player, 1);
         assert_eq!(native.decisions[1].player, 0);

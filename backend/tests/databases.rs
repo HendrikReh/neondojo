@@ -216,7 +216,7 @@ async fn clearing_unsorted_preserves_the_system_database_and_other_matches(pool:
 
     let job = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO jobs(id,match_uuid,kind,plies,status) VALUES($1,$2,'match',0,'queued')",
+        "INSERT INTO jobs(id,match_uuid,kind,plies,status) VALUES($1,$2,'match',1,'queued')",
     )
     .bind(job)
     .bind(unsorted)
@@ -393,7 +393,7 @@ async fn deletion_guards_active_jobs_and_nonempty_database(pool: PgPool) {
         409
     );
     sqlx::query(
-        "INSERT INTO jobs(id,match_uuid,kind,plies,status) VALUES($1,$2,'match',0,'running')",
+        "INSERT INTO jobs(id,match_uuid,kind,plies,status) VALUES($1,$2,'match',1,'running')",
     )
     .bind(Uuid::new_v4())
     .bind(id)
@@ -479,7 +479,7 @@ async fn deep_copy_preserves_all_completed_analyses_and_remaps_selection(pool: P
         (2, "running", "running", 9.0),
     ] {
         let result = native_result(rating, 4.0);
-        sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,completed_games,engine_config,result,created_at) VALUES($1,$2,'match',0,$3,1,1,$4,$5,now()+$6*interval '1 second')").bind(Uuid::new_v4()).bind(id).bind(status).bind(config).bind(result).bind(n).execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,completed_games,engine_config,result,created_at) VALUES($1,$2,'match',1,$3,1,1,$4,$5,now()+$6*interval '1 second')").bind(Uuid::new_v4()).bind(id).bind(status).bind(config).bind(result).bind(n).execute(&pool).await.unwrap();
     }
     checkpoint_jobs(&pool, id).await;
     sqlx::query("INSERT INTO analysis_selections(match_id,analysis_id) SELECT $1,'job:'||id::text FROM jobs WHERE match_uuid=$1 AND engine_config='old'").bind(id).execute(&pool).await.unwrap();
@@ -749,7 +749,7 @@ fn native_result(white: f64, black: f64) -> Value {
     };
     let result = MatchAnalysisSummary {
         engine: "GNUbg".into(),
-        plies: 0,
+        plies: 1,
         total_games: 1,
         completed_games: 1,
         total_moves: 1,
@@ -766,7 +766,7 @@ fn native_result(white: f64, black: f64) -> Value {
         ],
         performance_rating: Some(PerformanceRatingSummary {
             method: "gnubg_emg_500_v1".into(),
-            profile: "GNUbg; 0-ply cubeful deterministic".into(),
+            profile: "GNUbg; 1-ply cubeful deterministic".into(),
             games: 1,
             players: [
                 PlayerPerformanceRating {
@@ -801,7 +801,7 @@ async fn latest_completed_missing_native_statistics_suppresses_older_pr(pool: Pg
             json!({"total_games":1,"completed_games":1,"performance_rating":null}),
         ),
     ] {
-        sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,completed_games,result,created_at) VALUES($1,$2,'match',0,'completed',1,1,$3,now()+$4*interval '1 second')").bind(Uuid::new_v4()).bind(id).bind(result).bind(n).execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,completed_games,result,created_at) VALUES($1,$2,'match',1,'completed',1,1,$3,now()+$4*interval '1 second')").bind(Uuid::new_v4()).bind(id).bind(result).bind(n).execute(&pool).await.unwrap();
     }
     checkpoint_jobs(&pool, id).await;
     let (status, page) = request(&pool, "GET", "/api/library/matches", None).await;
@@ -827,7 +827,7 @@ async fn position_submission_respects_match_deletion_lock(pool: PgPool) {
         .unwrap();
     let submit_pool = pool.clone();
     let mut submission = tokio::spawn(async move {
-        bgtutor::store::create_job(&submit_pool, position, "analysis", 0).await
+        bgtutor::store::create_job(&submit_pool, position, "analysis", 1).await
     });
     assert!(
         tokio::time::timeout(std::time::Duration::from_millis(200), &mut submission)
@@ -876,7 +876,7 @@ async fn exact_position_cursor_cannot_cross_database_filter(pool: PgPool) {
 async fn scoped_game_analysis_has_partial_status_and_never_whole_match_pr(pool: PgPool) {
     let id = target(&pool, "Scoped analysis status").await;
     let scoped = Uuid::new_v4();
-    sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,completed_games,game_no,result) VALUES($1,$2,'match',0,'completed',1,1,1,$3)")
+    sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,completed_games,game_no,result) VALUES($1,$2,'match',1,'completed',1,1,1,$3)")
         .bind(scoped).bind(id).bind(native_result(2.5,4.0)).execute(&pool).await.unwrap();
     checkpoint_jobs(&pool, id).await;
     let (status, page) = request(&pool, "GET", "/api/library/matches", None).await;
@@ -889,7 +889,7 @@ async fn scoped_game_analysis_has_partial_status_and_never_whole_match_pr(pool: 
         );
     }
     let latest = Uuid::new_v4();
-    sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,game_no,created_at) VALUES($1,$2,'match',0,'queued',1,2,now()+interval '1 second')")
+    sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,game_no,created_at) VALUES($1,$2,'match',1,'queued',1,2,now()+interval '1 second')")
         .bind(latest).bind(id).execute(&pool).await.unwrap();
     for expected in ["queued", "running", "failed"] {
         sqlx::query("UPDATE jobs SET status=$2 WHERE id=$1")
@@ -906,7 +906,7 @@ async fn scoped_game_analysis_has_partial_status_and_never_whole_match_pr(pool: 
         assert!(page["items"][0]["white_pr"].is_null());
     }
     // A whole-match status takes precedence even when the scoped job is newer.
-    sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,completed_games,result,created_at) VALUES($1,$2,'match',0,'completed',1,1,$3,now()-interval '1 second')")
+    sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,completed_games,result,created_at) VALUES($1,$2,'match',1,'completed',1,1,$3,now()-interval '1 second')")
         .bind(Uuid::new_v4()).bind(id).bind(native_result(1.0,3.0)).execute(&pool).await.unwrap();
     checkpoint_jobs(&pool, id).await;
     let (_, page) = request(&pool, "GET", "/api/library/matches", None).await;

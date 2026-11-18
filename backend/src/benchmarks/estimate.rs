@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 #[derive(Deserialize, IntoParams)]
 pub struct EstimateQuery {
-    #[param(minimum = 0, maximum = 4)]
+    #[param(minimum = 1, maximum = 5)]
     pub plies: Option<i32>,
     pub game_no: Option<i32>,
     /// Provider for this estimate; omitted uses the saved analysis engine.

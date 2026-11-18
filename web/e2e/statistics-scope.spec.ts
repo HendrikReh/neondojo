@@ -19,7 +19,7 @@ test('single-game statistics pin errors to their source game across views, reset
   await openMatchAnalysisOptions(page);
   await page
     .getByLabel('Match analysis depth', { exact: true })
-    .selectOption('0');
+    .selectOption('1');
   await page.getByRole('button', { name: 'Analyze game', exact: true }).click();
   await expect(page.locator('.match-analysis-progress')).toContainText(
     'Game analysis complete',
