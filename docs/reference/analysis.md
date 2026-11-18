@@ -16,6 +16,11 @@ the engine and search depth from the active analysis profile. Selecting another
 position does the same while **Dice equity** is visible. After a submission or
 engine failure, select **Dice equity** again to retry.
 
+The grid shows the best play's equity for each of the 36 rolls. Cells at or
+above the weighted mean **Ø** use the success color, cells below it the
+warning color. The grid starts on 1-1. Select a cell to see that roll's best
+play, its equity and its probability below the grid.
+
 The position pane shows each result with its source and recorded depth. To
 choose a depth and calculate again, use **Recalculate position …** or
 **Recalculate dice equity …** in the header's **Analysis options**.
@@ -76,6 +81,16 @@ New GNU Backgammon analyses retain each original route available in the native
 SGF output alongside the display notation. Open Sage's current checker API
 returns candidate end boards, so its move notation is derived from those boards.
 
+Each engine column starts with the latest, deepest saved analysis of that
+engine for the selected game or match scope. A dash marks a move that the
+analysis does not contain. In the GNU Backgammon and Open Sage columns,
+**|Δ|** sorts the rows by the absolute equity difference to XG, largest first.
+Rows without a comparable value come last, and selecting **|Δ|** again restores
+the original order. Values are comparable only in the same known unit. Each
+local equity cell also shows its difference to XG, and an arrow beside the
+rank shows whether the engine ranks the move higher (↑) or lower (↓) than XG's
+equity ranking. The tooltip names the XG rank.
+
 In **Cube**, **Previous error** and **Next error** above the board also work
 without a local analysis job. Review uses saved local
 game checkpoints from the selected job and imported evaluations
@@ -91,6 +106,8 @@ action, best action, loss and source. The inspector shows the recorded cube
 options with their unit and the name of the player whose perspective is used.
 Older local results may only provide the saved played and best equities.
 For imported decisions, **Cube details** opens the original evaluation and notes.
+When a checker position is selected, **Back to the checker move** closes the
+cube review and returns the board to that position.
 
 `GET /api/matches/{id}/review-decisions` supplies this paginated view. Only
 evaluations with known units and a validated decision context enter imported
@@ -181,7 +198,7 @@ BG Tutor reads the breakdown from stored decisions for fully checkpointed games,
 
 Open **Analysis → Notes** and select **Match**, **Game** or **Position** to edit its tags and comment. **Cube and move notes** also opens game notes and recorded actions such as doubles, takes, drops and accepted resignations, with the board immediately before each action. A pending double displays the offered cube value in the center. Games without checker moves can have notes too. Checker move notes use the same annotation as the corresponding position.
 
-**Save notes** writes to PostgreSQL. Drafts survive navigation and dialog changes during the current session. If another edit has been saved, BG Tutor shows a version conflict and keeps the draft. Tags are normalized and limited to 30 per note and 64 characters each. Comments are displayed as text and can contain up to 20,000 characters.
+Press Enter or **Add tag** to add each tag. **Save notes** writes to PostgreSQL. Drafts survive navigation and dialog changes during the current session. If another edit has been saved, BG Tutor shows a version conflict and keeps the draft. Tags are normalized and limited to 30 per note and 64 characters each. Comments are displayed as text and can contain up to 20,000 characters.
 
 Use **Search tags & comments** to combine free text (3–200 characters), an exact tag, a note type and a database filter. Results link to the relevant match, game, position or move. The regular match search also indexes annotations across those scopes.
 
