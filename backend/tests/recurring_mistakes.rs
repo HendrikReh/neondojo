@@ -1353,6 +1353,138 @@ async fn decision_search_filters_by_type_score_cube_and_loss_with_stable_pages(p
     }
 }
 
+async fn index_entries(pool: &PgPool, matches: &[Uuid]) -> Vec<(String, String)> {
+    let mut entries = Vec::new();
+    for id in matches {
+        entries.push(
+            sqlx::query_as(
+                "SELECT fingerprint,indexed_at::text FROM decision_index_matches WHERE match_id=$1",
+            )
+            .bind(id)
+            .fetch_one(pool)
+            .await
+            .unwrap(),
+        );
+    }
+    entries
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn decision_index_follows_saved_decisions_and_carries_old_fingerprints_over(pool: PgPool) {
+    let analyzed = source(&pool).await;
+    let sgf = "(;GM[6]PW[Alice]PB[Carol]MI[length:5];W[31hefe])";
+    let unanalyzed = store::import_match(
+        &pool,
+        "unanalyzed.sgf",
+        "sgf",
+        sgf.as_bytes(),
+        sgf,
+        &import::parse_sgf(sgf).unwrap(),
+    )
+    .await
+    .unwrap()
+    .r#match
+    .id;
+    let saved = job(&pool, analyzed, 3, Some(1), &game1(0.1)).await;
+    let router = app(&pool);
+    let search_player = |player: &'static str| {
+        let router = router.clone();
+        async move {
+            let uri = format!("/api/study/decisions?player={player}");
+            let (status, page) = call(&router, "GET", &uri, Value::Null).await;
+            assert_eq!(status, 200, "{page}");
+            page
+        }
+    };
+    let search = || search_player("alice");
+    let matches = [analyzed, unanalyzed];
+
+    assert_eq!(search().await["total"], 2);
+    let built = index_entries(&pool, &matches).await;
+    assert!(built[0].0.ends_with(&format!(
+        "|4:{}",
+        sqlx::query_scalar::<_, i64>("SELECT sum(id)::bigint FROM move_analyses WHERE job_id=$1")
+            .bind(saved)
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+    )));
+    assert!(built[1].0.ends_with("|0:0"), "{}", built[1].0);
+    // An unchanged library is served from the index without rebuilding.
+    assert_eq!(search().await["total"], 2);
+    assert_eq!(index_entries(&pool, &matches).await, built);
+
+    // Entries written before migration 0080 end with the hash of the saved
+    // decisions. The migration carries current ones over and leaves a stale
+    // one for the next read to rebuild.
+    sqlx::query(
+        "UPDATE decision_index_matches SET fingerprint=regexp_replace(fingerprint,'[^|]*$','')
+             ||CASE WHEN match_id=$1 THEN (SELECT coalesce(sum(hashtextextended(a.data::text,0)),0)::text
+                    FROM move_analyses a WHERE a.job_id=$2) ELSE '42' END",
+    )
+    .bind(analyzed)
+    .bind(saved)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::raw_sql(include_str!(
+        "../migrations/0080_decision_index_row_fingerprint.sql"
+    ))
+    .execute(&pool)
+    .await
+    .unwrap();
+    let migrated = index_entries(&pool, &matches).await;
+    assert_eq!(migrated[0], built[0]);
+    assert!(migrated[1].0.ends_with("|42"), "{}", migrated[1].0);
+    assert_eq!(search().await["total"], 2);
+    let reread = index_entries(&pool, &matches).await;
+    assert_eq!(reread[0], built[0]);
+    assert_eq!(reread[1].0, built[1].0);
+    assert_ne!(reread[1].1, built[1].1, "the stale entry is rebuilt");
+
+    // A removed decision leaves the results; saving it again under a new id
+    // keeps the count but still re-indexes the match. The last decision is
+    // removed because a gap in the numbering invalidates the whole game.
+    assert_eq!(search_player("bob").await["total"], 2);
+    let removed: Value = sqlx::query_scalar(
+        "DELETE FROM move_analyses WHERE job_id=$1 AND decision_no=4 RETURNING data",
+    )
+    .bind(saved)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(search_player("bob").await["total"], 1);
+    sqlx::query("INSERT INTO move_analyses(job_id,game_no,decision_no,player,kind,equity_loss,data) VALUES($1,1,4,1,'checker',0.1,$2)")
+        .bind(saved)
+        .bind(&removed)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let before = index_entries(&pool, &matches).await;
+    assert_eq!(search_player("bob").await["total"], 2);
+    let after = index_entries(&pool, &matches).await;
+    assert_ne!(after[0], before[0]);
+    assert_eq!(after[1], before[1], "only the changed match is rebuilt");
+
+    // An in-place update keeps count and ids; the trigger drops the entry.
+    sqlx::query("UPDATE move_analyses SET equity_loss=0.5,data=data||'{\"equity_loss\":0.5,\"best_equity\":0.5}'::jsonb WHERE job_id=$1 AND decision_no=1")
+        .bind(saved)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let missing: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM decision_index_matches WHERE match_id=$1")
+            .bind(analyzed)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(missing, 0);
+    let page = search().await;
+    assert_eq!(page["total"], 2);
+    assert_eq!(page["items"][0]["equity_loss"], 0.5);
+    assert_eq!(page["items"][0]["kind"], "checker");
+}
+
 #[sqlx::test(migrations = "./migrations")]
 async fn aliases_of_one_profile_count_as_one_player(pool: PgPool) {
     let mut jobs = Vec::new();

@@ -2,7 +2,9 @@
 //!
 //! Mistake groups and the decision search read this index with SQL. A match
 //! is re-indexed when its fingerprint changes: another analysis is displayed,
-//! the source or a player name changed, or the index format moved on.
+//! its saved decisions were added or removed, the source or a player name
+//! changed, or the index format moved on. Updating a saved decision drops the
+//! match's entry instead (migration 0080).
 use super::{
     can_practice_correct_cube, kind, opportunity,
     search::{DecisionHit, context, owner_filter},
@@ -46,9 +48,11 @@ pub(super) async fn ensure(
                           lower(btrim(m.white)), lower(btrim(m.black)),
                           m.imported_analysis_loaded::text, m.moves_cataloged::text,
                           live.blocked::text,
-                          -- Saved decisions are written once, but a changed row must
-                          -- never be served from the index.
-                          (SELECT coalesce(sum(hashtextextended(a.data::text,0)),0)::text
+                          -- Inserted or deleted decisions change the count or the sum
+                          -- of their never-reused ids, read from move_analyses_page
+                          -- without the analysis JSON. An UPDATE drops the affected
+                          -- matches' index entries in a trigger (migration 0080).
+                          (SELECT count(*)::text||':'||coalesce(sum(a.id),0)::text
                            FROM move_analyses a WHERE a.job_id=sel.job_id)) AS fingerprint,
                 coalesce(m.played_on, m.created_at::date) AS played,
                 x.fingerprint AS stored
