@@ -1386,3 +1386,126 @@ async fn playing_mode_defaults_roundtrip_and_invalid_thresholds_are_atomic(pool:
         settings
     );
 }
+
+/// Records each launch as `version` or `evaluation` and answers each `set dice`
+/// with one candidate. With `change_after`, the installed version changes
+/// during that evaluation.
+#[cfg(unix)]
+fn counting_fixture_engine(change_after: Option<usize>) -> (tempfile::TempDir, Engine) {
+    let change = change_after
+        .map(|count| {
+            format!(
+                "if [ \"$(grep -c evaluation \"$dir/launches\")\" -eq {count} ]; then printf 'GNU Backgammon fixture-B\\n' >\"$dir/version\"; fi\n"
+            )
+        })
+        .unwrap_or_default();
+    let script = format!(
+        "#!/bin/sh\ndir=\"$(dirname \"$0\")\"\nif [ \"$1\" = --version ]; then echo version >>\"$dir/launches\"; cat \"$dir/version\"; exit 0; fi\necho evaluation >>\"$dir/launches\"\n{change}echo 'GNU Backgammon fixture-A'\ngrep '^set dice' commands.txt | while read -r _ _ a b; do\n  echo \"The dice have been set to $a and $b.\"\n  echo '    1. Cubeful 0-ply    8/5 6/5                      Eq.: +0.219'\n  echo '       0.551 0.174 0.013 - 0.449 0.124 0.005'\ndone\n"
+    );
+    let (temp, engine) = fixture_engine(&script);
+    std::fs::write(temp.path().join("version"), "GNU Backgammon fixture-A\n").unwrap();
+    (temp, engine)
+}
+
+#[cfg(unix)]
+async fn run_dice_job(
+    pool: &PgPool,
+    temp: &tempfile::TempDir,
+    engine: Engine,
+) -> (Value, Vec<String>) {
+    let imported = imported(pool).await;
+    let position = store::positions(pool, Some(imported.r#match.id), None, None, 10)
+        .await
+        .unwrap()
+        .items
+        .remove(0);
+    let state = AppState::new(pool.clone(), engine);
+    let app = api::router(state.clone());
+    let (status, job) = call(
+        app.clone(),
+        "POST",
+        "/api/jobs",
+        json!({"position_id":position.id,"kind":"dice"}),
+    )
+    .await;
+    assert_eq!(status, 202, "{job}");
+    // Count only the launches of the job itself, not of its submission.
+    std::fs::write(temp.path().join("launches"), "").unwrap();
+    assert!(jobs::run_one(&state).await.unwrap());
+    let (_, done) = call(
+        app,
+        "GET",
+        &format!("/api/jobs/{}", job["id"].as_str().unwrap()),
+        Value::Null,
+    )
+    .await;
+    let launches = std::fs::read_to_string(temp.path().join("launches"))
+        .unwrap()
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    (done, launches)
+}
+
+#[cfg(unix)]
+fn count(launches: &[String], kind: &str) -> usize {
+    launches.iter().filter(|launch| *launch == kind).count()
+}
+
+#[cfg(unix)]
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn dice_job_evaluates_all_rolls_in_one_process_between_two_version_checks(pool: PgPool) {
+    let (temp, engine) = counting_fixture_engine(None);
+    let (done, launches) = run_dice_job(&pool, &temp, engine).await;
+    assert_eq!(done["status"], "completed", "{done}");
+    let rolls = done["result"]["rolls"].as_array().unwrap();
+    assert_eq!(rolls.len(), 21);
+    assert_eq!(
+        rolls
+            .iter()
+            .map(|roll| roll["weight"].as_i64().unwrap())
+            .sum::<i64>(),
+        36
+    );
+    // All 21 rolls run in one GNUbg process between two version checks.
+    assert_eq!(count(&launches, "evaluation"), 1, "{launches:?}");
+    assert_eq!(count(&launches, "version"), 2, "{launches:?}");
+    assert_eq!(launches.first().map(String::as_str), Some("version"));
+    assert_eq!(launches.last().map(String::as_str), Some("version"));
+}
+
+#[cfg(unix)]
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn dice_job_discards_all_rolls_when_the_version_changes_during_the_batch(pool: PgPool) {
+    let (temp, engine) = counting_fixture_engine(Some(1));
+    let (done, launches) = run_dice_job(&pool, &temp, engine).await;
+    assert_eq!(done["status"], "failed", "{done}");
+    assert!(done["result"].is_null(), "{done}");
+    let error = done["error"].as_str().unwrap();
+    assert!(
+        error.contains("GNUbg changed during execution") && error.contains("fixture-B"),
+        "{done}"
+    );
+    assert_eq!(count(&launches, "evaluation"), 1, "{launches:?}");
+}
+
+#[cfg(unix)]
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn dice_job_fails_without_a_result_when_gnubg_skips_a_roll(pool: PgPool) {
+    let (temp, engine) = fixture_engine(
+        "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'GNU Backgammon fixture'; exit 0; fi\necho 'GNU Backgammon fixture'\ngrep '^set dice' commands.txt | head -n 20 | while read -r _ _ a b; do\n  echo \"The dice have been set to $a and $b.\"\n  echo '    1. Cubeful 0-ply    8/5 6/5                      Eq.: +0.219'\n  echo '       0.551 0.174 0.013 - 0.449 0.124 0.005'\ndone\n",
+    );
+    let (done, _) = run_dice_job(&pool, &temp, engine).await;
+    assert_eq!(done["status"], "failed", "{done}");
+    assert!(done["result"].is_null(), "{done}");
+    assert!(
+        done["error"]
+            .as_str()
+            .unwrap()
+            .contains("GNUbg evaluated 20 of 21 rolls"),
+        "{done}"
+    );
+}

@@ -330,11 +330,24 @@ impl Engine {
         commands: &str,
         timeout: Option<Duration>,
     ) -> Result<String> {
+        self.run_observed(directory, commands, timeout, |_| {})
+            .await
+    }
+
+    /// Like `run_with_limit`, and passes the standard output read so far to
+    /// `observe` after each chunk while GNUbg runs.
+    async fn run_observed(
+        &self,
+        directory: &Path,
+        commands: &str,
+        timeout: Option<Duration>,
+        mut observe: impl FnMut(&[u8]) + Send,
+    ) -> Result<String> {
         let _permit = engine_permit().await;
         let binary =
             resolve_binary(&self.binary).context("Could not start GNUbg; check GNUBG_BIN")?;
         // A job may outlive an upgrade at the same path. Fence every native
-        // invocation, including later games, dice rolls and forced-pass calls.
+        // invocation, including later games, dice batches and forced-pass calls.
         if self.expected_version.is_some() {
             self.version_unlocked(&binary)
                 .await
@@ -378,11 +391,28 @@ impl Engine {
                 );
                 Ok(output)
             };
+        let observed = async {
+            let mut stdout = stdout;
+            let mut output = Vec::new();
+            let mut chunk = vec![0; 64 * 1024];
+            loop {
+                let read = stdout.read(&mut chunk).await?;
+                if read == 0 {
+                    break;
+                }
+                output.extend_from_slice(&chunk[..read]);
+                ensure!(
+                    output.len() <= MAX_OUTPUT as usize,
+                    "GNUbg output limit exceeded"
+                );
+                observe(&output);
+            }
+            Ok::<_, anyhow::Error>(output)
+        };
         let work = async {
-            let (out, err, status) =
-                tokio::try_join!(read(Box::pin(stdout)), read(Box::pin(stderr)), async {
-                    Ok::<_, anyhow::Error>(child.wait().await?)
-                })?;
+            let (out, err, status) = tokio::try_join!(observed, read(Box::pin(stderr)), async {
+                Ok::<_, anyhow::Error>(child.wait().await?)
+            })?;
             ensure!(
                 status.success(),
                 "GNUbg process failed: {}",
@@ -494,13 +524,17 @@ impl Engine {
         let candidates = if output.contains("There are no legal moves.") {
             // A dance is still a real checker decision. GNUbg evaluates the board
             // after passing, from the opponent's perspective; invert it back.
-            let forced_commands = commands.replace(&hint, "set automatic roll off\nset automatic move off\nset player 0 human\nset player 1 human\nmove\neval\n");
+            let forced_commands = commands.replace(&hint, FORCED_PASS);
             let output = self.run(temp.path(), &forced_commands).await?;
             vec![parse_pass(&output, plies)?]
         } else {
             let mut candidates = parse_hints(&output)?;
-            crate::match_analysis::retain_hint_paths(temp.path(), position_id, &mut candidates)
-                .await;
+            crate::match_analysis::retain_hint_paths(
+                &temp.path().join("hint.sgf"),
+                position_id,
+                &mut candidates,
+            )
+            .await;
             candidates
         };
         Ok(Analysis {
@@ -508,6 +542,131 @@ impl Engine {
             plies,
             candidates,
         })
+    }
+
+    /// Evaluate the position once for each roll in one GNUbg process and return
+    /// the analyses in the given order. Rolls that the rules cannot play are
+    /// evaluated as forced passes. `evaluated` receives the number of finished
+    /// rolls while GNUbg runs. The usual version check brackets the process,
+    /// so a replacement during the batch discards all of its rolls.
+    pub(crate) async fn analyze_rolls<F>(
+        &self,
+        position_id: &str,
+        match_id: &str,
+        plies: i32,
+        rolls: &[[i32; 2]],
+        mut evaluated: impl FnMut(usize) -> F,
+    ) -> Result<Vec<Analysis>>
+    where
+        F: std::future::Future<Output = Result<()>>,
+    {
+        let native = gnubg_plies(plies)?;
+        ensure!(
+            valid_id(position_id, 14) && valid_id(match_id, 12),
+            "Invalid GNUbg ID"
+        );
+        ensure!(
+            (1..=MAX_BATCH_ROLLS).contains(&rolls.len()),
+            "Invalid number of rolls"
+        );
+        let mut blocked = Vec::with_capacity(rolls.len());
+        for &dice in rolls {
+            ensure!(dice.iter().all(|die| (1..=6).contains(die)), "Invalid dice");
+            blocked.push(crate::engines::forced_pass(position_id, match_id, dice)?);
+        }
+        let mut commands = format!(
+            "set display off\nset evaluation chequerplay evaluation plies {native}\nset evaluation cubedecision evaluation plies {native}\nset output digits 6\n"
+        );
+        let count = self
+            .append_move_filter(&mut commands, "evaluation", plies)
+            .unwrap_or(10);
+        // Passing changes the player settings, so forced passes come last.
+        let order: Vec<usize> = (0..rolls.len())
+            .filter(|&index| !blocked[index])
+            .chain((0..rolls.len()).filter(|&index| blocked[index]))
+            .collect();
+        for &index in &order {
+            let [a, b] = rolls[index];
+            // Every roll starts again from the original position and match context.
+            commands.push_str(&format!(
+                "set gnubgid {position_id}:{match_id}\nset dice {a} {b}\n"
+            ));
+            if blocked[index] {
+                commands.push_str(FORCED_PASS);
+            } else {
+                commands.push_str(&format!("hint {count}\nsave game hint-{index}.sgf\n"));
+            }
+        }
+        let temp = tempfile::tempdir()?;
+        let (finished, mut progress) = tokio::sync::watch::channel(0);
+        let run = self.run_observed(
+            temp.path(),
+            &commands,
+            Some(ROLL_TIMEOUT * rolls.len() as u32),
+            move |output| {
+                // A roll's marker precedes its evaluation.
+                let done = roll_markers(output).saturating_sub(1);
+                finished.send_if_modified(|reported| {
+                    let changed = *reported != done;
+                    *reported = done;
+                    changed
+                });
+            },
+        );
+        // Reports progress until GNUbg finishes; only a failed report ends it.
+        let report = async {
+            while progress.changed().await.is_ok() {
+                let done = *progress.borrow_and_update();
+                evaluated(done).await?;
+            }
+            std::future::pending::<()>().await;
+            Ok::<(), anyhow::Error>(())
+        };
+        let output = tokio::select! {
+            biased;
+            output = run => output?,
+            reported = report => {
+                reported?;
+                bail!("Dice progress reporting stopped")
+            }
+        };
+        let engine = output
+            .lines()
+            .find(|l| l.starts_with("GNU Backgammon "))
+            .unwrap_or("GNU Backgammon")
+            .to_string();
+        let expected: Vec<[i32; 2]> = order.iter().map(|&index| rolls[index]).collect();
+        let parts = split_rolls(&output, &expected)?;
+        let mut analyses: Vec<Option<Analysis>> = rolls.iter().map(|_| None).collect();
+        for (&index, part) in order.iter().zip(parts) {
+            let [a, b] = rolls[index];
+            let candidates = if blocked[index] {
+                vec![parse_pass(part, plies)?]
+            } else {
+                ensure!(
+                    !part.contains("There are no legal moves."),
+                    "GNUbg found no legal move for {a}-{b}, but the rules allow one"
+                );
+                let mut candidates = parse_hints(part)?;
+                crate::match_analysis::retain_hint_paths(
+                    &temp.path().join(format!("hint-{index}.sgf")),
+                    position_id,
+                    &mut candidates,
+                )
+                .await;
+                candidates
+            };
+            analyses[index] = Some(Analysis {
+                engine: engine.clone(),
+                plies,
+                candidates,
+            });
+        }
+        evaluated(rolls.len()).await?;
+        analyses
+            .into_iter()
+            .collect::<Option<Vec<_>>>()
+            .context("GNUbg skipped a roll")
     }
 
     /// Evaluate all legal root moves at the requested depth, including plays
@@ -529,8 +688,12 @@ impl Engine {
             .run_with_timeout(directory.path(), &commands, Duration::from_secs(180))
             .await?;
         let (mut candidates, evaluated_plies) = parse_full_checker_hints(&output, plies)?;
-        crate::match_analysis::retain_hint_paths(directory.path(), position_id, &mut candidates)
-            .await;
+        crate::match_analysis::retain_hint_paths(
+            &directory.path().join("hint.sgf"),
+            position_id,
+            &mut candidates,
+        )
+        .await;
         Ok(Analysis {
             engine: output
                 .lines()
@@ -771,6 +934,52 @@ pub(crate) fn parse_full_checker_hints(output: &str, plies: i32) -> Result<(Vec<
     Ok((candidates, evaluated_plies))
 }
 
+/// GNUbg passes for the player on roll and evaluates the resulting position.
+const FORCED_PASS: &str = "set automatic roll off\nset automatic move off\nset player 0 human\nset player 1 human\nmove\neval\n";
+/// Printed by `set dice`; it starts each roll's output in a batch.
+const ROLL_MARKER: &str = "The dice have been set to ";
+/// The 21 distinct rolls, or all 36 ordered ones.
+const MAX_BATCH_ROLLS: usize = 36;
+/// The time a single position evaluation had before rolls were batched.
+const ROLL_TIMEOUT: Duration = Duration::from_secs(90);
+
+fn roll_markers(output: &[u8]) -> usize {
+    let marker = format!("\n{ROLL_MARKER}");
+    output
+        .windows(marker.len())
+        .filter(|window| *window == marker.as_bytes())
+        .count()
+}
+
+/// Each roll's evaluation output, in the order the rolls were set. The next
+/// roll's position setup is cut off.
+fn split_rolls<'a>(output: &'a str, rolls: &[[i32; 2]]) -> Result<Vec<&'a str>> {
+    let starts: Vec<usize> = output
+        .match_indices(&format!("\n{ROLL_MARKER}"))
+        .map(|(start, _)| start + 1)
+        .collect();
+    ensure!(
+        starts.len() == rolls.len(),
+        "GNUbg evaluated {} of {} rolls",
+        starts.len(),
+        rolls.len()
+    );
+    starts
+        .iter()
+        .zip(rolls)
+        .enumerate()
+        .map(|(index, (&start, [a, b]))| {
+            let end = starts.get(index + 1).copied().unwrap_or(output.len());
+            let part = &output[start..end];
+            ensure!(
+                part.starts_with(&format!("{ROLL_MARKER}{a} and {b}.")),
+                "GNUbg output does not follow the roll order"
+            );
+            Ok(part.split("Setting GNUbg ID").next().unwrap_or(part))
+        })
+        .collect()
+}
+
 fn parse_pass(output: &str, plies: i32) -> Result<Candidate> {
     let prefix = match gnubg_plies(plies)? {
         0 => "static:".to_owned(),
@@ -962,6 +1171,113 @@ mod tests {
         assert_eq!(result.candidates[0].notation, "dance");
         assert!(result.candidates[0].equity < -0.9);
         assert!(result.candidates[0].probabilities[0] < 0.4);
+    }
+
+    fn all_rolls() -> Vec<[i32; 2]> {
+        (1..=6).flat_map(|a| (a..=6).map(move |b| [a, b])).collect()
+    }
+
+    /// The batch must reproduce each individual evaluation exactly.
+    async fn assert_batch_matches_individual_rolls(
+        engine: &super::Engine,
+        position_id: &str,
+        match_id: &str,
+        plies: i32,
+    ) -> Vec<super::Analysis> {
+        let rolls = all_rolls();
+        let mut reported = Vec::new();
+        let batch = engine
+            .analyze_rolls(position_id, match_id, plies, &rolls, |done| {
+                reported.push(done);
+                std::future::ready(Ok(()))
+            })
+            .await
+            .unwrap();
+        assert_eq!(reported.last(), Some(&21));
+        assert!(
+            reported.windows(2).all(|pair| pair[0] <= pair[1]),
+            "{reported:?}"
+        );
+        for (dice, analysis) in rolls.iter().zip(&batch) {
+            let single = engine
+                .analyze(position_id, match_id, plies, Some(*dice))
+                .await
+                .unwrap();
+            assert_eq!(
+                serde_json::to_value(analysis).unwrap(),
+                serde_json::to_value(&single).unwrap(),
+                "{dice:?} at {plies}-ply"
+            );
+        }
+        batch
+    }
+
+    #[tokio::test]
+    #[ignore = "requires local GNUbg"]
+    async fn real_gnubg_roll_batch_matches_individual_evaluations() {
+        let binary = std::env::var("GNUBG_BIN").unwrap_or("gnubg".into());
+        let engine = super::Engine::new(binary.clone());
+        let opening =
+            assert_batch_matches_individual_rolls(&engine, "4HPwATDgc/ABMA", "cInlAAAAAAAE", 1)
+                .await;
+        assert!(
+            opening
+                .iter()
+                .all(|analysis| analysis.candidates[0].path.is_some())
+        );
+        // BG Tutor's 3-ply is GNUbg's 2-ply, pruned by the analysis move filter.
+        let filtered =
+            super::Engine::new(binary).with_move_filter(Some(super::GnubgMoveFilter::Top14));
+        assert_batch_matches_individual_rolls(&filtered, "4HPwATDgc/ABMA", "cInlAAAAAAAE", 3).await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires local GNUbg"]
+    async fn real_gnubg_roll_batch_evaluates_forced_passes_in_place() {
+        let engine = super::Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()));
+        let analyses =
+            assert_batch_matches_individual_rolls(&engine, "Y54pATDg28EBYA", "cAlnAQAAAAAE", 1)
+                .await;
+        let passes: Vec<[i32; 2]> = all_rolls()
+            .into_iter()
+            .zip(&analyses)
+            .filter(|(_, analysis)| analysis.candidates[0].notation == "dance")
+            .map(|(dice, _)| dice)
+            .collect();
+        assert_eq!(passes, [[1, 1], [1, 4], [1, 6], [4, 4], [4, 6], [6, 6]]);
+    }
+
+    #[tokio::test]
+    #[ignore = "requires local GNUbg"]
+    async fn real_gnubg_roll_batch_stops_when_progress_cannot_be_saved() {
+        let engine = super::Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()));
+        let error = engine
+            .analyze_rolls("4HPwATDgc/ABMA", "cInlAAAAAAAE", 1, &all_rolls(), |done| {
+                std::future::ready(if done > 0 {
+                    Err(anyhow::anyhow!("Job lease was lost"))
+                } else {
+                    Ok(())
+                })
+            })
+            .await
+            .unwrap_err();
+        assert_eq!(error.to_string(), "Job lease was lost");
+    }
+
+    #[test]
+    fn roll_output_is_split_at_the_dice_markers_in_order() {
+        let output = "banner\nThe dice have been set to 1 and 2.\n    1. first\nSetting GNUbg ID x\nboard\nThe dice have been set to 6 and 6.\n    1. second\n";
+        assert_eq!(super::roll_markers(output.as_bytes()), 2);
+        let parts = super::split_rolls(output, &[[1, 2], [6, 6]]).unwrap();
+        assert_eq!(
+            parts,
+            [
+                "The dice have been set to 1 and 2.\n    1. first\n",
+                "The dice have been set to 6 and 6.\n    1. second\n"
+            ]
+        );
+        assert!(super::split_rolls(output, &[[6, 6], [1, 2]]).is_err());
+        assert!(super::split_rolls(output, &[[1, 2], [6, 6], [3, 3]]).is_err());
     }
 
     #[tokio::test]

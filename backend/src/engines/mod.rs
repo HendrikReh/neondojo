@@ -492,6 +492,17 @@ pub(crate) fn validate_evaluation(equity: f64, probabilities: &[f64]) -> Result<
     Ok(())
 }
 
+/// Whether the player on roll cannot play a checker with `dice`, decided by
+/// the rule validation that also checks recorded moves.
+pub(crate) fn forced_pass(position_id: &str, match_id: &str, dice: [i32; 2]) -> Result<bool> {
+    let player = context::Context::decode(match_id)?.player;
+    let board: [i32; 26] = crate::learning::decode_decision_board(position_id, match_id)?
+        .try_into()
+        .ok()
+        .context("Invalid board length")?;
+    Ok(crate::import::sgf::apply_checker_turn(&board, player, dice, &[]).is_ok())
+}
+
 #[derive(Clone)]
 pub enum AnalysisEngine {
     Gnubg(Engine),
@@ -526,6 +537,39 @@ impl AnalysisEngine {
         match self {
             Self::Gnubg(engine) => engine.analyze(position_id, match_id, plies, dice).await,
             Self::OpenSage(engine) => engine.analyze(position_id, match_id, plies, dice).await,
+        }
+    }
+    /// Evaluate the position once for each roll, in the given order, and
+    /// report the number of evaluated rolls after each one.
+    pub async fn analyze_rolls<F>(
+        &self,
+        position_id: &str,
+        match_id: &str,
+        plies: i32,
+        rolls: &[[i32; 2]],
+        mut evaluated: impl FnMut(usize) -> F,
+    ) -> Result<Vec<Analysis>>
+    where
+        F: std::future::Future<Output = Result<()>>,
+    {
+        match self {
+            Self::Gnubg(engine) => {
+                engine
+                    .analyze_rolls(position_id, match_id, plies, rolls, evaluated)
+                    .await
+            }
+            Self::OpenSage(engine) => {
+                let mut analyses = Vec::with_capacity(rolls.len());
+                for &dice in rolls {
+                    analyses.push(
+                        engine
+                            .analyze(position_id, match_id, plies, Some(dice))
+                            .await?,
+                    );
+                    evaluated(analyses.len()).await?;
+                }
+                Ok(analyses)
+            }
         }
     }
     pub async fn analyze_checker_choices(
@@ -585,6 +629,13 @@ impl From<Engine> for AnalysisEngine {
 #[cfg(test)]
 mod tests {
     use super::SageSnapshot;
+
+    #[test]
+    fn forced_passes_follow_the_rules() {
+        assert!(!super::forced_pass("4HPwATDgc/ABMA", "cInlAAAAAAAE", [3, 1]).unwrap());
+        assert!(super::forced_pass("Y54pATDg28EBYA", "cAlnAQAAAAAE", [6, 6]).unwrap());
+        assert!(!super::forced_pass("Y54pATDg28EBYA", "cAlnAQAAAAAE", [2, 3]).unwrap());
+    }
 
     fn snapshot(artifact_fingerprint: &str) -> SageSnapshot {
         SageSnapshot {
