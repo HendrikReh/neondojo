@@ -85,7 +85,9 @@ each candidate's original evaluation depth. Ties keep their file order.
 In **Analysis → Checker → Compare moves** (German **Zugvergleich**), plays that
 reach the same board share a row across saved eXtreme Gammon, GNU Backgammon and
 Open Sage analyses. Each engine column shows its rank, equity and actual
-candidate depth. Use the column selector to choose another saved analysis.
+candidate depth. Open Sage 2-ply analyses from fork release 2.0.20261119 on
+contain only the candidates its move filter searched at full depth, plus the
+played move. Use the column selector to choose another saved analysis.
 Select a row to show each step on the board in **Arrows** view. The preview
 uses the recorded XG path when that candidate is available, followed by the
 first local source otherwise.

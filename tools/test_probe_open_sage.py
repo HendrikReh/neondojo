@@ -22,6 +22,14 @@ class ProbeTests(unittest.TestCase):
             return
         SPEC.loader.exec_module(probe)
 
+    def test_accepts_only_supported_package_versions(self):
+        for version in probe.SUPPORTED_VERSIONS:
+            probe.validate_versions({'bgsage': version, 'numpy': probe.NUMPY_VERSION})
+        for value in ({'bgsage': '2.0.20261118', 'numpy': probe.NUMPY_VERSION},
+                      {'bgsage': probe.SUPPORTED_VERSIONS[-1], 'numpy': '2.5.3'}):
+            with self.subTest(value=value), self.assertRaises(probe.ProbeError):
+                probe.validate_versions(value)
+
     def test_valid_nested_probabilities(self):
         self.assertTrue(hasattr(probe, 'validate_probabilities'), 'probability validator missing')
         probe.validate_probabilities([0.6, 0.2, 0.03, 0.1, 0.01])

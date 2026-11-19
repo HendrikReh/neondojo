@@ -19,7 +19,11 @@ import subprocess
 import sys
 import time
 
-VERSION = '2.0.20260907'
+# Supported Open Sage fork package versions. 2.0.20260907 covers the fork
+# builds up to 340fc53; 2.0.20261119 is the fork release v2.0.20261119.
+# The worker and the Rust snapshot validation use this list as well.
+SUPPORTED_VERSIONS = ('2.0.20260907', '2.0.20261119')
+NUMPY_VERSION = '2.5.4'
 
 
 class ProbeError(Exception):
@@ -72,6 +76,11 @@ def validate_result(result, probability_validator=validate_probabilities):
                  'equity_dt', 'equity_dp', 'optimal_equity', 'equity_diff'):
         if hasattr(result, name):
             require(math.isfinite(getattr(result, name)), f'Non-finite {name}')
+
+
+def validate_versions(value):
+    require(value['bgsage'] in SUPPORTED_VERSIONS, 'Unsupported bgsage version; install the locked wheels.')
+    require(value['numpy'] == NUMPY_VERSION, 'Unsupported numpy version; install the locked wheels.')
 
 
 def deny_network():
@@ -146,8 +155,7 @@ def run_worker(skip_platform=False, levels=None):
             raise ProbeError('Open Sage dependency/native library unavailable. Install the locked wheels into native Python 3.12; import failure: ' + type(error).__name__) from None
         report['import_seconds'] = time.perf_counter() - import_start
         report['identity'] = identity(sage, native)
-        require(report['identity']['bgsage'] == VERSION, 'Unsupported bgsage version; install the locked wheels.')
-        require(report['identity']['numpy'] == '2.5.4', 'Unsupported numpy version; install the locked wheels.')
+        validate_versions(report['identity'])
         for name in ('checker_play', 'cube_action', 'post_move_analytics'):
             require(callable(getattr(sage.BgBotAnalyzer, name, None)), f'Missing API {name}')
         require('force_boards' in inspect.signature(sage.BgBotAnalyzer.checker_play).parameters,
@@ -340,11 +348,17 @@ def run_worker(skip_platform=False, levels=None):
             validate_result(actual)
             cubeful = sage.BgBotAnalyzer(eval_level='2ply', parallel_threads=2, filter_max_moves=1, filter_threshold=.001)
             cf_result = cubeful.checker_play(opening, 3, 1, beaver=False, force_boards=[played])
-            require(all(move.eval_level == '2-ply' for move in cf_result.moves), 'Cubeful candidate not evaluated at full depth')
+            # From fork release 2.0.20261119 cubeful 2-ply also prunes the
+            # filter's losers to 1-ply. The played move must reach full depth;
+            # BG Tutor discards the other partially searched candidates.
+            cf_full = [move for move in cf_result.moves if move.eval_level == '2-ply']
+            require(cf_full, 'No cubeful candidate evaluated at full depth')
+            require(any(move.board == played for move in cf_full), 'Cubeful played move not evaluated at full depth')
             for move in cf_result.moves:
                 validate_result(move)
-            return {'cubeful_all_candidates_full_depth': True, 'played_board': played, 'before_level': pruned[-1].eval_level,
-                    'after_level': actual.eval_level, 'equity': actual.equity}
+            return {'cubeful_all_candidates_full_depth': len(cf_full) == len(cf_result.moves),
+                    'cubeful_full_depth_candidates': len(cf_full), 'played_board': played,
+                    'before_level': pruned[-1].eval_level, 'after_level': actual.eval_level, 'equity': actual.equity}
         check('forced_played_move_2ply', force_case)
 
         if len(levels) > 1:

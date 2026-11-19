@@ -13,6 +13,11 @@ use serde_json::json;
 use std::{path::Path, time::Duration};
 use utoipa::ToSchema;
 
+/// Open Sage fork package versions BG Tutor accepts. Older versions stay valid
+/// for saved job and duel snapshots. The sidecar checks the same list in
+/// `SUPPORTED_VERSIONS` of `tools/probe_open_sage.py`.
+pub const SUPPORTED_SAGE_PACKAGE_VERSIONS: [&str; 2] = ["2.0.20260907", "2.0.20261119"];
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct SageSnapshot {
     pub python: String,
@@ -37,8 +42,9 @@ pub struct EngineFork {
 
 impl SageSnapshot {
     pub fn known_fork(&self) -> Option<EngineFork> {
-        // Both wheels retain the upstream package version. Identify the
-        // documented builds by their full runtime fingerprints.
+        // Fork builds before release 2.0.20261119 retain the upstream package
+        // version. Identify the documented builds by their full runtime
+        // fingerprints.
         let revision = match self.artifact_fingerprint.as_str() {
             "e76f82a04e35c3180e5837a76ce0f6f6b9ecfe459816284a2d25dc51e28d13d3" => {
                 "2e71beed9c24b5bbc7564c03374d6d588ff24119"
@@ -49,6 +55,10 @@ impl SageSnapshot {
             "7c9a021a3f29b55462d91220c33b00aa247cd4b65a74cbb45db7cb57b6295092" => {
                 "340fc5346f1938d505f99f22101e059a30e9cfc6"
             }
+            // Release v2.0.20261119, official GitHub cp312 wheel.
+            "9b3ffc5c023367937ed234e45d077e3d341a96f9f44bf27e58e1355afaf0c93f" => {
+                "0dee4f321c0437dc142da2ae68d26f7da3038db1"
+            }
             _ => return None,
         };
         Some(EngineFork {
@@ -56,6 +66,17 @@ impl SageSnapshot {
             revision,
         })
     }
+}
+
+/// Which checker candidates the sidecar must search at the profile depth.
+#[derive(Clone, Copy)]
+enum CheckerScope {
+    /// The engine's own selection, which may prune weaker candidates.
+    Searched,
+    /// The engine's selection plus the played move.
+    Played([i32; 26]),
+    /// Every legal move.
+    AllLegal,
 }
 
 #[derive(Clone)]
@@ -103,7 +124,8 @@ impl SageEngine {
             "Open Sage 1-ply capability has not been verified"
         );
         ensure!(
-            snapshot.adapter_version == 1 && snapshot.package_version == "2.0.20260907",
+            snapshot.adapter_version == 1
+                && SUPPORTED_SAGE_PACKAGE_VERSIONS.contains(&snapshot.package_version.as_str()),
             "Unsupported Open Sage adapter or package version"
         );
         ensure!(
@@ -181,7 +203,8 @@ impl SageEngine {
                 .to_str()
                 .context("Open Sage Python path is not UTF-8")?
                 .into(),
-            package_version: "2.0.20260907".into(),
+            // Replaced by the installation's own identity below.
+            package_version: String::new(),
             artifact_fingerprint: String::new(),
             threads,
             plies,
@@ -243,6 +266,19 @@ impl SageEngine {
             .await
     }
 
+    /// Every legal checker play at the profile depth, for hints that rate any
+    /// move. Plain requests may omit candidates the engine's filter pruned.
+    pub async fn all_legal_checker_boards(
+        &self,
+        position_id: &str,
+        match_id: &str,
+    ) -> Result<Vec<SageCheckerCandidate>> {
+        Ok(self
+            .checker_boards_scoped(position_id, match_id, None, CheckerScope::AllLegal, None)
+            .await?
+            .0)
+    }
+
     /// Checker candidates plus the engine cost the worker measured for them.
     pub async fn checker_boards_costed(
         &self,
@@ -277,6 +313,19 @@ impl SageEngine {
         force_board: Option<[i32; 26]>,
         batch: Option<&mut process::VerifiedBatch>,
     ) -> Result<(Vec<SageCheckerCandidate>, Option<EngineCost>)> {
+        let scope = force_board.map_or(CheckerScope::Searched, CheckerScope::Played);
+        self.checker_boards_scoped(position_id, match_id, dice, scope, batch)
+            .await
+    }
+
+    async fn checker_boards_scoped(
+        &self,
+        position_id: &str,
+        match_id: &str,
+        dice: Option<[i32; 2]>,
+        scope: CheckerScope,
+        batch: Option<&mut process::VerifiedBatch>,
+    ) -> Result<(Vec<SageCheckerCandidate>, Option<EngineCost>)> {
         let context = context::Context::decode(match_id)?;
         ensure!(
             !context.pending_double,
@@ -288,7 +337,15 @@ impl SageEngine {
             dice.iter().all(|die| (1..=6).contains(die)),
             "Invalid checker dice"
         );
-        let payload = json!({"operation":"checker", "board":board, "context":context, "dice":dice, "force_board":force_board.map(|board| context::to_sage(&board, context.player))});
+        let mut payload =
+            json!({"operation":"checker", "board":board, "context":context, "dice":dice});
+        match scope {
+            CheckerScope::Searched => {}
+            CheckerScope::Played(played) => {
+                payload["force_board"] = json!(context::to_sage(&played, context.player));
+            }
+            CheckerScope::AllLegal => payload["all_legal"] = json!(true),
+        }
         let (result, cost) = self.request_with_batch(payload, batch).await?;
         let mut candidates: Vec<SageCheckerCandidate> = serde_json::from_value(result)?;
         ensure!(
@@ -665,6 +722,10 @@ mod tests {
                 "7c9a021a3f29b55462d91220c33b00aa247cd4b65a74cbb45db7cb57b6295092",
                 "340fc5346f1938d505f99f22101e059a30e9cfc6",
             ),
+            (
+                "9b3ffc5c023367937ed234e45d077e3d341a96f9f44bf27e58e1355afaf0c93f",
+                "0dee4f321c0437dc142da2ae68d26f7da3038db1",
+            ),
         ] {
             let fork = snapshot(fingerprint)
                 .known_fork()
@@ -672,6 +733,35 @@ mod tests {
             assert_eq!(fork.repository, "HendrikReh/bgsage");
             assert_eq!(fork.revision, revision);
         }
+    }
+
+    #[test]
+    fn supported_package_versions_match_the_sidecar_check() {
+        let probe = include_str!("../../../tools/probe_open_sage.py");
+        let line = probe
+            .lines()
+            .find(|line| line.starts_with("SUPPORTED_VERSIONS = "))
+            .expect("probe lists its supported versions");
+        let listed: Vec<&str> = line.split('\'').skip(1).step_by(2).collect();
+        assert_eq!(listed, super::SUPPORTED_SAGE_PACKAGE_VERSIONS);
+    }
+
+    #[test]
+    fn engine_accepts_only_supported_package_versions() {
+        for version in super::SUPPORTED_SAGE_PACKAGE_VERSIONS {
+            let snapshot = SageSnapshot {
+                python: "/usr/bin/python3".into(),
+                package_version: version.into(),
+                ..snapshot(&"a".repeat(64))
+            };
+            assert!(super::SageEngine::new(snapshot).is_ok(), "{version}");
+        }
+        let snapshot = SageSnapshot {
+            python: "/usr/bin/python3".into(),
+            package_version: "2.0.20261118".into(),
+            ..snapshot(&"a".repeat(64))
+        };
+        assert!(super::SageEngine::new(snapshot).is_err());
     }
 
     #[test]
