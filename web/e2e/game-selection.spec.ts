@@ -355,3 +355,96 @@ test('a saved whole-match result stays identified while game navigation loads', 
   await expect(page.locator('.board-heading')).toContainText('Spiel 1');
   await expect(page.getByRole('button', { name: 'Spiel analysieren', exact: true })).toBeEnabled();
 });
+
+test('stepping through moves keeps move colors and statistics without reloading them', async ({
+  page,
+}) => {
+  await page.goto('/');
+  const imported = page.waitForResponse(
+    (r) =>
+      r.request().method() === 'POST' &&
+      new URL(r.url()).pathname === '/api/imports',
+  );
+  await page
+    .getByLabel('Matchdatei')
+    .setInputFiles('../backend/tests/fixtures/WC2014.xg');
+  const match = (await (await imported).json()).match;
+  const games: { game_no: number; position_count: number }[] = await (
+    await page.request.get(`/api/matches/${match.id}/games`)
+  ).json();
+  const game = games.find((entry) => entry.position_count > 11);
+  expect(game, 'a game with at least eleven positions').toBeDefined();
+  const assessed = page.waitForResponse(
+    (r) =>
+      new URL(r.url()).pathname ===
+        `/api/matches/${match.id}/move-assessments` &&
+      new URL(r.url()).searchParams.get('game_no') === String(game!.game_no),
+  );
+  await page
+    .getByLabel('Spiel auswählen', { exact: true })
+    .selectOption(String(game!.game_no));
+  await expect(page.locator('.board-heading')).toContainText(
+    `Spiel ${game!.game_no}`,
+  );
+  await assessed;
+  const colored = page.locator(
+    '.moves-list .move-history-row[class*="move-assessment-"]',
+  );
+  await expect(colored.first()).toBeVisible();
+  const coloredRows = await colored.count();
+  await page.waitForLoadState('networkidle');
+
+  // Record any render in which the move colors are gone.
+  await page.evaluate(() => {
+    const state = window as unknown as { minColored: number };
+    const count = () =>
+      document.querySelectorAll(
+        '.moves-list .move-history-row[class*="move-assessment-"]',
+      ).length;
+    state.minColored = count();
+    new MutationObserver(() => {
+      state.minColored = Math.min(state.minColored, count());
+    }).observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+  });
+  const reloads: string[] = [];
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (
+      path.endsWith('/move-assessments') ||
+      path.endsWith('/analysis-statistics')
+    )
+      reloads.push(request.url());
+  });
+  const visited = new Set<string>();
+  async function step(name: 'Nächster Zug' | 'Vorheriger Zug') {
+    const before = await page.locator('.position-code code').textContent();
+    // Candidates still follow each move.
+    const result = page.waitForResponse((r) =>
+      /^\/api\/positions\/[^/]+\/analysis-result$/.test(
+        new URL(r.url()).pathname,
+      ),
+    );
+    await page.getByRole('button', { name, exact: true }).click();
+    await expect(page.locator('.position-code code')).not.toHaveText(
+      before ?? '',
+    );
+    visited.add(new URL((await result).url()).pathname);
+  }
+  for (let move = 0; move < 10; move++) await step('Nächster Zug');
+  for (let move = 0; move < 10; move++) await step('Vorheriger Zug');
+  await page.waitForLoadState('networkidle');
+
+  expect(visited.size).toBeGreaterThanOrEqual(10);
+  expect(reloads).toEqual([]);
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { minColored: number }).minColored,
+    ),
+  ).toBe(coloredRows);
+  await expect(colored).toHaveCount(coloredRows);
+});
