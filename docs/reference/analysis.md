@@ -15,7 +15,9 @@ result or a queued or running job from the active analysis engine. Results from
 another engine are not reused. If none exists, it starts a calculation with
 the engine and search depth from the active analysis profile. Selecting another
 position does the same while **Dice equity** is visible. After a submission or
-engine failure, select **Dice equity** again to retry.
+engine failure, select **Dice equity** again to retry. GNUbg evaluates all 21
+distinct rolls in one run and reports progress roll by roll; Open Sage evaluates
+them one at a time. A roll without a legal play is evaluated as a forced pass.
 
 The grid shows the best play's equity for each of the 36 rolls. Cells at or
 above the weighted mean **Ø** use the success color, cells below it the

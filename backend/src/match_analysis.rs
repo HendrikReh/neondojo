@@ -373,12 +373,12 @@ fn retain_checker_paths<'a>(
 }
 
 pub(crate) async fn retain_hint_paths(
-    directory: &std::path::Path,
+    hint_sgf: &std::path::Path,
     position_id: &str,
     candidates: &mut [Candidate],
 ) {
     // Some GNUbg builds and decisions only expose textual hints.
-    let Ok(sgf) = read_analysis_artifact(&directory.join("hint.sgf")).await else {
+    let Ok(sgf) = read_analysis_artifact(hint_sgf).await else {
         return;
     };
     let Ok((matched, _)) = crate::import::sgf::parse_native_sgf_with_context(&sgf) else {

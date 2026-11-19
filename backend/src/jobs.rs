@@ -218,34 +218,36 @@ async fn execute(state: &AppState, job: &Job, token: Uuid) -> Result<Value> {
                 .await?,
         )?);
     }
-    let mut rolls = Vec::new();
+    // 21 unordered pairs; doubles have weight 1 and other pairs weight 2.
+    let dice: Vec<[i32; 2]> = (1..=6).flat_map(|a| (a..=6).map(move |b| [a, b])).collect();
+    let total = dice.len();
+    let analyses = configured_engine
+        .analyze_rolls(
+            &position.position_id,
+            &position.gnubg_match_id,
+            job.plies,
+            &dice,
+            |evaluated| progress(&state.pool, job.id, token, (evaluated * 100 / total) as i32),
+        )
+        .await?;
     let mut engine = String::new();
-    for a in 1..=6 {
-        for b in a..=6 {
-            let analysis = configured_engine
-                .analyze(
-                    &position.position_id,
-                    &position.gnubg_match_id,
-                    job.plies,
-                    Some([a, b]),
-                )
-                .await?;
-            engine = analysis.engine;
-            let best = analysis
-                .candidates
-                .into_iter()
-                .next()
-                .context("No evaluated candidate")?;
-            let weight = if a == b { 1 } else { 2 };
-            rolls.push(DiceEvaluation {
-                dice: [a, b],
-                weight,
-                probability: f64::from(weight) / 36.0,
-                best,
-            });
-            progress(&state.pool, job.id, token, (rolls.len() * 100 / 21) as i32).await?;
-        }
+    let mut rolls = Vec::with_capacity(dice.len());
+    for ([a, b], analysis) in dice.iter().copied().zip(analyses) {
+        engine = analysis.engine;
+        let best = analysis
+            .candidates
+            .into_iter()
+            .next()
+            .context("No evaluated candidate")?;
+        let weight = if a == b { 1 } else { 2 };
+        rolls.push(DiceEvaluation {
+            dice: [a, b],
+            weight,
+            probability: f64::from(weight) / 36.0,
+            best,
+        });
     }
+    ensure!(rolls.len() == 21, "Dice equity needs all 21 rolls");
     let mean_equity = rolls.iter().map(|r| r.best.equity * r.probability).sum();
     Ok(serde_json::to_value(Distribution {
         engine,
