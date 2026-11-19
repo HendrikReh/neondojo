@@ -88,13 +88,13 @@ BGTUTOR_SAGE_PYTHON=/path/to/venv/bin/python cargo test -p bgtutor sage_executes
 OPEN_SAGE_TEST_PYTHON=/path/to/venv/bin/python cargo test -p bgtutor --test open_sage_play -- --ignored
 ```
 
-BG Tutor verwendet ausschließlich die Fork-Installation. `BGTUTOR_SAGE_PYTHON` und `OPEN_SAGE_TEST_PYTHON` erwarten deren Interpreter (lokal `local-data/open-sage-fork-340fc53/venv/bin/python`). Mit dem ursprünglichen Wheel scheitert `native_checker_cube_and_match_analysis` am oben beschriebenen 1-ply-Threadbudget, und `open_sage_settings` erwartet die Tiefen 1 bis 4. Kein Test benötigt das ursprüngliche Wheel.
+BG Tutor verwendet ausschließlich die Fork-Installation. `BGTUTOR_SAGE_PYTHON` und `OPEN_SAGE_TEST_PYTHON` erwarten deren Interpreter (lokal `local-data/open-sage-fork-2.0.20261119/venv/bin/python`). Mit dem ursprünglichen Wheel scheitert `native_checker_cube_and_match_analysis` am oben beschriebenen 1-ply-Threadbudget, und `open_sage_settings` erwartet die Tiefen 1 bis 4. Kein Test benötigt das ursprüngliche Wheel.
 
 Die Testziele laufen einzeln und mit `--test-threads=1`. Ein gemeinsamer Aufruf von `cargo test --workspace -- --include-ignored` mit gesetzten Sage-Variablen lässt die Prozess-Tests in `engines::process` scheitern, weil sie sich den globalen Worker mit den echten Sage-Tests teilen.
 
 ## Verwendung in BG Tutor
 
-1. Die Fork-Umgebung installieren. Für diese lokale Umsetzung liegt sie dauerhaft unter `local-data/open-sage-fork-340fc53/venv` im Hauptrepository; `local-data/` ist von Git ausgeschlossen. Es wurden keine Pakete oder Gewichte in den Quellcode kopiert.
+1. Die Fork-Umgebung installieren. Für diese lokale Umsetzung liegt sie dauerhaft unter `local-data/open-sage-fork-2.0.20261119/venv` im Hauptrepository; `local-data/` ist von Git ausgeschlossen. Es wurden keine Pakete oder Gewichte in den Quellcode kopiert.
 2. Backend und Frontend aus dem Hauptrepository bauen und gemäß [README](../README.md#restart-bg-tutor-locally-on-port-8787) starten. Vor der ersten Anwendung von Migration `0041_open_sage.sql` die Benutzerdatenbank sichern. Die Migration ergänzt lokale Installationsmetadaten und Provider-Indizes; vorhandene Jobs bleiben GNUbg-kompatibel. Datenbank- und Browsertests verwenden weiterhin eigene Testdatenbanken.
 3. Unter **Einstellungen → Analyse → Engines auf diesem Rechner → Lokale Open-Sage-Installation** den absoluten Pfad zum venv-Interpreter eintragen und **Prüfen und speichern** wählen. Danach Analyse-Engine und Spiel-Engine getrennt wählen und den Entwurf anwenden.
 4. Unter **Einstellungen → Analyse → Engines auf diesem Rechner** die Rechenlimits **Open-Sage-Threads für Analysen** und **Open-Sage-Threads beim Spielen** jeweils von 2 bis zur ermittelten Zahl verfügbarer logischer CPUs einstellen. Bei **Standard** verwendet Open Sage 4 Threads für Analysen und Duelle und 2 beim Spielen. Neue Sitzungen, Aufträge und Duellserien speichern den jeweils gültigen Wert. Die Engine prüft das konfigurierte Limit mit einer echten Stellungsbewertung. Der geprüfte serielle 1-ply-Checkerpfad bleibt seriell.
@@ -331,7 +331,7 @@ Empfehlung lautete trotzdem „doppeln“, aber die Analyse verbuchte für
 bewertet einen Cube, den der Zurückliegende noch drehen kann, als einmal
 verdoppelt.
 
-Der aktive Build aus `340fc5346f1938d505f99f22101e059a30e9cfc6` liegt unter
+Der Build aus `340fc5346f1938d505f99f22101e059a30e9cfc6` liegt unter
 `local-data/open-sage-fork-340fc53/` mit `src/`, `wheels/`, `requirements.lock`,
 `provenance.json`, `probe-1ply-2ply.json` (bestanden) und `venv/`. Der
 Sage-Wheel hat SHA256
@@ -361,6 +361,46 @@ Insgesamt sank der Cube-Fehler von 4,302 auf 2,769. Die Zahl der
 Cube-Fehler über 0,02 sank von 68 auf 50. Bei den Zugentscheidungen blieb
 der Gesamtfehler praktisch gleich (14,419 gegenüber 14,422). Die vorherigen
 Analysen sind weiterhin gespeichert.
+
+## Fork-Release 2.0.20261119 – 19. November 2026
+
+Seit dem 19. November 2026 verwendet BG Tutor das Fork-Release
+[`v2.0.20261119`](https://github.com/HendrikReh/bgsage/releases/tag/v2.0.20261119)
+(Commit `0dee4f321c0437dc142da2ae68d26f7da3038db1`, Modell weiterhin
+`stage11`). Es ist das erste Fork-Paket mit eigener Versionsnummer. Frühere
+Fork-Builds meldeten weiterhin `2.0.20260907`. Die Installation liegt unter
+`local-data/open-sage-fork-2.0.20261119/`. Sie enthält `wheels/`,
+`requirements.lock`, `provenance.json`, `probe-1ply-2ply.json` (bestanden) und
+`venv/`. Verwendet wird das offizielle cp312-Wheel aus dem GitHub-Release mit
+SHA256 `c476a0b6edbc32021a0c7c4a7397ffcd2d869502c04bbf060a2a12b37baec4d9`.
+Der Digest wurde gegen die Release-API geprüft. Der Laufzeit-Fingerprint in
+BG Tutor lautet `9b3ffc5c…`.
+
+Die unterstützten Paketversionen stehen in `SUPPORTED_VERSIONS` in
+`tools/probe_open_sage.py`. Der Sidecar verwendet diese Prüfung, und
+`SUPPORTED_SAGE_PACKAGE_VERSIONS` in `backend/src/engines/mod.rs` muss
+dieselbe Liste enthalten; ein Unit-Test vergleicht beide. `2.0.20260907` bleibt
+gültig, damit gespeicherte Job- und Duell-Snapshots und die Installation
+`open-sage-fork-340fc53` weiter funktionieren.
+
+Laut Release-Notes ändern sich die Ergebnisse: Bei 1- und 2-ply hängt die
+Cube-Lebensdauer im Money-Kontaktspiel von Tiefe und Pipcount ab. Außerdem
+durchsucht der cubeful 2-ply-Checkerpfad nur noch die Kandidaten, die den
+Zugfilter überstehen, in voller Tiefe. Die übrigen Kandidaten liefert Open Sage
+mit 1-ply-Werten in derselben Liste. BG Tutor mischt keine Tiefen. Der Sidecar
+verwirft deshalb Kandidaten unter der angeforderten Tiefe, wie bisher schon
+beim cubeless Pfad. Der gespielte Zug wird über `force_boards` immer in voller
+Tiefe bewertet; liefert Open Sage ihn flacher, schlägt die Anfrage fehl.
+Spielhinweise und die Bewertung des eigenen Zugs benötigen jeden legalen Zug.
+Für sie fordert BG Tutor alle legalen Züge an (`all_legal`). Bei der
+Eröffnung 31 dauert das in 2-ply etwa 35 ms statt 12 ms. Neue 2-ply-Analysen
+zeigen dadurch weniger Kandidaten, im Testfall 5 statt 16. 3- und 4-ply
+bewerten weiterhin alle Kandidaten in voller Tiefe. Die Probe-Prüfung
+`forced_played_move_2ply` verlangt den gespielten Zug in voller Tiefe, nicht
+mehr jeden Kandidaten.
+
+Analysen und Duelle, die mit `7c9a021a…` liefen, behalten ihre Installation
+und ihre Werte. Neue Werte erhalten sie nur durch eine neue Analyse.
 
 ## Warm-up für Partien
 

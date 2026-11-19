@@ -10,6 +10,9 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 PATH = Path(__file__).resolve().parents[1] / 'backend/src/engines/worker.py'
+_PROBE_SPEC = importlib.util.spec_from_file_location('probe_open_sage', Path(__file__).with_name('probe_open_sage.py'))
+PROBE = importlib.util.module_from_spec(_PROBE_SPEC)
+_PROBE_SPEC.loader.exec_module(PROBE)
 
 class WorkerTests(unittest.TestCase):
     def test_worker_exists(self):
@@ -114,21 +117,49 @@ class BatchTests(unittest.TestCase):
         self.cube = {'operation': 'cube', 'board': [0] * 26,
                      'context': dict(cube_value=1, cube_owner='centered', away1=0, away2=0, is_crawford=False, jacoby=True)}
 
-    def test_cubeless_profile_keeps_only_fully_searched_candidates(self):
+    def test_keeps_only_fully_searched_candidates_and_requires_full_depth_played_move(self):
         full = SimpleNamespace(eval_level='2-ply', board=[0] * 26, equity=.1,
                                probs=SimpleNamespace(to_list=lambda: [.6, .1, .02, .1, .01]))
         pruned = SimpleNamespace(eval_level='1-ply', board=[1] + [0] * 25, equity=.3,
                                  probs=SimpleNamespace(to_list=lambda: [.6, .1, .02, .1, .01]))
         self.runtime.analyzer.checker_play = lambda *args, **kwargs: SimpleNamespace(moves=[full, pruned])
+        self.runtime.sage = SimpleNamespace(possible_moves=lambda *args: [[0] * 26, [1] + [0] * 25])
         checker = dict(self.cube, operation='checker', dice=[3, 1])
         with patch.dict(sys.modules, {'bgsage.text_export': SimpleNamespace(compute_move_notation=lambda *args: '8/5 6/5')}):
-            with self.assertRaisesRegex(ValueError, 'below the requested depth'):
-                self.runtime.dispatch(checker)
+            for cubeless in (False, True):
+                with self.subTest(cubeless=cubeless):
+                    self.runtime.cubeless = cubeless
+                    moves, _ = self.runtime.dispatch(checker)
+                    self.assertEqual([move['board'] for move in moves], [[0] * 26])
+            self.runtime.cubeless = False
+            with self.assertRaisesRegex(ValueError, 'forced candidate below the requested depth'):
+                self.runtime.dispatch(dict(checker, force_board=[1] + [0] * 25))
+            moves, _ = self.runtime.dispatch(dict(checker, force_board=[0] * 26))
+            self.assertEqual([move['board'] for move in moves], [[0] * 26])
+            with self.assertRaisesRegex(ValueError, 'forced candidate below the requested depth'):
+                self.runtime.dispatch(dict(checker, all_legal=True))
+            for scope in ({'all_legal': 1}, {'all_legal': True, 'force_board': [0] * 26}):
+                with self.assertRaisesRegex(ValueError, 'Invalid checker candidate scope'):
+                    self.runtime.dispatch(dict(checker, **scope))
             self.runtime.cubeless = True
-            moves, _ = self.runtime.dispatch(checker)
-        self.assertEqual([move['board'] for move in moves], [[0] * 26])
         with self.assertRaisesRegex(ValueError, 'no cube decisions'):
             self.runtime.dispatch(self.cube)
+
+    def test_all_legal_scope_forces_every_legal_board(self):
+        legal = [[0] * 26, [1] + [0] * 25]
+        calls = []
+        def checker_play(*args, force_boards=None, **kwargs):
+            calls.append(force_boards)
+            return SimpleNamespace(moves=[SimpleNamespace(eval_level='2-ply', board=list(b), equity=.1,
+                                                          probs=SimpleNamespace(to_list=lambda: [.6, .1, .02, .1, .01]))
+                                          for b in legal])
+        self.runtime.analyzer.checker_play = checker_play
+        self.runtime.sage = SimpleNamespace(possible_moves=lambda *args: [tuple(b) for b in legal])
+        checker = dict(self.cube, operation='checker', dice=[3, 1], all_legal=True)
+        with patch.dict(sys.modules, {'bgsage.text_export': SimpleNamespace(compute_move_notation=lambda *args: '8/5 6/5')}):
+            moves, _ = self.runtime.dispatch(checker)
+        self.assertEqual(calls, [legal])
+        self.assertEqual([move['board'] for move in moves], legal)
 
     def test_rejects_cube_depth_below_profile(self):
         self.runtime.profile = {'plies': 3}
@@ -187,9 +218,12 @@ class BatchTests(unittest.TestCase):
                     self.setUp()
                     del self.runtime.check_identity
                     self.runtime.sage = self.runtime.native = None
-                    manifest = dict(identity_sha256='original', bgsage='2.0.20260907', numpy='2.5.4',
-                                    production_model='stage11', strategy='backgame_pair_phased')
+                    manifest = dict(identity_sha256='original', bgsage=PROBE.SUPPORTED_VERSIONS[-1],
+                                    numpy=PROBE.NUMPY_VERSION, production_model='stage11',
+                                    strategy='backgame_pair_phased')
                     self.runtime.integrity['identity'] = lambda *args: dict(manifest)
+                    self.runtime.integrity['validate_versions'] = PROBE.validate_versions
+                    self.runtime.integrity['ProbeError'] = PROBE.ProbeError
                     distribution = Mock()
                     distribution.read_text.return_value = 'original RECORD'
                     with patch('importlib.metadata.distribution', return_value=distribution):

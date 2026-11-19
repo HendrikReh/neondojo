@@ -1,4 +1,4 @@
-use bgtutor::engines::{SageEngine, SageSnapshot};
+use bgtutor::engines::{SUPPORTED_SAGE_PACKAGE_VERSIONS, SageEngine, SageSnapshot};
 
 fn snapshot() -> SageSnapshot {
     SageSnapshot {
@@ -52,7 +52,7 @@ async fn native_checker_cube_and_match_analysis() {
         let profile = SageEngine::probe_profile(python.clone(), depth, threads)
             .await
             .unwrap();
-        assert_eq!(profile.package_version, "2.0.20260907");
+        assert!(SUPPORTED_SAGE_PACKAGE_VERSIONS.contains(&profile.package_version.as_str()));
         assert_eq!(profile.threads, threads);
         let engine = SageEngine::new(profile).unwrap();
         let version = engine.version().await.unwrap();

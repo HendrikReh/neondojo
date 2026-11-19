@@ -337,11 +337,9 @@ pub(super) async fn alternatives(
 ) -> Result<Vec<PlayAlternative>> {
     if matches!(session.phase, PlayPhase::Move) {
         let candidates = engine
-            .checker_boards(
+            .all_legal_checker_boards(
                 &session.position.position_id,
                 &session.position.gnubg_match_id,
-                None,
-                None,
             )
             .await?;
         let best = candidates

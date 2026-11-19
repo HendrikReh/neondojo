@@ -91,8 +91,10 @@ class Runtime:
 
     def check_identity(self):
         value = self.integrity['identity'](self.sage, self.native)
-        if value['bgsage'] != '2.0.20260907' or value['numpy'] != '2.5.4':
-            raise ValueError('Unsupported Open Sage/NumPy version; install the locked wheels')
+        try:
+            self.integrity['validate_versions'](value)
+        except self.integrity['ProbeError']:
+            raise ValueError('Unsupported Open Sage/NumPy version; install the locked wheels') from None
         # Include the RECORD file itself, dependency version, and model selection.
         distribution = __import__('importlib.metadata', fromlist=['distribution']).distribution('bgsage')
         record = distribution.read_text('RECORD')
@@ -140,11 +142,19 @@ class Runtime:
                 if len(dice) != 2 or any(type(x) is not int or x < 1 or x > 6 for x in dice):
                     raise ValueError('Invalid dice')
                 forced = request.get('force_board')
+                all_legal = request.get('all_legal', False)
+                if type(all_legal) is not bool or all_legal and forced is not None:
+                    raise ValueError('Invalid checker candidate scope')
+                force_boards = None
                 if forced is not None:
                     forced = board(forced)
                     if forced not in self.sage.possible_moves(before, *dice):
                         raise ValueError('Forced played board is not legal')
-                result = self.analyzer.checker_play(before, *dice, force_boards=[forced] if forced is not None else None, **kwargs)
+                    force_boards = [forced]
+                elif all_legal:
+                    # Hints rate every legal move, so search all of them at full depth.
+                    force_boards = [board(list(move)) for move in self.sage.possible_moves(before, *dice)]
+                result = self.analyzer.checker_play(before, *dice, force_boards=force_boards, **kwargs)
                 from bgsage.text_export import compute_move_notation
                 moves = []
                 for move in result.moves:
@@ -153,11 +163,13 @@ class Runtime:
                     except Exception as error:
                         raise ValueError(f'Invalid checker evaluation: probabilities={move.probs.to_list()}, board={before}, dice={dice}, context={context}; {error}') from error
                     if move.eval_level != f"{self.profile['plies']}-ply":
-                        # The cubeless path prunes weaker candidates to 1-ply;
-                        # keep only fully searched ones, which include its choice.
-                        if self.cubeless and forced is None:
+                        # The cubeless path and, from fork release 2.0.20261119,
+                        # cubeful 2-ply prune weaker candidates to 1-ply. Keep
+                        # only fully searched ones, which include the engine's
+                        # choice; forced candidates must still reach full depth.
+                        if not all_legal and move.board != forced:
                             continue
-                        raise ValueError('Open Sage returned a candidate below the requested depth')
+                        raise ValueError('Open Sage returned a forced candidate below the requested depth')
                     moves.append({'board': board(move.board), 'notation': compute_move_notation(before, move.board, *dice),
                                   'equity': move.equity, 'probabilities': probabilities(move.probs.to_list())})
                 if not moves or forced is not None and not any(move['board'] == forced for move in moves):
