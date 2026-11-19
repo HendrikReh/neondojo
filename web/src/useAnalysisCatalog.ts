@@ -24,6 +24,13 @@ export function useAnalysisCatalog(
     scope: string;
     page: AnalysisCatalogPage;
   }>();
+  // The effective selection and source revision belong to the match; only the
+  // entries depend on the position. Keep the match's last page so moving to
+  // another position does not clear the selection that dependent views read.
+  const [matchPage, setMatchPage] = useState<{
+    matchId: string;
+    page: AnalysisCatalogPage;
+  }>();
   const [failure, setFailure] = useState<{ scope: string; error: unknown }>();
   const [busy, setBusy] = useState<string>();
   const [loadingMore, setLoadingMore] = useState<string>();
@@ -62,6 +69,7 @@ export function useAnalysisCatalog(
               }
             : { scope, page: next },
         );
+        setMatchPage({ matchId: matchId!, page: next });
         setFailure(undefined);
         if (
           next.items.some(
@@ -98,6 +106,7 @@ export function useAnalysisCatalog(
       // The server resolves automatic selection. Keep dependent readers empty until
       // its authoritative response arrives, including when the option is off-page.
       setState(undefined);
+      setMatchPage(undefined);
       refresh();
       return true;
     } catch (error) {
@@ -148,6 +157,7 @@ export function useAnalysisCatalog(
             }
           : previous,
       );
+      setMatchPage({ matchId, page: next });
       setFailure(undefined);
     } catch (error) {
       if (current.current === scope && version === readVersion.current)
@@ -156,17 +166,23 @@ export function useAnalysisCatalog(
       setLoadingMore((pending) => (pending === scope ? undefined : pending));
     }
   }
+  const failed = failure?.scope === scope;
+  const known =
+    page ??
+    (matchId && matchPage?.matchId === matchId && !failed
+      ? matchPage.page
+      : undefined);
   return {
-    sourceRevision: page?.source_revision,
+    sourceRevision: known?.source_revision,
     entries: page?.items ?? [],
-    selected: busy === matchId ? undefined : (page?.selected ?? undefined),
-    selectedId: page?.selected_id ?? null,
-    analysisId: busy === matchId ? undefined : page?.selected?.id,
+    selected: busy === matchId ? undefined : (known?.selected ?? undefined),
+    selectedId: known?.selected_id ?? null,
+    analysisId: busy === matchId ? undefined : known?.selected?.id,
     loading: !!matchId && !page && failure?.scope !== scope,
     saving: !!matchId && busy === matchId,
     loadingMore: loadingMore === scope,
     nextCursor: page?.next_cursor,
-    error: failure?.scope === scope ? failure.error : undefined,
+    error: failed ? failure.error : undefined,
     select,
     remove,
     loadMore,
