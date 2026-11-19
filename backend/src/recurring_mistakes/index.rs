@@ -19,8 +19,12 @@ use uuid::Uuid;
 const INDEX_VERSION: &str = "1";
 /// Matches re-indexed by one request; a larger backlog asks for a retry.
 const MAX_REBUILDS: usize = 400;
+/// Loads of one match per request while its saved decisions keep changing.
+const MAX_PUBLISH_ATTEMPTS: usize = 3;
+const CHANGED: &str =
+    "Saved analyses changed while the decision index was updated; retry this request";
 
-#[derive(FromRow)]
+#[derive(Clone, FromRow)]
 struct Candidate {
     id: Uuid,
     fingerprint: String,
@@ -28,30 +32,18 @@ struct Candidate {
     stored: Option<String>,
 }
 
-fn version() -> String {
-    format!("{INDEX_VERSION}:{}", crate::game_plan::CLASSIFIER)
-}
-
-/// Bring the index up to date for one player's matches in the scope.
-pub(super) async fn ensure(
-    pool: &PgPool,
-    database: Option<Uuid>,
-    player: &[String],
-) -> ApiResult<()> {
-    // Older imports gain their displayed analysis only once they are cataloged.
-    // This is bounded per request and reports when a retry is needed.
-    super::imported::catalog_legacy(pool, database, None, Some(player)).await?;
-    let candidates: Vec<Candidate> = sqlx::query_as(
-        "SELECT m.id,
-                concat_ws('|', $3::text, coalesce(sel.analysis_id,''), coalesce(sel.source,''),
+/// Each match's current fingerprint and stored index entry. `$1` is the index
+/// version; callers append their filter. The fingerprint covers the displayed
+/// analysis, the source, the player names and the format. Inserted or deleted
+/// decisions change the count or the sum of their never-reused ids, read from
+/// move_analyses_page without the analysis JSON. An UPDATE drops the affected
+/// matches' index entries in a trigger (migration 0080).
+const CANDIDATES: &str = "SELECT m.id,
+                concat_ws('|', $1::text, coalesce(sel.analysis_id,''), coalesce(sel.source,''),
                           coalesce(sel.job_id::text,''), m.source_revision::text,
                           lower(btrim(m.white)), lower(btrim(m.black)),
                           m.imported_analysis_loaded::text, m.moves_cataloged::text,
                           live.blocked::text,
-                          -- Inserted or deleted decisions change the count or the sum
-                          -- of their never-reused ids, read from move_analyses_page
-                          -- without the analysis JSON. An UPDATE drops the affected
-                          -- matches' index entries in a trigger (migration 0080).
                           (SELECT count(*)::text||':'||coalesce(sum(a.id),0)::text
                            FROM move_analyses a WHERE a.job_id=sel.job_id)) AS fingerprint,
                 coalesce(m.played_on, m.created_at::date) AS played,
@@ -72,31 +64,69 @@ pub(super) async fn ensure(
              ) AS blocked
          ) live
          LEFT JOIN decision_index_matches x ON x.match_id=m.id
-         WHERE NOT m.collection_only
-           AND ($1::uuid IS NULL OR m.database_id=$1)
-           AND (lower(btrim(m.white))=ANY($2) OR lower(btrim(m.black))=ANY($2))",
-    )
+         WHERE NOT m.collection_only";
+
+fn version() -> String {
+    format!("{INDEX_VERSION}:{}", crate::game_plan::CLASSIFIER)
+}
+
+/// Bring the index up to date for one player's matches in the scope.
+pub(super) async fn ensure(
+    pool: &PgPool,
+    database: Option<Uuid>,
+    player: &[String],
+) -> ApiResult<()> {
+    // Older imports gain their displayed analysis only once they are cataloged.
+    // This is bounded per request and reports when a retry is needed.
+    super::imported::catalog_legacy(pool, database, None, Some(player)).await?;
+    let candidates: Vec<Candidate> = sqlx::query_as(&format!(
+        "{CANDIDATES} AND ($2::uuid IS NULL OR m.database_id=$2)
+           AND (lower(btrim(m.white))=ANY($3) OR lower(btrim(m.black))=ANY($3))"
+    ))
+    .bind(version())
     .bind(database)
     .bind(player)
-    .bind(version())
     .fetch_all(pool)
     .await
     .map_err(anyhow::Error::from)?;
-    let stale: Vec<&Candidate> = candidates
-        .iter()
+    let stale: Vec<Candidate> = candidates
+        .into_iter()
         .filter(|candidate| candidate.stored.as_deref() != Some(candidate.fingerprint.as_str()))
         .collect();
     if stale.len() > MAX_REBUILDS {
         return Err(ApiError::invalid(super::source::TOO_BROAD));
     }
     for candidate in stale {
-        let rows = load(pool, None, Some(candidate.id), None).await?;
-        store(pool, candidate, rows).await?;
+        publish(pool, candidate).await?;
     }
     Ok(())
 }
 
-async fn store(pool: &PgPool, candidate: &Candidate, rows: Vec<SourceDecision>) -> ApiResult<()> {
+/// What `store` found under the match lock.
+enum Published {
+    /// The index holds the match's current state, or the match left its scope.
+    Current,
+    /// The decisions changed after they were loaded; load them again.
+    Outdated(Candidate),
+}
+
+/// Re-index one match until the stored entry matches its saved decisions.
+async fn publish(pool: &PgPool, mut candidate: Candidate) -> ApiResult<()> {
+    for _ in 0..MAX_PUBLISH_ATTEMPTS {
+        let rows = load(pool, None, Some(candidate.id), None).await?;
+        match store(pool, &candidate, rows).await? {
+            Published::Current => return Ok(()),
+            Published::Outdated(current) => candidate = current,
+        }
+    }
+    Err(ApiError::invalid(CHANGED))
+}
+
+async fn store(
+    pool: &PgPool,
+    candidate: &Candidate,
+    rows: Vec<SourceDecision>,
+) -> ApiResult<Published> {
     let mut seq = Vec::new();
     let mut game_no = Vec::new();
     let mut decision_no = Vec::new();
@@ -150,6 +180,22 @@ async fn store(pool: &PgPool, candidate: &Candidate, rows: Vec<SourceDecision>) 
         .execute(&mut *tx)
         .await
         .map_err(anyhow::Error::from)?;
+    // The rows describe the decisions saved under the candidate's fingerprint.
+    // A slower request must not replace a newer entry with them.
+    let current: Option<Candidate> = sqlx::query_as(&format!("{CANDIDATES} AND m.id=$2"))
+        .bind(version())
+        .bind(candidate.id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?;
+    if let Some(current) = current
+        && current.fingerprint != candidate.fingerprint
+    {
+        if current.stored.as_deref() == Some(current.fingerprint.as_str()) {
+            return Ok(Published::Current);
+        }
+        return Ok(Published::Outdated(current));
+    }
     sqlx::query("DELETE FROM decision_index_matches WHERE match_id=$1")
         .bind(candidate.id)
         .execute(&mut *tx)
@@ -203,7 +249,7 @@ async fn store(pool: &PgPool, candidate: &Candidate, rows: Vec<SourceDecision>) 
         .map_err(anyhow::Error::from)?;
     }
     tx.commit().await.map_err(anyhow::Error::from)?;
-    Ok(())
+    Ok(Published::Current)
 }
 
 /// Decisions needed on each side of the comparison before a trend is shown.
@@ -384,4 +430,85 @@ pub(super) async fn ensure_and_group(
 ) -> ApiResult<(Vec<super::MistakeGroup>, usize, usize)> {
     ensure(pool, database, player).await?;
     groups(pool, database, player, plan, min_loss, independent_only).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SOURCE: &str =
+        "(;GM[6]FF[4]PW[Alice]PB[Bob]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])";
+
+    fn ok<T>(result: ApiResult<T>) -> T {
+        result.unwrap_or_else(|ApiError(status, message)| panic!("{status}: {message}"))
+    }
+
+    async fn current(pool: &PgPool, id: Uuid) -> Candidate {
+        sqlx::query_as(&format!("{CANDIDATES} AND m.id=$2"))
+            .bind(version())
+            .bind(id)
+            .fetch_one(pool)
+            .await
+            .unwrap()
+    }
+
+    async fn entry(pool: &PgPool, id: Uuid) -> Option<(String, String)> {
+        sqlx::query_as(
+            "SELECT fingerprint,indexed_at::text FROM decision_index_matches WHERE match_id=$1",
+        )
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .unwrap()
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    #[ignore = "requires PostgreSQL"]
+    async fn slower_rebuilds_never_publish_an_older_fingerprint(pool: PgPool) {
+        let parsed = crate::import::parse_sgf(SOURCE).unwrap();
+        let id = crate::store::import_match(
+            &pool,
+            "race.sgf",
+            "sgf",
+            SOURCE.as_bytes(),
+            SOURCE,
+            &parsed,
+        )
+        .await
+        .unwrap()
+        .r#match
+        .id;
+        // `ensure` catalogs older imports before it reads fingerprints.
+        crate::move_catalog::ensure_catalog(&pool, id)
+            .await
+            .unwrap();
+        crate::imported_analysis::ensure_catalog(&pool, id)
+            .await
+            .unwrap();
+        let fresh = current(&pool, id).await;
+        // A request that read the fingerprint before the decisions changed.
+        let read_before_change = Candidate {
+            fingerprint: format!("{}-before", fresh.fingerprint),
+            ..fresh.clone()
+        };
+
+        let Published::Outdated(next) = ok(store(&pool, &read_before_change, Vec::new()).await)
+        else {
+            panic!("an outdated fingerprint was published");
+        };
+        assert_eq!(next.fingerprint, fresh.fingerprint);
+        assert_eq!(entry(&pool, id).await, None);
+
+        // The rebuild loads again under the current fingerprint.
+        ok(publish(&pool, read_before_change.clone()).await);
+        let published = entry(&pool, id).await.unwrap();
+        assert_eq!(published.0, fresh.fingerprint);
+
+        // Once the current state is stored, a slower request leaves it alone.
+        assert!(matches!(
+            ok(store(&pool, &read_before_change, Vec::new()).await),
+            Published::Current
+        ));
+        assert_eq!(entry(&pool, id).await, Some(published));
+    }
 }

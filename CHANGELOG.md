@@ -9,6 +9,10 @@ All notable changes to BG Tutor are recorded in this file. The format follows [K
 - **Faster freshness check for the decision index.** **My recurring mistakes** and **All analyzed decisions** no longer hash the analysis data of every one of the player's native decisions on each request. The check now counts the saved decisions and sums their row IDs. Migration `0080_decision_index_row_fingerprint` adds a trigger that drops a match from the index when one of its saved decisions changes in place. It also carries up-to-date index entries over to the new fingerprint, so the upgrade does not re-index the library. [Recurring mistakes](docs/reference/study.md#my-recurring-mistakes)
 - **Faster lookup of the displayed analysis.** Finding the displayed analysis of a match no longer counts the saved decisions of each of its GNUbg and Open Sage analyses. Migration `0081_catalog_native_lookup` checks that a saved decision exists instead and counts the decisions only when the analysis catalog shows them. The decision index uses the same lookup, so its freshness check also gets faster. The choice of the displayed analysis is unchanged. [Displayed analysis](docs/reference/analysis.md#imported-analysis-and-opening-books)
 
+### Fixed
+
+- **Decision index keeps the newest analysis.** When two requests rebuilt the index entry of the same match, the slower one could replace the newer entry with decisions it had loaded earlier. Each rebuild now reads the match's fingerprint again before it stores the entry, and loads the decisions again if they changed. [Recurring mistakes](docs/reference/study.md#my-recurring-mistakes)
+
 ## [0.2.0] - 2026-11-18
 
 Adds two features and fixes dice equity and Open Sage fork recognition. This release has no new database migration; the latest migration is still `0079_xg_ply_convention`.
