@@ -33,7 +33,7 @@ In `recurring_mistakes::index::ensure` die aus Entscheidungs-JSON abgeleitete Pr
 - Der Fingerabdruck endet mit `count(*)` und `sum(id)` der Entscheidungen des wirksamen Jobs. `bigserial`-IDs werden nie wiederverwendet, daher fällt jedes Einfügen und Löschen auf, auch Löschen mit anschließendem Neueinfügen. Der Index `move_analyses_page(job_id,id)` liefert beide Werte, ohne das JSON zu lesen.
 - Migration `0080_decision_index_row_fingerprint` legt einen Statement-Trigger an. Er entfernt bei jedem `UPDATE` auf `move_analyses` die Indexeinträge der betroffenen Matches. Aktualisierungen in Migrationen, Korrekturen und Tests führen damit zur Neuindexierung.
 - Dieselbe Migration überträgt jeden Eintrag, dessen Hash noch zu den gespeicherten Entscheidungen passt, in das neue Format. Ohne diese Übertragung würde das Upgrade jeden Match veralten lassen. Ab 400 veralteten Matches pro Anfrage antwortet die Suche nur noch mit „Too many …“.
-- Verbleibende Lücke: Ein Rebuild, der vor einem gleichzeitigen `UPDATE` gelesen hat, kann einen alten Stand veröffentlichen. Der Anwendungscode führt solche `UPDATE`s nicht aus, und Migrationen laufen vor dem Serverstart. Die Prüfung unter der Sperre (siehe **Veröffentlichung**) schließt nur die Lücke bei Einfügen und Löschen.
+- Verbleibende Lücke: Ein Rebuild, der vor einem gleichzeitigen `UPDATE` gelesen hat, kann einen alten Stand veröffentlichen, weil ein `UPDATE` Anzahl und ID-Summe nicht ändert. Der Anwendungscode führt solche `UPDATE`s nicht aus, und Migrationen laufen vor dem Serverstart. Die Prüfung unter der Sperre (siehe **Veröffentlichung**) schließt nur die Lücke bei Einfügen und Löschen.
 
 Ergebnis auf Fixture A (19. November 2026, M4 Pro, PostgreSQL 16.13): Aktualitätsprüfung **~1.250 ms → ~122 ms** (−90 %). Vor der Übertragung waren 1.000 von 1.000 Kandidaten veraltet, danach 0.
 
@@ -43,10 +43,18 @@ Ergebnis auf Fixture A (19. November 2026, M4 Pro, PostgreSQL 16.13): Aktualitä
 
 Ergebnis auf der lokalen Bibliothek (858 Matches, 65.796 Entscheidungen; Spieler mit 101 nativen Analysen; View in einer zurückgerollten Transaktion getauscht): Aktualitätsprüfung **~38 ms → ~13 ms** (−66 %). Katalog, wirksame Auswahl und Fingerabdrücke waren identisch. Auf Fixture A (isolierter Cluster, PostgreSQL 16.13, abwechselnd je 3 × 3 warme Läufe; Load-Average 50–65 durch fremde Prozesse): **153–367 ms → 44–103 ms**, Bestwerte −71 %, Mediane 293 → 49 ms. Katalog und Auswahl waren identisch, und alle 1.000 Einträge blieben aktuell.
 
-**Veröffentlichung.** `store` prüft die Prüfsumme heute unter der Match-Sperre nicht erneut. Ein langsamer Rebuild kann deshalb schon jetzt einen älteren Stand veröffentlichen. Unter der Sperre die erwartete Prüfsumme bzw. Revision erneut lesen und bei Abweichung verwerfen.
+**Veröffentlichung · umgesetzt.** `store` las den Fingerabdruck unter der Match-Sperre nicht erneut. Ein langsamer Rebuild konnte deshalb einen neueren Eintrag mit früher geladenen Entscheidungen überschreiben. `ensure` und `store` lesen den Fingerabdruck jetzt über dieselbe Abfrage `CANDIDATES`. Unter der Sperre liest `store` ihn für den Match erneut:
+
+- Unverändert: Der Eintrag wird veröffentlicht.
+- Geändert, aber eine andere Anfrage hat den aktuellen Stand schon gespeichert: Es wird nichts geschrieben.
+- Sonst: `publish` lädt die Entscheidungen unter dem neuen Fingerabdruck erneut. Nach drei Versuchen bittet die Anfrage um Wiederholung.
+
+Das deckt auch ältere Importe ab, deren Laden `moves_cataloged` umschaltet. Die zusätzliche Abfrage kostet auf der lokalen Bibliothek ~0,4 ms je neu aufgebautem Match. Der Test `slower_rebuilds_never_publish_an_older_fingerprint` in `index.rs` schlägt ohne die Prüfung fehl.
+
+Die Messrezepte unten extrahieren die Abfrage über `let candidates: Vec<Candidate> = sqlx::query_as(`. Sie gelten für den Review-Stand `d3a21e1`. Für spätere Stände die Konstante `CANDIDATES` mit `$1` als Indexversion verwenden.
 
 - [x] Zwei identische Suchen auf aktuellem Bestand lösen null Rebuilds aus und lesen im Pfad zur Aktualitätsprüfung kein natives Entscheidungs-JSON. Auswahllogik, Trefferzahl, Sortierung und Rückverweise stimmen mit der Baseline überein. Vorgeschlagenes Messziel für A ist mindestens 70 % weniger PostgreSQL-Ausführungszeit der Aktualitätsprüfung auf demselben warmen Datensatz. *Stufe 1: erreicht mit −90 %. Abgedeckt durch den Test `decision_index_follows_saved_decisions_and_carries_old_fingerprints_over`.*
-- [ ] Wechsel zwischen nativem und importiertem Ergebnis, spätere Checkpoints, Löschung, Positionsretention, Namensänderung, Restore und eine neue Klassifikatorversion invalidieren die betroffenen Einträge. Ein konkurrierender Rebuild kann keinen älteren Stand veröffentlichen. Bei Stufe 2 werden bestehende Datenbanken migriert. Fehlergruppen liefern dieselben Gruppen und Raten wie zuvor.
+- [ ] Wechsel zwischen nativem und importiertem Ergebnis, spätere Checkpoints, Löschung, Positionsretention, Namensänderung, Restore und eine neue Klassifikatorversion invalidieren die betroffenen Einträge. Ein konkurrierender Rebuild kann keinen älteren Stand veröffentlichen. Bei Stufe 2 werden bestehende Datenbanken migriert. Fehlergruppen liefern dieselben Gruppen und Raten wie zuvor. *Konkurrierender Rebuild: für Einfügen und Löschen umgesetzt; bei `UPDATE` bleibt die Lücke aus Stufe 1.*
 - [ ] `recurring_mistakes`, `recurring_mistakes_native`, `recurring_mistakes_imported` und `analysis_catalog` mit isoliertem SQLx-Setup ausführen. In Messung A `EXPLAIN (ANALYZE, BUFFERS)` und den Aufwand für Aktualitätsprüfung, Seitenselektion und exaktes `COUNT` getrennt erfassen.
 
 ## P1 · GNUbg Dice Equity
