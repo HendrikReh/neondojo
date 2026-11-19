@@ -782,3 +782,90 @@ async fn deleting_dice_equity_removes_only_that_finished_dice_job(pool: PgPool) 
         1
     );
 }
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn native_eligibility_needs_a_checkpointed_decision_and_selection_skips_the_counts(
+    pool: PgPool,
+) {
+    let (_app, id, p) = setup(&pool).await;
+    let complete = match_job(&pool, id, p[0], None, "GNU Backgammon", 2, "completed").await;
+    let partial = match_job(&pool, id, p[0], None, "GNU Backgammon", 3, "running").await;
+    sqlx::query("INSERT INTO move_analyses(job_id,game_no,decision_no,player,kind,equity_loss,data) VALUES($1,1,99,0,'cube',0,'{}')")
+        .bind(partial.id).execute(&pool).await.unwrap();
+    // A saved decision makes a job eligible only once its game is checkpointed.
+    let orphan = store::create_match_job_scoped(&pool, id, 4, 2, None)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE jobs SET status='running' WHERE id=$1")
+        .bind(orphan.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO match_analysis_games(job_id,game_no) VALUES($1,1)")
+        .bind(orphan.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO move_analyses(job_id,game_no,decision_no,player,kind,equity_loss,data) VALUES($1,2,1,0,'checker',0,'{}')")
+        .bind(orphan.id).execute(&pool).await.unwrap();
+
+    let mut rows: Vec<(Uuid, i64, i64)> = sqlx::query_as(
+        "SELECT job_id,checker_count,cube_count FROM analysis_catalog_sources
+         WHERE match_id=$1 AND source='native'",
+    )
+    .bind(id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    rows.sort();
+    let mut expected = vec![(complete.id, 1, 0), (partial.id, 1, 1)];
+    expected.sort();
+    assert_eq!(rows, expected);
+    let selected: Option<Uuid> =
+        sqlx::query_scalar("SELECT job_id FROM effective_analysis_selections WHERE match_id=$1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(selected, Some(complete.id));
+
+    // Resolving the effective analysis must not count each job's decisions.
+    let counts_decisions = |sql: &'static str| {
+        let pool = pool.clone();
+        async move {
+            let plan: Value = sqlx::query_scalar(sql)
+                .bind(id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            aggregates_relation(&plan[0]["Plan"], "move_analyses")
+        }
+    };
+    assert!(
+        counts_decisions(
+            "EXPLAIN (FORMAT JSON) SELECT checker_count FROM analysis_catalog_sources WHERE match_id=$1"
+        )
+        .await
+    );
+    assert!(
+        !counts_decisions(
+            "EXPLAIN (FORMAT JSON) SELECT job_id FROM effective_analysis_selections WHERE match_id=$1"
+        )
+        .await
+    );
+}
+
+/// Whether an aggregate in the plan reads the relation below it.
+fn aggregates_relation(node: &Value, relation: &str) -> bool {
+    fn reads(node: &Value, relation: &str) -> bool {
+        node["Relation Name"] == relation
+            || node["Plans"]
+                .as_array()
+                .is_some_and(|plans| plans.iter().any(|plan| reads(plan, relation)))
+    }
+    (node["Node Type"] == "Aggregate" && reads(node, relation))
+        || node["Plans"]
+            .as_array()
+            .is_some_and(|plans| plans.iter().any(|plan| aggregates_relation(plan, relation)))
+}
