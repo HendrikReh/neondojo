@@ -11,13 +11,13 @@ use tokio::{
 
 const MAX_REQUEST: usize = 262_144;
 const MAX_RESPONSE: u64 = 2_097_152;
-// Keep one worker for playing and one for other requests. Both slots and
-// transient probes share a lock, so the engine's evaluation concurrency and
-// the benchmark gate are unchanged.
-static WORKER: Mutex<WorkerCache> = Mutex::const_new(WorkerCache {
-    general: None,
-    play: None,
-});
+// One worker for playing and one for everything else, each behind its own
+// lock. A move therefore never waits for an analysis block; the configured
+// play and analysis thread counts share the CPU while both evaluate. Game
+// blocks, other requests, probes and restarts stay serial on the general
+// slot, and benchmarks still exclude all engine work through the engine gate.
+static GENERAL: Mutex<Option<Worker>> = Mutex::const_new(None);
+static PLAY: Mutex<Option<Worker>> = Mutex::const_new(None);
 
 #[derive(Clone, Copy)]
 pub(super) enum Slot {
@@ -25,32 +25,26 @@ pub(super) enum Slot {
     Play,
 }
 
-struct WorkerCache {
-    general: Option<Worker>,
-    play: Option<Worker>,
+impl Slot {
+    fn worker(self) -> &'static Mutex<Option<Worker>> {
+        match self {
+            Self::General => &GENERAL,
+            Self::Play => &PLAY,
+        }
+    }
 }
 
-impl WorkerCache {
-    fn slot(&mut self, slot: Slot) -> &mut Option<Worker> {
-        match slot {
-            Slot::General => &mut self.general,
-            Slot::Play => &mut self.play,
-        }
+/// A cached worker belongs to the runtime that started it.
+async fn reap_other_runtime(slot: &mut Option<Worker>) -> Result<()> {
+    let current = tokio::runtime::Handle::current().id();
+    if slot
+        .as_ref()
+        .is_some_and(|worker| worker.runtime_id != current)
+        && let Some(worker) = slot.take()
+    {
+        worker.shutdown().await?;
     }
-
-    async fn reap_other_runtimes(&mut self) -> Result<()> {
-        let current = tokio::runtime::Handle::current().id();
-        for slot in [&mut self.general, &mut self.play] {
-            if slot
-                .as_ref()
-                .is_some_and(|worker| worker.runtime_id != current)
-                && let Some(worker) = slot.take()
-            {
-                worker.shutdown().await?;
-            }
-        }
-        Ok(())
-    }
+    Ok(())
 }
 
 struct Worker {
@@ -209,15 +203,15 @@ impl Worker {
 /// Dropping an unfinished block kills/reaps its worker rather than caching it.
 pub(super) struct VerifiedBatch {
     worker: Option<Worker>,
-    cache: MutexGuard<'static, WorkerCache>,
+    cache: MutexGuard<'static, Option<Worker>>,
 }
 
 impl VerifiedBatch {
     pub(super) async fn begin(profile: &SageSnapshot) -> Result<Self> {
-        let mut cache = WORKER.lock().await;
+        let mut cache = GENERAL.lock().await;
         let worker = tokio::time::timeout(Duration::from_secs(120), async {
-            cache.reap_other_runtimes().await?;
-            let mut worker = Worker::checkout(&mut cache.general, profile).await?;
+            reap_other_runtime(&mut cache).await?;
+            let mut worker = Worker::checkout(&mut cache, profile).await?;
             worker
                 .validated_exchange(json!({"operation":"begin_batch"}))
                 .await?;
@@ -258,7 +252,7 @@ impl VerifiedBatch {
         )
         .await
         .context("Open Sage final integrity check timed out; worker terminated")??;
-        self.cache.general = Some(worker);
+        *self.cache = Some(worker);
         Ok(())
     }
 }
@@ -287,28 +281,29 @@ pub(super) async fn request_costed(
         "Unsupported Open Sage single-request operation"
     );
     crate::engine::with_shared_access(async {
-        // Worker is removed from the slot while awaiting I/O, so dropping this
+        // The deadline includes waiting for the slot, so a request ends on time
+        // even while another request of the same slot holds its worker. The
+        // worker is removed from the slot while awaiting I/O, so dropping this
         // future always drops/kills its process instead of caching a dirty stream.
-        let mut cache = WORKER.lock().await;
         tokio::time::timeout(timeout, async {
-            cache.reap_other_runtimes().await?;
-            let slot = cache.slot(slot);
-            let mut worker = Worker::checkout(slot, profile).await?;
+            let mut cache = slot.worker().lock().await;
+            reap_other_runtime(&mut cache).await?;
+            let mut worker = Worker::checkout(&mut cache, profile).await?;
             let result = worker.validated_exchange(payload).await?;
-            *slot = Some(worker);
+            *cache = Some(worker);
             Ok(result)
         })
         .await
-        .context("Open Sage evaluation timed out; worker terminated")?
+        .context("Open Sage request timed out, including the wait for its worker")?
     })
     .await
 }
 
 pub(super) async fn probe(profile: &SageSnapshot) -> Result<Value> {
     crate::engine::with_shared_access(async {
-        let mut cache = WORKER.lock().await;
+        let mut cache = GENERAL.lock().await;
         tokio::time::timeout(Duration::from_secs(120), async {
-            cache.reap_other_runtimes().await?;
+            reap_other_runtime(&mut cache).await?;
             let mut worker = Worker::start(profile).await?;
             let (identity, _) = worker
                 .exchange(json!({"operation":"initialize", "profile":profile}))
@@ -326,15 +321,14 @@ pub(super) async fn probe(profile: &SageSnapshot) -> Result<Value> {
 /// The old child is reaped before the new interpreter is started.
 pub(super) async fn restart(profile: &SageSnapshot) -> Result<()> {
     crate::engine::with_shared_access(async {
-        let mut cache = WORKER.lock().await;
+        let mut cache = GENERAL.lock().await;
         tokio::time::timeout(Duration::from_secs(120), async {
-            cache.reap_other_runtimes().await?;
-            let slot = &mut cache.general;
-            if let Some(previous) = slot.take() {
+            reap_other_runtime(&mut cache).await?;
+            if let Some(previous) = cache.take() {
                 previous.shutdown().await?;
             }
             let worker = Worker::initialize(profile).await?;
-            *slot = Some(worker);
+            *cache = Some(worker);
             Ok(())
         })
         .await
@@ -348,11 +342,11 @@ pub(super) async fn restart(profile: &SageSnapshot) -> Result<()> {
 /// the usual before/after integrity checks.
 pub(super) async fn warm_play(profile: &SageSnapshot) -> Result<()> {
     crate::engine::with_shared_access(async {
-        let mut cache = WORKER.lock().await;
+        let mut cache = PLAY.lock().await;
         tokio::time::timeout(Duration::from_secs(120), async {
-            cache.reap_other_runtimes().await?;
-            let worker = Worker::checkout(&mut cache.play, profile).await?;
-            cache.play = Some(worker);
+            reap_other_runtime(&mut cache).await?;
+            let worker = Worker::checkout(&mut cache, profile).await?;
+            *cache = Some(worker);
             Ok(())
         })
         .await
@@ -590,7 +584,7 @@ for line in sys.stdin:
             Duration::from_secs(5),
         )
         .await;
-        let cached = WORKER.lock().await.general.take();
+        let cached = GENERAL.lock().await.take();
         let was_cached = cached.is_some();
         drop(cached);
         if fake.directory.path().join("pid").exists() {
@@ -610,7 +604,7 @@ for line in sys.stdin:
             let fake = FakeWorker::new(mode);
             let engine = super::super::SageEngine::new(fake.profile.clone()).unwrap();
             let result = engine.analyze_game(SINGLE_GAME, 1, 2).await;
-            let cached = WORKER.lock().await.general.take();
+            let cached = GENERAL.lock().await.take();
             let was_cached = cached.is_some();
             drop(cached);
             assert_reaped(&fake.pid()).await;
@@ -636,7 +630,7 @@ for line in sys.stdin:
         );
         engine.version().await.unwrap();
         let operations = std::fs::read_to_string(fake.directory.path().join("operations")).unwrap();
-        drop(WORKER.lock().await.general.take());
+        drop(GENERAL.lock().await.take());
         assert_reaped(&fake.pid()).await;
         assert_eq!(first.unwrap().decisions.len(), 1);
         assert_eq!(second.unwrap().decisions.len(), 1);
@@ -653,7 +647,7 @@ for line in sys.stdin:
             let fake = FakeWorker::new(mode);
             let engine = super::super::SageEngine::new(fake.profile.clone()).unwrap();
             assert!(engine.analyze_game(SINGLE_GAME, 1, 2).await.is_err());
-            assert!(WORKER.lock().await.general.is_none());
+            assert!(GENERAL.lock().await.is_none());
             assert_reaped(&fake.pid()).await;
         }
     }
@@ -673,7 +667,7 @@ for line in sys.stdin:
         .unwrap();
         task.abort();
         assert!(task.await.unwrap_err().is_cancelled());
-        assert!(WORKER.lock().await.general.is_none());
+        assert!(GENERAL.lock().await.is_none());
         assert_reaped(&fake.pid()).await;
     }
 
@@ -698,7 +692,7 @@ for line in sys.stdin:
                 .await
                 .unwrap_err();
             assert!(error.to_string().contains("game analysis timed out"));
-            assert!(WORKER.lock().await.general.is_none());
+            assert!(GENERAL.lock().await.is_none());
             assert_reaped(&pid).await;
         }
     }
@@ -718,7 +712,7 @@ for line in sys.stdin:
         .await;
         assert!(cancelled.is_err());
         assert!(batch.finish().await.is_err());
-        assert!(WORKER.lock().await.general.is_none());
+        assert!(GENERAL.lock().await.is_none());
         assert_reaped(&fake.pid()).await;
     }
 
@@ -739,7 +733,7 @@ for line in sys.stdin:
             )
             .await;
             // Clean up even on the red baseline, which incorrectly caches it.
-            let cached = WORKER.lock().await.general.take();
+            let cached = GENERAL.lock().await.take();
             let was_cached = cached.is_some();
             drop(cached);
             assert_reaped(&fake.pid()).await;
@@ -765,7 +759,7 @@ for line in sys.stdin:
                 .await
                 .is_err()
             );
-            assert!(WORKER.lock().await.general.is_none());
+            assert!(GENERAL.lock().await.is_none());
             assert_reaped(&fake.pid()).await;
         }
     }
@@ -781,7 +775,7 @@ for line in sys.stdin:
         )
         .await;
         assert!(result.unwrap_err().to_string().contains("timed out"));
-        assert!(WORKER.lock().await.general.is_none());
+        assert!(GENERAL.lock().await.is_none());
         assert_reaped(&fake.pid()).await;
     }
 
@@ -801,7 +795,7 @@ for line in sys.stdin:
         fake.wait_started().await;
         task.abort();
         assert!(task.await.unwrap_err().is_cancelled());
-        assert!(WORKER.lock().await.general.is_none());
+        assert!(GENERAL.lock().await.is_none());
         assert_reaped(&fake.pid()).await;
     }
 
@@ -825,7 +819,7 @@ for line in sys.stdin:
         .await
         .unwrap();
         assert_eq!(fake.pid(), pid);
-        drop(WORKER.lock().await.general.take());
+        drop(GENERAL.lock().await.take());
         assert_reaped(&pid).await;
     }
     #[tokio::test]
@@ -844,7 +838,7 @@ for line in sys.stdin:
             .await
             .unwrap();
         let reused = cached.pid();
-        drop(WORKER.lock().await.general.take());
+        drop(GENERAL.lock().await.take());
         assert_reaped(&reused).await;
         assert_eq!(reused, pid, "An isolated probe evicted a healthy sidecar");
     }
@@ -879,10 +873,8 @@ for line in sys.stdin:
             .unwrap();
         assert_eq!(game.pid(), pid, "Other work displaced the playing worker");
 
-        let mut cache = WORKER.lock().await;
-        drop(cache.play.take());
-        drop(cache.general.take());
-        drop(cache);
+        drop(PLAY.lock().await.take());
+        drop(GENERAL.lock().await.take());
         assert_reaped(&pid).await;
         assert_reaped(&analysis.pid()).await;
     }
@@ -904,11 +896,11 @@ for line in sys.stdin:
                 .await
                 .is_err()
         );
-        assert!(WORKER.lock().await.play.is_none());
+        assert!(PLAY.lock().await.is_none());
         assert_reaped(&game.pid()).await;
         request(&analysis.profile, payload, limit).await.unwrap();
         assert_eq!(analysis.pid(), analysis_pid);
-        drop(WORKER.lock().await.general.take());
+        drop(GENERAL.lock().await.take());
         assert_reaped(&analysis_pid).await;
     }
 
@@ -932,7 +924,7 @@ for line in sys.stdin:
         .expect("Restart deadlocked inside the benchmark gate")
         .unwrap();
         let current_pid = fake.pid();
-        let cached = WORKER.lock().await.general.take();
+        let cached = GENERAL.lock().await.take();
         let is_cached = cached.is_some();
         drop(cached);
         assert_reaped(&previous_pid).await;
@@ -973,7 +965,7 @@ for line in sys.stdin:
             let new_pid = fake.pid();
             assert_ne!(old_pid, new_pid);
             assert_reaped(&old_pid).await;
-            let worker = WORKER.lock().await.general.take().unwrap();
+            let worker = GENERAL.lock().await.take().unwrap();
             worker.shutdown().await.unwrap();
             assert_reaped(&new_pid).await;
         });
@@ -1008,9 +1000,76 @@ for line in sys.stdin:
             let new_pid = fake.pid();
             assert_ne!(old_pid, new_pid);
             assert_reaped(&old_pid).await;
-            let worker = WORKER.lock().await.general.take().unwrap();
+            let worker = GENERAL.lock().await.take().unwrap();
             worker.shutdown().await.unwrap();
             assert_reaped(&new_pid).await;
         });
+    }
+
+    #[tokio::test]
+    async fn moves_finish_while_an_analysis_block_holds_the_general_worker() {
+        let _serial = TEST_LOCK.lock().await;
+        let analysis = FakeWorker::new("batch_healthy");
+        let game = FakeWorker::new("healthy");
+        let identity = json!({"operation":"identity"});
+        let batch = VerifiedBatch::begin(&analysis.profile).await.unwrap();
+        let started = std::time::Instant::now();
+        super::request(
+            &game.profile,
+            identity.clone(),
+            Duration::from_secs(5),
+            Slot::Play,
+        )
+        .await
+        .unwrap();
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "A move waited for the analysis block"
+        );
+        // Other general work still waits for the block and ends at its deadline.
+        let waited = std::time::Instant::now();
+        let general = request(&analysis.profile, identity, Duration::from_millis(300)).await;
+        assert!(general.is_err(), "General work overlapped a game block");
+        assert!(waited.elapsed() < Duration::from_secs(2));
+        batch.finish().await.unwrap();
+        assert!(
+            GENERAL.lock().await.is_some(),
+            "The finished block lost its worker"
+        );
+        drop(PLAY.lock().await.take());
+        drop(GENERAL.lock().await.take());
+        assert_reaped(&game.pid()).await;
+        assert_reaped(&analysis.pid()).await;
+    }
+
+    #[tokio::test]
+    async fn a_move_ends_at_its_deadline_including_the_wait_for_the_play_worker() {
+        let _serial = TEST_LOCK.lock().await;
+        let game = FakeWorker::new("healthy");
+        // Another move owns the play worker for longer than this move's deadline.
+        let held = PLAY.lock().await;
+        let started = std::time::Instant::now();
+        let error = super::request(
+            &game.profile,
+            json!({"operation":"identity"}),
+            Duration::from_millis(300),
+            Slot::Play,
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            format!("{error:#}").contains("including the wait for its worker"),
+            "{error:#}"
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "The deadline did not include the wait"
+        );
+        assert!(
+            !game.directory.path().join("pid").exists(),
+            "A move started a worker after its deadline"
+        );
+        drop(held);
+        assert!(PLAY.lock().await.is_none());
     }
 }

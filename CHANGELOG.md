@@ -4,6 +4,10 @@ All notable changes to BG Tutor are recorded in this file. The format follows [K
 
 ## [Unreleased]
 
+### Changed
+
+- **Open Sage moves no longer wait for analyses.** Playing and analysis use separate Open Sage worker processes with their own locks. During a 3-ply game analysis an Open Sage bot move took 3.9 s at the median and now takes about 33 ms, as without a running analysis. While both run, the playing and analysis thread counts share the CPU (4 + 2 by default). A move's deadline now includes waiting for its worker. Analyses stay serial, and benchmarks still pause all engine work. [Settings](docs/reference/settings.md#settings-and-engines)
+
 ## [0.3.0] - 2026-11-19
 
 Supports the Open Sage fork release 2.0.20261119 and speeds up the decision index, the analysis catalog, GNUbg dice equity and moving between moves in Analysis. Migrations `0080_decision_index_row_fingerprint` and `0081_catalog_native_lookup` run at startup. Open Sage results change with the new fork release; existing analyses keep their values.
