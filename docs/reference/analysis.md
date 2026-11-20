@@ -200,7 +200,7 @@ Manage books under **Settings → Analysis → Opening books**. Select **Automat
 
 Book lookups use the full decision context, including Crawford, away scores, cube value and ownership, and money-game rules. BackgammonDB has no beaver contexts. The XG book reads money-game rules such as Jacoby and beavers from the original header and requires a supported context. Its pre-roll values apply to the resulting position independently of any displayed dice.
 
-Keep the downloaded book files outside Git, for example in `~/Library/Application Support/Neondojo/` on macOS, and enter their backend paths in the book dialog. Extract the BackgammonDB serving SQLite file and the XG `OpeningbookV2.ob` file. The check and install endpoints validate the data formats directly.
+Keep the downloaded book files outside Git, for example in `~/Library/Application Support/NeonDojo/` on macOS, and enter their backend paths in the book dialog. Extract the BackgammonDB serving SQLite file and the XG `OpeningbookV2.ob` file. The check and install endpoints validate the data formats directly.
 
 ## Game plan
 

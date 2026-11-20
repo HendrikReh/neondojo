@@ -9,8 +9,8 @@ Voraussetzungen: nativer ARM64-Interpreter Python 3.12, macOS mindestens 14 (Num
 Aus dem Repository-Root mit frei gewähltem externem Installationsverzeichnis:
 
 ```sh
-python3.12 -m venv "$HOME/Library/Application Support/Neondojo/open-sage-venv"
-"$HOME/Library/Application Support/Neondojo/open-sage-venv/bin/python" -m pip install \
+python3.12 -m venv "$HOME/Library/Application Support/NeonDojo/open-sage-venv"
+"$HOME/Library/Application Support/NeonDojo/open-sage-venv/bin/python" -m pip install \
   --only-binary=:all: --require-hashes \
   -r tools/open-sage/requirements-macos-arm64.lock
 ```
@@ -19,7 +19,7 @@ Für eine Installation ohne Netzwerk die bereits heruntergeladenen, unverändert
 
 ```sh
 python3 -m unittest discover -s tools -p test_probe_open_sage.py
-"$HOME/Library/Application Support/Neondojo/open-sage-venv/bin/python" \
+"$HOME/Library/Application Support/NeonDojo/open-sage-venv/bin/python" \
   tools/probe_open_sage.py --levels 2ply --output /tmp/open-sage-2ply.json
 ```
 
@@ -51,7 +51,7 @@ Der Probe beobachtet dafür den echten `ThreadPoolExecutor`-Konstruktor und dele
 
 ```sh
 # Reproduziert auch den bekannten Fehler; Exitcode 1 ist hier erwartet.
-"$HOME/Library/Application Support/Neondojo/open-sage-venv/bin/python" \
+"$HOME/Library/Application Support/NeonDojo/open-sage-venv/bin/python" \
   tools/probe_open_sage.py --levels 1ply 2ply --output /tmp/open-sage-all.json
 ```
 

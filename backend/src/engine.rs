@@ -60,10 +60,10 @@ fn reported_threads(output: &str) -> Option<i32> {
     })
 }
 
-/// Deepest GNUbg evaluation Neondojo offers, in Neondojo's ply convention.
+/// Deepest GNUbg evaluation NeonDojo offers, in NeonDojo's ply convention.
 pub(crate) const GNUBG_MAX_PLIES: i32 = 5;
 
-/// Neondojo stores, shows and compares every depth in the XG / Open Sage
+/// NeonDojo stores, shows and compares every depth in the XG / Open Sage
 /// convention, where 1-ply is the raw neural-net evaluation. GNUbg counts that
 /// evaluation as 0-ply. This is the only conversion into GNUbg's native level;
 /// apply it where a command or request is written for GNUbg.
@@ -113,7 +113,7 @@ pub struct Candidate {
     /// loss, lose gammon (including backgammon), lose backgammon.
     pub probabilities: Vec<f64>,
     /// Depth actually used for this candidate, when recorded by the engine,
-    /// in Neondojo's ply convention (1-ply is the raw evaluation).
+    /// in NeonDojo's ply convention (1-ply is the raw evaluation).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plies: Option<i32>,
 }
@@ -864,7 +864,7 @@ pub fn valid_id(value: &str, length: usize) -> bool {
 
 /// GNUbg uses the same rows for hints and game exports, marking the played
 /// move with an asterisk in the game export. Reported depths are converted to
-/// Neondojo's ply convention.
+/// NeonDojo's ply convention.
 pub(crate) fn parse_checker_candidates(output: &str) -> Result<Vec<(Candidate, bool)>> {
     static PATTERN: OnceLock<Regex> = OnceLock::new();
     let pattern = PATTERN.get_or_init(|| {
@@ -1031,7 +1031,7 @@ mod tests {
         assert!(super::parse_hints("No game in progress").is_err());
         assert!(super::parse_full_checker_hints(output, 2).is_err());
         let single = output.split("    2.").next().unwrap();
-        // GNUbg's native 0-ply is Neondojo's 1-ply raw evaluation.
+        // GNUbg's native 0-ply is NeonDojo's 1-ply raw evaluation.
         assert_eq!(super::parse_full_checker_hints(single, 1).unwrap().1, 1);
         assert_eq!(hints[0].plies, Some(1));
     }
@@ -1225,7 +1225,7 @@ mod tests {
                 .iter()
                 .all(|analysis| analysis.candidates[0].path.is_some())
         );
-        // Neondojo's 3-ply is GNUbg's 2-ply, pruned by the analysis move filter.
+        // NeonDojo's 3-ply is GNUbg's 2-ply, pruned by the analysis move filter.
         let filtered =
             super::Engine::new(binary).with_move_filter(Some(super::GnubgMoveFilter::Top14));
         assert_batch_matches_individual_rolls(&filtered, "4HPwATDgc/ABMA", "cInlAAAAAAAE", 3).await;

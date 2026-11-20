@@ -1,4 +1,4 @@
-//! Migration 0079 moves every stored GNUbg depth to Neondojo's single ply
+//! Migration 0079 moves every stored GNUbg depth to NeonDojo's single ply
 //! convention (XG / Open Sage: 1-ply is the raw evaluation) and leaves Open
 //! Sage, XG and source text unchanged.
 use neondojo::{import, store};

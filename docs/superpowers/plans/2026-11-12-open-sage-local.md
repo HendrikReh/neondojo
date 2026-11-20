@@ -227,7 +227,7 @@ Reihenfolge: A → B → C → D → E → F → G → H. Vor jedem Eingriff akt
 
 **Dateien:** `README.md`, `.env.example`, `docs/open-sage-local.md`, neue Lockdatei und Migrationstests.
 
-- Versionierte lokale Umgebung unter `~/Library/Application Support/Neondojo/engines/open-sage/` dokumentieren; Modell-/Paketdateien nicht im Git-Repository ablegen.
+- Versionierte lokale Umgebung unter `~/Library/Application Support/NeonDojo/engines/open-sage/` dokumentieren; Modell-/Paketdateien nicht im Git-Repository ablegen.
 - Reproduzierbares Setup aus gehashten Wheels beschreiben; keine Installation beim normalen App-Start und kein automatisches Upgrade laufender Installationen.
 - Migration auf einer isolierten Kopie historischer Daten testen: GNUbg-Partien, Ergebnisse, Profile, Notizen und Lernfortschritt bleiben erhalten.
 - Abnahmematrix für beide Engines ausführen und Messergebnisse mit Hardware, Datenumfang, Profil und Prozessstrategie dokumentieren.

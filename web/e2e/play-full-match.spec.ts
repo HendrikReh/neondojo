@@ -29,7 +29,7 @@ import {
   type CheckerStep,
 } from '../src/play-state';
 
-/** GNUbg writes its own level (one below Neondojo's 1-ply = raw net) into the SGF. */
+/** GNUbg writes its own level (one below NeonDojo's 1-ply = raw net) into the SGF. */
 const gnubgLevel = (plies: number) => plies - 1;
 
 test.skip(

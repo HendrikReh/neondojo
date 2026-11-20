@@ -45,7 +45,7 @@ test('exports a backup and restores it only after confirmation', async ({
   ).toBeVisible();
   await expect(review).toBeDisabled();
   await expect(
-    restore.getByText('Restoring replaces all Neondojo data', { exact: false }),
+    restore.getByText('Restoring replaces all NeonDojo data', { exact: false }),
   ).toBeVisible();
   await expect(chooseFile).toBeVisible();
   await expect(restore.getByText('No file selected')).toBeVisible();
@@ -119,13 +119,13 @@ test('exports a backup and restores it only after confirmation', async ({
     comparison.getByRole('row', { name: /^Matches/ }).getByRole('cell'),
   ).toHaveText([number(counts.matches), number(counts.matches + 1), '-1']);
   await expect(
-    dialog.getByText('Restoring replaces all Neondojo data', { exact: false }),
+    dialog.getByText('Restoring replaces all NeonDojo data', { exact: false }),
   ).toBeVisible();
   await expect(
     dialog.getByText(download.suggestedFilename(), { exact: true }),
   ).toBeVisible();
   await expect(dialog).toContainText(
-    'Neondojo checks the archive and database constraints again during restore.',
+    'NeonDojo checks the archive and database constraints again during restore.',
   );
   await page.screenshot({
     path: testInfo.outputPath('database-backup-confirm.png'),
@@ -145,7 +145,7 @@ test('exports a backup and restores it only after confirmation', async ({
     buffer: Buffer.from('Invalid backup'),
   });
   await expect(restore.getByRole('alert')).toContainText(
-    'Invalid Neondojo backup archive',
+    'Invalid NeonDojo backup archive',
   );
   await expect(review).toBeDisabled();
   await expect(dialog).toBeHidden();
@@ -178,7 +178,7 @@ test('exports a backup and restores it only after confirmation', async ({
   expect(restoredResponse.status(), 'Database restore status').toBe(204);
   await expect(dialog.getByRole('status')).toContainText('Backup restored.');
   await expect(
-    dialog.getByRole('button', { name: 'Reload Neondojo' }),
+    dialog.getByRole('button', { name: 'Reload NeonDojo' }),
   ).toBeFocused();
   const restored = await (await request.get('/api/databases')).json();
   expect(restored).toEqual(
@@ -191,7 +191,7 @@ test('exports a backup and restores it only after confirmation', async ({
       expect.objectContaining({ name: 'Target fixture' }),
     ]),
   );
-  await dialog.getByRole('button', { name: 'Reload Neondojo' }).click();
+  await dialog.getByRole('button', { name: 'Reload NeonDojo' }).click();
   await expect(
     page.getByRole('tab', { name: 'Extras', exact: true }),
   ).toBeVisible();
@@ -257,7 +257,7 @@ test('only the latest selected archive can enable review', async ({ page }) => {
   await expect(review).toBeDisabled();
 });
 
-test('dates older backups from a valid Neondojo filename', async ({ page }) => {
+test('dates older backups from a valid NeonDojo filename', async ({ page }) => {
   const archivedDate = '2025-03-01T10:11:12Z';
   await page.route('**/api/database-backup/target-counts', (route) =>
     route.fulfill({

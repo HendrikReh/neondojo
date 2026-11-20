@@ -983,7 +983,7 @@ async fn five_ply_native_jobs_preserve_real_search_depth(pool: PgPool) {
 
 #[cfg(unix)]
 async fn native_jobs_preserve_real_search_depth(pool: PgPool, plies: i32) {
-    // GNUbg's own output names its native level, one below Neondojo's.
+    // GNUbg's own output names its native level, one below NeonDojo's.
     let native_plies = plies - 1;
     let evidence = tempfile::tempdir().unwrap();
     let quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));

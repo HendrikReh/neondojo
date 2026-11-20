@@ -80,7 +80,7 @@ test('hover tooltip can be reached and does not activate its button', async ({
   page,
 }) => {
   await page.goto('/');
-  await page.getByRole('link', { name: 'Neondojo home', exact: true }).focus();
+  await page.getByRole('link', { name: 'NeonDojo home', exact: true }).focus();
   const settings = page.getByRole('button', { name: 'Settings', exact: true });
   await settings.hover();
   const tip = page.getByRole('tooltip');

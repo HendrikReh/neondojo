@@ -1,7 +1,7 @@
 """Optional integration check against Anki's own import library in a fresh profile.
 
 Run with a Python environment containing the official `anki` package. This is a
-development check only; Neondojo's export and learning implementation is Rust.
+development check only; NeonDojo's export and learning implementation is Rust.
 """
 
 import argparse

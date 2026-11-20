@@ -350,7 +350,7 @@ def run_worker(skip_platform=False, levels=None):
             cf_result = cubeful.checker_play(opening, 3, 1, beaver=False, force_boards=[played])
             # From fork release 2.0.20261119 cubeful 2-ply also prunes the
             # filter's losers to 1-ply. The played move must reach full depth;
-            # Neondojo discards the other partially searched candidates.
+            # NeonDojo discards the other partially searched candidates.
             cf_full = [move for move in cf_result.moves if move.eval_level == '2-ply']
             require(cf_full, 'No cubeful candidate evaluated at full depth')
             require(any(move.board == played for move in cf_full), 'Cubeful played move not evaluated at full depth')

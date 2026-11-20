@@ -313,7 +313,7 @@ async fn save_card(
     ensure!(input.tags.len() <= 100, "Too many Anki tags");
     let mut tags = BTreeSet::new();
     for tag in input.tags {
-        // A comma separates terms in the Neondojo topic filter.
+        // A comma separates terms in the NeonDojo topic filter.
         let tag = tag.replace(',', " ");
         tags.extend(topics::tags(vec![tag]).map_err(|error| anyhow::anyhow!("{}", error.1))?);
     }

@@ -93,7 +93,7 @@ for (const target of ['icon', 'title', 'keyboard'])
     });
     if (target === 'keyboard') {
       await page
-        .getByRole('link', { name: 'Neondojo home', exact: true })
+        .getByRole('link', { name: 'NeonDojo home', exact: true })
         .focus();
       await page.keyboard.press('Enter');
     } else
@@ -121,7 +121,7 @@ test('home cancels pending restoration', async ({ page }) => {
   const release = await fixture(page, true);
   try {
     await page
-      .getByRole('link', { name: 'Neondojo home', exact: true })
+      .getByRole('link', { name: 'NeonDojo home', exact: true })
       .click();
     await expect(page.locator('.analysis-welcome')).toBeVisible();
     expect(
@@ -158,7 +158,7 @@ test('a finishing import cannot reopen a match after Home', async ({
   await started;
   try {
     await page
-      .getByRole('link', { name: 'Neondojo home', exact: true })
+      .getByRole('link', { name: 'NeonDojo home', exact: true })
       .click();
     await expect(page.locator('.analysis-welcome')).toBeVisible();
     release();

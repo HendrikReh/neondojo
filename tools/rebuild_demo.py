@@ -20,7 +20,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 REPO = Path(__file__).resolve().parents[1]
-DATA = Path.home() / 'Library/Application Support/Neondojo'
+DATA = Path.home() / 'Library/Application Support/NeonDojo'
 DEFAULT = '00000000-0000-0000-0000-000000000001'
 API = 'http://127.0.0.1:8787/api'
 CONTAINER = 'neondojo-db-1'
