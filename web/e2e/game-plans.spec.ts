@@ -71,7 +71,7 @@ test('real import shows both named plans without analysis and follows the displa
   );
   await panel.locator('.game-plan-help').focus();
   await expect(page.getByRole('tooltip')).toContainText(
-    /Open Sage.*board structure.*GNUbg/,
+    /NeonGammon.*board structure.*GNUbg/,
   );
   const initial = await displayedBoard(page);
   expect(requests.at(-1)).toEqual(initial);

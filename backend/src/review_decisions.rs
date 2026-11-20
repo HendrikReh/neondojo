@@ -874,7 +874,7 @@ fn project(row: Row, match_id: Uuid, format: &str, job: Option<&Job>) -> Option<
             .engine_snapshot
             .as_ref()
             .map(|s| match s.engine_id.as_str() {
-                "bgsage" => "Open Sage",
+                "bgsage" => "NeonGammon",
                 "gnubg" => "GNU Backgammon",
                 _ => s.engine_id.as_str(),
             })

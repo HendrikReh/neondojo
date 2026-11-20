@@ -28,7 +28,7 @@ export default function AnalysisRunningJobs({
               );
         const context = t('analysis.jobContext', {
           scope,
-          engine: jobEngine(job) === 'bgsage' ? 'Open Sage' : 'GNUbg',
+          engine: jobEngine(job) === 'bgsage' ? 'NeonGammon' : 'GNUbg',
           plies: formatNumber(job.plies),
         });
         return (

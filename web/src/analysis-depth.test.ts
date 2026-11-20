@@ -36,7 +36,7 @@ it('defaults position search to GNUbg 3-ply and names GNUbg’s own level', () =
   );
   expect(html).toContain('value="5">5-ply (GNUbg 4-ply)</option>');
 });
-it('labels Open Sage depths without a GNUbg level', () => {
+it('labels NeonGammon depths without a GNUbg level', () => {
   const html = renderToStaticMarkup(
     createElement(I18nProvider, {
       children: createElement(PositionAnalysisDepth, {

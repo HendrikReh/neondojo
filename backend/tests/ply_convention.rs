@@ -1,5 +1,5 @@
 //! Migration 0079 moves every stored GNUbg depth to NeonDojo's single ply
-//! convention (XG / Open Sage: 1-ply is the raw evaluation) and leaves Open
+//! convention (XG / NeonGammon: 1-ply is the raw evaluation) and leaves Open
 //! Sage, XG and source text unchanged.
 use neondojo::{import, store};
 use serde_json::{Value, json};
@@ -115,7 +115,7 @@ async fn gnubg_depths_move_to_the_shared_convention(pool: PgPool) {
             "analysis",
             2,
             Some(&sage_snapshot),
-            json!({"engine": "Open Sage", "plies": 2, "candidates": [candidate(2)]}),
+            json!({"engine": "NeonGammon", "plies": 2, "candidates": [candidate(2)]}),
         ),
     ] {
         sqlx::query("INSERT INTO jobs(id,position_uuid,kind,plies,status,engine_snapshot,result) VALUES($1,$2,$3,$4,'completed',$5,$6)")
@@ -238,7 +238,7 @@ async fn gnubg_depths_move_to_the_shared_convention(pool: PgPool) {
     .await;
     assert_eq!(
         configuration["a"]["plies"], 3,
-        "Open Sage already used the convention"
+        "NeonGammon already used the convention"
     );
     assert_eq!(configuration["b"]["plies"], 3);
     assert_eq!(configuration["count"], 2);

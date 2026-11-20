@@ -121,7 +121,7 @@ async fn claim(state: &AppState) -> Result<Option<Claimed>> {
         sqlx::query("INSERT INTO job_events(job_id,event,data) SELECT id,status,jsonb_build_object('status',status,'progress',progress,'error',error,'completed_games',completed_games,'total_games',total_games) FROM jobs WHERE id=$1")
             .bind(id).execute(&mut *tx).await?;
     }
-    // Open Sage analyses share one sidecar process; run them one at a time
+    // NeonGammon analyses share one sidecar process; run them one at a time
     // and let GNUbg jobs use the remaining slots.
     let job = sqlx::query_as::<_, Job>("UPDATE jobs SET status='running',lease_token=$1,lease_until=now()+interval '120 seconds',attempts=attempts+1,updated_at=now() WHERE id=(SELECT id FROM jobs WHERE status='queued' AND (coalesce(engine_snapshot->>'engine_id','gnubg')<>'bgsage' OR NOT EXISTS(SELECT 1 FROM jobs WHERE status='running' AND engine_snapshot->>'engine_id'='bgsage')) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *")
         .bind(token).fetch_optional(&mut *tx).await?;
@@ -295,7 +295,7 @@ mod tests {
                 .fetch_one(&pool)
                 .await
                 .unwrap();
-        // Two Open Sage jobs are queued before one GNUbg job.
+        // Two NeonGammon jobs are queued before one GNUbg job.
         for (offset, plies, engine) in [(3, 1, "bgsage"), (2, 2, "bgsage"), (1, 3, "gnubg")] {
             sqlx::query("INSERT INTO jobs(id,position_uuid,kind,plies,status,engine_snapshot,created_at) VALUES($1,$2,'analysis',$3,'queued',jsonb_build_object('engine_id',$4::text,'gnubg_path','gnubg'),now()-make_interval(secs=>$5))")
                 .bind(Uuid::new_v4())
@@ -308,7 +308,7 @@ mod tests {
                 .unwrap();
         }
         let state = AppState::new(pool.clone(), crate::engine::Engine::new("gnubg".into()));
-        let first = claim(&state).await.unwrap().expect("first Open Sage job");
+        let first = claim(&state).await.unwrap().expect("first NeonGammon job");
         assert_eq!(first.job.plies, 1);
         let second = claim(&state)
             .await
@@ -323,7 +323,7 @@ mod tests {
         .execute(&pool)
         .await
         .unwrap();
-        let third = claim(&state).await.unwrap().expect("second Open Sage job");
+        let third = claim(&state).await.unwrap().expect("second NeonGammon job");
         assert_eq!(third.job.plies, 2);
     }
     #[sqlx::test(migrations = "./migrations")]

@@ -92,12 +92,12 @@ const entries = {
     'Riprova',
   ],
   explanation: [
-    'Open Sage rules classify the displayed board structure. GNUbg provides move recommendations.',
-    'Open-Sage-Regeln ordnen die Struktur der angezeigten Stellung ein. Zugempfehlungen kommen von GNUbg.',
-    'Las reglas de Open Sage clasifican la estructura de la posición mostrada. GNUbg proporciona las recomendaciones de jugadas.',
-    'Les règles d’Open Sage classent la structure de la position affichée. GNUbg fournit les recommandations de coups.',
-    'Reguły Open Sage klasyfikują strukturę wyświetlonej pozycji. Rekomendacje ruchów pochodzą z GNUbg.',
-    'Le regole di Open Sage classificano la struttura della posizione visualizzata. GNUbg fornisce le raccomandazioni sulle mosse.',
+    'NeonGammon rules classify the displayed board structure. GNUbg provides move recommendations.',
+    'NeonGammon-Regeln ordnen die Struktur der angezeigten Stellung ein. Zugempfehlungen kommen von GNUbg.',
+    'Las reglas de NeonGammon clasifican la estructura de la posición mostrada. GNUbg proporciona las recomendaciones de jugadas.',
+    'Les règles de NeonGammon classent la structure de la position affichée. GNUbg fournit les recommandations de coups.',
+    'Reguły NeonGammon klasyfikują strukturę wyświetlonej pozycji. Rekomendacje ruchów pochodzą z GNUbg.',
+    'Le regole di NeonGammon classificano la struttura della posizione visualizzata. GNUbg fornisce le raccomandazioni sulle mosse.',
   ],
 } satisfies Record<string, [string, string, string, string, string, string]>;
 type Key = keyof typeof entries;

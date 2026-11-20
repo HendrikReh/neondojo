@@ -1257,7 +1257,7 @@ export default function PlayWorkspace({
               <span>
                 {settingsT('playEngine')}:{' '}
                 {(confirmed?.play.engine ?? settings?.play_engine) === 'bgsage'
-                  ? 'Open Sage'
+                  ? 'NeonGammon'
                   : 'GNUbg'}{' '}
                 ·{' '}
                 {confirmed?.play.plies ??
@@ -1268,7 +1268,7 @@ export default function PlayWorkspace({
                 {settingsT('analysisEngine')}:{' '}
                 {(confirmed?.analysis.engine ?? settings?.analysis_engine) ===
                 'bgsage'
-                  ? 'Open Sage'
+                  ? 'NeonGammon'
                   : 'GNUbg'}{' '}
                 ·{' '}
                 {confirmed?.analysis.plies ??

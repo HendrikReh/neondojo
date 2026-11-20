@@ -43,7 +43,7 @@ pub(super) fn schedule_warmup(session: &PlaySession, shutdown: &CancellationToke
             _ = shutdown.cancelled() => {}
             result = async { SageEngine::for_play(snapshot)?.warm_play().await } => {
                 if let Err(error) = result {
-                    tracing::debug!(%error, "Could not warm Open Sage for play");
+                    tracing::debug!(%error, "Could not warm NeonGammon for play");
                 }
             }
         }
@@ -95,7 +95,7 @@ async fn chosen_move(bot: &SageEngine, snapshot: &NativeSnapshot) -> Result<Chec
         .await?;
     let best = candidates
         .first()
-        .context("Open Sage returned no chosen move")?;
+        .context("NeonGammon returned no chosen move")?;
     if snapshot.legal_moves.is_empty() {
         let before: [i32; 26] = snapshot
             .board
@@ -104,7 +104,7 @@ async fn chosen_move(bot: &SageEngine, snapshot: &NativeSnapshot) -> Result<Chec
             .context("Invalid native board")?;
         ensure!(
             best.board == before,
-            "Open Sage did not confirm forced pass"
+            "NeonGammon did not confirm forced pass"
         );
         return Ok((None, candidates, cost));
     }
@@ -131,7 +131,7 @@ async fn chosen_move(bot: &SageEngine, snapshot: &NativeSnapshot) -> Result<Chec
         .find(|candidate| legal.contains_key(&candidate.board));
     ensure!(
         bore_off(best) && first_legal.is_some_and(bore_off),
-        "Open Sage best move is absent from GNUbg legal results for {} (player {}, dice {:?}): best {:?} -> {:?}; GNUbg has {} candidates",
+        "NeonGammon best move is absent from GNUbg legal results for {} (player {}, dice {:?}): best {:?} -> {:?}; GNUbg has {} candidates",
         snapshot.native_id,
         snapshot.player,
         snapshot.dice,
@@ -198,7 +198,7 @@ pub(super) async fn choose(bot: &SageEngine, snapshot: &NativeSnapshot) -> Resul
                 .context("Missing cube response options")?
                 .0
         }
-        _ => anyhow::bail!("Unexpected Open Sage turn phase"),
+        _ => anyhow::bail!("Unexpected NeonGammon turn phase"),
     };
     Ok(ChosenAction {
         action,
@@ -279,7 +279,7 @@ pub(super) async fn advance(
             };
             (process, snapshot, sgf) = process.execute(&request).await?;
         }
-        anyhow::bail!("Open Sage did not yield within the bounded action chain")
+        anyhow::bail!("NeonGammon did not yield within the bounded action chain")
     })
     .await
 }
@@ -323,7 +323,7 @@ pub(super) async fn benchmark_checker_turn(
                     .history
                     .last()
                     .is_some_and(|turn| turn.player == bot_player && turn.dice == dice),
-            "Open Sage did not complete exactly one checker turn"
+            "NeonGammon did not complete exactly one checker turn"
         );
         process.finish().await?;
         Ok(())
@@ -344,12 +344,12 @@ pub(super) async fn alternatives(
             .await?;
         let best = candidates
             .first()
-            .context("Open Sage omitted best checker move")?
+            .context("NeonGammon omitted best checker move")?
             .equity;
         if session.legal_moves.is_empty() {
             ensure!(
                 candidates.len() == 1 && candidates[0].notation == "Cannot move",
-                "Open Sage omitted forced pass"
+                "NeonGammon omitted forced pass"
             );
             return Ok(vec![PlayAlternative {
                 rating_decisions: 0,
@@ -372,7 +372,7 @@ pub(super) async fn alternatives(
             let candidate = candidates
                 .iter()
                 .find(|candidate| candidate.board == after)
-                .context("Open Sage omitted a legal checker result")?;
+                .context("NeonGammon omitted a legal checker result")?;
             alternatives.push(PlayAlternative {
                 rating_decisions: 0,
                 action: "move".into(),
@@ -432,7 +432,7 @@ pub(super) async fn alternatives(
 mod tests {
     use super::*;
     #[tokio::test]
-    #[ignore = "requires locked Open Sage and GNUbg with embedded Python; no database"]
+    #[ignore = "requires locked NeonGammon and GNUbg with embedded Python; no database"]
     async fn sage_executes_reference_checker_turns_using_gnubg_rules() {
         let python = std::env::var("NEONDOJO_SAGE_PYTHON").unwrap();
         let bot = SageEngine::new(SageEngine::probe(python, 2).await.unwrap()).unwrap();

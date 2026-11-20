@@ -150,7 +150,7 @@ async function open(page: Page) {
 test('play-turn latency starts independently and has its own history metric', async ({
   page,
 }, testInfo) => {
-  // GNUbg-only defaults, so Open Sage must fall back to its own depth.
+  // GNUbg-only defaults, so NeonGammon must fall back to its own depth.
   const api = await backend(page, { ...settings, analysis_plies: 5, play_plies: 3 });
   await page.setViewportSize({ width: 1800, height: 1169 });
   await page.route('**/api/engines', (route) =>
@@ -165,9 +165,9 @@ test('play-turn latency starts independently and has its own history metric', as
         },
         {
           id: 'bgsage',
-          name: 'Open Sage',
+          name: 'NeonGammon',
           available: true,
-          version: 'Open Sage 2.0',
+          version: 'NeonGammon 2.0',
           plies: [1, 2, 3, 4],
         },
       ],
@@ -177,7 +177,7 @@ test('play-turn latency starts independently and has its own history metric', as
   const playRun = {
     ...run('play-completed', 'completed', 1),
     engine_id: 'bgsage',
-    engine_name: 'Open Sage',
+    engine_name: 'NeonGammon',
     reference: null,
     protocol: null,
     play_reference: {
@@ -265,7 +265,7 @@ test('play-turn latency starts independently and has its own history metric', as
   await expect(playingDepth).toHaveValue('1');
   await page.getByRole('button', { name: 'Measure play-turn latency' }).click();
   const row = page.getByRole('row').filter({ hasText: '42 ms' });
-  await expect(row).toContainText('Open Sage');
+  await expect(row).toContainText('NeonGammon');
   await expect(row).toContainText('1-ply');
   await expect(row).not.toContainText('11 / 11 checker turns');
   await expect(row).toContainText('42 ms');

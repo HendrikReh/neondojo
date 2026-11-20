@@ -248,7 +248,7 @@ test('shows partial results and leaves raw engine errors collapsed', async ({
     results.getByText('A · GNUbg 3-ply', { exact: true }),
   ).toBeVisible();
   await expect(
-    results.getByText('B · Open Sage 4-ply', { exact: true }),
+    results.getByText('B · NeonGammon 4-ply', { exact: true }),
   ).toBeVisible();
   await expect(results.getByText('60.0%', { exact: true })).toBeVisible();
   await expect(results.getByText('40.0%', { exact: true })).toBeVisible();

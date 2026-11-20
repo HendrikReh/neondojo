@@ -213,7 +213,7 @@ fn stored_cost(side: SideCost) -> Result<(i64, i64, i32)> {
 fn competitor_label(side: &Competitor) -> Result<String> {
     let name = match side.engine_id.as_str() {
         "gnubg" => "GNUbg",
-        "bgsage" => "Open Sage",
+        "bgsage" => "NeonGammon",
         _ => bail!("Unsupported saved duel engine {}", side.engine_id),
     };
     Ok(format!("{name} {}-ply", side.plies))

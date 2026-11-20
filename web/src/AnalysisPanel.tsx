@@ -100,7 +100,7 @@ export default function AnalysisPanel({
     formatDecision,
     formatError,
   } = useI18n();
-  const engineName = configuredEngine === 'bgsage' ? 'Open Sage' : 'GNUbg';
+  const engineName = configuredEngine === 'bgsage' ? 'NeonGammon' : 'GNUbg';
   const supportedPlies =
     configurationOptions.engine_profiles[configuredEngine].analysis;
   const l = useSourceText();

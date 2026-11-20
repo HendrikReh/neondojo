@@ -2942,7 +2942,7 @@ export interface components {
             started_at?: string | null;
             /**
              * Format: double
-             * @description Cold Open Sage worker initialization, outside the warm pipeline timer.
+             * @description Cold NeonGammon worker initialization, outside the warm pipeline timer.
              */
             startup_elapsed_ms?: number | null;
             status: string;

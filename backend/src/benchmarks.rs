@@ -134,7 +134,7 @@ pub struct BenchmarkRun {
     pub protocol: Option<BenchmarkProtocol>,
     #[sqlx(json(nullable))]
     pub play_reference: Option<PlayBenchmarkReference>,
-    /// Cold Open Sage worker initialization, outside the warm pipeline timer.
+    /// Cold NeonGammon worker initialization, outside the warm pipeline timer.
     pub startup_elapsed_ms: Option<f64>,
     pub total_elapsed_ms: Option<f64>,
     pub average_move_ms: Option<f64>,
@@ -383,7 +383,7 @@ async fn enqueue(
             .bind(Uuid::new_v4()).bind(SqlJson(&machine)).bind(&version).bind(&path).bind(plies)
             .bind(analysis.as_ref().map(SqlJson)).bind(analysis.as_ref().map(|reference| SqlJson(&reference.protocol)))
             .bind(analysis.as_ref().map(|_| REFERENCE_SGF)).bind(play.as_ref().map(SqlJson))
-            .bind(engine_id).bind(if engine_id == "bgsage" {"Open Sage"} else {"GNUbg"}).bind(&saved_snapshot)
+            .bind(engine_id).bind(if engine_id == "bgsage" {"NeonGammon"} else {"GNUbg"}).bind(&saved_snapshot)
             .fetch_one(&mut *tx).await.map_err(anyhow::Error::from)?;
         runs.push(run);
     }

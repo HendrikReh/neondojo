@@ -100,10 +100,10 @@ impl Worker {
             .stderr(Stdio::piped())
             .kill_on_drop(true)
             .spawn()
-            .context("Cannot start Open Sage Python; install the locked native environment")?;
-        let stdin = child.stdin.take().context("Missing Open Sage stdin")?;
-        let stdout = BufReader::new(child.stdout.take().context("Missing Open Sage stdout")?);
-        let mut stderr = child.stderr.take().context("Missing Open Sage stderr")?;
+            .context("Cannot start NeonGammon Python; install the locked native environment")?;
+        let stdin = child.stdin.take().context("Missing NeonGammon stdin")?;
+        let stdout = BufReader::new(child.stdout.take().context("Missing NeonGammon stdout")?);
+        let mut stderr = child.stderr.take().context("Missing NeonGammon stderr")?;
         // Drain diagnostics with fixed memory. They are never part of the protocol.
         let stderr = tokio::spawn(async move {
             let mut buffer = [0u8; 4096];
@@ -140,7 +140,7 @@ impl Worker {
             // shutdown must still kill/reap instead of abandoning the child.
             child
                 .start_kill()
-                .context("Cannot terminate Open Sage worker")?;
+                .context("Cannot terminate NeonGammon worker")?;
             reap_child(child).await?;
         }
         self.child.take();
@@ -155,7 +155,7 @@ impl Worker {
         bytes.push(b'\n');
         ensure!(
             bytes.len() <= MAX_REQUEST,
-            "Open Sage request exceeds limit"
+            "NeonGammon request exceeds limit"
         );
         self.stdin.write_all(&bytes).await?;
         self.stdin.flush().await?;
@@ -166,26 +166,26 @@ impl Worker {
             .await?;
         ensure!(
             !line.is_empty() && line.len() as u64 <= MAX_RESPONSE && line.last() == Some(&b'\n'),
-            "Open Sage crashed or exceeded its output limit"
+            "NeonGammon crashed or exceeded its output limit"
         );
         let response: Value =
-            serde_json::from_slice(&line).context("Invalid Open Sage protocol response")?;
+            serde_json::from_slice(&line).context("Invalid NeonGammon protocol response")?;
         ensure!(
             response.get("id").and_then(Value::as_u64) == Some(id),
-            "Open Sage response ID mismatch"
+            "NeonGammon response ID mismatch"
         );
         if let Some(error) = response.get("error").and_then(Value::as_str) {
-            anyhow::bail!("Open Sage: {error}");
+            anyhow::bail!("NeonGammon: {error}");
         }
         let cost = response
             .get("cost")
             .map(|cost| serde_json::from_value::<EngineCost>(cost.clone()))
             .transpose()
-            .context("Invalid Open Sage engine cost")?;
+            .context("Invalid NeonGammon engine cost")?;
         let result = response
             .get("result")
             .cloned()
-            .context("Open Sage response omitted result")?;
+            .context("NeonGammon response omitted result")?;
         Ok((result, cost))
     }
 
@@ -218,7 +218,7 @@ impl VerifiedBatch {
             Ok::<_, anyhow::Error>(worker)
         })
         .await
-        .context("Open Sage batch initialization timed out; worker terminated")??;
+        .context("NeonGammon batch initialization timed out; worker terminated")??;
         Ok(Self {
             worker: Some(worker),
             cache,
@@ -230,28 +230,28 @@ impl VerifiedBatch {
         payload: Value,
         timeout: Duration,
     ) -> Result<(Value, Option<EngineCost>)> {
-        let mut worker = self.worker.take().context("Open Sage batch was aborted")?;
+        let mut worker = self.worker.take().context("NeonGammon batch was aborted")?;
         ensure!(
             matches!(payload["operation"].as_str(), Some("checker" | "cube")),
-            "Unsupported Open Sage game operation"
+            "Unsupported NeonGammon game operation"
         );
         // Removing ownership also poisons the block if this individual future
         // is cancelled while its caller still retains the batch object.
         let result = tokio::time::timeout(timeout, worker.validated_exchange(payload))
             .await
-            .context("Open Sage evaluation timed out; worker terminated")??;
+            .context("NeonGammon evaluation timed out; worker terminated")??;
         self.worker = Some(worker);
         Ok(result)
     }
 
     pub(super) async fn finish(mut self) -> Result<()> {
-        let mut worker = self.worker.take().context("Open Sage batch was aborted")?;
+        let mut worker = self.worker.take().context("NeonGammon batch was aborted")?;
         tokio::time::timeout(
             Duration::from_secs(120),
             worker.validated_exchange(json!({"operation":"end_batch"})),
         )
         .await
-        .context("Open Sage final integrity check timed out; worker terminated")??;
+        .context("NeonGammon final integrity check timed out; worker terminated")??;
         *self.cache = Some(worker);
         Ok(())
     }
@@ -278,7 +278,7 @@ pub(super) async fn request_costed(
             payload["operation"].as_str(),
             Some("identity" | "checker" | "cube" | "resignation")
         ),
-        "Unsupported Open Sage single-request operation"
+        "Unsupported NeonGammon single-request operation"
     );
     crate::engine::with_shared_access(async {
         // The deadline includes waiting for the slot, so a request ends on time
@@ -294,7 +294,7 @@ pub(super) async fn request_costed(
             Ok(result)
         })
         .await
-        .context("Open Sage request timed out, including the wait for its worker")?
+        .context("NeonGammon request timed out, including the wait for its worker")?
     })
     .await
 }
@@ -312,7 +312,7 @@ pub(super) async fn probe(profile: &SageSnapshot) -> Result<Value> {
             Ok(identity)
         })
         .await
-        .context("Open Sage installation check timed out; worker terminated")?
+        .context("NeonGammon installation check timed out; worker terminated")?
     })
     .await
 }
@@ -332,7 +332,7 @@ pub(super) async fn restart(profile: &SageSnapshot) -> Result<()> {
             Ok(())
         })
         .await
-        .context("Open Sage restart timed out; worker terminated")?
+        .context("NeonGammon restart timed out; worker terminated")?
     })
     .await
 }
@@ -350,7 +350,7 @@ pub(super) async fn warm_play(profile: &SageSnapshot) -> Result<()> {
             Ok(())
         })
         .await
-        .context("Open Sage play warm-up timed out; worker terminated")?
+        .context("NeonGammon play warm-up timed out; worker terminated")?
     })
     .await
 }
@@ -361,10 +361,10 @@ fn validate_payload(profile: &SageSnapshot, request: &Value, result: &Value) -> 
         Some("checker") => {
             let candidates: Vec<super::SageCheckerCandidate> =
                 serde_json::from_value(result.clone())
-                    .context("Invalid Open Sage checker response")?;
+                    .context("Invalid NeonGammon checker response")?;
             ensure!(
                 !candidates.is_empty(),
-                "Open Sage returned no checker candidates"
+                "NeonGammon returned no checker candidates"
             );
             let before = request
                 .get("board")
@@ -385,7 +385,7 @@ fn validate_payload(profile: &SageSnapshot, request: &Value, result: &Value) -> 
                     } else {
                         ensure!(
                             !candidate.notation.is_empty(),
-                            "Open Sage omitted checker notation"
+                            "NeonGammon omitted checker notation"
                         );
                     }
                 }
@@ -394,14 +394,14 @@ fn validate_payload(profile: &SageSnapshot, request: &Value, result: &Value) -> 
                 let forced: [i32; 26] = serde_json::from_value(forced.clone())?;
                 ensure!(
                     candidates.iter().any(|candidate| candidate.board == forced),
-                    "Open Sage omitted the played candidate"
+                    "NeonGammon omitted the played candidate"
                 );
             }
             Ok(())
         }
         Some("cube") => {
             let cube: super::SageCubeEvaluation = serde_json::from_value(result.clone())
-                .context("Invalid Open Sage cube response")?;
+                .context("Invalid NeonGammon cube response")?;
             for equity in [cube.no_double, cube.take, cube.pass] {
                 super::validate_evaluation(equity, &cube.probabilities)?;
             }
@@ -410,7 +410,7 @@ fn validate_payload(profile: &SageSnapshot, request: &Value, result: &Value) -> 
         Some("resignation") => {
             ensure!(
                 result.get("accept").and_then(Value::as_bool).is_some(),
-                "Open Sage omitted resignation decision"
+                "NeonGammon omitted resignation decision"
             );
             for field in ["continuation", "offered"] {
                 ensure!(
@@ -418,12 +418,12 @@ fn validate_payload(profile: &SageSnapshot, request: &Value, result: &Value) -> 
                         .get(field)
                         .and_then(Value::as_f64)
                         .is_some_and(f64::is_finite),
-                    "Open Sage returned invalid resignation equity"
+                    "NeonGammon returned invalid resignation equity"
                 );
             }
             Ok(())
         }
-        _ => anyhow::bail!("Unsupported Open Sage response operation"),
+        _ => anyhow::bail!("Unsupported NeonGammon response operation"),
     }
 }
 
@@ -431,7 +431,7 @@ fn validate_identity(profile: &SageSnapshot, identity: &Value) -> Result<()> {
     ensure!(
         identity["package_version"].as_str() == Some(&profile.package_version)
             && identity["artifact_fingerprint"].as_str() == Some(&profile.artifact_fingerprint),
-        "Open Sage installation differs from the immutable job snapshot"
+        "NeonGammon installation differs from the immutable job snapshot"
     );
     Ok(())
 }
@@ -524,7 +524,7 @@ for line in sys.stdin:
             Self {
                 profile: SageSnapshot {
                     python: executable.to_str().unwrap().into(),
-                    package_version: "2.0.20260907".into(),
+                    package_version: "3.0.0".into(),
                     artifact_fingerprint: "a".repeat(64),
                     threads: 2,
                     plies: 2,

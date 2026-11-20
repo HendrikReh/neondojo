@@ -224,7 +224,7 @@ test('analysis puts defaults and book source ahead of local engine setup', async
     dialog.getByText('GNUbg · Available', { exact: true }),
   ).toBeVisible();
   await expect(
-    dialog.getByText('Open Sage · Not available', { exact: true }),
+    dialog.getByText('NeonGammon · Not available', { exact: true }),
   ).toBeVisible();
   const path = dialog.getByLabel('GNUbg executable path', { exact: true });
   await expect(path).toBeHidden();
@@ -303,7 +303,7 @@ test('playing groups engine, feedback and game preferences without desktop scrol
   }
 });
 
-test('an edited Open Sage path stays in the draft until verified or discarded', async ({
+test('an edited NeonGammon path stays in the draft until verified or discarded', async ({
   page,
 }) => {
   const backend = await settingsBackend(page);
@@ -317,7 +317,7 @@ test('an edited Open Sage path stays in the draft until verified or discarded', 
     attempts++;
     return route.fulfill({
       status: 422,
-      json: { error: 'Open Sage probe failed' },
+      json: { error: 'NeonGammon probe failed' },
     });
   });
   await page.goto('/');
@@ -341,7 +341,7 @@ test('an edited Open Sage path stays in the draft until verified or discarded', 
   );
   await guard.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(guard.getByRole('alert')).toContainText(
-    'Open Sage probe failed',
+    'NeonGammon probe failed',
   );
   await guard
     .getByRole('button', { name: 'Keep editing', exact: true })
@@ -429,8 +429,8 @@ test('saves separate engine thread limits and restores them when reopened', asyn
   const fields = [
     ['GNUbg threads for analysis', 1, 7, '3'],
     ['GNUbg threads for playing', 1, 7, '2'],
-    ['Open Sage threads for analysis', 2, 9, '6'],
-    ['Open Sage threads for playing', 2, 9, '4'],
+    ['NeonGammon threads for analysis', 2, 9, '6'],
+    ['NeonGammon threads for playing', 2, 9, '4'],
   ] as const;
   for (const [label, min, max] of fields) {
     const field = dialog.getByRole('combobox', { name: label, exact: true });
@@ -451,7 +451,7 @@ test('saves separate engine thread limits and restores them when reopened', asyn
     exact: true,
   });
   await expect(parallelJobs).toHaveAccessibleDescription(
-    /Open Sage runs one analysis at a time/,
+    /NeonGammon runs one analysis at a time/,
   );
   await expect(parallelJobs.locator('option').last()).toHaveAttribute(
     'value',

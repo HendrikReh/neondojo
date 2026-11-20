@@ -457,7 +457,7 @@ test('automatically opens match statistics with the engine that produced them', 
   await expect(statistics).toContainText('2 of 2 checker moves analyzed');
   await expect(selection).toHaveValue(`job:${job.id}`);
 
-  // Reopening the analysis dialog defaults to Open Sage again, but the GNUbg
+  // Reopening the analysis dialog defaults to NeonGammon again, but the GNUbg
   // result must still be accessible there without restarting the calculation.
   await selection.selectOption(`job:${gameJob.id}`);
   await expect(statistics).not.toHaveAttribute('data-job-id', job.id);

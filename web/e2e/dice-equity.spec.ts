@@ -211,7 +211,7 @@ test('dice equity ignores a saved result from another engine', async ({
   expect(submissions).toEqual([
     expect.objectContaining({ kind: 'dice', engine_id: 'gnubg' }),
   ]);
-  // Present the saved GNUbg result as Open Sage's once. GNUbg must not reuse it.
+  // Present the saved GNUbg result as NeonGammon's once. GNUbg must not reuse it.
   const restored: string[] = [];
   page.on('request', (request) => {
     if (/\/api\/positions\/[^/]+\/jobs$/.test(new URL(request.url()).pathname))

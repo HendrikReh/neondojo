@@ -186,7 +186,7 @@ impl EngineSnapshot {
             "bgsage" => Ok(AnalysisEngine::OpenSage(SageEngine::new(
                 self.open_sage
                     .clone()
-                    .ok_or_else(|| anyhow::anyhow!("Missing saved Open Sage installation"))?,
+                    .ok_or_else(|| anyhow::anyhow!("Missing saved NeonGammon installation"))?,
             )?)),
             _ => anyhow::bail!("Unsupported saved job engine"),
         }
@@ -253,7 +253,7 @@ pub(crate) async fn snapshot_for_practice(
 ) -> anyhow::Result<(i32, EngineSnapshot)> {
     let settings = load(state).await?;
     // Practice answers stay quick: at most GNUbg 3-ply (its native 2-ply) or
-    // Open Sage 2-ply.
+    // NeonGammon 2-ply.
     let cap = if settings.analysis_engine == "gnubg" {
         3
     } else {
@@ -287,13 +287,13 @@ async fn analysis_snapshot(
     .await
 }
 
-/// The same verified Open Sage profile with cubeless evaluation. Starting the
+/// The same verified NeonGammon profile with cubeless evaluation. Starting the
 /// worker for its version runs the real capability check for that profile.
 pub(crate) async fn cubeless_sage(mut snapshot: EngineSnapshot) -> anyhow::Result<EngineSnapshot> {
     let sage = snapshot
         .open_sage
         .as_mut()
-        .ok_or_else(|| anyhow::anyhow!("Missing verified Open Sage installation"))?;
+        .ok_or_else(|| anyhow::anyhow!("Missing verified NeonGammon installation"))?;
     sage.cubeless = true;
     snapshot.engine_version = Some(SageEngine::new(sage.clone())?.version().await?);
     Ok(snapshot)
@@ -483,7 +483,7 @@ async fn put_settings(
     }
     open_sage::verify_settings(&state.pool, &current, &settings)
         .await
-        .map_err(|e| ApiError::invalid(format!("Open Sage installation check failed: {e:#}")))?;
+        .map_err(|e| ApiError::invalid(format!("NeonGammon installation check failed: {e:#}")))?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     crate::configuration::store::lock(&mut tx)
         .await
@@ -584,7 +584,7 @@ async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo
         },
         EngineInfo {
             id: "bgsage".into(),
-            name: "Open Sage".into(),
+            name: "NeonGammon".into(),
             available: sage_version.is_some(),
             version: sage_version,
             fork: sage.as_ref().and_then(SageSnapshot::known_fork),

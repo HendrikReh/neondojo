@@ -86,7 +86,7 @@ async fn defaults_use_injected_engine_and_survive_new_app_states(pool: PgPool) {
     assert_eq!(engines[0]["version"], Value::Null);
     assert_eq!(engines[0]["plies"], json!([1, 2, 3, 4, 5]));
     assert_eq!(engines[1]["id"], "bgsage");
-    assert_eq!(engines[1]["name"], "Open Sage");
+    assert_eq!(engines[1]["name"], "NeonGammon");
     assert_eq!(engines[1]["available"], false);
     assert_eq!(engines[1]["version"], Value::Null);
     // 1-ply needs an installation verified for it; the others are offered.

@@ -45,7 +45,7 @@ it('keeps candidate provenance and an explicit preview reset', () => {
 
 it.each([
   [
-    'Open Sage 2.0.20260907',
+    'NeonGammon 3.0.0',
     `; model ${'a'.repeat(64)}; threads 10; adapter 1 · 2-ply cubeful`,
   ],
   ['GNU Backgammon 1.08.003', ' 20261108 · 2-ply cubeful'],

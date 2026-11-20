@@ -203,7 +203,7 @@ async fn sage_full_game_both_colors_restores_pinned_engines_and_has_no_gnubg_pr(
         let games = report["review"]["games"].as_array().unwrap();
         assert!(!games.is_empty());
         assert!(games.iter().all(|game| game["statistics"].is_null()
-            && game["engine"].as_str().unwrap().starts_with("Open Sage")));
+            && game["engine"].as_str().unwrap().starts_with("NeonGammon")));
     }
 }
 

@@ -188,7 +188,7 @@ function parseSageInstallation(value: unknown): SageInstallation {
     !Number.isSafeInteger(value.version) ||
     typeof value.python_path !== 'string'
   )
-    throw new SettingsApiError(200, 'Invalid Open Sage installation response');
+    throw new SettingsApiError(200, 'Invalid NeonGammon installation response');
   const snapshot = value.snapshot;
   if (
     snapshot != null &&
@@ -201,7 +201,7 @@ function parseSageInstallation(value: unknown): SageInstallation {
       !isThreadLimit(snapshot.threads, 'bgsage') ||
       snapshot.adapter_version !== 1)
   )
-    throw new SettingsApiError(200, 'Invalid Open Sage installation identity');
+    throw new SettingsApiError(200, 'Invalid NeonGammon installation identity');
   return value as SageInstallation;
 }
 export async function loadSageInstallation(signal?: AbortSignal) {

@@ -575,7 +575,7 @@ pub(crate) async fn resources(
                     .is_err()
             {
                 issues.push(ConfigurationIssue { path: path.into(), code: "engine_unavailable".into(),
-                    message: "The configured Open Sage installation or requested depth is unavailable or changed".into() });
+                    message: "The configured NeonGammon installation or requested depth is unavailable or changed".into() });
             }
         }
     }

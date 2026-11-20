@@ -30,7 +30,7 @@ import './position-comparison.css';
 const names = {
   xg: 'eXtreme Gammon',
   gnubg: 'GNU Backgammon',
-  bgsage: 'Open Sage',
+  bgsage: 'NeonGammon',
 };
 
 export default function PositionComparison({

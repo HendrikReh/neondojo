@@ -1,7 +1,7 @@
 import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
 
 /**
- * Every depth in NeonDojo uses the XG / Open Sage convention for both
+ * Every depth in NeonDojo uses the XG / NeonGammon convention for both
  * engines: 1-ply is the raw neural-net evaluation. The backend converts to
  * GNUbg's own level (one lower) only when it talks to GNUbg.
  */
@@ -30,7 +30,7 @@ export const PLAY_PLIES: readonly number[] = [
 
 /**
  * Depth chosen when switching to an engine without a remembered choice:
- * GNUbg's former 2-ply and Open Sage's 2-ply, each in its original numbering.
+ * GNUbg's former 2-ply and NeonGammon's 2-ply, each in its original numbering.
  */
 export function preferredDepth(engine: string) {
   return engine === 'gnubg' ? DEFAULT_ANALYSIS_PLIES : 2;

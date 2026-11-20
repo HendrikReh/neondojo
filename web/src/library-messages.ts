@@ -98,12 +98,12 @@ const rows = {
     'Riprendi le partite in pausa da dove le avevi lasciate.',
   ],
   botMatchesDescription: [
-    'Matches against an engine such as GNU Backgammon or Open Sage are saved here automatically.',
-    'Matches gegen eine Engine wie GNU Backgammon oder Open Sage werden hier automatisch gespeichert.',
-    'Las partidas contra un motor como GNU Backgammon u Open Sage se guardan aquí automáticamente.',
-    'Les matchs contre un moteur comme GNU Backgammon ou Open Sage sont automatiquement enregistrés ici.',
-    'Mecze z silnikiem takim jak GNU Backgammon lub Open Sage są tutaj zapisywane automatycznie.',
-    'Le partite contro un motore come GNU Backgammon o Open Sage vengono salvate qui automaticamente.',
+    'Matches against an engine such as GNU Backgammon or NeonGammon are saved here automatically.',
+    'Matches gegen eine Engine wie GNU Backgammon oder NeonGammon werden hier automatisch gespeichert.',
+    'Las partidas contra un motor como GNU Backgammon u NeonGammon se guardan aquí automáticamente.',
+    'Les matchs contre un moteur comme GNU Backgammon ou NeonGammon sont automatiquement enregistrés ici.',
+    'Mecze z silnikiem takim jak GNU Backgammon lub NeonGammon są tutaj zapisywane automatycznie.',
+    'Le partite contro un motore come GNU Backgammon o NeonGammon vengono salvate qui automaticamente.',
   ],
   occurrences: [
     'Occurrences',

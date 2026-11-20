@@ -653,7 +653,7 @@ mod tests {
             let decoded = serde_json::from_value::<ProfileConfiguration>(value.clone());
             assert!(
                 decoded.is_ok(),
-                "verified Open Sage must be selectable in {area}"
+                "verified NeonGammon must be selectable in {area}"
             );
             assert!(validation::normalize(decoded.unwrap()).is_ok());
             value[area]["plies"] = serde_json::json!(1);

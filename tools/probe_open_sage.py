@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline, fail-closed compatibility probe for the locked Open Sage ARM64 build.
+"""Offline, fail-closed compatibility probe for the locked NeonGammon ARM64 build.
 
 This is a diagnostic tool, not an application engine adapter. It never installs
 packages, downloads assets, alters models, or substitutes evaluation results.
@@ -19,10 +19,9 @@ import subprocess
 import sys
 import time
 
-# Supported Open Sage fork package versions. 2.0.20260907 covers the fork
-# builds up to 340fc53; 2.0.20261119 is the fork release v2.0.20261119.
+# Supported NeonGammon package versions (HendrikReh/neongammon releases).
 # The worker and the Rust snapshot validation use this list as well.
-SUPPORTED_VERSIONS = ('2.0.20260907', '2.0.20261119')
+SUPPORTED_VERSIONS = ('3.0.0',)
 NUMPY_VERSION = '2.5.4'
 
 
@@ -62,6 +61,39 @@ def validate_thread_budget(requested, observed, *, serial=False):
             'Do not enable this profile without an explicit bounded integration solution.')
 
 
+def observe_thread_budgets(sage, call):
+    """Run ``call`` and record every thread budget the analyzer hands out.
+
+    NeonGammon bounds its work in two places: Python candidate pools
+    (``ThreadPoolExecutor(max_workers=...)``) and, from 3.0.0, the native N-ply
+    checker routine ``bgbot_cpp.checker_play_nply(n_threads=...)``. Both
+    observers delegate unchanged to the real implementation; they neither alter
+    budgets nor substitute any engine computation. Returns the call's result
+    and the observed budgets.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    from contextlib import ExitStack
+    from unittest.mock import patch
+    module = sage.analyzer
+    native = module.bgbot_cpp
+    checker_play_nply = native.checker_play_nply
+    observed = []
+
+    def observe_pool(*args, **kwargs):
+        observed.append(kwargs.get('max_workers', args[0] if args else None))
+        return ThreadPoolExecutor(*args, **kwargs)
+
+    def observe_native(*args, **kwargs):
+        observed.append(kwargs.get('n_threads'))
+        return checker_play_nply(*args, **kwargs)
+
+    with ExitStack() as stack:
+        stack.enter_context(patch.object(module, 'ThreadPoolExecutor', side_effect=observe_pool))
+        stack.enter_context(patch.object(native, 'checker_play_nply', side_effect=observe_native))
+        result = call()
+    return result, observed
+
+
 def validate_probabilities(values):
     require(len(values) == 5 and all(math.isfinite(x) and 0 <= x <= 1 for x in values),
             'Non-finite or out-of-range probabilities')
@@ -79,7 +111,7 @@ def validate_result(result, probability_validator=validate_probabilities):
 
 
 def validate_versions(value):
-    require(value['bgsage'] in SUPPORTED_VERSIONS, 'Unsupported bgsage version; install the locked wheels.')
+    require(value['neongammon'] in SUPPORTED_VERSIONS, 'Unsupported NeonGammon version; install the locked wheels.')
     require(value['numpy'] == NUMPY_VERSION, 'Unsupported numpy version; install the locked wheels.')
 
 
@@ -111,20 +143,20 @@ def identity(sage, native):
     weights = sage.default_weights()
     for path in weights.weight_paths_list:
         checked_hash(Path(path), Path(path).name)
-    from bgsage.weights import bearoff_db_path
+    from neongammon.weights import bearoff_db_path
     bearoff = bearoff_db_path()
     require(bearoff is not None, 'Missing bearoff model. Reinstall from the locked wheels.')
     checked_hash(Path(bearoff), 'bearoff database')
     native_path = Path(native.__file__)
     files[native_path.name] = checked_hash(native_path, native_path.name)
-    records = {str(file): file.hash for file in importlib.metadata.distribution('bgsage').files or []}
+    records = {str(file): file.hash for file in importlib.metadata.distribution('neongammon').files or []}
     for label, file_digest in files.items():
-        record = records.get(label if label == native_path.name else 'bgsage/' + label)
+        record = records.get(label if label == native_path.name else 'neongammon/' + label)
         require(record is not None and record.mode == 'sha256',
                 f'Missing SHA256 wheel RECORD entry for {label}. Reinstall from the locked wheels.')
         validate_record_digest(file_digest, record.value, label)
     digest = hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()
-    return {'bgsage': importlib.metadata.version('bgsage'),
+    return {'neongammon': importlib.metadata.version('neongammon'),
             'numpy': importlib.metadata.version('numpy'), 'production_model': sage.PRODUCTION_MODEL,
             'strategy': weights.strategy_type, 'weight_slots': len(weights.weight_paths_list),
             'wheel_record_verified': True,
@@ -149,10 +181,10 @@ def run_worker(skip_platform=False, levels=None):
             validate_platform(platform.system(), platform.machine(), sys.version_info)
         import_start = time.perf_counter()
         try:
-            import bgsage as sage
+            import neongammon as sage
             import bgbot_cpp as native
         except (ImportError, OSError) as error:
-            raise ProbeError('Open Sage dependency/native library unavailable. Install the locked wheels into native Python 3.12; import failure: ' + type(error).__name__) from None
+            raise ProbeError('NeonGammon dependency/native library unavailable. Install the locked wheels into native Python 3.12; import failure: ' + type(error).__name__) from None
         report['import_seconds'] = time.perf_counter() - import_start
         report['identity'] = identity(sage, native)
         validate_versions(report['identity'])
@@ -195,7 +227,7 @@ def run_worker(skip_platform=False, levels=None):
         check('opening_31_five_point', opening_case)
 
         def notation_case():
-            from bgsage.text_export import compute_move_notation
+            from neongammon.text_export import compute_move_notation
             require(compute_move_notation(opening, five_point, 3, 1) == '8/5 6/5', 'Opening notation mismatch')
             before = [0] * 26
             before[25], before[6], before[24], before[23] = 1, 14, -1, -14
@@ -375,24 +407,17 @@ def run_worker(skip_platform=False, levels=None):
                     check(name + '_' + level, case)
 
         report['thread_budgets'] = []
-        # Transparent constructor observation: delegates to the real executor;
-        # neither alters pool sizes nor substitutes any engine computation.
-        from concurrent.futures import ThreadPoolExecutor
-        from unittest.mock import patch
         for threads in (2, 4):
             for level in levels:
                 def thread_case(threads=threads, level=level):
-                    observed = []
-                    def observe_pool(*args, **kwargs):
-                        observed.append(kwargs.get('max_workers', args[0] if args else None))
-                        return ThreadPoolExecutor(*args, **kwargs)
                     engine = sage.BgBotAnalyzer(eval_level=level, parallel_threads=threads)
-                    with patch('bgsage.analyzer.ThreadPoolExecutor', side_effect=observe_pool):
-                        engine.checker_play(opening, 3, 1, beaver=False)
+                    _, observed = observe_thread_budgets(
+                        sage, lambda: engine.checker_play(opening, 3, 1, beaver=False))
                     serial = level == '1ply' and getattr(sage.analyzer, 'SERIAL_CUBEFUL_1PLY', False) is True
                     detail = {'level': level, 'requested_threads': threads, 'serial_checker': serial,
-                              'observed_candidate_pool_limits': observed,
-                              'scope': 'Real Python ThreadPoolExecutor constructor, not simultaneous native thread census'}
+                              'observed_thread_budgets': observed,
+                              'scope': 'Python ThreadPoolExecutor limits and native checker_play_nply n_threads '
+                                       'as requested; not a census of simultaneous native threads'}
                     report['thread_budgets'].append(detail)
                     validate_thread_budget(threads, observed, serial=serial)
                     return detail

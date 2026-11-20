@@ -84,7 +84,7 @@ async function openMatch(p: Page, locale = 'en') {
   await expect(p.locator('.analysis-workspace .board')).toBeVisible();
   return match;
 }
-test('starts GNUbg 5-ply for the selected game with an Open Sage profile', async ({
+test('starts GNUbg 5-ply for the selected game with a NeonGammon profile', async ({
   page,
 }) => {
   // A real GNUbg 5-ply (its own 4-ply) game analysis; other specs allow the same three minutes.
@@ -105,7 +105,7 @@ test('starts GNUbg 5-ply for the selected game with an Open Sage profile', async
         },
         {
           id: 'bgsage',
-          name: 'Open Sage',
+          name: 'NeonGammon',
           available: true,
           version: null,
           plies: [2, 3],

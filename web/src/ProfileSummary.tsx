@@ -150,7 +150,7 @@ export default function ProfileSummary({
     const s = String(value);
     if (path.endsWith('.engine')) {
       if (s === 'gnubg') return 'GNUbg';
-      if (s === 'bgsage') return 'Open Sage';
+      if (s === 'bgsage') return 'NeonGammon';
     }
     if (s === ALL_CARDS) return t('allCards');
     if (s === CARDS_WITHOUT_DECK) return searchText('withoutDeck');
