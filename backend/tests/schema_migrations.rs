@@ -121,6 +121,40 @@ async fn former_history_before_later_migrations_is_adopted_and_migrated(pool: Pg
 
 #[sqlx::test(migrations = false)]
 #[ignore = "requires PostgreSQL"]
+async fn release_1_0_databases_receive_the_former_0084_and_are_adopted(pool: PgPool) {
+    let baseline_only = sqlx::migrate::Migrator {
+        migrations: std::borrow::Cow::Owned(
+            MIGRATOR
+                .iter()
+                .filter(|m| m.version == 1)
+                .cloned()
+                .collect(),
+        ),
+        ..sqlx::migrate::Migrator::DEFAULT
+    };
+    baseline_only.run(&pool).await.unwrap();
+    // NeonDojo 1.0.0 ends with 0083: the former 0084 only added these objects.
+    sqlx::raw_sql(
+        "DROP VIEW virtual_player_sides;
+         DROP TABLE virtual_player_members, virtual_player_profiles;",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    record_legacy_history(&pool, 83).await;
+
+    schema_migrations::run(&pool).await.unwrap();
+
+    assert_eq!(history(&pool).await, current());
+    let virtual_sides: i64 = sqlx::query_scalar("SELECT count(*) FROM virtual_player_sides")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(virtual_sides, 0);
+}
+
+#[sqlx::test(migrations = false)]
+#[ignore = "requires PostgreSQL"]
 async fn incomplete_or_changed_former_history_is_rejected_unchanged(pool: PgPool) {
     MIGRATOR.run(&pool).await.unwrap();
     record_legacy_history(&pool, 60).await;

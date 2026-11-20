@@ -57,13 +57,17 @@ test('shows the running app and engine versions under Extras', async ({
     versions.click({ timeout: 4000 }),
   ]);
   expect(versionResponse.ok()).toBe(true);
-  const { version: commit } = await versionResponse.json();
+  const { release, commit, version } = await versionResponse.json();
+  expect(release).toMatch(/^\d+\.\d+\.\d+$/);
   expect(commit).toMatch(/^[a-f\d]{40}$/i);
+  expect(version).toBe(commit);
   const panel = page.getByRole('region', { name: 'Version information' });
   const appRow = panel.locator('dl > div').filter({
     has: page.getByText('NeonDojo', { exact: true }),
   });
-  const appCommit = appRow.getByText(commit.slice(0, 7), { exact: true });
+  const appCommit = appRow.getByText(`${release} (${commit.slice(0, 7)})`, {
+    exact: true,
+  });
   await expect(appCommit).toBeVisible();
   await expect(appCommit).toHaveAttribute('title', commit);
   await expect(panel.getByText('1.08.003', { exact: true })).toBeVisible();
@@ -92,7 +96,13 @@ test('shows the running app and engine versions under Extras', async ({
   );
   await expect(copy).toBeFocused();
   const clipboard = await page.evaluate(() => navigator.clipboard.readText());
-  for (const detail of [commit, gnubgVersion, currentSageVersion, forkUrl]) {
+  for (const detail of [
+    `NeonDojo version: ${release}`,
+    `NeonDojo commit: ${commit}`,
+    gnubgVersion,
+    currentSageVersion,
+    forkUrl,
+  ]) {
     expect(clipboard).toContain(detail);
   }
 
@@ -100,6 +110,7 @@ test('shows the running app and engine versions under Extras', async ({
   await details.focus();
   await details.press('Enter');
   await expect(panel.getByText(commit, { exact: true })).toBeVisible();
+  await expect(panel.getByText(release, { exact: true })).toBeVisible();
   await expect(panel.getByText(gnubgVersion, { exact: true })).toBeVisible();
   await expect(
     panel.getByText(currentSageVersion, { exact: true }),
@@ -133,18 +144,19 @@ test('shows the running app and engine versions under Extras', async ({
   expect(unexpectedVersionReads).toBe(0);
   await details.click();
   await expect(panel.getByText(sageVersion, { exact: true })).toBeVisible();
-  await expect(panel.getByText('NeonGammon source', { exact: true })).toHaveCount(
-    0,
-  );
+  await expect(
+    panel.getByText('NeonGammon source', { exact: true }),
+  ).toHaveCount(0);
 
   await page.getByRole('tab', { name: 'Benchmark', exact: true }).click();
   sageVersion = null;
   await page.route('**/api/version', (route) =>
-    route.fulfill({ json: { version: '' } }),
+    route.fulfill({ json: { release, commit: '', version: '' } }),
   );
   await versions.click();
   await expect(panel.getByText('1.08.003', { exact: true })).toBeVisible();
-  await expect(panel.getByText('Unavailable', { exact: true })).toHaveCount(2);
+  await expect(appRow.getByText(release, { exact: true })).toBeVisible();
+  await expect(panel.getByText('Unavailable', { exact: true })).toHaveCount(1);
   await expect(panel.getByRole('alert')).toHaveCount(0);
 
   await page.context().clearPermissions();

@@ -112,11 +112,19 @@ export async function loadSettings(signal?: AbortSignal) {
   return parseSettings(await settingsRequest('/settings', { signal }));
 }
 
-export async function loadAppVersion(signal?: AbortSignal) {
+export type AppVersion = { release: string; commit: string };
+
+export async function loadAppVersion(
+  signal?: AbortSignal,
+): Promise<AppVersion> {
   const value = await settingsRequest('/version', { signal });
-  if (!isObject(value) || typeof value.version !== 'string')
+  if (
+    !isObject(value) ||
+    typeof value.release !== 'string' ||
+    typeof value.commit !== 'string'
+  )
     throw new SettingsApiError(200, '');
-  return value.version;
+  return { release: value.release.trim(), commit: value.commit.trim() };
 }
 
 export async function loadEngines(signal?: AbortSignal): Promise<EngineInfo[]> {

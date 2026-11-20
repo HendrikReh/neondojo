@@ -6,6 +6,10 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-20
+
+NeonDojo 1.1.0 adds virtual player profiles, catalogues bot matches as real NeonDojo players and opens a new match in a setup dialog with per-match bot choices. One schema baseline replaces the migrations 0001–0084. Databases from 1.0.0 and later development builds are updated automatically at startup without changing their data, and backups stay restorable. Migration `0085_bot_match_players` then runs.
+
 ### Added
 
 - **Virtual player profiles.** A virtual profile groups real player profiles without changing them, for example the same person's Galaxy and OpenGammon accounts. Unlike **Merge …** it is reversible: members keep their aliases and their own rows in the player list, which name their group, and can be removed again. Each real profile belongs to at most one virtual profile. The virtual profile shows the consolidated PR, PR chart, matches and opponents of its members. [Virtual player profiles](docs/reference/library.md#virtual-player-profiles)
@@ -13,17 +17,28 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
   - In *My recurring mistakes* and *All analyzed decisions* a virtual profile is an additional player choice; members stay selectable on their own.
   - Merging a member into a profile without a group passes the membership on.
   - New endpoints under `/api/virtual-players`, `virtual_player_id` on `GET /api/library/matches`, and `virtual_profile` on player profiles. `GET /api/study/mistakes` now returns `resolved_player` for **My player profile** even without `resolve`.
-  - Migration `0084_virtual_player_profiles` adds the tables and the view `virtual_player_sides`. Backups include the virtual profiles and their members.
+  - The schema baseline contains their tables and the view `virtual_player_sides`; a 1.0.0 database receives them at startup. Backups include the virtual profiles and their members.
+- **Bot matches belong to real players.** The human side of every NeonDojo bot match is catalogued as a player under the platform `neondojo`; the bot side stays uncatalogued. Existing NeonDojo players join **My player profile**, so earlier results stay the same. The view `player_match_sides` is the one definition of which match sides can enter a PR: assisted and running bot matches stay out. Migration `0085_bot_match_players` stores the human side on each bot match. [Player database](docs/reference/library.md#player-database)
+- **Bot choices per match.** The **New match** setup offers the player name, bot engine and playing strength for that match only, and the saved settings stay unchanged. `POST /api/play/sessions` accepts optional `human_name`, `play_engine` and `play_plies`. [Playing against an engine](docs/reference/playing.md#playing-against-an-engine)
+- **Engine roles in Playing.** The setup and match bar name the **Bot engine**, **Analysis engine** and **Rules engine**, and the bot tooltip shows its version, depth and bear-off direction. [Playing against an engine](docs/reference/playing.md#playing-against-an-engine)
+- **Legal checker paths from the backend.** A play session in the move phase includes `legal_turns`, the complete checker paths of the roll with their dice in execution order. `POST /api/play/checker-turns` returns the paths for any training position, using the same step rules as practice answer validation. [API reference](docs/development/api.md#checker-turns)
+- **NeonDojo version with commit.** **Extras → Versions** shows the running version with its build commit, for example `1.1.0 (b9bff70)`, and copies both. `GET /api/version` returns `release` and `commit`; `version` is deprecated and repeats the commit. [Version information](docs/reference/extras.md#version-information)
+- **NeonDojo logo.** A torii whose pillars are backgammon points, in front of a checker as the rising sun, replaces the "bg" mark in the header, as the favicon and in the README.
 - **Sort benchmark history.** In **Extras → Benchmark → History**, the date, engine, ply, total analysis time, average time and status headings sort the list; a second click reverses it. Runs without a measured time stay last, and status sorts by lifecycle. [Engine benchmark](docs/reference/extras.md#engine-benchmark)
 - **Delete benchmark runs.** In **Extras → Benchmark → History**, finished runs (completed, failed or cancelled) can be deleted after an inline confirmation. Queued and running runs must be cancelled first. A deleted completed run no longer calibrates analysis time estimates. New endpoint `DELETE /api/benchmarks/{id}` (204; 404 if missing; 409 while queued or running). [Engine benchmark](docs/reference/extras.md#engine-benchmark)
 
 ### Changed
 
-- **One database schema baseline.** `backend/migrations/0001_schema.sql` replaces the migrations 0001–0084 and creates the same schema and seed rows. At startup NeonDojo adopts a database migrated with the former files without changing its data; a database that is missing any of them must first be updated with an earlier version. Existing backups stay restorable. [Database schema](docs/development/architecture.md#database-schema)
+- **One database schema baseline.** `backend/migrations/0001_schema.sql` replaces the migrations 0001–0084 and creates the same schema and seed rows. At startup NeonDojo adopts a database migrated with the former files without changing its data. A database from 1.0.0 (migrations 0001–0083) first receives the former `0084_virtual_player_profiles`. Other histories are rejected with a message instead of being migrated. Existing backups stay restorable. [Database schema](docs/development/architecture.md#database-schema)
+- **New match setup as a dialog.** The setup opens over the playing view, so the current match or an empty starting board stays visible. It covers only the playing view; the app header stays usable, and Close or Escape dismisses it. [Playing against an engine](docs/reference/playing.md#playing-against-an-engine)
+- **XG transcripts with recorded irregularities import.** Plays that XG itself marks as illegal become an SGF setup instead of a checker decision, a game may start from its first recorded position, and an unfinished game followed by the next game is closed without a result. The import lists each resolution as a warning. The nine previously rejected local XG files now import. [Import formats](docs/reference/library.md#import-formats)
 - **Players with the same name can be told apart.** When several profiles in **Player database** share a display name, for example the same username on Galaxy and OpenGammon, each row shows its platforms under the name. `GET /api/players` returns them in `name_platforms`. [Player database](docs/reference/library.md#player-database)
 
 ### Fixed
 
+- **NeonGammon 4-ply analysis benchmarks run.** They failed before starting with "Unsupported benchmark protocol or reference version". The runner and the time estimate now share one protocol rule.
+- **A deleted last match no longer breaks the start.** When the stored Analysis selection no longer exists, the app forgets it and opens the empty workspace instead of reporting HTTP 404.
+- **A missing stored play session opens the setup.** If the last session no longer exists, Playing opens **New match** instead of an error. An explicitly selected missing session still reports it.
 - **PR coverage of "My player profile".** Bot matches played with learning aids no longer count as unrated: the coverage beside the PR counts only matches that can enter it, and **Analyze unrated matches …** no longer stays visible for them. Virtual profiles report these matches as `rateable_match_count`. [Virtual player profiles](docs/reference/library.md#virtual-player-profiles)
 
 ## [1.0.0] - 2026-11-20
@@ -183,7 +198,8 @@ First tagged release. It covers everything since the first commit on 2026-11-08.
 - An illustrated English user guide, reference pages for each workspace, and development guides for the API, architecture and verification. [#4](https://github.com/HendrikReh/neondojo/pull/4) · [#5](https://github.com/HendrikReh/neondojo/pull/5) · [#6](https://github.com/HendrikReh/neondojo/pull/6) · [#7](https://github.com/HendrikReh/neondojo/pull/7)
 - The local restart procedure on port 8787 and the local Open Sage setup.
 
-[Unreleased]: https://github.com/HendrikReh/neondojo/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/HendrikReh/neondojo/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/HendrikReh/neondojo/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/HendrikReh/neondojo/compare/v0.3.0...v1.0.0
 [0.3.0]: https://github.com/HendrikReh/neondojo/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/HendrikReh/neondojo/compare/v0.1.0...v0.2.0

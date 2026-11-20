@@ -180,13 +180,22 @@ async fn database_access(
 
 #[derive(Serialize, ToSchema)]
 struct VersionInfo {
+    /// NeonDojo release version, for example `1.1.0`.
+    release: &'static str,
+    /// Full build commit ID, or an empty string when it is unavailable.
+    commit: &'static str,
+    /// The build commit, as in `commit`; kept for earlier clients.
+    #[schema(deprecated)]
     version: &'static str,
 }
 
 #[utoipa::path(get, path="/api/version", responses((status=200, body=VersionInfo)), tag="System")]
 async fn version() -> Json<VersionInfo> {
+    let commit = env!("NEONDOJO_GIT_COMMIT");
     Json(VersionInfo {
-        version: env!("NEONDOJO_GIT_COMMIT"),
+        release: env!("CARGO_PKG_VERSION"),
+        commit,
+        version: commit,
     })
 }
 
@@ -926,7 +935,6 @@ async fn events(
 #[openapi(
     info(
         title = "NeonDojo API",
-        version = "1.0.0",
         description = "Local headless backgammon library with GNUbg and NeonGammon analysis. No authentication; bind to loopback."
     ),
     paths(

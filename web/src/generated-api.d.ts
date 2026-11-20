@@ -6163,6 +6163,14 @@ export interface components {
             expected_profile_revision: number;
         };
         VersionInfo: {
+            /** @description Full build commit ID, or an empty string when it is unavailable. */
+            commit: string;
+            /** @description NeonDojo release version, for example `1.1.0`. */
+            release: string;
+            /**
+             * @deprecated
+             * @description The build commit, as in `commit`; kept for earlier clients.
+             */
             version: string;
         };
         VirtualPlayerCreate: {
