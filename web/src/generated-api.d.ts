@@ -6154,7 +6154,7 @@ export interface components {
         UploadForm: {
             /**
              * Format: binary
-             * @description One MAT, SGF, binary XG, BGBlitz BGF, or HedgeHog OGXM file, at most 16 MiB including multipart envelope.
+             * @description One MAT (also as a .txt match transcript), SGF, binary XG, BGBlitz BGF, or HedgeHog OGXM file, at most 16 MiB including multipart envelope.
              */
             file: string;
         };

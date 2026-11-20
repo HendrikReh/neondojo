@@ -4,7 +4,7 @@ use neondojo::{
     api::{self, AppState},
     engine::Engine,
     jobs,
-    model::ImportResponse,
+    model::{ImportResponse, MatchGame},
     store,
 };
 use sqlx::PgPool;
@@ -52,6 +52,109 @@ async fn import_uses_unsorted_unless_a_database_is_selected(pool: PgPool) {
         .unwrap();
         assert_eq!(name, expected_name);
     }
+}
+
+/// Game-start scores as printed in a MAT transcript's `Name : score` header rows.
+fn transcript_scores(text: &str) -> Vec<[i32; 2]> {
+    text.lines()
+        .filter(|line| line.matches(" : ").count() == 2)
+        .map(|line| {
+            let mut scores = line.split(" : ").skip(1).map(|part| {
+                part.split_whitespace()
+                    .next()
+                    .and_then(|score| score.parse().ok())
+                    .expect("numeric transcript score")
+            });
+            [scores.next().unwrap(), scores.next().unwrap()]
+        })
+        .collect()
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL and local GNUbg"]
+async fn txt_match_transcripts_import_as_mat(pool: PgPool) {
+    let app = api::router(AppState::new(
+        pool.clone(),
+        Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into())),
+    ));
+    // Boxed title header, no `;` metadata, CRLF lines, `Doubles => n`.
+    let transcript = include_bytes!("fixtures/WC1988-final.txt");
+    let response = app
+        .clone()
+        .oneshot(upload("WC1988-final.TXT", transcript))
+        .await
+        .unwrap();
+    let status = response.status();
+    let data = response.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(status, 201, "{}", String::from_utf8_lossy(&data));
+    let result: ImportResponse = serde_json::from_slice(&data).unwrap();
+    let summary = &result.r#match;
+    assert_eq!(summary.filename, "WC1988-final.TXT");
+    assert_eq!(summary.format, "mat");
+    assert_eq!(summary.match_length, 41);
+    assert_eq!(
+        [summary.white.as_str(), summary.black.as_str()],
+        ["Ray Glaeser", "Joe Sylvester"]
+    );
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/matches/{}/games", summary.id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    let data = response.into_body().collect().await.unwrap().to_bytes();
+    let games: Vec<MatchGame> = serde_json::from_slice(&data).unwrap();
+    let expected = transcript_scores(std::str::from_utf8(transcript).unwrap());
+    assert_eq!(expected.len(), 45);
+    assert_eq!(
+        games
+            .iter()
+            .map(|game| [game.white_score, game.black_score])
+            .collect::<Vec<_>>(),
+        expected
+    );
+    // Sylvester reaches 40 of 41 only before the last game.
+    assert_eq!(
+        games
+            .iter()
+            .filter(|game| game.crawford)
+            .map(|game| game.game_no)
+            .collect::<Vec<_>>(),
+        [games.last().unwrap().game_no]
+    );
+    // The same bytes under .mat are the same source file.
+    let response = app
+        .clone()
+        .oneshot(upload("WC1988-final.mat", transcript))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200);
+
+    // A GNUbg board-diagram text export is not a match transcript.
+    let response = app
+        .clone()
+        .oneshot(upload(
+            "analysis-game1.txt",
+            include_bytes!("fixtures/analysis-game1.txt"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 422);
+    let data = response.into_body().collect().await.unwrap().to_bytes();
+    assert!(
+        String::from_utf8_lossy(&data).contains("TXT import failed"),
+        "{}",
+        String::from_utf8_lossy(&data)
+    );
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM matches")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 1);
 }
 
 #[sqlx::test(migrations = "./migrations")]
