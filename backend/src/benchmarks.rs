@@ -1,11 +1,12 @@
-//! Reproducible, append-only engine timing; independent of the match library.
+//! Reproducible engine timing; independent of the match library. Saved runs
+//! are immutable snapshots that the user may delete once they are finished.
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
 use crate::engine::{GnubgMoveFilter, resolve_binary};
 use axum::{
     Json, Router,
     extract::{Path, State},
     http::StatusCode,
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -178,6 +179,7 @@ pub(crate) fn routes() -> Router<AppState> {
         .route("/api/benchmarks/play", post(create_play))
         .route("/api/benchmarks/reference", get(get_reference))
         .route("/api/benchmarks/status", get(status))
+        .route("/api/benchmarks/{id}", delete(remove))
         .route("/api/benchmarks/{id}/cancel", post(cancel))
 }
 #[utoipa::path(get, path="/api/benchmarks/reference", responses((status=200,body=BenchmarkReference)),tag="Benchmark")]
@@ -413,9 +415,40 @@ async fn cancel(
     state.wake.notify_one();
     Ok(Json(run.ok_or_else(ApiError::missing)?))
 }
+/// Deletes one finished run from the history. Queued and running runs must be
+/// cancelled first so the worker never loses the row it is measuring. Analysis
+/// timings that used the run keep their copied average (`ON DELETE SET NULL`).
+#[utoipa::path(delete,path="/api/benchmarks/{id}",params(("id"=Uuid,Path)),responses((status=204),(status=404,body=ErrorBody),(status=409,body=ErrorBody)),tag="Benchmark")]
+async fn remove(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
+    let deleted = sqlx::query(
+        "DELETE FROM benchmark_runs WHERE id=$1 AND status NOT IN ('queued','running')",
+    )
+    .bind(id)
+    .execute(&state.pool)
+    .await
+    .map_err(anyhow::Error::from)?
+    .rows_affected();
+    if deleted > 0 {
+        return Ok(StatusCode::NO_CONTENT);
+    }
+    let exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM benchmark_runs WHERE id=$1)")
+            .bind(id)
+            .fetch_one(&state.pool)
+            .await
+            .map_err(anyhow::Error::from)?;
+    Err(if exists {
+        ApiError(
+            StatusCode::CONFLICT,
+            "Cancel the benchmark before deleting it".into(),
+        )
+    } else {
+        ApiError::missing()
+    })
+}
 #[derive(OpenApi)]
 #[openapi(
-    paths(get_reference, history, status, create, create_play, cancel),
+    paths(get_reference, history, status, create, create_play, remove, cancel),
     components(schemas(
         Machine,
         BenchmarkProtocol,

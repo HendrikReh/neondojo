@@ -330,6 +330,12 @@ const playEn = {
   playProgress: '{completed} / {total} checker turns',
   playTiming:
     'Measures reference checker turns with the selected engine, from loading the game state to producing the next state. Includes process startup.',
+  actions: 'Actions',
+  deleteRun: 'Delete run',
+  deleteQuestion: 'Delete this run permanently?',
+  confirmDelete: 'Delete',
+  keepRun: 'Keep',
+  deleting: 'Deleting …',
 };
 type PlayKey = keyof typeof playEn;
 const play: Record<Locale, Record<PlayKey, string>> = {
@@ -354,6 +360,12 @@ const play: Record<Locale, Record<PlayKey, string>> = {
     playProgress: '{completed} / {total} Checkerzüge',
     playTiming:
       'Misst Referenzzüge mit der gewählten Engine. Die Zeit umfasst den Prozessstart und reicht bis zum neuen Spielstand.',
+    actions: 'Aktionen',
+    deleteRun: 'Lauf löschen',
+    deleteQuestion: 'Diesen Lauf endgültig löschen?',
+    confirmDelete: 'Löschen',
+    keepRun: 'Behalten',
+    deleting: 'Wird gelöscht …',
   },
   es: {
     matchAnalysis: 'Análisis del encuentro',
@@ -375,6 +387,12 @@ const play: Record<Locale, Record<PlayKey, string>> = {
     playProgress: '{completed} / {total} jugadas de fichas',
     playTiming:
       'Mide jugadas de referencia con el motor seleccionado, desde la carga hasta el nuevo estado de la partida. Incluye el arranque del proceso.',
+    actions: 'Acciones',
+    deleteRun: 'Eliminar medición',
+    deleteQuestion: '¿Eliminar esta medición definitivamente?',
+    confirmDelete: 'Eliminar',
+    keepRun: 'Conservar',
+    deleting: 'Eliminando…',
   },
   fr: {
     matchAnalysis: 'Analyse de match',
@@ -396,6 +414,12 @@ const play: Record<Locale, Record<PlayKey, string>> = {
     playProgress: '{completed} / {total} coups de pions',
     playTiming:
       'Mesure des coups de référence avec le moteur sélectionné, du chargement au nouvel état de la partie. Le démarrage du processus est inclus.',
+    actions: 'Actions',
+    deleteRun: 'Supprimer la mesure',
+    deleteQuestion: 'Supprimer définitivement cette mesure ?',
+    confirmDelete: 'Supprimer',
+    keepRun: 'Conserver',
+    deleting: 'Suppression…',
   },
   it: {
     matchAnalysis: 'Analisi del match',
@@ -417,6 +441,12 @@ const play: Record<Locale, Record<PlayKey, string>> = {
     playProgress: '{completed} / {total} mosse di pedine',
     playTiming:
       'Misura mosse di riferimento con il motore selezionato, dal caricamento al nuovo stato della partita. Include l’avvio del processo.',
+    actions: 'Azioni',
+    deleteRun: 'Elimina misurazione',
+    deleteQuestion: 'Eliminare definitivamente questa misurazione?',
+    confirmDelete: 'Elimina',
+    keepRun: 'Mantieni',
+    deleting: 'Eliminazione…',
   },
   pl: {
     matchAnalysis: 'Analiza meczu',
@@ -438,6 +468,12 @@ const play: Record<Locale, Record<PlayKey, string>> = {
     playProgress: '{completed} / {total} ruchów pionkami',
     playTiming:
       'Mierzy ruchy referencyjne wybranym silnikiem, od wczytania stanu gry do uzyskania nowego stanu. Obejmuje uruchomienie procesu.',
+    actions: 'Akcje',
+    deleteRun: 'Usuń pomiar',
+    deleteQuestion: 'Trwale usunąć ten pomiar?',
+    confirmDelete: 'Usuń',
+    keepRun: 'Zachowaj',
+    deleting: 'Usuwanie…',
   },
 };
 function isPlayKey(key: Key | PlayKey): key is PlayKey {

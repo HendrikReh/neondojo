@@ -200,3 +200,17 @@
   color: var(--ui-muted);
   font-size: var(--font-size-control);
 }
+.benchmark-row-actions {
+  white-space: nowrap;
+}
+.benchmark-delete-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+.benchmark-delete-confirm .danger {
+  background: var(--ui-danger-button);
+  color: var(--ui-danger-button-text);
+  border-color: var(--ui-danger-button);
+}
