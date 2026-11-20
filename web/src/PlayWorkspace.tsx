@@ -79,6 +79,14 @@ function storedSession() {
     return null;
   }
 }
+function forgetStoredSession(id: string) {
+  try {
+    if (localStorage.getItem(storageKey) === id)
+      localStorage.removeItem(storageKey);
+  } catch {
+    /* Nothing is restored automatically without storage. */
+  }
+}
 /** Starting position on the empty table behind the setup dialog. */
 const idlePosition: PlaySession['position'] = {
   id: '',
@@ -360,9 +368,10 @@ export default function PlayWorkspace({
     if (requested) consumedRequest.current = requestedSession.token;
     const id = requested ? requestedSession.id : storedSession();
     if (!id) return;
-    load(id, requested ? requestedSession.resume : false);
+    load(id, requested ? requestedSession.resume : false, !requested);
   }, [visible, requestedSession, busy]);
-  function load(id: string, resume = false) {
+  /** `restoring` marks the automatic restore of the last stored session. */
+  function load(id: string, resume = false, restoring = false) {
     if (locked.current && !initialLoad.current) return;
     setSetup(false);
     setError(undefined);
@@ -390,7 +399,17 @@ export default function PlayWorkspace({
         if (token === generation.current) accept(value);
       })
       .catch((e) => {
-        if (!abort.signal.aborted && token === generation.current) setError(e);
+        if (abort.signal.aborted || token !== generation.current) return;
+        // A deleted session is not an error: forget it and offer a new match.
+        if (
+          restoring &&
+          e instanceof AppError &&
+          String(e.params.status) === '404'
+        ) {
+          forgetStoredSession(id);
+          retrySession.current = null;
+          setSetup(true);
+        } else setError(e);
       })
       .finally(() => {
         if (token === generation.current) {

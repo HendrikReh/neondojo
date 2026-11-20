@@ -215,6 +215,31 @@ test('without a match the setup dialog can be closed and reopened', async ({
   await expect(dialog).toHaveCount(0);
 });
 
+test('a deleted stored session is forgotten and opens the setup dialog', async ({
+  page,
+}) => {
+  const missing = '00000000-0000-4000-8000-000000000404';
+  await page.addInitScript((id) => {
+    localStorage.setItem('neondojo.locale', 'en');
+    localStorage.setItem('neondojo.play-session', id);
+  }, missing);
+  let reads = 0;
+  await page.route(`**/api/play/sessions/${missing}`, (route) => {
+    reads++;
+    return route.fulfill({ status: 404, json: { error: 'Not found' } });
+  });
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Playing', exact: true }).click();
+  await expect(
+    page.getByRole('dialog', { name: 'New match', exact: true }),
+  ).toBeVisible();
+  await expect(page.locator('.play-error')).toHaveCount(0);
+  expect(reads).toBe(1);
+  expect(
+    await page.evaluate(() => localStorage.getItem('neondojo.play-session')),
+  ).toBeNull();
+});
+
 test('a blocked Double stays visible and names the reason', async ({
   page,
 }) => {
