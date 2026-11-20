@@ -54,7 +54,12 @@ export const createPlaySession = (
   match_length: number,
   preferences?: Pick<
     Schema['CreatePlaySession'],
-    'play_mode' | 'tutor_threshold' | 'training_auto_analysis'
+    | 'play_mode'
+    | 'tutor_threshold'
+    | 'training_auto_analysis'
+    | 'human_name'
+    | 'play_engine'
+    | 'play_plies'
   >,
 ) =>
   request<PlaySession>(

@@ -649,6 +649,56 @@ async fn whole_native_match_reaches_scored_terminal_and_exports_no_pending_move(
 }
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL and native GNUbg"]
+async fn match_choices_override_name_and_strength_without_changing_settings(pool: PgPool) {
+    let app = api::router(AppState::new(pool.clone(), engine()));
+    call(app.clone(), "GET", "/api/settings", Value::Null).await;
+    sqlx::query("UPDATE app_settings SET play_engine='gnubg',play_plies=1,player_name='Saved'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (status, s) = call(
+        app.clone(),
+        "POST",
+        "/api/play/sessions",
+        json!({"human_player":1,"match_length":3,"human_name":"  Guest  ",
+               "play_engine":"gnubg","play_plies":2}),
+    )
+    .await;
+    assert_eq!(status, 201, "{s}");
+    assert_eq!(s["human_name"], "Guest");
+    assert_eq!(s["engine"]["id"], "gnubg");
+    assert_eq!(s["engine"]["plies"], 2);
+    assert_eq!(s["engine_snapshots"]["bot"]["engine_id"], "gnubg");
+    let saved: (String, String, i32) =
+        sqlx::query_as("SELECT player_name,play_engine,play_plies FROM app_settings")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(saved, ("Saved".into(), "gnubg".into(), 1));
+    // A blank name and an omitted strength fall back to the saved settings.
+    let (status, s) = call(
+        app.clone(),
+        "POST",
+        "/api/play/sessions",
+        json!({"human_player":0,"match_length":1,"human_name":"   "}),
+    )
+    .await;
+    assert_eq!(status, 201, "{s}");
+    assert_eq!(s["human_name"], "Saved");
+    assert_eq!(s["engine"]["plies"], 1);
+    for body in [
+        json!({"human_player":0,"match_length":1,"play_plies":4}),
+        json!({"human_player":0,"match_length":1,"play_engine":"xg"}),
+        json!({"human_player":0,"match_length":1,"human_name":"a\u{7}b"}),
+        json!({"human_player":0,"match_length":1,"human_name":"x".repeat(121)}),
+    ] {
+        let (status, error) = call(app.clone(), "POST", "/api/play/sessions", body).await;
+        assert_eq!(status, 422, "{error}");
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL and native GNUbg"]
 async fn creation_pins_actual_executable_profile_name_direction_and_sgf_names(pool: PgPool) {
     let app = api::router(AppState::new(pool.clone(), engine()));
     call(app.clone(), "GET", "/api/settings", Value::Null).await;

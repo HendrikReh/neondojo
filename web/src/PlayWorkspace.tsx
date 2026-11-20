@@ -1,4 +1,7 @@
-import { useSettingsText } from './settings-messages';
+import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
+import { playStrengthLabel, useSettingsText } from './settings-messages';
+import { loadEngines, type EngineInfo } from './settings-api';
+import { preferredDepth, type DepthEngine } from './analysis-depth';
 import EngineLabel from './EngineLabel';
 import Tooltip from './Tooltip';
 import { useConfirmedConfiguration } from './ConfigurationProvider';
@@ -76,6 +79,24 @@ function storedSession() {
     return null;
   }
 }
+/** Starting position on the empty table behind the setup dialog. */
+const idlePosition: PlaySession['position'] = {
+  id: '',
+  match_uuid: '',
+  ordinal: 0,
+  game_no: 1,
+  ply: 0,
+  player: 0,
+  dice: [],
+  board: [
+    0, -2, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, -5, 5, 0, 0, 0, -3, 0, -5, 0, 0, 0, 0,
+    2, 0,
+  ],
+  position_id: '4HPwATDgc/ABMA',
+  // Centered cube at 1, no score: the empty table carries no match context.
+  gnubg_match_id: 'MAAAAAAAAAAA',
+  notation: '',
+};
 export default function PlayWorkspace({
   visible,
   settings,
@@ -109,8 +130,7 @@ export default function PlayWorkspace({
   const resumeTrigger = useRef<HTMLButtonElement>(null);
   const pauseTrigger = useRef<HTMLButtonElement>(null);
   const focusResume = useRef(false);
-  const setupHeading = useRef<HTMLHeadingElement>(null);
-  const focusSetup = useRef(false);
+  const newMatchTrigger = useRef<HTMLButtonElement>(null);
   const [pauseWarning, setPauseWarning] = useState(false);
   const autoMoneyReviews = useRef(new Set<string>());
   const [learningReviewOpen, setLearningReviewOpen] = useState(false);
@@ -186,14 +206,9 @@ export default function PlayWorkspace({
     ['game_over', 'match_over'].includes(session.phase);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>(),
-    [setup, setSetup] = useState(true);
+    // A saved match is restored first; without one, the setup dialog opens.
+    [setup, setSetup] = useState(() => storedSession() === null);
   const review = usePlayReview(session, visible && !setup);
-  useEffect(() => {
-    if (setup && focusSetup.current) {
-      setupHeading.current?.focus({ preventScroll: true });
-      focusSetup.current = false;
-    }
-  }, [setup]);
   useEffect(() => {
     if (visible && paused && !busy && !setup && focusResume.current)
       resumeTrigger.current?.focus({ preventScroll: true });
@@ -206,6 +221,9 @@ export default function PlayWorkspace({
     length?: number;
     mode?: PlayMode;
     automatic?: boolean;
+    name?: string;
+    engine?: DepthEngine;
+    plies?: number;
   }>({});
   const confirmed = useConfirmedConfiguration();
   const defaults = defaultConfiguration.play;
@@ -228,6 +246,48 @@ export default function PlayWorkspace({
     confirmed?.play.training_auto_analysis ??
     settings?.training_auto_analysis ??
     defaults.training_auto_analysis;
+  // Name, bot engine and strength apply to the new match only.
+  const playerName =
+    setupOptions.name ??
+    confirmed?.general.player_name ??
+    settings?.player_name ??
+    '';
+  const botEngine =
+    setupOptions.engine ??
+    confirmed?.play.engine ??
+    settings?.play_engine ??
+    defaults.engine;
+  const botDepths = configurationOptions.engine_profiles[botEngine].play;
+  const requestedPlies =
+    setupOptions.plies ??
+    confirmed?.play.plies ??
+    settings?.play_plies ??
+    defaults.plies;
+  const botPlies = botDepths.includes(requestedPlies)
+    ? requestedPlies
+    : botDepths.includes(preferredDepth(botEngine))
+      ? preferredDepth(botEngine)
+      : botDepths[0];
+  const setupOpen = visible && setup;
+  const [idleFlipX, idleFlipY] = boardFlips(
+    human,
+    confirmed?.appearance.bearoff_direction ??
+      settings?.bearoff_direction ??
+      'right',
+  );
+  const [engines, setEngines] = useState<EngineInfo[]>([]);
+  useEffect(() => {
+    if (!setupOpen) return;
+    const abort = new AbortController();
+    void loadEngines(abort.signal)
+      .then((value) => {
+        if (!abort.signal.aborted) setEngines(value);
+      })
+      .catch(() => {
+        /* Engine availability is advisory; creating the match still verifies it. */
+      });
+    return () => abort.abort();
+  }, [setupOpen]);
   const [liveThreshold, setLiveThreshold] = useState('0.04');
   const [thresholdStatus, setThresholdStatus] = useState<
     'idle' | 'saving' | 'saved'
@@ -304,6 +364,7 @@ export default function PlayWorkspace({
   }, [visible, requestedSession, busy]);
   function load(id: string, resume = false) {
     if (locked.current && !initialLoad.current) return;
+    setSetup(false);
     setError(undefined);
     retrySession.current = id;
     initialLoad.current?.abort();
@@ -408,9 +469,15 @@ export default function PlayWorkspace({
     else setSetup(false);
   }
   function openMatchSetup() {
-    focusSetup.current = true;
     setSetupOptions({});
+    setPauseWarning(false);
+    setForfeitOpen(false);
     setSetup(true);
+    setError(undefined);
+  }
+  function closeSetup() {
+    if (locked.current) return;
+    setSetup(false);
     setError(undefined);
   }
   function create(event: FormEvent) {
@@ -420,6 +487,13 @@ export default function PlayWorkspace({
       createPlaySession(human, length, {
         play_mode: mode,
         training_auto_analysis: automatic,
+        ...(setupOptions.name === undefined
+          ? {}
+          : { human_name: setupOptions.name }),
+        ...(setupOptions.engine === undefined &&
+        setupOptions.plies === undefined
+          ? {}
+          : { play_engine: botEngine, play_plies: botPlies }),
       }),
     );
   }
@@ -954,7 +1028,6 @@ export default function PlayWorkspace({
       shortcut="H"
     />
   );
-  const inMatch = Boolean(session) && !setup;
   function closeMenu() {
     menu.current?.hidePopover();
   }
@@ -1133,9 +1206,19 @@ export default function PlayWorkspace({
   return (
     <div className="play-workspace" aria-busy={uiBusy}>
       <header className="play-header">
-        <h1 className={inMatch ? 'sr-only' : undefined}>{t('title')}</h1>
-        {!inMatch && (
+        <h1 className={session ? 'sr-only' : undefined}>{t('title')}</h1>
+        {!session && !setup && (
           <div className="play-actions">
+            <ActionButton
+              ref={newMatchTrigger}
+              className="primary"
+              onClick={openMatchSetup}
+              disabled={uiBusy}
+              icon="new-game"
+              label={t('newMatch')}
+            >
+              {t('newMatch')}
+            </ActionButton>
             <ActionButton
               onClick={onOpenPausedMatches}
               disabled={uiBusy}
@@ -1145,164 +1228,260 @@ export default function PlayWorkspace({
           </div>
         )}
       </header>
-      {!interruption &&
+      {!setupOpen &&
+        !interruption &&
         !pauseWarning &&
         !coachDecision &&
         !forfeitOpen &&
         errorNotice}
-      {setup && busy && <p role="status">{t('thinking')}</p>}
-      {setup && (
-        <section className="play-setup">
-          <form onSubmit={create}>
-            <h2 ref={setupHeading} tabIndex={-1}>
-              {t('newMatch')}
-            </h2>
-            <fieldset className="play-choice">
-              <legend>{t('humanColor')}</legend>
-              {([0, 1] as const).map((value) => (
-                <label key={value}>
-                  <input
-                    type="radio"
-                    name={`${setupId}-color`}
-                    checked={human === value}
-                    disabled={setupDisabled}
-                    onChange={() =>
-                      setSetupOptions({ ...setupOptions, human: value })
-                    }
-                  />
-                  {t(value === 0 ? 'white' : 'black')}
-                </label>
-              ))}
-            </fieldset>
-            <label>
-              {t('length')}
-              <select
-                value={length}
-                onChange={(event) =>
-                  setSetupOptions({
-                    ...setupOptions,
-                    length: Number(event.target.value),
-                  })
-                }
-                disabled={setupDisabled}
-              >
-                <option value="0">{appT('common.moneyGame')}</option>
-                {[1, 3, 5, 7, 9, 11, 15, 21, 25].map((n) => (
-                  <option key={n} value={n}>
-                    {formatPoints(n)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <fieldset className="play-choice play-mode-choice">
-              <legend>{modeT('mode')}</legend>
-              {playModes.map((value) => (
-                <label key={value}>
-                  <input
-                    type="radio"
-                    name={`${setupId}-mode`}
-                    aria-label={modeT(value)}
-                    aria-describedby={`${setupId}-${value}`}
-                    checked={mode === value}
-                    disabled={setupDisabled}
-                    onChange={() =>
-                      setSetupOptions({ ...setupOptions, mode: value })
-                    }
-                  />
-                  <span>
-                    <strong>{modeT(value)}</strong>
-                    <small id={`${setupId}-${value}`}>
-                      {modeT(`${value}Help`)}
-                    </small>
-                  </span>
-                </label>
-              ))}
-            </fieldset>
-            {mode === 'tutor' && (
-              <p>
-                {modeT('threshold')} ·{' '}
-                {formatNumber(threshold, {
-                  minimumFractionDigits: 3,
-                  maximumFractionDigits: 6,
-                })}
-              </p>
-            )}
-            {mode === 'training' && (
-              <label className="play-mode-checkbox">
+      {!session && (
+        // The empty table stays visible behind the setup dialog.
+        <div
+          className="play-board play-idle-board"
+          ref={boardAnchor}
+          data-human-player={human}
+          style={
+            {
+              '--play-flip-x': idleFlipX,
+              '--play-flip-y': idleFlipY,
+            } as CSSProperties
+          }
+        >
+          <Board
+            position={idlePosition}
+            white={t(human === 0 ? 'you' : 'bot')}
+            black={t(human === 1 ? 'you' : 'bot')}
+            theme={theme}
+          />
+        </div>
+      )}
+      {setupOpen && (
+        <PlayBoardDialog
+          anchor={boardAnchor}
+          heading={t('newMatch')}
+          busy={uiBusy}
+          className="play-setup-dialog"
+          returnFocus={session ? menuTrigger : newMatchTrigger}
+          onClose={closeSetup}
+        >
+          <div className="play-setup">
+            {errorNotice}
+            {busy && <p role="status">{t('thinking')}</p>}
+            <form onSubmit={create}>
+              <label>
+                {t('playerName')}
                 <input
-                  type="checkbox"
-                  checked={automatic}
+                  type="text"
+                  value={playerName}
+                  maxLength={120}
+                  autoComplete="off"
+                  spellCheck={false}
+                  disabled={setupDisabled}
                   onChange={(event) =>
                     setSetupOptions({
                       ...setupOptions,
-                      automatic: event.target.checked,
+                      name: event.target.value,
+                    })
+                  }
+                />
+              </label>
+              <div className="play-setup-bot">
+                <label>
+                  {t('botEngine')}
+                  <select
+                    value={botEngine}
+                    disabled={setupDisabled}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (value === 'gnubg' || value === 'bgsage')
+                        setSetupOptions({ ...setupOptions, engine: value });
+                    }}
+                  >
+                    {(['gnubg', 'bgsage'] as const).map((id) => {
+                      const available =
+                        engines.find((item) => item.id === id)?.available ??
+                        true;
+                      return (
+                        <option
+                          key={id}
+                          value={id}
+                          disabled={!available && id !== botEngine}
+                        >
+                          {id === 'bgsage' ? 'NeonGammon' : 'GNUbg'}
+                          {available ? '' : ` — ${settingsT('unavailable')}`}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </label>
+                <label>
+                  {t('strength')}
+                  <select
+                    value={botPlies}
+                    disabled={setupDisabled}
+                    onChange={(event) =>
+                      setSetupOptions({
+                        ...setupOptions,
+                        engine: botEngine,
+                        plies: Number(event.target.value),
+                      })
+                    }
+                  >
+                    {botDepths.map((ply) => (
+                      <option key={ply} value={ply}>
+                        {playStrengthLabel(settingsT, ply, botEngine)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <p className="play-setup-help">{t('matchChoicesHelp')}</p>
+              <fieldset className="play-choice">
+                <legend>{t('humanColor')}</legend>
+                {([0, 1] as const).map((value) => (
+                  <label key={value}>
+                    <input
+                      type="radio"
+                      name={`${setupId}-color`}
+                      checked={human === value}
+                      disabled={setupDisabled}
+                      onChange={() =>
+                        setSetupOptions({ ...setupOptions, human: value })
+                      }
+                    />
+                    {t(value === 0 ? 'white' : 'black')}
+                  </label>
+                ))}
+              </fieldset>
+              <label>
+                {t('length')}
+                <select
+                  value={length}
+                  onChange={(event) =>
+                    setSetupOptions({
+                      ...setupOptions,
+                      length: Number(event.target.value),
                     })
                   }
                   disabled={setupDisabled}
-                />
-                {modeT('automatic')}
+                >
+                  <option value="0">{appT('common.moneyGame')}</option>
+                  {[1, 3, 5, 7, 9, 11, 15, 21, 25].map((n) => (
+                    <option key={n} value={n}>
+                      {formatPoints(n)}
+                    </option>
+                  ))}
+                </select>
               </label>
-            )}
-            <p className="play-engine play-setup-engine">
-              <span>
-                {t('botEngine')} ·{' '}
-                {(confirmed?.play.engine ?? settings?.play_engine) === 'bgsage'
-                  ? 'NeonGammon'
-                  : 'GNUbg'}{' '}
-                ·{' '}
-                {confirmed?.play.plies ??
-                  settings?.play_plies ??
-                  defaults.plies}
-                -ply
-                {' / '}
-                {settingsT('analysisEngine')} ·{' '}
-                {(confirmed?.analysis.engine ?? settings?.analysis_engine) ===
-                'bgsage'
-                  ? 'NeonGammon'
-                  : 'GNUbg'}{' '}
-                ·{' '}
-                {confirmed?.analysis.plies ??
-                  settings?.analysis_plies ??
-                  defaultConfiguration.analysis.plies}
-                -ply
-                {' / '}
-                {t('rulesEngine')} · GNUbg
-              </span>
-              <ActionButton
-                type="button"
-                compact
-                icon="settings"
-                label={t('changeEngine')}
-                disabled={setupDisabled}
-                onClick={onOpenPlaySettings}
-              />
-            </p>
-            <div className="play-actions">
-              <ActionButton
-                type="submit"
-                className="primary"
-                disabled={setupDisabled}
-                icon="play"
-                label={t('start')}
-              >
-                {t('start')}
-              </ActionButton>
-              {session && (
+              <fieldset className="play-choice play-mode-choice">
+                <legend>{modeT('mode')}</legend>
+                {playModes.map((value) => (
+                  <label key={value}>
+                    <input
+                      type="radio"
+                      name={`${setupId}-mode`}
+                      aria-label={modeT(value)}
+                      aria-describedby={`${setupId}-${value}`}
+                      checked={mode === value}
+                      disabled={setupDisabled}
+                      onChange={() =>
+                        setSetupOptions({ ...setupOptions, mode: value })
+                      }
+                    />
+                    <span>
+                      <strong>{modeT(value)}</strong>
+                      <small id={`${setupId}-${value}`}>
+                        {modeT(`${value}Help`)}
+                      </small>
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
+              {mode === 'tutor' && (
+                <p>
+                  {modeT('threshold')} ·{' '}
+                  {formatNumber(threshold, {
+                    minimumFractionDigits: 3,
+                    maximumFractionDigits: 6,
+                  })}
+                </p>
+              )}
+              {mode === 'training' && (
+                <label className="play-mode-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={automatic}
+                    onChange={(event) =>
+                      setSetupOptions({
+                        ...setupOptions,
+                        automatic: event.target.checked,
+                      })
+                    }
+                    disabled={setupDisabled}
+                  />
+                  {modeT('automatic')}
+                </label>
+              )}
+              <p className="play-engine play-setup-engine">
+                <span>
+                  {settingsT('analysisEngine')} ·{' '}
+                  {(confirmed?.analysis.engine ?? settings?.analysis_engine) ===
+                  'bgsage'
+                    ? 'NeonGammon'
+                    : 'GNUbg'}{' '}
+                  ·{' '}
+                  {confirmed?.analysis.plies ??
+                    settings?.analysis_plies ??
+                    defaultConfiguration.analysis.plies}
+                  -ply
+                  {' / '}
+                  {t('rulesEngine')} · GNUbg
+                </span>
                 <ActionButton
                   type="button"
-                  onClick={resumeMatch}
-                  disabled={uiBusy}
-                  icon={session.paused ? 'resume' : 'back'}
-                  label={t(session.paused ? 'resumeMatch' : 'backToMatch')}
+                  compact
+                  icon="settings"
+                  label={t('changeEngine')}
+                  disabled={setupDisabled}
+                  onClick={onOpenPlaySettings}
+                />
+              </p>
+              <div className="play-actions">
+                <ActionButton
+                  type="submit"
+                  className="primary"
+                  disabled={setupDisabled}
+                  icon="play"
+                  label={t('start')}
                 >
-                  {t(session.paused ? 'resumeMatch' : 'backToMatch')}
+                  {t('start')}
                 </ActionButton>
-              )}
-            </div>
-          </form>
-        </section>
+                {session && (
+                  <ActionButton
+                    type="button"
+                    onClick={resumeMatch}
+                    disabled={uiBusy}
+                    icon={session.paused ? 'resume' : 'back'}
+                    label={t(session.paused ? 'resumeMatch' : 'backToMatch')}
+                  >
+                    {t(session.paused ? 'resumeMatch' : 'backToMatch')}
+                  </ActionButton>
+                )}
+                <ActionButton
+                  type="button"
+                  onClick={onOpenPausedMatches}
+                  disabled={uiBusy}
+                  icon="open"
+                  label={libraryT('pausedMatches')}
+                >
+                  {libraryT('pausedMatches')}
+                </ActionButton>
+              </div>
+            </form>
+          </div>
+        </PlayBoardDialog>
       )}
-      {session && !setup && (
+      {session && (
         <>
           <div className="play-match-heading">
             <div className="play-match-summary">

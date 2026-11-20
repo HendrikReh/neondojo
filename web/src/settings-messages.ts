@@ -1,5 +1,6 @@
 import { useI18n } from './i18n';
 import { interpolate, type Locale, type TranslationParams } from './i18n-core';
+import { depthLabel } from './analysis-depth';
 
 const en = {
   title: 'Settings',
@@ -597,3 +598,29 @@ export function useSettingsText() {
   return (key: SettingsMessageKey, params?: TranslationParams) =>
     settingsText(locale, key, params);
 }
+
+export type SettingsText = ReturnType<typeof useSettingsText>;
+
+/** GNUbg's three named profiles are its 1- to 3-ply searches. */
+export function depthOptionLabel(
+  t: SettingsText,
+  ply: number,
+  engine: string,
+  names: readonly [SettingsMessageKey, SettingsMessageKey, SettingsMessageKey],
+) {
+  const depth = depthLabel(ply, engine);
+  const name = engine === 'gnubg' ? names[ply - 1] : undefined;
+  return name ? t(name, { depth }) : depth;
+}
+
+/** Option text for a bot's playing strength. */
+export const playStrengthLabel = (
+  t: SettingsText,
+  ply: number,
+  engine: string,
+) =>
+  depthOptionLabel(t, ply, engine, [
+    'strengthQuick',
+    'strengthStronger',
+    'strengthStrongest',
+  ]);

@@ -67,7 +67,11 @@ const en = {
   passTurn: 'Pass',
   moreActions: 'More actions',
   backToMatch: 'Back to match',
-  changeEngine: 'Change engine in Settings',
+  changeEngine: 'Engine settings',
+  playerName: 'Your name',
+  strength: 'Playing strength',
+  matchChoicesHelp:
+    'Name, bot engine and strength apply to this match only. Saved settings stay unchanged.',
   passReady: 'Click the dice pair to pass.',
   double: 'Double',
   take: 'Take double',
@@ -175,7 +179,11 @@ const de: Record<Key, string> = {
   passTurn: 'Aussetzen',
   moreActions: 'Weitere Aktionen',
   backToMatch: 'Zurück zum Match',
-  changeEngine: 'Engine in den Einstellungen ändern',
+  changeEngine: 'Engine-Einstellungen',
+  playerName: 'Dein Name',
+  strength: 'Spielstärke',
+  matchChoicesHelp:
+    'Name, Gegner-Engine und Spielstärke gelten nur für dieses Match. Die gespeicherten Einstellungen bleiben unverändert.',
   passReady: 'Klicke auf das Würfelpaar, um auszusetzen.',
   double: 'Doppeln',
   take: 'Doppel annehmen',
@@ -440,7 +448,11 @@ Object.assign(extra.es, {
   passTurn: 'Pasar',
   moreActions: 'Más acciones',
   backToMatch: 'Volver a la partida',
-  changeEngine: 'Cambiar el motor en Ajustes',
+  changeEngine: 'Ajustes del motor',
+  playerName: 'Tu nombre',
+  strength: 'Fuerza de juego',
+  matchChoicesHelp:
+    'El nombre, el motor del rival y la fuerza solo se aplican a esta partida. Los ajustes guardados no cambian.',
   passReady: 'Haz clic en los dados para pasar el turno.',
   select:
     'Pasa el cursor sobre una ficha para ver su destino. Haz clic para moverla. Si puedes usar ambos dados, tiene prioridad el primero.',
@@ -470,7 +482,11 @@ Object.assign(extra.fr, {
   passTurn: 'Passer',
   moreActions: 'Autres actions',
   backToMatch: 'Retour au match',
-  changeEngine: 'Changer le moteur dans les réglages',
+  changeEngine: 'Réglages du moteur',
+  playerName: 'Votre nom',
+  strength: 'Force de jeu',
+  matchChoicesHelp:
+    'Le nom, le moteur adverse et la force ne s’appliquent qu’à ce match. Les réglages enregistrés restent inchangés.',
   passReady: 'Cliquez sur les dés pour passer votre tour.',
   select:
     'Survolez un pion pour voir sa destination. Cliquez pour le déplacer. Si les deux dés sont jouables, le premier est prioritaire.',
@@ -501,7 +517,11 @@ Object.assign(extra.it, {
   passTurn: 'Passa',
   moreActions: 'Altre azioni',
   backToMatch: 'Torna al match',
-  changeEngine: 'Cambia il motore nelle impostazioni',
+  changeEngine: 'Impostazioni del motore',
+  playerName: 'Il tuo nome',
+  strength: 'Forza di gioco',
+  matchChoicesHelp:
+    'Nome, motore avversario e forza valgono solo per questo match. Le impostazioni salvate restano invariate.',
   passReady: 'Fai clic sui dadi per passare il turno.',
   select:
     'Passa il puntatore su una pedina per vedere la destinazione. Fai clic per muoverla. Se entrambi i dadi sono giocabili, ha la precedenza il primo.',
@@ -531,7 +551,11 @@ Object.assign(extra.pl, {
   passTurn: 'Pasuj',
   moreActions: 'Więcej działań',
   backToMatch: 'Wróć do meczu',
-  changeEngine: 'Zmień silnik w ustawieniach',
+  changeEngine: 'Ustawienia silnika',
+  playerName: 'Twoje imię',
+  strength: 'Siła gry',
+  matchChoicesHelp:
+    'Imię, silnik przeciwnika i siła gry dotyczą tylko tego meczu. Zapisane ustawienia pozostają bez zmian.',
   passReady: 'Kliknij parę kości, aby spasować.',
   select:
     'Najedź na pionek, aby zobaczyć jego cel. Kliknij, aby go przesunąć. Jeśli można użyć obu kości, pierwsza ma pierwszeństwo.',

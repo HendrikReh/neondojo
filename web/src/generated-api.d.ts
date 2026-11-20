@@ -3585,6 +3585,8 @@ export interface components {
             name: string;
         };
         CreatePlaySession: {
+            /** @description Name of the human side for this match only; blank uses the saved player name. */
+            human_name?: string | null;
             /** Format: int32 */
             human_player: number;
             /**
@@ -3592,7 +3594,14 @@ export interface components {
              * @description Zero starts a continuous money-game session; 1..25 starts a point match.
              */
             match_length: number;
+            /** @description Bot engine for this match only (`gnubg` or `bgsage`); defaults to the saved play engine. */
+            play_engine?: string | null;
             play_mode?: null | components["schemas"]["PlayMode"];
+            /**
+             * Format: int32
+             * @description Bot strength for this match only; must be a verified play depth of the chosen engine.
+             */
+            play_plies?: number | null;
             training_auto_analysis?: boolean | null;
             /** Format: double */
             tutor_threshold?: number | null;

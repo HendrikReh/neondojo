@@ -363,6 +363,14 @@ fn validate_threads(engine: &str, threads: Option<i32>) -> ApiResult<()> {
     Ok(())
 }
 
+pub(crate) const PLAYER_NAME_RULE: &str =
+    "Player name must be at most 120 characters and contain no control characters";
+
+/// The one rule for a stored or per-match human player name.
+pub(crate) fn valid_player_name(name: &str) -> bool {
+    name.chars().count() <= 120 && !name.chars().any(char::is_control)
+}
+
 fn validate(settings: &AppSettings) -> ApiResult<()> {
     if !(settings.tutor_threshold.is_finite()
         && 0.0 < settings.tutor_threshold
@@ -375,12 +383,8 @@ fn validate(settings: &AppSettings) -> ApiResult<()> {
     if settings.version < 0 || settings.version == i64::MAX {
         return Err(ApiError::invalid("Invalid settings version"));
     }
-    if settings.player_name.chars().count() > 120
-        || settings.player_name.chars().any(char::is_control)
-    {
-        return Err(ApiError::invalid(
-            "Player name must be at most 120 characters and contain no control characters",
-        ));
+    if !valid_player_name(&settings.player_name) {
+        return Err(ApiError::invalid(PLAYER_NAME_RULE));
     }
     for (id, purpose, plies) in [
         (
