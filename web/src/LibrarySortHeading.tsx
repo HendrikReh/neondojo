@@ -9,6 +9,7 @@ export default function LibrarySortHeading<Sort extends string = LibrarySort>({
   direction,
   onSort,
   column,
+  className,
   resizeHandle,
   disabled = false,
 }: {
@@ -17,6 +18,7 @@ export default function LibrarySortHeading<Sort extends string = LibrarySort>({
   direction: 'asc' | 'desc';
   onSort: (sort: Sort) => void;
   column?: string;
+  className?: string;
   resizeHandle?: ReactNode;
   disabled?: boolean;
 }) {
@@ -25,6 +27,7 @@ export default function LibrarySortHeading<Sort extends string = LibrarySort>({
   return (
     <th
       scope="col"
+      className={className}
       data-column={column}
       aria-sort={
         active ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'

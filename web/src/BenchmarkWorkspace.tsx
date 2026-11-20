@@ -2,15 +2,22 @@ import BenchmarkComparison, {
   BenchmarkInitialization,
 } from './BenchmarkComparison';
 import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import ActionButton from './ActionButton';
 import EngineLabel from './EngineLabel';
+import LibrarySortHeading from './LibrarySortHeading';
 import {
   ANALYSIS_PLIES,
   PLAY_PLIES,
   preferredDepth as enginePreferredDepth,
 } from './analysis-depth';
 import { formatBenchmarkDuration } from './benchmark-duration';
+import {
+  DEFAULT_BENCHMARK_HISTORY_ORDER,
+  nextBenchmarkHistoryOrder,
+  sortBenchmarkRuns,
+  type BenchmarkHistorySort,
+} from './benchmark-history-sort';
 import { useI18n } from './i18n';
 import { loadEngines, type EngineInfo } from './settings-api';
 import {
@@ -62,6 +69,9 @@ export default function BenchmarkWorkspace({
   const [cancelling, setCancelling] = useState<string>();
   const [confirmingDelete, setConfirmingDelete] = useState<string>();
   const [deleting, setDeleting] = useState<string>();
+  const [historyOrder, setHistoryOrder] = useState(
+    DEFAULT_BENCHMARK_HISTORY_ORDER,
+  );
   const [revision, setRevision] = useState(0);
   const [configurationRevision, setConfigurationRevision] = useState(0);
   const [queueActive, setQueueActive] = useState(false);
@@ -137,7 +147,29 @@ export default function BenchmarkWorkspace({
   const selected =
     analysisFallback === undefined ? compatiblePlies : [analysisFallback];
   const play = mode === 'play';
-  const modeRuns = runs.filter((run) => Boolean(run.play_reference) === play);
+  const modeRuns = useMemo(
+    () => runs.filter((run) => Boolean(run.play_reference) === play),
+    [runs, play],
+  );
+  const historyRuns = useMemo(
+    () => sortBenchmarkRuns(modeRuns, historyOrder, play, locale),
+    [modeRuns, historyOrder, play, locale],
+  );
+  const sortHeading = (
+    sort: BenchmarkHistorySort,
+    label: string,
+    className?: string,
+  ) => (
+    <LibrarySortHeading<BenchmarkHistorySort>
+      fields={[{ key: sort, label }]}
+      sort={historyOrder.sort}
+      direction={historyOrder.direction}
+      className={className}
+      onSort={(next) =>
+        setHistoryOrder((current) => nextBenchmarkHistoryOrder(current, next))
+      }
+    />
+  );
   const supportedPlayDepths = (
     engineId === 'bgsage'
       ? configurationOptions.engine_profiles.bgsage.play
@@ -499,18 +531,17 @@ export default function BenchmarkWorkspace({
             <table>
               <thead>
                 <tr>
-                  <th scope="col">{t('date')}</th>
-                  <th scope="col">{t('engineColumn')}</th>
-                  <th scope="col">{t('depth')}</th>
-                  {!play && (
-                    <th scope="col" className="benchmark-number">
-                      {t('total')}
-                    </th>
+                  {sortHeading('date', t('date'))}
+                  {sortHeading('engine', t('engineColumn'))}
+                  {sortHeading('plies', t('depth'))}
+                  {!play &&
+                    sortHeading('total', t('total'), 'benchmark-number')}
+                  {sortHeading(
+                    'average',
+                    t(play ? 'playAverage' : 'average'),
+                    'benchmark-number',
                   )}
-                  <th scope="col" className="benchmark-number">
-                    {t(play ? 'playAverage' : 'average')}
-                  </th>
-                  <th scope="col">{t('status')}</th>
+                  {sortHeading('status', t('status'))}
                   <th scope="col">{t('details')}</th>
                   <th scope="col">
                     <span className="sr-only">{t('actions')}</span>
@@ -518,7 +549,7 @@ export default function BenchmarkWorkspace({
                 </tr>
               </thead>
               <tbody>
-                {modeRuns.map((run) => (
+                {historyRuns.map((run) => (
                   <tr key={run.id}>
                     <td>
                       <time dateTime={run.created_at}>
