@@ -1,8 +1,8 @@
 import { defineConfig } from '@playwright/test';
 
-if (process.env.BGTUTOR_TEST_URL)
+if (process.env.NEONDOJO_TEST_URL)
   throw new Error(
-    'Browser tests start their own isolated BG Tutor. Unset BGTUTOR_TEST_URL.',
+    'Browser tests start their own isolated Neondojo. Unset NEONDOJO_TEST_URL.',
   );
 
 export default defineConfig({

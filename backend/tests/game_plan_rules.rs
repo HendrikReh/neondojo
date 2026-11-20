@@ -1,4 +1,4 @@
-use bgtutor::game_plan::{GamePlan, classify, classify_reference};
+use neondojo::game_plan::{GamePlan, classify, classify_reference};
 use serde::Deserialize;
 use std::collections::HashSet;
 
@@ -36,7 +36,7 @@ fn matches_pinned_cpp_reference_for_all_classes_and_color_pairs() {
 #[test]
 fn color_swap_and_point_reflection_swap_absolute_labels() {
     for fixture in reference_fixtures() {
-        // BG Tutor's bars retain absolute signs under this transformation.
+        // Neondojo's bars retain absolute signs under this transformation.
         let flipped = std::array::from_fn(|point| -fixture.board[25 - point]);
         let result = classify_reference(&flipped).unwrap();
         assert_eq!(

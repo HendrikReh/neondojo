@@ -13,7 +13,7 @@
 Files: create `backend/src/recurring_mistakes.rs` (and focused submodules), `backend/tests/recurring_mistakes.rs`; modify `backend/src/lib.rs`, `backend/src/api.rs` for route/OpenAPI registration; reuse/expose `backend/src/learning/content.rs` decoding if useful.
 
 - [x] Write isolated API tests before production changes. Seed imported legal SGF, jobs and checkpointed decision JSON using existing test helpers. Assert `GET /api/study/mistakes?player=Alice` does not double count overlapping game/whole-match jobs, categorizes cube directions by deciding player, and omits stale/unfinished data.
-- [x] Run `DATABASE_URL=postgres://bgtutor:bgtutor_local@127.0.0.1:54329/bgtutor cargo test -p bgtutor --test recurring_mistakes -- --ignored`; observe missing-route assertion failures.
+- [x] Run `DATABASE_URL=postgres://neondojo:neondojo_local@127.0.0.1:54329/neondojo cargo test -p neondojo --test recurring_mistakes -- --ignored`; observe missing-route assertion failures.
 - [x] Implement eligibility and bounded loading, exact player filtering, source reconstruction, grouping and deterministic ordering. Implement the three endpoints with the exact contract in the approved spec. Invariants include `selected_job.source_revision == match.source_revision`, `status == "completed"`, and checkpointed game membership.
 - [x] Add practice privacy/read-only tests: `question["position"]["notation"] == ""`, no `best`/`played`/`equity_loss` fields; reveal only on the separate endpoint; card and review counts unchanged.
 - [x] Run the focused tests and fix failures without invoking GNUbg.

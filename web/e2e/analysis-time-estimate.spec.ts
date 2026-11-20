@@ -60,7 +60,7 @@ function result(url: string, ms = 40_000) {
 }
 async function openMatch(p: Page, locale = 'en') {
   await p.addInitScript(
-    (locale) => localStorage.setItem('bgtutor.locale', locale),
+    (locale) => localStorage.setItem('neondojo.locale', locale),
     locale,
   );
   await p.goto('/');
@@ -141,7 +141,7 @@ test('starts GNUbg 5-ply for the selected game with an Open Sage profile', async
   await expect(depth).toHaveValue('2');
   await engine.selectOption('gnubg');
   await depth.selectOption('5');
-  await page.screenshot({ path: '/tmp/bgtutor-analysis-engine-desktop.png' });
+  await page.screenshot({ path: '/tmp/neondojo-analysis-engine-desktop.png' });
   const accepted = page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname ===
@@ -239,7 +239,7 @@ test('shows benchmark basis before any job and follows game, scope and depth', a
   await expect(estimate(page)).toContainText('5 Ply');
   expect(starts).toEqual([]);
   await page.screenshot({
-    path: '/tmp/bgtutor-analysis-estimate-desktop.png',
+    path: '/tmp/neondojo-analysis-estimate-desktop.png',
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -249,7 +249,7 @@ test('shows benchmark basis before any job and follows game, scope and depth', a
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
     .toBe(390);
   await page.screenshot({
-    path: '/tmp/bgtutor-analysis-estimate-mobile.png',
+    path: '/tmp/neondojo-analysis-estimate-mobile.png',
     fullPage: true,
   });
 });
@@ -368,7 +368,7 @@ test('retains the estimate when confirmed settings change only appearance', asyn
 // Mount the real component and configuration store in the browser to exercise
 // the 300ms unsaved window, including when status still reads "ready".
 async function mountEstimateHarness(page: Page) {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.route('**/api/matches/fixture/analysis?*', (route) =>
     route.fulfill({ json: null }),
   );

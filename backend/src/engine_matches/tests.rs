@@ -7,12 +7,12 @@ use crate::{
 use uuid::Uuid;
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires isolated PostgreSQL, GNUbg Python and locked BGTUTOR_SAGE_PYTHON"]
+#[ignore = "requires isolated PostgreSQL, GNUbg Python and locked NEONDOJO_SAGE_PYTHON"]
 async fn mixed_duels_retain_checker_evaluations_for_both_sides(pool: sqlx::PgPool) {
     let rules = Engine::new(std::env::var("GNUBG_BIN").unwrap_or_else(|_| "gnubg".into()));
     rules.check_installation().await.unwrap();
     let sage = crate::engines::SageEngine::new(
-        crate::engines::SageEngine::probe(std::env::var("BGTUTOR_SAGE_PYTHON").unwrap(), 2)
+        crate::engines::SageEngine::probe(std::env::var("NEONDOJO_SAGE_PYTHON").unwrap(), 2)
             .await
             .unwrap(),
     )
@@ -251,9 +251,9 @@ async fn cubeless_money_block_plays_independent_games_without_cube_or_jacoby() {
 }
 
 #[tokio::test]
-#[ignore = "requires local GNUbg and BGTUTOR_SAGE_PYTHON"]
+#[ignore = "requires local GNUbg and NEONDOJO_SAGE_PYTHON"]
 async fn cubeless_open_sage_plays_a_money_block_against_gnubg() {
-    let python = std::env::var("BGTUTOR_SAGE_PYTHON").unwrap();
+    let python = std::env::var("NEONDOJO_SAGE_PYTHON").unwrap();
     let mut profile = crate::engines::SageSnapshot {
         cubeless: true,
         ..crate::engines::SageEngine::probe(python, 2).await.unwrap()
@@ -815,9 +815,9 @@ async fn read_json(response: axum::response::Response) -> serde_json::Value {
 }
 
 #[tokio::test]
-#[ignore = "requires local GNUbg and BGTUTOR_SAGE_PYTHON"]
+#[ignore = "requires local GNUbg and NEONDOJO_SAGE_PYTHON"]
 async fn open_sage_and_gnubg_complete_both_legs() {
-    let python = std::env::var("BGTUTOR_SAGE_PYTHON").unwrap();
+    let python = std::env::var("NEONDOJO_SAGE_PYTHON").unwrap();
     let sage = crate::engines::SageEngine::probe(python, 2).await.unwrap();
     let sage = AnalysisEngine::OpenSage(crate::engines::SageEngine::new(sage).unwrap());
     let rules = Engine::new(std::env::var("GNUBG_BIN").unwrap_or_else(|_| "gnubg".into()));
@@ -867,9 +867,9 @@ async fn open_sage_and_gnubg_complete_both_legs() {
 }
 
 #[tokio::test]
-#[ignore = "requires local GNUbg and BGTUTOR_SAGE_PYTHON"]
+#[ignore = "requires local GNUbg and NEONDOJO_SAGE_PYTHON"]
 async fn mixed_duel_preserves_legal_moves_for_retained_seed() {
-    let python = std::env::var("BGTUTOR_SAGE_PYTHON").unwrap();
+    let python = std::env::var("NEONDOJO_SAGE_PYTHON").unwrap();
     let sage = crate::engines::SageEngine::probe_profile(python, 3, 10)
         .await
         .unwrap();

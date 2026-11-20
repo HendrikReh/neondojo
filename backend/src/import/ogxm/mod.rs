@@ -8,7 +8,7 @@ use super::sgf::{Node, serialize_trees};
 use anyhow::{Context, Result, bail, ensure};
 use wire::{Reader, Sections, has};
 
-pub(crate) const SGF_APPLICATION: &str = "BGTutor:OGXM2";
+pub(crate) const SGF_APPLICATION: &str = "Neondojo:OGXM2";
 
 const DICE: [[u8; 2]; 21] = [
     [1, 1],

@@ -434,7 +434,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires locked Open Sage and GNUbg with embedded Python; no database"]
     async fn sage_executes_reference_checker_turns_using_gnubg_rules() {
-        let python = std::env::var("BGTUTOR_SAGE_PYTHON").unwrap();
+        let python = std::env::var("NEONDOJO_SAGE_PYTHON").unwrap();
         let bot = SageEngine::new(SageEngine::probe(python, 2).await.unwrap()).unwrap();
         let rules = Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()));
         let turns: Vec<serde_json::Value> =
@@ -462,9 +462,9 @@ mod reuse_tests {
     use std::os::unix::fs::PermissionsExt;
 
     #[tokio::test]
-    #[ignore = "requires GNUbg Python and locked BGTUTOR_SAGE_PYTHON"]
+    #[ignore = "requires GNUbg Python and locked NEONDOJO_SAGE_PYTHON"]
     async fn sage_reference_uses_one_rules_process_per_turn() {
-        let python = std::env::var("BGTUTOR_SAGE_PYTHON").unwrap();
+        let python = std::env::var("NEONDOJO_SAGE_PYTHON").unwrap();
         let bot = SageEngine::new(SageEngine::probe(python, 2).await.unwrap()).unwrap();
         let directory = tempfile::tempdir().unwrap();
         let binary =

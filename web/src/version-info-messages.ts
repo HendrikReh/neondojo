@@ -3,7 +3,7 @@ import type { Locale } from './i18n';
 const en = {
   available: 'Available',
   details: 'Technical details',
-  appCommit: 'BG Tutor commit',
+  appCommit: 'Neondojo commit',
   copy: 'Copy version information',
   copied: 'Version information copied.',
   copyError: 'Version information could not be copied.',
@@ -16,7 +16,7 @@ export const versionInfoMessages = {
   de: {
     available: 'Verfügbar',
     details: 'Technische Details',
-    appCommit: 'BG-Tutor-Commit',
+    appCommit: 'Neondojo-Commit',
     copy: 'Versionsinformationen kopieren',
     copied: 'Versionsinformationen kopiert.',
     copyError: 'Versionsinformationen konnten nicht kopiert werden.',
@@ -24,7 +24,7 @@ export const versionInfoMessages = {
   es: {
     available: 'Disponible',
     details: 'Detalles técnicos',
-    appCommit: 'Commit de BG Tutor',
+    appCommit: 'Commit de Neondojo',
     copy: 'Copiar información de versiones',
     copied: 'Se ha copiado la información de versiones.',
     copyError: 'No se pudo copiar la información de versiones.',
@@ -32,7 +32,7 @@ export const versionInfoMessages = {
   fr: {
     available: 'Disponible',
     details: 'Détails techniques',
-    appCommit: 'Commit de BG Tutor',
+    appCommit: 'Commit de Neondojo',
     copy: 'Copier les informations sur les versions',
     copied: 'Informations sur les versions copiées.',
     copyError: 'Impossible de copier les informations sur les versions.',
@@ -40,7 +40,7 @@ export const versionInfoMessages = {
   it: {
     available: 'Disponibile',
     details: 'Dettagli tecnici',
-    appCommit: 'Commit di BG Tutor',
+    appCommit: 'Commit di Neondojo',
     copy: 'Copia le informazioni sulle versioni',
     copied: 'Informazioni sulle versioni copiate.',
     copyError: 'Impossibile copiare le informazioni sulle versioni.',
@@ -48,7 +48,7 @@ export const versionInfoMessages = {
   pl: {
     available: 'Dostępny',
     details: 'Szczegóły techniczne',
-    appCommit: 'Commit BG Tutor',
+    appCommit: 'Commit Neondojo',
     copy: 'Kopiuj informacje o wersjach',
     copied: 'Skopiowano informacje o wersjach.',
     copyError: 'Nie udało się skopiować informacji o wersjach.',

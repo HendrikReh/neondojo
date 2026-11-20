@@ -45,7 +45,7 @@ while True:
         with open('native-output.txt', 'w') as capture:
             os.dup2(capture.fileno(), 1)
             try:
-                exec(adapter, {'__name__': 'bgtutor_rules', '_reuse_checkpoint': reuse})
+                exec(adapter, {'__name__': 'neondojo_rules', '_reuse_checkpoint': reuse})
             finally:
                 sys.stdout.flush()
                 flush_native(None)

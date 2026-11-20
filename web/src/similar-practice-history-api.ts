@@ -6,7 +6,7 @@ export type PracticeSummaryInput = Schema['SaveSimilarPracticeSummary'];
 export type PracticeHistoryPage = Schema['SimilarPracticeHistory'];
 
 const path = '/study/similar-practice';
-const pendingPrefix = 'bgtutor.similarPractice.pending.';
+const pendingPrefix = 'neondojo.similarPractice.pending.';
 const activeSaves = new Map<
   string,
   Promise<Schema['SimilarPracticeSummary']>

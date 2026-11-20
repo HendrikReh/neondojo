@@ -1,6 +1,6 @@
 use axum::{body::Body, http::Request};
-use bgtutor::{api, engine::Engine, import, jobs, model::Job, store};
 use http_body_util::BodyExt;
+use neondojo::{api, engine::Engine, import, jobs, model::Job, store};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -38,7 +38,7 @@ async fn explicit_match_analysis_engine_leaves_the_saved_provider_intact(pool: P
     .unwrap();
     let app = api::router(api::AppState::new(
         pool.clone(),
-        Engine::new("/no/such/bgtutor-gnubg".into()),
+        Engine::new("/no/such/neondojo-gnubg".into()),
     ));
     call(app.clone(), "GET", "/api/settings", Value::Null).await;
     sqlx::query("UPDATE app_settings SET analysis_engine='bgsage',analysis_plies=2")
@@ -425,7 +425,7 @@ async fn engine_failure_is_visible_and_empty_job_results_remain_readable(pool: P
     let imported = store::import_match(&pool, "failure.sgf", "sgf", sgf.as_bytes(), sgf, &parsed)
         .await
         .unwrap();
-    let state = api::AppState::new(pool.clone(), Engine::new("/no/such/bgtutor-gnubg".into()));
+    let state = api::AppState::new(pool.clone(), Engine::new("/no/such/neondojo-gnubg".into()));
     let app = api::router(state.clone());
     let endpoint = format!("/api/matches/{}/analysis", imported.r#match.id);
     let (_, value) = call(app.clone(), "POST", &endpoint, json!({})).await;

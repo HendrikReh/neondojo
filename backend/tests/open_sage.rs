@@ -1,4 +1,4 @@
-use bgtutor::engines::{SUPPORTED_SAGE_PACKAGE_VERSIONS, SageEngine, SageSnapshot};
+use neondojo::engines::{SUPPORTED_SAGE_PACKAGE_VERSIONS, SageEngine, SageSnapshot};
 
 fn snapshot() -> SageSnapshot {
     SageSnapshot {
@@ -46,8 +46,8 @@ async fn missing_interpreter_fails_explicitly() {
 #[tokio::test]
 #[ignore = "requires the locked native macOS ARM64 Open Sage installation; no database"]
 async fn native_checker_cube_and_match_analysis() {
-    let python = std::env::var("BGTUTOR_SAGE_PYTHON")
-        .expect("Set BGTUTOR_SAGE_PYTHON to the locked venv interpreter");
+    let python = std::env::var("NEONDOJO_SAGE_PYTHON")
+        .expect("Set NEONDOJO_SAGE_PYTHON to the locked venv interpreter");
     for (depth, threads) in [(1, 2), (2, 6)] {
         let profile = SageEngine::probe_profile(python.clone(), depth, threads)
             .await
@@ -81,9 +81,9 @@ async fn native_checker_cube_and_match_analysis() {
 #[tokio::test]
 #[ignore = "requires locked native Open Sage; no database"]
 async fn native_reference_game_five_full_coverage() {
-    let python = std::env::var("BGTUTOR_SAGE_PYTHON").unwrap();
+    let python = std::env::var("NEONDOJO_SAGE_PYTHON").unwrap();
     let engine = SageEngine::new(SageEngine::probe(python, 4).await.unwrap()).unwrap();
-    let source = bgtutor::benchmarks::REFERENCE_SGF;
+    let source = neondojo::benchmarks::REFERENCE_SGF;
     let result = engine.analyze_game(source, 5, 2).await.unwrap();
     assert!(!result.decisions.is_empty());
 }

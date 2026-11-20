@@ -43,8 +43,8 @@ const ConfirmedConfigurationContext = createContext<
 const WorkspaceDefaultsContext = createContext<
   ProfileConfiguration | undefined
 >(undefined);
-const confirmedKey = 'bgtutor.configuration-confirmed.v1';
-const workspaceDefaultsKey = 'bgtutor.workspace-defaults.v1';
+const confirmedKey = 'neondojo.configuration-confirmed.v1';
+const workspaceDefaultsKey = 'neondojo.workspace-defaults.v1';
 
 function readCachedConfiguration(key: string) {
   try {
@@ -100,7 +100,7 @@ export function ConfigurationProvider({
     window.addEventListener('pagehide', store.dispose);
     const channel =
       typeof BroadcastChannel === 'function'
-        ? new BroadcastChannel('bgtutor.configuration')
+        ? new BroadcastChannel('neondojo.configuration')
         : null;
     if (channel) channel.onmessage = focus;
     return () => {
@@ -136,7 +136,7 @@ export function ConfigurationProvider({
     if (!state.confirmed) return;
     const channel =
       typeof BroadcastChannel === 'function'
-        ? new BroadcastChannel('bgtutor.configuration')
+        ? new BroadcastChannel('neondojo.configuration')
         : null;
     channel?.postMessage({ revision: state.confirmed.revision });
     channel?.close();

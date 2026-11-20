@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 test('the catalog shows saved match candidates without recalculating the position', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   const standaloneJobs: string[] = [];
   page.on('request', (request) => {
     if (
@@ -60,7 +60,7 @@ test('the catalog shows saved match candidates without recalculating the positio
 test('imported GNUbg analysis remains available independently from new engine jobs', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   // Export-native A annotations record candidates and their original evaluation depth.
   const imported = page.waitForResponse(
@@ -139,7 +139,7 @@ test('imported GNUbg analysis remains available independently from new engine jo
 test('opening-book preferences and a real opening lookup expose source and depth', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page
@@ -219,7 +219,7 @@ test('opening-book preferences and a real opening lookup expose source and depth
 test('opening-book navigation explicitly applies or preserves an engine draft', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.route('**/api/opening-book', (route) =>
     route.fulfill({
       json: {
@@ -306,7 +306,7 @@ test('opening-book navigation explicitly applies or preserves an engine draft', 
 test('XG lookup is an attributed position reference, separate from rolled candidates', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await page.getByLabel('Match file', { exact: true }).setInputFiles({
     name: 'xg-book-reference.sgf',
@@ -337,7 +337,7 @@ test('XG lookup is an attributed position reference, separate from rolled candid
 test('a late imported source response cannot replace a newer position', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   let release = () => {},
     started = () => {},
     first = true;

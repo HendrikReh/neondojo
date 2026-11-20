@@ -742,12 +742,12 @@ const rows = {
     'File originali',
   ],
   exportHelp: [
-    'Multiple matches download as ZIP. Source exports do not contain BG Tutor notes or learning history.',
-    'Mehrere Matches werden als ZIP heruntergeladen. Quellexporte enthalten keine BG-Tutor-Notizen oder Lerndaten.',
-    'Varios matches se descargan como ZIP. No incluye notas ni historial de BG Tutor.',
-    'Plusieurs matchs sont téléchargés en ZIP. Les notes et l’historique BG Tutor sont exclus.',
-    'Wiele meczów pobierzesz jako ZIP. Eksport nie obejmuje notatek i nauki BG Tutor.',
-    'Più match vengono scaricati come ZIP. Note e cronologia BG Tutor non sono incluse.',
+    'Multiple matches download as ZIP. Source exports do not contain Neondojo notes or learning history.',
+    'Mehrere Matches werden als ZIP heruntergeladen. Quellexporte enthalten keine Neondojo-Notizen oder Lerndaten.',
+    'Varios matches se descargan como ZIP. No incluye notas ni historial de Neondojo.',
+    'Plusieurs matchs sont téléchargés en ZIP. Les notes et l’historique Neondojo sont exclus.',
+    'Wiele meczów pobierzesz jako ZIP. Eksport nie obejmuje notatek i nauki Neondojo.',
+    'Più match vengono scaricati come ZIP. Note e cronologia Neondojo non sono incluse.',
   ],
   batchLimit: [
     'Select up to 100 matches per action, or 50 for export.',

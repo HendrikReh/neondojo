@@ -1,10 +1,10 @@
 use axum::{body::Body, http::Request};
-use bgtutor::{
+use http_body_util::BodyExt;
+use neondojo::{
     api::{self, AppState},
     engine::Engine,
     import, store,
 };
-use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -31,7 +31,7 @@ async fn setup(pool: &PgPool) -> (axum::Router, Uuid) {
         pool.clone(),
         Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into())),
     ));
-    let source = bgtutor::benchmarks::REFERENCE_SGF;
+    let source = neondojo::benchmarks::REFERENCE_SGF;
     let imported = store::import_match(
         pool,
         "estimate.sgf",

@@ -120,7 +120,7 @@ for (const config of [
       await page.evaluate(() => document.documentElement.scrollWidth),
     ).toBeLessThanOrEqual(config.width);
     await page.screenshot({
-      path: `/tmp/bgtutor-feedback-preview-${config.mode}-${config.human}.png`,
+      path: `/tmp/neondojo-feedback-preview-${config.mode}-${config.human}.png`,
       fullPage: true,
     });
     await page.keyboard.press('Escape');

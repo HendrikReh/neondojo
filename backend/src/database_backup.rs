@@ -26,7 +26,7 @@ use utoipa::{
     openapi::{KnownFormat, Object, RefOr, Schema, SchemaFormat, Type},
 };
 
-const MEDIA_TYPE: &str = "application/vnd.bgtutor.backup";
+const MEDIA_TYPE: &str = "application/vnd.neondojo.backup";
 const MAX_ARCHIVE_BYTES: u64 = 16 * 1024 * 1024 * 1024;
 const MAX_DATA_BYTES: u64 = 64 * 1024 * 1024 * 1024;
 
@@ -224,7 +224,7 @@ impl PartialSchema for BackupFile {
 impl ToSchema for BackupFile {}
 
 #[utoipa::path(get, path="/api/database-backup", operation_id="export_database_backup", responses(
-    (status=200, body=inline(BackupFile), content_type="application/vnd.bgtutor.backup"),
+    (status=200, body=inline(BackupFile), content_type="application/vnd.neondojo.backup"),
     (status=409, body=ErrorBody), (status=500, body=ErrorBody)
 ), tag="Database backup")]
 async fn export(State(state): State<AppState>) -> ApiResult<impl IntoResponse> {
@@ -237,7 +237,7 @@ async fn export(State(state): State<AppState>) -> ApiResult<impl IntoResponse> {
     let created_at = Utc::now();
     let (file, length) = archive::export(&state.pool, created_at).await?;
     let filename = format!(
-        "bgtutor-{}.bgtutor-backup",
+        "neondojo-{}.neondojo-backup",
         created_at.format("%Y-%m-%d-%H%M%S")
     );
     let content = tokio_util::io::ReaderStream::with_capacity(file, 128 * 1024);
@@ -262,7 +262,7 @@ async fn export(State(state): State<AppState>) -> ApiResult<impl IntoResponse> {
 }
 
 fn schema_mismatch() -> ApiError {
-    ApiError::invalid("Backup schema differs from this BG Tutor installation")
+    ApiError::invalid("Backup schema differs from this Neondojo installation")
 }
 
 fn validate_sequences(manifest: &Manifest, count: usize) -> ApiResult<()> {
@@ -291,7 +291,7 @@ async fn receive_backup(
     {
         return Err(ApiError(
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            "Select a BG Tutor backup file".into(),
+            "Select a Neondojo backup file".into(),
         ));
     }
     let permit = state
@@ -354,7 +354,7 @@ pub(crate) async fn target_counts(State(state): State<AppState>) -> ApiResult<im
 }
 
 #[utoipa::path(post, path="/api/database-backup/check", operation_id="check_database_backup",
-    request_body(content=inline(BackupFile), content_type="application/vnd.bgtutor.backup"),
+    request_body(content=inline(BackupFile), content_type="application/vnd.neondojo.backup"),
     responses((status=200, body=BackupCheck), (status=408, body=ErrorBody), (status=409, body=ErrorBody),
               (status=413, body=ErrorBody), (status=415, body=ErrorBody),
               (status=422, body=ErrorBody), (status=500, body=ErrorBody)),
@@ -395,7 +395,7 @@ struct RestoreQuery {
 }
 
 #[utoipa::path(post, path="/api/database-backup", operation_id="restore_database_backup", params(RestoreQuery),
-    request_body(content=inline(BackupFile), content_type="application/vnd.bgtutor.backup"),
+    request_body(content=inline(BackupFile), content_type="application/vnd.neondojo.backup"),
     responses((status=204), (status=408, body=ErrorBody), (status=409, body=ErrorBody), (status=413, body=ErrorBody),
               (status=415, body=ErrorBody), (status=422, body=ErrorBody), (status=500, body=ErrorBody)),
     tag="Database backup"

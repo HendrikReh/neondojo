@@ -1,10 +1,10 @@
 use axum::{body::Body, http::Request};
-use bgtutor::{
+use http_body_util::BodyExt;
+use neondojo::{
     api::{self, AppState},
     engine::Engine,
     store,
 };
-use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -200,7 +200,7 @@ async fn annotation_validation_is_bounded_and_does_not_change_existing_data(pool
 #[ignore = "requires PostgreSQL"]
 async fn unicode_limits_and_learning_annotation_reads_use_characters(pool: PgPool) {
     let (match_id, _) = targets(&pool, "unicode").await;
-    let empty = bgtutor::annotations::get_annotation(&pool, "match", match_id)
+    let empty = neondojo::annotations::get_annotation(&pool, "match", match_id)
         .await
         .unwrap();
     assert_eq!(empty.version, 0);
@@ -208,7 +208,7 @@ async fn unicode_limits_and_learning_annotation_reads_use_characters(pool: PgPoo
     let comment = "🧠".repeat(20_000);
     let (status, body) = save(app(&pool), "matches", match_id, vec![&tag], &comment, 0).await;
     assert_eq!(status, 200, "{body}");
-    let saved = bgtutor::annotations::get_annotation(&pool, "match", match_id)
+    let saved = neondojo::annotations::get_annotation(&pool, "match", match_id)
         .await
         .unwrap();
     assert_eq!(saved.tags, vec!["ä".repeat(64)]);
@@ -241,12 +241,12 @@ async fn unicode_limits_and_learning_annotation_reads_use_characters(pool: PgPoo
         422
     );
     assert!(
-        bgtutor::annotations::get_annotation(&pool, "match", Uuid::new_v4())
+        neondojo::annotations::get_annotation(&pool, "match", Uuid::new_v4())
             .await
             .is_err()
     );
     assert!(
-        bgtutor::annotations::get_annotation(&pool, "invalid", match_id)
+        neondojo::annotations::get_annotation(&pool, "invalid", match_id)
             .await
             .is_err()
     );

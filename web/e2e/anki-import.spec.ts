@@ -9,8 +9,8 @@ const run = promisify(execFile);
 test('imports a batch of Anki packages and keeps reviews on reimport', async ({
   page,
 }, info) => {
-  const python = process.env.BGTUTOR_ANKI_PYTHON;
-  test.skip(!python, 'Set BGTUTOR_ANKI_PYTHON to an interpreter with Anki');
+  const python = process.env.NEONDOJO_ANKI_PYTHON;
+  test.skip(!python, 'Set NEONDOJO_ANKI_PYTHON to an interpreter with Anki');
   if (!python) return;
   const fixture = info.outputPath('external.apkg');
   const invalid = info.outputPath('broken.apkg');
@@ -48,7 +48,7 @@ for package_path, name in zip(sys.argv[1:], ['External study::Cube', 'External s
     fixture,
     second,
   ]);
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
   await page

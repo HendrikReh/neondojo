@@ -120,7 +120,7 @@ test('black perspective is stable and uses archive artwork with readable labels'
     },
   ];
   await page.addInitScript(() =>
-    localStorage.setItem('bgtutor.theme', 'bgblitz:bg-earth'),
+    localStorage.setItem('neondojo.theme', 'bgblitz:bg-earth'),
   );
   await page.route('**/api/play/sessions', (route) =>
     route.fulfill({ json: route.request().method() === 'POST' ? saved : [] }),
@@ -149,7 +149,7 @@ test('Playing restores its last session directly without a saved-match list', as
   page,
 }) => {
   await page.addInitScript(
-    (last) => localStorage.setItem('bgtutor.play-session', last),
+    (last) => localStorage.setItem('neondojo.play-session', last),
     id,
   );
   await page.route(`**/api/play/sessions/${id}`, (route) =>
@@ -311,7 +311,7 @@ for (const theme of ['forest', 'bgblitz:bg-earth'])
     saved.position.dice = [3, 2];
     saved.legal_moves = [{ notation: '13/8', steps: [{ from: 13, to: 8 }] }];
     await page.addInitScript(
-      (value) => localStorage.setItem('bgtutor.theme', value),
+      (value) => localStorage.setItem('neondojo.theme', value),
       theme,
     );
     await page.route('**/api/play/sessions', (route) =>
@@ -419,7 +419,7 @@ test('a black hit after an already moved checker remains confirmable with source
     },
   ];
   await page.addInitScript(() =>
-    localStorage.setItem('bgtutor.theme', 'bgblitz:bg-earth'),
+    localStorage.setItem('neondojo.theme', 'bgblitz:bg-earth'),
   );
   await page.route('**/api/play/sessions', (route) =>
     route.fulfill({ json: route.request().method() === 'POST' ? saved : [] }),

@@ -327,12 +327,12 @@ pub fn default_path() -> String {
         .map(std::path::PathBuf::from)
         .unwrap_or_default();
     #[cfg(target_os = "macos")]
-    let directory = home.join("Library/Application Support/BG Tutor");
+    let directory = home.join("Library/Application Support/Neondojo");
     #[cfg(not(target_os = "macos"))]
     let directory = std::env::var_os("XDG_DATA_HOME")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| home.join(".local/share"))
-        .join("bgtutor");
+        .join("neondojo");
     directory
         .join("opening-book.sqlite")
         .to_string_lossy()
@@ -486,7 +486,7 @@ async fn lookup_bgdb(
     .context("Opening book reader task failed")
 }
 
-/// Canonical BG Tutor positions use the standard no-beaver contract. REST
+/// Canonical Neondojo positions use the standard no-beaver contract. REST
 /// callers resolve the immutable source's rule and use lookup_with_rules.
 pub async fn lookup(
     config: &BookConfig,
@@ -767,7 +767,7 @@ impl Book {
                 })
                 .transpose()
         };
-        // BackgammonDB records GNUbg's native levels; BG Tutor shows its own
+        // BackgammonDB records GNUbg's native levels; Neondojo shows its own
         // convention, so GNUbg's regular 3-ply book reads as 4-ply.
         let top_ply = plies("topPly")?.map(crate::engine::plies_from_gnubg);
         let cube_ply = plies("cubePly")?.map(crate::engine::plies_from_gnubg);
@@ -1472,7 +1472,7 @@ mod tests {
         let config = BookConfig {
             version: 0,
             provider: "backgammondb".into(),
-            path: std::env::var("BGTUTOR_OPENING_BOOK").unwrap_or_else(|_| default_path()),
+            path: std::env::var("NEONDOJO_OPENING_BOOK").unwrap_or_else(|_| default_path()),
             xg_path: crate::xg_book::default_path(),
         };
         let state = status(&config).await;

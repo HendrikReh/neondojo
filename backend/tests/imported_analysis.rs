@@ -1,10 +1,10 @@
 use axum::{body::Body, http::Request};
-use bgtutor::{
+use http_body_util::BodyExt;
+use neondojo::{
     api::{self, AppState},
     engine::Engine,
     import, store,
 };
-use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -153,7 +153,7 @@ async fn engine_reanalysis_does_not_overwrite_imported_analysis(pool: PgPool) {
         pool.clone(),
         Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into())),
     );
-    assert!(bgtutor::jobs::run_one(&state).await.unwrap());
+    assert!(neondojo::jobs::run_one(&state).await.unwrap());
     let finished = store::get_job(&pool, job.id).await.unwrap().unwrap();
     assert_eq!(finished.status, "completed", "{:?}", finished.error);
     let after:Vec<Value>=sqlx::query_scalar("SELECT data FROM imported_analyses WHERE match_uuid=$1 ORDER BY game_no,source_move_no,kind").bind(id).fetch_all(&pool).await.unwrap();

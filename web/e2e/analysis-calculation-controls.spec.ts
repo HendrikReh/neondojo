@@ -14,7 +14,7 @@ import { expect, test } from './test';
 test('imported candidates come first and position progress stays in the workspace header', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await page.getByLabel('Match file', { exact: true }).setInputFiles({
     name: 'position-controls.sgf',
@@ -120,7 +120,7 @@ test('imported candidates come first and position progress stays in the workspac
 test('the previous engine result survives a pending rerun and position restoration', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await page.getByLabel('Match file', { exact: true }).setInputFiles({
     name: 'rerun-controls.sgf',
@@ -188,7 +188,7 @@ test('the previous engine result survives a pending rerun and position restorati
 test('only the header starts the selected game and the library starts the entire match', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await page.getByLabel('Match file', { exact: true }).setInputFiles({
     name: 'match-controls.sgf',
@@ -240,7 +240,7 @@ test('reload resumes native bulk match analysis without submitting new jobs', as
   page,
 }) => {
   test.setTimeout(180_000);
-  const testDatabase = process.env.BGTUTOR_E2E_DATABASE_URL;
+  const testDatabase = process.env.NEONDOJO_E2E_DATABASE_URL;
   if (!testDatabase)
     throw new Error('Playwright did not provision a test database');
 
@@ -282,7 +282,7 @@ test('reload resumes native bulk match analysis without submitting new jobs', as
     expect(imported.status(), await imported.text()).toBe(201);
     matchIds.push((await imported.json()).match.id);
   }
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();
   const originFilter = page.getByRole('button', { name: `${originName} 2` });

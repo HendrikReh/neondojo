@@ -24,9 +24,9 @@ async function setup(page: Page) {
     conflict: false,
   };
   await page.addInitScript(() => {
-    localStorage.setItem('bgtutor.locale', 'en');
+    localStorage.setItem('neondojo.locale', 'en');
     localStorage.setItem(
-      'bgtutor.deck',
+      'neondojo.deck',
       '11111111-1111-4111-8111-111111111111',
     );
   });
@@ -101,7 +101,7 @@ async function deckAction(
 test('creating a deck from the library opens it in card search', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
   await page
@@ -510,8 +510,8 @@ test('real renamed decks update position membership and Anki; deleting one share
     originalCard.review_count + 1,
   );
   await page.addInitScript((id) => {
-    localStorage.setItem('bgtutor.locale', 'en');
-    localStorage.setItem('bgtutor.deck', id);
+    localStorage.setItem('neondojo.locale', 'en');
+    localStorage.setItem('neondojo.deck', id);
   }, decks[0].id);
   await page.goto('/');
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
@@ -669,7 +669,7 @@ test('deck search, card moves and shared membership removal work in Study', asyn
     });
     await expect(response).toBeOK();
   }
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
   await page

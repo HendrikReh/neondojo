@@ -61,19 +61,19 @@ async function fixture(
   ).toBe(true);
   await page.addInitScript(
     ({ id, deck, theme, mode, locale, positionId, jobId }) => {
-      if (!localStorage.getItem('bgtutor.locale'))
-        localStorage.setItem('bgtutor.locale', locale);
+      if (!localStorage.getItem('neondojo.locale'))
+        localStorage.setItem('neondojo.locale', locale);
       localStorage.setItem(
-        'bgtutor.workspace',
+        'neondojo.workspace',
         JSON.stringify({ matchId: id, gameNo: 1, positionId }),
       );
-      localStorage.setItem('bgtutor.deck', deck);
+      localStorage.setItem('neondojo.deck', deck);
       localStorage.setItem(
-        `bgtutor.jobs.${positionId}`,
+        `neondojo.jobs.${positionId}`,
         JSON.stringify({ analysis: jobId }),
       );
       localStorage.setItem(
-        'bgtutor.ui-appearance',
+        'neondojo.ui-appearance',
         JSON.stringify({ version: 1, theme, mode }),
       );
     },

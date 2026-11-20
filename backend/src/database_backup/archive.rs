@@ -282,7 +282,7 @@ async fn scan<W: Write + Send + 'static>(
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
         let mut archive = ZipArchive::new(file)
-            .map_err(|_| ApiError::invalid("Invalid BG Tutor backup archive"))?;
+            .map_err(|_| ApiError::invalid("Invalid Neondojo backup archive"))?;
         let manifest = (|| -> Result<Manifest> {
             let mut entry = archive.by_name(MANIFEST)?;
             ensure!(entry.size() <= MAX_MANIFEST_BYTES);
@@ -299,9 +299,9 @@ async fn scan<W: Write + Send + 'static>(
             ensure!(manifest.format != FORMAT || manifest.created_at.is_some());
             Ok(manifest)
         })()
-        .map_err(|_| ApiError::invalid("Invalid BG Tutor backup manifest"))?;
+        .map_err(|_| ApiError::invalid("Invalid Neondojo backup manifest"))?;
         if !matches!(manifest.format, LEGACY_FORMAT | FORMAT) {
-            return Err(ApiError::invalid("Unsupported BG Tutor backup format"));
+            return Err(ApiError::invalid("Unsupported Neondojo backup format"));
         }
         let compatible = manifest.schema == fingerprint;
         if compatible && archive.len() != TABLES.len() + 1 {

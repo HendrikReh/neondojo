@@ -14,7 +14,7 @@ const exec = promisify(execFile);
 const root = fileURLToPath(new URL('../', import.meta.url));
 const web = join(root, 'web');
 const localPostgres =
-  'postgres://bgtutor:bgtutor_local@127.0.0.1:54329/postgres';
+  'postgres://neondojo:neondojo_local@127.0.0.1:54329/postgres';
 
 async function sql(url: URL, statement: string) {
   try {
@@ -61,7 +61,7 @@ function listeningUrl(child: ChildProcess) {
       finish(new Error(`Browser test backend exited during startup.\n${log}`));
     const output = (chunk: Buffer) => {
       log = (log + chunk.toString()).slice(-12_000);
-      const bound = /BG Tutor listening[^\n]*127\.0\.0\.1:(\d+)/.exec(log);
+      const bound = /Neondojo listening[^\n]*127\.0\.0\.1:(\d+)/.exec(log);
       if (bound) finish(undefined, `http://127.0.0.1:${bound[1]}`);
     };
     function finish(error?: Error, url?: string) {
@@ -70,10 +70,10 @@ function listeningUrl(child: ChildProcess) {
       child.removeListener('exit', exited);
       child.stdout?.off('data', output);
       child.stderr?.off('data', output);
-      // Keep draining the pipes after startup. BGTUTOR_E2E_BACKEND_LOG names
+      // Keep draining the pipes after startup. NEONDOJO_E2E_BACKEND_LOG names
       // a file that receives the backend's output for diagnosing a failed run.
-      const sink = process.env.BGTUTOR_E2E_BACKEND_LOG
-        ? createWriteStream(process.env.BGTUTOR_E2E_BACKEND_LOG, { flags: 'a' })
+      const sink = process.env.NEONDOJO_E2E_BACKEND_LOG
+        ? createWriteStream(process.env.NEONDOJO_E2E_BACKEND_LOG, { flags: 'a' })
         : undefined;
       if (sink) {
         sink.write(log);
@@ -95,21 +95,21 @@ function listeningUrl(child: ChildProcess) {
 
 export default async function setup() {
   const maintenance = new URL(
-    process.env.BGTUTOR_E2E_POSTGRES_URL ?? localPostgres,
+    process.env.NEONDOJO_E2E_POSTGRES_URL ?? localPostgres,
   );
-  const template = process.env.BGTUTOR_E2E_POSTGRES_TEMPLATE ?? 'template0';
+  const template = process.env.NEONDOJO_E2E_POSTGRES_TEMPLATE ?? 'template0';
   if (
     template !== 'template0' &&
-    !/^bgtutor_e2e_template_[a-z0-9_]+$/.test(template)
+    !/^neondojo_e2e_template_[a-z0-9_]+$/.test(template)
   )
     throw new Error(
-      'Use a bgtutor_e2e_template_* PostgreSQL fixture database.',
+      'Use a neondojo_e2e_template_* PostgreSQL fixture database.',
     );
-  const name = `bgtutor_e2e_${randomUUID().replaceAll('-', '')}`;
+  const name = `neondojo_e2e_${randomUUID().replaceAll('-', '')}`;
   const database = new URL(maintenance);
   database.pathname = `/${name}`;
   database.searchParams.delete('dbname');
-  const temporary = await mkdtemp(join(tmpdir(), 'bgtutor-e2e-'));
+  const temporary = await mkdtemp(join(tmpdir(), 'neondojo-e2e-'));
   let created = false;
   let backend: ChildProcess | undefined;
   let frontend: ViteDevServer | undefined;
@@ -146,7 +146,7 @@ export default async function setup() {
     await exec('npm', ['run', 'themes:prepare'], { cwd: web });
     const { stdout } = await exec(
       'cargo',
-      ['build', '-p', 'bgtutor', '--bin', 'bgtutor', '--message-format=json'],
+      ['build', '-p', 'neondojo', '--bin', 'neondojo', '--message-format=json'],
       { cwd: root, maxBuffer: 8 * 1024 * 1024 },
     );
     const executable = stdout
@@ -154,19 +154,19 @@ export default async function setup() {
       .split('\n')
       .map((line) => JSON.parse(line))
       .find(
-        (message) => message.target?.name === 'bgtutor' && message.executable,
+        (message) => message.target?.name === 'neondojo' && message.executable,
       )?.executable;
     if (!executable)
-      throw new Error('Cargo did not build the BG Tutor backend.');
+      throw new Error('Cargo did not build the Neondojo backend.');
 
     backend = spawn(executable, [], {
       cwd: root,
       env: {
         ...process.env,
         DATABASE_URL: database.href,
-        BGTUTOR_E2E_DATABASE_NAME: name,
-        BGTUTOR_BIND: '127.0.0.1:0',
-        RUST_LOG: 'bgtutor=info',
+        NEONDOJO_E2E_DATABASE_NAME: name,
+        NEONDOJO_BIND: '127.0.0.1:0',
+        RUST_LOG: 'neondojo=info',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -214,7 +214,7 @@ export default async function setup() {
 
     // Playwright reads this environment variable for its built-in baseURL.
     process.env.PLAYWRIGHT_TEST_BASE_URL = url;
-    process.env.BGTUTOR_E2E_DATABASE_URL = database.href;
+    process.env.NEONDOJO_E2E_DATABASE_URL = database.href;
     return cleanup;
   } catch (error) {
     await cleanup();

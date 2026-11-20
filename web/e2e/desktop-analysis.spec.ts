@@ -11,11 +11,11 @@ test.use({ actionTimeout: 10000 });
 
 const localBoardWidths = (page: Page) =>
   page.evaluate(() =>
-    JSON.parse(localStorage.getItem('bgtutor.layout.analysis.boardWidths.v1') ?? '{}'),
+    JSON.parse(localStorage.getItem('neondojo.layout.analysis.boardWidths.v1') ?? '{}'),
   );
 
 async function importDesktopMatch(page: Page) {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   const importResponse = page.waitForResponse(
     (response) =>
@@ -195,7 +195,7 @@ nativeTest(
 test('checker tabs share the compact board and preserve a candidate preview', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await page.getByLabel('Match file', { exact: true }).setInputFiles({
     name: 'board-checker-comparison.sgf',
@@ -358,7 +358,7 @@ nativeTest('Errors uses wide windows for the board and move history', async ({
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 1800, height: 1169 });
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   const response = await page.request.post('/api/imports', {
     multipart: {
       file: {
@@ -372,7 +372,7 @@ nativeTest('Errors uses wide windows for the board and move history', async ({
   const { match } = await response.json();
   await page.addInitScript((matchId) => {
     localStorage.setItem(
-      'bgtutor.workspace',
+      'neondojo.workspace',
       JSON.stringify({ matchId, gameNo: 1 }),
     );
   }, match.id);
@@ -423,7 +423,7 @@ nativeTest('overview keeps the whole board visible when a checker candidate is s
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 1800, height: 1074 });
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   const response = await page.request.post('/api/imports', {
     multipart: {
       file: {
@@ -437,7 +437,7 @@ nativeTest('overview keeps the whole board visible when a checker candidate is s
   const { match } = await response.json();
   await page.addInitScript((matchId) => {
     localStorage.setItem(
-      'bgtutor.workspace',
+      'neondojo.workspace',
       JSON.stringify({ matchId, gameNo: 7 }),
     );
   }, match.id);

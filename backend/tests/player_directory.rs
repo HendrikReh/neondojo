@@ -1,10 +1,10 @@
 use axum::{body::Body, http::Request};
-use bgtutor::{
+use http_body_util::BodyExt;
+use neondojo::{
     api::{self, AppState},
     engine::Engine,
     import, store,
 };
-use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -255,7 +255,7 @@ async fn players_sort_by_name_or_counts_with_name_as_tie_break(pool: PgPool) {
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
 async fn ratings_weight_decisions_and_keep_analysis_profiles_separate(pool: PgPool) {
-    use bgtutor::model::{
+    use neondojo::model::{
         MatchAnalysisSummary, PerformanceRatingSummary, PlayerAnalysisSummary,
         PlayerPerformanceRating,
     };

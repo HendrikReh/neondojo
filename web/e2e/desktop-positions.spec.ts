@@ -6,11 +6,11 @@ import {
 
 test.use({ actionTimeout: 10000 });
 
-const widthsKey = 'bgtutor.positions.columns';
-const libraryKey = 'bgtutor.library.columns';
+const widthsKey = 'neondojo.positions.columns';
+const libraryKey = 'neondojo.library.columns';
 async function fixture(page: Page, width = 1800, height = 1169) {
   await page.setViewportSize({ width, height });
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   const database = await (
     await page.request.post('/api/databases', {
       data: { name: `Mochy research ${crypto.randomUUID()}` },
@@ -132,7 +132,7 @@ test('compact position rows retain a right-hand board preview at desktop sizes',
   }
   await page.setViewportSize({ width: 1800, height: 1169 });
   await page.screenshot({
-    path: '/tmp/bgtutor-desktop-positions-1800.png',
+    path: '/tmp/neondojo-desktop-positions-1800.png',
     fullPage: true,
   });
   const positionPanel = page.locator('#workspace-panel-positions');

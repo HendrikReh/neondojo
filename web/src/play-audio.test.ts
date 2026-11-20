@@ -23,7 +23,7 @@ it('stores mute and honors the in-memory preference when storage is blocked', ()
   };
   expect(readPlaySounds(storage)).toBe(true);
   savePlaySounds(false, storage);
-  expect(values.get('bgtutor.play-sounds')).toBe('off');
+  expect(values.get('neondojo.play-sounds')).toBe('off');
   expect(readPlaySounds(storage)).toBe(false);
   expect(
     readPlaySounds({

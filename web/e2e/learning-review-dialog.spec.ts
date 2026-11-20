@@ -16,7 +16,7 @@ async function study(
   name = 'Hendrik · GNUbg',
 ) {
   await page.addInitScript(
-    (locale) => localStorage.setItem('bgtutor.locale', locale),
+    (locale) => localStorage.setItem('neondojo.locale', locale),
     locale,
   );
   await page.route('**/api/decks', (r) => r.fulfill({ json: [] }));

@@ -69,7 +69,7 @@ import GameResultSummary from './GameResultSummary';
 import { actionFrames, checkerFrame, reverseFrame } from './play-animation';
 import { usePlayAnimation, useRollingFaces } from './usePlayAnimation';
 import './play.css';
-const storageKey = 'bgtutor.play-session';
+const storageKey = 'neondojo.play-session';
 function storedSession() {
   try {
     return localStorage.getItem(storageKey);

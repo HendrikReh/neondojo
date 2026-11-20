@@ -13,7 +13,7 @@ import {
 } from './configuration-model';
 import { restoreConfigurationField } from './profile-changes';
 
-export const configurationJournalKey = 'bgtutor.configuration-pending.v1';
+export const configurationJournalKey = 'neondojo.configuration-pending.v1';
 type StorageAccess = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 type PendingConflict = { configuration: ProfileConfiguration; error: unknown };
 export type ConfigurationStatus =

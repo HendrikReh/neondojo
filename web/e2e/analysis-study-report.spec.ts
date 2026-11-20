@@ -38,9 +38,9 @@ async function fixture(page: Page, available = true) {
     return r.fulfill({ json: report });
   });
   await page.addInitScript((matchId) => {
-    localStorage.setItem('bgtutor.locale', 'en');
+    localStorage.setItem('neondojo.locale', 'en');
     localStorage.setItem(
-      'bgtutor.workspace',
+      'neondojo.workspace',
       JSON.stringify({ matchId, gameNo: 1 }),
     );
   }, match.id);

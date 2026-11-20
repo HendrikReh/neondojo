@@ -1,10 +1,10 @@
 use axum::{body::Body, http::Request};
-use bgtutor::{
+use http_body_util::BodyExt;
+use neondojo::{
     api::{self, AppState},
     engine::Engine,
     import, jobs, store,
 };
-use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -48,7 +48,7 @@ fn absolute_binary() -> std::path::PathBuf {
     std::fs::canonicalize(path).expect("GNUbg executable must exist")
 }
 
-async fn imported(pool: &PgPool) -> bgtutor::model::ImportResponse {
+async fn imported(pool: &PgPool) -> neondojo::model::ImportResponse {
     let sgf = "(;GM[6]FF[4]PW[Alice]PB[Bob]MI[length:7][game:0][ws:0][bs:0];W[31hefe])";
     store::import_match(
         pool,
@@ -683,7 +683,7 @@ async fn play_latency_uses_the_saved_play_depth_and_installation(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    assert!(bgtutor::benchmarks::run_one(&state).await.unwrap());
+    assert!(neondojo::benchmarks::run_one(&state).await.unwrap());
     let (_, history) = call(app, "GET", "/api/benchmarks", Value::Null).await;
     let run = &history["runs"][0];
     assert_eq!(run["id"], queued["id"]);
@@ -983,7 +983,7 @@ async fn five_ply_native_jobs_preserve_real_search_depth(pool: PgPool) {
 
 #[cfg(unix)]
 async fn native_jobs_preserve_real_search_depth(pool: PgPool, plies: i32) {
-    // GNUbg's own output names its native level, one below BG Tutor's.
+    // GNUbg's own output names its native level, one below Neondojo's.
     let native_plies = plies - 1;
     let evidence = tempfile::tempdir().unwrap();
     let quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
@@ -1281,7 +1281,7 @@ async fn queued_and_recovered_jobs_refuse_a_replaced_engine_version(pool: PgPool
 #[tokio::test]
 async fn snapshot_rejects_output_if_the_version_changes_during_evaluation() {
     let (_temp, engine) = versioned_fixture_engine(true);
-    let snapshot = bgtutor::settings::EngineSnapshot {
+    let snapshot = neondojo::settings::EngineSnapshot {
         gnubg_threads: None,
         gnubg_move_filter: None,
         open_sage: None,

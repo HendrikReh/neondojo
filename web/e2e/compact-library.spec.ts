@@ -49,8 +49,8 @@ const entries = Array.from({ length: 50 }, (_, index) => ({
 
 async function mockLibrary(page: Page) {
   await page.addInitScript((id) => {
-    localStorage.setItem('bgtutor.locale', 'en');
-    localStorage.setItem('bgtutor.database', id);
+    localStorage.setItem('neondojo.locale', 'en');
+    localStorage.setItem('neondojo.database', id);
   }, databaseId);
   await page.route('**/api/databases', (route) =>
     route.fulfill({

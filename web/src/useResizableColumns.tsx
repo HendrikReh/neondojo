@@ -48,7 +48,7 @@ export function useResizableColumns<Id extends string>(
         layout.minimum(id),
     );
   const [savedWidths, saveWidths] = useWorkspaceLayout<ColumnWidths<Id> | null>(
-    layout.storageKey.replace(/^bgtutor\./, ''),
+    layout.storageKey.replace(/^neondojo\./, ''),
     options.legacyWidths === undefined
       ? undefined
       : options.legacyWidths && fillWidths(options.legacyWidths),

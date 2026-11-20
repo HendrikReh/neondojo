@@ -3,7 +3,7 @@ import { expect, test } from './test';
 test('match suggestions preview boards and add only the checked cards', async ({
   page,
 }, testInfo) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'de'));
   await page.goto('/');
   const importing = page.waitForResponse(
     (response) =>

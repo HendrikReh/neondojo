@@ -11,7 +11,7 @@ import VersionInfo from './VersionInfo';
 
 const tools = ['benchmark', 'matches', 'backup', 'versions'] as const;
 export type ExtrasTool = (typeof tools)[number];
-const storageKey = 'bgtutor.extrasTool';
+const storageKey = 'neondojo.extrasTool';
 
 export function readExtrasTool(): ExtrasTool {
   try {

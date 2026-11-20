@@ -72,8 +72,8 @@ async function resume(
   state: ReturnType<typeof saved>,
 ) {
   await page.addInitScript((id) => {
-    localStorage.setItem('bgtutor.play-session', id);
-    localStorage.setItem('bgtutor.play-sounds', 'off');
+    localStorage.setItem('neondojo.play-session', id);
+    localStorage.setItem('neondojo.play-sounds', 'off');
   }, id);
   await page.route(`**/api/play/sessions/${id}`, (route) =>
     route.fulfill({ json: state }),
@@ -421,7 +421,7 @@ test('Training displays complete equities and probabilities', async ({
   await expect(panel).toContainText('0.777');
   await expect(panel).toContainText('99.1%');
   await page.screenshot({
-    path: '/tmp/bgtutor-training-feedback.png',
+    path: '/tmp/neondojo-training-feedback.png',
     fullPage: true,
   });
 });
@@ -510,7 +510,7 @@ test('startup restores a live Competition selection into Playing without an anal
   await page.addInitScript(
     (id) =>
       localStorage.setItem(
-        'bgtutor.workspace',
+        'neondojo.workspace',
         JSON.stringify({ matchId: id, gameNo: 1, positionId: id }),
       ),
     id,
@@ -634,7 +634,7 @@ test('Home cancels a delayed startup Competition redirect', async ({
   await page.addInitScript(
     (id) =>
       localStorage.setItem(
-        'bgtutor.workspace',
+        'neondojo.workspace',
         JSON.stringify({ matchId: id, gameNo: 1 }),
       ),
     id,
@@ -654,7 +654,7 @@ test('Home cancels a delayed startup Competition redirect', async ({
       .catch(() => {});
   });
   await page.goto('/');
-  await page.getByRole('link', { name: 'BG Tutor home', exact: true }).click();
+  await page.getByRole('link', { name: 'Neondojo home', exact: true }).click();
   release();
   await expect(page.locator('.analysis-welcome')).toBeVisible();
   await expect(
@@ -682,7 +682,7 @@ test('mode switching preserves partial checker steps', async ({ page }) => {
     'true',
   );
   await page.screenshot({
-    path: '/tmp/bgtutor-active-mode.png',
+    path: '/tmp/neondojo-active-mode.png',
     fullPage: true,
   });
 });
@@ -694,7 +694,7 @@ for (const choice of ['open', 'upload'] as const) {
     await page.addInitScript(
       (id) =>
         localStorage.setItem(
-          'bgtutor.workspace',
+          'neondojo.workspace',
           JSON.stringify({ matchId: id, gameNo: 1 }),
         ),
       id,
@@ -756,10 +756,10 @@ test('entering Competition synchronously discards cached linked analysis', async
   const state = { ...saved('coach'), library_match_id: id };
   await page.addInitScript((id) => {
     localStorage.setItem(
-      'bgtutor.workspace',
+      'neondojo.workspace',
       JSON.stringify({ matchId: id, gameNo: 1 }),
     );
-    localStorage.setItem('bgtutor.play-session', id);
+    localStorage.setItem('neondojo.play-session', id);
   }, id);
   await page.route(`**/api/matches/${id}/metadata`, (route) => {
     return route.fulfill({
@@ -870,7 +870,7 @@ test('running Tutor threshold saves on blur without a button or duplicate writes
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();
   await expect(threshold).toHaveValue('0.075');
   await page.screenshot({
-    path: '/tmp/bgtutor-blur-threshold.png',
+    path: '/tmp/neondojo-blur-threshold.png',
     fullPage: true,
   });
 });
@@ -939,7 +939,7 @@ for (const locale of ['en', 'de'] as const) {
     page,
   }) => {
     await page.addInitScript(
-      (locale) => localStorage.setItem('bgtutor.locale', locale),
+      (locale) => localStorage.setItem('neondojo.locale', locale),
       locale,
     );
     const state = { ...saved('tutor'), tutor_threshold: 0.04 };
@@ -965,7 +965,7 @@ for (const locale of ['en', 'de'] as const) {
     release();
     await expect(status).toHaveText(locale === 'de' ? 'Gespeichert' : 'Saved');
     await page.screenshot({
-      path: `/tmp/bgtutor-threshold-status-${locale}.png`,
+      path: `/tmp/neondojo-threshold-status-${locale}.png`,
       fullPage: true,
     });
     await expect(status).toHaveText('', { timeout: 4500 });

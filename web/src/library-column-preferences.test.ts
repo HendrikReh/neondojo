@@ -63,7 +63,7 @@ test('the last data column stays visible and toggles never reorder columns', () 
 });
 test('visibility can be saved and reset independently of width profiles', () => {
   const values = new Map<string, string>([
-    ['bgtutor.library.columns', 'existing widths'],
+    ['neondojo.library.columns', 'existing widths'],
   ]);
   const storage = {
     getItem: (key: string) => values.get(key) ?? null,
@@ -76,7 +76,7 @@ test('visibility can be saved and reset independently of width profiles', () => 
   };
   saveVisibleColumns(['id', 'comment'], storage);
   expect(readVisibleColumns(storage)).toEqual(['id', 'comment']);
-  expect(values.get('bgtutor.library.columns')).toBe('existing widths');
+  expect(values.get('neondojo.library.columns')).toBe('existing widths');
   saveVisibleColumns(undefined, storage);
   expect(values.has(VISIBLE_COLUMNS_KEY)).toBe(false);
   expect(readVisibleColumns(storage)).toEqual(DEFAULT_LIBRARY_COLUMNS);

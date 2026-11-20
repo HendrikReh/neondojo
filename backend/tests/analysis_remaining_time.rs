@@ -1,10 +1,10 @@
 use axum::{body::Body, http::Request};
-use bgtutor::{
+use http_body_util::BodyExt;
+use neondojo::{
     api::{self, AppState},
     engine::Engine,
     import, store,
 };
-use http_body_util::BodyExt;
 use serde_json::Value;
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -167,7 +167,7 @@ async fn native_game_commits_timing_with_checkpoint(pool: PgPool) {
         pool.clone(),
         Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into())),
     );
-    assert!(bgtutor::jobs::run_one(&state).await.unwrap());
+    assert!(neondojo::jobs::run_one(&state).await.unwrap());
     let job = store::get_job(&pool, id).await.unwrap().unwrap();
     assert_eq!(job.status, "completed", "{:?}", job.error);
     let app = api::router(state);
@@ -243,7 +243,7 @@ async fn timing_calibration_uses_saved_job_installation_and_plies(pool: PgPool) 
         .fetch_one(&pool)
         .await
         .unwrap();
-    let snapshot = bgtutor::settings::EngineSnapshot {
+    let snapshot = neondojo::settings::EngineSnapshot {
         gnubg_threads: None,
         gnubg_move_filter: None,
         open_sage: None,
@@ -263,7 +263,7 @@ async fn timing_calibration_uses_saved_job_installation_and_plies(pool: PgPool) 
     .await
     .unwrap();
     let state = AppState::new(pool.clone(), Engine::new("/wrong-fallback".into()));
-    assert!(bgtutor::jobs::run_one(&state).await.unwrap());
+    assert!(neondojo::jobs::run_one(&state).await.unwrap());
     let done = store::get_job(&pool, job.id).await.unwrap().unwrap();
     assert_eq!(done.status, "completed", "{:?}", done.error);
     let basis: (Option<Uuid>, Option<f64>) = sqlx::query_as(

@@ -34,7 +34,7 @@ describe('library round filter', () => {
     ['it', 'Turno'],
   ])('renders the round input in %s', (locale, label) => {
     vi.stubGlobal('localStorage', {
-      getItem: (key: string) => (key === 'bgtutor.locale' ? locale : null),
+      getItem: (key: string) => (key === 'neondojo.locale' ? locale : null),
     });
     const markup = renderToStaticMarkup(
       createElement(I18nProvider, {

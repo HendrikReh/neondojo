@@ -41,13 +41,13 @@ export function readLegacyConfiguration(
   try {
     const source = storage ?? localStorage;
     c.positions.show_played = source.getItem(POSITION_PLAYED_KEY) === 'true';
-    const database = source.getItem('bgtutor.database');
+    const database = source.getItem('neondojo.database');
     if (
       database &&
       /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(database)
     )
       c.library.database_id = database;
-    const deck = source.getItem('bgtutor.deck');
+    const deck = source.getItem('neondojo.deck');
     if (
       deck &&
       (isCollectionScope(deck) ||

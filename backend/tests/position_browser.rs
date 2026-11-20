@@ -1,13 +1,13 @@
 use axum::{body::Body, http::Request};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use bgtutor::{
+use http_body_util::BodyExt;
+use neondojo::{
     api::{self, AppState},
     engine::Engine,
     import,
     model::Position,
     store,
 };
-use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
@@ -77,7 +77,7 @@ async fn setup(pool: &PgPool) -> (axum::Router, Uuid, Vec<Position>) {
     .unwrap();
     let id = imported.r#match.id;
     save_match(pool, id).await;
-    bgtutor::move_catalog::ensure_catalog(pool, id)
+    neondojo::move_catalog::ensure_catalog(pool, id)
         .await
         .unwrap();
     let positions = sqlx::query_as("SELECT * FROM positions WHERE match_uuid=$1 ORDER BY ordinal")
@@ -1337,7 +1337,7 @@ async fn table_columns_sort_both_directions_with_nulls_last_ties_and_keyset_page
     .r#match
     .id;
     save_match(&pool, second_match).await;
-    bgtutor::move_catalog::ensure_catalog(&pool, second_match)
+    neondojo::move_catalog::ensure_catalog(&pool, second_match)
         .await
         .unwrap();
     let second: Vec<Position> =
@@ -1701,7 +1701,7 @@ async fn mochy_player_filter_matches_on_roll_in_both_colors_without_opponent_lea
 
 #[test]
 fn legacy_v1_saved_definition_serialization_preserves_the_original_definition_bytes() {
-    use bgtutor::position_browser::PositionFilterDefinition;
+    use neondojo::position_browser::PositionFilterDefinition;
     for sort in ["match", "loss"] {
         let parsed: PositionFilterDefinition =
             serde_json::from_value(definition(json!({"sort":sort}))).unwrap();
@@ -1721,7 +1721,7 @@ fn legacy_v1_saved_definition_serialization_preserves_the_original_definition_by
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
 async fn global_cursors_are_invalidated_while_v1_saved_definitions_still_round_trip(pool: PgPool) {
-    use bgtutor::position_browser::PositionFilterDefinition;
+    use neondojo::position_browser::PositionFilterDefinition;
     let (app, id, positions) = setup(&pool).await;
     native(&pool, id, &positions[0], 1, 0.04, "completed").await;
     native(&pool, id, &positions[1], 1, 0.16, "completed").await;
@@ -1780,7 +1780,7 @@ async fn global_cursors_are_invalidated_while_v1_saved_definitions_still_round_t
 
 #[test]
 fn game_plan_filters_round_trip_without_changing_legacy_serialization() {
-    use bgtutor::position_browser::PositionFilterDefinition;
+    use neondojo::position_browser::PositionFilterDefinition;
     let legacy: PositionFilterDefinition =
         serde_json::from_value(json!({"schema_version":1})).unwrap();
     assert!(
@@ -1812,7 +1812,7 @@ async fn game_plan_filter_uses_the_player_on_roll_and_precedes_pagination(pool: 
             .iter()
             .filter(|p| {
                 let plans =
-                    bgtutor::game_plan::classify(p.board.as_slice().try_into().unwrap()).unwrap();
+                    neondojo::game_plan::classify(p.board.as_slice().try_into().unwrap()).unwrap();
                 serde_json::to_value(if p.player == 0 {
                     plans.white
                 } else {
@@ -1909,7 +1909,7 @@ async fn game_plan_cache_is_versioned_and_retained_positions_remain_searchable(p
     assert_eq!(after["items"][0]["source_available"], false);
     let cached: i64 =
         sqlx::query_scalar("SELECT count(*) FROM position_game_plans WHERE classifier=$1")
-            .bind(bgtutor::game_plan::CLASSIFIER)
+            .bind(neondojo::game_plan::CLASSIFIER)
             .fetch_one(&pool)
             .await
             .unwrap();

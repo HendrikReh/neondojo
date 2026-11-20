@@ -1,6 +1,6 @@
 use axum::{body::Body, http::Request};
-use bgtutor::{api, engine::Engine, import, store};
 use http_body_util::BodyExt;
+use neondojo::{api, engine::Engine, import, store};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -32,7 +32,7 @@ async fn fixture(pool: &PgPool, count: u128) -> (axum::Router, Uuid, Uuid, Uuid)
     )
     .await
     .unwrap();
-    bgtutor::move_catalog::ensure_catalog(pool, imported.r#match.id)
+    neondojo::move_catalog::ensure_catalog(pool, imported.r#match.id)
         .await
         .unwrap();
     let position = store::positions(pool, Some(imported.r#match.id), None, None, 1)

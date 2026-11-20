@@ -1616,7 +1616,7 @@ pub fn source_metadata(sgf: &str) -> SourceMetadata {
         black = black.min(length);
     }
     if white < length && black < length {
-        // A BG Tutor forfeit awards the remaining match points without a game result.
+        // A Neondojo forfeit awards the remaining match points without a game result.
         match prop(crate::import::sgf::MATCH_FORFEIT_PROPERTY, 1).as_deref() {
             Some("W") => black = length,
             Some("B") => white = length,

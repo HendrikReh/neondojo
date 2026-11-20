@@ -93,7 +93,7 @@ move below the first five candidates at 0, 1 and 2 plies. They require a real
 GNUbg installation and can be run with:
 
 ```
-GNUBG_BIN=/path/to/gnubg cargo test -p bgtutor match_analysis::tests --lib -- --ignored
+GNUBG_BIN=/path/to/gnubg cargo test -p neondojo match_analysis::tests --lib -- --ignored
 ```
 
 ## Additional XG import regressions

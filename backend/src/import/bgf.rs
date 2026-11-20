@@ -289,7 +289,7 @@ pub fn bgf_to_sgf(input: &[u8]) -> Result<String> {
         if data.use_jacoby && data.matchlen == 0 {
             rules.push("Jacoby");
         }
-        out.push_str(&format!("(;FF[4]GM[6]CA[UTF-8]AP[BGTutor:BGF1]PW[{}]PB[{}]MI[length:{}][game:{game_index}][ws:{}][bs:{}]",escape_value(names[0]),escape_value(names[1]),data.matchlen,scores[0],scores[1]));
+        out.push_str(&format!("(;FF[4]GM[6]CA[UTF-8]AP[Neondojo:BGF1]PW[{}]PB[{}]MI[length:{}][game:{game_index}][ws:{}][bs:{}]",escape_value(names[0]),escape_value(names[1]),data.matchlen,scores[0],scores[1]));
         if game_index == 0 {
             context.write_sgf(&mut out);
         }

@@ -10,8 +10,8 @@ import { test, expect } from './test';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
-    if (!localStorage.getItem('bgtutor.locale'))
-      localStorage.setItem('bgtutor.locale', 'de');
+    if (!localStorage.getItem('neondojo.locale'))
+      localStorage.setItem('neondojo.locale', 'de');
   });
 });
 
@@ -82,7 +82,7 @@ test('real import, search, GNUbg analysis, distribution, themes and mobile layou
   await page.getByRole('tab', { name: 'Zugkandidaten' }).click();
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({
-    path: 'test-results/bgtutor-desktop.png',
+    path: 'test-results/neondojo-desktop.png',
     fullPage: true,
   });
   await page.reload();
@@ -105,7 +105,7 @@ test('real import, search, GNUbg analysis, distribution, themes and mobile layou
     ),
   ).toBe(true);
   await page.screenshot({
-    path: 'test-results/bgtutor-mobile.png',
+    path: 'test-results/neondojo-mobile.png',
     fullPage: true,
   });
   expect(errors).toEqual([]);
@@ -246,7 +246,7 @@ test('full match analysis starts and preserves conflicting local settings', asyn
   });
   await page.addInitScript((draft) => {
     localStorage.setItem(
-      'bgtutor.configuration-pending.v1',
+      'neondojo.configuration-pending.v1',
       JSON.stringify(draft),
     );
   }, pending);
@@ -285,7 +285,7 @@ test('full match analysis starts and preserves conflicting local settings', asyn
   expect(profile.calls.filter(({ method }) => method !== 'GET')).toEqual([]);
   expect(
     await page.evaluate(() =>
-      JSON.parse(localStorage.getItem('bgtutor.configuration-pending.v1')!),
+      JSON.parse(localStorage.getItem('neondojo.configuration-pending.v1')!),
     ),
   ).toEqual(pending);
 });

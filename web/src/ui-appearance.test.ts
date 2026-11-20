@@ -12,8 +12,8 @@ import {
 
 function memoryStorage(raw: string | null = null) {
   const values = new Map<string, string>();
-  if (raw !== null) values.set('bgtutor.ui-appearance', raw);
-  values.set('bgtutor.theme', 'walnut');
+  if (raw !== null) values.set('neondojo.ui-appearance', raw);
+  values.set('neondojo.theme', 'walnut');
   return {
     values,
     getItem: (key: string) => values.get(key) ?? null,
@@ -28,7 +28,7 @@ describe('interface appearance preferences', () => {
       theme: 'graphite',
       mode: 'system',
     });
-    expect(storage.values.get('bgtutor.theme')).toBe('walnut');
+    expect(storage.values.get('neondojo.theme')).toBe('walnut');
   });
 
   it('persists every supported combination in a separate versioned namespace', () => {
@@ -42,7 +42,7 @@ describe('interface appearance preferences', () => {
         );
       }
     }
-    expect(storage.values.get('bgtutor.theme')).toBe('walnut');
+    expect(storage.values.get('neondojo.theme')).toBe('walnut');
   });
 
   it('rejects corrupt, unsupported and incomplete stored preferences', () => {

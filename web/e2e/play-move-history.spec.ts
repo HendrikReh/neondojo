@@ -52,9 +52,9 @@ for (const config of [
     const writes: unknown[] = [];
     await page.addInitScript(
       ({ id, theme }) => {
-        localStorage.setItem('bgtutor.locale', 'en');
-        localStorage.setItem('bgtutor.play-session', id);
-        localStorage.setItem('bgtutor.theme', theme);
+        localStorage.setItem('neondojo.locale', 'en');
+        localStorage.setItem('neondojo.play-session', id);
+        localStorage.setItem('neondojo.theme', theme);
       },
       { id, theme: config.theme },
     );
@@ -189,8 +189,8 @@ test('history rates the corrected move and names the session analysis engine', a
     opening: null,
   };
   await page.addInitScript((id) => {
-    localStorage.setItem('bgtutor.locale', 'en');
-    localStorage.setItem('bgtutor.play-session', id);
+    localStorage.setItem('neondojo.locale', 'en');
+    localStorage.setItem('neondojo.play-session', id);
   }, id);
   await page.route(`**/api/play/sessions/${id}`, (r) =>
     r.fulfill({ json: saved }),

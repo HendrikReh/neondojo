@@ -10,7 +10,7 @@ test.use({ actionTimeout: 10000 });
 test('compares saved catalog analyses without filtering them by calculation engine', async ({
   page,
 }, info) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   const summary = (engine: string, plies: number, loss: number) => ({
     engine,
     plies,
@@ -174,7 +174,7 @@ function analyzedGameFile() {
 test('played move arrows and before/after remain tied to the original decision', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await page.getByLabel('Match file', { exact: true }).setInputFiles({
     name: 'preview.sgf',
@@ -215,7 +215,7 @@ test('played move arrows and before/after remain tied to the original decision',
 test('file, book and native candidates preview explicitly and source changes restore the played move', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await page
     .getByLabel('Match file', { exact: true })
@@ -283,7 +283,7 @@ for (const [layout, viewport] of [
   }) => {
     await page.setViewportSize(viewport);
     await page.addInitScript(() =>
-      localStorage.setItem('bgtutor.locale', 'de'),
+      localStorage.setItem('neondojo.locale', 'de'),
     );
     await page.goto('/');
     await page
@@ -320,7 +320,7 @@ for (const [layout, viewport] of [
 test('native match and game metrics open the exact visible decision filters', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await page.getByLabel('Match file', { exact: true }).setInputFiles({
     name: 'statistics-drilldown.sgf',
@@ -438,7 +438,7 @@ test('native match and game metrics open the exact visible decision filters', as
 test('a delayed next-error response cannot undo manual move navigation', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await page.getByLabel('Match file', { exact: true }).setInputFiles({
     name: 'next-error-race.sgf',
@@ -510,7 +510,7 @@ test('a delayed next-error response cannot undo manual move navigation', async (
 test('all board themes render the same arrows and projected checker counts', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await page.getByLabel('Match file', { exact: true }).setInputFiles({
     name: 'preview-themes.sgf',
@@ -532,7 +532,7 @@ test('all board themes render the same arrows and projected checker counts', asy
     await expect
       .poll(() =>
         page.evaluate(() =>
-          localStorage.getItem('bgtutor.configuration-pending.v1'),
+          localStorage.getItem('neondojo.configuration-pending.v1'),
         ),
       )
       .toBeNull();

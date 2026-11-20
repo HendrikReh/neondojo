@@ -1,6 +1,6 @@
 import { themes, type Theme } from './themes';
 
-export const themeStorageKey = 'bgtutor.theme';
+export const themeStorageKey = 'neondojo.theme';
 
 export function readTheme(storage?: Pick<Storage, 'getItem'>): Theme {
   try {

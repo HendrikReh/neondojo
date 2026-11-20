@@ -1,4 +1,4 @@
-use bgtutor::import::{ogxm_to_sgf, parse_sgf};
+use neondojo::import::{ogxm_to_sgf, parse_sgf};
 
 #[test]
 fn archive_match_agrees_with_independent_gnubg_replay() {
@@ -17,7 +17,7 @@ fn archive_match_agrees_with_independent_gnubg_replay() {
         assert_eq!(p.position_id, q.position_id);
         assert_eq!(p.match_id, q.match_id);
     }
-    let metadata = bgtutor::databases::source_metadata(&sgf);
+    let metadata = neondojo::databases::source_metadata(&sgf);
     assert_eq!(metadata.tournament.as_deref(), Some("CdF Super Jackpot"));
     assert_eq!(metadata.played_on.unwrap().to_string(), "2026-10-24");
     assert_eq!(

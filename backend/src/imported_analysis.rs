@@ -82,7 +82,7 @@ pub(crate) fn sgf_notation(value: &str, player: i32) -> String {
     }
 }
 /// GNUbg SGF evaluations record GNUbg's native level (0 = raw evaluation);
-/// the stored depth uses BG Tutor's ply convention. The raw token is kept.
+/// the stored depth uses Neondojo's ply convention. The raw token is kept.
 fn gnubg_depth(token: Option<&&str>) -> (Option<String>, Option<i32>) {
     let Some(token) = token else {
         return (None, None);
@@ -801,7 +801,7 @@ mod tests {
             .expect("source analysis must be extracted");
         assert_eq!(first.engine, "GNU Backgammon");
         assert_eq!(first.engine_version.as_deref(), Some("1.05.002"));
-        // The source token "0C" is GNUbg's native raw evaluation: BG Tutor 1-ply.
+        // The source token "0C" is GNUbg's native raw evaluation: Neondojo 1-ply.
         assert_eq!(first.depth_plies, Some(1));
         assert_eq!(first.depth.as_deref(), Some("1-ply cubeful"));
         assert_eq!(first.candidates[0].depth_plies, Some(1));

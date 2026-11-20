@@ -19,13 +19,13 @@ async function fixture(page: Page, hold = false) {
   });
   await page.addInitScript(
     ({ id }) => {
-      localStorage.setItem('bgtutor.locale', 'en');
+      localStorage.setItem('neondojo.locale', 'en');
       if (!sessionStorage.getItem('home-fixture-seeded')) {
         localStorage.setItem(
-          'bgtutor.workspace',
+          'neondojo.workspace',
           JSON.stringify({ matchId: id, gameNo: 1 }),
         );
-        localStorage.setItem('bgtutor.play-session', 'preserve-bot-session');
+        localStorage.setItem('neondojo.play-session', 'preserve-bot-session');
         sessionStorage.setItem('home-fixture-seeded', 'yes');
       }
     },
@@ -93,7 +93,7 @@ for (const target of ['icon', 'title', 'keyboard'])
     });
     if (target === 'keyboard') {
       await page
-        .getByRole('link', { name: 'BG Tutor home', exact: true })
+        .getByRole('link', { name: 'Neondojo home', exact: true })
         .focus();
       await page.keyboard.press('Enter');
     } else
@@ -109,10 +109,10 @@ for (const target of ['icon', 'title', 'keyboard'])
       page.getByRole('tab', { name: 'Analysis', exact: true }),
     ).toHaveAttribute('aria-selected', 'true');
     expect(
-      await page.evaluate(() => localStorage.getItem('bgtutor.workspace')),
+      await page.evaluate(() => localStorage.getItem('neondojo.workspace')),
     ).toBeNull();
     expect(
-      await page.evaluate(() => localStorage.getItem('bgtutor.play-session')),
+      await page.evaluate(() => localStorage.getItem('neondojo.play-session')),
     ).toBe('preserve-bot-session');
     await page.reload();
     await expect(page.locator('.analysis-welcome')).toBeVisible();
@@ -121,11 +121,11 @@ test('home cancels pending restoration', async ({ page }) => {
   const release = await fixture(page, true);
   try {
     await page
-      .getByRole('link', { name: 'BG Tutor home', exact: true })
+      .getByRole('link', { name: 'Neondojo home', exact: true })
       .click();
     await expect(page.locator('.analysis-welcome')).toBeVisible();
     expect(
-      await page.evaluate(() => localStorage.getItem('bgtutor.workspace')),
+      await page.evaluate(() => localStorage.getItem('neondojo.workspace')),
     ).toBeNull();
     release();
     await expect(page.locator('.analysis-workspace .board')).toHaveCount(0);
@@ -158,7 +158,7 @@ test('a finishing import cannot reopen a match after Home', async ({
   await started;
   try {
     await page
-      .getByRole('link', { name: 'BG Tutor home', exact: true })
+      .getByRole('link', { name: 'Neondojo home', exact: true })
       .click();
     await expect(page.locator('.analysis-welcome')).toBeVisible();
     release();
@@ -167,7 +167,7 @@ test('a finishing import cannot reopen a match after Home', async ({
     );
     await expect(page.locator('.analysis-welcome')).toBeVisible();
     expect(
-      await page.evaluate(() => localStorage.getItem('bgtutor.workspace')),
+      await page.evaluate(() => localStorage.getItem('neondojo.workspace')),
     ).toBeNull();
   } finally {
     release();

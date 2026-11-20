@@ -10,7 +10,7 @@ export const playSoundFiles: Record<PlaySound, string> = {
   bear_off: moveRecording,
   cube: cubeRecording,
 };
-export const playSoundsStorageKey = 'bgtutor.play-sounds';
+export const playSoundsStorageKey = 'neondojo.play-sounds';
 let enabledInMemory = true;
 
 export function readPlaySounds(storage?: Pick<Storage, 'getItem'>): boolean {

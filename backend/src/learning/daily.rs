@@ -32,7 +32,7 @@ impl NewCardAllowance {
     }
 }
 
-/// Start of the current day on the computer that runs BG Tutor.
+/// Start of the current day on the computer that runs Neondojo.
 fn local_day_start() -> DateTime<Utc> {
     let now = Local::now();
     now.with_time(NaiveTime::MIN)

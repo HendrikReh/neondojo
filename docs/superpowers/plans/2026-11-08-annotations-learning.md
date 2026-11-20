@@ -24,11 +24,11 @@ Partien und Positionen erhalten bearbeitbare Tags und einen Kommentar. Beides is
 - https://docs.rs/fsrs/latest/fsrs/
 - https://docs.rs/genanki-rs/latest/genanki_rs/
 
-Die Quellen sprechen für thematische und persönliche Fehlerdecks. BG Tutor nutzt seine vorhandenen Import-/Analyseergebnisse und setzt Export und Lernzustand in Rust um. Fremde Trainingsdecks oder Texte werden nicht übernommen.
+Die Quellen sprechen für thematische und persönliche Fehlerdecks. Neondojo nutzt seine vorhandenen Import-/Analyseergebnisse und setzt Export und Lernzustand in Rust um. Fremde Trainingsdecks oder Texte werden nicht übernommen.
 
 ## Umsetzung und Verifikation
 
-Umgesetzt: Migrationen 0003–0005, Annotationen mit Versionsschutz, indizierte Suche, gemeinsame Rust-Kartenbibliothek, APKG-Export, FSRS-Lernmodus und Oberfläche in allen sechs Sprachen. Die Card-Fragen zeigen Matchlänge, Spielstand, Doppler, Spieler am Zug und bei Money Games die Jacoby-Regel. Anki und BG Tutor behalten getrennte Lernstände.
+Umgesetzt: Migrationen 0003–0005, Annotationen mit Versionsschutz, indizierte Suche, gemeinsame Rust-Kartenbibliothek, APKG-Export, FSRS-Lernmodus und Oberfläche in allen sechs Sprachen. Die Card-Fragen zeigen Matchlänge, Spielstand, Doppler, Spieler am Zug und bei Money Games die Jacoby-Regel. Anki und Neondojo behalten getrennte Lernstände.
 
 Verifiziert am 8. November 2026:
 

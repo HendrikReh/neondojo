@@ -10,9 +10,9 @@ async function openMatch(
 ) {
   await page.addInitScript(
     ({ theme, mode, locale }) => {
-      localStorage.setItem('bgtutor.locale', locale);
+      localStorage.setItem('neondojo.locale', locale);
       localStorage.setItem(
-        'bgtutor.ui-appearance',
+        'neondojo.ui-appearance',
         JSON.stringify({ version: 1, theme, mode }),
       );
     },
@@ -76,7 +76,7 @@ async function openMatch(
   await page.addInitScript(
     (id) =>
       localStorage.setItem(
-        'bgtutor.workspace',
+        'neondojo.workspace',
         JSON.stringify({ matchId: id, gameNo: 1 }),
       ),
     imported.match.id,

@@ -8,7 +8,7 @@
 
 **Tech Stack:** Rust/Axum/SQLx/PostgreSQL; React/TypeScript; Playwright/Vitest.
 
-- [x] Add backend/tests/study_reports.rs covering existing reports, pagination past 100, missing/unfinished reports, invalid cursors and persisted detail without an engine. Run DATABASE_URL=postgres://bgtutor:bgtutor_local@127.0.0.1:54329/bgtutor cargo test -p bgtutor --test study_reports -- --ignored; expect 404 before implementation.
+- [x] Add backend/tests/study_reports.rs covering existing reports, pagination past 100, missing/unfinished reports, invalid cursors and persisted detail without an engine. Run DATABASE_URL=postgres://neondojo:neondojo_local@127.0.0.1:54329/neondojo cargo test -p neondojo --test study_reports -- --ignored; expect 404 before implementation.
 - [x] Add backend/src/study.rs with GET /api/study/reports and /api/study/reports/{id}, DTOs and cursor validation; register routes and OpenAPI in backend/src/lib.rs and api.rs. Add migration 0030_study_reports.sql for a partial recent-report index. Re-run backend tests.
 - [x] Add web/e2e/study-reports.spec.ts for archive navigation/detail, refresh/reload, pagination/error/retry and deck routing. Run against current app; expect missing Study tab.
 - [x] Add web/src/study-api.ts, study-messages.ts, StudyWorkspace.tsx, StudyReports.tsx and study.css. Wrap LearningPanel in App, keep flashcards as initial area for compatibility and open reports via second tab. Preserve hidden flashcard state; archive loads only while visible. Reuse PlayLearningReview for full persisted details.
@@ -25,7 +25,7 @@ Verification on 2026-11-10:
 - Review identified the long-list visibility issue; fixed by focusing the opened report heading and adding a return-to-list action. Follow-up review found no remaining actionable issues.
 - An additional existing Positions row-height test fails at 55px versus its <=40px expectation. Reproduced with the Study wrapper removed, confirming it is independent of this feature; no unrelated layout change made.
 - Rust fmt, clippy with warnings denied, and git diff --check passed.
-- Local backend restarted with migration 0030 and updated production frontend. Actual archive returned the existing report and its detail via HTTP 200. A real German browser check opened it without JavaScript errors or API writes. Screenshots inspected at /tmp/bgtutor-study-archive.png and /tmp/bgtutor-study-detail.png.
+- Local backend restarted with migration 0030 and updated production frontend. Actual archive returned the existing report and its detail via HTTP 200. A real German browser check opened it without JavaScript errors or API writes. Screenshots inspected at /tmp/neondojo-study-archive.png and /tmp/neondojo-study-detail.png.
 - Existing feature branch and all pre-existing uncommitted work preserved; no merge, push, or unrelated staging.
 
 

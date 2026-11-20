@@ -59,7 +59,7 @@ const de = {
   reviews: 'Wiederholungen',
   nextDue: 'Nächste Wiederholung: {date}',
   separateProgress:
-    'Die Karteninhalte werden gemeinsam genutzt. Der Lernfortschritt wird in BG Tutor und Anki jeweils separat gespeichert.',
+    'Die Karteninhalte werden gemeinsam genutzt. Der Lernfortschritt wird in Neondojo und Anki jeweils separat gespeichert.',
   noDeck: 'Bitte zuerst ein Deck erstellen.',
   nativeDiagnostic: 'Technische Details',
   retention: 'Wiederholungsplanung mit FSRS · Zielbehalten 90 %',
@@ -138,7 +138,7 @@ const en: Messages = {
   reviews: 'Reviews',
   nextDue: 'Next review: {date}',
   separateProgress:
-    'Card content is shared. Learning progress is stored separately in BG Tutor and Anki.',
+    'Card content is shared. Learning progress is stored separately in Neondojo and Anki.',
   noDeck: 'Create a deck first.',
   nativeDiagnostic: 'Technical details',
   retention: 'FSRS scheduling · 90% target retention',
@@ -216,7 +216,7 @@ const es: Messages = {
   reviews: 'Repasos',
   nextDue: 'Próximo repaso: {date}',
   separateProgress:
-    'El contenido de las tarjetas se comparte. El progreso se guarda por separado en BG Tutor y Anki.',
+    'El contenido de las tarjetas se comparte. El progreso se guarda por separado en Neondojo y Anki.',
   noDeck: 'Primero crea un mazo.',
   nativeDiagnostic: 'Detalles técnicos',
   retention: 'Planificación FSRS · Retención objetivo del 90 %',
@@ -294,7 +294,7 @@ const fr: Messages = {
   reviews: 'Révisions',
   nextDue: 'Prochaine révision : {date}',
   separateProgress:
-    'Le contenu des cartes est partagé. La progression est enregistrée séparément dans BG Tutor et Anki.',
+    'Le contenu des cartes est partagé. La progression est enregistrée séparément dans Neondojo et Anki.',
   noDeck: 'Créez d’abord un paquet.',
   nativeDiagnostic: 'Détails techniques',
   retention: 'Planification FSRS · Rétention cible de 90 %',
@@ -373,7 +373,7 @@ const pl: Messages = {
   reviews: 'Powtórki',
   nextDue: 'Następna powtórka: {date}',
   separateProgress:
-    'Treść kart jest wspólna. Postępy nauki są zapisywane osobno w BG Tutor i Anki.',
+    'Treść kart jest wspólna. Postępy nauki są zapisywane osobno w Neondojo i Anki.',
   noDeck: 'Najpierw utwórz talię.',
   nativeDiagnostic: 'Szczegóły techniczne',
   retention: 'Harmonogram FSRS · Docelowa retencja 90%',
@@ -451,7 +451,7 @@ const it: Messages = {
   reviews: 'Ripassi',
   nextDue: 'Prossimo ripasso: {date}',
   separateProgress:
-    'Il contenuto delle schede è condiviso. I progressi vengono salvati separatamente in BG Tutor e Anki.',
+    'Il contenuto delle schede è condiviso. I progressi vengono salvati separatamente in Neondojo e Anki.',
   noDeck: 'Crea prima un mazzo.',
   nativeDiagnostic: 'Dettagli tecnici',
   retention: 'Pianificazione FSRS · Ritenzione obiettivo del 90%',

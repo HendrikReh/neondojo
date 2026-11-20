@@ -28,11 +28,11 @@ pub struct AppSettings {
     pub version: i64,
     pub player_name: String,
     pub analysis_engine: String,
-    /// Depth in BG Tutor's ply convention; 1-ply is the raw evaluation.
+    /// Depth in Neondojo's ply convention; 1-ply is the raw evaluation.
     #[schema(minimum = 1, maximum = 5, default = 3)]
     pub analysis_plies: i32,
     pub play_engine: String,
-    /// Depth in BG Tutor's ply convention; 1-ply is the raw evaluation.
+    /// Depth in Neondojo's ply convention; 1-ply is the raw evaluation.
     #[schema(minimum = 1, maximum = 3, default = 1)]
     pub play_plies: i32,
     pub gnubg_path: String,

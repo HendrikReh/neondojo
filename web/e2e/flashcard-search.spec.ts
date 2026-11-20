@@ -49,8 +49,8 @@ async function setup(page: Page, singleDeck = false) {
   const writes: string[] = [];
   let slow: (() => Promise<void>) | undefined;
   await page.addInitScript(() => {
-    localStorage.setItem('bgtutor.locale', 'en');
-    localStorage.setItem('bgtutor.deck', '__all__');
+    localStorage.setItem('neondojo.locale', 'en');
+    localStorage.setItem('neondojo.deck', '__all__');
   });
   await page.route('**/api/decks', (route) =>
     route.fulfill({

@@ -43,8 +43,8 @@ async function fixture(page: Page, count = 2, repeatWithinGame = false) {
     entries.push({ match, positions, metadata });
   }
   await page.addInitScript((id) => {
-    localStorage.setItem('bgtutor.locale', 'en');
-    localStorage.setItem('bgtutor.database', id);
+    localStorage.setItem('neondojo.locale', 'en');
+    localStorage.setItem('neondojo.database', id);
   }, database.id);
   await page.goto('/');
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();
@@ -529,7 +529,7 @@ test('position-search column widths resize and persist in the browser', async ({
   const header = (id: string) => page.locator(`th[data-column="${id}"]`);
   const width = async (id: string) => (await header(id).boundingBox())!.width;
   const localWidths = () => page.evaluate(() =>
-    JSON.parse(localStorage.getItem('bgtutor.layout.library.columns.v1') ?? 'null'),
+    JSON.parse(localStorage.getItem('neondojo.layout.library.columns.v1') ?? 'null'),
   );
   const saved: Record<string, number> = {};
   for (const [id, delta] of [

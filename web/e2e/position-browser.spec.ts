@@ -10,7 +10,7 @@ test.use({ actionTimeout: 10000 });
 test('header omits import while the match database retains working file import', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await expect(
     page.getByRole('banner').getByRole('button', { name: /Import match/ }),
@@ -96,7 +96,7 @@ test('positions show the first results, full board and analysis action together 
   page,
 }) => {
   await page.setViewportSize({ width: 1800, height: 1169 });
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   const f = await fixture(page);
   const pane = await openBrowser(page, f.database.id);
   const rows = pane.locator('.position-table tbody tr');
@@ -115,7 +115,7 @@ test('positions show the first results, full board and analysis action together 
 test('applied filters stay visible when advanced filters are collapsed and can be removed independently', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   const f = await fixture(page);
   const pane = await openBrowser(page, f.database.id);
   const more = pane.getByText('More filters', { exact: true });
@@ -151,7 +151,7 @@ test('default position columns fit beside the board and optional columns persist
   page,
 }) => {
   await page.setViewportSize({ width: 1800, height: 1169 });
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'de'));
   const f = await fixture(page);
   await page.goto('/');
   await page.getByRole('tab', { name: 'Positionen', exact: true }).click();
@@ -232,7 +232,7 @@ async function saveSearchDialog(page: Page, pane: Locator) {
 test('paging previews the first result and keeps checkbox selections across pages', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   const f = await fixture(page, 14);
   const pane = await openBrowser(page, f.database.id);
   const rows = pane.locator('.position-table tbody tr');
@@ -277,7 +277,7 @@ test('selection actions open a transfer dialog with the missing local analysis c
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 1800, height: 1169 });
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   const f = await fixture(page);
   const pane = await openBrowser(page, f.database.id);
   const actions = pane.locator('.position-selection-summary');
@@ -326,7 +326,7 @@ test('selection actions open a transfer dialog with the missing local analysis c
 });
 
 test('transfer checks positions in selection order', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   const f = await fixture(page);
   const pane = await openBrowser(page, f.database.id);
   const rows = pane.locator('.position-table tbody tr');
@@ -354,10 +354,10 @@ test('deck memberships refresh on later result pages and retain existing column 
     ]),
   );
   await page.addInitScript((widths) => {
-    localStorage.setItem('bgtutor.locale', 'en');
-    if (!localStorage.getItem('bgtutor.positions.columns'))
+    localStorage.setItem('neondojo.locale', 'en');
+    if (!localStorage.getItem('neondojo.positions.columns'))
       localStorage.setItem(
-        'bgtutor.positions.columns',
+        'neondojo.positions.columns',
         JSON.stringify({ version: 1, widths }),
       );
   }, legacyWidths);
@@ -477,7 +477,7 @@ test('deck memberships refresh on later result pages and retain existing column 
 test('position notes filter exact decisions, search definitions persist, and pagination stays contextual', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   const f = await fixture(page, 15);
   const annotated = await page.request.put(
     `/api/positions/${f.positions[0].id}/annotation`,
@@ -577,7 +577,7 @@ test('position notes filter exact decisions, search definitions persist, and pag
 test('found positions flow through real analysis, partial card transfer, Anki export and a fresh study session', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   // Keep FSRS progress separate from the commonly reviewed seven-point fixtures.
   const f = await fixture(page, 1, 61),
     pane = await openBrowser(page, f.database.id),
@@ -675,7 +675,7 @@ test('found positions flow through real analysis, partial card transfer, Anki ex
 test('a delayed old search cannot replace a newly loaded saved search', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   const f = await fixture(page);
   const saved = await (
     await page.request.post('/api/position-filters', {
@@ -736,7 +736,7 @@ test('a delayed old search cannot replace a newly loaded saved search', async ({
 test('saved-search conflicts retain drafts and deleted database scopes never broaden silently', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   const f = await fixture(page),
     replacement = await fixture(page);
   const saved = await (
@@ -812,7 +812,7 @@ test('positions keep a readable active tab and contain wide results on mobile', 
   page,
 }) => {
   await page.emulateMedia({ colorScheme: 'light' });
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   const f = await fixture(page);
   const pane = await openBrowser(page, f.database.id);
   await expect(pane.locator('.position-table tbody tr')).toHaveCount(2);

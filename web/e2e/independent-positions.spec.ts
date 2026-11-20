@@ -126,8 +126,8 @@ async function setup(page: Page, learn = false) {
     expect(card!.review_count).toBe(previousReviews + 1);
   }
   await page.addInitScript((id) => {
-    localStorage.setItem('bgtutor.locale', 'en');
-    localStorage.setItem('bgtutor.database', id);
+    localStorage.setItem('neondojo.locale', 'en');
+    localStorage.setItem('neondojo.database', id);
   }, database.id);
   await page.goto('/');
   return {

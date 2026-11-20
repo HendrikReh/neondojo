@@ -12,7 +12,7 @@ for (const scope of ['match', 'game'] as const) {
     page,
   }) => {
     await page.addInitScript(() =>
-      localStorage.setItem('bgtutor.locale', 'en'),
+      localStorage.setItem('neondojo.locale', 'en'),
     );
     await page.goto('/');
     await page.getByLabel('Match file', { exact: true }).setInputFiles({

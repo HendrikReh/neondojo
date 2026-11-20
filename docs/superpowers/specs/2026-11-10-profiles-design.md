@@ -1,6 +1,6 @@
 # Profile: funktionale und technische Spezifikation
 
-Stand: 10. November 2026. Grundlage ist der vom Nutzer bestätigte Entwurf. Diese Spezifikation ist der fachliche Vertrag für die Umsetzung im vorhandenen BGTutor; Prüfergebnisse werden im Implementierungsplan festgehalten.
+Stand: 10. November 2026. Grundlage ist der vom Nutzer bestätigte Entwurf. Diese Spezifikation ist der fachliche Vertrag für die Umsetzung im vorhandenen Neondojo; Prüfergebnisse werden im Implementierungsplan festgehalten.
 
 ## 1. Ziel und Begriffe
 
@@ -199,7 +199,7 @@ Nach unklarem Netzwerkabbruch wird zuerst der Zustand gelesen. Eine Namensoperat
 
 1. SQL-Migration erzeugt die Tabellen, übernimmt aber keine erfundenen Browserwerte und ändert keine laufenden Sitzungen.
 2. Beim ersten aktualisierten Browserstart werden bestätigte App-/Book-Einstellungen und validierte bestehende Browserwerte zu „Standard“ zusammengeführt. Nicht bisher persistierte Ansichtswerte erhalten ihre bisherigen Code-Defaults.
-3. Übernommene Schlüssel: `bgtutor.locale`, `bgtutor.theme`, `bgtutor.ui-appearance`, `bgtutor.play-sounds`, `bgtutor.library.visibleColumns`, `bgtutor.library.columns`, `bgtutor.positions.columns`, `bgtutor.positions.showPlayed`, `bgtutor.database`, `bgtutor.deck`. Arbeitszustandsschlüssel wie `bgtutor.workspace`, `bgtutor.play-session` und `bgtutor.jobs.*` bleiben getrennt.
+3. Übernommene Schlüssel: `neondojo.locale`, `neondojo.theme`, `neondojo.ui-appearance`, `neondojo.play-sounds`, `neondojo.library.visibleColumns`, `neondojo.library.columns`, `neondojo.positions.columns`, `neondojo.positions.showPlayed`, `neondojo.database`, `neondojo.deck`. Arbeitszustandsschlüssel wie `neondojo.workspace`, `neondojo.play-session` und `neondojo.jobs.*` bleiben getrennt.
 4. Initialisierung ist transaktional und konkurrenzfest: Von zwei Browsern gewinnt genau einer. Andere Browser zeigen anschließend die bereits vorhandene zentrale Konfiguration; kein zweites „Standard“ und kein erneuter Import.
 5. Beschädigte Legacywerte verwenden denselben dokumentierten Fallback wie bisher. Nicht mehr existierende Legacy-Datenbank-/Deckauswahl fällt ausschließlich bei dieser Erstübernahme mit sichtbarem Hinweis auf den bisherigen Standard zurück. Ein fehlender bisher konfigurierter Book-Pfad bleibt erhalten und wird als nicht verfügbar gemeldet.
 6. Vorhandene Cache-Schlüssel bleiben für das frühe Theme-/Sprach-Rendering verwendbar, werden nach bestätigter Übernahme nur noch aus dem Provider aktualisiert. Wiederholtes Laden/Initialisieren verändert keine Profile.

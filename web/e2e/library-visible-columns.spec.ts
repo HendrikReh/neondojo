@@ -40,8 +40,8 @@ async function fixture(page: Page) {
     matches.push(match);
   }
   await page.addInitScript((id) => {
-    localStorage.setItem('bgtutor.locale', 'en');
-    localStorage.setItem('bgtutor.database', id);
+    localStorage.setItem('neondojo.locale', 'en');
+    localStorage.setItem('neondojo.database', id);
   }, database.id);
   await page.goto('/');
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();
@@ -127,9 +127,9 @@ test('hidden columns retain their widths and legacy notes widths migrate to tags
     actions: 88,
   };
   await page.addInitScript((widths) => {
-    if (!localStorage.getItem('bgtutor.library.columns'))
+    if (!localStorage.getItem('neondojo.library.columns'))
       localStorage.setItem(
-        'bgtutor.library.columns',
+        'neondojo.library.columns',
         JSON.stringify({ version: 1, widths }),
       );
   }, legacy);
@@ -172,7 +172,7 @@ test('opening and selection remain available with both player columns hidden', a
   await page.addInitScript(
     (widths) =>
       localStorage.setItem(
-        'bgtutor.library.columns',
+        'neondojo.library.columns',
         JSON.stringify({ version: 1, widths }),
       ),
     Object.fromEntries(

@@ -106,7 +106,7 @@ pub(super) async fn upload(
     tokio::fs::create_dir(&output)
         .await
         .map_err(anyhow::Error::from)?;
-    let python = std::env::var_os("BGTUTOR_ANKI_PYTHON").unwrap_or_else(|| "python3".into());
+    let python = std::env::var_os("NEONDOJO_ANKI_PYTHON").unwrap_or_else(|| "python3".into());
     let mut renderer = tokio::process::Command::new(python)
         .arg("-I")
         .arg("-c")
@@ -159,7 +159,7 @@ pub(super) async fn upload(
 fn renderer_unavailable() -> ApiError {
     ApiError(
         StatusCode::SERVICE_UNAVAILABLE,
-        "Install the Anki Python package and set BGTUTOR_ANKI_PYTHON to its Python interpreter"
+        "Install the Anki Python package and set NEONDOJO_ANKI_PYTHON to its Python interpreter"
             .into(),
     )
 }
@@ -313,7 +313,7 @@ async fn save_card(
     ensure!(input.tags.len() <= 100, "Too many Anki tags");
     let mut tags = BTreeSet::new();
     for tag in input.tags {
-        // A comma separates terms in the BG Tutor topic filter.
+        // A comma separates terms in the Neondojo topic filter.
         let tag = tag.replace(',', " ");
         tags.extend(topics::tags(vec![tag]).map_err(|error| anyhow::anyhow!("{}", error.1))?);
     }
@@ -408,7 +408,7 @@ pub async fn import_rendered_package(
     );
     ensure!(!manifest.decks.is_empty(), "No Anki decks");
     let mut tx = pool.begin().await?;
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended('bgtutor-anki-import',0))")
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended('neondojo-anki-import',0))")
         .execute(&mut *tx)
         .await?;
     let mut decks = BTreeMap::new();

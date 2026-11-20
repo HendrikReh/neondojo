@@ -1,4 +1,4 @@
-# Lernstartseite für BG Tutor
+# Lernstartseite für Neondojo
 
 Die Lernstartseite wird der erste Reiter unter **Study → Übersicht**. Sie zeigt den nächsten sinnvollen Schritt, die Zahl fälliger Lernkarten und die wichtigsten wiederkehrenden Fehler für den gewählten Spieler. Von hier aus startet ein Klick den vorhandenen Lernkartenablauf oder den Übungsdialog für eine konkrete Fehlergruppe.
 
@@ -49,7 +49,7 @@ Die Fälligkeit hat Vorrang. Während sie lädt, zeigt der Empfehlungsbereich se
 
 ```sh
 npm run api:types --prefix web
-cargo test -p bgtutor --test learning learning_summary_counts_unique_due_cards
+cargo test -p neondojo --test learning learning_summary_counts_unique_due_cards
 npm test --prefix web -- src/study-overview.test.ts
 npm run test:e2e --prefix web -- e2e/study-overview.spec.ts e2e/active-study-answers.spec.ts e2e/recurring-mistakes.spec.ts
 cargo fmt --all --check

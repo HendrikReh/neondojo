@@ -1,9 +1,9 @@
 use axum::{body::Body, http::Request};
-use bgtutor::{
+use http_body_util::BodyExt;
+use neondojo::{
     api::{self, AppState},
     engine::Engine,
 };
-use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -162,7 +162,7 @@ async fn metadata_get_missing_match_returns_json_404(pool: PgPool) {
 }
 
 fn native_result() -> Value {
-    use bgtutor::model::PlayerAnalysisSummary;
+    use neondojo::model::PlayerAnalysisSummary;
     let players = [
         PlayerAnalysisSummary {
             player: 0,
@@ -185,7 +185,7 @@ fn native_result() -> Value {
             ]
         }
     });
-    assert!(bgtutor::match_analysis::match_performance_rating(&value).is_some());
+    assert!(neondojo::match_analysis::match_performance_rating(&value).is_some());
     value
 }
 
@@ -225,7 +225,7 @@ async fn metadata_get_uses_only_authoritative_whole_match_native_pr(pool: PgPool
     game_result["total_games"] = json!(1);
     game_result["completed_games"] = json!(1);
     game_result["performance_rating"]["games"] = json!(1);
-    assert!(bgtutor::match_analysis::match_performance_rating(&game_result).is_some());
+    assert!(neondojo::match_analysis::match_performance_rating(&game_result).is_some());
     analysis(&pool, id, Some(1), game_result, 2).await;
     let scoped = metadata(&pool, id).await;
     assert_eq!(scoped["analysis_status"], "partial");

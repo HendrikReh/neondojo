@@ -2,7 +2,7 @@ import { expect, test, type Page } from './test';
 import { id, other, summary, detail } from './study-report-fixture';
 async function open(page: Page, locale = 'en') {
   await page.addInitScript(
-    (locale) => localStorage.setItem('bgtutor.locale', locale),
+    (locale) => localStorage.setItem('neondojo.locale', locale),
     locale,
   );
   await page.route('**/api/decks', (route) => route.fulfill({ json: [] }));
@@ -179,7 +179,7 @@ test('opening a report below a long archive moves keyboard focus to its visible 
 test('Study areas support German labels, unknown PR and arrow/Home/End navigation', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'de'));
   await page.route('**/api/decks', (r) => r.fulfill({ json: [] }));
   await page.route('**/api/study/similar-practice', (r) =>
     r.fulfill({ json: { items: [], next_cursor: null } }),
@@ -243,7 +243,7 @@ test('Practice history switches rolling windows while keeping retry rounds visib
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 900 });
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   const round = (
     id: string,
     date: string,

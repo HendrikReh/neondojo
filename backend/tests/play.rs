@@ -1,9 +1,9 @@
 use axum::{body::Body, http::Request};
-use bgtutor::{
+use http_body_util::BodyExt;
+use neondojo::{
     api::{self, AppState},
     engine::Engine,
 };
-use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -138,7 +138,7 @@ async fn assert_library_checkpoint(pool: &PgPool, app: &axum::Router, session: &
         .unwrap();
     assert_eq!(row["position_count"].as_i64().unwrap(), count);
     assert!(row["played_on"].as_str().is_some());
-    bgtutor::move_catalog::ensure_catalog(pool, match_id)
+    neondojo::move_catalog::ensure_catalog(pool, match_id)
         .await
         .unwrap();
 }
@@ -643,7 +643,7 @@ async fn whole_native_match_reaches_scored_terminal_and_exports_no_pending_move(
     );
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
     let sgf = String::from_utf8(bytes.to_vec()).unwrap();
-    let imported = bgtutor::import::parse_sgf(&sgf).unwrap();
+    let imported = neondojo::import::parse_sgf(&sgf).unwrap();
     assert!(!imported.positions.is_empty());
     assert!(sgf.contains("RE["));
 }
@@ -779,7 +779,7 @@ async fn creation_pins_actual_executable_profile_name_direction_and_sgf_names(po
         .unwrap();
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
     let exported = String::from_utf8(bytes.to_vec()).unwrap();
-    let imported = bgtutor::import::parse_sgf(&exported).unwrap();
+    let imported = neondojo::import::parse_sgf(&exported).unwrap();
     assert_eq!(imported.players[0], "Test ] \\ name");
     assert_eq!(imported.players[1], "GNUbg");
 }
@@ -991,7 +991,7 @@ async fn explicit_opening_stages_pause_before_roll_and_before_checker_play(pool:
             let sgf = std::str::from_utf8(&bytes).unwrap();
             assert!(sgf.contains("GM[6]"));
             assert!(
-                bgtutor::import::parse_sgf(sgf)
+                neondojo::import::parse_sgf(sgf)
                     .unwrap_err()
                     .to_string()
                     .contains("no checker-play decisions"),
@@ -1339,7 +1339,7 @@ async fn pausing_and_resuming_preserves_the_checkpoint_and_library_identity(pool
     }
     let (status, moved) = call(
         app.clone(), "POST", "/api/library/actions",
-        json!({"action":"move","match_ids":[copy_id],"target_database_id":bgtutor::play::BOT_DATABASE_ID}),
+        json!({"action":"move","match_ids":[copy_id],"target_database_id":neondojo::play::BOT_DATABASE_ID}),
     ).await;
     assert_eq!(status, 200, "{moved}");
     assert_eq!(moved["results"][0]["status"], "moved");
@@ -1369,7 +1369,7 @@ async fn pausing_and_resuming_preserves_the_checkpoint_and_library_identity(pool
 #[ignore = "requires PostgreSQL and native GNUbg"]
 async fn bot_sessions_are_library_matches_from_creation(pool: PgPool) {
     let _ = tracing_subscriber::fmt()
-        .with_env_filter("bgtutor=debug")
+        .with_env_filter("neondojo=debug")
         .try_init();
     let app = api::router(AppState::new(pool.clone(), engine()));
     let (status, session) = call(
@@ -1494,7 +1494,7 @@ async fn bot_library_preserves_identity_management_and_detaches_deleted_matches(
             .await
             .unwrap();
     assert!(!positions.is_empty());
-    bgtutor::move_catalog::ensure_catalog(&pool, match_id)
+    neondojo::move_catalog::ensure_catalog(&pool, match_id)
         .await
         .unwrap();
     let moves: Vec<(uuid::Uuid, i32)> =
@@ -1506,7 +1506,7 @@ async fn bot_library_preserves_identity_management_and_detaches_deleted_matches(
     assert!(!moves.is_empty());
     let first = positions[0].0;
     sqlx::query("INSERT INTO annotations(id,position_uuid,tags,comment,version) VALUES($1,$2,ARRAY['kept'],'my note',1)").bind(uuid::Uuid::new_v4()).bind(first).execute(&pool).await.unwrap();
-    let job = bgtutor::store::create_match_job(&pool, match_id, 1, 1)
+    let job = neondojo::store::create_match_job(&pool, match_id, 1, 1)
         .await
         .unwrap();
     sqlx::query("UPDATE jobs SET status='completed' WHERE id=$1")
@@ -1514,7 +1514,7 @@ async fn bot_library_preserves_identity_management_and_detaches_deleted_matches(
         .execute(&pool)
         .await
         .unwrap();
-    let queued = bgtutor::store::create_match_job(&pool, match_id, 1, 1)
+    let queued = neondojo::store::create_match_job(&pool, match_id, 1, 1)
         .await
         .unwrap();
     // Advance through a checker action so the source really grows.
@@ -1545,7 +1545,7 @@ async fn bot_library_preserves_identity_management_and_detaches_deleted_matches(
             break;
         }
     }
-    bgtutor::move_catalog::ensure_catalog(&pool, match_id)
+    neondojo::move_catalog::ensure_catalog(&pool, match_id)
         .await
         .unwrap();
     let now: Vec<(uuid::Uuid, i32)> =
@@ -1581,13 +1581,13 @@ async fn bot_library_preserves_identity_management_and_detaches_deleted_matches(
     assert_eq!(metadata["display_name"], "My named match");
     assert!(metadata["analysis_status"].is_null(), "{metadata}");
     assert!(
-        bgtutor::store::latest_match_job(&pool, match_id)
+        neondojo::store::latest_match_job(&pool, match_id)
             .await
             .unwrap()
             .is_none()
     );
     assert_eq!(
-        bgtutor::store::get_job(&pool, job.id)
+        neondojo::store::get_job(&pool, job.id)
             .await
             .unwrap()
             .unwrap()
@@ -1608,14 +1608,14 @@ async fn bot_library_preserves_identity_management_and_detaches_deleted_matches(
         "Copied historical analysis must stay stale: {stale_metadata}"
     );
     assert_eq!(
-        bgtutor::store::get_job(&pool, queued.id)
+        neondojo::store::get_job(&pool, queued.id)
             .await
             .unwrap()
             .unwrap()
             .status,
         "failed"
     );
-    let events = bgtutor::store::events(&pool, queued.id, 0).await.unwrap();
+    let events = neondojo::store::events(&pool, queued.id, 0).await.unwrap();
     assert_eq!(events.last().unwrap().event, "failed");
     let (status, _) = call(
         app.clone(),
@@ -1634,7 +1634,7 @@ async fn bot_library_preserves_identity_management_and_detaches_deleted_matches(
         .await
         .unwrap();
     assert_eq!(
-        bgtutor::play::backfill_library_matches(&pool)
+        neondojo::play::backfill_library_matches(&pool)
             .await
             .unwrap(),
         0
@@ -1649,7 +1649,7 @@ async fn bot_library_preserves_identity_management_and_detaches_deleted_matches(
     assert_eq!(status, 200, "{deleted}");
     assert_eq!(deleted["results"][0]["status"], "deleted");
     assert_eq!(
-        bgtutor::play::backfill_library_matches(&pool)
+        neondojo::play::backfill_library_matches(&pool)
             .await
             .unwrap(),
         0
@@ -1733,13 +1733,13 @@ async fn bot_library_backfill_keeps_native_checkpoint_and_revisions(pool: PgPool
     .await
     .unwrap();
     assert_eq!(
-        bgtutor::play::backfill_library_matches(&pool)
+        neondojo::play::backfill_library_matches(&pool)
             .await
             .unwrap(),
         1
     );
     assert_eq!(
-        bgtutor::play::backfill_library_matches(&pool)
+        neondojo::play::backfill_library_matches(&pool)
             .await
             .unwrap(),
         0
@@ -1836,7 +1836,7 @@ async fn bot_analysis_submission_uses_game_catalog_after_waiting_for_source_lock
     let task_pool = pool.clone();
     let submission =
         tokio::spawn(
-            async move { bgtutor::store::create_match_job(&task_pool, match_id, 1, 1).await },
+            async move { neondojo::store::create_match_job(&task_pool, match_id, 1, 1).await },
         );
     tokio::task::yield_now().await;
     growth.commit().await.unwrap();
@@ -2598,7 +2598,7 @@ async fn competition_position_analysis_and_existing_job_reads_are_blocked_until_
     let (status, browser) = call(app.clone(), "GET", "/api/position-browser", Value::Null).await;
     assert_eq!(status, 200, "{browser}");
     assert!(browser["items"].as_array().unwrap().is_empty(), "{browser}");
-    bgtutor::move_catalog::ensure_catalog(&pool, match_id)
+    neondojo::move_catalog::ensure_catalog(&pool, match_id)
         .await
         .unwrap();
     let move_id: uuid::Uuid = sqlx::query_scalar(
@@ -2635,7 +2635,7 @@ async fn competition_position_analysis_and_existing_job_reads_are_blocked_until_
     .await;
     assert_eq!(status, 200, "{page}");
     assert!(page["items"].as_array().unwrap().is_empty(), "{page}");
-    let job = bgtutor::store::create_job(&pool, position, "analysis", 1)
+    let job = neondojo::store::create_job(&pool, position, "analysis", 1)
         .await
         .unwrap();
     for path in [
@@ -3362,7 +3362,7 @@ async fn native_resign_levels_score_and_continue_current_game(pool: PgPool) {
             library_sgf.contains(&format!("RE[B+{points}R]")),
             "{library_sgf}"
         );
-        let games = bgtutor::store::match_games(&pool, library_id)
+        let games = neondojo::store::match_games(&pool, library_id)
             .await
             .unwrap()
             .unwrap();
@@ -3756,7 +3756,7 @@ async fn money_game_opens_plays_doubles_and_finishes_with_a_saved_report(pool: P
         let (_, export) = call(app.clone(), "GET", &format!("{uri}/sgf"), Value::Null).await;
         let source = export.as_str().unwrap();
         assert!(source.contains("length:0"));
-        let parsed = bgtutor::import::parse_sgf(source).unwrap();
+        let parsed = neondojo::import::parse_sgf(source).unwrap();
         assert_eq!(parsed.match_length, 0);
         let (status, reviewed) = call(
             app.clone(),
@@ -4453,7 +4453,7 @@ async fn native_match_forfeit_archives_a_loss_and_fences_competing_actions(pool:
     );
     let (status, sgf) = call(app.clone(), "GET", &format!("{uri}/sgf"), Value::Null).await;
     assert_eq!(status, 200, "{sgf}");
-    let metadata = bgtutor::databases::source_metadata(sgf.as_str().unwrap());
+    let metadata = neondojo::databases::source_metadata(sgf.as_str().unwrap());
     assert_eq!(metadata.result_state, "completed");
     assert_eq!(
         (metadata.white_score, metadata.black_score),

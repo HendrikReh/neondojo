@@ -24,7 +24,7 @@ const job = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 async function mount(page: Page, value = job()) {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await page.evaluate(async (value) => {
     const { React, createRoot } = await import('/e2e/react-fixture.ts');

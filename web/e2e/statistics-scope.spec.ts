@@ -5,7 +5,7 @@ test.use({ actionTimeout: 10000 });
 test('single-game statistics pin errors to their source game across views, reset and navigation', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await page.getByLabel('Match file', { exact: true }).setInputFiles({
     name: `statistics-game-scope-${crypto.randomUUID()}.sgf`,
@@ -99,7 +99,7 @@ test('single-game statistics pin errors to their source game across views, reset
     .poll(() =>
       page.evaluate(
         () =>
-          JSON.parse(localStorage.getItem('bgtutor.workspace') ?? '{}').gameNo,
+          JSON.parse(localStorage.getItem('neondojo.workspace') ?? '{}').gameNo,
       ),
     )
     .toBe(2);

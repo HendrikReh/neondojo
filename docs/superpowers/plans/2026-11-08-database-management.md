@@ -12,7 +12,7 @@
 
 - [x] Write failing `backend/tests/databases.rs` cases for independent copies, scoped deduplication, filter cursors, batch conflicts and exports.
 - [x] Add migration `0009_databases.sql`, `backend/src/databases.rs` and database-aware import in `store.rs`; keep original endpoints compatible.
-- [x] Run `DATABASE_URL=postgres://bgtutor:bgtutor_local@127.0.0.1:54329/bgtutor cargo test -p bgtutor --test databases`; require all cases pass.
+- [x] Run `DATABASE_URL=postgres://neondojo:neondojo_local@127.0.0.1:54329/neondojo cargo test -p neondojo --test databases`; require all cases pass.
 
 ## 2. Game and source move notes
 
@@ -47,7 +47,7 @@
 
 ## Validation evidence
 
-- `cargo test -p bgtutor -- --include-ignored --skip all_local_game_files_import_atomically_and_deduplicate`: **127 passed**, including PostgreSQL, native GNUbg, scoped imports, copy independence, source notes, search performance and recovery. Log: `/tmp/bgtutor-databases-core-tests.log`.
+- `cargo test -p neondojo -- --include-ignored --skip all_local_game_files_import_atomically_and_deduplicate`: **127 passed**, including PostgreSQL, native GNUbg, scoped imports, copy independence, source notes, search performance and recovery. Log: `/tmp/bgtutor-databases-core-tests.log`.
 - `npx playwright test` in `web/`: **37 passed**. Includes collection CRUD, actual-result filters, copy, per-file import errors, tags, move, ZIP download, delete, native PR, empty-game notes, cube snapshots, shared drafts and late-search fencing. Log: `/tmp/bgtutor-databases-browser-tests.log`.
 - Vitest: **27 passed**. Python theme suite: **6 passed**.
 - Rust fmt, Clippy `-D warnings`, TypeScript/Vite build, generated OpenAPI/types, Prettier and `git diff --check`: passed.

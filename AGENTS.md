@@ -1,17 +1,17 @@
-# BG Tutor repository guidance
+# Neondojo repository guidance
 
 These instructions apply from the repository root. Paths and commands are relative to that root. Follow any more specific `AGENTS.md` in the directories you change.
 
 ## Product and priorities
 
-BG Tutor is a local backgammon application for importing matches, searching matches and positions, analyzing and playing with GNU Backgammon (GNUbg), and practicing specific decisions. The target is Apple Silicon macOS, especially the Mac mini M4 Pro with 64 GB RAM. The interface is designed for dense desktop use.
+Neondojo is a local backgammon application for importing matches, searching matches and positions, analyzing and playing with GNU Backgammon (GNUbg), and practicing specific decisions. The target is Apple Silicon macOS, especially the Mac mini M4 Pro with 64 GB RAM. The interface is designed for dense desktop use.
 
 Prioritize backgammon correctness, preservation of user data, database performance, and maintainable module boundaries. Give each business rule one authoritative implementation. Complete the requested change and keep the scope focused.
 
 ## Working in this repository
 
 - Start with `git status` and inspect both staged and unstaged changes in the affected files. Preserve existing work. Read the relevant README, reference, and development sections and current specifications. Check historical plans against the implementation and tests. [README](README.md) · [Reference](docs/reference/) · [Development](docs/development/) · [Documentation](docs/)
-- Use the documented local restart procedure to build before stopping the running service and to reuse its database and engine settings. After startup, verify the changed workflow on port 8787 when the task calls for a live check. [Local restart](README.md#restart-bg-tutor-locally-on-port-8787)
+- Use the documented local restart procedure to build before stopping the running service and to reuse its database and engine settings. After startup, verify the changed workflow on port 8787 when the task calls for a live check. [Local restart](README.md#restart-neondojo-locally-on-port-8787)
 - Use `rg` to find existing modules, helpers, components, and tests before adding code. Make small, cohesive changes. Keep broad formatting, dependency upgrades, and unrelated cleanup out of the diff.
 - Make reversible implementation decisions independently. Clarify domain ambiguities that would materially change the data model, calculations, or user behavior.
 - Get explicit authorization for destructive Git commands, database resets, or deletion of user data. Commit, push, and publish within the requested scope.

@@ -747,7 +747,7 @@ mod tests {
     #[ignore = "requires a locked native Open Sage installation"]
     async fn native_open_sage_grades_checker_offer_and_response() {
         let python =
-            std::env::var("BGTUTOR_SAGE_PYTHON").expect("Set the Open Sage venv Python path");
+            std::env::var("NEONDOJO_SAGE_PYTHON").expect("Set the Open Sage venv Python path");
         let profile = SageEngine::probe_profile(python, 2, 2).await.unwrap();
         native_checker_and_cube(AnalysisEngine::OpenSage(SageEngine::new(profile).unwrap())).await;
     }

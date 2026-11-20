@@ -29,11 +29,11 @@ import {
   type CheckerStep,
 } from '../src/play-state';
 
-/** GNUbg writes its own level (one below BG Tutor's 1-ply = raw net) into the SGF. */
+/** GNUbg writes its own level (one below Neondojo's 1-ply = raw net) into the SGF. */
 const gnubgLevel = (plies: number) => plies - 1;
 
 test.skip(
-  !process.env.BGTUTOR_FULL_MATCH_TEST,
+  !process.env.NEONDOJO_FULL_MATCH_TEST,
   'Requires a disposable real GNUbg play service',
 );
 test.describe.configure({ mode: 'serial' });
@@ -48,10 +48,10 @@ let temporary = '',
 const sameStep = (a: CheckerStep, b: CheckerStep | undefined) =>
   b !== undefined && a.from === b.from && a.to === b.to;
 function sql(statement: string) {
-  const database = process.env.BGTUTOR_E2E_DATABASE_URL;
+  const database = process.env.NEONDOJO_E2E_DATABASE_URL;
   if (
     !database ||
-    !/^\/bgtutor_e2e_[a-f0-9]{32}$/.test(new URL(database).pathname)
+    !/^\/neondojo_e2e_[a-f0-9]{32}$/.test(new URL(database).pathname)
   )
     throw new Error(
       'Full-match fixtures require the Playwright test database.',
@@ -101,7 +101,7 @@ async function action(page: Page, label: string) {
 async function show(page: Page, id?: string) {
   if (id)
     await page.evaluate(
-      (value) => localStorage.setItem('bgtutor.play-session', value),
+      (value) => localStorage.setItem('neondojo.play-session', value),
       id,
     );
   await page.reload();
@@ -387,7 +387,7 @@ test.beforeAll(async ({ request }) => {
   const real = process.env.GNUBG_BIN;
   if (!real?.startsWith('/'))
     throw new Error('GNUBG_BIN must be the absolute real GNUbg executable');
-  temporary = mkdtempSync(join(tmpdir(), 'bgtutor-full-native-'));
+  temporary = mkdtempSync(join(tmpdir(), 'neondojo-full-native-'));
   wrapper = join(temporary, 'seeded-gnubg');
   counter = join(temporary, 'seed');
   writeFileSync(counter, '1');

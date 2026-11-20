@@ -93,8 +93,8 @@ async function install(
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.addInitScript(
     ({ id, theme }) => {
-      localStorage.setItem('bgtutor.play-session', id);
-      localStorage.setItem('bgtutor.theme', theme);
+      localStorage.setItem('neondojo.play-session', id);
+      localStorage.setItem('neondojo.theme', theme);
     },
     { id, theme },
   );

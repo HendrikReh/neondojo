@@ -11,7 +11,7 @@ async function transfer(page: Page, filename?: string) {
   }, filename);
 }
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'de'));
   await page.goto('/');
 });
 test('drop zone aligns with both buttons, highlights nested file drags and resets on leave', async ({

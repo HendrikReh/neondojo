@@ -24,9 +24,9 @@ for (const source of ['engine', 'file', 'book'] as const)
   }) => {
     await page.addInitScript(
       ({ matchId }) => {
-        localStorage.setItem('bgtutor.locale', 'en');
+        localStorage.setItem('neondojo.locale', 'en');
         localStorage.setItem(
-          'bgtutor.workspace',
+          'neondojo.workspace',
           JSON.stringify({ matchId, gameNo: 1 }),
         );
       },
@@ -472,7 +472,7 @@ for (const source of ['engine', 'file', 'book'] as const)
       await page.setViewportSize({ width, height });
       await expect(rows.last().locator('td').last()).toBeInViewport();
       await page.screenshot({
-        path: `/tmp/bgtutor-candidates-${source}-${width}.png`,
+        path: `/tmp/neondojo-candidates-${source}-${width}.png`,
       });
     }
     await expect(board.locator('[data-point="13"]')).toHaveAttribute(

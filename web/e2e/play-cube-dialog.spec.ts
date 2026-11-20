@@ -39,8 +39,8 @@ function state(mode = 'competition') {
 }
 async function resume(page: Page, saved: ReturnType<typeof state>) {
   await page.addInitScript((id) => {
-    localStorage.setItem('bgtutor.play-session', id);
-    localStorage.setItem('bgtutor.play-sounds', 'off');
+    localStorage.setItem('neondojo.play-session', id);
+    localStorage.setItem('neondojo.play-sounds', 'off');
   }, id);
   await page.route(`**/api/play/sessions/${id}`, (r) =>
     r.fulfill({ json: saved }),
@@ -105,7 +105,7 @@ for (const width of [1440, 390])
       ).toBe(true);
     }
     await page.screenshot({
-      path: `/tmp/bgtutor-cube-dialog-${width}.png`,
+      path: `/tmp/neondojo-cube-dialog-${width}.png`,
       fullPage: true,
     });
     await dialog

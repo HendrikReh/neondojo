@@ -71,7 +71,7 @@ test('flashcard browsing previews the selected question without changing learnin
     )
       writes.push(request.url());
   });
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
   await page
@@ -227,7 +227,7 @@ test('more cards preserve the preview and a late page cannot survive a deck roun
       })
     ).ok(),
   ).toBe(true);
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
   await page

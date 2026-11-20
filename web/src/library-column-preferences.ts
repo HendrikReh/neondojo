@@ -7,7 +7,7 @@ export const LIBRARY_DATA_COLUMNS = LIBRARY_COLUMNS.map(
 export const DEFAULT_LIBRARY_COLUMNS = LIBRARY_DATA_COLUMNS.filter(
   (id) => id !== 'tournament' && id !== 'comment',
 );
-export const VISIBLE_COLUMNS_KEY = 'bgtutor.library.visibleColumns';
+export const VISIBLE_COLUMNS_KEY = 'neondojo.library.visibleColumns';
 const canonical = (columns: readonly string[]) =>
   LIBRARY_DATA_COLUMNS.filter((id) => columns.includes(id));
 

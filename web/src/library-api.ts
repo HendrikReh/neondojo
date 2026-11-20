@@ -178,7 +178,7 @@ export async function exportMatches(ids: string[], format: 'original' | 'sgf') {
 }
 export function readDatabase() {
   try {
-    const value = localStorage.getItem('bgtutor.database');
+    const value = localStorage.getItem('neondojo.database');
     return value && /^[a-f0-9-]{36}$/i.test(value) ? value : '';
   } catch {
     return '';

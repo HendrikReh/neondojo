@@ -5,9 +5,9 @@ test.use({ viewport: { width: 1800, height: 1169 }, actionTimeout: 10000 });
 async function fixture(page: Page, theme = 'graphite', mode = 'light') {
   await page.addInitScript(
     ({ theme, mode }) => {
-      localStorage.setItem('bgtutor.locale', 'en');
+      localStorage.setItem('neondojo.locale', 'en');
       localStorage.setItem(
-        'bgtutor.ui-appearance',
+        'neondojo.ui-appearance',
         JSON.stringify({ version: 1, theme, mode }),
       );
     },
@@ -29,7 +29,7 @@ async function fixture(page: Page, theme = 'graphite', mode = 'light') {
   await page.addInitScript(
     (id) =>
       localStorage.setItem(
-        'bgtutor.workspace',
+        'neondojo.workspace',
         JSON.stringify({ matchId: id, gameNo: 1 }),
       ),
     imported.match.id,
@@ -214,7 +214,7 @@ for (const theme of ['graphite', 'club', 'paper'])
 test('header tabs follow the workspace order with mouse and keyboard', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'de'));
   await page.goto('/');
   const header = page.getByRole('tablist', { name: 'Arbeitsbereiche' });
   const tabs = header.getByRole('tab');

@@ -2,7 +2,7 @@ use axum::{
     body::{Body, Bytes, to_bytes},
     http::{Request, StatusCode, header},
 };
-use bgtutor::{
+use neondojo::{
     api::{AppState, router},
     engine::Engine,
 };
@@ -11,7 +11,7 @@ use tower::ServiceExt;
 
 const BACKUP: &str = "/api/database-backup";
 const CHECK: &str = "/api/database-backup/check";
-const MEDIA_TYPE: &str = "application/vnd.bgtutor.backup";
+const MEDIA_TYPE: &str = "application/vnd.neondojo.backup";
 
 fn restore(file: impl Into<Body>, confirm: bool) -> Request<Body> {
     Request::post(format!("{BACKUP}?replace={confirm}"))
@@ -260,7 +260,7 @@ async fn restores_data_and_keeps_target_installation_settings(pool: PgPool) {
         exported.headers()[header::CONTENT_DISPOSITION]
             .to_str()
             .unwrap()
-            .contains(".bgtutor-backup")
+            .contains(".neondojo-backup")
     );
     let archive = to_bytes(exported.into_body(), 16 * 1024 * 1024)
         .await
@@ -387,7 +387,7 @@ async fn restores_data_and_keeps_target_installation_settings(pool: PgPool) {
     for (file, message) in [
         (
             Bytes::from_static(b"invalid backup"),
-            "Invalid BG Tutor backup archive",
+            "Invalid Neondojo backup archive",
         ),
         (Bytes::from(damaged), "Backup table is damaged"),
         (

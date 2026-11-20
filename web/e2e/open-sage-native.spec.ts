@@ -7,7 +7,7 @@ import {
 import { test, expect } from '@playwright/test';
 import type { components } from '../src/generated-api';
 test.skip(
-  !process.env.BGTUTOR_SAGE_PYTHON,
+  !process.env.NEONDOJO_SAGE_PYTHON,
   'Requires locked local Open Sage and GNUbg',
 );
 
@@ -20,7 +20,7 @@ test('independent native engines, immutable sessions and desktop settings', asyn
   const installation = await page.request.get('/api/engines/bgsage');
   const saved = await installation.json();
   const verified = await page.request.put('/api/engines/bgsage', {
-    data: { version: saved.version, path: process.env.BGTUTOR_SAGE_PYTHON },
+    data: { version: saved.version, path: process.env.NEONDOJO_SAGE_PYTHON },
   });
   expect(verified.status(), await verified.text()).toBe(200);
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -28,7 +28,7 @@ test('independent native engines, immutable sessions and desktop settings', asyn
   await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
   await dialog.getByText('Engines on this computer', { exact: true }).click();
   await expect(dialog.getByLabel('Python path', { exact: true })).toHaveValue(
-    process.env.BGTUTOR_SAGE_PYTHON!,
+    process.env.NEONDOJO_SAGE_PYTHON!,
   );
   const latest = await (await page.request.get('/api/engines/bgsage')).json();
   expect(
@@ -36,7 +36,7 @@ test('independent native engines, immutable sessions and desktop settings', asyn
       await page.request.put('/api/engines/bgsage', {
         data: {
           version: latest.version,
-          path: process.env.BGTUTOR_SAGE_PYTHON,
+          path: process.env.NEONDOJO_SAGE_PYTHON,
         },
       })
     ).status(),
@@ -128,7 +128,7 @@ test('completes Open Sage 4-ply for one game and the entire match', async ({
   const installation = await page.request.get('/api/engines/bgsage');
   const { version } = await installation.json();
   const verified = await page.request.put('/api/engines/bgsage', {
-    data: { version, path: process.env.BGTUTOR_SAGE_PYTHON },
+    data: { version, path: process.env.NEONDOJO_SAGE_PYTHON },
   });
   expect(verified.status(), await verified.text()).toBe(200);
   await page.goto('/');
@@ -198,7 +198,7 @@ test('completes Open Sage 4-ply for one game and the entire match', async ({
 });
 
 test.afterEach(async ({ request }) => {
-  if (!process.env.BGTUTOR_SAGE_PYTHON) return;
+  if (!process.env.NEONDOJO_SAGE_PYTHON) return;
   const state = await (await request.get('/api/configuration')).json();
   if (!state.current_configuration) return;
   state.current_configuration.analysis.engine = 'gnubg';

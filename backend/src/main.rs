@@ -1,4 +1,4 @@
-use bgtutor::{
+use neondojo::{
     api::{self, AppState},
     engine::Engine,
     jobs,
@@ -14,29 +14,29 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "bgtutor=info,tower_http=info".into()),
+                .unwrap_or_else(|_| "neondojo=info,tower_http=info".into()),
         )
         .init();
     let url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://bgtutor:bgtutor_local@127.0.0.1:54329/bgtutor".into());
+        .unwrap_or_else(|_| "postgres://neondojo:neondojo_local@127.0.0.1:54329/neondojo".into());
     let pool = database_pool::options()
         .max_connections(10)
         .acquire_timeout(std::time::Duration::from_secs(5))
         .connect(&url)
         .await?;
-    if let Ok(expected) = std::env::var("BGTUTOR_E2E_DATABASE_NAME") {
+    if let Ok(expected) = std::env::var("NEONDOJO_E2E_DATABASE_NAME") {
         let actual: String = sqlx::query_scalar("SELECT current_database()")
             .fetch_one(&pool)
             .await?;
         anyhow::ensure!(
-            expected.starts_with("bgtutor_e2e_") && actual == expected,
+            expected.starts_with("neondojo_e2e_") && actual == expected,
             "Browser test backend must use the provisioned test database"
         );
     }
     sqlx::migrate!().run(&pool).await?;
-    bgtutor::benchmarks::recover_interrupted(&pool).await?;
-    while bgtutor::databases::backfill_source_metadata(&pool).await? > 0 {}
-    while bgtutor::play::backfill_library_matches(&pool).await? > 0 {}
+    neondojo::benchmarks::recover_interrupted(&pool).await?;
+    while neondojo::databases::backfill_source_metadata(&pool).await? > 0 {}
+    while neondojo::play::backfill_library_matches(&pool).await? > 0 {}
     let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or_else(|_| "gnubg".into()));
     match engine.version().await {
         Ok(version) => tracing::info!(%version,"Local engine ready"),
@@ -47,19 +47,19 @@ async fn main() -> anyhow::Result<()> {
     let state = AppState::new(pool, engine);
     let stop = state.shutdown.clone();
     let worker = tokio::spawn(jobs::worker(state.clone(), stop.clone()));
-    let assessment_worker = tokio::spawn(bgtutor::match_assessment::worker(state.clone()));
-    let match_worker = tokio::spawn(bgtutor::engine_matches::worker(state.clone()));
-    let anki_worker = tokio::spawn(bgtutor::learning::anki_sync_worker(state.clone()));
+    let assessment_worker = tokio::spawn(neondojo::match_assessment::worker(state.clone()));
+    let match_worker = tokio::spawn(neondojo::engine_matches::worker(state.clone()));
+    let anki_worker = tokio::spawn(neondojo::learning::anki_sync_worker(state.clone()));
     let mut app = api::router(state);
-    if let Ok(dir) = std::env::var("BGTUTOR_WEB_DIR") {
+    if let Ok(dir) = std::env::var("NEONDOJO_WEB_DIR") {
         app = app.fallback_service(tower_http::services::ServeDir::new(&dir).not_found_service(
             tower_http::services::ServeFile::new(format!("{dir}/index.html")),
         ));
     }
-    let address = std::env::var("BGTUTOR_BIND").unwrap_or_else(|_| "127.0.0.1:8787".into());
+    let address = std::env::var("NEONDOJO_BIND").unwrap_or_else(|_| "127.0.0.1:8787".into());
     let listener = tokio::net::TcpListener::bind(&address).await?;
     let address = listener.local_addr()?;
-    tracing::info!(%address,"BG Tutor listening");
+    tracing::info!(%address,"Neondojo listening");
     let shutdown = stop.clone();
     axum::serve(listener, app)
         .with_graceful_shutdown(async move {

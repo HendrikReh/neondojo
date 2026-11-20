@@ -1,11 +1,11 @@
 //! Optional local corpus: every upload runs in a disposable SQLx database.
 use axum::{body::Body, http::Request};
-use bgtutor::{
+use http_body_util::BodyExt;
+use neondojo::{
     api::{self, AppState},
     engine::Engine,
     model::ImportResponse,
 };
-use http_body_util::BodyExt;
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use std::{
@@ -32,7 +32,7 @@ fn files(dir: &Path, extension: &str, output: &mut Vec<PathBuf>) {
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL, GNUbg and the optional local games/{xg,mat,bgf} corpus"]
 async fn all_local_game_files_import_atomically_and_deduplicate(pool: PgPool) {
-    let root = std::env::var_os("BGTUTOR_GAMES_DIR")
+    let root = std::env::var_os("NEONDOJO_GAMES_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -128,7 +128,7 @@ async fn all_local_game_files_import_atomically_and_deduplicate(pool: PgPool) {
         }
         report.push(serde_json::json!({"file":relative,"status":status,"response":result}));
     }
-    if let Some(path) = std::env::var_os("BGTUTOR_CORPUS_REPORT") {
+    if let Some(path) = std::env::var_os("NEONDOJO_CORPUS_REPORT") {
         std::fs::write(path, serde_json::to_vec_pretty(&report).unwrap()).unwrap();
     }
     println!(

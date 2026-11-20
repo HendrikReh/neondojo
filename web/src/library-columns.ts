@@ -72,7 +72,7 @@ export const LIBRARY_COLUMNS = [
 ] as const;
 export type LibraryColumn = (typeof LIBRARY_COLUMNS)[number]['id'];
 export type ColumnWidths = SharedColumnWidths<LibraryColumn>;
-export const COLUMN_WIDTHS_KEY = 'bgtutor.library.columns';
+export const COLUMN_WIDTHS_KEY = 'neondojo.library.columns';
 const baseLayout = createColumnLayout(LIBRARY_COLUMNS, COLUMN_WIDTHS_KEY, {
   comment: 220,
   play_mode: 210,

@@ -20,7 +20,7 @@ async function imported(
 ) {
   if (initialize) {
     await page.addInitScript(() =>
-      localStorage.setItem('bgtutor.locale', 'en'),
+      localStorage.setItem('neondojo.locale', 'en'),
     );
     await page.goto('/');
   }
@@ -139,7 +139,7 @@ test('analysis header shows a compact single-line identity and metadata while da
   expect(titleFont).toBeGreaterThan(metadataFont);
   await page.setViewportSize({ width: 1800, height: 1169 });
   await page.screenshot({
-    path: '/tmp/bgtutor-analysis-header-1800.png',
+    path: '/tmp/neondojo-analysis-header-1800.png',
     fullPage: true,
   });
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();

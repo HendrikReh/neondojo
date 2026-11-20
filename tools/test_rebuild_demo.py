@@ -27,7 +27,7 @@ class DemoGuardTests(unittest.TestCase):
         self.identity = {
             'system_identifier': '123456789',
             'database_oid': '16384',
-            'database_name': 'bgtutor',
+            'database_name': 'neondojo',
         }
         self.report = {
             'ready': True,
@@ -153,15 +153,15 @@ class DemoGuardTests(unittest.TestCase):
         self.assertFalse(json.loads(manifest.read_text()).get('ready', False))
 
 
-@unittest.skipUnless(os.environ.get('BGTUTOR_REBUILD_PG_TESTS') == '1', 'optional isolated PostgreSQL fixtures')
+@unittest.skipUnless(os.environ.get('NEONDOJO_REBUILD_PG_TESTS') == '1', 'optional isolated PostgreSQL fixtures')
 class DemoPostgresGuardTests(unittest.TestCase):
     save = DemoGuardTests.save
 
     def setUp(self):
         DemoGuardTests.setUp(self)
         self.database = 'demo_guard_test_'+uuid.uuid4().hex
-        subprocess.run(['docker', 'exec', demo.CONTAINER, 'createdb', '-U', 'bgtutor', self.database], check=True, capture_output=True)
-        self.addCleanup(lambda: subprocess.run(['docker', 'exec', demo.CONTAINER, 'dropdb', '-U', 'bgtutor', '--force', self.database], check=True, capture_output=True))
+        subprocess.run(['docker', 'exec', demo.CONTAINER, 'createdb', '-U', 'neondojo', self.database], check=True, capture_output=True)
+        self.addCleanup(lambda: subprocess.run(['docker', 'exec', demo.CONTAINER, 'dropdb', '-U', 'neondojo', '--force', self.database], check=True, capture_output=True))
         self.run_sql('''CREATE TABLE databases(id uuid PRIMARY KEY,name text,description text,version bigint DEFAULT 0,is_system boolean NOT NULL DEFAULT false);
 CREATE TABLE matches(id uuid PRIMARY KEY,database_id uuid REFERENCES databases(id),sha256 text);
 CREATE TABLE learning_history(id integer);
@@ -180,7 +180,7 @@ INSERT INTO learning_history VALUES(1);''')
     def run_sql(self, statement):
         # This helper cannot be redirected to the real application database.
         assert self.database.startswith('demo_guard_test_')
-        return subprocess.run(['docker', 'exec', '-i', demo.CONTAINER, 'psql', '-U', 'bgtutor', '-d', self.database, '-v', 'ON_ERROR_STOP=1', '-At'], input=statement, text=True, check=True, capture_output=True).stdout
+        return subprocess.run(['docker', 'exec', '-i', demo.CONTAINER, 'psql', '-U', 'neondojo', '-d', self.database, '-v', 'ON_ERROR_STOP=1', '-At'], input=statement, text=True, check=True, capture_output=True).stdout
 
     def snapshot(self):
         return self.run_sql("SELECT jsonb_build_object('databases',(SELECT jsonb_agg(to_jsonb(d) ORDER BY id) FROM databases d),'matches',(SELECT jsonb_agg(to_jsonb(m) ORDER BY id) FROM matches m),'learning',(SELECT jsonb_agg(id) FROM learning_history));")

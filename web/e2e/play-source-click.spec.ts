@@ -48,8 +48,8 @@ for (const config of [
     };
     await page.addInitScript(
       ({ id, theme }) => {
-        localStorage.setItem('bgtutor.play-session', id);
-        localStorage.setItem('bgtutor.theme', theme);
+        localStorage.setItem('neondojo.play-session', id);
+        localStorage.setItem('neondojo.theme', theme);
       },
       { id, theme: config.theme },
     );
@@ -191,7 +191,7 @@ for (const mode of [
       ];
     }
     await page.addInitScript(
-      (id) => localStorage.setItem('bgtutor.play-session', id),
+      (id) => localStorage.setItem('neondojo.play-session', id),
       id,
     );
     await page.route('**/api/play/sessions', (route) =>
@@ -296,7 +296,7 @@ for (const sourceKind of ['board', 'bar'] as const) {
         steps: [{ from: 6, to: 1 }],
       });
     await page.addInitScript(
-      (id) => localStorage.setItem('bgtutor.play-session', id),
+      (id) => localStorage.setItem('neondojo.play-session', id),
       id,
     );
     await page.route(`**/api/play/sessions/${id}`, (route) =>

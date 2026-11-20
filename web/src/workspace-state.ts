@@ -3,7 +3,7 @@ export interface WorkspaceSelection {
   gameNo: number;
   positionId?: string;
 }
-const key = 'bgtutor.workspace';
+const key = 'neondojo.workspace';
 const uuid = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
 
 export type BulkAnalysisSession = {

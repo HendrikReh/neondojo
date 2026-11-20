@@ -14,7 +14,7 @@ export function useWorkspaceSession<T>(
   decode: (stored: unknown) => T | undefined,
   scope: 'session' | 'layout' = 'session',
 ) {
-  const key = `bgtutor.${scope}.${name}.v1`;
+  const key = `neondojo.${scope}.${name}.v1`;
   const storage = () => (scope === 'layout' ? localStorage : sessionStorage);
   const [stored, setStored] = useState<T | undefined>(() => {
     try {

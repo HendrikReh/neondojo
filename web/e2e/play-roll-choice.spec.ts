@@ -101,9 +101,9 @@ for (const config of [
     });
     await page.addInitScript(
       ({ id, theme }) => {
-        localStorage.setItem('bgtutor.locale', 'en');
-        localStorage.setItem('bgtutor.play-session', id);
-        localStorage.setItem('bgtutor.theme', theme);
+        localStorage.setItem('neondojo.locale', 'en');
+        localStorage.setItem('neondojo.play-session', id);
+        localStorage.setItem('neondojo.theme', theme);
       },
       { id, theme: config.theme },
     );
