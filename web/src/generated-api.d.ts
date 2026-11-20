@@ -6118,6 +6118,12 @@ export interface components {
             /** Format: int64 */
             member_count: number;
             name: string;
+            /**
+             * Format: int64
+             * @description The matches that can enter the PR once analyzed: all but bot matches
+             *     played with learning aids.
+             */
+            rateable_match_count: number;
             /** Format: int64 */
             version: number;
         };

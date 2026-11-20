@@ -549,6 +549,7 @@ async fn my_virtual_profile_counts_bot_matches_and_is_the_default_study_player(p
     // Without "me", bot matches stay out.
     let before = call(&app, "GET", &uri, Value::Null, 200).await;
     assert_eq!(before["match_count"], 1);
+    assert_eq!(before["rateable_match_count"], 1);
     assert_eq!(
         call(&app, "GET", "/api/virtual-players/me", Value::Null, 200).await,
         json!({"profile":null})
@@ -590,6 +591,8 @@ async fn my_virtual_profile_counts_bot_matches_and_is_the_default_study_player(p
     let details = call(&app, "GET", &uri, Value::Null, 200).await;
     assert_eq!(details["is_me"], true);
     assert_eq!(details["match_count"], 3);
+    // The coached match can never enter the PR, so it is not waiting for one.
+    assert_eq!(details["rateable_match_count"], 2);
     // Only unassisted competition play enters the rating: (0.04 + 0.12) · 500 / 40.
     assert_eq!(details["ratings"][0]["value"], 2.0);
     assert_eq!(details["ratings"][0]["match_count"], 2);
@@ -661,4 +664,5 @@ async fn my_virtual_profile_counts_bot_matches_and_is_the_default_study_player(p
     assert_eq!(cleared, json!({"profile":null}));
     let details = call(&app, "GET", &uri, Value::Null, 200).await;
     assert_eq!(details["match_count"], 1);
+    assert_eq!(details["rateable_match_count"], 1);
 }

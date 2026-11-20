@@ -40,6 +40,9 @@ struct VirtualPlayerProfile {
     member_count: i64,
     /// Distinct matches of all members, plus NeonDojo bot matches for "me".
     match_count: i64,
+    /// The matches that can enter the PR once analyzed: all but bot matches
+    /// played with learning aids.
+    rateable_match_count: i64,
     game_count: i64,
 }
 
@@ -113,6 +116,8 @@ const MEMBER_COUNT: &str =
     "(SELECT count(*) FROM virtual_player_members v WHERE v.virtual_id=vp.id)";
 const MATCH_COUNT: &str =
     "(SELECT count(DISTINCT s.match_id) FROM virtual_player_sides s WHERE s.virtual_id=vp.id)";
+const RATEABLE_MATCH_COUNT: &str = "(SELECT count(DISTINCT s.match_id) FROM virtual_player_sides s
+     WHERE s.virtual_id=vp.id AND s.rated)";
 const GAME_COUNT: &str = "(SELECT count(*) FROM match_games g WHERE g.match_uuid IN (
         SELECT s.match_id FROM virtual_player_sides s WHERE s.virtual_id=vp.id))";
 
@@ -135,7 +140,8 @@ pub(super) fn routes() -> Router<AppState> {
 async fn list(State(state): State<AppState>) -> ApiResult<Json<VirtualPlayerList>> {
     let items = sqlx::query_as(&format!(
         "SELECT vp.id,vp.name,vp.is_me,vp.version,{MEMBER_COUNT} AS member_count,
-           {MATCH_COUNT} AS match_count,{GAME_COUNT} AS game_count
+           {MATCH_COUNT} AS match_count,{RATEABLE_MATCH_COUNT} AS rateable_match_count,
+           {GAME_COUNT} AS game_count
          FROM virtual_player_profiles vp ORDER BY vp.is_me DESC,lower(vp.name),vp.id LIMIT $1"
     ))
     .bind(MAX_VIRTUAL_PROFILES)
@@ -175,7 +181,8 @@ async fn detail(
 async fn details(pool: &PgPool, id: Uuid) -> ApiResult<VirtualPlayerDetails> {
     let profile = sqlx::query_as(&format!(
         "SELECT vp.id,vp.name,vp.is_me,vp.version,{MEMBER_COUNT} AS member_count,
-           {MATCH_COUNT} AS match_count,{GAME_COUNT} AS game_count
+           {MATCH_COUNT} AS match_count,{RATEABLE_MATCH_COUNT} AS rateable_match_count,
+           {GAME_COUNT} AS game_count
          FROM virtual_player_profiles vp WHERE vp.id=$1"
     ))
     .bind(id)

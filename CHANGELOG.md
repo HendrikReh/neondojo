@@ -6,6 +6,10 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ## [Unreleased]
 
+### Fixed
+
+- **PR coverage of "My player profile".** Bot matches played with learning aids no longer count as unrated: the coverage beside the PR counts only matches that can enter it, and **Analyze unrated matches …** no longer stays visible for them. Virtual profiles report these matches as `rateable_match_count`. [Virtual player profiles](docs/reference/library.md#virtual-player-profiles)
+
 ### Added
 
 - **Virtual player profiles.** A virtual profile groups real player profiles without changing them, for example the same person's Galaxy and OpenGammon accounts. Unlike **Merge …** it is reversible: members keep their aliases and their own rows in the player list, which name their group, and can be removed again. Each real profile belongs to at most one virtual profile. The virtual profile shows the consolidated PR, PR chart, matches and opponents of its members. [Virtual player profiles](docs/reference/library.md#virtual-player-profiles)
