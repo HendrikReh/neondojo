@@ -44,7 +44,7 @@ pub(super) async fn start(
     {
         return Err(ApiError::invalid("Choose a valid exact player name"));
     }
-    let player = crate::recurring_mistakes::player_scope::names(&state.pool, &body.player).await?;
+    let player = crate::player_scope::names(&state.pool, &body.player).await?;
     let candidates = source::load(&state.pool, body.database_id, None, Some(&player)).await?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     sqlx::query("LOCK TABLE transfer_practice_seen IN SHARE ROW EXCLUSIVE MODE")

@@ -1226,6 +1226,7 @@ export default function App() {
           applyAppearance(applied.appearance);
           setInstalledSettings(applied.settings);
           setSettingsError(undefined);
+          if (applied.myProfileChanged) setRevision((n) => n + 1);
         }}
       />
     </div>

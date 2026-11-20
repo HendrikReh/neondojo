@@ -152,6 +152,9 @@ pub struct LibraryQuery {
     pub player: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub player_id: Option<Uuid>,
+    /// Matches of a virtual player profile; excludes `player_id`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub virtual_player_id: Option<Uuid>,
     pub date_from: Option<NaiveDate>,
     pub date_to: Option<NaiveDate>,
     pub date_field: Option<String>,
@@ -601,7 +604,14 @@ fn like(q: &mut QueryBuilder<'_, Postgres>, expr: &str, value: &Option<String>) 
             .push_bind(literal_pattern(v.trim()));
     }
 }
-const PLAYER_MATCH_FROM: &str = "FROM match_players mp JOIN player_aliases a ON a.id=mp.alias_id WHERE mp.match_id=m.id AND a.profile_id=";
+impl LibraryQuery {
+    /// The player whose sides the rows report: `(id, virtual profile)`.
+    fn player_scope(&self) -> Option<(Uuid, bool)> {
+        self.player_id
+            .map(|id| (id, false))
+            .or(self.virtual_player_id.map(|id| (id, true)))
+    }
+}
 
 fn library_filters(
     q: &mut QueryBuilder<'_, Postgres>,
@@ -615,9 +625,9 @@ fn library_filters(
         let pattern = literal_pattern(v.trim());
         q.push(" AND m.id IN (SELECT id FROM matches WHERE search_text LIKE ").push_bind(pattern.clone()).push(" OR lower(display_name) LIKE ").push_bind(pattern.clone()).push(" OR lower(tournament) LIKE ").push_bind(pattern.clone()).push(" OR lower(round) LIKE ").push_bind(pattern.clone()).push(" UNION SELECT coalesce(n.match_uuid,np.match_uuid,ng.match_uuid,nm.match_uuid) FROM annotations n LEFT JOIN positions np ON np.id=n.position_uuid LEFT JOIN match_games ng ON ng.id=n.game_uuid LEFT JOIN match_moves nm ON nm.id=n.move_uuid WHERE n.search_text LIKE ").push_bind(pattern).push(")");
     }
-    if let Some(id) = p.player_id {
+    if let Some((id, virtual_profile)) = p.player_scope() {
         q.push(" AND EXISTS(SELECT 1 ")
-            .push(PLAYER_MATCH_FROM)
+            .push(crate::player_scope::match_sides_from(virtual_profile))
             .push_bind(id)
             .push(")");
     }
@@ -719,16 +729,19 @@ fn occurrence_after(
     }
 }
 
-fn library_row_projection(q: &mut QueryBuilder<'_, Postgres>, player_id: Option<Uuid>) {
+fn library_row_projection(q: &mut QueryBuilder<'_, Postgres>, player: Option<(Uuid, bool)>) {
     q.push("SELECT ").push(MATCH_COLUMNS);
-    if let Some(id) = player_id {
-        q.push(",ARRAY(SELECT mp.side ")
-            .push(PLAYER_MATCH_FROM)
+    if let Some((id, virtual_profile)) = player {
+        let sides = crate::player_scope::match_sides_from(virtual_profile);
+        q.push(",ARRAY(SELECT DISTINCT mp.side ")
+            .push(sides)
             .push_bind(id)
             .push(" ORDER BY mp.side) AS player_sides")
-            .push(",(SELECT a.profile_id FROM match_players mp JOIN player_aliases a ON a.id=mp.alias_id WHERE mp.match_id=m.id AND a.profile_id<>")
+            // The other side's profile; a match against oneself has none.
+            .push(",(SELECT a.profile_id FROM match_players o JOIN player_aliases a ON a.id=o.alias_id WHERE o.match_id=m.id AND o.side NOT IN (SELECT mp.side ")
+            .push(sides)
             .push_bind(id)
-            .push(" ORDER BY mp.side LIMIT 1) AS opponent_player_id");
+            .push(") ORDER BY o.side LIMIT 1) AS opponent_player_id");
     }
 }
 
@@ -744,6 +757,11 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
         &p.match_name,
     ] {
         bounded_text(v)?
+    }
+    if p.player_id.is_some() && p.virtual_player_id.is_some() {
+        return Err(ApiError::invalid(
+            "Choose either player_id or virtual_player_id",
+        ));
     }
     let sort = p.sort.clone().unwrap_or("created_at".into());
     if p.position_id.is_none()
@@ -908,7 +926,7 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
     }
     if sort_uses_analysis {
         q.push("page AS (");
-        library_row_projection(&mut q, p.player_id);
+        library_row_projection(&mut q, p.player_scope());
     } else {
         // Sort and limit narrow rows before fetching notes, games and analysis.
         q.push("ranked AS MATERIALIZED (SELECT m.id");
@@ -971,7 +989,7 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
     q.push(")");
     if !sort_uses_analysis {
         q.push(", page AS (");
-        library_row_projection(&mut q, p.player_id);
+        library_row_projection(&mut q, p.player_scope());
         q.push(",ranked.cursor_key,ranked.page_sort")
             .push(projected_occurrence_columns)
             .push(" FROM ranked JOIN matches m ON m.id=ranked.id")
@@ -1009,7 +1027,7 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
     for row in rows.iter().take(limit as usize) {
         let mut m = <DatabaseMatch as sqlx::FromRow<sqlx::postgres::PgRow>>::from_row(row)
             .map_err(anyhow::Error::from)?;
-        if p.player_id.is_some() {
+        if p.player_scope().is_some() {
             m.player_sides = Some(row.try_get("player_sides").map_err(anyhow::Error::from)?);
             m.opponent_player_id = row
                 .try_get("opponent_player_id")

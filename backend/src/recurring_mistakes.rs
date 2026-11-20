@@ -1,4 +1,5 @@
 //! Read-only questions and aggregates from native and immutable imported analyses.
+use crate::player_scope;
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     game_plan::GamePlan,
@@ -27,7 +28,6 @@ mod history;
 mod imported;
 pub(crate) mod imported_projection;
 mod index;
-pub(crate) mod player_scope;
 mod search;
 pub(crate) mod source;
 use source::{SourceDecision, load, players};
@@ -100,7 +100,9 @@ pub struct Mistakes {
     pub groups: Vec<MistakeGroup>,
     pub analyzed_decisions: usize,
     pub analyzed_matches: usize,
-    /// The entry of `players` that covers the name given as `resolve`.
+    /// The entry of `players` that stands for "me": the virtual profile
+    /// chosen as My player profile, or else the entry that covers the name
+    /// given as `resolve`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resolved_player: Option<String>,
     /// All matches of the chosen player in the scope, under any alias.
@@ -284,15 +286,13 @@ async fn list(
         unanalyzed_matches: 0,
         resolved_player: None,
     };
-    if let Some(name) = validate(q.resolve, None)?.0 {
-        let shown = player_scope::display_names(&s.pool, vec![name]).await?;
-        result.resolved_player = shown.into_iter().next().and_then(|shown| {
-            result
-                .players
-                .iter()
-                .find(|player| player.to_lowercase() == shown.to_lowercase())
-                .cloned()
-        });
+    let configured = validate(q.resolve, None)?.0;
+    if let Some(shown) = player_scope::my_choice(&s.pool, configured).await? {
+        result.resolved_player = result
+            .players
+            .iter()
+            .find(|player| player.to_lowercase() == shown.to_lowercase())
+            .cloned();
     }
     let Some(player) = player else {
         return Ok(Json(result));

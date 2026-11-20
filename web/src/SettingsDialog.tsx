@@ -78,6 +78,11 @@ import {
 } from './ui-appearance';
 import { useUiAppearanceText } from './ui-appearance-messages';
 import UiAppearancePreview from './UiAppearancePreview';
+import { useVirtualPlayerText } from './virtual-player-messages';
+import {
+  MyPlayerProfileField,
+  useMyPlayerProfileDraft,
+} from './MyPlayerProfileSetting';
 
 export interface SettingsDialogProps {
   open: boolean;
@@ -92,6 +97,8 @@ export interface SettingsDialogProps {
     locale: Locale;
     settings: AppSettings;
     appearance: UiAppearance;
+    /** "My player profile" changed, so player-scoped views reload. */
+    myProfileChanged: boolean;
   }) => void;
 }
 
@@ -235,6 +242,7 @@ export default function SettingsDialog({
   const sourceT = useSourceText();
   const benchmarkT = useBenchmarkText();
   const appearanceT = useUiAppearanceText();
+  const virtualT = useVirtualPlayerText();
   const id = useId();
   const dialog = useRef<HTMLDialogElement>(null);
   const boardGallery = useRef<HTMLDivElement>(null);
@@ -268,6 +276,7 @@ export default function SettingsDialog({
   const [engineCatalogError, setEngineCatalogError] = useState<unknown>(null);
   const [reload, setReload] = useState(0);
   const sage = useOpenSageInstallation(open, reload);
+  const myProfile = useMyPlayerProfileDraft(open, reload);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [recoveryError, setRecoveryError] = useState<unknown>(null);
@@ -374,10 +383,12 @@ export default function SettingsDialog({
   const installationChanged =
     sage.dirty ||
     !!(draft && initial && changedInstallationFields(initial, draft).length);
-  const dirty = configurationChanged || installationChanged;
+  const dirty =
+    configurationChanged || installationChanged || myProfile.changed;
   const applyHint = [
     configurationChanged && t('applyConfiguration'),
     installationChanged && t('applyInstallation'),
+    myProfile.changed && virtualT('applyMyProfile'),
   ]
     .filter(Boolean)
     .join(' ');
@@ -575,7 +586,9 @@ export default function SettingsDialog({
     let settings: AppSettings;
     let savedPreferences = draftPreferences;
     let savedThresholds = initialThresholds.current;
+    const myProfileChanged = myProfile.changed;
     try {
+      if (myProfileChanged) await myProfile.save(abort.signal);
       if (sage.dirty) {
         await sage.verify();
         void refreshEngines();
@@ -652,6 +665,7 @@ export default function SettingsDialog({
       locale,
       settings,
       appearance,
+      myProfileChanged,
     });
     return true;
   }
@@ -730,6 +744,7 @@ export default function SettingsDialog({
     setRecoveryError(null);
     resetInstallationCheck();
     sage.discard();
+    myProfile.discard();
     continueTo(next);
   }
 
@@ -967,6 +982,10 @@ export default function SettingsDialog({
                   <p id={`${id}-player-help`} className="settings-help">
                     {t('playerHelp')}
                   </p>
+                  <MyPlayerProfileField
+                    id={`${id}-my-profile`}
+                    state={myProfile}
+                  />
                 </fieldset>
                 <fieldset
                   className="settings-section"

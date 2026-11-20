@@ -995,7 +995,7 @@ impl OpenApi for ApiDoc {
         doc.merge(crate::analysis_catalog::AnalysisCatalogDoc::openapi());
         doc.merge(crate::databases::DatabaseDoc::openapi());
         doc.merge(crate::database_backup::BackupDoc::openapi());
-        doc.merge(crate::player_directory::PlayerDoc::openapi());
+        doc.merge(crate::player_directory::openapi());
         doc.merge(crate::move_catalog::MoveCatalogDoc::openapi());
         doc.merge(crate::annotations::AnnotationDoc::openapi());
         doc.merge(crate::learning::LearningDoc::openapi());
