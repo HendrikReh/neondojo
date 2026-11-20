@@ -131,13 +131,13 @@ The **New match** dialog opens over the board. Your current match stays visible 
 
 1. Check **Your name** and choose the **Bot engine** and its **Playing strength**. These start from your settings and apply only to this match.
 2. Choose **Your checkers**: **White** or **Black**. Your checkers are always shown at the bottom of the board.
-3. Choose the **Match length**. You can play a **Money game** or a match of 1 to 25 points.
+3. Choose the **Match length**: a **Money game** or a match of 1, 3, 5, 7, 9, 11, 15, 21 or 25 points.
 4. Choose a **Play mode**. The modes are described in the next section.
 5. Select **Start match**.
 
 The line above the button shows which engine analyzes your decisions. Select the gear button beside it to change the saved engine defaults in **Settings → Playing**. A match keeps the engine settings it was started with. Close the dialog with **Close** or Escape; without a match, **New match** above the board opens it again.
 
-**Paused Matches** in the dialog or at the top of the page opens the paused sessions in the Match database. From there you can resume one.
+**Paused Matches**, in the dialog or above the empty board, opens the paused sessions in the Match database. From there you can resume one.
 
 ### Play modes
 
@@ -148,11 +148,11 @@ The line above the button shows which engine analyzes your decisions. Select the
 | **Coach** *(default)* | Compact feedback with equity differences and the history's severity colors. | Everyday practice. |
 | **Tutor** | Warns you **before** you play a checker or cube decision that reaches the error threshold. | Novices, and anyone drilling a weakness. |
 
-Coach and Tutor pause at the **Error** threshold from **Settings → Analysis**, 0.020 by default. You can switch the mode during a match with the **Play mode** menu in the match bar. The current position and any checkers you have already moved stay as they are.
+Each new match takes the **Error** threshold from **Settings → Analysis**, 0.020 by default. Coach uses it for checker moves and for skipping a double; your own doubles, takes and passes always get Coach feedback. Tutor uses it as the starting **Tutor warning threshold**, which you can change for the current match beside the **Play mode** menu in the match bar. That menu also switches the mode during a match. The current position and any checkers you have already moved stay as they are.
 
 ```mermaid
 flowchart TD
-  D["You choose a move<br/>or a cube action"] --> Q{"Equity loss at or above<br/>the error threshold?"}
+  D["You choose a move<br/>or a cube action"] --> Q{"Equity loss at or above<br/>the threshold?"}
   Q -- "No" --> OK["Played immediately<br/>and rated in the move history"]
   Q -- "Yes, Coach" --> C["Feedback appears before the turn is played.<br/>Click your dice again to play it,<br/>or open Details and try another move."]
   Q -- "Yes, Tutor" --> T["Warning dialog:<br/>Try again · Show solution · Play anyway"]
@@ -162,7 +162,7 @@ flowchart TD
 
 > **Novice:** Start with **Tutor** in short matches of 3 or 5 points. Every warning is a free lesson, and the learning review shows your first attempt next to the better play.
 >
-> **Advanced:** Use **Coach** for normal practice and play a **Competition** match from time to time. Only matches played without learning aids count when you tick **Only matches played without learning aids** in Study.
+> **Advanced:** Use **Coach** for normal practice and play a **Competition** match from time to time. Tick **Only matches played without learning aids** in Study to measure yourself on those matches alone.
 
 Details: [Playing feedback modes](../reference/playing.md#playing-feedback-modes)
 
@@ -170,7 +170,7 @@ Details: [Playing feedback modes](../reference/playing.md#playing-feedback-modes
 
 ![A match in progress in Coach mode with the match bar, move history, board and action panel](images/playing-match.webp)
 
-- **Match bar** (top): score, match format, game number, engine and whose turn it is. Hover over the engine name to see its version, the playing and analysis depth and the bear-off direction. On the right are **Play mode**, **Resign game**, **Pause match** and the **⋯** menu with **Forfeit match**, **New match** and **Paused Matches**.
+- **Match bar** (top): score, match format, game number, the bot, analysis and rules engines, and whose turn it is. Hover over the bot engine to see its version, playing depth and bear-off direction. On the right are **Play mode**, **Resign game**, **Pause match** and the **⋯** menu with **Forfeit match**, **New match** and **Paused Matches**.
 - **Move history** (left): every move with notation, dice and severity colors. Select a past move to review it. An accent frame around the board and the **Return to game** button show that the board is not showing the live position. **Download SGF** exports the match at any time.
 - **Board** (center): your checkers are at the bottom. Player rows show names, points and pip counts. Pip counts are hidden in Competition mode.
 - **Action panel** (right): names the current step and shows its main button, which is **Roll dice**, **Confirm turn** or **Pass**, together with **Double**, **Hint** and **Undo step** where they apply. A disabled button explains why it is unavailable.
@@ -187,7 +187,7 @@ Details: [Playing feedback modes](../reference/playing.md#playing-feedback-modes
 - Click the cube, or select **Double** (**D**), to offer a double before you roll. When the cube lifts as you hover over it, you are allowed to double.
 - When the bot doubles, a dialog asks you to **Take** or **Pass**.
 
-**Hints:** **Hint** (**H**) opens a movable dialog with the engine's suggestions. Use **Up**/**Down** to step through them, and **Initial**, **Arrows** and **Final** to preview each one on a separate board. Using a hint is recorded as a learning aid.
+**Hints:** **Hint** (**H**) opens a movable dialog with the engine's suggestions. It is not available in Competition mode. Use **Up**/**Down** to step through them, and **Initial**, **Arrows** and **Final** to preview each one on a separate board. Using a hint is recorded as a learning aid.
 
 **Resigning, pausing and forfeiting**
 
@@ -199,7 +199,7 @@ Details: [Playing feedback modes](../reference/playing.md#playing-feedback-modes
 
 **Where played matches go:** Every bot match is archived in **Match database → Bot Matches**, where you can analyze, tag, export or copy it like an imported match.
 
-> **Pro:** The bot's strength in **Settings → Playing** is independent of the analysis depth used for feedback. Learning reviews report a *first-attempt PR*, computed from your original choices at the positions you actually reached. This PR is separate from GNUbg's rating of the moves you finally played.
+> **Pro:** The bot's strength in **Settings → Playing** is independent of the analysis depth used for feedback. Learning reviews report a *first-attempt PR*, computed from your original choices at the positions you actually reached. This PR is separate from GNUbg's rating of the moves you finally played, and it requires GNUbg as the analysis engine; a review analyzed with NeonGammon shows no first-attempt PR.
 
 Details: [Playing against an engine](../reference/playing.md#playing-against-an-engine)
 
@@ -230,9 +230,11 @@ Select **Open match** to go to the Match database, select **Import match**, or d
 | 9 | **Evaluation pane** | **Candidate moves**, **Compare moves**, **Dice equity** and **Game rolls**. |
 | 10 | **Position ID** | GNUbg's 14-character identifier of the board. Use it to search for the exact position. |
 
+The arrows below the board step to the previous and next move. With no control focused, **Left** and **Right** do the same. **Game plan** below the board classifies each side's structure, as described in the [glossary](#13-glossary).
+
 **Move history colors:** Each row shows the equity loss of the move. `0.000` means the best move was played and a dash means the move has not been evaluated. Colored badges mark the grades from *Questionable* to *Large Blunder*, as defined in the [error grades](#error-grades) table. Hover over a value to see its grade, source and depth. Use the menu at the top of the list to show **All moves**, **All errors** or a single grade. The filter does not change the board selection.
 
-**Resizing the board:** Drag the divider beside the board, or focus it and use **Left**/**Right**. Hold **Shift** for larger steps. Double-click the divider to make the board as large as the window allows, and press **Enter** to restore the default size. Each tab remembers its own board width.
+**Resizing the board:** Drag the divider beside the board, or focus it and use **Left**/**Right**. Hold **Shift** for larger steps. **Home** and **End** jump to the smallest and largest width. Double-click the divider to make the board as large as the window allows, and press **Enter** to restore the default size. Each tab remembers its own board width.
 
 Details: [Analysis workspace](../reference/analysis.md#analysis-workspace)
 
@@ -247,7 +249,7 @@ The Checker tab shows the move history, the board and the evaluation of the sele
 - The header line names the **engine**, the **depth** (for example *2-ply cubeful*), the **unit** and **whose perspective** the values are shown from.
 - **Best** marks the engine's choice and **Played** marks the recorded move.
 - **Equity** is the expected result of each move. **Loss** is the difference to the best move.
-- **Wins** and **Losses** show total, gammon and backgammon chances. Total includes gammons and backgammons, and gammon includes backgammons.
+- **Wins** and **Losses** show total, gammon and backgammon chances. Total includes gammons and backgammons; the gammon column excludes backgammons.
 - Select a move, or press **Enter** on it, to preview it on the board. **Up**/**Down** move to the next or previous candidate. **Left** shows *Initial* and **Right** shows *Final*.
 - **What the plays do differently** compares the best play with the chosen play on the board. It counts facts such as hits, the opponent's shots and their pip cost, points held, the longest row of adjacent points, checkers out of play or stacked, blots, and gammon chances. The counts describe the plays; the engine's equity decides which one is better. **Terms** explains equity, equity loss, PR and ply.
 - **Opening book** expands a reference from BackgammonDB or the XG Opening Book, if one is configured.
@@ -272,9 +274,9 @@ Details: [Candidate comparison and decision review](../reference/analysis.md#can
 
 ![Dice equity grid with 36 cells, color-coded by the expected equity of each roll](images/analysis-dice.webp)
 
-**Dice equity** shows how good each roll would be in the current position. The 6 × 6 grid covers all 36 ordered rolls. They come from 21 distinct pairs: each double counts once (1/36) and each other pair counts twice (2/36). **Ø** is the weighted average over all rolls. Green cells are above the average and yellow cells are below it. Select a cell to see the best play for that roll and its probability. When a roll has no legal move, the forced pass is evaluated.
+**Dice equity** shows how good each roll would be in the current position. The 6 × 6 grid covers all 36 ordered rolls. They come from 21 distinct pairs: each double counts once (1/36) and each other pair counts twice (2/36). **Ø** is the weighted average over all rolls. Green cells are at or above the average and yellow cells are below it. Select a cell to see the best play for that roll and its probability, and to show that play on the board. When a roll has no legal move, the forced pass is evaluated.
 
-If no saved result exists, NeonDojo starts the calculation automatically with the engine and depth of your active profile. Use **Analysis options → Recalculate dice equity …** to calculate again at a different depth.
+If no saved result exists, NeonDojo starts the calculation automatically with the engine and depth of your active profile. After a failure, select **Dice equity** again to retry. Use **Analysis options → Recalculate dice equity …** to calculate again at a different depth. **Delete dice equity** beside **Ø** removes the displayed result after confirmation.
 
 > **Advanced:** Dice equity shows which rolls you are playing for and which rolls hurt you. It helps when you are deciding between a safe play and a bold one.
 
@@ -300,7 +302,7 @@ Details: [Analysis time estimates](../reference/analysis.md#analysis-time-estima
 
 ### Displayed analysis and new calculations
 
-A match can have several saved analyses: imported XG, GNUbg or BGBlitz values from the original file, and local GNUbg or NeonGammon analyses at different depths. **Displayed analysis** picks **one** of them for the checker and cube review, the move colors, Statistics and new flashcards.
+A match can have several saved analyses: imported XG, GNUbg, BGBlitz or HedgeHog values from the original file, and local GNUbg or NeonGammon analyses at different depths. **Displayed analysis** picks **one** of them for the checker and cube review, the move colors, Statistics and new flashcards.
 
 ```mermaid
 flowchart TD
@@ -341,7 +343,7 @@ Details: [Checker and cube error statistics](../reference/analysis.md#checker-an
 
 ![Cube tab reviewing a doubling decision with the cube evaluation on the right](images/analysis-cube.webp)
 
-The Cube tab reviews **doubling decisions only**. Use **Previous error** and **Next error** above the board, or press **E** / **Shift+E**, to step through them. Filter by player, severity and game. **Inaccuracies only** hides decisions below the *Questionable* threshold. **Reset filters** (the eraser button) restores the default filters.
+The Cube tab reviews **doubling decisions only**. Use **Next error** (**E**) and **Previous error** (**Shift+E**) above the board to step through them. Filter by player, severity and game. **Inaccuracies only** hides decisions below the *Questionable* threshold. **Reset filters** (the eraser button) restores the default filters.
 
 For each decision you see:
 
@@ -374,7 +376,7 @@ Details: [Tags and comments](../reference/analysis.md#tags-and-comments)
 Use this tab to turn analyzed positions into flashcards.
 
 1. **Choose deck**, or create one with **Create deck**.
-2. Add the **current position**, or set a **Minimum loss** and a **Player** to import that player's errors from the selected game.
+2. Select **Add current position**, or set a **Minimum loss** and a **Player** and select **Add match errors** to import that player's errors from the selected game.
 3. **Suggest positions** proposes up to ten decisions from the whole match. Up to three of them come from mistake groups that recur for this player in other matches, and the rest are the largest losses. Choose the cards you want to keep.
 4. Optional **Topic tags** help you filter cards later. Use `::` for subtopics, for example `cube::take-point`.
 
@@ -392,9 +394,9 @@ Details: [Create and manage decks](../reference/study.md#create-and-manage-decks
 
 ![Study overview with the next step, due flashcards and recurring mistakes](images/study-overview.webp)
 
-- **Next step** starts the deck that holds the card that has been due longest. If no cards are due, it recommends your costliest mistake group.
-- **Due flashcards** shows today's due reviews and new cards. **New cards per day** limits how many cards you see for the first time each day, 10 by default. Set it to 0 to pause new cards. Due reviews are always offered.
-- **My recurring mistakes** shows the top mistake groups for a player. **Open mistake overview** opens the full list.
+- **Next step** suggests what to do now. **Study due cards** opens the deck that holds the card that has been due longest. If no cards are due, **Practice mistake group** opens your costliest mistake group.
+- **Due flashcards** shows today's due reviews and new cards. **New cards per day** (0 to 1,000, 10 by default) limits how many cards you see for the first time each day. Set it to 0 to pause new cards. Due reviews are always offered.
+- **My recurring mistakes** shows up to three mistake groups of your player that occur in at least two matches. **Open mistake overview** opens the full list.
 
 Details: [Study](../reference/study.md#study)
 
@@ -403,14 +405,14 @@ Details: [Study](../reference/study.md#study)
 ![Flashcards & Anki with the card search, deck, actions and card preview](images/study-flashcards.webp)
 
 - **Choose deck** selects the deck. **Manage decks** creates, renames and deletes decks.
-- Search cards by text, player on roll, deck or **More filters**, which include topic tags, game plan and decision type. The table supports selection and bulk actions: **Add to deck**, **Move cards**, **Remove from this deck** and **Delete permanently**. The last one asks for confirmation.
+- Search cards by text, player on roll, deck or **More filters**, which include topic tags, game plan, card type and review status. Select up to 200 cards for the bulk actions **Add to deck**, **Move cards**, **Remove from this deck** and **Delete permanently**. Only the last one deletes review history, and it asks for confirmation.
 - **Study now** opens the next due card of the deck.
-- **Practice results** starts a shuffled round of 10 or 20 cards from the current filters. These rounds never change your review schedule.
+- **Practice results** starts a shuffled round of up to 10 or 20 cards from the current filters. **Retry errors and marked cards** repeats the ones you missed or marked. These rounds never change your review schedule.
 - **Timed preview** shows the filtered cards with separate question and answer times.
 - **Transfer practice** checks whether a lesson transfers to new positions. It offers a baseline and a follow-up round of unseen decisions. Repeat the same topic after 7 to 14 days.
 - **Saved topics** stores a set of card filters for later.
 - **Find duplicates** finds cards that are stored more than once.
-- **Anki**: **Download Anki deck** exports an `.apkg` file. **Import Anki package** imports third-party decks. **Send to Anki** and **Sync Anki reviews** exchange cards and reviews with Anki Desktop through AnkiConnect. **Sync reviews automatically** keeps a deck in sync in the background, and **Anki sync** shows the status of each linked deck.
+- **Anki**: **Download Anki deck** exports an `.apkg` file, and **Import NeonDojo Anki deck** reads such a file back into the selected deck. **Import Anki package** imports third-party decks. **Send to Anki** and **Sync Anki reviews** exchange cards and reviews with Anki Desktop through AnkiConnect. **Sync reviews automatically** keeps a deck in sync in the background, and **Anki sync** shows the status of each linked deck.
 
 #### Studying a card
 
@@ -420,7 +422,7 @@ Details: [Study](../reference/study.md#study)
 2. Answer:
    - **Checker card:** play the whole move on the board. **Undo step** corrects it before you check it.
    - **Cube card:** choose **No double** or **Double** (keys **N**/**D**), or **Take** or **Pass** (keys **T**/**P**).
-3. **Check move** (**Enter**) evaluates your answer and shows the best answer and its source. **Show answer** (**A**) reveals the solution without grading, so you can assess yourself.
+3. **Check move**, or **Check answer** on a cube card (**Enter**), evaluates your answer and shows the best answer and its source. **Show answer** (**A**) reveals the solution without grading, so you can assess yourself.
 4. Rate how well you remembered it: **Again**, **Hard**, **Good** or **Easy** (keys **1**–**4**). NeonDojo schedules the next review with the FSRS algorithm at a target retention of 90 %.
 
 ```mermaid
@@ -474,7 +476,7 @@ Choose a **Player**, and optionally a **Database**, a **Game plan** and a **Mini
 | Earlier → recent | Error rate in the older half of the player's matches compared with the newer half. |
 | Equity loss per 100 decisions | The cost of the mistake group, a good guide for what to practice first. |
 
-**Practice** opens a round of saved examples from this group in shuffled order. Play the checker move, or choose the cube action, and compare your answer with the original decision. Rounds about missed doubles, wrong takes or wrong passes also include correct examples, so the answer cannot be guessed from the topic.
+**Practice** opens a shuffled round of up to 20 saved examples from this group, starting with the largest losses. Play the checker move, or choose the cube action, and compare your answer with the original decision. Rounds about missed doubles, wrong takes or wrong passes also include correct examples, so the answer cannot be guessed from the topic.
 
 **Only matches played without learning aids** limits the statistics to imported matches and Competition games played without hints.
 
@@ -488,7 +490,7 @@ Details: [My recurring mistakes](../reference/study.md#my-recurring-mistakes)
 
 ![Practice history with checked answers per day, player, game plan and error type](images/study-history.webp)
 
-Practice history records every checked answer from mistake practice and search practice: the day, player, game plan, error type, number of answers, how often you found the best decision, and your mean equity loss. Rounds from **Similar positions** practice appear in their own section.
+Practice history records every answer you check in mistake practice and in **Practice results** from [All analyzed decisions](#all-analyzed-decisions): the day, player, game plan, error type, number of answers, how often you found the best decision, and your mean equity loss. Rounds from **Similar positions** practice appear in their own section.
 
 ---
 
@@ -507,7 +509,7 @@ This is your personal collection of decisions. You add positions with **Save pos
 - Applied filters appear as chips. Remove a chip to update the results immediately.
 - **Show played moves** reveals the recorded decision. It starts switched off, so the answers stay hidden while you study.
 - Select a row to see a large preview with the equity loss, decks, tags and notes. **Open analysis**, or **Enter** or a double-click, opens the exact decision in Analysis. The icon beside it finds **similar positions** ([details](../reference/library.md#similar-positions)).
-- Select rows with the checkboxes, up to 200, and use **Add to deck** or **Remove from collection**. Removing offers **Undo**.
+- Select up to 200 rows with the checkboxes and use **Add to deck**, or **Remove from collection** in the **⋯** menu beside it. Removing offers **Undo**.
 
 ### All analyzed decisions
 
@@ -558,9 +560,9 @@ Details: [Match databases](../reference/library.md#match-databases)
 
 ### Importing
 
-Select **Import match**, or drop files on the Analysis welcome panel. Supported formats are **MAT** (Jellyfish/GNUbg, also as a `.txt` match transcript), **XG** (eXtreme Gammon), **SGF** (GNUbg), **BGF** (BGBlitz) and **OGXM**. Each file is imported separately, and duplicates and errors are reported per file. Analyses stored in the file are kept as *imported analysis* with their original depth and units.
+Select **Import match**, or drop files on the Analysis welcome panel. Supported formats are **MAT** (Jellyfish/GNUbg, also as a `.txt` match transcript), **XG** (eXtreme Gammon), **SGF** (GNUbg), **BGF** (BGBlitz) and **OGXM** (HedgeHog). Each file may be up to 16 MiB. Each file is imported separately, and duplicates and errors are reported per file. Analyses stored in the file are kept as *imported analysis* with their original depth and units.
 
-Unsupported content is rejected, for example XG1 files, edited starting positions, beavers and other variants.
+Unsupported content is rejected, for example XG1 files, edits later in an XG game, custom starting positions in BGF and OGXM files, beavers and other variants. An XG game that starts from a recorded mid-game position is imported from that position, and the import result lists it.
 
 Details: [Import formats](../reference/library.md#import-formats)
 
@@ -610,7 +612,7 @@ The Player database lists everyone who appears in your matches.
 - **Analyze unrated matches …** opens the analysis dialog for all of the player's matches that don't have a PR yet.
 - **Virtual profiles** group real profiles without changing them, for example your *leihande* accounts on Galaxy and OpenGammon. Use **New virtual profile …**, then **Add member …** for each account. The virtual profile shows the PR, the PR chart and the matches of all members. **Remove** takes a member out again; the real profiles stay in the list.
 
-> **Advanced:** Group your own online accounts in a virtual profile and choose it under **Settings → General → My player profile**. Add your NeonDojo player (the name you play under in Playing, source NeonDojo) as a member, and your games against the bot count towards it as well. Your PR trend, Study, *My recurring mistakes* and *All analyzed decisions* start with all your matches.
+> **Advanced:** Group your own online accounts in a virtual profile and choose it under **Settings → General → My player profile**. Your NeonDojo player (the name you play under in Playing) belongs in it too; if you start playing under a new name, add that player the same way. Your PR trend, Study, *My recurring mistakes* and *All analyzed decisions* then start with all your matches. Bot matches enter the PR only when they are finished and were played in Competition mode without learning aids.
 
 Details: [Player database](../reference/library.md#player-database)
 
@@ -690,17 +692,17 @@ The **Profile** button in the header shows the active configuration profile. It 
 - choose **Show changes** to list each changed setting with its saved and current value, and restore single values with the arrow,
 - choose **Manage profiles** to open **Settings → Profiles**.
 
-A profile stores engines, default depths, error thresholds, playing defaults, language, sound, appearance, board artwork and opening-book references. Engine paths belong to each computer and are not part of a profile.
+A profile stores engines, default depths, error thresholds, playing defaults, language, sound, appearance, board artwork and opening-book references. Engine paths belong to each computer and are not part of a profile. **My player profile** is saved with the player database, so it is the same in every profile.
 
 Details: [Configuration profiles](../reference/settings.md#configuration-profiles)
 
 ### Settings
 
-Select the gear in the header. Choose a category on the left. **Apply** saves your changes and keeps the dialog open. **Close** returns to the workspace. If you have unapplied changes, NeonDojo asks whether to **Apply**, **Discard draft** or **Keep editing**. **Up**/**Down** switch between categories.
+Select the gear in the header. Choose a category on the left. **Apply** saves your changes and keeps the dialog open. **Close** returns to the workspace. If you have unapplied changes, NeonDojo asks whether to **Apply**, **Discard draft** or **Keep editing**. **Up**/**Down** switch between categories, and **Home**/**End** jump to the first or last.
 
 <table>
 <tr>
-<td width="50%"><img src="images/settings-general.webp" alt="Settings: General"><br><b>General</b>: the app language (Deutsch, English, Español, Français, Italiano, Polski) your player name for new games and **My player profile**, the virtual profile that stands for you.</td>
+<td width="50%"><img src="images/settings-general.webp" alt="Settings: General"><br><b>General</b>: the app language (Deutsch, English, Español, Français, Italiano, Polski), your player name for new games, and <b>My player profile</b>, the virtual profile that stands for you.</td>
 <td width="50%"><img src="images/settings-appearance.webp" alt="Settings: Appearance"><br><b>Appearance</b>: the <i>Graphite</i>, <i>Club</i> or <i>Paper</i> theme with <i>Light</i>, <i>Dark</i> or <i>System</i> mode, with a live preview.</td>
 </tr>
 <tr>
@@ -726,7 +728,7 @@ The error thresholds in **Settings → Analysis** decide how a move is graded in
 | Blunder | 0.080 |
 | Large Blunder | 0.120 |
 
-Each value is the lower bound of its grade, and the four values must increase. When you change them, existing analyses are graded again from their stored losses. *Inaccuracies* in Statistics counts all four grades together. The **Error** threshold also decides when Coach and Tutor intervene in new matches. The settings screenshot above shows a customized *Blunder* value of 0.050.
+Each value is the lower bound of its grade. The four values must be greater than 0, at most 1, and strictly increasing. When you change them, existing analyses are graded again from their stored losses. *Inaccuracies* in Statistics counts all four grades together. The **Error** threshold also sets when Coach intervenes and the starting Tutor warning threshold in new matches.
 
 #### Engines on this computer
 
@@ -751,7 +753,7 @@ flowchart LR
   end
   subgraph P["Professional"]
     direction TB
-    P1["Analyze key matches at 4- or 5-ply"] --> P2["Compare moves: XG vs GNUbg vs NeonGammon"]
+    P1["Analyze key matches at 4-ply<br/>(5-ply with GNUbg)"] --> P2["Compare moves: XG vs GNUbg vs NeonGammon"]
     P2 --> P3["All analyzed decisions:<br/>filter by score and cube"] --> P4["Build topic decks with tags;<br/>sync with Anki"]
     P4 --> P5["Transfer practice after 7–14 days"]
   end
@@ -789,20 +791,22 @@ flowchart LR
 | Where | Key | Action |
 | --- | --- | --- |
 | Header and tab rows | **Left** / **Right**, **Home** / **End** | Previous or next tab, first or last tab |
-| Analysis | **E** / **Shift+E** | Next or previous error in the active review |
+| Analysis | **Left** / **Right** | Previous or next move, when no control has focus |
+| | **E** / **Shift+E** | Next or previous error in the active review |
 | Candidate table and board preview | **Up** / **Down** | Previous or next candidate |
 | | **Left** / **Right** | Show *Initial* or *Final* |
 | | **Enter** / **Space** | Preview the selected move |
 | Board divider | **Left** / **Right** (with **Shift**), **Home** / **End**, **Enter** | Resize the board, jump to the limits, restore the default |
 | Playing | **Enter** | Roll, confirm the turn, or pass |
 | | **D** | Double |
-| | **H** | Hint |
+| | **H** | Hint (not in Competition) |
 | | **Z** | Undo one checker step |
 | | **Escape** | Return from a reviewed move to the game |
 | Practice and flashcards | **N** / **D** / **T** / **P** | No double, Double, Take, Pass |
 | | **Enter** | Check the answer, then continue |
 | | **A** | Show the answer |
 | | **1** – **4** | Rate: Again, Hard, Good, Easy |
+| Study reports | **Left** / **Right**, **Escape** | Switch report tabs, return to the archive |
 | Settings | **Up** / **Down**, **Home** / **End** | Switch categories |
 | Dialogs and menus | **Escape** | Close and return focus to the button that opened them |
 
@@ -814,13 +818,14 @@ Shortcuts are ignored while you type in a text field. When a dialog is open, onl
 
 | Symptom | What to check |
 | --- | --- |
-| The footer shows that GNUbg is not connected, or analyses fail | **Settings → Analysis → Engines on this computer → Check installation**. GNUbg needs its neural-network weights. Playing also needs GNUbg's embedded Python. |
+| The footer shows *Backend / GNUbg unavailable* | Open <http://127.0.0.1:8787/api/health>. It reports whether the database responds and which GNUbg version was found. If the page does not load, the NeonDojo backend is not running; see the [project README](../../README.md). |
+| Analyses fail | **Settings → Analysis → Engines on this computer → Check installation**. GNUbg needs its neural-network weights. Playing also needs GNUbg's embedded Python. |
 | NeonGammon is unavailable | Enter the Python path of its environment and choose **Verify and save**. See [NeonGammon setup](../open-sage-local.md). |
 | A move shows a dash instead of a loss | The displayed analysis does not cover this position. Run **Analyze game**, or choose another **Displayed analysis**. |
-| No PR is shown | PR needs a **complete** native GNUbg analysis of the match. Imported analyses and partial analyses don't supply PR. |
-| *My recurring mistakes* shows nothing | Choose a player, and check the database and minimum-loss filters. The player's matches need an analysis. Use **Analyze in Player database**. |
+| No PR is shown | PR needs a **complete** native GNUbg analysis of the match. Imported, NeonGammon and partial analyses don't supply PR. Bot matches played with learning aids show no PR. |
+| *My recurring mistakes* shows nothing | Choose a player, and check the database, minimum-loss and *Only matches played without learning aids* filters. The player's matches need an analysis; **Analyze in Player database** leads to **Analyze unrated matches …**. |
 | An import is rejected | Check the format and its limitations in [Importing](#importing). The error message names the file and the reason. |
-| *Apply* reports a conflict | Another browser window saved newer settings. **Apply** retries your changed settings against the newer version. If a profile conflict remains, load the server version or save your changes as a new profile in **Settings → Profiles**. |
+| *Apply* reports a conflict | Another browser window saved newer settings. **Apply** retries your changed settings against the newer version. If the conflict remains, choose **Load latest and discard draft**, or save your changes as a new profile in **Settings → Profiles**. |
 | A benchmark is running and other work waits | This is intended. Engine work resumes when the benchmark finishes or is cancelled. |
 
 For installation and server details, see the [project README](../../README.md). Detailed behavior is described in the [reference](../reference/).
@@ -839,10 +844,10 @@ For installation and server details, see the [project README](../../README.md). 
 | **Cubeful / cubeless** | Whether the evaluation takes the doubling cube into account. |
 | **MWC** | Match winning chances, the probability of winning the match. Used instead of equity in some analyses. |
 | **Take point** | The winning chance at which taking a double breaks even. It is 25 % in money play without gammons, and depends on the score in match play. |
-| **Crawford game** | The first game after a player reaches match point minus one. No doubling is allowed in that game. |
+| **Crawford game** | The game right after a player first comes within one point of winning the match. No doubling is allowed in that game. |
 | **Jacoby rule** | In money play, gammons and backgammons count only if the cube has been turned. |
 | **Position ID** | GNUbg's 14-character code for the checker arrangement. It describes the board only. |
-| **Match ID** | GNUbg's code for the match context: length, score, cube, dice and turn. |
+| **Match ID** | GNUbg's code for the match context: length, score, Crawford, cube, dice and turn. |
 | **Displayed analysis** | The saved analysis that NeonDojo shows for a match. See [Displayed analysis](#displayed-analysis-and-new-calculations). |
 | **Game plan** | NeonDojo's classification of each side's structure: Opening, Pure race, Racing (contact), Attacking / blitz, Priming or Anchoring. |
 | **FSRS** | The scheduling algorithm that decides when a flashcard is due again. |

@@ -286,4 +286,4 @@ Konkrete Module: `backend/src/engines/{mod,context,game,process}.rs`, `engines/w
 
 ## Übernahme in den Hauptworktree
 
-Am 12. November 2026 mit den zwischenzeitlichen Pause-/Fortsetzungsänderungen auf `main` zusammengeführt und erneut geprüft. Nach vollständiger Datenbanksicherung wurde Migration 0041 angewendet und Open Sage 2-ply auf Wunsch als Vorgabe für neue Spiele und Analysen aktiviert. Bestehende Partien, Aufträge, Profile und Lernstände bleiben erhalten. Prüfungen, Sicherung und tatsächlicher Laufzeitstand stehen in [open-sage-local.md](../../open-sage-local.md#übernahme-und-lokale-aktivierung-am-12-november-2026).
+Am 12. November 2026 mit den zwischenzeitlichen Pause-/Fortsetzungsänderungen auf `main` zusammengeführt und erneut geprüft. Nach vollständiger Datenbanksicherung wurde Migration 0041 angewendet und Open Sage 2-ply auf Wunsch als Vorgabe für neue Spiele und Analysen aktiviert. Bestehende Partien, Aufträge, Profile und Lernstände bleiben erhalten. Prüfungen, Sicherung und tatsächlicher Laufzeitstand stehen in [open-sage-local.md](../../open-sage-local.md#adoption-and-local-activation-on-november-12-2026).
