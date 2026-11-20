@@ -208,6 +208,136 @@ test('history deletes finished runs after inline confirmation', async ({
       .getByRole('button', { name: 'Delete run' }),
   ).toBeVisible();
 });
+test('history sorts by every data column, including status', async ({
+  page,
+}) => {
+  await backend(page);
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  const timed = (
+    id: string,
+    engine: string,
+    plies: number,
+    created: string,
+    average: number,
+  ) => ({
+    ...run(id, 'completed', plies),
+    engine_name: engine,
+    created_at: created,
+    total_elapsed_ms: average * 460,
+    average_move_ms: average,
+  });
+  const history = [
+    { ...run('gnu-5', 'cancelled', 5), created_at: '2026-11-14T12:00:00Z' },
+    timed('neon-2', 'NeonGammon', 2, '2026-11-13T12:00:00Z', 9),
+    { ...run('gnu-1', 'failed', 1), created_at: '2026-11-12T12:00:00Z' },
+    timed('gnu-3', 'GNU Backgammon', 3, '2026-11-11T12:00:00Z', 40),
+  ];
+  await page.route('**/api/benchmarks', (route) =>
+    route.request().method() === 'GET'
+      ? route.fulfill({ json: { active: false, runs: history } })
+      : route.fallback(),
+  );
+  await open(page);
+  const table = page.locator('.benchmark-history table');
+  const order = () =>
+    table
+      .locator('tbody tr')
+      .evaluateAll((rows) =>
+        rows.map(
+          (row) =>
+            `${(row as HTMLTableRowElement).cells[1].textContent} ${(row as HTMLTableRowElement).cells[2].textContent}`,
+        ),
+      );
+  const sortBy = (column: string) =>
+    table.getByRole('button', { name: `Sort by ${column}` }).click();
+  const header = (column: string) =>
+    table.getByRole('columnheader', { name: `Sort by ${column}` });
+
+  await expect(header('Date')).toHaveAttribute('aria-sort', 'descending');
+  expect(await order()).toEqual([
+    'GNU Backgammon 5-ply',
+    'NeonGammon 2-ply',
+    'GNU Backgammon 1-ply',
+    'GNU Backgammon 3-ply',
+  ]);
+
+  await sortBy('Ply');
+  await expect(header('Ply')).toHaveAttribute('aria-sort', 'ascending');
+  await expect(header('Date')).toHaveAttribute('aria-sort', 'none');
+  await expect
+    .poll(order)
+    .toEqual([
+      'GNU Backgammon 1-ply',
+      'NeonGammon 2-ply',
+      'GNU Backgammon 3-ply',
+      'GNU Backgammon 5-ply',
+    ]);
+  await sortBy('Ply');
+  await expect(header('Ply')).toHaveAttribute('aria-sort', 'descending');
+  await expect
+    .poll(order)
+    .toEqual([
+      'GNU Backgammon 5-ply',
+      'GNU Backgammon 3-ply',
+      'NeonGammon 2-ply',
+      'GNU Backgammon 1-ply',
+    ]);
+
+  await sortBy('Engine');
+  await expect
+    .poll(order)
+    .toEqual([
+      'GNU Backgammon 5-ply',
+      'GNU Backgammon 1-ply',
+      'GNU Backgammon 3-ply',
+      'NeonGammon 2-ply',
+    ]);
+
+  // Runs without a measured time stay last in both directions.
+  for (const column of ['Total analysis time', 'Ø analysis time / move']) {
+    await sortBy(column);
+    await expect
+      .poll(order)
+      .toEqual([
+        'NeonGammon 2-ply',
+        'GNU Backgammon 3-ply',
+        'GNU Backgammon 5-ply',
+        'GNU Backgammon 1-ply',
+      ]);
+    await sortBy(column);
+    await expect
+      .poll(order)
+      .toEqual([
+        'GNU Backgammon 3-ply',
+        'NeonGammon 2-ply',
+        'GNU Backgammon 5-ply',
+        'GNU Backgammon 1-ply',
+      ]);
+  }
+
+  await sortBy('Status');
+  await expect(header('Status')).toHaveAttribute('aria-sort', 'ascending');
+  await expect
+    .poll(order)
+    .toEqual([
+      'NeonGammon 2-ply',
+      'GNU Backgammon 3-ply',
+      'GNU Backgammon 1-ply',
+      'GNU Backgammon 5-ply',
+    ]);
+  await sortBy('Status');
+  await expect
+    .poll(order)
+    .toEqual([
+      'GNU Backgammon 5-ply',
+      'GNU Backgammon 1-ply',
+      'NeonGammon 2-ply',
+      'GNU Backgammon 3-ply',
+    ]);
+
+  await sortBy('Date');
+  await expect(header('Date')).toHaveAttribute('aria-sort', 'descending');
+});
 test('play-turn latency starts independently and has its own history metric', async ({
   page,
 }, testInfo) => {

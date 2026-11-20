@@ -14,6 +14,7 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
   - Merging a member into a profile without a group passes the membership on.
   - New endpoints under `/api/virtual-players`, `virtual_player_id` on `GET /api/library/matches`, and `virtual_profile` on player profiles. `GET /api/study/mistakes` now returns `resolved_player` for **My player profile** even without `resolve`.
   - Migration `0084_virtual_player_profiles` adds the tables and the view `virtual_player_sides`. Backups include the virtual profiles and their members.
+- **Sort benchmark history.** In **Extras → Benchmark → History**, the date, engine, ply, total analysis time, average time and status headings sort the list; a second click reverses it. Runs without a measured time stay last, and status sorts by lifecycle. [Engine benchmark](docs/reference/extras.md#engine-benchmark)
 - **Delete benchmark runs.** In **Extras → Benchmark → History**, finished runs (completed, failed or cancelled) can be deleted after an inline confirmation. Queued and running runs must be cancelled first. A deleted completed run no longer calibrates analysis time estimates. New endpoint `DELETE /api/benchmarks/{id}` (204; 404 if missing; 409 while queued or running). [Engine benchmark](docs/reference/extras.md#engine-benchmark)
 
 ### Changed

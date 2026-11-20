@@ -214,3 +214,20 @@
   color: var(--ui-danger-button-text);
   border-color: var(--ui-danger-button);
 }
+.benchmark-history th.benchmark-number .library-sort-heading {
+  justify-content: flex-end;
+}
+.benchmark-history th .action-button {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.benchmark-history th .action-button[aria-pressed='true'] {
+  color: var(--ui-accent);
+}
+.benchmark-history th .action-button[aria-pressed='true'] .action-icon {
+  color: inherit;
+}
