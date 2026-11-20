@@ -233,6 +233,7 @@ export function PlayerEditDialog({
                   <option value="">{t('local')}</option>
                   <option>backgammongalaxy.com</option>
                   <option>opengammon.com</option>
+                  <option>neondojo</option>
                 </select>
               </label>
               <label>

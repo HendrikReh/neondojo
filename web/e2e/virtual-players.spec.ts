@@ -202,7 +202,9 @@ test('virtual profiles group members, consolidate results and stand for me in St
     await page.getByRole('tab', { name: 'Player database' }).click();
     await expect(card.getByRole('heading', { name: group })).toBeVisible();
     await expect(card).toContainText('My profile');
-    await expect(card).toContainText('Includes your NeonDojo bot matches.');
+    await expect(card).toContainText(
+      'Your NeonDojo bot matches count once your NeonDojo player is a member.',
+    );
   } finally {
     await cleanUp(page, group);
   }

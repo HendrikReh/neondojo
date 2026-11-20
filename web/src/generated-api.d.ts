@@ -5165,6 +5165,12 @@ export interface components {
         };
         PlayerDetails: components["schemas"]["PlayerProfile"] & {
             aliases: components["schemas"]["PlayerAlias"][];
+            /**
+             * Format: int64
+             * @description The matches that can enter the PR once analyzed: all but bot matches
+             *     played with learning aids or still running in Competition mode.
+             */
+            rateable_match_count: number;
             /** @description Per-match ratings, oldest first. */
             rating_history: components["schemas"]["PlayerRatingPoint"][];
             ratings: components["schemas"]["PlayerRating"][];
@@ -6159,7 +6165,7 @@ export interface components {
             is_me: boolean;
             /**
              * Format: int64
-             * @description Distinct matches of all members, plus NeonDojo bot matches for "me".
+             * @description Distinct matches of all members.
              */
             match_count: number;
             /** Format: int64 */
@@ -6168,7 +6174,7 @@ export interface components {
             /**
              * Format: int64
              * @description The matches that can enter the PR once analyzed: all but bot matches
-             *     played with learning aids.
+             *     played with learning aids or still running in Competition mode.
              */
             rateable_match_count: number;
             /** Format: int64 */

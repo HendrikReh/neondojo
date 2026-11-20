@@ -610,7 +610,7 @@ The Player database lists everyone who appears in your matches.
 - **Analyze unrated matches …** opens the analysis dialog for all of the player's matches that don't have a PR yet.
 - **Virtual profiles** group real profiles without changing them, for example your *leihande* accounts on Galaxy and OpenGammon. Use **New virtual profile …**, then **Add member …** for each account. The virtual profile shows the PR, the PR chart and the matches of all members. **Remove** takes a member out again; the real profiles stay in the list.
 
-> **Advanced:** Group your own online accounts in a virtual profile and choose it under **Settings → General → My player profile**. Your games against the bot then count towards it as well, and your PR trend, Study, *My recurring mistakes* and *All analyzed decisions* start with all your matches.
+> **Advanced:** Group your own online accounts in a virtual profile and choose it under **Settings → General → My player profile**. Add your NeonDojo player (the name you play under in Playing, source NeonDojo) as a member, and your games against the bot count towards it as well. Your PR trend, Study, *My recurring mistakes* and *All analyzed decisions* start with all your matches.
 
 Details: [Player database](../reference/library.md#player-database)
 
