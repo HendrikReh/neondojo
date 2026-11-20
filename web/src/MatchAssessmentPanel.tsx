@@ -104,7 +104,7 @@ export default function MatchAssessmentPanel({
     setSelected(reference);
   };
   const output = state?.job?.result;
-  const bot = session.engine.id === 'bgsage' ? 'Open Sage' : 'GNUbg';
+  const bot = session.engine.id === 'bgsage' ? 'NeonGammon' : 'GNUbg';
   const failed = state?.job?.status === 'failed' ? state.job.error : undefined;
   const errorKey =
     failed === 'invalid_report'

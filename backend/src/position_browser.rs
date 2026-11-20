@@ -60,7 +60,7 @@ pub enum PositionAnalysisState {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PositionFilterDefinition {
-    /// Open Sage plan for the player on roll.
+    /// NeonGammon plan for the player on roll.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub game_plan: Option<crate::game_plan::GamePlan>,
     /// Supported definition version: exactly 1.

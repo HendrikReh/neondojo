@@ -921,7 +921,7 @@ async fn events(
     info(
         title = "NeonDojo API",
         version = "0.3.0",
-        description = "Local headless backgammon library with GNUbg and Open Sage analysis. No authentication; bind to loopback."
+        description = "Local headless backgammon library with GNUbg and NeonGammon analysis. No authentication; bind to loopback."
     ),
     paths(
         health,

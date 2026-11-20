@@ -59,7 +59,7 @@ async fn installation_is_separate_revisioned_and_rejects_invalid_python(pool: Pg
 #[ignore = "requires isolated PostgreSQL and OPEN_SAGE_TEST_PYTHON with locked weights"]
 async fn verified_installation_allows_independent_analysis_and_preserves_snapshot(pool: PgPool) {
     let python =
-        std::env::var("OPEN_SAGE_TEST_PYTHON").expect("test requires explicit Open Sage Python");
+        std::env::var("OPEN_SAGE_TEST_PYTHON").expect("test requires explicit NeonGammon Python");
     let app = api::router(AppState::new(pool.clone(), Engine::new("gnubg".into())));
     let (status, installation) = call(
         app.clone(),
@@ -171,7 +171,7 @@ async fn saved_result_catalog_is_engine_independent_and_legacy_remains_gnubg(poo
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires isolated PostgreSQL and locked Open Sage installation"]
+#[ignore = "requires isolated PostgreSQL and locked NeonGammon installation"]
 async fn sage_benchmark_snapshots_are_independent_and_complete(pool: PgPool) {
     let python = std::env::var("OPEN_SAGE_TEST_PYTHON").expect("explicit native interpreter");
     let state = AppState::new(pool.clone(), Engine::new("gnubg".into()));
@@ -277,7 +277,7 @@ async fn sage_benchmark_snapshots_are_independent_and_complete(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires isolated PostgreSQL, GNUbg and locked Open Sage"]
+#[ignore = "requires isolated PostgreSQL, GNUbg and locked NeonGammon"]
 async fn jobs_pin_provider_across_settings_changes_and_dice_keep_36_weight(pool: PgPool) {
     use neondojo::{import, jobs, store};
     let python = std::env::var("OPEN_SAGE_TEST_PYTHON").expect("explicit native interpreter");
@@ -433,7 +433,7 @@ async fn provider_lookup_uses_index_with_many_other_engine_results(pool: PgPool)
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires isolated PostgreSQL, GNUbg and the Open Sage fork interpreter"]
+#[ignore = "requires isolated PostgreSQL, GNUbg and the NeonGammon fork interpreter"]
 async fn fork_depths_are_pinned_in_sessions_duels_and_benchmarks(pool: PgPool) {
     let fork = std::env::var("OPEN_SAGE_TEST_PYTHON").unwrap();
     let state = AppState::new(pool.clone(), Engine::new("gnubg".into()));

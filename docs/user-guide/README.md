@@ -44,7 +44,7 @@ Open NeonDojo in your browser at <http://127.0.0.1:8787>. The header is the same
 
 | # | Header item | What you do there |
 | --- | --- | --- |
-| 1 | **Playing** | Play a match or money session against GNUbg or Open Sage, with optional feedback. |
+| 1 | **Playing** | Play a match or money session against GNUbg or NeonGammon, with optional feedback. |
 | 2 | **Analysis** | Review a match move by move, compare candidate moves, and study cube decisions and statistics. NeonDojo opens here. |
 | 3 | **Study** | Review flashcards, read learning reports, and practice your recurring mistakes. |
 | 4 | **Positions** | Browse saved positions and search every analyzed decision of a player. |
@@ -121,7 +121,7 @@ flowchart LR
 
 ## 2. Playing
 
-**Playing** pits you against GNU Backgammon (GNUbg) or Open Sage. Depending on the play mode, NeonDojo stays silent, explains your errors afterwards, or stops you before you play a mistake.
+**Playing** pits you against GNU Backgammon (GNUbg) or NeonGammon. Depending on the play mode, NeonDojo stays silent, explains your errors afterwards, or stops you before you play a mistake.
 
 ### Starting a match
 
@@ -255,9 +255,9 @@ Details: [Candidate comparison and decision review](../reference/analysis.md#can
 
 #### Compare moves
 
-![Compare moves aligns eXtreme Gammon, GNU Backgammon and Open Sage candidates by their resulting position](images/analysis-compare.webp)
+![Compare moves aligns eXtreme Gammon, GNU Backgammon and NeonGammon candidates by their resulting position](images/analysis-compare.webp)
 
-**Compare moves** lines up saved eXtreme Gammon, GNU Backgammon and Open Sage analyses of the same position. Moves that reach the same board share a row. Each engine column shows the rank, equity and actual search depth. A dash means that engine has no value for that move.
+**Compare moves** lines up saved eXtreme Gammon, GNU Backgammon and NeonGammon analyses of the same position. Moves that reach the same board share a row. Each engine column shows the rank, equity and actual search depth. A dash means that engine has no value for that move.
 
 - Use the menu in a column header to choose another saved analysis of that engine.
 - Select **|Δ|** in a local engine's equity column to sort by the largest difference from XG. Arrows show whether the local rank is higher or lower than XG's rank.
@@ -289,7 +289,7 @@ If no saved result exists, NeonDojo starts the calculation automatically with th
 - **Recalculate position …** and **Recalculate dice equity …** calculate only the current position at the depth you choose.
 - Analyses run as background jobs. They keep running when you switch tabs or close the dialog. Progress and remaining time appear in the header.
 
-NeonDojo numbers depths the same way for GNUbg and Open Sage, like XG: 1-ply is the raw evaluation. GNUbg's own manual calls that level 0-ply, so NeonDojo's 3-ply is GNUbg's 2-ply.
+NeonDojo numbers depths the same way for GNUbg and NeonGammon, like XG: 1-ply is the raw evaluation. GNUbg's own manual calls that level 0-ply, so NeonDojo's 3-ply is GNUbg's 2-ply.
 
 > **Pro:** Every job keeps the engine version, depth and move filter it started with, even if you change Settings while it is running.
 
@@ -297,11 +297,11 @@ Details: [Analysis time estimates](../reference/analysis.md#analysis-time-estima
 
 ### Displayed analysis and new calculations
 
-A match can have several saved analyses: imported XG, GNUbg or BGBlitz values from the original file, and local GNUbg or Open Sage analyses at different depths. **Displayed analysis** picks **one** of them for the checker and cube review, the move colors, Statistics and new flashcards.
+A match can have several saved analyses: imported XG, GNUbg or BGBlitz values from the original file, and local GNUbg or NeonGammon analyses at different depths. **Displayed analysis** picks **one** of them for the checker and cube review, the move colors, Statistics and new flashcards.
 
 ```mermaid
 flowchart TD
-  C["Saved analyses of this match<br/>(imported XG / GNUbg SGF / BGBlitz,<br/>local GNUbg, local Open Sage)"] --> SEL{"Displayed analysis"}
+  C["Saved analyses of this match<br/>(imported XG / GNUbg SGF / BGBlitz,<br/>local GNUbg, local NeonGammon)"] --> SEL{"Displayed analysis"}
   SEL -- "Automatic" --> AUTO["1. a complete current whole-match analysis<br/>2. otherwise meaningful imported results<br/>3. otherwise a completed partial analysis"]
   SEL -- "Explicit choice" --> EXP["exactly that analysis,<br/>kept across reloads"]
   AUTO --> USE["Checker and Cube review, move colors,<br/>Statistics, new flashcards"]
@@ -620,7 +620,7 @@ Details: [Player database](../reference/library.md#player-database)
 
 The benchmark measures how fast your computer runs the engines on a fixed reference match: WC2014, Yazawa against Mayfield, with 11 points, 10 games and 460 checker moves.
 
-1. Choose the **Benchmark engine**: GNUbg or Open Sage.
+1. Choose the **Benchmark engine**: GNUbg or NeonGammon.
 2. Choose **Match analysis** or **Play-turn latency**.
 3. Tick one or more depths and select **Start benchmark**. The depths run from lowest to highest in the background. **Cancel run** stops the run.
 
@@ -668,9 +668,9 @@ Details: [Database backup](../reference/extras.md#database-backup)
 
 ### Versions
 
-![Versions shows the NeonDojo build and the availability of GNUbg and Open Sage](images/extras-versions.webp)
+![Versions shows the NeonDojo build and the availability of GNUbg and NeonGammon](images/extras-versions.webp)
 
-**Versions** shows the NeonDojo build and the versions of GNU Backgammon and Open Sage, and whether they are available. **Technical details** shows the full commit and the engine version output. **Copy version information** copies a report you can attach to a bug report.
+**Versions** shows the NeonDojo build and the versions of GNU Backgammon and NeonGammon, and whether they are available. **Technical details** shows the full commit and the engine version output. **Copy version information** copies a report you can attach to a bug report.
 
 Details: [Version information](../reference/extras.md#version-information)
 
@@ -726,7 +726,7 @@ Each value is the lower bound of its grade, and the four values must increase. W
 
 #### Engines on this computer
 
-Expand **Engines on this computer** to set the GNUbg executable and the Open Sage Python environment, and the maximum number of threads per engine, separately for analysis (including engine duels) and for playing. **Simultaneous analysis jobs** lets several analyses run at the same time; Open Sage still runs one analysis at a time. **Check installation** and **Verify and save** run a real position evaluation before a setting is accepted. NeonDojo never falls back to another engine on its own. A missing engine is reported as unavailable. See also [Local Open Sage setup](../open-sage-local.md).
+Expand **Engines on this computer** to set the GNUbg executable and the NeonGammon Python environment, and the maximum number of threads per engine, separately for analysis (including engine duels) and for playing. **Simultaneous analysis jobs** lets several analyses run at the same time; NeonGammon still runs one analysis at a time. **Check installation** and **Verify and save** run a real position evaluation before a setting is accepted. NeonDojo never falls back to another engine on its own. A missing engine is reported as unavailable. See also [Local NeonGammon setup](../open-sage-local.md).
 
 ---
 
@@ -747,7 +747,7 @@ flowchart LR
   end
   subgraph P["Professional"]
     direction TB
-    P1["Analyze key matches at 4- or 5-ply"] --> P2["Compare moves: XG vs GNUbg vs Open Sage"]
+    P1["Analyze key matches at 4- or 5-ply"] --> P2["Compare moves: XG vs GNUbg vs NeonGammon"]
     P2 --> P3["All analyzed decisions:<br/>filter by score and cube"] --> P4["Build topic decks with tags;<br/>sync with Anki"]
     P4 --> P5["Transfer practice after 7–14 days"]
   end
@@ -811,7 +811,7 @@ Shortcuts are ignored while you type in a text field. When a dialog is open, onl
 | Symptom | What to check |
 | --- | --- |
 | The footer shows that GNUbg is not connected, or analyses fail | **Settings → Analysis → Engines on this computer → Check installation**. GNUbg needs its neural-network weights. Playing also needs GNUbg's embedded Python. |
-| Open Sage is unavailable | Enter the Python path of its environment and choose **Verify and save**. See [Open Sage setup](../open-sage-local.md). |
+| NeonGammon is unavailable | Enter the Python path of its environment and choose **Verify and save**. See [NeonGammon setup](../open-sage-local.md). |
 | A move shows a dash instead of a loss | The displayed analysis does not cover this position. Run **Analyze game**, or choose another **Displayed analysis**. |
 | No PR is shown | PR needs a **complete** native GNUbg analysis of the match. Imported analyses and partial analyses don't supply PR. |
 | *My recurring mistakes* shows nothing | Choose a player, and check the database and minimum-loss filters. The player's matches need an analysis. Use **Analyze in Player database**. |

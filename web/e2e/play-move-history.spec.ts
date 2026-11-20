@@ -134,7 +134,7 @@ test('history rates the corrected move and names the session analysis engine', a
       bot: snapshot('gnubg', 'GNU Backgammon 1.08.003'),
       analysis: snapshot(
         'bgsage',
-        'Open Sage 2.0.20260907; model abc; 2ply cubeful',
+        'NeonGammon 3.0.0; model abc; 2ply cubeful',
       ),
     },
     play_mode: 'coach',
@@ -206,7 +206,7 @@ test('history rates the corrected move and names the session analysis engine', a
   const marker = row.locator('.move-assessment-marker');
   await expect(marker).toHaveAttribute(
     'data-move-assessment',
-    /Open Sage 2\.0\.20260907 · 2-ply/,
+    /NeonGammon 3\.0\.0 · 2-ply/,
   );
   await expect(marker).not.toHaveAttribute('data-move-assessment', /GNUbg/);
   await expect(

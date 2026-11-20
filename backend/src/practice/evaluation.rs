@@ -113,12 +113,12 @@ impl PracticeProvenance {
 
 fn proven_checker_depth(solution: &SavedEvaluation<'_>) -> Option<i32> {
     // GNUbg's move filter may finish candidates early and older cards omit
-    // per-candidate depths; its 1-ply raw evaluation has no filter. Open Sage
+    // per-candidate depths; its 1-ply raw evaluation has no filter. NeonGammon
     // verifies each returned candidate depth.
     let plies = solution.plies?;
     if solution.native
         && (plies == 1
-            || solution.engine.starts_with("Open Sage ")
+            || solution.engine.starts_with("NeonGammon ")
                 && solution.engine.contains(&format!("; {plies}ply cubeful;")))
     {
         Some(plies)
@@ -410,14 +410,14 @@ async fn fresh_checker(
                 .await?;
             let best = candidates
                 .first()
-                .context("Open Sage omitted the best checker move")?;
+                .context("NeonGammon omitted the best checker move")?;
             let chosen = candidates
                 .iter()
                 .find(|c| &c.board == board)
-                .context("Open Sage omitted the submitted checker move")?;
+                .context("NeonGammon omitted the submitted checker move")?;
             let name = engine
                 .saved_version()
-                .context("Open Sage did not report its version")?;
+                .context("NeonGammon did not report its version")?;
             (
                 name.to_owned(),
                 plies,
@@ -455,7 +455,7 @@ async fn cube_equities(
             let cube = engine.cube(&context.position_id, &context.match_id).await?;
             let name = engine
                 .saved_version()
-                .context("Open Sage did not report its version")?;
+                .context("NeonGammon did not report its version")?;
             (
                 name.to_owned(),
                 plies,
@@ -744,10 +744,10 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires a locked native Open Sage installation"]
+    #[ignore = "requires a locked native NeonGammon installation"]
     async fn native_open_sage_grades_checker_offer_and_response() {
         let python =
-            std::env::var("NEONDOJO_SAGE_PYTHON").expect("Set the Open Sage venv Python path");
+            std::env::var("NEONDOJO_SAGE_PYTHON").expect("Set the NeonGammon venv Python path");
         let profile = SageEngine::probe_profile(python, 2, 2).await.unwrap();
         native_checker_and_cube(AnalysisEngine::OpenSage(SageEngine::new(profile).unwrap())).await;
     }

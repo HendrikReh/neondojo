@@ -59,7 +59,7 @@ const unitLabel = (money: boolean, paired: boolean): EngineMatchLabel =>
   money ? (paired ? 'blockPairs' : 'blocks') : paired ? 'pairs' : 'matches';
 
 const engineName = (id: string) =>
-  id === 'gnubg' ? 'GNUbg' : id === 'bgsage' ? 'Open Sage' : id;
+  id === 'gnubg' ? 'GNUbg' : id === 'bgsage' ? 'NeonGammon' : id;
 
 const active = (status: string) => status === 'queued' || status === 'running';
 const statusLabel = (status: string, text: Text) => {

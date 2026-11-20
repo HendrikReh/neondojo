@@ -38,16 +38,16 @@ pub(crate) async fn verified_profile(
     let saved = load(pool)
         .await?
         .snapshot
-        .ok_or_else(|| anyhow::anyhow!("Open Sage has not been installed and verified"))?;
+        .ok_or_else(|| anyhow::anyhow!("NeonGammon has not been installed and verified"))?;
     anyhow::ensure!(
         plies != 1 || saved.one_ply_verified,
-        "Open Sage 1-ply capability has not been verified"
+        "NeonGammon 1-ply capability has not been verified"
     );
     let mut current = SageEngine::probe_profile(saved.python.clone(), plies, threads).await?;
     anyhow::ensure!(
         current.artifact_fingerprint == saved.artifact_fingerprint
             && current.package_version == saved.package_version,
-        "Open Sage installation changed; verify the installation again"
+        "NeonGammon installation changed; verify the installation again"
     );
     current.one_ply_verified = saved.one_ply_verified;
     Ok(current)
@@ -124,7 +124,7 @@ async fn put_installation(
     validate_path(&request.path)?;
     let snapshot = SageEngine::probe(request.path, SAGE_ANALYSIS_THREADS)
         .await
-        .map_err(|e| ApiError::invalid(format!("Open Sage installation check failed: {e:#}")))?;
+        .map_err(|e| ApiError::invalid(format!("NeonGammon installation check failed: {e:#}")))?;
     let saved = sqlx::query_as("UPDATE engine_installations SET version=version+1,python_path=$2,snapshot=$3 WHERE engine_id='bgsage' AND version=$1 RETURNING version,python_path,snapshot")
         .bind(request.version).bind(&snapshot.python).bind(sqlx::types::Json(&snapshot)).fetch_optional(&state.pool).await.map_err(anyhow::Error::from)?;
     Ok(Json(saved.ok_or_else(conflict)?))

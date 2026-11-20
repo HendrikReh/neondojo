@@ -3,7 +3,7 @@ use neondojo::engines::{SUPPORTED_SAGE_PACKAGE_VERSIONS, SageEngine, SageSnapsho
 fn snapshot() -> SageSnapshot {
     SageSnapshot {
         python: "/missing/python".into(),
-        package_version: "2.0.20260907".into(),
+        package_version: "3.0.0".into(),
         artifact_fingerprint: "a".repeat(64),
         threads: 2,
         plies: 2,
@@ -44,7 +44,7 @@ async fn missing_interpreter_fails_explicitly() {
 }
 
 #[tokio::test]
-#[ignore = "requires the locked native macOS ARM64 Open Sage installation; no database"]
+#[ignore = "requires the locked native macOS ARM64 NeonGammon installation; no database"]
 async fn native_checker_cube_and_match_analysis() {
     let python = std::env::var("NEONDOJO_SAGE_PYTHON")
         .expect("Set NEONDOJO_SAGE_PYTHON to the locked venv interpreter");
@@ -79,7 +79,7 @@ async fn native_checker_cube_and_match_analysis() {
 }
 
 #[tokio::test]
-#[ignore = "requires locked native Open Sage; no database"]
+#[ignore = "requires locked native NeonGammon; no database"]
 async fn native_reference_game_five_full_coverage() {
     let python = std::env::var("NEONDOJO_SAGE_PYTHON").unwrap();
     let engine = SageEngine::new(SageEngine::probe(python, 4).await.unwrap()).unwrap();

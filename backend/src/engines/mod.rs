@@ -13,10 +13,10 @@ use serde_json::json;
 use std::{path::Path, time::Duration};
 use utoipa::ToSchema;
 
-/// Open Sage fork package versions NeonDojo accepts. Older versions stay valid
-/// for saved job and duel snapshots. The sidecar checks the same list in
+/// NeonGammon package versions NeonDojo accepts (`neongammon` releases of
+/// HendrikReh/neongammon). The sidecar checks the same list in
 /// `SUPPORTED_VERSIONS` of `tools/probe_open_sage.py`.
-pub const SUPPORTED_SAGE_PACKAGE_VERSIONS: [&str; 2] = ["2.0.20260907", "2.0.20261119"];
+pub const SUPPORTED_SAGE_PACKAGE_VERSIONS: [&str; 1] = ["3.0.0"];
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct SageSnapshot {
@@ -42,27 +42,16 @@ pub struct EngineFork {
 
 impl SageSnapshot {
     pub fn known_fork(&self) -> Option<EngineFork> {
-        // Fork builds before release 2.0.20261119 retain the upstream package
-        // version. Identify the documented builds by their full runtime
-        // fingerprints.
+        // Identify the documented releases by their full runtime fingerprints.
         let revision = match self.artifact_fingerprint.as_str() {
-            "e76f82a04e35c3180e5837a76ce0f6f6b9ecfe459816284a2d25dc51e28d13d3" => {
-                "2e71beed9c24b5bbc7564c03374d6d588ff24119"
-            }
-            "5b741451d4f49e69eaa1063fc44f5de67d9e2a528cf9b75f32733136d55b352b" => {
-                "5b146c7d86fa965f2185e3871f3c56df030fd76f"
-            }
-            "7c9a021a3f29b55462d91220c33b00aa247cd4b65a74cbb45db7cb57b6295092" => {
-                "340fc5346f1938d505f99f22101e059a30e9cfc6"
-            }
-            // Release v2.0.20261119, official GitHub cp312 wheel.
-            "9b3ffc5c023367937ed234e45d077e3d341a96f9f44bf27e58e1355afaf0c93f" => {
-                "0dee4f321c0437dc142da2ae68d26f7da3038db1"
+            // Release v3.0.0, official GitHub cp312 wheel.
+            "621c35546142fe9d4762ad763e3c2dac3372a03c8a67c6d264fa634dfc69f7f7" => {
+                "cbfcb014c7f8cf33d75e7f06cbdfc77260cb53ed"
             }
             _ => return None,
         };
         Some(EngineFork {
-            repository: "HendrikReh/bgsage",
+            repository: "HendrikReh/neongammon",
             revision,
         })
     }
@@ -117,16 +106,16 @@ impl SageEngine {
     pub fn new(snapshot: SageSnapshot) -> Result<Self> {
         ensure!(
             valid_sage_depth(snapshot.plies) && valid_sage_threads(snapshot.threads),
-            "Unsupported Open Sage depth or thread count"
+            "Unsupported NeonGammon depth or thread count"
         );
         ensure!(
             snapshot.plies != 1 || snapshot.one_ply_verified,
-            "Open Sage 1-ply capability has not been verified"
+            "NeonGammon 1-ply capability has not been verified"
         );
         ensure!(
             snapshot.adapter_version == 1
                 && SUPPORTED_SAGE_PACKAGE_VERSIONS.contains(&snapshot.package_version.as_str()),
-            "Unsupported Open Sage adapter or package version"
+            "Unsupported NeonGammon adapter or package version"
         );
         ensure!(
             snapshot.artifact_fingerprint.len() == 64
@@ -134,14 +123,14 @@ impl SageEngine {
                     .artifact_fingerprint
                     .bytes()
                     .all(|b| b.is_ascii_hexdigit()),
-            "Invalid Open Sage artifact fingerprint"
+            "Invalid NeonGammon artifact fingerprint"
         );
         ensure!(
             Path::new(&snapshot.python).is_absolute(),
-            "Open Sage Python path must be absolute"
+            "NeonGammon Python path must be absolute"
         );
         let version = format!(
-            "Open Sage {}; model {}; {}ply {}; threads {}; adapter {}",
+            "NeonGammon {}; model {}; {}ply {}; threads {}; adapter {}",
             snapshot.package_version,
             snapshot.artifact_fingerprint,
             snapshot.plies,
@@ -181,10 +170,10 @@ impl SageEngine {
     }
 
     pub async fn probe_profile(python: String, plies: i32, threads: u32) -> Result<SageSnapshot> {
-        ensure!(valid_sage_depth(plies), "Unsupported Open Sage depth");
+        ensure!(valid_sage_depth(plies), "Unsupported NeonGammon depth");
         ensure!(
             valid_sage_threads(threads),
-            "Unsupported Open Sage thread count"
+            "Unsupported NeonGammon thread count"
         );
         // Preserve the venv executable symlink; canonicalizing it loses pyvenv.cfg.
         let path = Path::new(&python);
@@ -196,12 +185,12 @@ impl SageEngine {
             std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
                 .map(|base| base.join(path))
                 .find(|path| path.is_file())
-                .context("Open Sage Python was not found on PATH")?
+                .context("NeonGammon Python was not found on PATH")?
         };
         let mut snapshot = SageSnapshot {
             python: python
                 .to_str()
-                .context("Open Sage Python path is not UTF-8")?
+                .context("NeonGammon Python path is not UTF-8")?
                 .into(),
             // Replaced by the installation's own identity below.
             package_version: String::new(),
@@ -250,7 +239,7 @@ impl SageEngine {
     fn check_depth(&self, plies: i32) -> Result<()> {
         ensure!(
             plies == self.snapshot.plies,
-            "Requested depth differs from immutable Open Sage profile"
+            "Requested depth differs from immutable NeonGammon profile"
         );
         Ok(())
     }
@@ -350,7 +339,7 @@ impl SageEngine {
         let mut candidates: Vec<SageCheckerCandidate> = serde_json::from_value(result)?;
         ensure!(
             !candidates.is_empty(),
-            "Open Sage returned no checker candidates"
+            "NeonGammon returned no checker candidates"
         );
         for candidate in &mut candidates {
             validate_evaluation(candidate.equity, &candidate.probabilities)?;
@@ -366,7 +355,7 @@ impl SageEngine {
             } else {
                 ensure!(
                     !candidate.notation.is_empty(),
-                    "Open Sage omitted checker notation"
+                    "NeonGammon omitted checker notation"
                 );
             }
             candidate.board = context::from_sage(&candidate.board, context.player)?;
@@ -421,7 +410,7 @@ impl SageEngine {
         ensure!(
             !forced_pass
                 || result.candidates.len() == 1 && result.candidates[0].notation == "Cannot move",
-            "Expected a forced pass but Open Sage returned playable moves"
+            "Expected a forced pass but NeonGammon returned playable moves"
         );
         Ok(result)
     }
@@ -449,7 +438,7 @@ impl SageEngine {
         .await?;
         result["accept"]
             .as_bool()
-            .context("Open Sage omitted resignation decision")
+            .context("NeonGammon omitted resignation decision")
     }
 
     pub async fn cube(&self, position_id: &str, match_id: &str) -> Result<SageCubeEvaluation> {
@@ -536,7 +525,7 @@ pub(crate) fn validate_evaluation(equity: f64, probabilities: &[f64]) -> Result<
             && probabilities
                 .iter()
                 .all(|p| p.is_finite() && (0.0..=1.0).contains(p)),
-        "Invalid Open Sage evaluation"
+        "Invalid NeonGammon evaluation"
     );
     ensure!(
         (probabilities[0] + probabilities[3] - 1.0).abs() <= 1e-9
@@ -544,7 +533,7 @@ pub(crate) fn validate_evaluation(equity: f64, probabilities: &[f64]) -> Result<
             && probabilities[1] <= probabilities[0]
             && probabilities[5] <= probabilities[4]
             && probabilities[4] <= probabilities[3] + 1e-12,
-        "Inconsistent Open Sage probabilities"
+        "Inconsistent NeonGammon probabilities"
     );
     Ok(())
 }
@@ -697,7 +686,7 @@ mod tests {
     fn snapshot(artifact_fingerprint: &str) -> SageSnapshot {
         SageSnapshot {
             python: "python".into(),
-            package_version: "2.0.20260907".into(),
+            package_version: "3.0.0".into(),
             artifact_fingerprint: artifact_fingerprint.into(),
             threads: 4,
             plies: 2,
@@ -709,30 +698,11 @@ mod tests {
 
     #[test]
     fn known_fork_names_the_documented_builds() {
-        for (fingerprint, revision) in [
-            (
-                "e76f82a04e35c3180e5837a76ce0f6f6b9ecfe459816284a2d25dc51e28d13d3",
-                "2e71beed9c24b5bbc7564c03374d6d588ff24119",
-            ),
-            (
-                "5b741451d4f49e69eaa1063fc44f5de67d9e2a528cf9b75f32733136d55b352b",
-                "5b146c7d86fa965f2185e3871f3c56df030fd76f",
-            ),
-            (
-                "7c9a021a3f29b55462d91220c33b00aa247cd4b65a74cbb45db7cb57b6295092",
-                "340fc5346f1938d505f99f22101e059a30e9cfc6",
-            ),
-            (
-                "9b3ffc5c023367937ed234e45d077e3d341a96f9f44bf27e58e1355afaf0c93f",
-                "0dee4f321c0437dc142da2ae68d26f7da3038db1",
-            ),
-        ] {
-            let fork = snapshot(fingerprint)
-                .known_fork()
-                .unwrap_or_else(|| panic!("{fingerprint} is not recognized"));
-            assert_eq!(fork.repository, "HendrikReh/bgsage");
-            assert_eq!(fork.revision, revision);
-        }
+        let fork = snapshot("621c35546142fe9d4762ad763e3c2dac3372a03c8a67c6d264fa634dfc69f7f7")
+            .known_fork()
+            .expect("release v3.0.0 is recognized");
+        assert_eq!(fork.repository, "HendrikReh/neongammon");
+        assert_eq!(fork.revision, "cbfcb014c7f8cf33d75e7f06cbdfc77260cb53ed");
     }
 
     #[test]

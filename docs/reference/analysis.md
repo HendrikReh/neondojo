@@ -16,7 +16,7 @@ another engine are not reused. If none exists, it starts a calculation with
 the engine and search depth from the active analysis profile. Selecting another
 position does the same while **Dice equity** is visible. After a submission or
 engine failure, select **Dice equity** again to retry. GNUbg evaluates all 21
-distinct rolls in one run and reports progress roll by roll; Open Sage evaluates
+distinct rolls in one run and reports progress roll by roll; NeonGammon evaluates
 them one at a time. A roll without a legal play is evaluated as a forced pass.
 
 The grid shows the best play's equity for each of the 36 rolls. Cells at or
@@ -84,22 +84,21 @@ each candidate's original evaluation depth. Ties keep their file order.
 
 In **Analysis → Checker → Compare moves** (German **Zugvergleich**), plays that
 reach the same board share a row across saved eXtreme Gammon, GNU Backgammon and
-Open Sage analyses. Each engine column shows its rank, equity and actual
-candidate depth. Open Sage 2-ply analyses from fork release 2.0.20261119 on
-contain only the candidates its move filter searched at full depth, plus the
-played move. Use the column selector to choose another saved analysis.
+NeonGammon analyses. Each engine column shows its rank, equity and actual
+candidate depth. NeonGammon 2-ply analyses contain only the candidates its
+move filter searched at full depth, plus the played move. Use the column selector to choose another saved analysis.
 Select a row to show each step on the board in **Arrows** view. The preview
 uses the recorded XG path when that candidate is available, followed by the
 first local source otherwise.
 Select an engine's rank, equity or depth cell to use that engine's move. If
 the source stores only the endpoints, the preview reconstructs a legal route.
 New GNU Backgammon analyses retain each original route available in the native
-SGF output alongside the display notation. Open Sage's current checker API
+SGF output alongside the display notation. NeonGammon's current checker API
 returns candidate end boards, so its move notation is derived from those boards.
 
 Each engine column starts with the latest, deepest saved analysis of that
 engine for the selected game or match scope. A dash marks a move that the
-analysis does not contain. In the GNU Backgammon and Open Sage columns,
+analysis does not contain. In the GNU Backgammon and NeonGammon columns,
 **|Δ|** sorts the rows by the absolute equity difference to XG, largest first.
 Rows without a comparable value come last, and selecting **|Δ|** again restores
 the original order. Values are comparable only in the same known unit. Each
@@ -141,7 +140,7 @@ offer from the original decision context.
 
 Cube review, cube practice results, flashcards and Playing feedback describe a cube decision in words: match length or money rules, the points each player still needs (for example `Alice 7-away, Bob 6-away`), Crawford or post-Crawford, and the cube value with its owner or the pending offer. Offers list all three outcomes (**No double**, **Double / take**, **Double / pass**) with their unit and the player whose perspective is used, and mark the outcome reached when both sides act correctly. A position that is too good to double is labeled. A response lists **Take** and **Pass**.
 
-New native GNUbg and Open Sage analyses also save the cubeless win, gammon and backgammon chances of each cube decision, and the table shows them for both players. For a native analysis saved before this change, **Calculate winning chances** evaluates that one cube decision now with the practice engine and depth (at most 2-ply). The result names its engine and depth, is shown as not part of the saved analysis and is not stored; recalculating the game saves the chances with the analysis. `POST /api/cube-chances` takes the decision's position and whether it is a take or pass. Imported analyses do not record chances.
+New native GNUbg and NeonGammon analyses also save the cubeless win, gammon and backgammon chances of each cube decision, and the table shows them for both players. For a native analysis saved before this change, **Calculate winning chances** evaluates that one cube decision now with the practice engine and depth (at most 2-ply). The result names its engine and depth, is shown as not part of the saved analysis and is not stored; recalculating the game saves the chances with the analysis. `POST /api/cube-chances` takes the decision's position and whether it is a take or pass. Imported analyses do not record chances.
 
 The take point is the game winning chance at which taking breaks even, ignoring gammons and any later use of the cube. In money play it is 25 %. In match play NeonDojo derives it from the Kazaross-XG2 match equity table that GNUbg ships, using the Crawford entry when a result reaches a one-away score. The line names the table and, when chances are saved, how often the taker wins here. No take point is shown in the Crawford game, when the player cannot double, or beyond 25-away. `POST /api/cube-context` takes a GNUbg match ID and the doubler and returns this context. The table and its notice are in [met_kazaross_xg2.json](../../backend/src/met_kazaross_xg2.json).
 
@@ -191,7 +190,7 @@ Text tabs use the active theme's accent and a 2 px underline. The same pattern c
 
 ## Imported analysis and opening books
 
-**Displayed analysis** is one persistent choice per match, shared by checker/cube review, move colors, statistics and new learning cards. The catalog lists all retained GNUbg, Open Sage and imported results, including source, scope, depth, time and coverage. **Automatic** prefers a complete current whole-match analysis, then meaningful imported results, then a completed scoped analysis; time and stable identity break ties, never cross-engine ply counts. An explicit choice remains selected across reloads and calculation-profile changes. Missing positions in that analysis remain unavailable; no other result fills the gap. **Load more analyses** exposes older history. If an import contains several records for one decision, the shared projection prefers real values over known placeholders and then the first record in original source order. Original records remain intact and accessible through the source-analysis endpoints and original-file export. **Compare saved analyses** compares any two catalog entries without changing the displayed analysis. New calculations use the configured engine and depth, independently of this result selection. The expandable **Opening book** section is a separate reference. Imported XG, native GNUbg SGF, and available BGBlitz analysis stay in their own records, with the original depth or profile label, method, candidates, cube responses, raw values, equity units, and engine version where known. Missing analysis and unknown engines or units stay unavailable. GNUbg match-winning chances retain their original units. Analysis jobs and independent match copies preserve source results. Older imports can reconstruct analysis once from the stored original file. Source evaluations for recorded double, take, and drop actions also appear in **Cube and move notes**. Imported cube evaluations show whose perspective the values use when the source identifies the player. This includes positions where the player on roll did not double.
+**Displayed analysis** is one persistent choice per match, shared by checker/cube review, move colors, statistics and new learning cards. The catalog lists all retained GNUbg, NeonGammon and imported results, including source, scope, depth, time and coverage. **Automatic** prefers a complete current whole-match analysis, then meaningful imported results, then a completed scoped analysis; time and stable identity break ties, never cross-engine ply counts. An explicit choice remains selected across reloads and calculation-profile changes. Missing positions in that analysis remain unavailable; no other result fills the gap. **Load more analyses** exposes older history. If an import contains several records for one decision, the shared projection prefers real values over known placeholders and then the first record in original source order. Original records remain intact and accessible through the source-analysis endpoints and original-file export. **Compare saved analyses** compares any two catalog entries without changing the displayed analysis. New calculations use the configured engine and depth, independently of this result selection. The expandable **Opening book** section is a separate reference. Imported XG, native GNUbg SGF, and available BGBlitz analysis stay in their own records, with the original depth or profile label, method, candidates, cube responses, raw values, equity units, and engine version where known. Missing analysis and unknown engines or units stay unavailable. GNUbg match-winning chances retain their original units. Analysis jobs and independent match copies preserve source results. Older imports can reconstruct analysis once from the stored original file. Source evaluations for recorded double, take, and drop actions also appear in **Cube and move notes**. Imported cube evaluations show whose perspective the values use when the source identifies the player. This includes positions where the player on roll did not double.
 
 Manage books under **Settings → Analysis → Opening books**. Select **Automatic** to compare available books, choose a provider directly, or select **Off**. The book dialog saves the provider and paths with revision checks. Apply or discard any Settings draft before opening it. Book paths are on the backend computer. The analysis inspector shows the selected source, engine, and depth for the current position. New calculations use the configured engine and depth. Book results remain an optional reference alongside the displayed analysis and do not contribute to match PR.
 
@@ -204,9 +203,9 @@ Keep the downloaded book files outside Git, for example in `~/Library/Applicatio
 
 ## Game plan
 
-**Game plan** classifies White's and Black's structures independently as **Pure race**, **Racing (contact)**, **Attacking / blitz**, **Priming** or **Anchoring**. Both sides are labeled **Opening** while each has at most four checkers off its starting points, which covers about the first two rolls per player. The opening label is NeonDojo's own addition on top of the pinned Open Sage rules, so opening errors form their own mistake group. **Initial** and **Arrows** use the starting position. **Final** uses the displayed position after the move and falls back to the starting position if the move notation cannot be applied. The display is also available for saved positions whose source match has been deleted.
+**Game plan** classifies White's and Black's structures independently as **Pure race**, **Racing (contact)**, **Attacking / blitz**, **Priming** or **Anchoring**. Both sides are labeled **Opening** while each has at most four checkers off its starting points, which covers about the first two rolls per player. The opening label is NeonDojo's own addition on top of the pinned NeonGammon rules, so opening errors form their own mistake group. **Initial** and **Arrows** use the starting position. **Final** uses the displayed position after the move and falls back to the starting position if the move notation cannot be applied. The display is also available for saved positions whose source match has been deleted.
 
-The classifier uses the board alone. It works without an analysis job, and GNUbg supplies move and cube recommendations. `POST /api/game-plans` validates the 26-entry board and returns both classifications with the rule version. The browser caches a bounded number of identical boards. Source and license information is in [game_plan_source.txt](../../backend/src/game_plan_source.txt) and [backend/licenses](../../backend/licenses/). [Open Sage reference implementation](https://github.com/markbgsage/bgsage/blob/139427d826dd67798226e7d23c003c90315306ba/cpp/src/encoding.cpp)
+The classifier uses the board alone. It works without an analysis job, and GNUbg supplies move and cube recommendations. `POST /api/game-plans` validates the 26-entry board and returns both classifications with the rule version. The browser caches a bounded number of identical boards. Source and license information is in [game_plan_source.txt](../../backend/src/game_plan_source.txt) and [backend/licenses](../../backend/licenses/). [NeonGammon reference implementation](https://github.com/markbgsage/bgsage/blob/139427d826dd67798226e7d23c003c90315306ba/cpp/src/encoding.cpp)
 
 ## Checker and cube error statistics
 
@@ -254,7 +253,7 @@ SSE event types are `queued`, `running`, `progress`, `completed` and `failed`. T
 
 Match analysis checkpoints decisions, partial statistics and SSE progress for each completed game in one transaction. `Job` and SSE report `completed_games` and `total_games`, so the percentage advances when a game finishes. After an expired lease, a replacement worker resumes at the next incomplete game. An expired worker cannot write checkpoints or results. Completed games and their reviewed decisions remain accessible after a later game fails. Submitting a new job analyzes the requested scope from the beginning.
 
-New GNUbg and Open Sage game and match analyses save the ranked checker candidates returned by the engine, including the played move, equity, outcome probabilities, and actual evaluation depth. The **Candidates** table displays these details for the selected saved result. Recalculate an older game or match analysis to obtain candidates if it only saved the played and best moves. To remove a saved analysis, select it under **Displayed analysis**, choose **Delete analysis**, and confirm the identified result. This keeps the match and its source file available.
+New GNUbg and NeonGammon game and match analyses save the ranked checker candidates returned by the engine, including the played move, equity, outcome probabilities, and actual evaluation depth. The **Candidates** table displays these details for the selected saved result. Recalculate an older game or match analysis to obtain candidates if it only saved the played and best moves. To remove a saved analysis, select it under **Displayed analysis**, choose **Delete analysis**, and confirm the identified result. This keeps the match and its source file available.
 
 GNUbg evaluation uses `analyse game` output at six decimal places. NeonDojo clears existing analysis annotations before the calculation, normalizes inherited match data and setups, and verifies board and match context for each checker and cube action. Mixed SGF collections can include empty or cube-only games. Missing or incomplete native exports fail the job. Each native export is capped at 64 MiB.
 

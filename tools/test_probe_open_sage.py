@@ -24,9 +24,9 @@ class ProbeTests(unittest.TestCase):
 
     def test_accepts_only_supported_package_versions(self):
         for version in probe.SUPPORTED_VERSIONS:
-            probe.validate_versions({'bgsage': version, 'numpy': probe.NUMPY_VERSION})
-        for value in ({'bgsage': '2.0.20261118', 'numpy': probe.NUMPY_VERSION},
-                      {'bgsage': probe.SUPPORTED_VERSIONS[-1], 'numpy': '2.5.3'}):
+            probe.validate_versions({'neongammon': version, 'numpy': probe.NUMPY_VERSION})
+        for value in ({'neongammon': '2.0.20261118', 'numpy': probe.NUMPY_VERSION},
+                      {'neongammon': probe.SUPPORTED_VERSIONS[-1], 'numpy': '2.5.3'}):
             with self.subTest(value=value), self.assertRaises(probe.ProbeError):
                 probe.validate_versions(value)
 
@@ -64,7 +64,7 @@ class ProbeTests(unittest.TestCase):
     def test_identity_hashes_each_path_once_but_rechecks_next_identity(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            package = root / 'bgsage'
+            package = root / 'neongammon'
             models = package / '_assets/models'
             models.mkdir(parents=True)
             source, model, native = package / '__init__.py', models / 'model', root / 'native.so'
@@ -76,13 +76,13 @@ class ProbeTests(unittest.TestCase):
             records = []
             for label, digest in files.items():
                 entry = __import__('importlib.metadata', fromlist=['PackagePath']).PackagePath(
-                    label if label == 'native.so' else 'bgsage/' + label)
+                    label if label == 'native.so' else 'neongammon/' + label)
                 entry.hash = SimpleNamespace(mode='sha256', value=base64.urlsafe_b64encode(bytes.fromhex(digest)).decode().rstrip('='))
                 records.append(entry)
             sage = SimpleNamespace(__file__=str(source), PRODUCTION_MODEL='fixture',
                                    default_weights=lambda: SimpleNamespace(weight_paths_list=[str(model)] * 24, strategy_type='fixture'))
             weights = SimpleNamespace(bearoff_db_path=lambda: str(model))
-            with patch.dict(sys.modules, {'bgsage.weights': weights}), \
+            with patch.dict(sys.modules, {'neongammon.weights': weights}), \
                  patch.object(probe.importlib.metadata, 'distribution', return_value=SimpleNamespace(files=records)), \
                  patch.object(probe.importlib.metadata, 'version', return_value='fixture'), \
                  patch.object(probe, 'hash_required_file', wraps=probe.hash_required_file) as hashing:
@@ -145,6 +145,33 @@ class ProbeTests(unittest.TestCase):
         probe.validate_thread_budget(2, [2])
         with self.assertRaisesRegex(probe.ProbeError, 'requested 2.*10'):
             probe.validate_thread_budget(2, [10])
+
+    def test_thread_budget_observer_records_pools_and_native_routine(self):
+        calls = []
+
+        def checker_play_nply(*args, **kwargs):
+            calls.append(kwargs)
+            return ['native result']
+
+        class Pool:
+            def __init__(self, max_workers=None):
+                self.max_workers = max_workers
+
+        native = SimpleNamespace(checker_play_nply=checker_play_nply)
+        module = SimpleNamespace(bgbot_cpp=native, ThreadPoolExecutor=Pool)
+        sage = SimpleNamespace(analyzer=module)
+
+        def analysis():
+            module.ThreadPoolExecutor(max_workers=3)
+            return native.checker_play_nply([0] * 26, 3, 1, n_threads=4)
+
+        result, observed = probe.observe_thread_budgets(sage, analysis)
+        self.assertEqual(result, ['native result'])
+        self.assertEqual(observed, [3, 4])
+        self.assertEqual(calls, [{'n_threads': 4}])
+        # Both observers are removed again after the call.
+        self.assertIs(module.ThreadPoolExecutor, Pool)
+        self.assertIs(native.checker_play_nply, checker_play_nply)
 
     def test_network_guard_denies_socket_connections(self):
         self.assertTrue(hasattr(probe, 'deny_network'), 'network guard missing')

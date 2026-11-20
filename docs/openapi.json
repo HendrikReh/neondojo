@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "NeonDojo API",
-    "description": "Local headless backgammon library with GNUbg and Open Sage analysis. No authentication; bind to loopback.",
+    "description": "Local headless backgammon library with GNUbg and NeonGammon analysis. No authentication; bind to loopback.",
     "license": {
       "name": ""
     },
@@ -12806,7 +12806,7 @@
               "null"
             ],
             "format": "double",
-            "description": "Cold Open Sage worker initialization, outside the warm pipeline timer."
+            "description": "Cold NeonGammon worker initialization, outside the warm pipeline timer."
           },
           "status": {
             "type": "string"
@@ -20568,7 +20568,7 @@
               },
               {
                 "$ref": "#/components/schemas/GamePlan",
-                "description": "Open Sage plan for the player on roll."
+                "description": "NeonGammon plan for the player on roll."
               }
             ]
           },

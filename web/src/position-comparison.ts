@@ -37,7 +37,7 @@ export function positionComparisonOptions(
         ? provider === engine
         : (engine === 'gnubg'
             ? /^(GNU Backgammon|GNUbg)\b/i
-            : /^Open Sage\b/i
+            : /^NeonGammon\b/i
           ).test(entry.engine);
     })
     .sort(

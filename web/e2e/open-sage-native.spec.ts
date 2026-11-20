@@ -8,7 +8,7 @@ import { test, expect } from '@playwright/test';
 import type { components } from '../src/generated-api';
 test.skip(
   !process.env.NEONDOJO_SAGE_PYTHON,
-  'Requires locked local Open Sage and GNUbg',
+  'Requires locked local NeonGammon and GNUbg',
 );
 
 test('independent native engines, immutable sessions and desktop settings', async ({
@@ -121,7 +121,7 @@ test('independent native engines, immutable sessions and desktop settings', asyn
   expect(resumed.engine_snapshots).toEqual(first.engine_snapshots);
 });
 
-test('completes Open Sage 4-ply for one game and the entire match', async ({
+test('completes NeonGammon 4-ply for one game and the entire match', async ({
   page,
 }) => {
   test.setTimeout(120_000);

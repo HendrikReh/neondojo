@@ -153,7 +153,7 @@ test('tracks selected matches after closing the dialog and reloading the page', 
         },
         {
           id: 'bgsage',
-          name: 'Open Sage',
+          name: 'NeonGammon',
           available: true,
           version: '1',
           plies: [2, 4],

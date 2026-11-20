@@ -3,8 +3,8 @@ import { expect, test } from './test';
 const gnubgVersion = 'GNU Backgammon 1.08.003 20261108';
 const sageModel =
   '5b741451d4f49e69eaa1063fc44f5de67d9e2a528cf9b75f32733136d55b352b';
-const currentSageVersion = `Open Sage 2.0.20260907; model ${sageModel}; 2ply cubeful; threads 4; adapter 1`;
-const forkRepository = 'HendrikReh/bgsage';
+const currentSageVersion = `NeonGammon 3.0.0; model ${sageModel}; 2ply cubeful; threads 4; adapter 1`;
+const forkRepository = 'HendrikReh/neongammon';
 const forkRevision = '5b146c7d86fa965f2185e3871f3c56df030fd76f';
 const forkUrl = `https://github.com/${forkRepository}/commit/${forkRevision}`;
 
@@ -32,7 +32,7 @@ test('shows the running app and engine versions under Extras', async ({
               },
               {
                 id: 'bgsage',
-                name: 'Open Sage',
+                name: 'NeonGammon',
                 available: sageVersion !== null,
                 version: sageVersion,
                 fork: sageFork,
@@ -67,7 +67,7 @@ test('shows the running app and engine versions under Extras', async ({
   await expect(appCommit).toBeVisible();
   await expect(appCommit).toHaveAttribute('title', commit);
   await expect(panel.getByText('1.08.003', { exact: true })).toBeVisible();
-  await expect(panel.getByText('2.0.20260907', { exact: true })).toBeVisible();
+  await expect(panel.getByText('3.0.0', { exact: true })).toBeVisible();
   await expect(panel.getByText('Available', { exact: true })).toHaveCount(2);
   await expect(
     panel.getByText(currentSageVersion, { exact: true }),
@@ -125,7 +125,7 @@ test('shows the running app and engine versions under Extras', async ({
   });
   engineStatus = 200;
   sageFork = undefined;
-  sageVersion = 'Open Sage 0.8.0 (adapter 1)';
+  sageVersion = 'NeonGammon 0.8.0 (adapter 1)';
   await panel.getByRole('button', { name: 'Try again' }).click();
   await expect(panel.getByText('0.8.0', { exact: true })).toBeVisible();
   await expect(copy).toBeEnabled();
@@ -133,7 +133,7 @@ test('shows the running app and engine versions under Extras', async ({
   expect(unexpectedVersionReads).toBe(0);
   await details.click();
   await expect(panel.getByText(sageVersion, { exact: true })).toBeVisible();
-  await expect(panel.getByText('Open Sage fork', { exact: true })).toHaveCount(
+  await expect(panel.getByText('NeonGammon source', { exact: true })).toHaveCount(
     0,
   );
 

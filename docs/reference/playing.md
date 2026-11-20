@@ -1,6 +1,6 @@
 # Playing
 
-How matches against GNUbg or Open Sage, feedback modes and game results behave. For a guided introduction, see the [user guide](../user-guide/README.md#2-playing).
+How matches against GNUbg or NeonGammon, feedback modes and game results behave. For a guided introduction, see the [user guide](../user-guide/README.md#2-playing).
 
 ## Playing against GNUbg
 
@@ -83,4 +83,4 @@ In Coach mode, a checker move at or above the captured **Error** threshold opens
 
 The **Play mode** column in Match database shows the mode and use of learning aids. You can hide or resize it independently of existing column profiles. Opening the original of an ongoing Competition match resumes Playing, including at startup. The original match and its positions become available for analysis when the match ends, or after a completed money game. Switching to Competition clears cached analysis for that source. Explicit independent library copies remain available for review.
 
-**Learning review** distinguishes first attempts, played choices, retries, and assistance, including in mixed-mode matches. First-attempt PR uses `500 × original normalized equity loss / native-relevant decisions` at the positions actually reached. It excludes forced checker moves and applies GNUbg's strict close-cube rule to no-double choices. The review identifies its method and profile separately from GNUbg's aggregate rating of the played match. It needs GNUbg's game statistics, which exist for point matches and money games analyzed with GNUbg; a review analyzed with Open Sage shows no first-attempt PR. Mode and assistance metadata are retained for originals, copies, and bookmarked occurrences. The match overview omits PR for matches that used learning aids.
+**Learning review** distinguishes first attempts, played choices, retries, and assistance, including in mixed-mode matches. First-attempt PR uses `500 × original normalized equity loss / native-relevant decisions` at the positions actually reached. It excludes forced checker moves and applies GNUbg's strict close-cube rule to no-double choices. The review identifies its method and profile separately from GNUbg's aggregate rating of the played match. It needs GNUbg's game statistics, which exist for point matches and money games analyzed with GNUbg; a review analyzed with NeonGammon shows no first-attempt PR. Mode and assistance metadata are retained for originals, copies, and bookmarked occurrences. The match overview omits PR for matches that used learning aids.

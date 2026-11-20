@@ -1,4 +1,4 @@
-//! Portable checker evaluations captured while Open Sage plays an engine duel.
+//! Portable checker evaluations captured while NeonGammon plays an engine duel.
 use super::{ImportedAnalysisData, ImportedCandidate, base};
 use crate::{
     engines::{SageCheckerCandidate, SageSnapshot, valid_sage_depth, validate_evaluation},
@@ -47,20 +47,20 @@ impl RetainedChecker {
     fn record(self, source: &SourceMove) -> Result<ImportedAnalysisData> {
         ensure!(
             self.version == 1 && valid_sage_depth(self.plies),
-            "Unsupported retained Open Sage evaluation"
+            "Unsupported retained NeonGammon evaluation"
         );
         ensure!(
             source.kind == "checker"
                 && self.native_id == format!("{}:{}", source.position_id, source.match_id),
-            "Retained Open Sage checker context differs from played move"
+            "Retained NeonGammon checker context differs from played move"
         );
         ensure!(
             !self.candidates.is_empty() && self.candidates.len() <= 5,
-            "Invalid retained Open Sage candidates"
+            "Invalid retained NeonGammon candidates"
         );
         ensure!(
             self.candidates[0].board.as_slice() == source.after_board,
-            "Retained Open Sage choice differs from played board"
+            "Retained NeonGammon choice differs from played board"
         );
         for candidate in &self.candidates {
             validate_evaluation(candidate.equity, &candidate.probabilities)?;
@@ -68,7 +68,7 @@ impl RetainedChecker {
         let mut record = base(
             source,
             "checker",
-            "Open Sage",
+            "NeonGammon",
             Some(self.package_version.clone()),
         );
         record.method = "evaluation".into();
@@ -95,7 +95,7 @@ impl RetainedChecker {
 
 pub(super) fn extract(source: &SourceMove, value: &str) -> Result<ImportedAnalysisData> {
     let saved: RetainedChecker = serde_json::from_value(decode_retained_analysis(value)?)
-        .context("Invalid retained Open Sage checker evaluation")?;
+        .context("Invalid retained NeonGammon checker evaluation")?;
     saved.record(source)
 }
 
@@ -122,7 +122,7 @@ pub(crate) fn retain(sgf: &str, evaluations: Vec<(usize, RetainedChecker)>) -> R
         evaluation.record(source)?;
         ensure!(
             nodes[ordinal].insert("BGTSC".into(), vec![value]).is_none(),
-            "Duplicate retained Open Sage evaluation"
+            "Duplicate retained NeonGammon evaluation"
         );
     }
     Ok(serialize_trees(&trees))
@@ -140,7 +140,7 @@ mod tests {
         RetainedChecker {
             version: 1,
             native_id: format!("{}:{}", m.position_id, m.match_id),
-            package_version: "2.0.20260907".into(),
+            package_version: "3.0.0".into(),
             artifact_fingerprint: "a".repeat(64),
             plies: 2,
             threads: 4,
@@ -160,8 +160,8 @@ mod tests {
         let records = crate::imported_analysis::extract(&sgf).unwrap();
         assert_eq!(records.len(), 1);
         let r = &records[0];
-        assert_eq!(r.engine, "Open Sage");
-        assert_eq!(r.engine_version.as_deref(), Some("2.0.20260907"));
+        assert_eq!(r.engine, "NeonGammon");
+        assert_eq!(r.engine_version.as_deref(), Some("3.0.0"));
         assert_eq!(r.depth_plies, Some(2));
         assert_eq!(r.candidates[0].equity, Some(0.125));
         assert_eq!(r.candidates[0].notation, "8/5 6/5");

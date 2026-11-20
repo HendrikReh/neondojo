@@ -56,8 +56,8 @@ async fn mixed_duels_retain_checker_evaluations_for_both_sides(pool: sqlx::PgPoo
                 .find(|r| {
                     r.kind == "checker" && r.game_no == m.game_no && r.source_move_no == m.move_no
                 })
-                .unwrap_or_else(|| panic!("Open Sage checker evaluation was discarded: {m:?}; retained {} checker records", records.iter().filter(|r| r.kind == "checker" && r.engine == "Open Sage").count()));
-            assert_eq!(record.engine, "Open Sage");
+                .unwrap_or_else(|| panic!("NeonGammon checker evaluation was discarded: {m:?}; retained {} checker records", records.iter().filter(|r| r.kind == "checker" && r.engine == "NeonGammon").count()));
+            assert_eq!(record.engine, "NeonGammon");
             assert_eq!(record.depth_plies, Some(2));
             assert_eq!(record.position_id.as_deref(), Some(m.position_id.as_str()));
             assert_eq!(record.gnubg_match_id.as_deref(), Some(m.match_id.as_str()));
@@ -89,16 +89,16 @@ async fn mixed_duels_retain_checker_evaluations_for_both_sides(pool: sqlx::PgPoo
         )
         .await
         .unwrap();
-        let expected_count = records.iter().filter(|r| r.engine == "Open Sage").count() as i64;
+        let expected_count = records.iter().filter(|r| r.engine == "NeonGammon").count() as i64;
         let stored_count: i64 = sqlx::query_scalar(
-            "SELECT count(*) FROM imported_analyses WHERE match_uuid=$1 AND data->>'engine'='Open Sage'",
+            "SELECT count(*) FROM imported_analyses WHERE match_uuid=$1 AND data->>'engine'='NeonGammon'",
         )
         .bind(stored.r#match.id)
         .fetch_one(&pool)
         .await
         .unwrap();
         assert_eq!(stored_count, expected_count);
-        let position: Uuid = sqlx::query_scalar("SELECT position_uuid FROM imported_analyses WHERE match_uuid=$1 AND data->>'engine'='Open Sage' ORDER BY game_no,source_move_no LIMIT 1")
+        let position: Uuid = sqlx::query_scalar("SELECT position_uuid FROM imported_analyses WHERE match_uuid=$1 AND data->>'engine'='NeonGammon' ORDER BY game_no,source_move_no LIMIT 1")
             .bind(stored.r#match.id).fetch_one(&pool).await.unwrap();
         let router = crate::api::router(crate::api::AppState::new(pool.clone(), rules.clone()));
         let response = router
@@ -115,7 +115,7 @@ async fn mixed_duels_retain_checker_evaluations_for_both_sides(pool: sqlx::PgPoo
             .as_array()
             .unwrap()
             .iter()
-            .find(|r| r["engine"] == "Open Sage")
+            .find(|r| r["engine"] == "NeonGammon")
             .unwrap();
         assert_eq!(sage["depth_plies"], 2);
         assert!(sage["candidates"][0]["equity"].is_number());
@@ -403,7 +403,7 @@ fn student_t_quantile_matches_reference_values() {
 fn pair_interval_uses_the_empirical_variance_of_pair_means() {
     // Reference: mean ± t(0.975, n−1) · s / √n with scipy, s the sample
     // standard deviation of the pair means.
-    // 100 pairs: 23 won 2–0 by A, 16 by B, 61 split (a real GNUbg/Open Sage series).
+    // 100 pairs: 23 won 2–0 by A, 16 by B, 61 split (a real GNUbg/NeonGammon series).
     assert_interval(&paired_results(23, 16, 61), [0.473_123_1, 0.596_876_9]);
     assert_interval(&paired_results(8, 2, 10), [0.496_269_7, 0.803_730_3]);
     // Bounds stay within [0, 1].
@@ -849,7 +849,7 @@ async fn open_sage_and_gnubg_complete_both_legs() {
     .unwrap();
     assert_eq!(first.games, 1);
     assert_eq!(second.games, 1);
-    // Both the native GNUbg side and the external Open Sage side are measured.
+    // Both the native GNUbg side and the external NeonGammon side are measured.
     for side in first.costs.iter().chain(&second.costs) {
         let side = side.expect("each engine reports its cost");
         assert!(side.moves > 0 && side.cost.cpu_us > 0 && side.cost.wall_us > 0);

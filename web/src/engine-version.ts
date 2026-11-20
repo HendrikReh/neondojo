@@ -1,6 +1,6 @@
 const versionPattern = /^v?\d+(?:\.\d+)+(?:[-+][\w.+-]+)?(?=$|[\s;(])/i;
 const engineNamePattern =
-  /^(GNU Backgammon|GNUbg|Open Sage|eXtreme Gammon|BGBlitz|HedgeHog|Snowie)(?=$|[\s;(])/i;
+  /^(GNU Backgammon|GNUbg|NeonGammon|eXtreme Gammon|BGBlitz|HedgeHog|Snowie)(?=$|[\s;(])/i;
 const namedVersionPattern = new RegExp(
   `^(.+?\\s+${versionPattern.source.slice(1)})`,
   'i',
@@ -11,7 +11,7 @@ export function shortEngineVersion(
   details: string | null,
 ) {
   const prefix =
-    engine === 'gnubg' ? /^(?:GNU Backgammon|GNUbg)\s+/i : /^Open Sage\s+/i;
+    engine === 'gnubg' ? /^(?:GNU Backgammon|GNUbg)\s+/i : /^NeonGammon\s+/i;
   return details?.trim().replace(prefix, '').match(versionPattern)?.[0];
 }
 

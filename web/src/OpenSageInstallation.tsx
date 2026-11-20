@@ -10,7 +10,7 @@ import { useSettingsText } from './settings-messages';
 
 const text = {
   de: [
-    'Lokale Open-Sage-Installation',
+    'Lokale NeonGammon-Installation',
     'Python-Pfad',
     'Prüfen und speichern',
     'Prüfung läuft…',
@@ -18,7 +18,7 @@ const text = {
     'Installation nicht geprüft',
   ],
   en: [
-    'Local Open Sage installation',
+    'Local NeonGammon installation',
     'Python path',
     'Verify and save',
     'Verifying…',
@@ -26,7 +26,7 @@ const text = {
     'Installation not verified',
   ],
   es: [
-    'Instalación local de Open Sage',
+    'Instalación local de NeonGammon',
     'Ruta de Python',
     'Verificar y guardar',
     'Verificando…',
@@ -34,7 +34,7 @@ const text = {
     'Instalación no verificada',
   ],
   fr: [
-    'Installation locale Open Sage',
+    'Installation locale NeonGammon',
     'Chemin Python',
     'Vérifier et enregistrer',
     'Vérification…',
@@ -42,7 +42,7 @@ const text = {
     'Installation non vérifiée',
   ],
   it: [
-    'Installazione locale Open Sage',
+    'Installazione locale NeonGammon',
     'Percorso Python',
     'Verifica e salva',
     'Verifica…',
@@ -50,7 +50,7 @@ const text = {
     'Installazione non verificata',
   ],
   pl: [
-    'Lokalna instalacja Open Sage',
+    'Lokalna instalacja NeonGammon',
     'Ścieżka Pythona',
     'Sprawdź i zapisz',
     'Sprawdzanie…',

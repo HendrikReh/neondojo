@@ -955,7 +955,7 @@ async fn catalog_consumers_keep_open_sage_checkpoint_provenance_without_job_summ
     let deck = create_deck(&app).await;
     let (status, page) = call(app.clone(), "GET", "/api/position-browser", Value::Null).await;
     assert_eq!(status, 200, "{page}");
-    assert_eq!(page["items"][0]["native_error"]["engine"], "Open Sage");
+    assert_eq!(page["items"][0]["native_error"]["engine"], "NeonGammon");
     for body in [
         json!({"position_id":position.id,"analysis_id":format!("job:{job}")}),
         json!({"match_id":position.match_uuid,"analysis_id":format!("job:{job}")}),
@@ -973,7 +973,7 @@ async fn catalog_consumers_keep_open_sage_checkpoint_provenance_without_job_summ
                 .fetch_one(&pool)
                 .await
                 .unwrap();
-        assert_eq!(engine, "Open Sage");
+        assert_eq!(engine, "NeonGammon");
     }
     let (_, groups) = call(
         app.clone(),
@@ -984,5 +984,5 @@ async fn catalog_consumers_keep_open_sage_checkpoint_provenance_without_job_summ
     .await;
     let (status,practice)=call(app,"POST","/api/study/mistakes/practice",json!({"player":"Alice","min_loss":0.1,"mistake_kind":"checker","game_plan":groups["groups"][0]["game_plan"]})).await;
     assert_eq!(status, 200, "{practice}");
-    assert_eq!(practice["items"][0]["engine"], "Open Sage");
+    assert_eq!(practice["items"][0]["engine"], "NeonGammon");
 }

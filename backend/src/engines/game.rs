@@ -38,7 +38,7 @@ impl SageEngine {
             match limit {
                 Some(limit) => tokio::time::timeout(limit, work)
                     .await
-                    .context("Open Sage game analysis timed out; active worker terminated")?,
+                    .context("NeonGammon game analysis timed out; active worker terminated")?,
                 None => work.await,
             }
         })
@@ -105,11 +105,11 @@ impl SageEngine {
                     .await?;
                 let best = candidates
                     .first()
-                    .context("Open Sage omitted best checker move")?;
+                    .context("NeonGammon omitted best checker move")?;
                 let played = candidates
                     .iter()
                     .find(|candidate| candidate.board == after)
-                    .context("Open Sage omitted played checker move")?;
+                    .context("NeonGammon omitted played checker move")?;
                 let forced = event.board == event.after_board;
                 let mut result = decision(
                     event.player,
@@ -153,7 +153,7 @@ impl SageEngine {
         }
         ensure!(
             analyzed_checkers == expected_checkers,
-            "Incomplete Open Sage game coverage"
+            "Incomplete NeonGammon game coverage"
         );
         for (index, decision) in decisions.iter_mut().enumerate() {
             decision.decision_no = i32::try_from(index + 1)?;
@@ -181,10 +181,13 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires locked native Open Sage; no database"]
+    #[ignore = "requires locked native NeonGammon; no database"]
     async fn native_opening_analysis_retains_all_ranked_checker_candidates() {
         let python = std::env::var("NEONDOJO_SAGE_PYTHON").unwrap();
-        for plies in [2, 4] {
+        // Cubeful 2-ply searches only the move filter's survivors (plus the
+        // played move) at full depth and drops the 1-ply rest; deeper levels
+        // search every legal move. Counts are for the pinned NeonGammon 3.0.0.
+        for (plies, expected) in [(2, 5), (4, 14)] {
             let profile = SageEngine::probe_profile(python.clone(), plies, 4)
                 .await
                 .unwrap();
@@ -195,7 +198,7 @@ mod tests {
                 .unwrap();
             let decision = &game.decisions[0];
             let candidates = &decision.checker_candidates;
-            assert_eq!(candidates.len(), 14);
+            assert_eq!(candidates.len(), expected, "{plies}-ply");
             assert_eq!(candidates[0].notation, decision.best);
             assert_eq!(Some(candidates[0].equity), decision.best_equity);
             assert!(
@@ -213,7 +216,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires locked native Open Sage; compares all WC2014 decisions; no database"]
+    #[ignore = "requires locked native NeonGammon; compares all WC2014 decisions; no database"]
     async fn native_atomic_games_match_individual_requests() {
         let python = std::env::var("NEONDOJO_SAGE_PYTHON").unwrap();
         let engine = SageEngine::new(SageEngine::probe(python, 4).await.unwrap()).unwrap();

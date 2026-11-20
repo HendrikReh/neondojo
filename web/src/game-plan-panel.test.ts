@@ -45,7 +45,7 @@ it('shows both actual player names in fixed White/Black order with board-only at
   expect(html.indexOf('data-game-plan="white"')).toBeLessThan(
     html.indexOf('data-game-plan="black"'),
   );
-  expect(html).toContain('Open Sage');
+  expect(html).toContain('NeonGammon');
   expect(html).toContain('board structure');
   expect(html).toContain('GNUbg');
   expect(html).toContain('move recommendations');

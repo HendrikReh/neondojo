@@ -1,4 +1,4 @@
-"""Dependency-free tests for the bundled Open Sage sidecar protocol."""
+"""Dependency-free tests for the bundled NeonGammon sidecar protocol."""
 import importlib.util
 from pathlib import Path
 import unittest
@@ -125,7 +125,7 @@ class BatchTests(unittest.TestCase):
         self.runtime.analyzer.checker_play = lambda *args, **kwargs: SimpleNamespace(moves=[full, pruned])
         self.runtime.sage = SimpleNamespace(possible_moves=lambda *args: [[0] * 26, [1] + [0] * 25])
         checker = dict(self.cube, operation='checker', dice=[3, 1])
-        with patch.dict(sys.modules, {'bgsage.text_export': SimpleNamespace(compute_move_notation=lambda *args: '8/5 6/5')}):
+        with patch.dict(sys.modules, {'neongammon.text_export': SimpleNamespace(compute_move_notation=lambda *args: '8/5 6/5')}):
             for cubeless in (False, True):
                 with self.subTest(cubeless=cubeless):
                     self.runtime.cubeless = cubeless
@@ -156,7 +156,7 @@ class BatchTests(unittest.TestCase):
         self.runtime.analyzer.checker_play = checker_play
         self.runtime.sage = SimpleNamespace(possible_moves=lambda *args: [tuple(b) for b in legal])
         checker = dict(self.cube, operation='checker', dice=[3, 1], all_legal=True)
-        with patch.dict(sys.modules, {'bgsage.text_export': SimpleNamespace(compute_move_notation=lambda *args: '8/5 6/5')}):
+        with patch.dict(sys.modules, {'neongammon.text_export': SimpleNamespace(compute_move_notation=lambda *args: '8/5 6/5')}):
             moves, _ = self.runtime.dispatch(checker)
         self.assertEqual(calls, [legal])
         self.assertEqual([move['board'] for move in moves], legal)
@@ -212,13 +212,13 @@ class BatchTests(unittest.TestCase):
             self.runtime.dispatch({'operation': 'begin_batch'})
 
     def test_real_fingerprint_rejects_metadata_and_asset_identity_changes(self):
-        for field in ('RECORD', 'production_model', 'strategy', 'identity_sha256', 'numpy', 'bgsage'):
+        for field in ('RECORD', 'production_model', 'strategy', 'identity_sha256', 'numpy', 'neongammon'):
             for boundary in ('begin_batch', 'end_batch'):
                 with self.subTest(field=field, boundary=boundary):
                     self.setUp()
                     del self.runtime.check_identity
                     self.runtime.sage = self.runtime.native = None
-                    manifest = dict(identity_sha256='original', bgsage=PROBE.SUPPORTED_VERSIONS[-1],
+                    manifest = dict(identity_sha256='original', neongammon=PROBE.SUPPORTED_VERSIONS[-1],
                                     numpy=PROBE.NUMPY_VERSION, production_model='stage11',
                                     strategy='backgame_pair_phased')
                     self.runtime.integrity['identity'] = lambda *args: dict(manifest)

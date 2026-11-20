@@ -63,7 +63,7 @@ fn reported_threads(output: &str) -> Option<i32> {
 /// Deepest GNUbg evaluation NeonDojo offers, in NeonDojo's ply convention.
 pub(crate) const GNUBG_MAX_PLIES: i32 = 5;
 
-/// NeonDojo stores, shows and compares every depth in the XG / Open Sage
+/// NeonDojo stores, shows and compares every depth in the XG / NeonGammon
 /// convention, where 1-ply is the raw neural-net evaluation. GNUbg counts that
 /// evaluation as 0-ply. This is the only conversion into GNUbg's native level;
 /// apply it where a command or request is written for GNUbg.

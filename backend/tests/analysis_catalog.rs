@@ -237,7 +237,7 @@ async fn catalog_preserves_history_and_selected_entry_across_pages(pool: PgPool)
     let (app, id, p) = setup(&pool).await;
     imported(&pool, id, p[0]).await;
     let old = match_job(&pool, id, p[0], None, "GNU Backgammon", 4, "completed").await;
-    let scoped = match_job(&pool, id, p[2], Some(2), "Open Sage", 2, "completed").await;
+    let scoped = match_job(&pool, id, p[2], Some(2), "NeonGammon", 2, "completed").await;
     let hint = position_job(&pool, p[0], 1).await;
     let key = format!("job:{}", old.id);
     assert_eq!(select(&app, id, Some(&key)).await.0, 200);
@@ -304,12 +304,12 @@ async fn catalog_preserves_history_and_selected_entry_across_pages(pool: PgPool)
 async fn automatic_selection_is_engine_independent_and_never_merges_scopes(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
     imported(&pool, id, p[0]).await;
-    let scoped = match_job(&pool, id, p[2], Some(2), "Open Sage", 4, "completed").await;
+    let scoped = match_job(&pool, id, p[2], Some(2), "NeonGammon", 4, "completed").await;
     let (_, catalog) = get(&app, &format!("/api/matches/{id}/analyses")).await;
     assert_eq!(catalog["selected"]["id"], format!("imported:{id}"));
     assert!(catalog["selected_id"].is_null());
     let older = match_job(&pool, id, p[0], None, "GNU Backgammon", 4, "completed").await;
-    let newer = match_job(&pool, id, p[0], None, "Open Sage", 1, "completed").await;
+    let newer = match_job(&pool, id, p[0], None, "NeonGammon", 1, "completed").await;
     sqlx::query("UPDATE app_settings SET analysis_engine='gnubg'")
         .execute(&pool)
         .await
@@ -548,7 +548,7 @@ async fn retained_native_occurrences_remain_automatically_readable_without_full_
 async fn calculation_monitor_uses_explicit_engine_filter_only(pool: PgPool) {
     let (_, id, p) = setup(&pool).await;
     let legacy = match_job(&pool, id, p[0], None, "GNU Backgammon", 2, "completed").await;
-    let sage = match_job(&pool, id, p[0], None, "Open Sage", 1, "completed").await;
+    let sage = match_job(&pool, id, p[0], None, "NeonGammon", 1, "completed").await;
     sqlx::query("UPDATE jobs SET engine_snapshot=$2 WHERE id=$1").bind(sage.id).bind(json!({"engine_id":"bgsage","gnubg_path":"unused","engine_version":null,"open_sage":null})).execute(&pool).await.unwrap();
     sqlx::query("UPDATE app_settings SET analysis_engine='gnubg'")
         .execute(&pool)

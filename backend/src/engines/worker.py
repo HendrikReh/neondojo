@@ -24,7 +24,7 @@ def process_cpu_us():
 
 def validate_profile(plies, threads):
     if type(plies) is not int or not 1 <= plies <= 4 or type(threads) is not int or threads < 2:
-        raise ValueError('Unsupported Open Sage depth or thread count')
+        raise ValueError('Unsupported NeonGammon depth or thread count')
 
 
 def probabilities(values):
@@ -33,10 +33,10 @@ def probabilities(values):
     # larger errors and inconsistent nesting still fail closed.
     epsilon = 1e-7
     if len(values) != 5 or not all(math.isfinite(x) and -epsilon <= x <= 1 + epsilon for x in values):
-        raise ValueError('Invalid Open Sage probabilities')
+        raise ValueError('Invalid NeonGammon probabilities')
     w, wg, wb, lg, lb = [min(1.0, max(0.0, x)) for x in values]
     if not (wb <= wg <= w and lb <= lg <= 1 - w + 1e-12):
-        raise ValueError('Inconsistent Open Sage probabilities')
+        raise ValueError('Inconsistent NeonGammon probabilities')
     return [w, wg, wb, 1 - w, lg, lb]
 
 
@@ -56,35 +56,29 @@ class Runtime:
         integrity['deny_network']()
         integrity['validate_platform'](sys.platform == 'darwin' and 'Darwin' or sys.platform,
                                        __import__('platform').machine(), sys.version_info)
-        import bgsage
+        import neongammon
         import bgbot_cpp
-        self.sage, self.native, self.integrity = bgsage, bgbot_cpp, integrity
+        self.sage, self.native, self.integrity = neongammon, bgbot_cpp, integrity
         self.profile = profile
         self.cubeless = profile.get('cubeless', False)
         if type(self.cubeless) is not bool:
-            raise ValueError('Invalid Open Sage cubeless flag')
+            raise ValueError('Invalid NeonGammon cubeless flag')
         self.batch_active = False
         self.identity = self.check_identity()
         expected = profile.get('artifact_fingerprint')
         if expected and expected != self.identity['artifact_fingerprint']:
-            raise ValueError('Open Sage assets changed since submission; restore the saved installation')
+            raise ValueError('NeonGammon assets changed since submission; restore the saved installation')
         # Cubeless money duels use Sage's cubeless checker path, which evaluates
         # serially and searches only its filtered top candidates at full depth.
-        self.analyzer = bgsage.BgBotAnalyzer(eval_level=f"{profile['plies']}ply", cubeful=not self.cubeless,
+        self.analyzer = neongammon.BgBotAnalyzer(eval_level=f"{profile['plies']}ply", cubeful=not self.cubeless,
                                              parallel_threads=profile['threads'])
-        # Exercise the real candidate path and observe its configured pool bound.
-        from concurrent.futures import ThreadPoolExecutor
-        from unittest.mock import patch
-        observed = []
-        def pool(*args, **kwargs):
-            observed.append(kwargs.get('max_workers', args[0] if args else None))
-            return ThreadPoolExecutor(*args, **kwargs)
-        with patch('bgsage.analyzer.ThreadPoolExecutor', side_effect=pool):
-            opening = self.analyzer.checker_play(list(bgsage.STARTING_BOARD), 3, 1, beaver=False)
-        serial = self.cubeless or profile['plies'] == 1 and getattr(bgsage.analyzer, 'SERIAL_CUBEFUL_1PLY', False) is True
+        # Exercise the real candidate path and observe its configured budgets.
+        opening, observed = integrity['observe_thread_budgets'](
+            neongammon, lambda: self.analyzer.checker_play(list(neongammon.STARTING_BOARD), 3, 1, beaver=False))
+        serial = self.cubeless or profile['plies'] == 1 and getattr(neongammon.analyzer, 'SERIAL_CUBEFUL_1PLY', False) is True
         integrity['validate_thread_budget'](profile['threads'], observed, serial=serial)
         if not opening.moves:
-            raise ValueError('Open Sage capability check returned no candidates')
+            raise ValueError('NeonGammon capability check returned no candidates')
         for move in opening.moves:
             integrity['validate_result'](move)
         self.verify()
@@ -94,20 +88,20 @@ class Runtime:
         try:
             self.integrity['validate_versions'](value)
         except self.integrity['ProbeError']:
-            raise ValueError('Unsupported Open Sage/NumPy version; install the locked wheels') from None
+            raise ValueError('Unsupported NeonGammon/NumPy version; install the locked wheels') from None
         # Include the RECORD file itself, dependency version, and model selection.
-        distribution = __import__('importlib.metadata', fromlist=['distribution']).distribution('bgsage')
+        distribution = __import__('importlib.metadata', fromlist=['distribution']).distribution('neongammon')
         record = distribution.read_text('RECORD')
         if not record:
-            raise ValueError('Missing Open Sage wheel RECORD')
-        manifest = {k: value[k] for k in ('identity_sha256', 'bgsage', 'numpy', 'production_model', 'strategy')}
+            raise ValueError('Missing NeonGammon wheel RECORD')
+        manifest = {k: value[k] for k in ('identity_sha256', 'neongammon', 'numpy', 'production_model', 'strategy')}
         manifest['record_sha256'] = hashlib.sha256(record.encode()).hexdigest()
-        return {'package_version': value['bgsage'],
+        return {'package_version': value['neongammon'],
                 'artifact_fingerprint': hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()}
 
     def verify(self):
         if self.check_identity() != self.identity:
-            raise ValueError('Open Sage installation changed during evaluation')
+            raise ValueError('NeonGammon installation changed during evaluation')
 
     def dispatch(self, request):
         operation = request['operation']
@@ -155,7 +149,7 @@ class Runtime:
                     # Hints rate every legal move, so search all of them at full depth.
                     force_boards = [board(list(move)) for move in self.sage.possible_moves(before, *dice)]
                 result = self.analyzer.checker_play(before, *dice, force_boards=force_boards, **kwargs)
-                from bgsage.text_export import compute_move_notation
+                from neongammon.text_export import compute_move_notation
                 moves = []
                 for move in result.moves:
                     try:
@@ -169,11 +163,11 @@ class Runtime:
                         # choice; forced candidates must still reach full depth.
                         if not all_legal and move.board != forced:
                             continue
-                        raise ValueError('Open Sage returned a forced candidate below the requested depth')
+                        raise ValueError('NeonGammon returned a forced candidate below the requested depth')
                     moves.append({'board': board(move.board), 'notation': compute_move_notation(before, move.board, *dice),
                                   'equity': move.equity, 'probabilities': probabilities(move.probs.to_list())})
                 if not moves or forced is not None and not any(move['board'] == forced for move in moves):
-                    raise ValueError('Open Sage omitted the played candidate')
+                    raise ValueError('NeonGammon omitted the played candidate')
                 result = moves
             elif request['operation'] == 'resignation':
                 level = request['level']
@@ -196,12 +190,12 @@ class Runtime:
                           'continuation': continuation, 'offered': offered.cubeful_equity}
             elif request['operation'] == 'cube':
                 if self.cubeless:
-                    raise ValueError('A cubeless Open Sage profile makes no cube decisions')
+                    raise ValueError('A cubeless NeonGammon profile makes no cube decisions')
                 result = self.analyzer.cube_action(before, **kwargs)
                 try:
                     self.integrity['validate_result'](result, probabilities)
                     if result.eval_level != f"{self.profile['plies']}-ply":
-                        raise ValueError('Open Sage returned a cube evaluation below the requested depth')
+                        raise ValueError('NeonGammon returned a cube evaluation below the requested depth')
                 except Exception as error:
                     raise ValueError(f'Invalid cube evaluation: probabilities={result.probs.to_list()}, board={before}, context={context}; {error}') from error
                 result = {'no_double': result.equity_nd, 'take': result.equity_dt, 'pass': result.equity_dp,

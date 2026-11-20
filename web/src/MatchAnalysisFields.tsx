@@ -112,7 +112,7 @@ export function MatchAnalysisFields({
         >
           {(['gnubg', 'bgsage'] as const).map((id) => {
             const item = catalog?.engines.find((entry) => entry.id === id);
-            const name = id === 'gnubg' ? 'GNUbg' : 'Open Sage';
+            const name = id === 'gnubg' ? 'GNUbg' : 'NeonGammon';
             return (
               <option key={id} value={id}>
                 {item?.name ?? name}

@@ -8,7 +8,7 @@ import './version-info.css';
 
 const engineNames = {
   gnubg: 'GNU Backgammon',
-  bgsage: 'Open Sage',
+  bgsage: 'NeonGammon',
 } as const;
 
 type EngineId = keyof typeof engineNames;

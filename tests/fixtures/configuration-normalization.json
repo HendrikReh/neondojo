@@ -273,7 +273,7 @@
       "expected_paths": []
     },
     {
-      "name": "independent Open Sage playing engine",
+      "name": "independent NeonGammon playing engine",
       "changes": [
         {
           "path": "play.engine",

@@ -26,7 +26,7 @@ impl Context {
         let player = bits(6, 1);
         let owner = bits(4, 2);
         ensure!(owner != 2, "Invalid cube owner");
-        ensure!(bits(8, 3) == 1, "Open Sage requires an active game");
+        ensure!(bits(8, 3) == 1, "NeonGammon requires an active game");
         ensure!(bits(13, 2) == 0, "Resignation context is unsupported");
         let length = bits(21, 15);
         let scores = [bits(36, 15), bits(51, 15)];

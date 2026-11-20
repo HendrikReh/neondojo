@@ -124,7 +124,7 @@ equity and show the original depth on every row. Older game and match results ma
 only show the played and best moves. Recalculate the game or match to save its
 candidates.
 Open **Compare moves** beside **Candidates** to see eXtreme Gammon, GNU Backgammon,
-and Open Sage for the current position. The table aligns moves by their ending
+and NeonGammon for the current position. The table aligns moves by their ending
 boards and shows rank, equity, and actual depth per candidate. The XG column
 shows the rank by equity when the saved values are comparable. Choose a
 different saved analysis in a column when available. The
@@ -361,7 +361,7 @@ classify normalized equity loss in error review, move history and statistics.
 In new matches, the Error threshold sets when Coach pauses for checker errors
 and missed doubles, and sets the initial Tutor warning threshold. Expand **Engines on this computer** for paths,
 installation checks, and thread limits. The collapsed section shows the
-availability of GNUbg and Open Sage.
+availability of GNUbg and NeonGammon.
 
 Closing **Opening books** returns to **Analysis** in Settings and restores focus
 to **Manage opening books**.
@@ -379,7 +379,7 @@ in another window, **Apply** retries the changed settings against that version.
 changes appear immediately on the open board. Choose **Close** to return to
 the workspace. If an earlier automatic save is in conflict, unrelated
 edits remain available for recovery in **Profiles**. **Verify and save** stores
-the Open Sage Python path on the NeonDojo computer.
+the NeonGammon Python path on the NeonDojo computer.
 
 ## Profile in der Navigation
 
@@ -440,7 +440,7 @@ the rows during the restore transaction. Reload NeonDojo after success.
 
 Versions shows the build and both engines. **Technical details** gives access
 to the full commit, the engine version output, and the source commit for
-recognized Open Sage forks. **Copy version information** copies the report.
+recognized NeonGammon forks. **Copy version information** copies the report.
 
 ## Dice equity
 

@@ -61,7 +61,7 @@ describe('configuration comparison', () => {
           }),
         ).toThrow(`appearance.${field}`);
   });
-  it('supports independent verified Open Sage profiles and rejects unverified depths', () => {
+  it('supports independent verified NeonGammon profiles and rejects unverified depths', () => {
     for (const area of ['analysis', 'play'] as const) {
       const current = structuredClone(defaultConfiguration);
       const input = {

@@ -374,12 +374,12 @@ async fn create(
                         .await
                         .map_err(|error| {
                             ApiError::invalid(format!(
-                                "Open Sage installation check failed: {error:#}"
+                                "NeonGammon installation check failed: {error:#}"
                             ))
                         })?;
                 if cubeless {
                     snapshot = settings::cubeless_sage(snapshot).await.map_err(|error| {
-                        ApiError::invalid(format!("Open Sage cubeless check failed: {error:#}"))
+                        ApiError::invalid(format!("NeonGammon cubeless check failed: {error:#}"))
                     })?;
                 }
                 Ok(snapshot)

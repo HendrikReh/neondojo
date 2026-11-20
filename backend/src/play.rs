@@ -201,7 +201,7 @@ impl PlaySession {
     }
     fn bot_name(&self) -> &str {
         if self.engine.id == "bgsage" {
-            "Open Sage"
+            "NeonGammon"
         } else {
             "GNUbg"
         }

@@ -30,7 +30,7 @@ const imported: AnalysisCatalogEntry = {
   job: null,
   complete: false,
 };
-const sage = { ...native, id: 'job:sage', engine: 'Open Sage', depth: '3-ply' };
+const sage = { ...native, id: 'job:sage', engine: 'NeonGammon', depth: '3-ply' };
 function statistics(
   entry: AnalysisCatalogEntry,
   loss: number,
@@ -104,7 +104,7 @@ it('compares imported and native analyses with all saved entries available in ei
   expect(html).toContain('<option value="job:native" selected="">');
   expect(html).toContain('<option value="imported:match" selected="">');
   expect(html).toContain('XGRoller++');
-  expect(html).toContain('Open Sage');
+  expect(html).toContain('NeonGammon');
   expect(html).toContain('>0.124<');
   expect(html).toContain('>0.456<');
   expect(html).not.toContain('>0.999<');

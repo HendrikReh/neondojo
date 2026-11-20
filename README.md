@@ -1,6 +1,6 @@
 # NeonDojo
 
-NeonDojo is a local backgammon application for importing matches, finding positions, analyzing decisions with GNU Backgammon (GNUbg) or Open Sage, playing against an engine, and practicing your own mistakes. Its headless Rust backend uses Tokio, Axum, PostgreSQL, and SQLx. The React and TypeScript client connects through REST and server-sent events (SSE).
+NeonDojo is a local backgammon application for importing matches, finding positions, analyzing decisions with GNU Backgammon (GNUbg) or NeonGammon, playing against an engine, and practicing your own mistakes. Its headless Rust backend uses Tokio, Axum, PostgreSQL, and SQLx. The React and TypeScript client connects through REST and server-sent events (SSE).
 
 [User guide](docs/user-guide/README.md) · [Quick start](#quick-start) · [Restart on port 8787](#restart-neondojo-locally-on-port-8787) · [Analyze a match](#analyze-your-first-match) · [Documentation](#documentation) · [API](docs/development/api.md) · [Verification](docs/development/testing.md) · [Repository guidance](AGENTS.md) · [Changelog](CHANGELOG.md)
 
@@ -86,7 +86,7 @@ Open <http://127.0.0.1:5173>. Vite forwards `/api` to `http://127.0.0.1:8787` by
 2. In **Analysis**, use **Select game** or its adjacent arrows to choose a game. The selector shows the game number, starting score, move count, and Crawford status when applicable. The move history stays within the selected game and loads more moves as needed.
 3. Select a move. The board shows the decision position before the recorded play, together with the score and doubling cube. Point numbering and notation follow the player on roll. Pip counts include checkers on the bar.
 4. In the Analysis header, open **Analysis options → Recalculate position …**, choose a depth, then select **Analyze position** to queue a persistent job. The default is 3-ply. Depths follow [one ply convention](docs/reference/settings.md#ply-convention) for both engines. The result includes up to five candidate moves, cubeful equity, and win probabilities.
-5. Use **Analyze game** in the Analysis header to evaluate the selected game. In the **Match database**, select one or more matches and use **Analyze selected matches …** above the list. Change the engine or depth in **Analysis options** for a game, or in the confirmation dialog for the selected matches. The engine starts with the profile's selection. Game and match analysis go up to 5-ply with GNUbg and 4-ply with Open Sage. **Displayed analysis** selects a saved result from the shared catalog. Games with no checker moves, including cube-only games, can also be selected and analyzed.
+5. Use **Analyze game** in the Analysis header to evaluate the selected game. In the **Match database**, select one or more matches and use **Analyze selected matches …** above the list. Change the engine or depth in **Analysis options** for a game, or in the confirmation dialog for the selected matches. The engine starts with the profile's selection. Game and match analysis go up to 5-ply with GNUbg and 4-ply with NeonGammon. **Displayed analysis** selects a saved result from the shared catalog. Games with no checker moves, including cube-only games, can also be selected and analyzed.
 6. Open **Checker → Dice equity** to see saved values or calculate all 21 unordered dice pairs automatically if the position has no result. The matrix represents 36 equally likely ordered rolls, with weight 1 for doubles and 2 for other pairs. The weighted mean gives the expected equity. When a player has no legal play for a roll, GNUbg evaluates the forced pass. **Game rolls** shows the rolls recorded in the selected game.
 
 **Match database → Find a position in the library** searches for an exact GNUbg position ID, which represents the checker arrangement from the perspective of the player on roll. Analysis also uses the GNUbg match ID for context such as the score, cube, and dice. Each occurrence in the library has its own row with the database, game, and move. Opening a row selects that exact occurrence, even when the same position appears more than once in a match. To find related positions, save the position and choose **Find similar positions** in its preview under **Positions**. The list of similar positions shows each occurrence's score as away values, the cube, the played move and, where the match has a displayed native analysis, the move's equity loss.
@@ -98,7 +98,7 @@ Open <http://127.0.0.1:5173>. Vite forwards `/api` to `http://127.0.0.1:8787` by
 | Players | [User guide](docs/user-guide/README.md) | Guided tour of every workspace, learning paths by level, keyboard reference, troubleshooting and glossary |
 | Detailed behavior | [Analysis](docs/reference/analysis.md) | Analysis workspace, candidate and cube review, displayed and imported analysis, opening books, game plans, error statistics, notes, time estimates and analysis jobs |
 | | [Match library, positions and players](docs/reference/library.md) | Match databases, import formats, saved positions and searches, similar positions and their practice, player database |
-| | [Playing](docs/reference/playing.md) | Matches against GNUbg or Open Sage, resigning, game results, feedback modes and the play API |
+| | [Playing](docs/reference/playing.md) | Matches against GNUbg or NeonGammon, resigning, game results, feedback modes and the play API |
 | | [Study](docs/reference/study.md) | Overview, reports, AI assessment, recurring mistakes, flashcards and Anki |
 | | [Settings, engines and profiles](docs/reference/settings.md) | Settings, engine installations and threads, configuration profiles, themes and languages |
 | | [Extras](docs/reference/extras.md) | Version information, engine benchmark, engine duels and database backup |
@@ -106,5 +106,5 @@ Open <http://127.0.0.1:5173>. Vite forwards `/api` to `http://127.0.0.1:8787` by
 | Developers | [API reference](docs/development/api.md) | Common REST endpoints and OpenAPI generation |
 | | [Verification and tests](docs/development/testing.md) | Quality checks, PostgreSQL and GNUbg integration tests, import corpus, browser tests and native play tests |
 | | [Architecture and data](docs/development/architecture.md) | Repository layout, storage of matches and positions, private demo data |
-| | [Local Open Sage setup](docs/open-sage-local.md) | Installing and checking the Open Sage fork |
+| | [Local NeonGammon setup](docs/open-sage-local.md) | Installing and checking NeonGammon 3.0.0 |
 | | [Repository guidance](AGENTS.md) | Rules for changes to this repository |

@@ -39,7 +39,7 @@ test('compares saved catalog analyses without filtering them by calculation engi
     },
     {
       id: 'sage-four',
-      engine: 'Open Sage 2.0.20260907',
+      engine: 'NeonGammon 3.0.0',
       plies: 4,
       matchLoss: 0.999,
       gameLoss: 0.555,

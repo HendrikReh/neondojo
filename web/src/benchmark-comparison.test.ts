@@ -13,7 +13,7 @@ const base: BenchmarkRun = {
   started_at: null,
   machine: { id: 'm', name: 'Mac', os: 'macOS', architecture: 'aarch64' },
   engine_id: 'bgsage',
-  engine_name: 'Open Sage',
+  engine_name: 'NeonGammon',
   engine_version: 'model-a;threads4',
   engine_path: '/local/python',
   plies: 2,
@@ -99,12 +99,12 @@ it('separates play measurements by the recorded GNUbg rules and protocol', () =>
   expect(groups.map((group) => group.median)).toEqual([20, 120]);
 });
 
-it('displays recorded thread counts for snapshots and older Open Sage runs', () => {
+it('displays recorded thread counts for snapshots and older NeonGammon runs', () => {
   expect(
     benchmarkThreadCount({
       ...base,
       engine_version:
-        'Open Sage 2.0; model abc; 2ply cubeful; threads 4; adapter 1',
+        'NeonGammon 2.0; model abc; 2ply cubeful; threads 4; adapter 1',
     }),
   ).toBe(4);
   expect(
@@ -119,7 +119,7 @@ it('displays recorded thread counts for snapshots and older Open Sage runs', () 
   expect(
     benchmarkThreadCount({
       ...base,
-      engine_version: 'Open Sage 2.0; threads 4; adapter 1',
+      engine_version: 'NeonGammon 2.0; threads 4; adapter 1',
       engine_snapshot: {
         engine: {
           engine_id: 'bgsage',

@@ -121,7 +121,7 @@ export default function AnalysisTimeEstimate({
             <EngineLabel
               details={
                 value.engine_version ??
-                (value.engine_id === 'bgsage' ? 'Open Sage' : 'GNU Backgammon')
+                (value.engine_id === 'bgsage' ? 'NeonGammon' : 'GNU Backgammon')
               }
               format={(engine) =>
                 text('basis', {
