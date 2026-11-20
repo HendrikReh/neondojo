@@ -1,4 +1,5 @@
 import { useI18n } from './i18n';
+import type { components } from './generated-api';
 import { PAUSED_MATCHES_DATABASE_ID, type Database } from './library-api';
 import {
   formatMessage,
@@ -870,6 +871,30 @@ const rows = {
     'Zaimportowano',
     'Importato',
   ],
+  importWarningIllegalPlay: [
+    'Game {game}, move {ply}: the file marks this move as illegal. The import continues from the position recorded after it; the move itself is not stored as a decision.',
+    'Partie {game}, Zug {ply}: Die Datei markiert diesen Zug als illegal. Der Import setzt mit der danach gespeicherten Stellung fort; der Zug selbst wird nicht als Entscheidung gespeichert.',
+    'Partida {game}, movimiento {ply}: el archivo marca este movimiento como ilegal. La importación continúa desde la posición guardada después; el movimiento no se guarda como decisión.',
+    'Partie {game}, coup {ply} : le fichier marque ce coup comme illégal. L’import reprend à la position enregistrée ensuite ; le coup lui-même n’est pas enregistré comme décision.',
+    'Partia {game}, ruch {ply}: plik oznacza ten ruch jako niedozwolony. Import kontynuuje od pozycji zapisanej po nim; sam ruch nie jest zapisywany jako decyzja.',
+    'Partita {game}, mossa {ply}: il file segna questa mossa come illegale. L’importazione prosegue dalla posizione registrata dopo; la mossa non viene salvata come decisione.',
+  ],
+  importWarningCustomStart: [
+    'Game {game} starts from a recorded position instead of the opening setup.',
+    'Partie {game} beginnt mit einer gespeicherten Stellung statt mit der Grundstellung.',
+    'La partida {game} empieza desde una posición guardada en lugar de la posición inicial.',
+    'La partie {game} commence à partir d’une position enregistrée au lieu de la position de départ.',
+    'Partia {game} zaczyna się od zapisanej pozycji zamiast od ustawienia początkowego.',
+    'La partita {game} inizia da una posizione registrata invece che dalla posizione iniziale.',
+  ],
+  importWarningUnfinishedGame: [
+    'Game {game} has no result: the file starts the next game before this one ends.',
+    'Partie {game} hat kein Ergebnis: Die Datei beginnt die nächste Partie, bevor diese endet.',
+    'La partida {game} no tiene resultado: el archivo empieza la siguiente antes de que termine.',
+    'La partie {game} n’a pas de résultat : le fichier commence la suivante avant la fin de celle-ci.',
+    'Partia {game} nie ma wyniku: plik zaczyna następną partię, zanim ta się skończy.',
+    'La partita {game} non ha risultato: il file inizia la successiva prima che questa finisca.',
+  ],
 } as const;
 type Key = keyof typeof rows;
 const locales: Locale[] = ['en', 'de', 'es', 'fr', 'pl', 'it'];
@@ -894,3 +919,19 @@ export function databaseDisplayName(
     : database.name;
 }
 export type LibraryMessageKey = Key;
+
+export type ImportWarning = components['schemas']['ImportWarning'];
+const importWarningKeys = {
+  illegal_play_replaced: 'importWarningIllegalPlay',
+  custom_start_position: 'importWarningCustomStart',
+  unfinished_game: 'importWarningUnfinishedGame',
+} as const satisfies Record<ImportWarning['kind'], Key>;
+export function importWarningText(
+  warning: ImportWarning,
+  t: ReturnType<typeof useLibraryText>,
+) {
+  return t(importWarningKeys[warning.kind], {
+    game: warning.game_no,
+    ply: warning.source_ply ?? '',
+  });
+}

@@ -169,6 +169,32 @@ pub struct JobProgress {
 pub struct ImportResponse {
     pub r#match: MatchSummary,
     pub duplicate: bool,
+    /// Source irregularities the importer resolved explicitly.
+    pub warnings: Vec<ImportWarning>,
+}
+
+/// An irregularity in the source file that the import kept visible instead
+/// of rejecting the whole match.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ImportWarningKind {
+    /// The source marks a played checker move as illegal. The import keeps the
+    /// position recorded after it as a setup and stores no decision for it.
+    IllegalPlayReplaced,
+    /// The game starts from a recorded position instead of the opening setup.
+    CustomStartPosition,
+    /// The game has no result because the next game starts without its footer.
+    UnfinishedGame,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct ImportWarning {
+    pub kind: ImportWarningKind,
+    #[schema(minimum = 1)]
+    pub game_no: i32,
+    /// Checker move number as counted in the source file.
+    #[schema(minimum = 1)]
+    pub source_ply: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]

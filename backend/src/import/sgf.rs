@@ -220,7 +220,7 @@ fn setup(node: &Node, board: &mut [i32; 26]) -> Result<()> {
     }
     valid_board(board)
 }
-fn local_board(board: &[i32; 26], player: i32) -> [i32; 26] {
+pub(crate) fn local_board(board: &[i32; 26], player: i32) -> [i32; 26] {
     if player == 0 {
         *board
     } else {

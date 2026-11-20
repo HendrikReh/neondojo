@@ -615,6 +615,14 @@
   padding-left: 20px;
   font-size: var(--font-size-body);
 }
+ul.import-warnings {
+  margin: 6px 0 0;
+  padding: 6px 10px 6px 26px;
+  border-radius: 4px;
+  background: var(--ui-warning-bg);
+  color: var(--ui-warning-text);
+  font-size: var(--font-size-table);
+}
 .import-results .section-heading h2 {
   font-size: var(--font-size-panel);
   margin: 0;
