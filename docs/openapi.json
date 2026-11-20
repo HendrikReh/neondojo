@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Neondojo API",
+    "title": "NeonDojo API",
     "description": "Local headless backgammon library with GNUbg and Open Sage analysis. No authentication; bind to loopback.",
     "license": {
       "name": ""
@@ -12173,7 +12173,7 @@
           "analysis_plies": {
             "type": "integer",
             "format": "int32",
-            "description": "Depth in Neondojo's ply convention; 1-ply is the raw evaluation.",
+            "description": "Depth in NeonDojo's ply convention; 1-ply is the raw evaluation.",
             "default": 3,
             "maximum": 5,
             "minimum": 1
@@ -12239,7 +12239,7 @@
           "play_plies": {
             "type": "integer",
             "format": "int32",
-            "description": "Depth in Neondojo's ply convention; 1-ply is the raw evaluation.",
+            "description": "Depth in NeonDojo's ply convention; 1-ply is the raw evaluation.",
             "default": 1,
             "maximum": 3,
             "minimum": 1
@@ -13233,7 +13233,7 @@
               "null"
             ],
             "format": "int32",
-            "description": "Depth actually used for this candidate, when recorded by the engine,\nin Neondojo's ply convention (1-ply is the raw evaluation)."
+            "description": "Depth actually used for this candidate, when recorded by the engine,\nin NeonDojo's ply convention (1-ply is the raw evaluation)."
           },
           "probabilities": {
             "type": "array",
@@ -16962,7 +16962,7 @@
           "plies": {
             "type": "integer",
             "format": "int32",
-            "description": "Depth in Neondojo's ply convention; 1-ply is the raw evaluation.",
+            "description": "Depth in NeonDojo's ply convention; 1-ply is the raw evaluation.",
             "maximum": 5,
             "minimum": 1
           },

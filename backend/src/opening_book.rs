@@ -327,7 +327,7 @@ pub fn default_path() -> String {
         .map(std::path::PathBuf::from)
         .unwrap_or_default();
     #[cfg(target_os = "macos")]
-    let directory = home.join("Library/Application Support/Neondojo");
+    let directory = home.join("Library/Application Support/NeonDojo");
     #[cfg(not(target_os = "macos"))]
     let directory = std::env::var_os("XDG_DATA_HOME")
         .map(std::path::PathBuf::from)
@@ -486,7 +486,7 @@ async fn lookup_bgdb(
     .context("Opening book reader task failed")
 }
 
-/// Canonical Neondojo positions use the standard no-beaver contract. REST
+/// Canonical NeonDojo positions use the standard no-beaver contract. REST
 /// callers resolve the immutable source's rule and use lookup_with_rules.
 pub async fn lookup(
     config: &BookConfig,
@@ -767,7 +767,7 @@ impl Book {
                 })
                 .transpose()
         };
-        // BackgammonDB records GNUbg's native levels; Neondojo shows its own
+        // BackgammonDB records GNUbg's native levels; NeonDojo shows its own
         // convention, so GNUbg's regular 3-ply book reads as 4-ply.
         let top_ply = plies("topPly")?.map(crate::engine::plies_from_gnubg);
         let cube_ply = plies("cubePly")?.map(crate::engine::plies_from_gnubg);

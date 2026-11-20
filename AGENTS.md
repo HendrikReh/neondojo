@@ -1,10 +1,10 @@
-# Neondojo repository guidance
+# NeonDojo repository guidance
 
 These instructions apply from the repository root. Paths and commands are relative to that root. Follow any more specific `AGENTS.md` in the directories you change.
 
 ## Product and priorities
 
-Neondojo is a local backgammon application for importing matches, searching matches and positions, analyzing and playing with GNU Backgammon (GNUbg), and practicing specific decisions. The target is Apple Silicon macOS, especially the Mac mini M4 Pro with 64 GB RAM. The interface is designed for dense desktop use.
+NeonDojo is a local backgammon application for importing matches, searching matches and positions, analyzing and playing with GNU Backgammon (GNUbg), and practicing specific decisions. The target is Apple Silicon macOS, especially the Mac mini M4 Pro with 64 GB RAM. The interface is designed for dense desktop use.
 
 Prioritize backgammon correctness, preservation of user data, database performance, and maintainable module boundaries. Give each business rule one authoritative implementation. Complete the requested change and keep the scope focused.
 

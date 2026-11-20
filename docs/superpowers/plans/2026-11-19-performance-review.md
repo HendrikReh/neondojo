@@ -1,4 +1,4 @@
-# Umsetzungsplan für die Neondojo-Performance
+# Umsetzungsplan für die NeonDojo-Performance
 
 Die Wartezeit bei der Entscheidungssuche, bei Dice Equity und beim Wechsel zwischen Zügen senken. Die folgenden Arbeitspakete basieren auf dem Review von `main` bei `d3a21e1` am 19. November 2026. Jedes Paket lässt sich einzeln umsetzen und abnehmen.
 

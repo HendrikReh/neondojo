@@ -1,19 +1,19 @@
 # Changelog
 
-All notable changes to Neondojo are recorded in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow [Semantic Versioning](https://semver.org/). Each release is tagged as `v<version>`, and the version matches `backend/Cargo.toml` and `web/package.json`. The backend applies pending database migrations at startup.
+All notable changes to NeonDojo are recorded in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow [Semantic Versioning](https://semver.org/). Each release is tagged as `v<version>`, and the version matches `backend/Cargo.toml` and `web/package.json`. The backend applies pending database migrations at startup.
 
 ## [Unreleased]
 
 ### Changed
 
-- **The project is now Neondojo** (it was BG Tutor). The repository moves to [HendrikReh/neondojo](https://github.com/HendrikReh/neondojo). This is a clean break with no compatibility with BG Tutor installations. Reimport your matches into the new database.
+- **The project is now NeonDojo** (it was BG Tutor). The repository moves to [HendrikReh/neondojo](https://github.com/HendrikReh/neondojo). This is a clean break with no compatibility with BG Tutor installations. Reimport your matches into the new database.
   - The Cargo package and binary are `neondojo`, and the web package is `neondojo-web`.
   - `NEONDOJO_*` environment variables replace `BGTUTOR_*`, and the old names are no longer read.
   - The Compose project, PostgreSQL role and database are `neondojo`, with the container `neondojo-db-1` and the volume `neondojo_postgres_data`. A new installation starts with an empty database, and the old `bgtutor_postgres_data` volume is left untouched.
-  - The default opening book path is `~/Library/Application Support/Neondojo/` on macOS and `$XDG_DATA_HOME/neondojo/` elsewhere.
+  - The default opening book path is `~/Library/Application Support/NeonDojo/` on macOS and `$XDG_DATA_HOME/neondojo/` elsewhere.
   - Browser preferences use `neondojo.*` storage keys, so the theme, language and column layouts start from their defaults.
   - Backups are saved as `.neondojo-backup` files with the media type `application/vnd.neondojo.backup`.
-  - Anki exports use the note type `Neondojo Decision v1`. Review synchronization does not find notes exported by BG Tutor.
+  - Anki exports use the note type `NeonDojo Decision v1`. Review synchronization does not find notes exported by BG Tutor.
 - **Faster numbered error lists.** A numbered page of the error list in Analysis no longer projects every decision of the analysis to count them and pick its 50. Migration `0082_review_hits` adds a derived list of each analysis's validated decisions, built once from the saved analysis and rebuilt when the analysis, its checkpoints or the source change. Pages count and select there with the current error thresholds and project only their own decisions. On WC2014 a page takes about 11 ms instead of 48 ms. Cursor pages are unchanged. [Analysis workspace](docs/reference/analysis.md#analysis-workspace)
 - **Open Sage moves no longer wait for analyses.** Playing and analysis use separate Open Sage worker processes with their own locks. During a 3-ply game analysis an Open Sage bot move took 3.9 s at the median and now takes about 33 ms, as without a running analysis. While both run, the playing and analysis thread counts share the CPU (4 + 2 by default). A move's deadline now includes waiting for its worker. Analyses stay serial, and benchmarks still pause all engine work. [Settings](docs/reference/settings.md#settings-and-engines)
 - **Fewer requests while jobs run.** Every view that follows a job shares one watch of it. A visible job reports progress over one event stream without reading the full job for each event; the full job is read when the watch starts, when the job ends, after a lost connection and every 15 seconds as a safeguard. Jobs that only the global progress display follows are still read every 3 seconds, so bulk analyses do not exhaust the browser's connections. A 3-ply dice equity job with 21 progress events took 25 full reads and now takes 3. [Analysis workspace](docs/reference/analysis.md#analysis-workspace)

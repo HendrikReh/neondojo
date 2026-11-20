@@ -1,6 +1,6 @@
 # Navigation style
 
-Neondojo uses the same text-navigation language in its workspaces, analysis
+NeonDojo uses the same text-navigation language in its workspaces, analysis
 subviews, board views, sources, opening books, decision kinds, note scopes,
 settings categories and database collections.
 
@@ -154,7 +154,7 @@ select matches with the checkboxes and use **Analyze selected matches …** in
 the toolbar above the list. **Open match**, **Resume match** and **Edit match
 details** are disabled for multiple selected matches. For a single match, the
 analysis dialog shows the engine, depth and estimated time. When the analysis
-finishes with the dialog open, Neondojo opens **Statistics** for the whole match and
+finishes with the dialog open, NeonDojo opens **Statistics** for the whole match and
 selects the completed analysis. If you close the dialog during the
 run, the analysis continues in the background. Open the dialog again and
 choose **Show results** to view a saved analysis.
@@ -267,7 +267,7 @@ In Flashcards & Anki, **Manage decks** opens a list searchable by deck name.
 **Import Anki package** accepts several `.apkg` files at once and imports their
 source decks and rendered card faces when the backend has Anki's Python package
 configured. The import shows progress and lists failed files by name. To add
-multiple Neondojo packages to the selected deck, use **Import Neondojo Anki deck**.
+multiple NeonDojo packages to the selected deck, use **Import NeonDojo Anki deck**.
 In **Manage decks**, create, open, rename or delete a deck. When a specific deck
 is selected, its study and export actions appear below the search.
 **Send to Anki** transfers the selected native deck to local Anki Desktop
@@ -379,7 +379,7 @@ in another window, **Apply** retries the changed settings against that version.
 changes appear immediately on the open board. Choose **Close** to return to
 the workspace. If an earlier automatic save is in conflict, unrelated
 edits remain available for recovery in **Profiles**. **Verify and save** stores
-the Open Sage Python path on the Neondojo computer.
+the Open Sage Python path on the NeonDojo computer.
 
 ## Profile in der Navigation
 
@@ -398,7 +398,7 @@ Bei einem Profilkonflikt steht der Hinweis in der App-Sprache direkt unter „Ak
 ## Extras
 
 **Extras** contains **Benchmark**, **Engine duels**, **Database backup**, and
-**Versions**. Use Left/Right or Home/End to switch tabs. Neondojo remembers the
+**Versions**. Use Left/Right or Home/End to switch tabs. NeonDojo remembers the
 last chosen tab on this browser. The link in Settings opens **Benchmark**.
 The selected tab names the tool, so the tools show no separate page title; each
 keeps its heading for assistive technology.
@@ -424,11 +424,11 @@ reopens setup with the settings and seed of the selected series. A series that
 stopped without a counted match shows its status and diagnostic without empty
 result tables.
 
-Database backup shows the scope of a restore before file selection. Neondojo
+Database backup shows the scope of a restore before file selection. NeonDojo
 automatically checks each selected archive and compares its schema with the
 destination. The preview shows the creation time and counts for matches, saved
 positions, and flashcards. For older archives without a stored creation time,
-a valid Neondojo filename supplies the time, marked **from filename**. Only
+a valid NeonDojo filename supplies the time, marked **from filename**. Only
 a compatible archive enables **Review database replacement**.
 The confirmation dialog shows the creation time and compares the backup counts
 with the destination counts fetched when the dialog opens.
@@ -436,7 +436,7 @@ The **Difference** column shows the expected change in each count after
 replacement. Increases are green with a plus sign, decreases are red with a
 minus sign, and zero uses the regular text color.
 After **Replace database**, the backend checks the archive again and validates
-the rows during the restore transaction. Reload Neondojo after success.
+the rows during the restore transaction. Reload NeonDojo after success.
 
 Versions shows the build and both engines. **Technical details** gives access
 to the full commit, the engine version output, and the source commit for

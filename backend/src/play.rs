@@ -265,7 +265,7 @@ struct Saved {
     native_id: String,
     paused_from_database_id: Option<Uuid>,
 }
-/// One request to the GNUbg adapter. Depths are Neondojo plies here and are
+/// One request to the GNUbg adapter. Depths are NeonDojo plies here and are
 /// written as GNUbg-native levels in `request.json`.
 #[derive(Clone, Copy, Serialize)]
 struct NativeRequest<'a> {

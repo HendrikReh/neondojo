@@ -1,4 +1,4 @@
-# Lernstartseite für Neondojo
+# Lernstartseite für NeonDojo
 
 Die Lernstartseite wird der erste Reiter unter **Study → Übersicht**. Sie zeigt den nächsten sinnvollen Schritt, die Zahl fälliger Lernkarten und die wichtigsten wiederkehrenden Fehler für den gewählten Spieler. Von hier aus startet ein Klick den vorhandenen Lernkartenablauf oder den Übungsdialog für eine konkrete Fehlergruppe.
 

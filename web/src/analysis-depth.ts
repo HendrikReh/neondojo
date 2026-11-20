@@ -1,7 +1,7 @@
 import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
 
 /**
- * Every depth in Neondojo uses the XG / Open Sage convention for both
+ * Every depth in NeonDojo uses the XG / Open Sage convention for both
  * engines: 1-ply is the raw neural-net evaluation. The backend converts to
  * GNUbg's own level (one lower) only when it talks to GNUbg.
  */

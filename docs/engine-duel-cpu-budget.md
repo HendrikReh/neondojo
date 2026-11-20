@@ -6,7 +6,7 @@ Status: step 1 (measurement, option A) is implemented; options B–D are proposa
 
 Engine duels currently pair `Competitor { engine_id, plies }` profiles ([engine_matches.rs](../backend/src/engine_matches.rs)). That compares labels, not effort:
 
-- Ply counting differed. GNUbg 0-ply is a static evaluation, while XG calls the same thing 1-ply. Since migration 0079, Neondojo uses the XG convention for both engines and converts only when it talks to GNUbg ([Ply convention](reference/settings.md#ply-convention)). Duels from before 0079 ran a GNUbg side labelled N-ply at today's N+1-ply. Open Sage only offers 1–4-ply.
+- Ply counting differed. GNUbg 0-ply is a static evaluation, while XG calls the same thing 1-ply. Since migration 0079, NeonDojo uses the XG convention for both engines and converts only when it talks to GNUbg ([Ply convention](reference/settings.md#ply-convention)). Duels from before 0079 ran a GNUbg side labelled N-ply at today's N+1-ply. Open Sage only offers 1–4-ply.
 - The work per ply differs. Move filters and pruning decide how many candidates are searched deeper. GNUbg duels currently use GNUbg's default move filter, while analysis uses Top14. Open Sage passes no filter.
 - Engines can be tuned differently, for example deeper for cube decisions and races than for normal checker play, with or without bear-off databases. A single depth setting for both sides cannot express that.
 - Thread counts are global per engine. GNUbg defaults to 1, Open Sage uses at least 2 in duels.
@@ -48,7 +48,7 @@ Each duel records the actual CPU and wall time per side. The series result shows
 
 ### B. Budget-matched profiles (recommended next step)
 
-The user sets a budget, for example "≤ 150 ms CPU per turn". Neondojo picks, for each engine, the strongest configuration whose measured average cost stays within the budget:
+The user sets a budget, for example "≤ 150 ms CPU per turn". NeonDojo picks, for each engine, the strongest configuration whose measured average cost stays within the budget:
 
 1. **Calibration:** for every candidate configuration (engine × plies × move filter), measure the cost on a fixed reference set of turns covering checker plays, cube decisions, contact positions, races and bear-off. The configuration, machine, engine version and thread count are recorded together.
 2. **Selection:** for each side, the most expensive configuration that stays within the budget. If the two sides' actual costs differ by more than a tolerance (for example ±15 %), the result shows that clearly.

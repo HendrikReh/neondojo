@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render and import APKG files into Neondojo using Anki's package reader."""
+"""Render and import APKG files into NeonDojo using Anki's package reader."""
 import argparse
 from collections import Counter
 from hashlib import file_digest

@@ -59,7 +59,7 @@ async fn main() -> anyhow::Result<()> {
     let address = std::env::var("NEONDOJO_BIND").unwrap_or_else(|_| "127.0.0.1:8787".into());
     let listener = tokio::net::TcpListener::bind(&address).await?;
     let address = listener.local_addr()?;
-    tracing::info!(%address,"Neondojo listening");
+    tracing::info!(%address,"NeonDojo listening");
     let shutdown = stop.clone();
     axum::serve(listener, app)
         .with_graceful_shutdown(async move {

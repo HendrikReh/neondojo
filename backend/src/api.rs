@@ -919,7 +919,7 @@ async fn events(
 #[derive(OpenApi)]
 #[openapi(
     info(
-        title = "Neondojo API",
+        title = "NeonDojo API",
         version = "0.3.0",
         description = "Local headless backgammon library with GNUbg and Open Sage analysis. No authentication; bind to loopback."
     ),

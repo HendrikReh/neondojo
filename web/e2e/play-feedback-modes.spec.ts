@@ -654,7 +654,7 @@ test('Home cancels a delayed startup Competition redirect', async ({
       .catch(() => {});
   });
   await page.goto('/');
-  await page.getByRole('link', { name: 'Neondojo home', exact: true }).click();
+  await page.getByRole('link', { name: 'NeonDojo home', exact: true }).click();
   release();
   await expect(page.locator('.analysis-welcome')).toBeVisible();
   await expect(

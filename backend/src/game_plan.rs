@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (C) 2026 Mark Higgins
-// Rust adaptation for Neondojo. See game_plan_source.txt for provenance.
+// Rust adaptation for NeonDojo. See game_plan_source.txt for provenance.
 
 //! Deterministic, board-only Open Sage game-plan labels for absolute colors.
 
@@ -9,14 +9,14 @@ use axum::{Json, Router, extract::rejection::JsonRejection, routing::post};
 use serde::{Deserialize, Serialize};
 use utoipa::{OpenApi, ToSchema};
 
-/// The pinned Open Sage rules with Neondojo's opening label on top.
+/// The pinned Open Sage rules with NeonDojo's opening label on top.
 pub const CLASSIFIER: &str = "opensage_rules_v1_opening1";
 pub const SOURCE_REVISION: &str = "139427d826dd67798226e7d23c003c90315306ba";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum GamePlan {
-    /// Neondojo label: both sides are still close to the starting position.
+    /// NeonDojo label: both sides are still close to the starting position.
     Opening,
     PureRace,
     Racing,
@@ -63,7 +63,7 @@ pub fn classify(board: &[i32; 26]) -> Result<GamePlans, String> {
     Ok(plans)
 }
 
-/// The pinned Open Sage rules alone, without Neondojo's opening label.
+/// The pinned Open Sage rules alone, without NeonDojo's opening label.
 pub fn classify_reference(board: &[i32; 26]) -> Result<GamePlans, String> {
     if board.iter().any(|&count| !(-15..=15).contains(&count)) {
         return Err("Each board count must be between -15 and 15".into());
@@ -79,7 +79,7 @@ pub fn classify_reference(board: &[i32; 26]) -> Result<GamePlans, String> {
         return Err("Each side may have at most 15 checkers, including the bar".into());
     }
 
-    // Open Sage's opponent bar is positive, unlike Neondojo's absolute board.
+    // Open Sage's opponent bar is positive, unlike NeonDojo's absolute board.
     let mut white_board = *board;
     white_board[0] = -white_board[0];
     let black_board = flip(&white_board);

@@ -1,8 +1,8 @@
 # HedgeHog comparison
 
-This comparison records six observations from the HedgeHog review and reflects the Neondojo implementation as of November 13, 2026. It covers features and workflow. The quality of HedgeHog's written explanations was outside the review.
+This comparison records six observations from the HedgeHog review and reflects the NeonDojo implementation as of November 13, 2026. It covers features and workflow. The quality of HedgeHog's written explanations was outside the review.
 
-| Area | Neondojo | HedgeHog reference |
+| Area | NeonDojo | HedgeHog reference |
 | --- | --- | --- |
 | Daily orientation | **Study → Overview** puts due cards, recurring mistakes, and the next practice action together. The application opens in **Analysis**, where you can reopen or import a match. | The signed-in home page also brings together recent matches, performance, and the largest mistake of the week. [Home](https://hedgehog-bg.com/help/getting-started) |
 | Active practice | Flashcards and recurring-mistake exercises accept checker plays and cube answers and show their equity cost. Missed-double, wrong-take, and wrong-pass rounds mix and shuffle positions with both possible best actions. For flashcards, a separate FSRS rating schedules the next review. | HedgeHog offers both board play and shuffled answer choices. For themes that would give away the answer, it mixes in positions with a different correct decision. [Practice](https://hedgehog-bg.com/help/practice) · [Themed practice](https://hedgehog-bg.com/help/positions#presets) |

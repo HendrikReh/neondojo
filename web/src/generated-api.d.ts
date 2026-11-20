@@ -2759,7 +2759,7 @@ export interface components {
             analysis_engine: string;
             /**
              * Format: int32
-             * @description Depth in Neondojo's ply convention; 1-ply is the raw evaluation.
+             * @description Depth in NeonDojo's ply convention; 1-ply is the raw evaluation.
              * @default 3
              */
             analysis_plies: number;
@@ -2794,7 +2794,7 @@ export interface components {
             play_engine: string;
             /**
              * Format: int32
-             * @description Depth in Neondojo's ply convention; 1-ply is the raw evaluation.
+             * @description Depth in NeonDojo's ply convention; 1-ply is the raw evaluation.
              * @default 1
              */
             play_plies: number;
@@ -3052,7 +3052,7 @@ export interface components {
             /**
              * Format: int32
              * @description Depth actually used for this candidate, when recorded by the engine,
-             *     in Neondojo's ply convention (1-ply is the raw evaluation).
+             *     in NeonDojo's ply convention (1-ply is the raw evaluation).
              */
             plies?: number | null;
             /**
@@ -4164,7 +4164,7 @@ export interface components {
             match_uuid?: string | null;
             /**
              * Format: int32
-             * @description Depth in Neondojo's ply convention; 1-ply is the raw evaluation.
+             * @description Depth in NeonDojo's ply convention; 1-ply is the raw evaluation.
              */
             plies: number;
             /** Format: uuid */

@@ -13,7 +13,7 @@ use serde_json::json;
 use std::{path::Path, time::Duration};
 use utoipa::ToSchema;
 
-/// Open Sage fork package versions Neondojo accepts. Older versions stay valid
+/// Open Sage fork package versions NeonDojo accepts. Older versions stay valid
 /// for saved job and duel snapshots. The sidecar checks the same list in
 /// `SUPPORTED_VERSIONS` of `tools/probe_open_sage.py`.
 pub const SUPPORTED_SAGE_PACKAGE_VERSIONS: [&str; 2] = ["2.0.20260907", "2.0.20261119"];

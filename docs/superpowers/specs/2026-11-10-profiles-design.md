@@ -1,6 +1,6 @@
 # Profile: funktionale und technische Spezifikation
 
-Stand: 10. November 2026. Grundlage ist der vom Nutzer bestätigte Entwurf. Diese Spezifikation ist der fachliche Vertrag für die Umsetzung im vorhandenen Neondojo; Prüfergebnisse werden im Implementierungsplan festgehalten.
+Stand: 10. November 2026. Grundlage ist der vom Nutzer bestätigte Entwurf. Diese Spezifikation ist der fachliche Vertrag für die Umsetzung im vorhandenen NeonDojo; Prüfergebnisse werden im Implementierungsplan festgehalten.
 
 ## 1. Ziel und Begriffe
 

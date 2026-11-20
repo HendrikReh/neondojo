@@ -1,4 +1,4 @@
-//! Exchange review records for cards exported using Neondojo's decision model.
+//! Exchange review records for cards exported using NeonDojo's decision model.
 use super::{
     anki_connect::{self, Client, upstream_error},
     *,
@@ -93,7 +93,7 @@ enum Unit {
 
 impl Interval {
     fn from_seconds(seconds: i64) -> anyhow::Result<Self> {
-        ensure!(seconds >= 0, "Invalid Neondojo review interval");
+        ensure!(seconds >= 0, "Invalid NeonDojo review interval");
         let (unit, value) = if seconds % 86400 == 0 {
             (Unit::Days, seconds / 86400)
         } else {
@@ -269,7 +269,7 @@ pub(super) async fn deck_cards(pool: &PgPool, id: Uuid) -> ApiResult<HashMap<Str
     tx.commit().await.map_err(anyhow::Error::from)?;
     if rows.is_empty() || rows.len() > MAX_CARDS as usize || rows.iter().any(CardRow::is_anki) {
         return Err(ApiError::invalid(
-            "Select a non-empty native Neondojo deck with at most 1000 cards",
+            "Select a non-empty native NeonDojo deck with at most 1000 cards",
         ));
     }
     let mut cards = HashMap::new();
@@ -279,7 +279,7 @@ pub(super) async fn deck_cards(pool: &PgPool, id: Uuid) -> ApiResult<HashMap<Str
         if !identity.bytes().all(|byte| {
             byte.is_ascii_alphanumeric() || matches!(byte, b':' | b'/' | b'+' | b'=' | b'_')
         }) {
-            return Err(ApiError::invalid("Invalid Neondojo card identity"));
+            return Err(ApiError::invalid("Invalid NeonDojo card identity"));
         }
         if cards
             .insert(apkg::identity_field(&identity), row.id)
@@ -324,7 +324,7 @@ async fn match_cards(
             .await?;
         if page.next_cursor.is_some() {
             return Err(conflict(
-                "Resolve duplicate Neondojo notes in Anki before synchronizing",
+                "Resolve duplicate NeonDojo notes in Anki before synchronizing",
             ));
         }
         if page.values.ids.is_empty() {
@@ -343,12 +343,12 @@ async fn match_cards(
             };
             let [remote] = note.card_ids.as_slice() else {
                 return Err(conflict(
-                    "An exported Neondojo note must have exactly one Anki card",
+                    "An exported NeonDojo note must have exactly one Anki card",
                 ));
             };
             if matched.insert(*card, remote.clone()).is_some() {
                 return Err(conflict(
-                    "Resolve duplicate Neondojo notes in Anki before synchronizing",
+                    "Resolve duplicate NeonDojo notes in Anki before synchronizing",
                 ));
             }
         }
@@ -436,7 +436,7 @@ async fn reconcile(
     .await
     .map_err(anyhow::Error::from)?;
     if locked.len() != ids.len() {
-        return Err(conflict("The Neondojo deck changed during synchronization"));
+        return Err(conflict("The NeonDojo deck changed during synchronization"));
     }
 
     let local: Vec<LocalReview> = sqlx::query_as(
@@ -457,12 +457,12 @@ async fn reconcile(
     .map_err(anyhow::Error::from)?;
     if local.len() > MAX_REVIEWS {
         return Err(ApiError::invalid(
-            "The selected deck has more than 100000 Neondojo reviews",
+            "The selected deck has more than 100000 NeonDojo reviews",
         ));
     }
 
     // Exports use collection-wide Anki IDs, including when different decks
-    // are synchronized through two Neondojo processes.
+    // are synchronized through two NeonDojo processes.
     sqlx::query("SELECT pg_advisory_xact_lock(73270182800161)")
         .execute(&mut *tx)
         .await
@@ -567,7 +567,7 @@ fn outgoing_review(id: i64, card: &str, row: &LocalReview) -> anyhow::Result<Out
         "hard" => Rating::Hard,
         "good" => Rating::Good,
         "easy" => Rating::Easy,
-        _ => anyhow::bail!("Invalid Neondojo review rating"),
+        _ => anyhow::bail!("Invalid NeonDojo review rating"),
     };
     let kind = if row.previous_interval == 0 {
         Kind::Learning

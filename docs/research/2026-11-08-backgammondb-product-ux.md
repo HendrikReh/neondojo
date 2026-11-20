@@ -1,4 +1,4 @@
-# BackgammonDB: Produkt- und UX-Auswertung für Neondojo
+# BackgammonDB: Produkt- und UX-Auswertung für NeonDojo
 
 Stand: 8. November 2026. Recherche über Blog, Handbuch, Opening-Book-Seite und eine tatsächlich geöffnete Review-Oberfläche. Empfehlungen sind von der in dieser Iteration umgesetzten Arbeit getrennt.
 
@@ -10,9 +10,9 @@ Auf dem Desktop steht eine durchgehende Aktionsliste links, ein großes Brett re
 
 Referenzen: [angegebener Matchlink, ohne Satzpunkt](https://backgammondb.com/match/m-mw88v2zb-yfc2fqjh), [Game Review](https://backgammondb.com/manual/game-review/).
 
-## Was Neondojo davon übernehmen sollte
+## Was NeonDojo davon übernehmen sollte
 
-| Priorität | Vorschlag für Neondojo | Begründung und konkrete Umsetzung |
+| Priorität | Vorschlag für NeonDojo | Begründung und konkrete Umsetzung |
 | --- | --- | --- |
 | P1 | Zugpfeile und eindeutige Brettmodi | „Vor dem Zug / Zugpfeile / Nach dem Zug“ für den ausgewählten Quellzug; gespielten Zug und gewählten Kandidaten sichtbar beschriften. „Bester Zug“ als gesonderte Vergleichsoption. Pfeile erhalten Kontur und Legende; Farbe allein reicht nicht. Bar-Eingaben, Treffer, Zwischenpunkte, Doppelwürfe und Bear-off verwenden dieselbe getestete Zug-/Brettlogik. Die Darstellung muss für alle BGBlitz-Themes funktionieren. |
 | P1 | Quellenwahl bei den Kandidaten | Datei, Opening Book und neue Engineanalyse direkt am Ergebnis wählen. Engine, Version, Original-Tiefe und Equity-Einheit immer sichtbar. Diese Trennung ist in dieser Iteration umgesetzt. |
@@ -22,7 +22,7 @@ Referenzen: [angegebener Matchlink, ohne Satzpunkt](https://backgammondb.com/mat
 | P2 | Ausblendbare Teilflächen | Brettfokus behalten; Kandidatenfläche alternativ unter das Brett legen. Die zuletzt gewählte Anordnung wird lokal gespeichert. Die Datenbank bleibt eine eigene Ansicht. |
 | P2 | Vergleichsansicht | Ausgewählter Kandidat und beste Alternative mit Equity-Differenz nebeneinander. Wahrscheinlichkeiten folgen dem aktuell betrachteten Kandidaten; Überschrift und Datenquelle ändern sich gemeinsam. |
 
-Die Referenz macht viele Funktionen über kleine Symbole erreichbar. Neondojo sollte zentrale Aktionen zusätzlich beschriften und auf schmalen Fenstern Reihenfolge statt Miniaturisierung verwenden. Kandidatenwechsel soll keine neue Engineberechnung auslösen, wenn das Ergebnis bereits vorliegt. Review-Hotkeys dürfen beim Schreiben von Kommentaren und in Dialogen nicht eingreifen.
+Die Referenz macht viele Funktionen über kleine Symbole erreichbar. NeonDojo sollte zentrale Aktionen zusätzlich beschriften und auf schmalen Fenstern Reihenfolge statt Miniaturisierung verwenden. Kandidatenwechsel soll keine neue Engineberechnung auslösen, wenn das Ergebnis bereits vorliegt. Review-Hotkeys dürfen beim Schreiben von Kommentaren und in Dialogen nicht eingreifen.
 
 Quellen für Statistikinteraktion und Kandidatenbezug: [Match & Game Stats](https://backgammondb.com/manual/game-review/match-and-game-stats/), [Release-Notiz zur Evaluationsleiste](https://backgammondb.com/blog/new-features-and-fixes/).
 
@@ -30,9 +30,9 @@ Quellen für Statistikinteraktion und Kandidatenbezug: [Match & Game Stats](http
 
 ### 1. Position Browser mit gespeicherten Filtern — P1
 
-Die Referenz bündelt analysierte Entscheidungen, Filter und benannte Voreinstellungen in einer positionsbezogenen Ansicht. Für Neondojo wäre dies der nächste große Schritt: Treffer als Brettkarten oder dichte Liste, gefiltert nach Datenbank, Spieler, Entscheidungstyp, Fehlergröße, Würfeln, Score/Crawford, Tags und Kommentar. Aus Treffern startet man Analyse, Lernkarten oder einen Durchgang durch die Auswahl. Bereits vorhanden sind normalisierte Positionen, genaue Position-IDs, Notizsuche, Fehlerentscheidungen und Pagination.
+Die Referenz bündelt analysierte Entscheidungen, Filter und benannte Voreinstellungen in einer positionsbezogenen Ansicht. Für NeonDojo wäre dies der nächste große Schritt: Treffer als Brettkarten oder dichte Liste, gefiltert nach Datenbank, Spieler, Entscheidungstyp, Fehlergröße, Würfeln, Score/Crawford, Tags und Kommentar. Aus Treffern startet man Analyse, Lernkarten oder einen Durchgang durch die Auswahl. Bereits vorhanden sind normalisierte Positionen, genaue Position-IDs, Notizsuche, Fehlerentscheidungen und Pagination.
 
-Zusätzliche Neondojo-Regel: Identische Checkerstellung bedeutet nicht identische Lernfrage. Gruppierung muss Wurf, Score, Cube und Regeln berücksichtigen. Gespeicherte Filter gehören als versionierte JSON-Spezifikation ins Backend und werden von Positionssuche, Statistiken und Lernen gemeinsam benutzt. Ein optionaler Spielerprofilfilter sollte Aliasnamen verstehen.
+Zusätzliche NeonDojo-Regel: Identische Checkerstellung bedeutet nicht identische Lernfrage. Gruppierung muss Wurf, Score, Cube und Regeln berücksichtigen. Gespeicherte Filter gehören als versionierte JSON-Spezifikation ins Backend und werden von Positionssuche, Statistiken und Lernen gemeinsam benutzt. Ein optionaler Spielerprofilfilter sollte Aliasnamen verstehen.
 
 Quelle: [Positions Browser](https://backgammondb.com/manual/positions-browser/).
 
@@ -40,7 +40,7 @@ Quelle: [Positions Browser](https://backgammondb.com/manual/positions-browser/).
 
 Sinnvoll sind benannte Sammlungen aus Matchpositionen, eigenen Aufstellungen und später XGIDs. Jeder Eintrag behält seinen eigenen Score, Cube, Kommentar und die gewählte Analyseherkunft. Ein Notebook ist eine thematische Lernsammlung, kein Ersatz für eine Matchdatenbank. Es sollte aus der Analyse mit einem einzigen „Zum Notebook hinzufügen“ erreichbar sein und direkt nach Anki beziehungsweise in unseren Lernmodus führen.
 
-Dafür braucht Neondojo eine eigenständige Stellung mit vollständigem Kontext sowie einen Notebook-Eintrag als eigene Notizebene. Man sollte keine künstlichen Ein-Zug-Matches erzeugen. Ein späterer Editor muss Checkeranzahl, Bar, Spieler, Würfel und Cube konsistent halten und Undo/Redo besitzen. Die vorhandenen Analyse- und Brettkomponenten werden wiederverwendet. Die Referenzdokumentation kennzeichnet Notebooks als feature-flag-abhängig; diese Beschreibung ist keine Aussage über deren universelle Verfügbarkeit.
+Dafür braucht NeonDojo eine eigenständige Stellung mit vollständigem Kontext sowie einen Notebook-Eintrag als eigene Notizebene. Man sollte keine künstlichen Ein-Zug-Matches erzeugen. Ein späterer Editor muss Checkeranzahl, Bar, Spieler, Würfel und Cube konsistent halten und Undo/Redo besitzen. Die vorhandenen Analyse- und Brettkomponenten werden wiederverwendet. Die Referenzdokumentation kennzeichnet Notebooks als feature-flag-abhängig; diese Beschreibung ist keine Aussage über deren universelle Verfügbarkeit.
 
 Quelle: [Notebooks](https://backgammondb.com/manual/notebooks/).
 
@@ -66,13 +66,13 @@ Quellen: [Match & Game Stats](https://backgammondb.com/manual/game-review/match-
 
 Eine erste nützliche Klassifikation umfasst Eröffnung, Mittelspiel, Endspiel mit Kontakt, Rennen und Bear-off. „Phase“ betrifft das ganze Brett; Strukturmerkmale wie Haltespiel oder Backgame betreffen dagegen einzelne Seiten. Ereignisse wie Treffer gehören zum Zug. Diese Ebenen dürfen nicht zu einer beliebigen gemeinsamen Tagliste werden.
 
-Für Neondojo: deterministische Regeln in Rust, nachvollziehbare Kriterien und eine Klassifikatorversion speichern. Rennen erfordert nachweislich keinen möglichen Kontakt; ein Bear-off mit Kontakt ist gesondert zu behandeln. Eröffnungszuordnung benötigt Verlauf, nicht nur den Pipcount. Manuelle Tags bleiben unabhängig. Ein späterer Neuaufbau der automatischen Merkmale läuft als begrenzter Hintergrundauftrag mit Fortschritt. Zuerst belastbare Phasen, danach komplexe Strukturen und „verpasste“ Ereignisse aus dem Vergleich von gespielt/best.
+Für NeonDojo: deterministische Regeln in Rust, nachvollziehbare Kriterien und eine Klassifikatorversion speichern. Rennen erfordert nachweislich keinen möglichen Kontakt; ein Bear-off mit Kontakt ist gesondert zu behandeln. Eröffnungszuordnung benötigt Verlauf, nicht nur den Pipcount. Manuelle Tags bleiben unabhängig. Ein späterer Neuaufbau der automatischen Merkmale läuft als begrenzter Hintergrundauftrag mit Fortschritt. Zuerst belastbare Phasen, danach komplexe Strukturen und „verpasste“ Ereignisse aus dem Vergleich von gespielt/best.
 
 Quellen: [Position Tagging](https://backgammondb.com/manual/position-tagging/), [Game Phases](https://backgammondb.com/manual/position-tagging/game-phases/).
 
 ### 6. Datenbankverwaltung und Sicherung — P1/P2
 
-Mehrere Bestände, getrennte Kopien, Notizen und Mehrfachverwaltung sind in Neondojo bereits umgesetzt. Zusätzlich sinnvoll: eine sichtbare Kennzeichnung von Demo-/Testbeständen, gespeicherte Suchansichten und ein vollständiges portables Bibliotheksbackup mit Schema-Version. Dieses sollte Quellen, Notizen, Quellanalyse, Engineergebnisse, Notebooks und Lernhistorie erhalten. Quellexport als MAT/XG/SGF ist weiterhin ein eigener Vorgang.
+Mehrere Bestände, getrennte Kopien, Notizen und Mehrfachverwaltung sind in NeonDojo bereits umgesetzt. Zusätzlich sinnvoll: eine sichtbare Kennzeichnung von Demo-/Testbeständen, gespeicherte Suchansichten und ein vollständiges portables Bibliotheksbackup mit Schema-Version. Dieses sollte Quellen, Notizen, Quellanalyse, Engineergebnisse, Notebooks und Lernhistorie erhalten. Quellexport als MAT/XG/SGF ist weiterhin ein eigener Vorgang.
 
 Das große Opening Book wird zweckmäßig über Anbieter, Version und Prüfsumme referenziert; nicht bei jedem kleinen Bibliotheksbackup erneut eingepackt. Für die jetzige Neuinitialisierung existiert ein überprüfter PostgreSQL-Dump außerhalb Git. Anders als die browserlokale Referenz hat unser Headless-Backend eine gemeinsame Datenhaltung und muss nicht an einen bestimmten Browser gebunden sein.
 

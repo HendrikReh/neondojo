@@ -387,7 +387,7 @@ async fn restores_data_and_keeps_target_installation_settings(pool: PgPool) {
     for (file, message) in [
         (
             Bytes::from_static(b"invalid backup"),
-            "Invalid Neondojo backup archive",
+            "Invalid NeonDojo backup archive",
         ),
         (Bytes::from(damaged), "Backup table is damaged"),
         (

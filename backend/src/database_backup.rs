@@ -262,7 +262,7 @@ async fn export(State(state): State<AppState>) -> ApiResult<impl IntoResponse> {
 }
 
 fn schema_mismatch() -> ApiError {
-    ApiError::invalid("Backup schema differs from this Neondojo installation")
+    ApiError::invalid("Backup schema differs from this NeonDojo installation")
 }
 
 fn validate_sequences(manifest: &Manifest, count: usize) -> ApiResult<()> {
@@ -291,7 +291,7 @@ async fn receive_backup(
     {
         return Err(ApiError(
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            "Select a Neondojo backup file".into(),
+            "Select a NeonDojo backup file".into(),
         ));
     }
     let permit = state

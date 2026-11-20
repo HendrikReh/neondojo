@@ -73,7 +73,7 @@ fn reference_for(
         && let Ok(native) = crate::engine::gnubg_plies(plies)
     {
         // Protocol ids name GNUbg's native filter level, so saved runs keep
-        // their identity: Neondojo 3-ply is gnubg-match-v3-2ply-top14.
+        // their identity: NeonDojo 3-ply is gnubg-match-v3-2ply-top14.
         value.id = format!("gnubg-match-v3-{native}ply-top14");
         value.move_filter = format!("gnubg-{native}ply-top14");
     }

@@ -25,7 +25,7 @@ for value in ['set display off', 'set confirm default yes', 'set confirm new no'
     command(value)
 
 human = request['human_player']
-# Neondojo converts its depths (1-ply = raw evaluation) to GNUbg-native levels
+# NeonDojo converts its depths (1-ply = raw evaluation) to GNUbg-native levels
 # (0-ply = raw evaluation) before writing this request; 'plies' and
 # 'match_bots' are native levels.
 plies = request['plies']

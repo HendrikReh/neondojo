@@ -748,7 +748,7 @@ export default function App() {
           <span className="brand-mark">
             b<span>g</span>
           </span>
-          <span>Neondojo</span>
+          <span>NeonDojo</span>
         </a>
         <nav
           className="app-tabs text-navigation"

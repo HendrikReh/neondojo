@@ -61,7 +61,7 @@ function listeningUrl(child: ChildProcess) {
       finish(new Error(`Browser test backend exited during startup.\n${log}`));
     const output = (chunk: Buffer) => {
       log = (log + chunk.toString()).slice(-12_000);
-      const bound = /Neondojo listening[^\n]*127\.0\.0\.1:(\d+)/.exec(log);
+      const bound = /NeonDojo listening[^\n]*127\.0\.0\.1:(\d+)/.exec(log);
       if (bound) finish(undefined, `http://127.0.0.1:${bound[1]}`);
     };
     function finish(error?: Error, url?: string) {
@@ -157,7 +157,7 @@ export default async function setup() {
         (message) => message.target?.name === 'neondojo' && message.executable,
       )?.executable;
     if (!executable)
-      throw new Error('Cargo did not build the Neondojo backend.');
+      throw new Error('Cargo did not build the NeonDojo backend.');
 
     backend = spawn(executable, [], {
       cwd: root,

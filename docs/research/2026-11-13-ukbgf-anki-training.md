@@ -1,16 +1,16 @@
-# Lerntraining in Neondojo nach den UKBGF-Anki-Artikeln
+# Lerntraining in NeonDojo nach den UKBGF-Anki-Artikeln
 
 Produktvorschlag vom 13. November 2026. Erste Ausbaustufe ist eine aktive Übungsrunde aus den gefilterten Karteikarten, gefolgt von einem gezielten Durchgang durch die schwierigen Entscheidungen. Ob sich das Training auf das Spiel überträgt, prüfen später unbekannte Vergleichsstellungen.
 
 ## Was die beiden Artikel beitragen
 
-**Stefan Paliwoda, 5. Juni 2026.** Auf reguläre Wiederholungen folgen gemischte Zusatzrunden. Der Spieler markiert schwierige Karten, übt sie deckübergreifend und entfernt die Markierung, wenn die Karte ausreichend verstanden ist. Die vorgeschlagenen Farben stehen etwa für Konzept-, Erkennungs- oder Rechenfehler sowie für richtige Antworten mit geringer Sicherheit. Auto Advance erlaubt zeitgesteuertes Betrachten von Frage und Lösung. Für Neondojo sind vor allem der direkte Fehlerdurchgang und die Rückmeldung zur Unsicherheit interessant. Die im Artikel genannten festen Intervalle und Sitzungsgrößen beschreiben den Ansatz des Autors. [UKBGF, Extending the Anki Open-Source Digital Flashcard Application](https://ukbgf.com/extending-the-anki-open-source-digital-flashcard-application/)
+**Stefan Paliwoda, 5. Juni 2026.** Auf reguläre Wiederholungen folgen gemischte Zusatzrunden. Der Spieler markiert schwierige Karten, übt sie deckübergreifend und entfernt die Markierung, wenn die Karte ausreichend verstanden ist. Die vorgeschlagenen Farben stehen etwa für Konzept-, Erkennungs- oder Rechenfehler sowie für richtige Antworten mit geringer Sicherheit. Auto Advance erlaubt zeitgesteuertes Betrachten von Frage und Lösung. Für NeonDojo sind vor allem der direkte Fehlerdurchgang und die Rückmeldung zur Unsicherheit interessant. Die im Artikel genannten festen Intervalle und Sitzungsgrößen beschreiben den Ansatz des Autors. [UKBGF, Extending the Anki Open-Source Digital Flashcard Application](https://ukbgf.com/extending-the-anki-open-source-digital-flashcard-application/)
 
-**Stefan Paliwoda, 13. Juli 2026.** Dauerhafte, mehrfach zuweisbare Tags mit `::` gruppieren Karten quer zu Decks. Der Autor empfiehlt, eigene Fehler beim Erfassen, in der Kartenliste oder während der Wiederholung zu verschlagworten und anschließend aus der Suche zu lernen. Er verweist außerdem auf die Cube-Score-Matrix von AnkiGammon und den Pipcount-Trainer in Rainer Birkles Decks. Neondojo kann den Wechsel von Analyse über Export und Anki-Browser zum Training durch einen Ablauf innerhalb der Anwendung abkürzen. [UKBGF, Extending the Anki Open-Source Digital Flashcard Application using Tags](https://ukbgf.com/extending-the-anki-open-source-digital-flashcard-application-using-tags/)
+**Stefan Paliwoda, 13. Juli 2026.** Dauerhafte, mehrfach zuweisbare Tags mit `::` gruppieren Karten quer zu Decks. Der Autor empfiehlt, eigene Fehler beim Erfassen, in der Kartenliste oder während der Wiederholung zu verschlagworten und anschließend aus der Suche zu lernen. Er verweist außerdem auf die Cube-Score-Matrix von AnkiGammon und den Pipcount-Trainer in Rainer Birkles Decks. NeonDojo kann den Wechsel von Analyse über Export und Anki-Browser zum Training durch einen Ablauf innerhalb der Anwendung abkürzen. [UKBGF, Extending the Anki Open-Source Digital Flashcard Application using Tags](https://ukbgf.com/extending-the-anki-open-source-digital-flashcard-application-using-tags/)
 
 Die Artikel beschreiben einen persönlichen Trainingsablauf. Experimente mit Textmaterial stützen den Wert des aktiven Abrufs für verzögertes Erinnern. Für Backgammon bleibt zu messen, ob sich Entscheidungen in neuen Stellungen verbessern. Anki unterscheidet bei gefilterten Decks ebenfalls zwischen Üben mit und ohne Neuterminierung. [Roediger und Karpicke, 2006](https://pubmed.ncbi.nlm.nih.gov/16507066/) · [Anki-Handbuch, Filtered Decks](https://docs.ankiweb.net/manual/filtered-decks)
 
-## Ausgangspunkt in Neondojo
+## Ausgangspunkt in NeonDojo
 
 | Vorhanden | Ansatzpunkt |
 | --- | --- |

@@ -2,7 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 if (process.env.NEONDOJO_TEST_URL)
   throw new Error(
-    'Browser tests start their own isolated Neondojo. Unset NEONDOJO_TEST_URL.',
+    'Browser tests start their own isolated NeonDojo. Unset NEONDOJO_TEST_URL.',
   );
 
 export default defineConfig({
