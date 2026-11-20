@@ -62,4 +62,6 @@ mod engine_process;
 
 pub mod review_decisions;
 
+pub mod schema_migrations;
+
 pub mod analysis_catalog;

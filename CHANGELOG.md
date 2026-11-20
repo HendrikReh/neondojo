@@ -17,6 +17,7 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ### Changed
 
+- **One database schema baseline.** `backend/migrations/0001_schema.sql` replaces the migrations 0001–0084 and creates the same schema and seed rows. At startup NeonDojo adopts a database migrated with the former files without changing its data; a database that is missing any of them must first be updated with an earlier version. Existing backups stay restorable. [Database schema](docs/development/architecture.md#database-schema)
 - **Players with the same name can be told apart.** When several profiles in **Player database** share a display name, for example the same username on Galaxy and OpenGammon, each row shows its platforms under the name. `GET /api/players` returns them in `name_platforms`. [Player database](docs/reference/library.md#player-database)
 
 ### Fixed

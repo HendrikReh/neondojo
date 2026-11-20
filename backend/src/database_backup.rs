@@ -137,7 +137,7 @@ async fn schema(connection: &mut PgConnection) -> Result<String> {
     .fetch_all(connection)
     .await?;
     let mut digest = Sha256::new();
-    for (version, checksum) in migrations {
+    for (version, checksum) in crate::schema_migrations::expanded_history(migrations) {
         digest.update(version.to_be_bytes());
         digest.update(checksum);
     }

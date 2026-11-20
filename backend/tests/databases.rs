@@ -1126,13 +1126,16 @@ async fn source_metadata_backfill_recovers_original_results_and_preserves_manual
             .bind(id).bind(id.to_string()).bind(bytes.as_slice()).bind(&old_canonical).bind(i64::from(manual)).bind(if manual { "My tournament final" } else { "" }).execute(&pool).await.unwrap();
         ids.push(id);
     }
-    // Reproduce a library created before the result-repair migration: every
-    // import was already source-loaded, while manual saves own their fields.
-    let changed = sqlx::raw_sql(include_str!("../migrations/0018_source_results.sql"))
-        .execute(&pool)
-        .await
-        .unwrap()
-        .rows_affected();
+    // Requeue source-derived metadata as the result repair did: every import
+    // was already source-loaded, while manual saves own their fields.
+    let changed = sqlx::query(
+        "UPDATE matches SET source_metadata_loaded=false
+         WHERE metadata_version=0 AND format IN ('bgf','xg')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap()
+    .rows_affected();
     assert_eq!(changed, 1);
     assert_eq!(
         neondojo::databases::backfill_source_metadata(&pool)
@@ -1206,15 +1209,16 @@ async fn native_context_backfill_fills_gaps_and_preserves_manual_saves(pool: PgP
         ids.push(id);
     }
 
-    // Reapply the migration to a library that already contains imports.
-    sqlx::query("ALTER TABLE matches DROP COLUMN native_match_context_pending")
-        .execute(&pool)
-        .await
-        .unwrap();
-    sqlx::raw_sql(include_str!("../migrations/0050_native_match_context.sql"))
-        .execute(&pool)
-        .await
-        .unwrap();
+    // Queue imports with missing native context, as an older library has them.
+    // A legacy manual save owns the whole metadata form, including empty fields.
+    sqlx::query(
+        "UPDATE matches SET native_match_context_pending=true
+         WHERE format IN ('xg','bgf') AND NOT collection_only AND metadata_version=0
+           AND (played_on IS NULL OR tournament IS NULL OR round IS NULL OR place IS NULL)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
 
     assert_eq!(
         neondojo::databases::backfill_source_metadata(&pool)

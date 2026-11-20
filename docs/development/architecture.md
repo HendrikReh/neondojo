@@ -16,6 +16,12 @@
 
 The Rust backend runs independently of the browser. A future Tauri shell could start it as a sidecar and reuse the HTTP API.
 
+## Database schema
+
+[`0001_schema.sql`](../../backend/migrations/0001_schema.sql) is the schema baseline. It consolidates the former migrations 0001–0084 and seeds the system databases, the NeonGammon installation record and the learning preferences. Add each schema change as a new migration after it, numbered from 0085 on, and leave the baseline unchanged.
+
+Before migrating, [`schema_migrations.rs`](../../backend/src/schema_migrations.rs) adopts a database that was migrated with the former files. If its `_sqlx_migrations` records match versions 0001–0084 and their checksums exactly, it replaces them with the baseline record in one transaction and leaves tables and rows unchanged. A database with an incomplete or changed history fails to start; update it with a NeonDojo version from before the consolidation first. The backup fingerprint expands the baseline record back to the former checksums, so backups made before and after the consolidation are compatible.
+
 ## How matches and positions are stored
 
 Imports store the original file, canonical SGF and normalized positions together in PostgreSQL. A position records 26 signed checker counts including the bar, the player on roll, the dice, the game and move numbers, and the played move. The game catalog also records games without checker moves, with their opening score and Crawford status. On first access, older imports build the catalog from stored SGF.
