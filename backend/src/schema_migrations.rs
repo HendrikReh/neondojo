@@ -6,6 +6,10 @@
 //! database is adopted: once its history matches the former files exactly,
 //! the records are replaced by the baseline record in one transaction. The
 //! schema itself is already identical, so no table or row changes.
+//!
+//! NeonDojo 1.0.0 shipped migrations 0001-0083. A database from that release
+//! first receives the former 0084 in the same transaction, then the baseline
+//! record.
 
 use anyhow::{Context, Result, bail};
 use sqlx::{PgPool, migrate::Migrator};
@@ -17,6 +21,13 @@ const BASELINE_VERSION: i64 = 1;
 /// The last former migration contained in the baseline.
 const LAST_CONSOLIDATED_VERSION: i64 = 84;
 const LEGACY_CHECKSUMS: &str = include_str!("schema_migrations/legacy_checksums.txt");
+/// The last former migration in NeonDojo 1.0.0.
+const RELEASED_1_0_VERSION: i64 = 83;
+/// The former migrations after 1.0.0, applied when adopting its databases.
+const AFTER_RELEASE_1_0: &[(i64, &str)] = &[(
+    84,
+    include_str!("schema_migrations/0084_virtual_player_profiles.sql"),
+)];
 
 /// Adopts a database migrated with the former files, then applies pending
 /// migrations.
@@ -102,18 +113,29 @@ async fn adopt_consolidated_history(pool: &PgPool) -> Result<()> {
         _ => {}
     }
     let expected = consolidated_history();
-    let matches = applied.len() == expected.len()
-        && applied.iter().zip(&expected).all(
-            |((version, checksum, success), (want_version, want_checksum))| {
-                *success && version == want_version && checksum == want_checksum
-            },
-        );
-    if !matches {
+    let records = |through: i64| {
+        let expected = expected.iter().filter(|(version, _)| *version <= through);
+        applied.len() == expected.clone().count()
+            && applied.iter().zip(expected).all(
+                |((version, checksum, success), (want_version, want_checksum))| {
+                    *success && version == want_version && checksum == want_checksum
+                },
+            )
+    };
+    if records(RELEASED_1_0_VERSION) {
+        for (version, sql) in AFTER_RELEASE_1_0 {
+            sqlx::raw_sql(sql)
+                .execute(&mut *tx)
+                .await
+                .with_context(|| format!("Applying the former migration {version:04}"))?;
+        }
+    } else if !records(LAST_CONSOLIDATED_VERSION) {
         let latest = applied.last().map_or(0, |(version, _, _)| *version);
         bail!(
             "The database records migrations up to {latest:04} that differ from the former \
-             migrations 0001-{LAST_CONSOLIDATED_VERSION:04}. Update it with a NeonDojo version \
-             from before the schema consolidation first, then start this version again."
+             migrations 0001-{LAST_CONSOLIDATED_VERSION:04} and from NeonDojo 1.0.0. Update it \
+             with a NeonDojo version from before the schema consolidation first, then start \
+             this version again."
         );
     }
     sqlx::query("DELETE FROM public._sqlx_migrations WHERE version <= $1")
@@ -160,6 +182,28 @@ mod tests {
         assert!(MIGRATOR.iter().all(|migration| {
             migration.version == BASELINE_VERSION || migration.version > LAST_CONSOLIDATED_VERSION
         }));
+    }
+
+    #[test]
+    fn migrations_after_1_0_are_the_recorded_former_files() {
+        use sha2::{Digest, Sha384};
+        let history = consolidated_history();
+        let after: Vec<i64> = history
+            .iter()
+            .map(|(version, _)| *version)
+            .filter(|version| *version > RELEASED_1_0_VERSION)
+            .collect();
+        assert_eq!(
+            after,
+            AFTER_RELEASE_1_0
+                .iter()
+                .map(|(version, _)| *version)
+                .collect::<Vec<_>>()
+        );
+        for (version, sql) in AFTER_RELEASE_1_0 {
+            let recorded = history.iter().find(|(v, _)| v == version).unwrap();
+            assert_eq!(Sha384::digest(sql.as_bytes()).as_slice(), recorded.1);
+        }
     }
 
     #[test]
