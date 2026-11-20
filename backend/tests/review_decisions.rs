@@ -638,3 +638,158 @@ async fn sgf_decimal_threshold_errors_are_not_lost_to_float_subtraction(pool: Pg
         "0.15 minus 0.145 is exactly the Questionable boundary: {page}"
     );
 }
+
+/// Every review decision of a filter, in order, from cursor pages, which
+/// scan the analysis without the numbered pages' hit set.
+async fn cursor_pages(app: &axum::Router, base: &str) -> Vec<Value> {
+    let mut items = Vec::new();
+    let mut after: Option<String> = None;
+    loop {
+        let uri = match &after {
+            Some(cursor) => format!("{base}&limit=50&after={cursor}"),
+            None => format!("{base}&limit=50"),
+        };
+        let (status, page) = call(app, "GET", &uri, Value::Null).await;
+        assert_eq!(status, 200, "{uri}: {page}");
+        items.extend(page["items"].as_array().unwrap().iter().cloned());
+        match page["next_cursor"].as_str() {
+            Some(cursor) => after = Some(cursor.to_owned()),
+            None => return items,
+        }
+    }
+}
+
+/// Numbered pages must return the cursor order, total and an empty page after
+/// the last one.
+async fn assert_numbered_pages_match_cursor(app: &axum::Router, base: &str) -> usize {
+    let expected = cursor_pages(app, base).await;
+    let mut numbered = Vec::new();
+    let pages = expected.len().div_ceil(50).max(1);
+    for page in 1..=pages + 1 {
+        let uri = format!("{base}&limit=50&page={page}");
+        let (status, body) = call(app, "GET", &uri, Value::Null).await;
+        assert_eq!(status, 200, "{uri}: {body}");
+        assert_eq!(body["total"], expected.len(), "{uri}");
+        assert!(body["next_cursor"].is_null(), "{uri}");
+        let items = body["items"].as_array().unwrap();
+        if page > pages || expected.is_empty() {
+            assert!(items.is_empty(), "{uri}");
+        }
+        numbered.extend(items.iter().cloned());
+    }
+    assert_eq!(numbered, expected, "{base}");
+    expected.len()
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn numbered_pages_follow_the_cursor_order_for_every_filter(pool: PgPool) {
+    let bytes = include_bytes!("fixtures/WC2014.xg");
+    let sgf = import::xg_to_sgf(bytes).unwrap();
+    let id = store::import_match(
+        &pool,
+        "WC2014.xg",
+        "xg",
+        bytes,
+        &sgf,
+        &import::parse_sgf(&sgf).unwrap(),
+    )
+    .await
+    .unwrap()
+    .r#match
+    .id;
+    let app = app(&pool);
+    let base = format!("/api/matches/{id}/review-decisions?analysis_id=imported:{id}");
+    assert_eq!(assert_numbered_pages_match_cursor(&app, &base).await, 738);
+    let built: String = sqlx::query_scalar(
+        "SELECT indexed_at::text FROM review_hit_sets WHERE match_id=$1 AND analysis_id=$2",
+    )
+    .bind(id)
+    .bind(format!("imported:{id}"))
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let mut sizes = Vec::new();
+    for filter in [
+        "&errors_only=true",
+        "&severity=doubtful",
+        "&severity=blunder",
+        "&game_no=3",
+        "&player=1",
+        "&kind=cube",
+        "&kind=checker&errors_only=true&player=0",
+        "&game_no=5&kind=cube&severity=bad",
+        "&game_no=1&player=0&severity=very_bad",
+    ] {
+        sizes.push(assert_numbered_pages_match_cursor(&app, &format!("{base}{filter}")).await);
+    }
+    assert_eq!(sizes[0], 74, "{sizes:?}");
+    assert!(sizes.contains(&0), "{sizes:?}");
+    // The hit set was built once; later pages and filters reuse it.
+    let reused: String = sqlx::query_scalar(
+        "SELECT indexed_at::text FROM review_hit_sets WHERE match_id=$1 AND analysis_id=$2",
+    )
+    .bind(id)
+    .bind(format!("imported:{id}"))
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(reused, built);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn numbered_pages_follow_native_checkpoints_and_in_place_updates(pool: PgPool) {
+    let (id, _) = imported(&pool).await;
+    let job = store::create_match_job(&pool, id, 2, 2).await.unwrap();
+    sqlx::query("UPDATE jobs SET status='running' WHERE id=$1")
+        .bind(job.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    for game in 1..=2 {
+        let position: Uuid =
+            sqlx::query_scalar("SELECT id FROM positions WHERE match_uuid=$1 AND game_no=$2")
+                .bind(id)
+                .bind(game)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let decision = json!({"decision_no":2,"checker_no":1,"player":0,"kind":"checker","played":"8/5 6/5","best":"6/3 6/5","played_equity":0.1,"best_equity":0.2,"equity_loss":0.1,"severity":"none","dice":[3,1],"evaluation_status":"evaluated"});
+        sqlx::query("INSERT INTO move_analyses(job_id,position_uuid,game_no,decision_no,player,kind,equity_loss,data) VALUES($1,$2,$3,2,0,'checker',0.1,$4)").bind(job.id).bind(position).bind(game).bind(decision).execute(&pool).await.unwrap();
+    }
+    // Only game 1 is checkpointed; the saved game 2 decision is incomplete.
+    sqlx::query("INSERT INTO match_analysis_games(job_id,game_no) VALUES($1,1)")
+        .bind(job.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let app = app(&pool);
+    let base = format!("/api/matches/{id}/review-decisions?job_id={}", job.id);
+    assert_eq!(assert_numbered_pages_match_cursor(&app, &base).await, 1);
+    assert_eq!(
+        assert_numbered_pages_match_cursor(&app, &format!("{base}&errors_only=true")).await,
+        1
+    );
+    sqlx::query("INSERT INTO match_analysis_games(job_id,game_no) VALUES($1,2)")
+        .bind(job.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(assert_numbered_pages_match_cursor(&app, &base).await, 2);
+    // An in-place change drops the hit set; the invalid row is not counted.
+    sqlx::query("UPDATE move_analyses SET data=jsonb_set(data,'{player}','1'::jsonb) WHERE job_id=$1 AND game_no=2")
+        .bind(job.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM review_hit_sets WHERE match_id=$1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(assert_numbered_pages_match_cursor(&app, &base).await, 1);
+}

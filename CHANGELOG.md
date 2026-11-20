@@ -6,6 +6,7 @@ All notable changes to BG Tutor are recorded in this file. The format follows [K
 
 ### Changed
 
+- **Faster numbered error lists.** A numbered page of the error list in Analysis no longer projects every decision of the analysis to count them and pick its 50. Migration `0082_review_hits` adds a derived list of each analysis's validated decisions, built once from the saved analysis and rebuilt when the analysis, its checkpoints or the source change. Pages count and select there with the current error thresholds and project only their own decisions. On WC2014 a page takes about 11 ms instead of 48 ms. Cursor pages are unchanged. [Analysis workspace](docs/reference/analysis.md#analysis-workspace)
 - **Open Sage moves no longer wait for analyses.** Playing and analysis use separate Open Sage worker processes with their own locks. During a 3-ply game analysis an Open Sage bot move took 3.9 s at the median and now takes about 33 ms, as without a running analysis. While both run, the playing and analysis thread counts share the CPU (4 + 2 by default). A move's deadline now includes waiting for its worker. Analyses stay serial, and benchmarks still pause all engine work. [Settings](docs/reference/settings.md#settings-and-engines)
 
 ## [0.3.0] - 2026-11-19
