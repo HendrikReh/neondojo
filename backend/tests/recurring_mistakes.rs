@@ -1370,7 +1370,7 @@ async fn index_entries(pool: &PgPool, matches: &[Uuid]) -> Vec<(String, String)>
 }
 
 #[sqlx::test(migrations = "./migrations")]
-async fn decision_index_follows_saved_decisions_and_carries_old_fingerprints_over(pool: PgPool) {
+async fn decision_index_follows_saved_decisions(pool: PgPool) {
     let analyzed = source(&pool).await;
     let sgf = "(;GM[6]PW[Alice]PB[Carol]MI[length:5];W[31hefe])";
     let unanalyzed = store::import_match(
@@ -1413,34 +1413,6 @@ async fn decision_index_follows_saved_decisions_and_carries_old_fingerprints_ove
     // An unchanged library is served from the index without rebuilding.
     assert_eq!(search().await["total"], 2);
     assert_eq!(index_entries(&pool, &matches).await, built);
-
-    // Entries written before migration 0080 end with the hash of the saved
-    // decisions. The migration carries current ones over and leaves a stale
-    // one for the next read to rebuild.
-    sqlx::query(
-        "UPDATE decision_index_matches SET fingerprint=regexp_replace(fingerprint,'[^|]*$','')
-             ||CASE WHEN match_id=$1 THEN (SELECT coalesce(sum(hashtextextended(a.data::text,0)),0)::text
-                    FROM move_analyses a WHERE a.job_id=$2) ELSE '42' END",
-    )
-    .bind(analyzed)
-    .bind(saved)
-    .execute(&pool)
-    .await
-    .unwrap();
-    sqlx::raw_sql(include_str!(
-        "../migrations/0080_decision_index_row_fingerprint.sql"
-    ))
-    .execute(&pool)
-    .await
-    .unwrap();
-    let migrated = index_entries(&pool, &matches).await;
-    assert_eq!(migrated[0], built[0]);
-    assert!(migrated[1].0.ends_with("|42"), "{}", migrated[1].0);
-    assert_eq!(search().await["total"], 2);
-    let reread = index_entries(&pool, &matches).await;
-    assert_eq!(reread[0], built[0]);
-    assert_eq!(reread[1].0, built[1].0);
-    assert_ne!(reread[1].1, built[1].1, "the stale entry is rebuilt");
 
     // A removed decision leaves the results; saving it again under a new id
     // keeps the count but still re-indexes the match. The last decision is

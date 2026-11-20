@@ -33,7 +33,7 @@ async fn main() -> anyhow::Result<()> {
             "Browser test backend must use the provisioned test database"
         );
     }
-    sqlx::migrate!().run(&pool).await?;
+    neondojo::schema_migrations::run(&pool).await?;
     neondojo::benchmarks::recover_interrupted(&pool).await?;
     while neondojo::databases::backfill_source_metadata(&pool).await? > 0 {}
     while neondojo::play::backfill_library_matches(&pool).await? > 0 {}

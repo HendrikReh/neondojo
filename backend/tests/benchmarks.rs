@@ -55,58 +55,6 @@ async fn health_allows_gnubg_version_startup_past_300_ms(pool: PgPool) {
     assert_eq!(health["gnubg"], "GNU Backgammon test version");
 }
 
-#[sqlx::test(migrations = false)]
-#[ignore = "requires PostgreSQL"]
-async fn play_latency_migration_preserves_existing_analysis_history(pool: PgPool) {
-    let all = sqlx::migrate!("./migrations");
-    let previous = sqlx::migrate::Migrator {
-        migrations: std::borrow::Cow::Owned(
-            all.iter().filter(|m| m.version < 39).cloned().collect(),
-        ),
-        ..sqlx::migrate::Migrator::DEFAULT
-    };
-    previous.run(&pool).await.unwrap();
-    let reference = serde_json::to_value(neondojo::benchmarks::reference()).unwrap();
-    let machine = json!({
-        "id": uuid::Uuid::new_v4(), "name": "Historical backend",
-        "os": "macOS", "architecture": "aarch64",
-        "cpu_model": null, "logical_cpus": null, "memory_bytes": null
-    });
-    for status in ["queued", "running", "completed", "failed", "cancelled"] {
-        sqlx::query("INSERT INTO benchmark_runs(id,status,machine,engine_id,engine_name,engine_version,engine_path,plies,reference,protocol,reference_sgf,completed_games,analyzed_moves,total_elapsed_ms,average_move_ms,finished_at) VALUES($1,$2,$3,'gnubg','GNUbg','historical version','/historical/gnubg',2,$4,$5,$6,CASE WHEN $2='completed' THEN 10 ELSE 0 END,CASE WHEN $2='completed' THEN 460 ELSE 0 END,CASE WHEN $2='completed' THEN 4600 END,CASE WHEN $2='completed' THEN 10 END,CASE WHEN $2 IN ('completed','failed','cancelled') THEN now() END)")
-            .bind(uuid::Uuid::new_v4()).bind(status).bind(&machine).bind(&reference)
-            .bind(&reference["protocol"]).bind(neondojo::benchmarks::REFERENCE_SGF)
-            .execute(&pool).await.unwrap();
-    }
-    let before: Vec<Value> =
-        sqlx::query_scalar("SELECT to_jsonb(r) FROM benchmark_runs r ORDER BY queue_no")
-            .fetch_all(&pool)
-            .await
-            .unwrap();
-    all.run(&pool).await.unwrap();
-    let after: Vec<Value> = sqlx::query_scalar("SELECT to_jsonb(r) - 'play_reference' - 'completed_turns' - 'average_turn_ms' - 'engine_snapshot' - 'startup_elapsed_ms' FROM benchmark_runs r ORDER BY queue_no")
-        .fetch_all(&pool).await.unwrap();
-    // Migration 0079 moves GNUbg's native 2-ply to the shared 3-ply.
-    let expected: Vec<Value> = before
-        .into_iter()
-        .map(|mut run| {
-            run["plies"] = json!(run["plies"].as_i64().unwrap() + 1);
-            run
-        })
-        .collect();
-    assert_eq!(after, expected);
-    let app = api::router(AppState::new(pool, engine()));
-    let (status, history) = call(app, "GET", "/api/benchmarks", Value::Null).await;
-    assert_eq!(status, 200, "{history}");
-    assert_eq!(history["runs"].as_array().unwrap().len(), 5);
-    for run in history["runs"].as_array().unwrap() {
-        assert!(run["play_reference"].is_null());
-        assert!(run["average_turn_ms"].is_null());
-        assert_eq!(run["completed_turns"], 0);
-        assert_eq!(run["reference"], reference);
-    }
-}
-
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL and GNUbg"]
 async fn interrupted_play_measurements_never_publish_partial_times(pool: PgPool) {

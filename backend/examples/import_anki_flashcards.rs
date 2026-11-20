@@ -10,7 +10,7 @@ async fn main() -> anyhow::Result<()> {
         .max_connections(1)
         .connect(&url)
         .await?;
-    sqlx::migrate!().run(&pool).await?;
+    neondojo::schema_migrations::run(&pool).await?;
     for directory in std::env::args_os().skip(1) {
         for (name, count) in
             import_rendered_package(&pool, std::path::Path::new(&directory)).await?
