@@ -836,7 +836,7 @@ export default function App() {
           className="sr-only"
           type="file"
           aria-label={t('app.matchFile')}
-          accept=".mat,.sgf,.xg,.bgf,.ogxm"
+          accept=".mat,.txt,.sgf,.xg,.bgf,.ogxm"
           multiple
           onChange={(event) => {
             const destination = importDestination.current;

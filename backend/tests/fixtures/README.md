@@ -212,3 +212,11 @@ The two files cover real archive replay, position and match IDs, Crawford,
 forced passes, cube offer/response, source MWC and depth, and CRC32 rejection.
 The binary layout and score rules follow the [OGXM v2
 specification](https://gitlab.com/eranlambooij/hedgehog-public/-/raw/main/docs/OGXM_FORMAT_SPEC.md).
+
+`WC1988-final.txt` is the publicly downloadable 41-point final of World Cup I
+(Boston, 1988) between Ray Glaeser and Joe Sylvester, kept byte for byte with
+its CRLF line endings. Downloaded on 2026-11-20 from
+https://www.hardyhuebener.de/downloads/1988world_cup_final_sylvester-glaeser.txt.
+It is a MAT transcript with a boxed title instead of `;` metadata lines and
+covers `.txt` uploads. Its 45 game-start score rows are the reference for the
+imported scores.

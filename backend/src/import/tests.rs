@@ -3,13 +3,48 @@ use super::*;
 #[test]
 fn mat_normalization_preserves_sgf_values_with_escapes_and_multiple_entries() {
     let source = r"(;GM[6]FF[4]PW[A\\B\]Ć]PB[Black]MI[length:7][ws:0][bs:0];W[31hefe])";
-    let normalized = sgf::normalize_mat_sgf(source).unwrap();
+    let normalized = sgf::normalize_mat_sgf(source, None).unwrap();
 
     assert_eq!(
         sgf::parse_trees(&normalized).unwrap(),
         sgf::parse_trees(source).unwrap()
     );
     assert!(normalized.contains(r"PW[A\\B\]Ć]"));
+}
+
+#[test]
+fn mat_dates_come_only_from_the_transcript_header() {
+    let date = |text: &str| sgf::mat_event_date(text.as_bytes());
+    let declared = chrono::NaiveDate::from_ymd_opt(2014, 8, 10);
+    assert_eq!(
+        date("\u{feff}; [Site \"Monte-Carlo\"]\r\n; [EventDate \"2014.08.10\"]\r\n"),
+        declared
+    );
+    assert_eq!(date("#[EventDate \"2014.8.10\"]\n"), declared);
+    for missing in [
+        " 41 point match\n",
+        "; [EventDate \"\"]\n",
+        "; [EventDate \"0000.00.00\"]\n",
+        "; [EventDate \"2014.02.30\"]\n",
+        "; [EventDate \"2014.08\"]\n",
+        "  ; [EventDate \"2014.08.10\"]\n",
+        " Game 1 [EventDate \"2014.08.10\"]\n",
+    ] {
+        assert_eq!(date(missing), None, "{missing:?}");
+    }
+
+    // GNUbg dates an undated transcript with its temporary file's mtime.
+    let gnubg = "(;GM[6]FF[4]PW[A]PB[B]DT[2026-11-20]MI[length:7][game:0][ws:0][bs:0];W[31hefe])\
+                 (;GM[6]FF[4]PW[A]PB[B]DT[2026-11-20]MI[length:7][game:1][ws:1][bs:0];W[31hefe])";
+    let undated = sgf::normalize_mat_sgf(gnubg, None).unwrap();
+    assert!(!undated.contains("DT["), "{undated}");
+    assert_eq!(crate::databases::source_metadata(&undated).played_on, None);
+    let dated = sgf::normalize_mat_sgf(gnubg, declared).unwrap();
+    assert_eq!(dated.matches("DT[").count(), 1);
+    assert_eq!(
+        crate::databases::source_metadata(&dated).played_on,
+        declared
+    );
 }
 
 #[test]

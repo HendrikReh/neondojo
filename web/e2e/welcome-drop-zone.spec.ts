@@ -20,7 +20,7 @@ test('drop zone aligns with both buttons, highlights nested file drags and reset
   const zone = page.locator('.match-drop-zone');
   await expect(zone).toBeVisible();
   await expect(zone).toContainText('Match-Datei hier ablegen');
-  await expect(zone).toContainText('MAT · XG · SGF · BGF');
+  await expect(zone).toContainText('MAT · TXT · XG · SGF · BGF');
   const buttons = page.locator('.welcome-actions > button');
   const first = await buttons.first().boundingBox(),
     last = await buttons.last().boundingBox(),
@@ -43,7 +43,7 @@ test('drop zone aligns with both buttons, highlights nested file drags and reset
   await page.evaluate(() => window.dispatchEvent(new Event('blur')));
   await expect(zone).toHaveAttribute('data-drag-active', 'false');
 });
-for (const extension of ['mat', 'xg', 'sgf', 'bgf'])
+for (const extension of ['mat', 'txt', 'xg', 'sgf', 'bgf'])
   test(`dropped ${extension} uses the existing importer once and clears highlighting`, async ({
     page,
   }) => {

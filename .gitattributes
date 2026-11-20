@@ -1,3 +1,5 @@
 *.sql text eol=lf
 # Preserve the verbatim fixed-width GNUbg text export, including trailing spaces.
 backend/tests/fixtures/analysis-game1.txt -whitespace
+# Verbatim public MAT transcript with CRLF line endings and trailing spaces.
+backend/tests/fixtures/WC1988-final.txt -text -whitespace

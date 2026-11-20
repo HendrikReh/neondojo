@@ -244,7 +244,7 @@ pub struct ImportQuery {
 #[derive(ToSchema)]
 #[allow(dead_code)]
 struct UploadForm {
-    /// One MAT, SGF, binary XG, BGBlitz BGF, or HedgeHog OGXM file, at most 16 MiB including multipart envelope.
+    /// One MAT (also as a .txt match transcript), SGF, binary XG, BGBlitz BGF, or HedgeHog OGXM file, at most 16 MiB including multipart envelope.
     #[schema(value_type=String, format=Binary)]
     file: String,
 }
@@ -279,14 +279,20 @@ async fn upload(
     if filename.len() > 255 || filename.is_empty() || filename.chars().any(char::is_control) {
         return Err(ApiError::invalid("Invalid filename"));
     }
-    let format = filename
+    let extension = filename
         .rsplit('.')
         .next()
         .unwrap_or("")
         .to_ascii_lowercase();
+    // A .txt upload is a plain-text match transcript in the Jellyfish MAT
+    // layout, as published by tournament archives. It is stored as MAT.
+    let format = match extension.as_str() {
+        "txt" => "mat".to_owned(),
+        _ => extension.clone(),
+    };
     if !["mat", "sgf", "xg", "bgf", "ogxm"].contains(&format.as_str()) {
         return Err(ApiError::invalid(
-            "Supported formats: .mat, .sgf, .xg, .bgf, .ogxm",
+            "Supported formats: .mat, .txt, .sgf, .xg, .bgf, .ogxm",
         ));
     }
     let bytes = field
@@ -309,7 +315,13 @@ async fn upload(
         "mat" => Engine::new(crate::settings::load(&state).await?.gnubg_path)
             .normalize_mat(&bytes)
             .await
-            .map_err(|e| ApiError::invalid(format!("MAT import failed: {e:#}")))?,
+            .map_err(|e| {
+                ApiError::invalid(if extension == "txt" {
+                    format!("TXT import failed; expected a MAT match transcript: {e:#}")
+                } else {
+                    format!("MAT import failed: {e:#}")
+                })
+            })?,
         "sgf" => {
             String::from_utf8(bytes.to_vec()).map_err(|_| ApiError::invalid("SGF must be UTF-8"))?
         }

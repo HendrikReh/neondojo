@@ -487,7 +487,7 @@ impl Engine {
         let native = tokio::fs::read_to_string(temp.path().join("canonical.sgf"))
             .await
             .context("GNUbg could not import this MAT file")?;
-        crate::import::sgf::normalize_mat_sgf(&native)
+        crate::import::sgf::normalize_mat_sgf(&native, crate::import::sgf::mat_event_date(bytes))
     }
 
     pub async fn analyze(
