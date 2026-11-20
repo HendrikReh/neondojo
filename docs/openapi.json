@@ -20093,6 +20093,13 @@
                     "description": "Alias responsible for the hit when the visible name does not match."
                   }
                 ]
+              },
+              "name_platforms": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Platforms of the profile's aliases, sorted. Listed only when another\nlisted profile has the same display name, so the rows can be told apart."
               }
             }
           }

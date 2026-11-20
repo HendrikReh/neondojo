@@ -6,6 +6,10 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ## [Unreleased]
 
+### Changed
+
+- **Players with the same name can be told apart.** When several profiles in **Player database** share a display name, for example the same username on Galaxy and OpenGammon, each row shows its platforms under the name. `GET /api/players` returns them in `name_platforms`. [Player database](docs/reference/library.md#player-database)
+
 ## [1.0.0] - 2026-11-20
 
 The first release as NeonDojo (formerly BG Tutor 0.3.0), with NeonGammon 3.0.0 replacing Open Sage. This release breaks compatibility with BG Tutor: the name, environment variables, database, backups, browser preferences and Anki note type change, and only the `neongammon` 3.0.0 package is accepted. Start with a new database, register the NeonGammon 3.0.0 environment again and reimport your matches. Migrations `0082_review_hits` and `0083_neongammon_label` run at startup. The release also speeds up numbered error lists, NeonGammon moves during analyses and job progress.

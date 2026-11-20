@@ -599,7 +599,7 @@ Details: [Filtering and navigating matches](../reference/library.md#filtering-an
 
 The Player database lists everyone who appears in your matches.
 
-- **Search** by display name or imported alias. Sort by name, matches or games.
+- **Search** by display name or imported alias. Sort by name, matches or games. When two profiles have the same name, for example the same username on Galaxy and OpenGammon, the list shows the platform under each name.
 - Select a player to see the **profile**: other names (aliases), the **PR** for each analysis profile, and all matches with the opponent, score, PR, format, event, database and date. From two fully analyzed matches on, a chart shows the PR per match with a ten-match average, split into checker and cube play.
 - Click a match row to open the match. Click an opponent's name to switch to their profile.
 - **Edit** changes the display name or adds an alias for future imports.

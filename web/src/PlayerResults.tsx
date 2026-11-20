@@ -138,6 +138,17 @@ export function PlayerResults({
                   >
                     {row.display_name}
                   </button>
+                  {row.name_platforms?.length ? (
+                    <span
+                      className="player-alias-hit player-name-platforms"
+                      title={row.name_platforms.join(', ')}
+                    >
+                      <span className="visually-hidden">
+                        {t('namePlatforms')}{' '}
+                      </span>
+                      {row.name_platforms.join(', ')}
+                    </span>
+                  ) : null}
                   {row.matching_alias && (
                     <span
                       className="player-alias-hit"

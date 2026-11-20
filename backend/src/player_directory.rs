@@ -45,6 +45,11 @@ struct PlayerSearchHit {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[sqlx(json(nullable))]
     matching_alias: Option<PlayerAlias>,
+    /// Platforms of the profile's aliases, sorted. Listed only when another
+    /// listed profile has the same display name, so the rows can be told apart.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[sqlx(json)]
+    name_platforms: Vec<String>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -145,6 +150,10 @@ struct PlayerPage {
 }
 
 pub(crate) const DISPLAY_NAME: &str = "coalesce(nullif(concat_ws(' ',nullif(p.first_name,''),nullif(p.last_name,'')),''),p.source_name)";
+/// Profiles the directory lists: those with a match or a name of their own.
+const LISTED: &str =
+    "(EXISTS (SELECT 1 FROM player_aliases a JOIN match_players mp ON mp.alias_id=a.id
+                 WHERE a.profile_id=p.id) OR p.first_name<>'' OR p.last_name<>'')";
 const MATCHING_ALIAS: &str =
     "FROM player_aliases a WHERE a.profile_id=p.id AND lower(a.name) LIKE $2";
 const MATCH_COUNT: &str = "(SELECT count(DISTINCT mp.match_id) FROM player_aliases a
@@ -199,8 +208,7 @@ async fn list(
         ),
     };
     let filters = format!(
-        "(EXISTS (SELECT 1 FROM player_aliases a JOIN match_players mp ON mp.alias_id=a.id
-                 WHERE a.profile_id=p.id) OR p.first_name<>'' OR p.last_name<>'')
+        "{LISTED}
          AND ($3::uuid IS NULL OR p.id<>$3)
          AND ($1='' OR lower({DISPLAY_NAME}) LIKE $2 OR EXISTS (SELECT 1 {MATCHING_ALIAS}))"
     );
@@ -233,13 +241,24 @@ async fn list(
              AND ($4::uuid IS NULL OR (lower({DISPLAY_NAME}), p.id) >
                   (SELECT lower({DISPLAY_NAME}), p.id FROM player_profiles p WHERE p.id=$4))
            ORDER BY {page_order} LIMIT 51 OFFSET $5
+         ),
+         -- Display names on this page that another listed profile shares.
+         shared AS MATERIALIZED (
+           SELECT lower({DISPLAY_NAME}) AS name_key FROM player_profiles p
+           WHERE {LISTED} AND lower({DISPLAY_NAME}) IN (SELECT lower(display_name) FROM page)
+           GROUP BY 1 HAVING count(*)>1
          )
          SELECT p.id,p.display_name,p.first_name,p.last_name,p.version,
            {MATCH_COUNT} AS match_count,{GAME_COUNT} AS game_count,
            CASE WHEN $1<>'' AND lower(p.display_name) NOT LIKE $2 THEN (
              SELECT jsonb_build_object('name',a.name,'platform',a.platform)
              {MATCHING_ALIAS} ORDER BY a.name,a.platform LIMIT 1
-           ) END AS matching_alias
+           ) END AS matching_alias,
+           CASE WHEN lower(p.display_name) IN (SELECT name_key FROM shared) THEN (
+             SELECT coalesce(jsonb_agg(DISTINCT a.platform ORDER BY a.platform)
+                    FILTER (WHERE a.platform<>''),'[]'::jsonb)
+             FROM player_aliases a WHERE a.profile_id=p.id
+           ) ELSE '[]'::jsonb END AS name_platforms
          FROM page p ORDER BY {row_order}"
     ))
     .bind(search)

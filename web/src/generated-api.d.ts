@@ -5129,6 +5129,11 @@ export interface components {
         };
         PlayerSearchHit: components["schemas"]["PlayerProfile"] & {
             matching_alias?: null | components["schemas"]["PlayerAlias"];
+            /**
+             * @description Platforms of the profile's aliases, sorted. Listed only when another
+             *     listed profile has the same display name, so the rows can be told apart.
+             */
+            name_platforms?: string[];
         };
         /** @enum {string} */
         PlayerSort: "name" | "matches" | "games";
