@@ -1,3 +1,4 @@
+import { checkerPath, eitherOrder } from './play-turn-fixtures';
 import { applyAndCloseSettings } from './settings-actions';
 import { rollDice } from './play-board-actions';
 import { test, expect, type Page } from './test';
@@ -37,6 +38,7 @@ function fixture(human = 0): PlaySession {
     },
     phase: 'move',
     can_double: false,
+    legal_turns: eitherOrder([2, 1], '6/4 6/5'),
     legal_moves: [
       {
         notation: '6/4 6/5',
@@ -169,6 +171,7 @@ for (const human of [0, 1])
     saved.position.board = Array<number>(26).fill(0);
     saved.position.board[from] = human === 0 ? 1 : -1;
     saved.position.board[to] = human === 0 ? -1 : 1;
+    saved.legal_turns = [checkerPath([2, 1], '3/1 1/off', human)];
     saved.legal_moves = [
       {
         notation: '3/1 1/off',

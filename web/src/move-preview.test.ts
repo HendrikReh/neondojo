@@ -25,11 +25,13 @@ const success = (result: MovePreview) => {
 
 test('restores the exact submitted path when only the checker steps were saved', () => {
   const source = position({ 24: 1, 19: -1 }, [6, 5], '', 0);
+  const steps = [
+    { from: 24, to: 19 },
+    { from: 19, to: 13 },
+  ];
+  expect(projectPracticeSteps(source, steps, undefined).ok).toBe(false);
   const preview = success(
-    projectPracticeSteps(source, [
-      { from: 24, to: 19 },
-      { from: 19, to: 13 },
-    ]),
+    projectPracticeSteps(source, steps, [{ steps, dice: [5, 6] }]),
   );
   expect(preview.steps).toEqual([
     { from: 24, to: 19, die: 5, hit: true },

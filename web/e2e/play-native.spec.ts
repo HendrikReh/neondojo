@@ -7,7 +7,6 @@ declare global {
     __nativeAudio: number[];
   }
 }
-import { orderedLegalTurns } from '../src/play-state';
 test.skip(
   !process.env.NEONDOJO_NATIVE_PLAY_TEST,
   'Requires disposable PostgreSQL/backend with actual GNUbg',
@@ -103,23 +102,16 @@ for (const config of [
       }
       expect(state.phase).toBe('move');
       expect(state.position.player).toBe(config.human);
-      let moves = orderedLegalTurns(
-        state.position.board,
-        state.human_player,
-        state.position.dice,
-        state.legal_moves,
+      const turns = state.legal_turns ?? [];
+      let moves = turns.filter(
+        (turn) => turn.dice[0] === state.position.dice[0],
       );
       if (!moves.length && state.position.dice[0] !== state.position.dice[1]) {
         await page
           .getByRole('button', { name: /Swap dice order/ })
           .first()
           .click();
-        moves = orderedLegalTurns(
-          state.position.board,
-          state.human_player,
-          [...state.position.dice].reverse(),
-          state.legal_moves,
-        );
+        moves = turns.filter((turn) => turn.dice[0] === state.position.dice[1]);
       }
       const move = moves[0];
       expect(move?.steps.length).toBeGreaterThan(0);

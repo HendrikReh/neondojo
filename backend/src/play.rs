@@ -28,13 +28,14 @@ use crate::{
 use anyhow::{Context, ensure};
 use axum::{
     Json, Router,
-    extract::{Path, Query, State},
+    extract::{Path, Query, State, rejection::JsonRejection},
     http::{StatusCode, header},
     routing::{get, post},
 };
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use std::collections::HashMap;
 use utoipa::{OpenApi, ToSchema};
 use uuid::Uuid;
 
@@ -53,6 +54,48 @@ pub struct PlayStep {
 pub struct PlayMove {
     pub notation: String,
     pub steps: Vec<PlayStep>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CheckerTurn {
+    pub steps: Vec<PlayStep>,
+    /// The die used by each step, in the same order.
+    pub dice: Vec<i32>,
+}
+
+impl CheckerTurn {
+    fn from_path(path: crate::import::sgf::CheckerPath, player: i32) -> Self {
+        let absolute = |point| if player == 0 { point } else { 25 - point };
+        let (steps, dice) = path
+            .steps
+            .into_iter()
+            .map(|(from, to, die)| {
+                (
+                    PlayStep {
+                        from: absolute(from as i32),
+                        to: absolute(if to == 0 { -1 } else { to as i32 }),
+                    },
+                    die,
+                )
+            })
+            .unzip();
+        Self { steps, dice }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct LiveCheckerTurn {
+    #[serde(flatten)]
+    pub turn: CheckerTurn,
+    /// Index into this session revision's GNUbg legal move catalog.
+    pub move_index: usize,
+}
+
+#[derive(Deserialize, ToSchema)]
+struct CheckerTurnsRequest {
+    board: [i32; 26],
+    player: i32,
+    dice: [i32; 2],
 }
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PlayHistory {
@@ -161,6 +204,9 @@ pub struct PlaySession {
     pub phase: PlayPhase,
     pub can_double: bool,
     pub legal_moves: Vec<PlayMove>,
+    /// Interactive paths derived from the saved roll and the rule engine's legal moves.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub legal_turns: Option<Vec<LiveCheckerTurn>>,
     pub history: Vec<PlayHistory>,
     pub scores: [i32; 2],
     pub game_no: i32,
@@ -332,6 +378,7 @@ struct NativeSnapshot {
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
+        .route("/api/play/checker-turns", post(checker_turns))
         .route(
             "/api/play/sessions",
             get(list_sessions).post(create_session),
@@ -343,6 +390,28 @@ pub(crate) fn routes() -> Router<AppState> {
         .route("/api/play/sessions/{id}/review", post(review))
         .route("/api/play/sessions/{id}/sgf", get(export_sgf))
         .route("/api/play/sessions/{id}/history", get(history_snapshots))
+}
+
+#[utoipa::path(post,path="/api/play/checker-turns",request_body=CheckerTurnsRequest,responses((status=200,body=Vec<CheckerTurn>,description="Complete paths in absolute coordinates. An empty list means a forced pass."),(status=422,body=ErrorBody)),tag="Playing")]
+async fn checker_turns(
+    payload: Result<Json<CheckerTurnsRequest>, JsonRejection>,
+) -> ApiResult<Json<Vec<CheckerTurn>>> {
+    let Json(request) = payload.map_err(|error| ApiError::invalid(error.body_text()))?;
+    let result = tokio::task::spawn_blocking(move || {
+        crate::import::sgf::checker_paths(&request.board, request.player, request.dice).map(
+            |paths| {
+                paths
+                    .into_iter()
+                    .map(|path| CheckerTurn::from_path(path, request.player))
+                    .collect()
+            },
+        )
+    })
+    .await
+    .map_err(anyhow::Error::from)?;
+    result
+        .map(Json)
+        .map_err(|error| ApiError::invalid(error.to_string()))
 }
 pub(crate) async fn require_review_available(pool: &sqlx::PgPool, match_id: Uuid) -> ApiResult<()> {
     require_review_available_on(pool, match_id).await
@@ -398,10 +467,86 @@ async fn saved(state: &AppState, id: Uuid) -> ApiResult<Saved> {
 }
 async fn present_with_results(session: PlaySession, sgf: String) -> ApiResult<PlaySession> {
     Ok(
-        tokio::task::spawn_blocking(move || project_game_results(session, &sgf))
+        tokio::task::spawn_blocking(move || {
+            let mut session = project_game_results(session, &sgf);
+            session.legal_turns = None;
+            if matches!(session.phase, PlayPhase::Move) {
+                match live_checker_turns(&session) {
+                    Ok(turns) => session.legal_turns = Some(turns),
+                    Err(error) => tracing::warn!(session_id = %session.id, %error, "Cannot project live checker turns"),
+                }
+            }
+            session
+        })
             .await
             .map_err(anyhow::Error::from)?,
     )
+}
+
+fn native_move_board(
+    board: &[i32],
+    player: i32,
+    dice: &[i32],
+    choice: &PlayMove,
+) -> anyhow::Result<[i32; 26]> {
+    let before: [i32; 26] = board.try_into().context("Invalid legal-move board")?;
+    let dice: [i32; 2] = dice.try_into().context("Invalid legal-move dice")?;
+    let mut pairs = Vec::new();
+    for step in &choice.steps {
+        let point = |point: i32| -> anyhow::Result<usize> {
+            if point == -1 && player == 0 || point == 26 && player == 1 {
+                return Ok(0);
+            }
+            let relative = if player == 0 { point } else { 25 - point };
+            ensure!(
+                (0..=25).contains(&relative),
+                "Invalid native legal move coordinate"
+            );
+            Ok(relative as usize)
+        };
+        pairs.push((point(step.from)?, point(step.to)?));
+    }
+    let mut expanded = before;
+    let steps = crate::import::sgf::expand_xg_play(&mut expanded, player, dice, &pairs)?;
+    crate::import::sgf::apply_checker_turn(&before, player, dice, &steps)
+}
+
+fn live_checker_turns(session: &PlaySession) -> anyhow::Result<Vec<LiveCheckerTurn>> {
+    if session.legal_moves.is_empty() {
+        return Ok(Vec::new());
+    }
+    let position = &session.position;
+    let board = position
+        .board
+        .as_slice()
+        .try_into()
+        .context("Invalid saved board")?;
+    let dice = position
+        .dice
+        .as_slice()
+        .try_into()
+        .context("Invalid saved roll")?;
+    let paths = crate::import::sgf::checker_paths(board, position.player, dice)?;
+    let mut native_boards = HashMap::new();
+    for (index, choice) in session.legal_moves.iter().enumerate() {
+        let end = native_move_board(&position.board, position.player, &position.dice, choice)?;
+        native_boards.entry(end).or_insert(index);
+    }
+    let turns = paths
+        .into_iter()
+        .filter_map(|path| {
+            let &move_index = native_boards.get(&path.board)?;
+            Some(LiveCheckerTurn {
+                turn: CheckerTurn::from_path(path, position.player),
+                move_index,
+            })
+        })
+        .collect::<Vec<_>>();
+    ensure!(
+        !turns.is_empty(),
+        "No checker path matches the rule engine's legal moves"
+    );
+    Ok(turns)
 }
 
 fn project_game_results(mut session: PlaySession, sgf: &str) -> PlaySession {
@@ -717,6 +862,7 @@ async fn create_session(
         phase: PlayPhase::OpeningRoll,
         can_double: false,
         legal_moves: vec![],
+        legal_turns: None,
         history: vec![],
         scores: [0, 0],
         game_no: 1,
@@ -1598,6 +1744,7 @@ fn apply_snapshot(session: &mut PlaySession, snapshot: NativeSnapshot) -> anyhow
 #[derive(OpenApi)]
 #[openapi(
     paths(
+        checker_turns,
         list_sessions,
         get_session,
         history_snapshots,
@@ -1616,6 +1763,9 @@ fn apply_snapshot(session: &mut PlaySession, snapshot: NativeSnapshot) -> anyhow
         PlayEngine,
         PlayMove,
         PlayStep,
+        CheckerTurnsRequest,
+        CheckerTurn,
+        LiveCheckerTurn,
         PlayHistory,
         PlayHistorySnapshot,
         PlayHistorySnapshots,

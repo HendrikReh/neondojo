@@ -1,3 +1,4 @@
+import { eitherOrder } from './play-turn-fixtures';
 import { rollDice } from './play-board-actions';
 import { test, expect } from './test';
 import type { PlaySession } from '../src/play-api';
@@ -87,6 +88,7 @@ for (const tie of [false, true])
           history: tie
             ? [{ player: 1, dice: [5, 1], notation: '13/8 24/23' }]
             : [],
+          legal_turns: tie ? [] : eitherOrder([6, 2], '24/18 13/11'),
           legal_moves: tie
             ? []
             : [
@@ -200,6 +202,7 @@ test('a lost opening-roll response resumes from the committed dice after reload'
       ...saved,
       version: 2,
       phase: 'move',
+      legal_turns: eitherOrder([6, 1], '13/7 6/5'),
       legal_moves: [
         {
           notation: '13/7 6/5',

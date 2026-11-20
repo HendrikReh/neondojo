@@ -1519,6 +1519,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/play/checker-turns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["checker_turns"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/play/sessions": {
         parameters: {
             query?: never;
@@ -3341,6 +3357,17 @@ export interface components {
             /** Format: double */
             played_equity: number;
         };
+        CheckerTurn: {
+            /** @description The die used by each step, in the same order. */
+            dice: number[];
+            steps: components["schemas"]["PlayStep"][];
+        };
+        CheckerTurnsRequest: {
+            board: number[];
+            dice: number[];
+            /** Format: int32 */
+            player: number;
+        };
         Competitor: {
             engine_id: string;
             /** Format: int32 */
@@ -4401,6 +4428,10 @@ export interface components {
             sent_reviews: number;
             status: components["schemas"]["OverviewStatus"];
         };
+        LiveCheckerTurn: components["schemas"]["CheckerTurn"] & {
+            /** @description Index into this session revision's GNUbg legal move catalog. */
+            move_index: number;
+        };
         /** @enum {string} */
         LossDirection: "asc" | "desc";
         Machine: {
@@ -5044,6 +5075,8 @@ export interface components {
             id: string;
             learning_used?: boolean;
             legal_moves: components["schemas"]["PlayMove"][];
+            /** @description Interactive paths derived from the saved roll and the rule engine's legal moves. */
+            legal_turns?: components["schemas"]["LiveCheckerTurn"][] | null;
             /**
              * Format: uuid
              * @description Current linked library entry; projected from the relational session link.
@@ -10738,6 +10771,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["XgBookStatus"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    checker_turns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckerTurnsRequest"];
+            };
+        };
+        responses: {
+            /** @description Complete paths in absolute coordinates. An empty list means a forced pass. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckerTurn"][];
                 };
             };
             422: {

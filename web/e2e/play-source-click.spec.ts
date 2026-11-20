@@ -1,3 +1,8 @@
+import {
+  checkerPath,
+  eitherOrder,
+  joinedThirteenToEight,
+} from './play-turn-fixtures';
 import { test, expect } from './test';
 import type { PlaySession } from '../src/play-api';
 const id = 'f23dfdc5-465c-4217-92d8-6c034296a32c';
@@ -37,6 +42,7 @@ for (const config of [
       },
       phase: 'move',
       can_double: false,
+      legal_turns: joinedThirteenToEight(config.human),
       legal_moves: [
         { notation: '13/8', steps: [{ from: absolute(13), to: absolute(8) }] },
       ],
@@ -157,6 +163,7 @@ for (const mode of [
       last = human === 0 ? 22 : 3;
     if (mode === 'double') {
       saved.position.board[6] = 4;
+      saved.legal_turns = [checkerPath([1, 1, 1, 1], '6/5 6/5 6/5 6/5')];
       saved.legal_moves = [
         {
           notation: '6/5(4)',
@@ -168,6 +175,7 @@ for (const mode of [
       const key = Buffer.from(saved.position.gnubg_match_id, 'base64');
       key[0] = (key[0] & ~0x3f) | 1 | (human << 4);
       saved.position.gnubg_match_id = key.toString('base64');
+      saved.legal_turns = eitherOrder([1, 2], 'bar/24 bar/23', human);
       saved.legal_moves = [
         {
           notation: 'bar/24 bar/23',
@@ -180,6 +188,7 @@ for (const mode of [
     } else {
       saved.position.board[bar] = human === 0 ? 1 : -1;
       saved.position.board[entry] = human === 0 ? -1 : 1;
+      saved.legal_turns = [checkerPath([1, 2], 'bar/24 24/22', human)];
       saved.legal_moves = [
         {
           notation: 'bar/24 24/22',
@@ -289,12 +298,22 @@ for (const sourceKind of ['board', 'bar'] as const) {
         ],
       },
     ];
+    const notation = sourceKind === 'bar' ? 'bar/23 6/3' : '13/11 6/3';
+    saved.legal_turns =
+      sourceKind === 'bar'
+        ? [checkerPath([2, 3], notation)]
+        : eitherOrder([2, 3], notation);
     // In the board case the preferred die is usable on another checker.
-    if (sourceKind === 'board')
+    if (sourceKind === 'board') {
+      saved.legal_turns.push({
+        ...checkerPath([3, 2], '6/3 3/1'),
+        move_index: 1,
+      });
       saved.legal_moves.push({
         notation: '6/3/1',
         steps: [{ from: 6, to: 1 }],
       });
+    }
     await page.addInitScript(
       (id) => localStorage.setItem('neondojo.play-session', id),
       id,

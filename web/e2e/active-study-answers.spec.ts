@@ -77,6 +77,12 @@ test('actively answers and reviews all three card types, with an idempotent retr
   test.setTimeout(90_000);
   const deck = await createDeck(page);
   const nextUrl = `/api/decks/${deck.id}/next`;
+  await page.route(
+    '**/api/play/checker-turns',
+    (route) =>
+      route.fulfill({ status: 503, json: { error: 'Moves unavailable' } }),
+    { times: 1 },
+  );
   await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   const study = await openDeck(page, deck);
@@ -115,6 +121,13 @@ test('actively answers and reviews all three card types, with an idempotent retr
     if (question.kind === 'checker') {
       const point = card.getByRole('button', { name: 'Point 24', exact: true });
       await expect(card.locator('.move-arrows')).toHaveCount(0);
+      const turnsError = card
+        .getByRole('alert')
+        .filter({ hasText: 'Moves unavailable' });
+      await expect(turnsError).toBeVisible();
+      await expect(card.getByRole('button', { name: /pass/i })).toHaveCount(0);
+      await turnsError.getByRole('button', { name: 'Try again' }).click();
+      await expect(point).toBeEnabled();
       await point.focus();
       await page.keyboard.press('Enter');
       await expect(submit).toBeDisabled();

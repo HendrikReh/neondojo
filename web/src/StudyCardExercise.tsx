@@ -1,3 +1,4 @@
+import { useCheckerTurns } from './useCheckerTurns';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import ActionButton from './ActionButton';
 import AnkiCardFace from './AnkiCardFace';
@@ -173,6 +174,11 @@ export function CardExercise({
   const questionHeading = useRef<HTMLHeadingElement>(null);
   const answerHeading = useRef<HTMLHeadingElement>(null);
   const hasAnswer = !!answer;
+  const checkerTurns = useCheckerTurns(
+    visible && card.kind === 'checker'
+      ? (card.position ?? undefined)
+      : undefined,
+  );
 
   useEffect(() => {
     if (!visible) return;
@@ -273,7 +279,7 @@ export function CardExercise({
   const result = evaluation;
   const chosenPreview =
     submitted?.kind === 'checker'
-      ? projectPracticeSteps(position, submitted.steps)
+      ? projectPracticeSteps(position, submitted.steps, checkerTurns.turns)
       : undefined;
   const bestNotation =
     result?.best ??
@@ -329,6 +335,7 @@ export function CardExercise({
       {checker && !answer ? (
         <CheckerPracticeBoard
           position={card.position}
+          checkerTurns={checkerTurns}
           players={[card.players[0], card.players[1]]}
           theme={theme}
           draft={draft}

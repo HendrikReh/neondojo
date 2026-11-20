@@ -1,3 +1,4 @@
+import { checkerPath } from './play-turn-fixtures';
 import { test, expect, type Page } from './test';
 import {
   historyFixture,
@@ -30,6 +31,10 @@ async function fixture(page: Page, human = 0, phase = 'move') {
     phase,
     play_mode: 'coach',
     can_double: phase === 'roll',
+  });
+  saved.legal_turns?.push({
+    ...checkerPath([3, 1], '13/10 10/9', human),
+    move_index: 1,
   });
   saved.legal_moves = ['13/10 6/5', '13/9'].map((notation) => ({
     notation,

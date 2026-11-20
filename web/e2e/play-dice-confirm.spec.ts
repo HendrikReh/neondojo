@@ -1,3 +1,4 @@
+import { checkerPath, joinedThirteenToEight } from './play-turn-fixtures';
 import { rollDice } from './play-board-actions';
 import { test, expect } from './test';
 import type { PlaySession } from '../src/play-api';
@@ -72,6 +73,7 @@ for (const config of [
       },
       phase: 'move',
       can_double: false,
+      legal_turns: joinedThirteenToEight(config.human),
       legal_moves: [
         { notation: '13/8', steps: [{ from: absolute(13), to: absolute(8) }] },
       ],
@@ -247,6 +249,9 @@ for (const mode of ['double', 'double_archive', 'single_usable'] as const)
       },
       phase: 'move',
       can_double: false,
+      legal_turns: double
+        ? [checkerPath([1, 1, 1, 1], '6/5 6/5 6/5 6/5')]
+        : [checkerPath([1], 'bar/24')],
       legal_moves: [
         {
           notation: double ? '6/5(4)' : 'bar/24',

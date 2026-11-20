@@ -1,3 +1,4 @@
+import { useCheckerTurns } from './useCheckerTurns';
 import {
   useEffect,
   useRef,
@@ -264,6 +265,7 @@ function PracticeQuestion({
     if (answer) revealed.current?.focus();
   }, [answer]);
   const { position } = item;
+  const checkerTurns = useCheckerTurns(position);
   const context = matchContext(position.gnubg_match_id);
   const score = answer && 'equity_loss' in answer ? answer : undefined;
   const previewLabels = {
@@ -272,7 +274,7 @@ function PracticeQuestion({
   };
   const preview =
     score && previewChoice === 'played'
-      ? projectPracticeSteps(position, draft.steps)
+      ? projectPracticeSteps(position, draft.steps, checkerTurns.turns)
       : answer
         ? projectMove(position, answer.best)
         : undefined;
@@ -329,6 +331,7 @@ function PracticeQuestion({
       ) : (
         <CheckerPracticeBoard
           position={position}
+          checkerTurns={checkerTurns}
           players={[item.white, item.black]}
           theme={theme}
           boardClassName="similar-practice-board"

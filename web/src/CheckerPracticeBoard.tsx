@@ -2,16 +2,18 @@ import { useMemo, useState, type ReactNode } from 'react';
 import ActionButton from './ActionButton';
 import Board from './Board';
 import type { Position } from './api';
+import { useI18n } from './i18n';
 import { usePlayText } from './play-messages';
+import { usePlayModeText } from './play-mode-messages';
 import {
   applySteps,
-  legalCheckerTurns,
   matchingMoves,
   nextPoints,
   relativePoint,
   type CheckerStep,
 } from './play-state';
 import type { Theme } from './themes';
+import type { useCheckerTurns } from './useCheckerTurns';
 
 export interface CheckerDraft {
   steps: CheckerStep[];
@@ -20,6 +22,7 @@ export interface CheckerDraft {
 
 export default function CheckerPracticeBoard({
   position,
+  checkerTurns,
   players,
   theme,
   boardClassName,
@@ -31,6 +34,7 @@ export default function CheckerPracticeBoard({
   children,
 }: {
   position: Position;
+  checkerTurns: ReturnType<typeof useCheckerTurns>;
   players: readonly [string, string];
   theme: Theme;
   boardClassName?: string;
@@ -42,21 +46,20 @@ export default function CheckerPracticeBoard({
   children?: ReactNode;
 }) {
   const t = usePlayText();
+  const modeT = usePlayModeText();
+  const { formatError } = useI18n();
   const [hovered, setHovered] = useState<number | null>(null);
   const { player } = position;
   const { steps } = draft;
-  const turns = useMemo(
-    () => legalCheckerTurns(position.board, player, position.dice),
-    [position, player],
-  );
-  const firstDie = draft.firstDie ?? turns[0]?.dice[0];
+  const { turns, error, loading, retry } = checkerTurns;
+  const firstDie = draft.firstDie ?? turns?.[0]?.dice[0];
   const dice =
     firstDie === position.dice[1]
       ? [...position.dice].reverse()
       : position.dice;
   const activeDie = dice[0];
   const moves = useMemo(
-    () => turns.filter((turn) => turn.dice[0] === activeDie),
+    () => turns?.filter((turn) => turn.dice[0] === activeDie) ?? [],
     [turns, activeDie],
   );
   const sources = busy ? [] : nextPoints(moves, steps, null);
@@ -64,8 +67,8 @@ export default function CheckerPracticeBoard({
     !busy &&
     !steps.length &&
     dice[0] !== dice[1] &&
-    turns.some((turn) => turn.dice[0] === dice[1]);
-  const forcedPass = !turns.length;
+    turns?.some((turn) => turn.dice[0] === dice[1]) === true;
+  const forcedPass = turns?.length === 0;
   const submitLabel = forcedPass ? t('pass') : checkLabel;
   const canCheck =
     forcedPass ||
@@ -124,7 +127,7 @@ export default function CheckerPracticeBoard({
                     ]
                   : [steps.length >= 1, steps.length >= 2],
               active:
-                busy || canCheck
+                busy || !turns || canCheck
                   ? null
                   : dice[0] === dice[1]
                     ? steps.length < 2
@@ -135,6 +138,22 @@ export default function CheckerPracticeBoard({
           }}
         />
       </div>
+      {loading && <p role="status">{t('checkerTurnsLoading')}</p>}
+      {error !== undefined && (
+        <div role="alert">
+          <p>
+            {t('checkerTurnsError')} {formatError(error)}
+          </p>
+          <ActionButton
+            type="button"
+            icon="refresh"
+            label={modeT('retry')}
+            onClick={retry}
+          >
+            {modeT('retry')}
+          </ActionButton>
+        </div>
+      )}
       <div className="play-actions">
         <ActionButton
           type="button"

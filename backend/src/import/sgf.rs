@@ -257,6 +257,99 @@ fn step(b: &[i32; 26], from: usize, to: usize, die: i32) -> Option<[i32; 26]> {
 fn any_step(board: &[i32; 26], die: i32) -> bool {
     (1..=25).any(|from| step(board, from, from.saturating_sub(die as usize), die).is_some())
 }
+
+fn turn_dice(dice: [i32; 2]) -> Vec<i32> {
+    if dice[0] == dice[1] {
+        vec![dice[0]; 4]
+    } else {
+        dice.to_vec()
+    }
+}
+
+fn is_finished(board: &[i32; 26]) -> bool {
+    !board.iter().any(|&count| count > 0)
+}
+
+pub(crate) struct CheckerPath {
+    pub board: [i32; 26],
+    pub steps: Vec<(usize, usize, i32)>,
+}
+
+/// Complete checker paths in mover-relative coordinates, with absolute end
+/// boards. An active position with no legal path is a forced pass.
+pub(crate) fn checker_paths(
+    board: &[i32; 26],
+    player: i32,
+    dice: [i32; 2],
+) -> Result<Vec<CheckerPath>> {
+    ensure!(matches!(player, 0 | 1), "Invalid checker turn player");
+    ensure!(
+        dice.iter().all(|die| (1..=6).contains(die)),
+        "Invalid checker turn dice"
+    );
+    ensure!(
+        board.iter().all(|count| (-15..=15).contains(count)),
+        "Invalid checker counts"
+    );
+    valid_board(board)?;
+    ensure!(
+        board.iter().any(|&count| count > 0) && board.iter().any(|&count| count < 0),
+        "Checker turns require an active position"
+    );
+
+    let before = local_board(board, player);
+    let available = turn_dice(dice);
+    let required = max_plays(&before, &available);
+    let high = dice[0].max(dice[1]);
+    let higher_die = (dice[0] != dice[1] && any_step(&before, high)).then_some(high);
+    let mut paths = Vec::new();
+    if required > 0 {
+        collect_checker_paths(&before, &available, &mut Vec::new(), required, &mut paths);
+    }
+    paths.retain_mut(|path| {
+        if let ([(from, to, die)], Some(high)) = (path.steps.as_slice(), higher_die)
+            && *die != high
+            && !(is_finished(&path.board) && step(&before, *from, *to, high).is_some())
+        {
+            return false;
+        }
+        path.board = local_board(&path.board, player);
+        true
+    });
+    Ok(paths)
+}
+
+fn collect_checker_paths(
+    board: &[i32; 26],
+    dice: &[i32],
+    steps: &mut Vec<(usize, usize, i32)>,
+    required: usize,
+    paths: &mut Vec<CheckerPath>,
+) {
+    if steps.len() == required || is_finished(board) {
+        paths.push(CheckerPath {
+            board: *board,
+            steps: steps.clone(),
+        });
+        return;
+    }
+    for (index, &die) in dice.iter().enumerate() {
+        if index > 0 && dice[index - 1] == die {
+            continue;
+        }
+        let mut remaining = dice.to_vec();
+        remaining.remove(index);
+        for from in 1usize..=25 {
+            let to = from.saturating_sub(die as usize);
+            if let Some(after) = step(board, from, to, die) {
+                steps.push((from, to, die));
+                collect_checker_paths(&after, &remaining, steps, required, paths);
+                steps.pop();
+            }
+        }
+    }
+}
+
 fn max_plays(board: &[i32; 26], dice: &[i32]) -> usize {
     let mut best = 0;
     for (i, die) in dice.iter().enumerate() {
@@ -307,7 +400,7 @@ fn expand_runs(
     if runs.is_empty() {
         // Bearing off the final checker ends the game immediately, even when
         // playing a smaller die first could have consumed another die.
-        return (remaining == 0 || !board.iter().any(|n| *n > 0)).then(|| (*board, Vec::new()));
+        return (remaining == 0 || is_finished(board)).then(|| (*board, Vec::new()));
     }
     if remaining == 0 || runs.len() > remaining || remaining > dice.len() {
         return None;
@@ -365,11 +458,7 @@ pub(crate) fn expand_xg_play(
                 .all(|&(from, to)| (1..=25).contains(&from) && to < from),
         "XG: invalid checker run"
     );
-    let available = if dice[0] == dice[1] {
-        vec![dice[0]; 4]
-    } else {
-        dice.to_vec()
-    };
+    let available = turn_dice(dice);
     let before = local_board(board, player);
     let required = max_plays(&before, &available);
     let (after, steps) = expand_runs(&before, runs, &available, required)
@@ -470,16 +559,12 @@ pub(crate) fn apply_checker_turn(
         matches!(player, 0 | 1) && dice.iter().all(|die| (1..=6).contains(die)),
         "Invalid checker turn context"
     );
-    let available = if dice[0] == dice[1] {
-        vec![dice[0]; 4]
-    } else {
-        dice.to_vec()
-    };
+    let available = turn_dice(dice);
     let before = local_board(board, player);
     let after =
         apply_pairs(&before, pairs, &available).context("Illegal or incomplete checker move")?;
     ensure!(
-        pairs.len() == max_plays(&before, &available) || !after.iter().any(|n| *n > 0),
+        pairs.len() == max_plays(&before, &available) || is_finished(&after),
         "SGF: checker play does not use the maximum possible dice"
     );
     if pairs.len() == 1 && dice[0] != dice[1] {

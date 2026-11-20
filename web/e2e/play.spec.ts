@@ -1,3 +1,4 @@
+import { eitherOrder, joinedThirteenToEight } from './play-turn-fixtures';
 import { applyAndCloseSettings } from './settings-actions';
 import { rollDice, doubleCube, passDice } from './play-board-actions';
 import { test, expect } from './test';
@@ -34,6 +35,7 @@ function session(human = 0, direction = 'right') {
     },
     phase: 'move',
     can_double: false,
+    legal_turns: eitherOrder([3, 1], '8/5 6/5', human),
     legal_moves: [
       {
         notation: '8/5 6/5',
@@ -84,7 +86,10 @@ for (const direction of ['right', 'left'])
       direction,
     );
     await expect(
-      page.locator('.play-match-engine .engine-label-details'),
+      page
+        .locator('.play-match-engine > span')
+        .first()
+        .locator('.engine-label-details'),
     ).toHaveText('GNU Backgammon 1.08.003');
     const point = (n: number) => page.locator(`[data-play-point="${n}"]`);
     await expect(
@@ -162,6 +167,34 @@ test('Playing restores its last session directly without a saved-match list', as
   await expect(
     page.getByRole('button', { name: 'Refresh matches', exact: true }),
   ).toHaveCount(0);
+});
+
+test('playing identifies each engine role and exposes only the supplied checker paths', async ({
+  page,
+}) => {
+  const saved = {
+    ...session(),
+    engine: { id: 'bgsage', version: 'NeonGammon 3.0.0', plies: 2 },
+    engine_snapshots: {
+      analysis: { engine_id: 'bgsage', engine_version: 'NeonGammon 3.0.0' },
+      rules: { engine_id: 'gnubg', engine_version: 'GNU Backgammon 1.08.003' },
+    },
+    legal_turns: eitherOrder([3, 1], '8/5 6/5').slice(0, 1),
+  };
+  await page.route(`**/api/play/sessions/${id}`, (route) =>
+    route.fulfill({ json: saved }),
+  );
+  await page.addInitScript((sessionId) => {
+    localStorage.setItem('neondojo.play-session', sessionId);
+  }, id);
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Playing', exact: true }).click();
+  const engines = page.locator('.play-match-engine');
+  await expect(engines).toContainText('Bot engine · NeonGammon 3.0.0 2-ply');
+  await expect(engines).toContainText('Analysis engine · NeonGammon 3.0.0');
+  await expect(engines).toContainText('Rules engine · GNU Backgammon 1.08.003');
+  await expect(page.locator('[data-play-point="8"]')).toBeEnabled();
+  await expect(page.locator('[data-play-point="6"]')).toBeDisabled();
 });
 
 test('a bot response remains owned when switching workspaces while it is thinking', async ({
@@ -309,6 +342,7 @@ for (const theme of ['forest', 'bgblitz:bg-earth'])
     saved.position.board = Array(26).fill(0);
     saved.position.board[13] = 1;
     saved.position.dice = [3, 2];
+    saved.legal_turns = joinedThirteenToEight();
     saved.legal_moves = [{ notation: '13/8', steps: [{ from: 13, to: 8 }] }];
     await page.addInitScript(
       (value) => localStorage.setItem('neondojo.theme', value),
@@ -409,6 +443,7 @@ test('a black hit after an already moved checker remains confirmable with source
   ])
     saved.position.board[point] = count;
   saved.position.dice = [3, 1];
+  saved.legal_turns = eitherOrder([3, 1], '24/21 24/23', 1);
   saved.legal_moves = [
     {
       notation: '24/23* 24/21',
