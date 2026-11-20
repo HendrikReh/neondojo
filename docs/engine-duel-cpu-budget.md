@@ -6,22 +6,22 @@ Status: step 1 (measurement, option A) is implemented; options B–D are proposa
 
 Engine duels currently pair `Competitor { engine_id, plies }` profiles ([engine_matches.rs](../backend/src/engine_matches.rs)). That compares labels, not effort:
 
-- Ply counting differed. GNUbg 0-ply is a static evaluation, while XG calls the same thing 1-ply. Since migration 0079, NeonDojo uses the XG convention for both engines and converts only when it talks to GNUbg ([Ply convention](reference/settings.md#ply-convention)). Duels from before 0079 ran a GNUbg side labelled N-ply at today's N+1-ply. NeonGammon only offers 1–4-ply.
+- Ply counting differed. GNUbg 0-ply is a static evaluation, while XG calls the same thing 1-ply. Since migration 0079 (now part of the schema baseline `0001_schema.sql`), NeonDojo uses the XG convention for both engines and converts only when it talks to GNUbg ([Ply convention](reference/settings.md#ply-convention)). Duels from before 0079 ran a GNUbg side labelled N-ply at today's N+1-ply. NeonGammon only offers 1–4-ply.
 - The work per ply differs. Move filters and pruning decide how many candidates are searched deeper. GNUbg duels currently use GNUbg's default move filter, while analysis uses Top14. NeonGammon passes no filter.
 - Engines can be tuned differently, for example deeper for cube decisions and races than for normal checker play, with or without bear-off databases. A single depth setting for both sides cannot express that.
-- Thread counts are global per engine. GNUbg defaults to 1, NeonGammon uses at least 2 in duels.
+- Thread counts are global per engine. Duels use each engine's analysis thread setting: GNUbg defaults to 1, NeonGammon to 4 with a minimum of 2.
 
 As a result, "GNUbg 3-ply vs. NeonGammon 3-ply" says little about which engine is stronger for the same effort.
 
-## Facts about today's implementation
+## Facts about the implementation
 
 | Aspect | GNUbg | NeonGammon |
 |---|---|---|
 | How a decision is made | Inside a GNUbg process via the native adapter: `set player N gnubg; nextturn` ([native.py](../backend/src/play/native.py)) | Persistent Python worker, `BgBotAnalyzer.checker_play` / `cube_action` ([worker.py](../backend/src/engines/worker.py)) |
 | Process lifetime | New process per native step; with SGF replay. Against Sage: one process per Sage decision | Worker reused while the profile is unchanged. A Sage-vs-Sage duel at different depths restarts it on every switch |
-| Settings | plies 0–4, cubeful, deterministic, noise 0, default move filter | `eval_level`, `parallel_threads`; `filter_max_moves` and `filter_threshold` are supported by the library but not exposed |
+| Settings | NeonDojo 1–5-ply (GNUbg-native 0–4), cubeful, deterministic, noise 0, default move filter | `eval_level`, `parallel_threads`; `filter_max_moves` and `filter_threshold` are supported by the library but not exposed |
 | Time limit | None. Only the 180 s timeout per call, which aborts | None. Only the 180 s timeout per call, which aborts and terminates the worker |
-| Timing measurement in duels | None | None |
+| Timing measurement in duels | CPU and wall time around each `nextturn()` of a bot turn (step 1) | CPU and wall time around each evaluation request in the worker (step 1) |
 
 Neither engine offers a native time limit or an anytime search. A hard CPU limit per decision can therefore not simply be set. The process structure also adds a lot of overhead (process start, SGF replay, version and integrity checks) that has nothing to do with playing strength. Any measurement has to exclude it.
 
@@ -40,7 +40,7 @@ Caveat: the GNUbg measurement in the adapter also includes GNUbg's own move exec
 
 ### A. Measure and report (foundation)
 
-Each duel records the actual CPU and wall time per side. The series result shows Ø CPU ms per turn, p95 and the turns counted, next to the win rate.
+Each duel records the actual CPU and wall time per side. The series result shows Ø CPU ms per turn, p95 and the turns counted, next to the win rate. Step 1 implements this without p95 (see [Proposed order](#proposed-order)).
 
 - Answers the question "how much stronger, and at what cost?" without changing engine behaviour.
 - Results stay deterministic and reproducible, because timing has no influence on play.
@@ -72,7 +72,7 @@ For third-party engines, a small protocol would be needed (position, dice, match
 
 ## Proposed order
 
-1. **A: measurement (done).** `native.py` and `worker.py` measure CPU and wall time, and the runner stores sums per match and side, plus checker moves, in `engine_match_results` (migration 0075). The series statistics show CPU and elapsed time per move. Still open: maximum and p95 per turn, which would need per-turn values or a histogram.
+1. **A: measurement (done).** `native.py` and `worker.py` measure CPU and wall time, and the runner stores sums per match and side, plus checker moves, in `engine_match_results` (`cpu_us_*`, `wall_us_*`, `moves_*`; migration 0075, now part of the schema baseline). The series statistics show CPU and elapsed time per move. Still open: maximum and p95 per turn, which would need per-turn values or a histogram.
 2. **Expose move filters in the duel profile.** For GNUbg, the filter set explicitly (default vs. Top14, with the filter part of the snapshot); for NeonGammon, `filter_max_moves`/`filter_threshold`. Recording the filter is a correctness gain even without a budget, because the current default is implicit.
 3. **B: calibration and budget mode.** Reference set of turns, a calibration job (a persisted background job like the benchmark, with exclusive engine access), budget selection when a series is created, and display of planned vs. actual cost.
 4. Decide on C/D only once an external engine with its own time control is available.
