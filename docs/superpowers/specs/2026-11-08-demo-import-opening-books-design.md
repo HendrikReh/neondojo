@@ -20,6 +20,6 @@ Die Buchverwaltung ist von Einstellungen → Analyse sowie beim Analyseergebnis 
 
 ## Recherche und Validierung
 
-Produktvorschläge werden auf bestehende Neondojo-Bausteine bezogen: Position Browser und gespeicherte Filter, thematische Notebooks, spoilerfreies Lernen mit bestehendem FSRS/Anki, interaktive Match-/Partiestatistik, automatische Phasen und vollständige Sicherung. Die konkrete Oberfläche wird im Browser angesehen; nicht zugängliche Teile werden als solche benannt. Ein grüner Zugpfeil ist eine Empfehlung beziehungsweise klar begrenzte UI-Verbesserung und muss gespielten Zug, Kandidatenvorschau und die Stellung vor/nach dem Zug auseinanderhalten.
+Produktvorschläge werden auf bestehende NeonDojo-Bausteine bezogen: Position Browser und gespeicherte Filter, thematische Notebooks, spoilerfreies Lernen mit bestehendem FSRS/Anki, interaktive Match-/Partiestatistik, automatische Phasen und vollständige Sicherung. Die konkrete Oberfläche wird im Browser angesehen; nicht zugängliche Teile werden als solche benannt. Ein grüner Zugpfeil ist eine Empfehlung beziehungsweise klar begrenzte UI-Verbesserung und muss gespielten Zug, Kandidatenvorschau und die Stellung vor/nach dem Zug auseinanderhalten.
 
 Tests prüfen Quellanalysen ohne Engineaufruf, Copy-Erhalt, Units/Depth, Canonical-XGID-Vektoren, Buchtreffer und Miss, Cube/Crawford, Rundenfilter sowie bestehende UI-/Import-/SSE-/Lernabläufe. Der lokale Demo-Reset wird erst nach diesen Schnittstellenänderungen ausgeführt.

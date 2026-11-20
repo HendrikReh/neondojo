@@ -1,6 +1,6 @@
-# Neondojo User Guide
+# NeonDojo User Guide
 
-Neondojo is a local backgammon workbench. You can play against an engine, import and analyze matches, search your library for positions, and turn your own mistakes into practice material. Everything runs on your own computer. Your matches, notes and learning progress stay in your local database.
+NeonDojo is a local backgammon workbench. You can play against an engine, import and analyze matches, search your library for positions, and turn your own mistakes into practice material. Everything runs on your own computer. Your matches, notes and learning progress stay in your local database.
 
 This guide walks through every workspace in the header and each of its tabs. Each chapter starts with what a newcomer needs and ends with details for stronger players. Exact rules, limits and edge cases are in the [reference](../reference/); a *Details* link at the end of a section leads to the matching part.
 
@@ -38,14 +38,14 @@ Tips for a particular level are marked with these labels:
 
 ## 1. Finding your way around
 
-Open Neondojo in your browser at <http://127.0.0.1:8787>. The header is the same in every workspace.
+Open NeonDojo in your browser at <http://127.0.0.1:8787>. The header is the same in every workspace.
 
-![The Neondojo header with its seven workspaces, the profile selector and Settings](images/header.webp)
+![The NeonDojo header with its seven workspaces, the profile selector and Settings](images/header.webp)
 
 | # | Header item | What you do there |
 | --- | --- | --- |
 | 1 | **Playing** | Play a match or money session against GNUbg or Open Sage, with optional feedback. |
-| 2 | **Analysis** | Review a match move by move, compare candidate moves, and study cube decisions and statistics. Neondojo opens here. |
+| 2 | **Analysis** | Review a match move by move, compare candidate moves, and study cube decisions and statistics. NeonDojo opens here. |
 | 3 | **Study** | Review flashcards, read learning reports, and practice your recurring mistakes. |
 | 4 | **Positions** | Browse saved positions and search every analyzed decision of a player. |
 | 5 | **Match database** | Import matches, organize them into databases, search, filter, export, and start bulk analyses. |
@@ -98,7 +98,7 @@ flowchart LR
 
 **Navigation style:** The current tab is shown with the accent color and an underline. Buttons with an icon show a tooltip when you hover over them or focus them with **Tab**. If a button has a keyboard shortcut, the tooltip names it.
 
-**What Neondojo remembers:** Each browser tab keeps its own database selection, search filters, sort order, study deck and analysis filters. Column choices, column widths and board sizes are stored in the browser. The selected match, game and move are restored after a reload. Details: [Configuration profiles](../reference/settings.md#configuration-profiles)
+**What NeonDojo remembers:** Each browser tab keeps its own database selection, search filters, sort order, study deck and analysis filters. Column choices, column widths and board sizes are stored in the browser. The selected match, game and move are restored after a reload. Details: [Configuration profiles](../reference/settings.md#configuration-profiles)
 
 ### The typical workflow
 
@@ -121,7 +121,7 @@ flowchart LR
 
 ## 2. Playing
 
-**Playing** pits you against GNU Backgammon (GNUbg) or Open Sage. Depending on the play mode, Neondojo stays silent, explains your errors afterwards, or stops you before you play a mistake.
+**Playing** pits you against GNU Backgammon (GNUbg) or Open Sage. Depending on the play mode, NeonDojo stays silent, explains your errors afterwards, or stops you before you play a mistake.
 
 ### Starting a match
 
@@ -271,7 +271,7 @@ Details: [Candidate comparison and decision review](../reference/analysis.md#can
 
 **Dice equity** shows how good each roll would be in the current position. The 6 × 6 grid covers all 36 ordered rolls. They come from 21 distinct pairs: each double counts once (1/36) and each other pair counts twice (2/36). **Ø** is the weighted average over all rolls. Green cells are above the average and yellow cells are below it. Select a cell to see the best play for that roll and its probability. When a roll has no legal move, the forced pass is evaluated.
 
-If no saved result exists, Neondojo starts the calculation automatically with the engine and depth of your active profile. Use **Analysis options → Recalculate dice equity …** to calculate again at a different depth.
+If no saved result exists, NeonDojo starts the calculation automatically with the engine and depth of your active profile. Use **Analysis options → Recalculate dice equity …** to calculate again at a different depth.
 
 > **Advanced:** Dice equity shows which rolls you are playing for and which rolls hurt you. It helps when you are deciding between a safe play and a bold one.
 
@@ -289,7 +289,7 @@ If no saved result exists, Neondojo starts the calculation automatically with th
 - **Recalculate position …** and **Recalculate dice equity …** calculate only the current position at the depth you choose.
 - Analyses run as background jobs. They keep running when you switch tabs or close the dialog. Progress and remaining time appear in the header.
 
-Neondojo numbers depths the same way for GNUbg and Open Sage, like XG: 1-ply is the raw evaluation. GNUbg's own manual calls that level 0-ply, so Neondojo's 3-ply is GNUbg's 2-ply.
+NeonDojo numbers depths the same way for GNUbg and Open Sage, like XG: 1-ply is the raw evaluation. GNUbg's own manual calls that level 0-ply, so NeonDojo's 3-ply is GNUbg's 2-ply.
 
 > **Pro:** Every job keeps the engine version, depth and move filter it started with, even if you change Settings while it is running.
 
@@ -309,7 +309,7 @@ flowchart TD
   NEW["Analyze game / Recalculate"] -. "uses the engine and depth<br/>from Analysis options" .-> C
 ```
 
-- Positions that the chosen analysis does not cover stay **unavailable**. Neondojo never fills the gaps with values from another analysis.
+- Positions that the chosen analysis does not cover stay **unavailable**. NeonDojo never fills the gaps with values from another analysis.
 - **Load more analyses** shows older results in the same list.
 - **Delete analysis** permanently removes the selected result after confirmation. Deleting imported values never changes the original match file.
 
@@ -358,7 +358,7 @@ Details: [Cube context, take point and move explanations](../reference/analysis.
 
 ![Notes tab with Match, Game and Position scopes, tags and a comment field](images/analysis-notes.webp)
 
-Choose **Match**, **Game** or **Position** and add **tags** and a **comment**. Press **Enter** or **Add tag** after each tag. A note can have up to 30 tags of 64 characters each and a comment of up to 20,000 characters. Select **Save notes** to store them. Unsaved drafts survive switching tabs. If someone else saved a newer version, Neondojo reports a conflict and keeps your draft.
+Choose **Match**, **Game** or **Position** and add **tags** and a **comment**. Press **Enter** or **Add tag** after each tag. A note can have up to 30 tags of 64 characters each and a comment of up to 20,000 characters. Select **Save notes** to store them. Unsaved drafts survive switching tabs. If someone else saved a newer version, NeonDojo reports a conflict and keeps your draft.
 
 **Cube and move notes** lists game notes and recorded actions such as doubles, takes, passes and accepted resignations. Each entry shows the board immediately before the action. You can search tags and comments from the [Match database](#search-and-filters) with **Notes**.
 
@@ -418,7 +418,7 @@ Details: [Study](../reference/study.md#study)
    - **Checker card:** play the whole move on the board. **Undo step** corrects it before you check it.
    - **Cube card:** choose **No double** or **Double** (keys **N**/**D**), or **Take** or **Pass** (keys **T**/**P**).
 3. **Check move** (**Enter**) evaluates your answer and shows the best answer and its source. **Show answer** (**A**) reveals the solution without grading, so you can assess yourself.
-4. Rate how well you remembered it: **Again**, **Hard**, **Good** or **Easy** (keys **1**–**4**). Neondojo schedules the next review with the FSRS algorithm at a target retention of 90 %.
+4. Rate how well you remembered it: **Again**, **Hard**, **Good** or **Easy** (keys **1**–**4**). NeonDojo schedules the next review with the FSRS algorithm at a target retention of 90 %.
 
 ```mermaid
 stateDiagram-v2
@@ -440,7 +440,7 @@ A legal answer that loses less than 0.040 equity counts as **playable**.
 
 > **Novice:** Be honest when you rate a card. *Again* only means you will see the card again soon. It is not a penalty.
 >
-> **Advanced:** Rate **after** you have read the explanation. The rating is for your memory, while the check grades your play. Neondojo keeps the two separate.
+> **Advanced:** Rate **after** you have read the explanation. The rating is for your memory, while the check grades your play. NeonDojo keeps the two separate.
 
 Details: [Flashcards and Anki](../reference/study.md#flashcards-and-anki)
 
@@ -461,7 +461,7 @@ Details: [Reports](../reference/study.md#reports) · [AI assessment](../referenc
 
 ![My recurring mistakes grouped by game plan and mistake type with a Practice button per group](images/study-mistakes.webp)
 
-Choose a **Player**, and optionally a **Database**, a **Game plan** and a **Minimum equity loss** (0.08 by default). Neondojo groups the player's errors by **game plan** and **mistake type**.
+Choose a **Player**, and optionally a **Database**, a **Game plan** and a **Minimum equity loss** (0.08 by default). NeonDojo groups the player's errors by **game plan** and **mistake type**.
 
 | Column | Meaning |
 | --- | --- |
@@ -540,7 +540,7 @@ The Match database stores all your matches in named collections.
 
 ### Databases
 
-Neondojo creates four **system databases** automatically. They cannot be deleted.
+NeonDojo creates four **system databases** automatically. They cannot be deleted.
 
 | Database | Contents |
 | --- | --- |
@@ -585,7 +585,7 @@ Click a column heading to sort ascending, and click it again to sort descending.
 | **Export** | up to 50 | Original file or SGF. Several matches are exported as a ZIP. |
 | **Delete** | up to 100 | Requires confirmation and skips matches that are being analyzed. Saved positions and flashcards survive. |
 
-> **Novice:** After importing your first match, select it and choose **Analyze selected matches …** at the default 3-ply. If you keep the dialog open until the analysis finishes, Neondojo opens **Statistics** for the match. If you close it, the analysis continues in the background.
+> **Novice:** After importing your first match, select it and choose **Analyze selected matches …** at the default 3-ply. If you keep the dialog open until the analysis finishes, NeonDojo opens **Statistics** for the match. If you close it, the analysis continues in the background.
 >
 > **Pro:** The **ID** column is a stable match number. It survives renames and moves, and copies receive new numbers. Use **Position ID** together with the **Database**, **Game** and **Move** columns to find out how often, and in which matches, a reference position occurred.
 
@@ -624,7 +624,7 @@ The benchmark measures how fast your computer runs the engines on a fixed refere
 2. Choose **Match analysis** or **Play-turn latency**.
 3. Tick one or more depths and select **Start benchmark**. The depths run from lowest to highest in the background. **Cancel run** stops the run.
 
-**Comparison** shows the median and range of the last three runs for each engine and depth. Neondojo uses these results for the time estimates of analyses. While a benchmark runs, other engine work waits.
+**Comparison** shows the median and range of the last three runs for each engine and depth. NeonDojo uses these results for the time estimates of analyses. While a benchmark runs, other engine work waits.
 
 Details: [Engine benchmark](../reference/extras.md#engine-benchmark)
 
@@ -651,7 +651,7 @@ Details: [Engine duels](../reference/extras.md#engine-duels)
 ```mermaid
 sequenceDiagram
   participant U as You
-  participant B as Neondojo
+  participant B as NeonDojo
   U->>B: Choose backup file
   B->>B: Check the archive and compare its schema
   B-->>U: Preview: creation time, matches, positions, flashcards
@@ -659,7 +659,7 @@ sequenceDiagram
   B-->>U: Compare backup counts with current counts (Difference column)
   U->>B: Replace database
   B->>B: Check again and restore in one transaction
-  B-->>U: Success, then reload Neondojo
+  B-->>U: Success, then reload NeonDojo
 ```
 
 > **Novice:** Export a backup regularly, and always before you restore another backup or move to a new computer.
@@ -668,9 +668,9 @@ Details: [Database backup](../reference/extras.md#database-backup)
 
 ### Versions
 
-![Versions shows the Neondojo build and the availability of GNUbg and Open Sage](images/extras-versions.webp)
+![Versions shows the NeonDojo build and the availability of GNUbg and Open Sage](images/extras-versions.webp)
 
-**Versions** shows the Neondojo build and the versions of GNU Backgammon and Open Sage, and whether they are available. **Technical details** shows the full commit and the engine version output. **Copy version information** copies a report you can attach to a bug report.
+**Versions** shows the NeonDojo build and the versions of GNU Backgammon and Open Sage, and whether they are available. **Technical details** shows the full commit and the engine version output. **Copy version information** copies a report you can attach to a bug report.
 
 Details: [Version information](../reference/extras.md#version-information)
 
@@ -692,7 +692,7 @@ Details: [Configuration profiles](../reference/settings.md#configuration-profile
 
 ### Settings
 
-Select the gear in the header. Choose a category on the left. **Apply** saves your changes and keeps the dialog open. **Close** returns to the workspace. If you have unapplied changes, Neondojo asks whether to **Apply**, **Discard draft** or **Keep editing**. **Up**/**Down** switch between categories.
+Select the gear in the header. Choose a category on the left. **Apply** saves your changes and keeps the dialog open. **Close** returns to the workspace. If you have unapplied changes, NeonDojo asks whether to **Apply**, **Discard draft** or **Keep editing**. **Up**/**Down** switch between categories.
 
 <table>
 <tr>
@@ -726,7 +726,7 @@ Each value is the lower bound of its grade, and the four values must increase. W
 
 #### Engines on this computer
 
-Expand **Engines on this computer** to set the GNUbg executable and the Open Sage Python environment, and the maximum number of threads per engine, separately for analysis (including engine duels) and for playing. **Simultaneous analysis jobs** lets several analyses run at the same time; Open Sage still runs one analysis at a time. **Check installation** and **Verify and save** run a real position evaluation before a setting is accepted. Neondojo never falls back to another engine on its own. A missing engine is reported as unavailable. See also [Local Open Sage setup](../open-sage-local.md).
+Expand **Engines on this computer** to set the GNUbg executable and the Open Sage Python environment, and the maximum number of threads per engine, separately for analysis (including engine duels) and for playing. **Simultaneous analysis jobs** lets several analyses run at the same time; Open Sage still runs one analysis at a time. **Check installation** and **Verify and save** run a real position evaluation before a setting is accepted. NeonDojo never falls back to another engine on its own. A missing engine is reported as unavailable. See also [Local Open Sage setup](../open-sage-local.md).
 
 ---
 
@@ -831,7 +831,7 @@ For installation and server details, see the [project README](../../README.md). 
 | **Equity loss / normalized equity loss** | How much worse a decision is than the best one. *Normalized* makes match-play values comparable with money play. |
 | **Error grades** | *Questionable*, *Error*, *Blunder* and *Large Blunder*, defined by the [thresholds](#error-grades). |
 | **PR (performance rating)** | 500 × normalized equity loss per decision. Lower is better. Strong experts average in the low single digits. GNUbg and XG count decisions differently, so compare PR values from the same source. |
-| **Ply** | Search depth. 1-ply evaluates each resulting position directly, and each additional ply looks ahead one more roll. Neondojo uses this XG convention for every engine; GNUbg calls the same levels one lower. |
+| **Ply** | Search depth. 1-ply evaluates each resulting position directly, and each additional ply looks ahead one more roll. NeonDojo uses this XG convention for every engine; GNUbg calls the same levels one lower. |
 | **Cubeful / cubeless** | Whether the evaluation takes the doubling cube into account. |
 | **MWC** | Match winning chances, the probability of winning the match. Used instead of equity in some analyses. |
 | **Take point** | The winning chance at which taking a double breaks even. It is 25 % in money play without gammons, and depends on the score in match play. |
@@ -839,7 +839,7 @@ For installation and server details, see the [project README](../../README.md). 
 | **Jacoby rule** | In money play, gammons and backgammons count only if the cube has been turned. |
 | **Position ID** | GNUbg's 14-character code for the checker arrangement. It describes the board only. |
 | **Match ID** | GNUbg's code for the match context: length, score, cube, dice and turn. |
-| **Displayed analysis** | The saved analysis that Neondojo shows for a match. See [Displayed analysis](#displayed-analysis-and-new-calculations). |
-| **Game plan** | Neondojo's classification of each side's structure: Opening, Pure race, Racing (contact), Attacking / blitz, Priming or Anchoring. |
+| **Displayed analysis** | The saved analysis that NeonDojo shows for a match. See [Displayed analysis](#displayed-analysis-and-new-calculations). |
+| **Game plan** | NeonDojo's classification of each side's structure: Opening, Pure race, Racing (contact), Attacking / blitz, Priming or Anchoring. |
 | **FSRS** | The scheduling algorithm that decides when a flashcard is due again. |
 | **Pip count** | The total number of points a player's checkers must travel to bear off. Checkers on the bar count fully. |

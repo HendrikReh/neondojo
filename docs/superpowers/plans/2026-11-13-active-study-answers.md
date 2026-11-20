@@ -1,6 +1,6 @@
-# Aktive Checker- und Cube-Antworten in Neondojo
+# Aktive Checker- und Cube-Antworten in NeonDojo
 
-**Ziel.** Unter **Study → Lernkarten & Anki → Jetzt lernen** beantwortet der Nutzer jede Karte aktiv. Neondojo bewertet den ersten abgegebenen Versuch anhand einer konkreten Analyse. Die vier bestehenden FSRS-Bewertungen bleiben der Schritt, der die nächste Wiederholung festlegt.
+**Ziel.** Unter **Study → Lernkarten & Anki → Jetzt lernen** beantwortet der Nutzer jede Karte aktiv. NeonDojo bewertet den ersten abgegebenen Versuch anhand einer konkreten Analyse. Die vier bestehenden FSRS-Bewertungen bleiben der Schritt, der die nächste Wiederholung festlegt.
 
 **Architektur.** Das Brett und seine Zuginteraktion werden mit „Ähnliche Stellungen üben“ geteilt. Der Rust-Dienst prüft die Eingabe gegen den gespeicherten Kartensnapshot, bewertet sie und speichert den Versuch in der vorhandenen Review-Session. PostgreSQL bleibt die Quelle für Karte, Versuch und Wiederholung. Der Client nutzt die aus OpenAPI generierten Typen.
 

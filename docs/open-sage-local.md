@@ -88,11 +88,11 @@ NEONDOJO_SAGE_PYTHON=/path/to/venv/bin/python cargo test -p neondojo sage_execut
 OPEN_SAGE_TEST_PYTHON=/path/to/venv/bin/python cargo test -p neondojo --test open_sage_play -- --ignored
 ```
 
-Neondojo verwendet ausschließlich die Fork-Installation. `NEONDOJO_SAGE_PYTHON` und `OPEN_SAGE_TEST_PYTHON` erwarten deren Interpreter (lokal `local-data/open-sage-fork-2.0.20261119/venv/bin/python`). Mit dem ursprünglichen Wheel scheitert `native_checker_cube_and_match_analysis` am oben beschriebenen 1-ply-Threadbudget, und `open_sage_settings` erwartet die Tiefen 1 bis 4. Kein Test benötigt das ursprüngliche Wheel.
+NeonDojo verwendet ausschließlich die Fork-Installation. `NEONDOJO_SAGE_PYTHON` und `OPEN_SAGE_TEST_PYTHON` erwarten deren Interpreter (lokal `local-data/open-sage-fork-2.0.20261119/venv/bin/python`). Mit dem ursprünglichen Wheel scheitert `native_checker_cube_and_match_analysis` am oben beschriebenen 1-ply-Threadbudget, und `open_sage_settings` erwartet die Tiefen 1 bis 4. Kein Test benötigt das ursprüngliche Wheel.
 
 Die Testziele laufen einzeln und mit `--test-threads=1`. Ein gemeinsamer Aufruf von `cargo test --workspace -- --include-ignored` mit gesetzten Sage-Variablen lässt die Prozess-Tests in `engines::process` scheitern, weil sie sich den globalen Worker mit den echten Sage-Tests teilen.
 
-## Verwendung in Neondojo
+## Verwendung in NeonDojo
 
 1. Die Fork-Umgebung installieren. Für diese lokale Umsetzung liegt sie dauerhaft unter `local-data/open-sage-fork-2.0.20261119/venv` im Hauptrepository; `local-data/` ist von Git ausgeschlossen. Es wurden keine Pakete oder Gewichte in den Quellcode kopiert.
 2. Backend und Frontend aus dem Hauptrepository bauen und gemäß [README](../README.md#restart-neondojo-locally-on-port-8787) starten. Vor der ersten Anwendung von Migration `0041_open_sage.sql` die Benutzerdatenbank sichern. Die Migration ergänzt lokale Installationsmetadaten und Provider-Indizes; vorhandene Jobs bleiben GNUbg-kompatibel. Datenbank- und Browsertests verwenden weiterhin eigene Testdatenbanken.
@@ -186,7 +186,7 @@ gegenüber der Ausgangsmessung identisch. Die OS-Dateicaches wurden nicht geleer
 
 Analyse: zehn Spiele, 460 Checkerzüge einschließlich erzwungener Züge und Cube-Analyse.
 Spiel: elf feste Checkerzüge mit bereits gewürfelten Würfeln. Zeiten enthalten die
-vollständige Neondojo-Strecke und bei Sage einen kalten Sidecarstart je Lauf; Wartezeit,
+vollständige NeonDojo-Strecke und bei Sage einen kalten Sidecarstart je Lauf; Wartezeit,
 Installationstest, Datenbankschreiben und UI-Animation sind ausgeschlossen. Die Spielzahl
 ist der Median der drei laufweisen Mittelwerte, keine Perzentile einzelner Benutzerzüge.
 
@@ -298,7 +298,7 @@ die native Cube-Strategie pro Analyzer vor. Sie wird beim ersten Cube-Aufruf
 aus den verifizierten Gewichten geladen und bleibt von der Checker-Strategie
 getrennt. Bearoff-Verarbeitung und temporäre Suchzustände bleiben an den
 jeweiligen Aufruf gebunden. Cubeful 1-ply konvertiert die Kandidaten seriell.
-Neondojo prüft im realen Checkerpfad, dass der als seriell deklarierte Build
+NeonDojo prüft im realen Checkerpfad, dass der als seriell deklarierte Build
 keinen Kandidatenpool startet. Bei bisherigen Builds und bei 2-ply gelten
 weiter die beobachteten Poolgrenzen.
 
@@ -336,7 +336,7 @@ Der Build aus `340fc5346f1938d505f99f22101e059a30e9cfc6` liegt unter
 `provenance.json`, `probe-1ply-2ply.json` (bestanden) und `venv/`. Der
 Sage-Wheel hat SHA256
 `a9a264d1436f613dfdbecc7ec1bb5c624f8f6589ed26e09eaaaddc306bd1c00d`, der
-Laufzeit-Fingerprint in Neondojo lautet `7c9a021a…`. Analysen, die vorher mit
+Laufzeit-Fingerprint in NeonDojo lautet `7c9a021a…`. Analysen, die vorher mit
 `5b146c7` liefen, behalten ihre Installation und ihre Werte. Für korrigierte
 Post-Crawford-Cube-Werte müssen sie neu analysiert werden.
 
@@ -364,7 +364,7 @@ Analysen sind weiterhin gespeichert.
 
 ## Fork-Release 2.0.20261119 – 19. November 2026
 
-Seit dem 19. November 2026 verwendet Neondojo das Fork-Release
+Seit dem 19. November 2026 verwendet NeonDojo das Fork-Release
 [`v2.0.20261119`](https://github.com/HendrikReh/bgsage/releases/tag/v2.0.20261119)
 (Commit `0dee4f321c0437dc142da2ae68d26f7da3038db1`, Modell weiterhin
 `stage11`). Es ist das erste Fork-Paket mit eigener Versionsnummer. Frühere
@@ -374,7 +374,7 @@ Fork-Builds meldeten weiterhin `2.0.20260907`. Die Installation liegt unter
 `venv/`. Verwendet wird das offizielle cp312-Wheel aus dem GitHub-Release mit
 SHA256 `c476a0b6edbc32021a0c7c4a7397ffcd2d869502c04bbf060a2a12b37baec4d9`.
 Der Digest wurde gegen die Release-API geprüft. Der Laufzeit-Fingerprint in
-Neondojo lautet `9b3ffc5c…`.
+NeonDojo lautet `9b3ffc5c…`.
 
 Die unterstützten Paketversionen stehen in `SUPPORTED_VERSIONS` in
 `tools/probe_open_sage.py`. Der Sidecar verwendet diese Prüfung, und
@@ -387,12 +387,12 @@ Laut Release-Notes ändern sich die Ergebnisse: Bei 1- und 2-ply hängt die
 Cube-Lebensdauer im Money-Kontaktspiel von Tiefe und Pipcount ab. Außerdem
 durchsucht der cubeful 2-ply-Checkerpfad nur noch die Kandidaten, die den
 Zugfilter überstehen, in voller Tiefe. Die übrigen Kandidaten liefert Open Sage
-mit 1-ply-Werten in derselben Liste. Neondojo mischt keine Tiefen. Der Sidecar
+mit 1-ply-Werten in derselben Liste. NeonDojo mischt keine Tiefen. Der Sidecar
 verwirft deshalb Kandidaten unter der angeforderten Tiefe, wie bisher schon
 beim cubeless Pfad. Der gespielte Zug wird über `force_boards` immer in voller
 Tiefe bewertet; liefert Open Sage ihn flacher, schlägt die Anfrage fehl.
 Spielhinweise und die Bewertung des eigenen Zugs benötigen jeden legalen Zug.
-Für sie fordert Neondojo alle legalen Züge an (`all_legal`). Bei der
+Für sie fordert NeonDojo alle legalen Züge an (`all_legal`). Bei der
 Eröffnung 31 dauert das in 2-ply etwa 35 ms statt 12 ms. Neue 2-ply-Analysen
 zeigen dadurch weniger Kandidaten, im Testfall 5 statt 16. 3- und 4-ply
 bewerten weiterhin alle Kandidaten in voller Tiefe. Die Probe-Prüfung
@@ -404,7 +404,7 @@ und ihre Werte. Neue Werte erhalten sie nur durch eine neue Analyse.
 
 ## Warm-up für Partien
 
-Beim Anlegen, Öffnen oder Fortsetzen einer aktiven Open-Sage-Partie kann Neondojo
+Beim Anlegen, Öffnen oder Fortsetzen einer aktiven Open-Sage-Partie kann NeonDojo
 deren gespeichertes Bot-Profil im Hintergrund laden. Die HTTP-Antwort wartet
 dabei nicht auf den Sidecar. Gleichzeitige Warm-up-Anfragen sind begrenzt.
 Ein Zug verwendet weiterhin seinen gespeicherten Snapshot und startet bei
@@ -437,5 +437,5 @@ die bisherigen Spielprofile.
 
 Beim letzten Ausspielzug kann Sage ein vorzeitiges Endbrett anbieten, obwohl
 GNUbg die Verwendung weiterer spielbarer Würfel verlangt. In diesem
-Sonderfall verwendet Neondojo das bestplatzierte gemeinsame Endbrett und
+Sonderfall verwendet NeonDojo das bestplatzierte gemeinsame Endbrett und
 speichert die ausgeführte GNUbg-Zugnotation.

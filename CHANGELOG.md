@@ -1,12 +1,12 @@
 # Changelog
 
-All notable changes to Neondojo are recorded in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow [Semantic Versioning](https://semver.org/). Each release is tagged as `v<version>`, and the version matches `backend/Cargo.toml` and `web/package.json`. The backend applies pending database migrations at startup.
+All notable changes to NeonDojo are recorded in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow [Semantic Versioning](https://semver.org/). Each release is tagged as `v<version>`, and the version matches `backend/Cargo.toml` and `web/package.json`. The backend applies pending database migrations at startup.
 
 ## [Unreleased]
 
 ### Changed
 
-- **The project is now Neondojo** (it was BG Tutor). The repository moves to [HendrikReh/neondojo](https://github.com/HendrikReh/neondojo). This is a clean break with no compatibility with BG Tutor installations. Reimport your matches into the new database.
+- **The project is now NeonDojo** (it was BG Tutor). The repository moves to [HendrikReh/neondojo](https://github.com/HendrikReh/neondojo). This is a clean break with no compatibility with BG Tutor installations. Reimport your matches into the new database.
   - The Cargo package and binary are `neondojo`, and the web package is `neondojo-web`.
   - `NEONDOJO_*` environment variables replace `BGTUTOR_*`, and the old names are no longer read.
   - The Compose project, PostgreSQL role and database are `neondojo`, with the container `neondojo-db-1` and the volume `neondojo_postgres_data`. A new installation starts with an empty database, and the old `bgtutor_postgres_data` volume is left untouched.

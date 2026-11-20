@@ -1,4 +1,4 @@
-# Open Sage lokal in Neondojo — Architektur und Umsetzungsplan
+# Open Sage lokal in NeonDojo — Architektur und Umsetzungsplan
 
 Stand: 12. November 2026. Umsetzung im isolierten Worktree `codex/open-sage-local` auf Basis `d3b1434`; vorhandene und parallel entstandene Änderungen im Hauptworktree bleiben erhalten.
 
@@ -84,7 +84,7 @@ Neue klar abgegrenzte Module unter `backend/src/engines/`:
 - `registry.rs`: geprüfte Installationen und Adapterauswahl.
 - `gnubg.rs`: Anbindung an die bestehende Implementierung ohne fachliche Neuimplementierung.
 - `open_sage.rs` und `open_sage_worker.py`: Prozessverwaltung und schmale Bibliotheksanbindung.
-- `context.rs`: einzige maßgebliche Konvertierung zwischen absolutem Neondojo-Brett und Engine-Perspektive.
+- `context.rs`: einzige maßgebliche Konvertierung zwischen absolutem NeonDojo-Brett und Engine-Perspektive.
 
 `engine.rs` kann zunächst als Kompatibilitätsfassade bestehen bleiben. Nur tatsächlich gemeinsame Prozess- und Koordinationslogik auslagern; GNUbg-SGF-Parsing bleibt GNUbg-spezifisch.
 
@@ -100,7 +100,7 @@ Rechnerabhängige Installationspfade bleiben außerhalb portabler Benutzerprofil
 
 ## 6. Fachliche Konvertierung und Analyse
 
-Neondojo speichert absolute Brettkoordinaten. Open Sage erwartet eine Spielerperspektive; auch die Bar-Darstellung muss explizit konvertiert werden. Ein unverändertes Durchreichen von 26 Zahlen ist nicht zulässig. Umkehrung, Spielerfarbe, Cube-Besitz und Away-Scores gemeinsam umrechnen. Quellen: [BG-Sage-Brettfunktionen](https://github.com/markbgsage/bgsage/blob/main/python/bgsage/board.py), [Simulationskontext](https://github.com/markbgsage/bgsage/blob/main/SIMULATION.md).
+NeonDojo speichert absolute Brettkoordinaten. Open Sage erwartet eine Spielerperspektive; auch die Bar-Darstellung muss explizit konvertiert werden. Ein unverändertes Durchreichen von 26 Zahlen ist nicht zulässig. Umkehrung, Spielerfarbe, Cube-Besitz und Away-Scores gemeinsam umrechnen. Quellen: [BG-Sage-Brettfunktionen](https://github.com/markbgsage/bgsage/blob/main/python/bgsage/board.py), [Simulationskontext](https://github.com/markbgsage/bgsage/blob/main/SIMULATION.md).
 
 Referenztests decken beide Farben, beide Bars, Schlagen, mehrfach bewegte Steine, Pasch, höheren Einzelwürfel, Ausspielen und blockierte Würfe ab. Open Sage liefert für einen komplett blockierten Wurf laut Brett-API die unveränderte Stellung; diese muss als Pass behandelt werden, nicht als fehlendes Ergebnis. Kandidaten werden über resultierende Bretter mit legalen Zugfolgen verknüpft; vorhandene SGF-Regelprüfung und Notationswerkzeuge wiederverwenden.
 
@@ -122,7 +122,7 @@ Die bestehende native Automatik muss gezielt aufgeteilt werden:
 
 1. GNUbg erzeugt oder lädt den unveränderten Spielstand, würfelt und bestimmt zulässige Aktionen.
 2. Für Open-Sage-Partien bleiben beide GNUbg-Spieler manuell gesteuert. Kein automatischer GNUbg-Botzug, keine automatische Take-/Pass-/Aufgabeentscheidung.
-3. Neondojo übergibt den Entscheidungskontext an die Spiel-Engine. Deren Antwort wird gegen den aktuellen Zustand und legale Zugfolgen geprüft.
+3. NeonDojo übergibt den Entscheidungskontext an die Spiel-Engine. Deren Antwort wird gegen den aktuellen Zustand und legale Zugfolgen geprüft.
 4. GNUbg wendet ausschließlich die gewählte Aktion an und erzeugt SGF, Historie und Folgezustand. Die nächste Bot-Entscheidung läuft erneut durch den gewählten Adapter.
 5. Sitzung, Archiv und relevante Berichte werden mit bestehender Versionsprüfung atomar gespeichert. Ein Fehler oder eine verspätete Antwort lässt den bestätigten Spielstand unangetastet.
 

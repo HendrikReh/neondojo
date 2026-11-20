@@ -1,4 +1,4 @@
-# Neondojo — erster lauffähiger Stand
+# NeonDojo — erster lauffähiger Stand
 
 Der vom Nutzer vorgegebene Stack ist verbindlich: ein eigenständiger Rust/Tokio/Axum-Prozess, REST und SSE mit OpenAPI, PostgreSQL in Docker über SQLx und das lokal installierte GNUbg. React/TypeScript verwendet ausschließlich die HTTP-Schnittstelle. Tauri bleibt ein späterer Host dieses Clients.
 

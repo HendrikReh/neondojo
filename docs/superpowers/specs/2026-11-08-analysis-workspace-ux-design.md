@@ -1,4 +1,4 @@
-# Neondojo: Analyse, Matchdatenbank und Einstellungen
+# NeonDojo: Analyse, Matchdatenbank und Einstellungen
 
 Stand: 8. November 2026. **Vom Nutzer freigegeben; erste Etappe umgesetzt.** Die Anwendung hat jetzt die Hauptansichten Analyse, Matchdatenbank und Lernen sowie einen echten Einstellungsdialog. Bestehende Einzelspiel-/Matchanalyse, Notizen, Suche, Themes und Lernen bleiben erhalten. Verwaltung und erweiterte Metadatenfilter der Datenbank sowie Spielen/BGSage bleiben weitere Etappen. Details und Verifikation: [Umsetzungsplan](../plans/2026-11-08-analysis-workspace-settings.md). Der ursprüngliche anklickbare Konzeptentwurf verwendet weiterhin lokale Beispieldaten.
 
@@ -98,7 +98,7 @@ Checkboxen und Shift-Bereichsauswahl. „Alle auf dieser Seite“ ist der erste 
 
 Stapelaktionen liefern ein Ergebnis pro Eintrag; ein fehlerhafter Import löscht keine erfolgreichen Importe. Beim Löschen entfallen Original, Positionen, Quellannotation und zugehörige Analysen dieses Matches. Lernkarten und Lernfortschritt bleiben erhalten: das aktuelle Schema speichert Karteninhalte bereits unabhängig als JSON ohne Fremdschlüssel zum Match. Der Löschdialog weist ausdrücklich darauf hin, dass die Match-/Positionsnotizen als Quellannotation mitgelöscht werden. Karten aus entfernten Quellen werden als solche gekennzeichnet; keine stille Löschung von Decks oder Reviews. Ein dauerhafter Schnappschuss auch dieser Quellnotizen ist ein gesondert festzulegender Kartenvertrag, keine Zusage des bisherigen Datenmodells. Laufende Jobs werden zunächst nicht nebenbei abgebrochen: betroffene Matches sind nicht löschbar und werden mit Grund gemeldet.
 
-Original-/SGF-Export enthält zunächst die jeweilige Datei, keine garantierte Sicherung aller Neondojo-Notizen und Lernstände. Ein vollständiger Neondojo-Backup-/Restore-Vertrag ist ein eigener Ausbau. ZIPs werden deterministisch benannt und mengen-/größenbegrenzt gestreamt; keine stillen Teilarchive.
+Original-/SGF-Export enthält zunächst die jeweilige Datei, keine garantierte Sicherung aller NeonDojo-Notizen und Lernstände. Ein vollständiger NeonDojo-Backup-/Restore-Vertrag ist ein eigener Ausbau. ZIPs werden deterministisch benannt und mengen-/größenbegrenzt gestreamt; keine stillen Teilarchive.
 
 ### Suche und Filter
 
