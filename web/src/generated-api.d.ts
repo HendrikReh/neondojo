@@ -4175,7 +4175,25 @@ export interface components {
         ImportResponse: {
             duplicate: boolean;
             match: components["schemas"]["MatchSummary"];
+            /** @description Source irregularities the importer resolved explicitly. */
+            warnings: components["schemas"]["ImportWarning"][];
         };
+        ImportWarning: {
+            /** Format: int32 */
+            game_no: number;
+            kind: components["schemas"]["ImportWarningKind"];
+            /**
+             * Format: int32
+             * @description Checker move number as counted in the source file.
+             */
+            source_ply?: number | null;
+        };
+        /**
+         * @description An irregularity in the source file that the import kept visible instead
+         *     of rejecting the whole match.
+         * @enum {string}
+         */
+        ImportWarningKind: "illegal_play_replaced" | "custom_start_position" | "unfinished_game";
         ImportedAnalysisData: {
             candidates: components["schemas"]["ImportedCandidate"][];
             /** Format: int32 */

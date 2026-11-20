@@ -36,7 +36,7 @@ NEONDOJO_CORPUS_REPORT=/tmp/neondojo-import-results.json \
   cargo test -p neondojo --test import_corpus -- --ignored --nocapture
 ```
 
-The November 8, 2026 rerun imported 33 of 42 files and rejected nine invalid XG files. The earlier 37-of-37 result used a different corpus with 17 distinct contents and 20 recognized duplicates. The corpus test requires every supplied file to pass, so the documented rejected files cause it to fail when present. See the [import corpus report](../import-corpus-results.md).
+The November 8, 2026 rerun imported 33 of 42 files and rejected nine XG tournament transcripts. On November 20, 2026, after the importer started resolving their irregularities, 41 of 41 local XG files imported. The earlier 37-of-37 result used a different corpus with 17 distinct contents and 20 recognized duplicates. The corpus test requires every supplied file to pass. See the [import corpus report](../import-corpus-results.md).
 
 ### Browser tests
 
