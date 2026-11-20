@@ -1,5 +1,8 @@
 //! Read-only scope estimates calibrated by complete local native measurements.
-use super::{BenchmarkRun, Machine, machine, reference, reference_for, running_engine_version};
+use super::{
+    BenchmarkRun, Machine, known_protocol_id, machine, reference, reference_for,
+    running_engine_version,
+};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     engine::{Engine, GnubgMoveFilter, resolve_binary},
@@ -75,9 +78,7 @@ fn compatible(run: &BenchmarkRun, machine: &Machine, move_filter: Option<GnubgMo
         return false;
     };
     let mut normalized = protocol_snapshot.clone();
-    if normalized.id != expected.protocol.id
-        && !(run.engine_id == "gnubg" && move_filter.is_none() && normalized.id == "gnubg-match-v1")
-    {
+    if !known_protocol_id(&run.engine_id, run.plies, move_filter, &normalized.id) {
         return false;
     }
     normalized.id = expected.protocol.id.clone();

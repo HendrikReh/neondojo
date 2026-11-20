@@ -79,6 +79,18 @@ fn reference_for(
     }
     reference
 }
+/// Whether a saved analysis protocol id is the one measured for this engine,
+/// depth and move filter, or GNUbg's legacy unlimited protocol. Runs and
+/// estimates share this rule so a newly supported depth never needs a list.
+fn known_protocol_id(
+    engine: &str,
+    plies: i32,
+    move_filter: Option<GnubgMoveFilter>,
+    id: &str,
+) -> bool {
+    id == reference_for(engine, plies, move_filter).protocol.id
+        || (engine == "gnubg" && move_filter.is_none() && id == "gnubg-match-v1")
+}
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct PlayBenchmarkRequest {
     pub engine_id: String,
@@ -418,3 +430,37 @@ async fn cancel(
     ))
 )]
 pub struct BenchmarkDoc;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_supported_analysis_depth_has_a_runnable_protocol() {
+        for engine in ["gnubg", "bgsage"] {
+            let depths = crate::configuration::engine_depths(engine, "analysis");
+            assert!(!depths.is_empty(), "{engine} has analysis depths");
+            for plies in depths {
+                let filter = GnubgMoveFilter::for_analysis(engine, plies);
+                let id = reference_for(engine, plies, filter).protocol.id;
+                assert!(
+                    known_protocol_id(engine, plies, filter, &id),
+                    "{engine} {plies}-ply: {id}"
+                );
+            }
+        }
+        assert!(known_protocol_id(
+            "bgsage",
+            4,
+            None,
+            "bgsage-match-v3-4ply-4threads"
+        ));
+        assert!(!known_protocol_id(
+            "bgsage",
+            4,
+            None,
+            "bgsage-match-v3-3ply-4threads"
+        ));
+        assert!(known_protocol_id("gnubg", 2, None, "gnubg-match-v1"));
+    }
+}
