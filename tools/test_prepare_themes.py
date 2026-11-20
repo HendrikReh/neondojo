@@ -32,6 +32,48 @@ class ThemePreparationTests(unittest.TestCase):
                 {"board_themes": ["forest", "walnut", "slate"]},
             )
 
+    def test_missing_listed_archive_fails_without_changing_outputs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)
+            source = target / "source"
+            source.mkdir()
+            options = target / "configuration-options.json"
+            listed = {"board_themes": ["forest", "walnut", "slate", "bgblitz:bg-quantum"]}
+            options.write_text(json.dumps(listed))
+            catalog = target / "catalog.json"
+            catalog.write_text('[{"id": "bgblitz:bg-quantum"}]\n')
+            asset = target / "public/bg-quantum/background.jpg"
+            asset.parent.mkdir(parents=True)
+            asset.write_bytes(b"artwork")
+            with self.assertRaisesRegex(
+                ValueError, r"bg-quantum\.zip.*NEONDOJO_ALLOW_MISSING_THEMES=1"
+            ):
+                prepare(source, target / "public", catalog, options)
+            self.assertEqual(json.loads(options.read_text()), listed)
+            self.assertEqual(catalog.read_text(), '[{"id": "bgblitz:bg-quantum"}]\n')
+            self.assertEqual(asset.read_bytes(), b"artwork")
+
+    def test_allowed_missing_archive_removes_listed_theme(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)
+            source = target / "source"
+            source.mkdir()
+            options = target / "configuration-options.json"
+            options.write_text(
+                json.dumps({"board_themes": ["forest", "walnut", "slate", "bgblitz:bg-quantum"]})
+            )
+            prepare(
+                source,
+                target / "public",
+                target / "catalog.json",
+                options,
+                allow_missing=True,
+            )
+            self.assertEqual(
+                json.loads(options.read_text()),
+                {"board_themes": ["forest", "walnut", "slate"]},
+            )
+
     @unittest.skipUnless(
         list((ROOT / "themes").glob("*.zip")), "optional local artwork"
     )
@@ -117,7 +159,13 @@ class ThemePreparationTests(unittest.TestCase):
                     *[f"{d}{i}" for d in ["RLD", "RLU", "LRD", "LRU"] for i in [1, 2]],
                 ]:
                     z.writestr(f"themes/synthetic/{name}.png", png(4, 4))
-            [theme] = prepare(source, root / "out", root / "manifest.json")
+            options = root / "configuration-options.json"
+            options.write_text(json.dumps({"board_themes": ["forest", "walnut", "slate"]}))
+            [theme] = prepare(source, root / "out", root / "manifest.json", options)
+            self.assertEqual(
+                json.loads(options.read_text())["board_themes"],
+                ["forest", "walnut", "slate", "bgblitz:synthetic"],
+            )
             self.assertEqual(theme["name"], "Synthetic")
             self.assertEqual(theme["background"]["width"], 128)
             self.assertEqual(

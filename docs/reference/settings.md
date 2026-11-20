@@ -63,7 +63,7 @@ Running analyses and matches retain their captured settings. If the profile cann
 
 ### Board artwork
 
-`npm run dev` and `npm run build` prepare artwork from locally supplied BGBlitz archives. Preparation requires **Python 3.10+** and uses the original backgrounds, checker variants, dice, cubes and point-number strips. Place new archives in `themes/` and restart the dev server or run `npm run themes:prepare --prefix web`. The three built-in themes are always available. [Board theme formats, sources and rights](../../themes/README.md)
+`npm run dev` and `npm run build` prepare artwork from locally supplied BGBlitz archives. Preparation requires **Python 3.10+** and uses the original backgrounds, checker variants, dice, cubes and point-number strips. Place new archives in `themes/` and restart the dev server or run `npm run themes:prepare --prefix web`. The three built-in themes are always available. `shared/configuration-options.json` lists the board themes that the backend accepts. If an archive for a listed theme is missing, for example in a fresh checkout or worktree, preparation stops and names the missing ZIP files. Copy them into `themes/`. To remove a theme on purpose, run the preparation once with `NEONDOJO_ALLOW_MISSING_THEMES=1` and commit the shortened list. [Board theme formats, sources and rights](../../themes/README.md)
 
 ### Interface appearance and language
 

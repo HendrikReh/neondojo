@@ -6,6 +6,10 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ## [Unreleased]
 
+### Fixed
+
+- **Builds without local theme archives stop.** `npm run build`, `npm run dev` and `npm test` in `web/` no longer drop BGBlitz themes from `shared/configuration-options.json` when their ZIPs are missing from `themes/`, for example in a fresh worktree. Such a build served no theme images and showed "The theme image could not be loaded" or "Invalid configuration: appearance". Theme preparation now names the missing archives and stops; `NEONDOJO_ALLOW_MISSING_THEMES=1` removes the themes on purpose. [Board themes](docs/reference/settings.md#board-artwork)
+
 ## [1.1.0] - 2026-11-20
 
 NeonDojo 1.1.0 adds virtual player profiles, catalogues bot matches as real NeonDojo players and opens a new match in a setup dialog with per-match bot choices. One schema baseline replaces the migrations 0001–0084. Databases from 1.0.0 and later development builds are updated automatically at startup without changing their data, and backups stay restorable. Migration `0085_bot_match_players` then runs.
