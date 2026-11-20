@@ -127,14 +127,17 @@ flowchart LR
 
 ![The New match form with color, match length and play mode](images/playing-setup.webp)
 
-1. Choose **Your checkers**: **White** or **Black**. Your checkers are always shown at the bottom of the board.
-2. Choose the **Match length**. You can play a **Money game** or a match of 1 to 25 points.
-3. Choose a **Play mode**. The modes are described in the next section.
-4. Select **Start match**.
+The **New match** dialog opens over the board. Your current match stays visible behind it.
 
-The line above the button shows which engine and strength the bot uses and which engine analyzes your decisions. Select the gear button beside it to change them in **Settings → Playing**. A match keeps the engine settings it was started with. Later changes apply only to new matches.
+1. Check **Your name** and choose the **Bot engine** and its **Playing strength**. These start from your settings and apply only to this match.
+2. Choose **Your checkers**: **White** or **Black**. Your checkers are always shown at the bottom of the board.
+3. Choose the **Match length**. You can play a **Money game** or a match of 1 to 25 points.
+4. Choose a **Play mode**. The modes are described in the next section.
+5. Select **Start match**.
 
-**Paused Matches** at the top of the page opens the paused sessions in the Match database. From there you can resume one.
+The line above the button shows which engine analyzes your decisions. Select the gear button beside it to change the saved engine defaults in **Settings → Playing**. A match keeps the engine settings it was started with. Close the dialog with **Close** or Escape; without a match, **New match** above the board opens it again.
+
+**Paused Matches** in the dialog or at the top of the page opens the paused sessions in the Match database. From there you can resume one.
 
 ### Play modes
 

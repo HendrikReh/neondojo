@@ -264,6 +264,49 @@ pub struct CreatePlaySession {
     /// Zero starts a continuous money-game session; 1..25 starts a point match.
     #[schema(minimum = 0, maximum = 25)]
     pub match_length: i32,
+    /// Name of the human side for this match only; blank uses the saved player name.
+    #[schema(max_length = 120)]
+    pub human_name: Option<String>,
+    /// Bot engine for this match only (`gnubg` or `bgsage`); defaults to the saved play engine.
+    pub play_engine: Option<String>,
+    /// Bot strength for this match only; must be a verified play depth of the chosen engine.
+    pub play_plies: Option<i32>,
+}
+
+impl CreatePlaySession {
+    /// Applies this match's own player name, bot engine and strength over the
+    /// saved settings without changing them.
+    fn apply_match_choices(&self, settings: &mut crate::settings::AppSettings) -> ApiResult<()> {
+        if let Some(name) = self.human_name.as_deref().map(str::trim) {
+            if !crate::settings::valid_player_name(name) {
+                return Err(ApiError::invalid(crate::settings::PLAYER_NAME_RULE));
+            }
+            if !name.is_empty() {
+                name.clone_into(&mut settings.player_name);
+            }
+        }
+        if self.play_engine.is_none() && self.play_plies.is_none() {
+            return Ok(());
+        }
+        let engine = self
+            .play_engine
+            .clone()
+            .unwrap_or_else(|| settings.play_engine.clone());
+        let depths = crate::configuration::engine_depths(&engine, "play");
+        let plies = match self.play_plies {
+            Some(plies) => plies,
+            None if depths.contains(&settings.play_plies) => settings.play_plies,
+            None => depths.first().copied().unwrap_or_default(),
+        };
+        if !depths.contains(&plies) {
+            return Err(ApiError::invalid(
+                "Engine or depth is not verified for this purpose",
+            ));
+        }
+        settings.play_engine = engine;
+        settings.play_plies = plies;
+        Ok(())
+    }
 }
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
@@ -755,7 +798,8 @@ async fn create_session(
             "human_player must be 0 or 1 and match_length must be 0 (money game) or 1..25",
         ));
     }
-    let (settings, error_thresholds) = crate::settings::load_play_settings(&state).await?;
+    let (mut settings, error_thresholds) = crate::settings::load_play_settings(&state).await?;
+    request.apply_match_choices(&mut settings)?;
     if request
         .tutor_threshold
         .is_some_and(|v| !v.is_finite() || v <= 0.0 || v > 1.0)

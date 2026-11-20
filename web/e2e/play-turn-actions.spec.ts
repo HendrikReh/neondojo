@@ -126,7 +126,7 @@ test('the setup form marks the start action and opens the play settings', async 
     setup.getByRole('radio', { name: 'White', exact: true }),
   ).not.toBeChecked();
   await setup
-    .getByRole('button', { name: 'Change engine in Settings', exact: true })
+    .getByRole('button', { name: 'Engine settings', exact: true })
     .click();
   const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
   await expect(
@@ -137,6 +137,82 @@ test('the setup form marks the start action and opens the play settings', async 
     .getByRole('button', { name: 'Back to match', exact: true })
     .click();
   await expect(page.getByTestId('play-board-toolbar')).toBeVisible();
+});
+
+test('the setup dialog overlays the match and sends this match’s name, engine and strength', async ({
+  page,
+}) => {
+  const { saved } = await historyFixture(page);
+  await page.route('**/api/engines', (route) =>
+    route.fulfill({
+      json: [
+        { id: 'gnubg', name: 'GNUbg', available: true, plies: [1, 2, 3] },
+        { id: 'bgsage', name: 'NeonGammon', available: true, plies: [1, 2] },
+      ],
+    }),
+  );
+  const created: unknown[] = [];
+  await page.route('**/api/play/sessions', (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    created.push(route.request().postDataJSON());
+    return route.fulfill({
+      status: 201,
+      json: { ...saved, human_name: 'Guest' },
+    });
+  });
+  await (await playMenuItem(page, 'New match')).click();
+  const dialog = page.getByRole('dialog', { name: 'New match', exact: true });
+  await expect(dialog).toHaveAttribute('aria-modal', 'true');
+  await expect(dialog).toHaveClass(/\bplay-setup-dialog\b/);
+  // The running match stays rendered behind the modal dialog.
+  await expect(page.locator('.play-live-board .board')).toBeVisible();
+  await expect(page.getByTestId('play-board-toolbar')).toBeAttached();
+  const name = dialog.getByRole('textbox', { name: 'Your name', exact: true });
+  await name.fill('Guest');
+  const engine = dialog.getByRole('combobox', {
+    name: 'Bot engine',
+    exact: true,
+  });
+  const strength = dialog.getByRole('combobox', {
+    name: 'Playing strength',
+    exact: true,
+  });
+  await expect(strength.locator('option')).toHaveCount(3);
+  await engine.selectOption('bgsage');
+  await expect(strength.locator('option')).toHaveText(['1-ply', '2-ply']);
+  await strength.selectOption('2');
+  await dialog
+    .getByRole('button', { name: 'Start match', exact: true })
+    .click();
+  await expect(dialog).toHaveCount(0);
+  expect(created).toEqual([
+    expect.objectContaining({
+      human_name: 'Guest',
+      play_engine: 'bgsage',
+      play_plies: 2,
+    }),
+  ]);
+});
+
+test('without a match the setup dialog can be closed and reopened', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Playing', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'New match', exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(page.locator('.play-idle-board .board')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  const reopen = page
+    .locator('.play-header')
+    .getByRole('button', { name: 'New match', exact: true });
+  await expect(reopen).toBeFocused();
+  await reopen.click();
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
 });
 
 test('a blocked Double stays visible and names the reason', async ({

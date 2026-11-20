@@ -15325,6 +15325,14 @@
           "match_length"
         ],
         "properties": {
+          "human_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Name of the human side for this match only; blank uses the saved player name.",
+            "maxLength": 120
+          },
           "human_player": {
             "type": "integer",
             "format": "int32",
@@ -15338,6 +15346,13 @@
             "maximum": 25,
             "minimum": 0
           },
+          "play_engine": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Bot engine for this match only (`gnubg` or `bgsage`); defaults to the saved play engine."
+          },
           "play_mode": {
             "oneOf": [
               {
@@ -15347,6 +15362,14 @@
                 "$ref": "#/components/schemas/PlayMode"
               }
             ]
+          },
+          "play_plies": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Bot strength for this match only; must be a verified play depth of the chosen engine."
           },
           "training_auto_analysis": {
             "type": [

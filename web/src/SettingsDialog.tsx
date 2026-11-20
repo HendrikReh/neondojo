@@ -27,7 +27,6 @@ import { useBenchmarkText } from './benchmark-messages';
 import ActionButton from './ActionButton';
 import {
   ANALYSIS_PLIES,
-  depthLabel,
   isAnalysisDepth,
   PLAY_PLIES,
   preferredDepth,
@@ -62,7 +61,12 @@ import {
   type AppSettings,
   type EngineInfo,
 } from './settings-api';
-import { useSettingsText, type SettingsMessageKey } from './settings-messages';
+import {
+  depthOptionLabel,
+  playStrengthLabel,
+  useSettingsText,
+  type SettingsMessageKey,
+} from './settings-messages';
 import { errorThresholdLabels } from './review-statistics-messages';
 import { saveTheme } from './ui-preferences';
 import './settings.css';
@@ -452,20 +456,6 @@ export default function SettingsDialog({
     ? configurationOptions.engine_profiles[draft.play_engine].play
     : [];
   const rememberedDepths = useRef<Record<string, number>>({});
-  /** GNUbg's three named profiles are its 1- to 3-ply searches. */
-  function depthOptionLabel(
-    ply: number,
-    engine: string,
-    names: readonly [
-      SettingsMessageKey,
-      SettingsMessageKey,
-      SettingsMessageKey,
-    ],
-  ) {
-    const depth = depthLabel(ply, engine);
-    const name = engine === 'gnubg' ? names[ply - 1] : undefined;
-    return name ? t(name, { depth }) : depth;
-  }
 
   function resetThresholds(values: ErrorThresholds, language: Locale) {
     initialThresholds.current = values;
@@ -1079,7 +1069,7 @@ export default function SettingsDialog({
                             value={ply}
                             disabled={!analysisPlies.includes(ply)}
                           >
-                            {depthOptionLabel(ply, draft.analysis_engine, [
+                            {depthOptionLabel(t, ply, draft.analysis_engine, [
                               'fast',
                               'deep',
                               'thorough',
@@ -1385,11 +1375,7 @@ export default function SettingsDialog({
                             value={ply}
                             disabled={!playPlies.includes(ply)}
                           >
-                            {depthOptionLabel(ply, draft.play_engine, [
-                              'strengthQuick',
-                              'strengthStronger',
-                              'strengthStrongest',
-                            ])}
+                            {playStrengthLabel(t, ply, draft.play_engine)}
                           </option>
                         ))}
                       </select>
