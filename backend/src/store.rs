@@ -210,14 +210,16 @@ async fn insert_games(
 
 /// Imported sources are immutable. Read the catalog directly, or populate it once
 /// under the match row lock for libraries created before the catalog migration.
-pub async fn match_games(pool: &PgPool, match_id: Uuid) -> Result<Option<Vec<MatchGame>>> {
+/// The game catalog of a match, built once from the stored SGF for older
+/// imports. Results are not derived; scope checks need only the games.
+pub async fn game_catalog(pool: &PgPool, match_id: Uuid) -> Result<Option<Vec<MatchGame>>> {
     const QUERY: &str = "SELECT game_no,position_count,white_score,black_score,crawford FROM match_games WHERE match_uuid=$1 ORDER BY game_no";
     let games = sqlx::query_as::<_, MatchGame>(QUERY)
         .bind(match_id)
         .fetch_all(pool)
         .await?;
     if !games.is_empty() {
-        return Ok(Some(enrich_game_results(pool, match_id, games).await?));
+        return Ok(Some(games));
     }
     let mut tx = pool.begin().await?;
     let source: Option<String> =
@@ -235,7 +237,7 @@ pub async fn match_games(pool: &PgPool, match_id: Uuid) -> Result<Option<Vec<Mat
         .await?;
     if !games.is_empty() {
         tx.commit().await?;
-        return Ok(Some(enrich_game_results(pool, match_id, games).await?));
+        return Ok(Some(games));
     }
     let games =
         tokio::task::spawn_blocking(move || crate::import::parse_sgf(&source).map(|m| m.games))
@@ -243,6 +245,14 @@ pub async fn match_games(pool: &PgPool, match_id: Uuid) -> Result<Option<Vec<Mat
     insert_games(&mut tx, match_id, &games).await?;
     tx.commit().await?;
     Ok(Some(games))
+}
+
+/// The game catalog with each game's result, derived from the stored SGF.
+pub async fn match_games(pool: &PgPool, match_id: Uuid) -> Result<Option<Vec<MatchGame>>> {
+    match game_catalog(pool, match_id).await? {
+        Some(games) => Ok(Some(enrich_game_results(pool, match_id, games).await?)),
+        None => Ok(None),
+    }
 }
 
 // Computed metadata deliberately stays out of match_games and retained source-less

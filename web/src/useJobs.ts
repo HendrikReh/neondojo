@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { request, terminal, mergeJob, jobEngine, type Job } from './api';
+import { watchJob } from './job-watch';
 import type { components } from './generated-api';
 import type { MatchAnalysisEngine } from './useMatchAnalysis';
 
@@ -49,8 +50,7 @@ export function useJobs(
   useEffect(() => {
     if (!positionId) return;
     const abort = new AbortController();
-    const streams: EventSource[] = [];
-    const timers: ReturnType<typeof setInterval>[] = [];
+    const watches: (() => void)[] = [];
     const belongs = (job: Job) =>
       job.position_uuid === positionId &&
       jobEngine(job) === engineId &&
@@ -75,20 +75,10 @@ export function useJobs(
     }
     function monitor(job: Job) {
       if (terminal(job)) return;
-      const stream = new EventSource(`/api/jobs/${job.id}/events`);
-      streams.push(stream);
-      let timer: ReturnType<typeof setInterval>;
-      async function refresh() {
-        try {
-          const incoming = await request<Job>(`/jobs/${job.id}`, {
-            signal: abort.signal,
-          });
-          receive(incoming);
-          if (terminal(incoming)) {
-            stream.close();
-            clearInterval(timer);
-          }
-        } catch (error) {
+      // Progress arrives over the shared job stream; full reads happen only
+      // at the start, at the end and to resynchronise.
+      watches.push(
+        watchJob(job.id, receive, (error) => {
           if (!abort.signal.aborted && current.current === scope)
             setState((previous) => ({
               scope,
@@ -96,22 +86,8 @@ export function useJobs(
               restored: true,
               error,
             }));
-        }
-      }
-      for (const event of [
-        'queued',
-        'running',
-        'progress',
-        'completed',
-        'failed',
-      ])
-        stream.addEventListener(event, () => {
-          void refresh();
-        });
-      timer = setInterval(() => {
-        void refresh();
-      }, 3000);
-      timers.push(timer);
+        }),
+      );
     }
     void request<Job[]>(positionJobsPath(positionId, engineId), {
       signal: abort.signal,
@@ -151,8 +127,7 @@ export function useJobs(
     );
     return () => {
       abort.abort();
-      streams.forEach((stream) => stream.close());
-      timers.forEach(clearInterval);
+      watches.forEach((stop) => stop());
     };
   }, [positionId, engineId, scope, revision]);
 

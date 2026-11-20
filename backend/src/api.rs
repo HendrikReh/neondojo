@@ -439,7 +439,8 @@ async fn validate_game(
     match_id: Uuid,
     game_no: Option<i32>,
 ) -> ApiResult<Vec<MatchGame>> {
-    let games = store::match_games(&state.pool, match_id)
+    // Existence and scope come from the catalog; results are not needed here.
+    let games = store::game_catalog(&state.pool, match_id)
         .await?
         .ok_or_else(ApiError::missing)?;
     if game_no.is_some_and(|n| !games.iter().any(|g| g.game_no == n)) {

@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
-import { request, terminal, mergeJob, type Job } from './api';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { terminal, mergeJob, type Job } from './api';
 import { AppError } from './i18n-core';
+import { watchJob } from './job-watch';
 
 /** Keep tracking accepted jobs even after their source position or game changes. */
 export function useBackgroundJobs(watchedIds: readonly string[]) {
@@ -29,34 +30,38 @@ export function useBackgroundJobs(watchedIds: readonly string[]) {
   ]
     .sort()
     .join(',');
+  // One shared watch per job. The global display reads periodically; a view
+  // that shows the same job adds its event stream to the watch instead.
+  const watching = useRef(new Map<string, () => void>());
   useEffect(() => {
-    if (!ids) return;
-    const abort = new AbortController();
-    const refresh = () =>
-      Promise.allSettled(
-        ids.split(',').map(async (id) => {
-          try {
-            const job = await request<Job>(`/jobs/${id}`, {
-              signal: abort.signal,
-            });
-            if (!abort.signal.aborted) track(job);
-          } catch (error) {
-            if (
-              !abort.signal.aborted &&
-              error instanceof AppError &&
-              error.params.status === '404'
-            )
-              setMissing((previous) => new Set([...previous, id]));
-          }
-        }),
-      );
-    void refresh();
-    const timer = setInterval(() => void refresh(), 3000);
-    return () => {
-      abort.abort();
-      clearInterval(timer);
-    };
+    const wanted = new Set(ids ? ids.split(',') : []);
+    for (const [id, stop] of watching.current)
+      if (!wanted.has(id)) {
+        stop();
+        watching.current.delete(id);
+      }
+    for (const id of wanted)
+      if (!watching.current.has(id))
+        watching.current.set(
+          id,
+          watchJob(
+            id,
+            track,
+            (error) => {
+              if (error instanceof AppError && error.params.status === '404')
+                setMissing((previous) => new Set([...previous, id]));
+            },
+            false,
+          ),
+        );
   }, [ids, track]);
+  useEffect(() => {
+    const current = watching.current;
+    return () => {
+      current.forEach((stop) => stop());
+      current.clear();
+    };
+  }, []);
   const assessmentRevision = Object.values(tracked)
     .filter(
       (job) =>

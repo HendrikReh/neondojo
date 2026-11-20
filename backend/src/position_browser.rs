@@ -755,15 +755,6 @@ async fn search(
                     severity: thresholds.classify(loss),
                 });
         let context: serde_json::Value = row.get("position");
-        let notes=sqlx::query(&format!("SELECT a.target_kind,a.tags,left(a.comment,280) AS comment_excerpt FROM positions p LEFT JOIN match_games g ON g.match_uuid=p.match_uuid AND g.game_no=p.game_no JOIN annotations a ON {NOTE_SCOPE} WHERE p.id=$1 ORDER BY a.target_kind,a.id"))
-            .bind(position.id).fetch_all(&s.pool).await.map_err(anyhow::Error::from)?.into_iter()
-            .map(|r|PositionBrowserNote{scope:r.get("target_kind"),tags:r.get("tags"),comment_excerpt:r.get("comment_excerpt")}).collect::<Vec<_>>();
-        let tags = notes
-            .iter()
-            .flat_map(|n| n.tags.iter().cloned())
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .collect();
         items.push(PositionBrowserHit {
             position,
             source_available: row.get("source_available"),
@@ -780,19 +771,58 @@ async fn search(
             crawford: context["source_crawford"].as_bool(),
             cube_value: context["source_cube_value"].as_i64().map(|v| v as i32),
             cube_owner: context["source_cube_owner"].as_i64().map(|v| v as i32),
-            tags,
-            notes,
+            tags: Vec::new(),
+            notes: Vec::new(),
             card_ready: row.get("card_ready"),
             decks: Vec::new(),
             native_error,
         });
     }
+    load_notes(&s.pool, &mut items).await?;
     load_deck_memberships(&s.pool, &mut items).await?;
     Ok(Json(PositionBrowserPage {
         items,
         next_cursor,
         total,
     }))
+}
+
+/// Match, game, position and move notes of every position on the page in one
+/// query, in the same order per position as before.
+async fn load_notes(pool: &PgPool, items: &mut [PositionBrowserHit]) -> ApiResult<()> {
+    if items.is_empty() {
+        return Ok(());
+    }
+    let ids: Vec<Uuid> = items.iter().map(|hit| hit.position.id).collect();
+    let rows = sqlx::query(&format!(
+        "SELECT p.id,a.target_kind,a.tags,left(a.comment,280) AS comment_excerpt FROM positions p LEFT JOIN match_games g ON g.match_uuid=p.match_uuid AND g.game_no=p.game_no JOIN annotations a ON {NOTE_SCOPE} WHERE p.id=ANY($1) ORDER BY p.id,a.target_kind,a.id"
+    ))
+    .bind(ids)
+    .fetch_all(pool)
+    .await
+    .map_err(anyhow::Error::from)?;
+    let mut notes = HashMap::<Uuid, Vec<PositionBrowserNote>>::new();
+    for row in rows {
+        notes
+            .entry(row.get("id"))
+            .or_default()
+            .push(PositionBrowserNote {
+                scope: row.get("target_kind"),
+                tags: row.get("tags"),
+                comment_excerpt: row.get("comment_excerpt"),
+            });
+    }
+    for hit in items {
+        hit.notes = notes.remove(&hit.position.id).unwrap_or_default();
+        hit.tags = hit
+            .notes
+            .iter()
+            .flat_map(|note| note.tags.iter().cloned())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+    }
+    Ok(())
 }
 
 async fn load_deck_memberships(pool: &PgPool, items: &mut [PositionBrowserHit]) -> ApiResult<()> {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { jobEngine, mergeJob, request, terminal, type Job } from './api';
+import { watchJob } from './job-watch';
 import {
   submitMatchAnalysis,
   type MatchAnalysisEngine,
@@ -35,8 +36,7 @@ export function useMatchAnalysis(
   useEffect(() => {
     if (!enabled) return;
     const abort = new AbortController();
-    let stream: EventSource | undefined;
-    let timer: ReturnType<typeof setInterval> | undefined;
+    let unwatch: (() => void) | undefined;
     const belongs = (job: Job) =>
       job.match_uuid === matchId &&
       (job.game_no ?? undefined) === gameNo &&
@@ -51,20 +51,6 @@ export function useMatchAnalysis(
         ),
       }));
       setFailure(undefined);
-    }
-    async function refresh(id: string) {
-      try {
-        const incoming = await request<Job>(`/jobs/${id}`, {
-          signal: abort.signal,
-        });
-        receive(incoming);
-        if (terminal(incoming)) {
-          stream?.close();
-          clearInterval(timer);
-        }
-      } catch (error) {
-        if (!abort.signal.aborted) setFailure({ scope, error });
-      }
     }
     const query = new URLSearchParams({ engine_id: engineId });
     if (gameNo !== undefined) query.set('game_no', String(gameNo));
@@ -85,29 +71,18 @@ export function useMatchAnalysis(
         if (!belongs(incoming)) return;
         receive(incoming);
         if (terminal(incoming)) return;
-        stream = new EventSource(`/api/jobs/${incoming.id}/events`);
-        for (const event of [
-          'queued',
-          'running',
-          'progress',
-          'completed',
-          'failed',
-        ]) {
-          stream.addEventListener(event, () => {
-            void refresh(incoming.id);
-          });
-        }
-        timer = setInterval(() => {
-          void refresh(incoming.id);
-        }, 3000);
+        // Progress arrives over the shared job stream; full reads happen only
+        // at the start, at the end and to resynchronise.
+        unwatch = watchJob(incoming.id, receive, (error) => {
+          if (!abort.signal.aborted) setFailure({ scope, error });
+        });
       })
       .catch((error) => {
         if (!abort.signal.aborted) setFailure({ scope, error });
       });
     return () => {
       abort.abort();
-      stream?.close();
-      clearInterval(timer);
+      unwatch?.();
     };
   }, [matchId, gameNo, engineId, scope, revision, enabled, externalRevision]);
 
