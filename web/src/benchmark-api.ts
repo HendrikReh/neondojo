@@ -33,5 +33,9 @@ export const cancelBenchmark = (id: string) =>
   request<BenchmarkRun>(`/benchmarks/${encodeURIComponent(id)}/cancel`, {
     method: 'POST',
   });
+export const deleteBenchmark = (id: string) =>
+  request<void>(`/benchmarks/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
 export const loadBenchmarkStatus = (signal?: AbortSignal) =>
   request<Schemas['BenchmarkStatus']>('/benchmarks/status', { signal });

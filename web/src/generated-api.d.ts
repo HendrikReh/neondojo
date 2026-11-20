@@ -100,6 +100,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/benchmarks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Deletes one finished run from the history. Queued and running runs must be
+         *     cancelled first so the worker never loses the row it is measuring. Analysis
+         *     timings that used the run keep their copied average (`ON DELETE SET NULL`).
+         */
+        delete: operations["remove"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/benchmarks/{id}/cancel": {
         parameters: {
             query?: never;
@@ -6478,6 +6499,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BenchmarkStatus"];
+                };
+            };
+        };
+    };
+    remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };

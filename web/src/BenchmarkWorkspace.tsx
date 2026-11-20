@@ -3,6 +3,7 @@ import BenchmarkComparison, {
 } from './BenchmarkComparison';
 import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
 import { useEffect, useRef, useState } from 'react';
+import ActionButton from './ActionButton';
 import EngineLabel from './EngineLabel';
 import {
   ANALYSIS_PLIES,
@@ -14,6 +15,7 @@ import { useI18n } from './i18n';
 import { loadEngines, type EngineInfo } from './settings-api';
 import {
   cancelBenchmark,
+  deleteBenchmark,
   loadBenchmarkReference,
   loadBenchmarks,
   startBenchmarks,
@@ -58,6 +60,8 @@ export default function BenchmarkWorkspace({
   const [actionError, setActionError] = useState<unknown>();
   const [starting, setStarting] = useState<'analysis' | 'play'>();
   const [cancelling, setCancelling] = useState<string>();
+  const [confirmingDelete, setConfirmingDelete] = useState<string>();
+  const [deleting, setDeleting] = useState<string>();
   const [revision, setRevision] = useState(0);
   const [configurationRevision, setConfigurationRevision] = useState(0);
   const [queueActive, setQueueActive] = useState(false);
@@ -190,6 +194,22 @@ export default function BenchmarkWorkspace({
       setActionError(error);
     } finally {
       setCancelling(undefined);
+    }
+  }
+  async function remove(id: string) {
+    if (deleting) return;
+    setDeleting(id);
+    setActionError(undefined);
+    try {
+      await deleteBenchmark(id);
+      setRuns((current) => current.filter((run) => run.id !== id));
+      setConfirmingDelete(undefined);
+      setRevision((r) => r + 1);
+    } catch (error) {
+      setActionError(error);
+      setRevision((r) => r + 1);
+    } finally {
+      setDeleting(undefined);
     }
   }
   const time = (run: BenchmarkRun, value: number | null | undefined) =>
@@ -492,6 +512,9 @@ export default function BenchmarkWorkspace({
                   </th>
                   <th scope="col">{t('status')}</th>
                   <th scope="col">{t('details')}</th>
+                  <th scope="col">
+                    <span className="sr-only">{t('actions')}</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -555,6 +578,54 @@ export default function BenchmarkWorkspace({
                     </td>
                     <td>
                       <BenchmarkRunDetails run={run} />
+                    </td>
+                    <td className="benchmark-row-actions">
+                      {run.status !== 'queued' &&
+                        run.status !== 'running' &&
+                        (confirmingDelete === run.id ? (
+                          <div
+                            className="benchmark-delete-confirm"
+                            role="group"
+                            aria-label={t('deleteQuestion')}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Escape' && !deleting) {
+                                event.stopPropagation();
+                                setConfirmingDelete(undefined);
+                              }
+                            }}
+                          >
+                            <span>{t('deleteQuestion')}</span>
+                            <ActionButton
+                              icon="delete"
+                              className="danger"
+                              type="button"
+                              label={t(
+                                deleting === run.id
+                                  ? 'deleting'
+                                  : 'confirmDelete',
+                              )}
+                              autoFocus
+                              disabled={Boolean(deleting)}
+                              onClick={() => void remove(run.id)}
+                            />
+                            <ActionButton
+                              icon="cancel"
+                              type="button"
+                              label={t('keepRun')}
+                              disabled={Boolean(deleting)}
+                              onClick={() => setConfirmingDelete(undefined)}
+                            />
+                          </div>
+                        ) : (
+                          <ActionButton
+                            icon="delete"
+                            type="button"
+                            label={t('deleteRun')}
+                            compact
+                            disabled={Boolean(deleting)}
+                            onClick={() => setConfirmingDelete(run.id)}
+                          />
+                        ))}
                     </td>
                   </tr>
                 ))}

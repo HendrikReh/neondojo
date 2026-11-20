@@ -53,6 +53,7 @@ async function backend(page: Page, savedSettings = settings) {
   let runs = [run('completed'), run('failed', 'failed')];
   const starts: unknown[] = [],
     cancels: string[] = [],
+    deletes: string[] = [],
     writes: unknown[] = [];
   let reads = 0;
   await page.addInitScript(() => {
@@ -137,8 +138,23 @@ async function backend(page: Page, savedSettings = settings) {
     runs = runs.map((r) => (r.id === id ? { ...r, status: 'cancelled' } : r));
     return route.fulfill({ json: runs.find((r) => r.id === id) });
   });
+  await page.route('**/api/benchmarks/*', (route) => {
+    if (route.request().method() !== 'DELETE') return route.fallback();
+    const id = route.request().url().split('/').at(-1)!;
+    deletes.push(id);
+    const target = runs.find((r) => r.id === id);
+    if (!target)
+      return route.fulfill({ status: 404, json: { error: 'Not found' } });
+    if (['queued', 'running'].includes(target.status))
+      return route.fulfill({
+        status: 409,
+        json: { error: 'Cancel the benchmark before deleting it' },
+      });
+    runs = runs.filter((r) => r.id !== id);
+    return route.fulfill({ status: 204 });
+  });
   await page.goto('/');
-  return { starts, cancels, writes, reads: () => reads };
+  return { starts, cancels, deletes, writes, reads: () => reads };
 }
 async function open(page: Page) {
   await page.getByRole('tab', { name: 'Extras', exact: true }).click();
@@ -147,11 +163,60 @@ async function open(page: Page) {
   ).toBeVisible();
   await expect(page.getByLabel('Benchmark engine')).toHaveValue('gnubg');
 }
+test('history deletes finished runs after inline confirmation', async ({
+  page,
+}) => {
+  const api = await backend(page);
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  await open(page);
+  const history = page.locator('.benchmark-history');
+  const rows = history.locator('tbody tr');
+  await expect(rows).toHaveCount(2);
+  const completed = rows.filter({ hasText: 'Completed' });
+  await completed.getByRole('button', { name: 'Delete run' }).click();
+  const confirm = completed.getByRole('group', {
+    name: 'Delete this run permanently?',
+  });
+  await expect(confirm.getByRole('button', { name: 'Delete' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(confirm).toBeHidden();
+  await expect(rows).toHaveCount(2);
+  expect(api.deletes).toEqual([]);
+
+  await completed.getByRole('button', { name: 'Delete run' }).click();
+  await confirm.getByRole('button', { name: 'Keep' }).click();
+  await expect(confirm).toBeHidden();
+  expect(api.deletes).toEqual([]);
+
+  await completed.getByRole('button', { name: 'Delete run' }).click();
+  await confirm.getByRole('button', { name: 'Delete' }).click();
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText('Failed');
+  expect(api.deletes).toEqual(['completed']);
+
+  // Active runs are cancelled from Current runs, never deleted from history.
+  await page.getByRole('button', { name: 'Start benchmark' }).click();
+  await expect(rows).toHaveCount(2);
+  await expect(
+    rows
+      .filter({ hasText: 'Running' })
+      .getByRole('button', { name: 'Delete run' }),
+  ).toHaveCount(0);
+  await expect(
+    rows
+      .filter({ hasText: 'Failed' })
+      .getByRole('button', { name: 'Delete run' }),
+  ).toBeVisible();
+});
 test('play-turn latency starts independently and has its own history metric', async ({
   page,
 }, testInfo) => {
   // GNUbg-only defaults, so NeonGammon must fall back to its own depth.
-  const api = await backend(page, { ...settings, analysis_plies: 5, play_plies: 3 });
+  const api = await backend(page, {
+    ...settings,
+    analysis_plies: 5,
+    play_plies: 3,
+  });
   await page.setViewportSize({ width: 1800, height: 1169 });
   await page.route('**/api/engines', (route) =>
     route.fulfill({
@@ -226,13 +291,17 @@ test('play-turn latency starts independently and has its own history metric', as
   await depth(1).uncheck();
   await playMode.click();
   await playingDepth.selectOption('3');
-  await page.getByRole('button', { name: 'Match analysis', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Match analysis', exact: true })
+    .click();
 
   await engine.selectOption('bgsage');
   await expect(depth(5)).toBeDisabled();
   await expect(depth(2)).toBeChecked();
   await expect(
-    page.getByText('2-ply selected because the requested depth is unavailable.'),
+    page.getByText(
+      '2-ply selected because the requested depth is unavailable.',
+    ),
   ).toBeVisible();
   await depth(3).check();
   await engine.selectOption('gnubg');
@@ -244,7 +313,9 @@ test('play-turn latency starts independently and has its own history metric', as
   await engine.selectOption('bgsage');
   await expect(playingDepth).toHaveValue('2');
   await expect(
-    page.getByText('2-ply selected because the requested depth is unavailable.'),
+    page.getByText(
+      '2-ply selected because the requested depth is unavailable.',
+    ),
   ).toBeVisible();
   await expect(
     page.getByText(

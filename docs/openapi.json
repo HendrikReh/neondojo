@@ -350,6 +350,51 @@
         }
       }
     },
+    "/api/benchmarks/{id}": {
+      "delete": {
+        "tags": [
+          "Benchmark"
+        ],
+        "summary": "Deletes one finished run from the history. Queued and running runs must be\ncancelled first so the worker never loses the row it is measuring. Analysis\ntimings that used the run keep their copied average (`ON DELETE SET NULL`).",
+        "operationId": "remove",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/benchmarks/{id}/cancel": {
       "post": {
         "tags": [

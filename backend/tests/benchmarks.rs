@@ -122,15 +122,86 @@ async fn reference_and_openapi_describe_the_fixed_workload(pool: PgPool) {
         "/api/benchmarks",
         "/api/benchmarks/play",
         "/api/benchmarks/reference",
+        "/api/benchmarks/{id}",
         "/api/benchmarks/{id}/cancel",
     ] {
         assert!(schema["paths"][path].is_object(), "{path}");
     }
+    assert!(schema["paths"]["/api/benchmarks/{id}"]["delete"].is_object());
+}
+
+async fn insert_run(pool: &PgPool, status: &str) -> uuid::Uuid {
+    let id = uuid::Uuid::new_v4();
+    let reference = neondojo::benchmarks::reference();
+    let completed = status == "completed";
+    sqlx::query("INSERT INTO benchmark_runs(id,status,finished_at,machine,engine_id,engine_name,engine_version,engine_path,plies,reference,protocol,reference_sgf,completed_games,analyzed_moves,total_elapsed_ms,average_move_ms) VALUES($1,$2,CASE WHEN $2 IN ('queued','running') THEN NULL ELSE now() END,$3,'gnubg','GNUbg','GNU Backgammon test','/usr/bin/gnubg',2,$4,$5,$6,$7,$8,$9,$10)")
+        .bind(id)
+        .bind(status)
+        .bind(json!({"id":uuid::Uuid::new_v4(),"name":"Test machine","os":"macos","architecture":"aarch64"}))
+        .bind(serde_json::to_value(&reference).unwrap())
+        .bind(serde_json::to_value(&reference.protocol).unwrap())
+        .bind(neondojo::benchmarks::REFERENCE_SGF)
+        .bind(if completed { 10 } else { 0 })
+        .bind(if completed { 460 } else { 0 })
+        .bind(completed.then_some(4600.0))
+        .bind(completed.then_some(10.0))
+        .execute(pool)
+        .await
+        .unwrap();
+    id
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn deletes_only_finished_runs_from_the_history(pool: PgPool) {
+    let app = api::router(AppState::new(pool.clone(), engine()));
+    let mut kept = Vec::new();
+    for status in ["queued", "running"] {
+        let id = insert_run(&pool, status).await;
+        let (code, body) = call(
+            app.clone(),
+            "DELETE",
+            &format!("/api/benchmarks/{id}"),
+            Value::Null,
+        )
+        .await;
+        assert_eq!(code, 409, "{status}: {body}");
+        assert_eq!(body["error"], "Cancel the benchmark before deleting it");
+        kept.push(id);
+    }
+    for status in ["completed", "failed", "cancelled"] {
+        let id = insert_run(&pool, status).await;
+        let uri = format!("/api/benchmarks/{id}");
+        let (code, body) = call(app.clone(), "DELETE", &uri, Value::Null).await;
+        assert_eq!(code, 204, "{status}: {body}");
+        let (code, _) = call(app.clone(), "DELETE", &uri, Value::Null).await;
+        assert_eq!(code, 404, "{status} is gone");
+    }
+    let (code, _) = call(
+        app.clone(),
+        "DELETE",
+        &format!("/api/benchmarks/{}", uuid::Uuid::new_v4()),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(code, 404);
+    let (_, list) = call(app, "GET", "/api/benchmarks", Value::Null).await;
+    let ids: Vec<&str> = list["runs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|run| run["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids.len(), 2, "{list}");
+    for id in kept {
+        assert!(ids.contains(&id.to_string().as_str()));
+    }
+    assert_eq!(list["active"], true);
 }
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL and GNUbg"]
-async fn runs_are_append_only_snapshots_and_cancellation_survives_reload(pool: PgPool) {
+async fn runs_are_immutable_snapshots_and_cancellation_survives_reload(pool: PgPool) {
     let app = api::router(AppState::new(pool.clone(), engine()));
     let body = json!({"engine_id":"gnubg","plies":[1,3]});
     let (status, first) = call(app.clone(), "POST", "/api/benchmarks", body.clone()).await;
