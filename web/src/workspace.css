@@ -23,7 +23,6 @@
 .app-header .brand-mark {
   width: 30px;
   height: 30px;
-  font-size: 24px;
 }
 .app-tabs {
   display: flex;
@@ -546,7 +545,6 @@
   .app-header .brand-mark {
     width: 32px;
     height: 32px;
-    font-size: 24px;
   }
   .app-header-actions {
     margin-left: auto;

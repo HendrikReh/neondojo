@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">NeonDojo – Ensō mit Backgammon-Zungen</title>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#16302f"/>
+      <stop offset="1" stop-color="#091013"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <mask id="gap">
+      <rect width="256" height="256" fill="#fff"/>
+      <path d="M128 128 L256 22 L256 84 Z" fill="#000"/>
+    </mask>
+    <clipPath id="inside"><circle cx="134" cy="126" r="64"/></clipPath>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#tile)"/>
+  <!-- Ensō: offset circles give the brush stroke its changing width -->
+  <g filter="url(#glow)">
+    <path mask="url(#gap)" fill="#3df2e0" fill-rule="evenodd"
+      d="M128 34 A94 94 0 1 1 127.9 34 Z M137 49 A72 72 0 1 0 137.1 49 Z"/>
+  </g>
+  <!-- Two opposing points, like both halves of the board -->
+  <g clip-path="url(#inside)" filter="url(#glow)">
+    <path d="M84 196 L134 196 L109 72 Z" fill="#ff4fa3"/>
+    <path d="M134 56 L184 56 L159 180 Z" fill="#e8f4f2"/>
+  </g>
+</svg>
