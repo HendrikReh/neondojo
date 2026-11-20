@@ -40,7 +40,6 @@ import { AppError } from './i18n-core';
 import { usePlayText } from './play-messages';
 import { useLibraryText } from './library-messages';
 import {
-  nativeLegalTurns,
   nextCheckerSteps,
   applySteps,
   boardFlips,
@@ -630,18 +629,9 @@ export default function PlayWorkspace({
         : openingPhase
           ? []
           : turnDice;
-  const moves = useMemo(
-    () =>
-      session?.phase === 'move'
-        ? nativeLegalTurns(
-            session.position.board,
-            session.human_player,
-            turnDice,
-            session.legal_moves,
-          )
-        : [],
-    [session, turnDice],
-  );
+  const moves = session?.legal_moves.length ? (session.legal_turns ?? []) : [];
+  const missingCheckerPaths =
+    canMove && !moves.length && !!session?.legal_moves.length;
   const continuations = canMove ? matchingCheckerTurns(moves, steps) : [];
   const choices = nextCheckerSteps(
     continuations,
@@ -695,7 +685,7 @@ export default function PlayWorkspace({
   function confirmTurn() {
     if (canContinueCoachTurn && pendingCoachTurn?.action === 'move')
       continueDecision();
-    else if (canConfirm && completed) action('move', completed.moveIndex);
+    else if (canConfirm && completed) action('move', completed.move_index);
   }
   function rollTurn() {
     if (boardRollReady) action('roll', undefined, pendingRoutineRoll?.id);
@@ -1255,7 +1245,7 @@ export default function PlayWorkspace({
             )}
             <p className="play-engine play-setup-engine">
               <span>
-                {settingsT('playEngine')}:{' '}
+                {t('botEngine')} ·{' '}
                 {(confirmed?.play.engine ?? settings?.play_engine) === 'bgsage'
                   ? 'NeonGammon'
                   : 'GNUbg'}{' '}
@@ -1264,8 +1254,8 @@ export default function PlayWorkspace({
                   settings?.play_plies ??
                   defaults.plies}
                 -ply
-                {' · '}
-                {settingsT('analysisEngine')}:{' '}
+                {' / '}
+                {settingsT('analysisEngine')} ·{' '}
                 {(confirmed?.analysis.engine ?? settings?.analysis_engine) ===
                 'bgsage'
                   ? 'NeonGammon'
@@ -1275,6 +1265,8 @@ export default function PlayWorkspace({
                   settings?.analysis_plies ??
                   defaultConfiguration.analysis.plies}
                 -ply
+                {' / '}
+                {t('rulesEngine')} · GNUbg
               </span>
               <ActionButton
                 type="button"
@@ -1325,18 +1317,45 @@ export default function PlayWorkspace({
                 · {t('game')} {formatNumber(session.game_no)}
               </p>
               <p className="play-engine play-match-engine">
-                <EngineLabel
-                  details={session.engine.version}
-                  tooltip={[
-                    session.engine.version,
-                    `${session.engine.plies}-ply`,
-                    feedbackMode !== 'competition' &&
-                      `${modeT('analysisDepth')}: ${session.analysis_plies ?? defaultConfiguration.analysis.plies}-ply`,
-                    t(session.bearoff_direction === 'left' ? 'left' : 'right'),
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                />
+                <span>
+                  {t('botEngine')} ·{' '}
+                  <EngineLabel
+                    details={session.engine.version}
+                    tooltip={[
+                      session.engine.version,
+                      `${session.engine.plies}-ply`,
+                      t(
+                        session.bearoff_direction === 'left' ? 'left' : 'right',
+                      ),
+                    ].join(' · ')}
+                  />{' '}
+                  {session.engine.plies}-ply
+                </span>
+                <span>
+                  {settingsT('analysisEngine')} ·{' '}
+                  <EngineLabel
+                    details={
+                      session.engine_snapshots?.analysis.engine_version ??
+                      (session.engine_snapshots?.analysis.engine_id === 'bgsage'
+                        ? 'NeonGammon'
+                        : 'GNUbg')
+                    }
+                  />{' '}
+                  {session.analysis_plies ??
+                    defaultConfiguration.analysis.plies}
+                  -ply
+                </span>
+                <span>
+                  {t('rulesEngine')} ·{' '}
+                  <EngineLabel
+                    details={
+                      session.engine_snapshots?.rules.engine_version ??
+                      (session.engine.id === 'gnubg'
+                        ? session.engine.version
+                        : 'GNUbg')
+                    }
+                  />
+                </span>
               </p>
               <p className="play-match-status" role="status">
                 {turnStatus()}
@@ -1722,6 +1741,18 @@ export default function PlayWorkspace({
                           </span>
                         )}
                       </ActionButton>
+                    )}
+                    {missingCheckerPaths && (
+                      <div role="alert" className="play-error">
+                        <p>{t('checkerTurnsError')}</p>
+                        <ActionButton
+                          icon="refresh"
+                          label={t('retry')}
+                          onClick={() => load(session.id)}
+                        >
+                          {t('retry')}
+                        </ActionButton>
+                      </div>
                     )}
                     {steps.length > 0 && (
                       <p id={turnNotationId} className="play-selected-steps">

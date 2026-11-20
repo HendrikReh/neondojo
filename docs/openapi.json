@@ -6956,6 +6956,49 @@
         }
       }
     },
+    "/api/play/checker-turns": {
+      "post": {
+        "tags": [
+          "Playing"
+        ],
+        "operationId": "checker_turns",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckerTurnsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Complete paths in absolute coordinates. An empty list means a forced pass.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CheckerTurn"
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/play/sessions": {
       "get": {
         "tags": [
@@ -14443,6 +14486,57 @@
           }
         ]
       },
+      "CheckerTurn": {
+        "type": "object",
+        "required": [
+          "steps",
+          "dice"
+        ],
+        "properties": {
+          "dice": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "description": "The die used by each step, in the same order."
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlayStep"
+            }
+          }
+        }
+      },
+      "CheckerTurnsRequest": {
+        "type": "object",
+        "required": [
+          "board",
+          "player",
+          "dice"
+        ],
+        "properties": {
+          "board": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "dice": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "player": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "Competitor": {
         "type": "object",
         "required": [
@@ -17879,6 +17973,26 @@
           }
         }
       },
+      "LiveCheckerTurn": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CheckerTurn"
+          },
+          {
+            "type": "object",
+            "required": [
+              "move_index"
+            ],
+            "properties": {
+              "move_index": {
+                "type": "integer",
+                "description": "Index into this session revision's GNUbg legal move catalog.",
+                "minimum": 0
+              }
+            }
+          }
+        ]
+      },
       "LossDirection": {
         "type": "string",
         "enum": [
@@ -20049,6 +20163,16 @@
             "items": {
               "$ref": "#/components/schemas/PlayMove"
             }
+          },
+          "legal_turns": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/LiveCheckerTurn"
+            },
+            "description": "Interactive paths derived from the saved roll and the rule engine's legal moves."
           },
           "library_match_id": {
             "type": [

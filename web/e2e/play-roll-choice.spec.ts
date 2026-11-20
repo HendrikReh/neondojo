@@ -1,3 +1,4 @@
+import { eitherOrder } from './play-turn-fixtures';
 import { test, expect } from './test';
 import { botDice } from './play-board-actions';
 import type { PlaySession } from '../src/play-api';
@@ -119,6 +120,7 @@ for (const config of [
         phase: 'move',
         can_double: false,
         position: { ...saved.position, dice: [3, 1] },
+        legal_turns: eitherOrder([3, 1], '8/5 6/5'),
         legal_moves: [
           {
             notation: '8/5 6/5',

@@ -166,7 +166,15 @@ async fn sage_full_game_both_colors_restores_pinned_engines_and_has_no_gnubg_pr(
                 phase => panic!("Unexpected phase {phase}"),
             };
             let extra = if next == "move" {
-                json!({"move":0})
+                assert!(
+                    session["legal_turns"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|turn| { turn["move_index"] == 0 }),
+                    "The top GNUbg move must have a selectable path: {session}"
+                );
+                json!({"move": 0})
             } else {
                 json!({})
             };

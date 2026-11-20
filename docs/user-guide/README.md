@@ -198,7 +198,7 @@ Details: [Playing feedback modes](../reference/playing.md#playing-feedback-modes
 
 > **Pro:** The bot's strength in **Settings → Playing** is independent of the analysis depth used for feedback. Learning reviews report a *first-attempt PR*, computed from your original choices at the positions you actually reached. This PR is separate from GNUbg's rating of the moves you finally played.
 
-Details: [Playing against GNUbg](../reference/playing.md#playing-against-gnubg)
+Details: [Playing against an engine](../reference/playing.md#playing-against-an-engine)
 
 ---
 

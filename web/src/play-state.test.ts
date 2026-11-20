@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  orderedLegalTurns,
-  nativeLegalTurns,
   matchingCheckerTurns,
   nextCheckerSteps,
   applySteps,
@@ -71,148 +69,32 @@ describe('playing checker selection', () => {
   });
 });
 
-describe('first-die interaction paths backed by native complete legal plays', () => {
-  it('splits combined native runs into dice steps and permits either selected die order', () => {
-    const b = Array(26).fill(0);
-    b[13] = 1;
-    const native = [{ notation: '13/8', steps: [{ from: 13, to: 8 }] }];
-    expect(orderedLegalTurns(b, 0, [3, 2], native).map((t) => t.steps)).toEqual(
-      [
-        [
-          { from: 13, to: 10 },
-          { from: 10, to: 8 },
-        ],
-      ],
-    );
-    expect(orderedLegalTurns(b, 0, [2, 3], native).map((t) => t.steps)).toEqual(
-      [
-        [
-          { from: 13, to: 11 },
-          { from: 11, to: 8 },
-        ],
-      ],
-    );
-  });
-  it('finds alternate checker order for the same native result, without inventing another final board', () => {
-    const b = Array(26).fill(0);
-    b[8] = 1;
-    b[6] = 1;
-    const native = [
-      {
-        notation: '8/5 6/5',
-        steps: [
-          { from: 8, to: 5 },
-          { from: 6, to: 5 },
-        ],
-      },
-    ];
-    expect(orderedLegalTurns(b, 0, [1, 3], native)).toContainEqual({
+it('prefers the displayed die among server paths and keeps the chosen die in the prefix', () => {
+  const turns = [
+    {
       steps: [
-        { from: 6, to: 5 },
-        { from: 8, to: 5 },
+        { from: 13, to: 10 },
+        { from: 10, to: 8 },
       ],
-      dice: [1, 3],
-      moveIndex: 0,
-      notation: '8/5 6/5',
-    });
-    expect(
-      orderedLegalTurns(b, 0, [3, 1], native).every((t) => t.moveIndex === 0),
-    ).toBe(true);
-  });
-  it('offers the only legal entry when the preferred die is blocked', () => {
-    const b = Array(26).fill(0);
-    b[25] = 1;
-    b[22] = -2;
-    const native = [
-      {
-        notation: 'bar/23 23/20',
-        steps: [
-          { from: 25, to: 23 },
-          { from: 23, to: 20 },
-        ],
-      },
-    ];
-    const turns = nativeLegalTurns(b, 0, [3, 2], native);
-    expect(nextCheckerSteps(turns, 0, 3).get(25)).toEqual({
-      from: 25,
-      to: 23,
-      die: 2,
-    });
-    const entry = { from: 25, to: 23, die: 2 };
-    const resumed = matchingCheckerTurns(turns, [entry]);
-    expect(nextCheckerSteps(resumed, 1, 2).get(23)).toEqual({
-      from: 23,
-      to: 20,
-      die: 3,
-    });
-  });
-  it('enforces maximum usage and the higher die when only one non-winning move can be played', () => {
-    const b = Array(26).fill(0);
-    b[25] = 1;
-    b[6] = 1;
-    b[17] = -2;
-    b[4] = -2;
-    const native = [{ notation: 'bar/19', steps: [{ from: 25, to: 19 }] }];
-    expect(orderedLegalTurns(b, 0, [2, 6], native)).toEqual([]);
-    expect(orderedLegalTurns(b, 0, [6, 2], native)).toEqual([
-      {
-        steps: [{ from: 25, to: 19 }],
-        dice: [6],
-        moveIndex: 0,
-        notation: 'bar/19',
-      },
-    ]);
-  });
-  it('allows a native winning bearoff immediately, even if using the smaller die first would take two steps', () => {
-    const b = Array(26).fill(0);
-    b[2] = 1;
-    expect(
-      orderedLegalTurns(
-        b,
-        0,
-        [2, 1],
-        [{ notation: '2/off', steps: [{ from: 2, to: -1 }] }],
-      ),
-    ).toEqual([
-      {
-        steps: [{ from: 2, to: -1 }],
-        dice: [2],
-        moveIndex: 0,
-        notation: '2/off',
-      },
-    ]);
-  });
-  it('uses four individual dice on doubles and mirrors black entry/bearoff correctly', () => {
-    const b = Array(26).fill(0);
-    b[13] = 1;
-    const native = [{ notation: '13/1', steps: [{ from: 13, to: 1 }] }];
-    const [turn] = orderedLegalTurns(b, 0, [3, 3], native);
-    expect(turn.steps).toEqual([
-      { from: 13, to: 10 },
-      { from: 10, to: 7 },
-      { from: 7, to: 4 },
-      { from: 4, to: 1 },
-    ]);
-    expect(turn.dice).toEqual([3, 3, 3, 3]);
-    const black = Array(26).fill(0);
-    black[0] = -1;
-    black[24] = -1;
-    const result = orderedLegalTurns(
-      black,
-      1,
-      [1, 1],
-      [
-        {
-          notation: 'bar/1 1/4',
-          steps: [
-            { from: 0, to: 1 },
-            { from: 1, to: 4 },
-          ],
-        },
+      dice: [3, 2],
+      move_index: 0,
+    },
+    {
+      steps: [
+        { from: 13, to: 11 },
+        { from: 11, to: 8 },
       ],
-    );
-    expect(
-      result.some((t) => t.steps[0].from === 0 && t.steps[0].to === 1),
-    ).toBe(true);
+      dice: [2, 3],
+      move_index: 0,
+    },
+  ];
+  expect(nextCheckerSteps(turns, 0, 3).get(13)).toEqual({
+    from: 13,
+    to: 10,
+    die: 3,
   });
+  const step = { from: 13, to: 11, die: 2 };
+  expect(nextCheckerSteps(turns, 0, 2).get(13)).toEqual(step);
+  expect(matchingCheckerTurns(turns, [step])).toEqual([turns[1]]);
+  expect(matchingCheckerTurns(turns, [{ ...step, die: 3 }])).toEqual([]);
 });

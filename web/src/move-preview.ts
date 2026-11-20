@@ -1,9 +1,9 @@
 import type { Position } from './api';
 import {
   applySteps,
-  legalCheckerTurns,
   matchingMoves,
   type CheckerStep,
+  type CheckerTurn,
 } from './play-state';
 
 export type BoardView = 'before' | 'arrows' | 'after';
@@ -22,9 +22,10 @@ export type MovePreview =
 export function projectPracticeSteps(
   position: CheckerPosition,
   steps: CheckerStep[],
+  turns: CheckerTurn[] | undefined,
 ): MovePreview {
   const { player } = position;
-  const turns = legalCheckerTurns(position.board, player, position.dice);
+  if (!turns) return { ok: false, reason: 'Checker paths are unavailable.' };
   const turn = matchingMoves(turns, steps).find(
     (move) => move.steps.length === steps.length,
   );

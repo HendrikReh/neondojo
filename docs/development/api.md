@@ -69,6 +69,11 @@ curl 'http://127.0.0.1:8787/api/matches?q=Tutor'
 | GET        | `/api/jobs/{id}/statistics`                                                  | Native match and game statistics with coverage, PR where available, and `error_breakdown`.                                                                                                                                 |
 | GET        | `/api/matches/{id}/move-assessments?game_no=&job_id=`                        | Stored checker evaluations for a game with source and depth. Optionally restrict to one native job.                                                                                                                        |
 
+### Checker turns
+
+- A play session in the `move` phase includes `legal_turns`. Each path contains `steps`, the corresponding `dice` in execution order and a `move_index` into `legal_moves` for that session revision. Submit the move index with the saved revision as usual. An empty list means a forced pass. A missing field in the move phase means paths could not be projected from the saved checkpoint.
+- `POST /api/play/checker-turns` takes the 26-element `board` of signed checker counts including the bars, `player` and two `dice` for a training position. It returns the complete checker paths and their dice in execution order. It returns an empty list for a forced pass and HTTP 422 for invalid input. It uses the same step rules as practice answer validation and can run without a database or an engine subprocess.
+
 ### Notes and flashcards
 
 | Method       | Path                                                                                                                         | Purpose                                                                                                                                                                                           |

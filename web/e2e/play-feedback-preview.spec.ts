@@ -1,3 +1,4 @@
+import { checkerPath } from './play-turn-fixtures';
 import { test, expect, type Page } from './test';
 import {
   historyFixture,
@@ -8,6 +9,10 @@ const decisionId = '56e78413-1d0c-45ed-bcc9-43e48968cc09';
 async function fixture(page: Page, mode = 'coach', human = 0, revealed = true) {
   const base = await historyFixture(page, human);
   const { saved } = base;
+  saved.legal_turns?.push({
+    ...checkerPath([3, 1], '13/10 10/9', human),
+    move_index: 1,
+  });
   saved.legal_moves = ['13/10 6/5', '13/9'].map((notation) => ({
     notation,
     steps: nativeSteps(notation, human),

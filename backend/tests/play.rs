@@ -1210,6 +1210,11 @@ async fn legacy_sessions_without_opening_metadata_keep_their_active_native_turn(
         json!([{"notation":"1/off","steps":[{"from":1,"to":-1}]}]),
     )
     .await;
+    let mut board = [0; 26];
+    board[1] = 1;
+    board[19] = -15;
+    session["position"]["board"] = json!(board);
+    session["position"]["dice"] = json!([6, 1]);
     session.as_object_mut().unwrap().remove("opening");
     sqlx::query("UPDATE play_sessions SET state=$1 WHERE id=$2")
         .bind(&session)
@@ -1221,6 +1226,17 @@ async fn legacy_sessions_without_opening_metadata_keep_their_active_native_turn(
     let loaded = call(app.clone(), "GET", &uri, Value::Null).await.1;
     assert_eq!(loaded["phase"], "move");
     assert!(loaded["opening"].is_null());
+    assert!(
+        loaded["legal_turns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|turn| {
+                turn["steps"] == json!([{"from":1,"to":-1}])
+                    && turn["dice"] == json!([6])
+                    && turn["move_index"] == 0
+            })
+    );
     let (status, finished) = call(
         app,
         "POST",

@@ -83,6 +83,10 @@ const en = {
   retry: 'Reload saved state',
   export: 'Download SGF',
   engine: 'Engine',
+  botEngine: 'Bot engine',
+  rulesEngine: 'Rules engine',
+  checkerTurnsLoading: 'Loading legal moves…',
+  checkerTurnsError: 'Legal moves could not be loaded.',
   game: 'Game',
   winner: 'Winner',
   direction: 'Bear-off direction',
@@ -187,6 +191,10 @@ const de: Record<Key, string> = {
   retry: 'Gespeicherten Stand laden',
   export: 'SGF herunterladen',
   engine: 'Engine',
+  botEngine: 'Gegner-Engine',
+  rulesEngine: 'Regel-Engine',
+  checkerTurnsLoading: 'Legale Züge werden geladen …',
+  checkerTurnsError: 'Die legalen Züge konnten nicht geladen werden.',
   game: 'Spiel',
   winner: 'Gewinner',
   direction: 'Auswürfelrichtung',
@@ -650,6 +658,31 @@ Object.assign(extra.pl, {
   sessionEnded: 'Sesja zakończona',
   endSession: 'Zakończ sesję',
 });
+Object.assign(extra.es, {
+  botEngine: 'Motor del rival',
+  rulesEngine: 'Motor de reglas',
+  checkerTurnsLoading: 'Cargando jugadas legales…',
+  checkerTurnsError: 'No se pudieron cargar las jugadas legales.',
+});
+Object.assign(extra.fr, {
+  botEngine: 'Moteur adverse',
+  rulesEngine: 'Moteur de règles',
+  checkerTurnsLoading: 'Chargement des coups légaux…',
+  checkerTurnsError: 'Impossible de charger les coups légaux.',
+});
+Object.assign(extra.it, {
+  botEngine: 'Motore avversario',
+  rulesEngine: 'Motore delle regole',
+  checkerTurnsLoading: 'Caricamento delle mosse legali…',
+  checkerTurnsError: 'Impossibile caricare le mosse legali.',
+});
+Object.assign(extra.pl, {
+  botEngine: 'Silnik przeciwnika',
+  rulesEngine: 'Silnik reguł',
+  checkerTurnsLoading: 'Wczytywanie legalnych ruchów…',
+  checkerTurnsError: 'Nie udało się wczytać legalnych ruchów.',
+});
+
 export function usePlayText() {
   const { locale } = useI18n();
   return (key: Key) => (locale === 'de' ? de : extra[locale])?.[key] ?? en[key];

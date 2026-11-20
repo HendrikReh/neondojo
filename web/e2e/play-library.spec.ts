@@ -1,3 +1,4 @@
+import { eitherOrder } from './play-turn-fixtures';
 import { rollDice, playMenuItem } from './play-board-actions';
 import { test, expect } from './test';
 import { nativeSteps } from '../src/play-sound-events';
@@ -33,6 +34,7 @@ const saved = (sessionId = id) => ({
   },
   phase: 'move',
   can_double: false,
+  legal_turns: eitherOrder([3, 1], '8/5 6/5'),
   legal_moves: [{ notation: '8/5 6/5', steps: nativeSteps('8/5 6/5', 0) }],
   history: [],
   scores: [2, 1],

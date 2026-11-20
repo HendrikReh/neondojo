@@ -1,6 +1,6 @@
 //! Sage chooses actions; GNUbg alone executes rules, rolls dice and scores games.
 use super::{
-    NativeRequest, NativeSnapshot, PlayAlternative, PlayMove, PlayPhase, PlaySession,
+    NativeRequest, NativeSnapshot, PlayAlternative, PlayPhase, PlaySession,
     rules_process::RulesProcess,
 };
 use crate::{
@@ -50,34 +50,6 @@ pub(super) fn schedule_warmup(session: &PlaySession, shutdown: &CancellationToke
     });
 }
 
-fn resulting_board(
-    board: &[i32],
-    player: i32,
-    dice: &[i32],
-    choice: &PlayMove,
-) -> Result<[i32; 26]> {
-    let before: [i32; 26] = board.try_into().context("Invalid legal-move board")?;
-    let dice: [i32; 2] = dice.try_into().context("Invalid legal-move dice")?;
-    let mut pairs = Vec::new();
-    for step in &choice.steps {
-        let point = |point: i32| -> Result<usize> {
-            if point == -1 && player == 0 || point == 26 && player == 1 {
-                return Ok(0);
-            }
-            let relative = if player == 0 { point } else { 25 - point };
-            ensure!(
-                (0..=25).contains(&relative),
-                "Invalid native legal move coordinate"
-            );
-            Ok(relative as usize)
-        };
-        pairs.push((point(step.from)?, point(step.to)?));
-    }
-    let mut expanded = before;
-    let steps = crate::import::sgf::expand_xg_play(&mut expanded, player, dice, &pairs)?;
-    crate::import::sgf::apply_checker_turn(&before, player, dice, &steps)
-}
-
 /// The chosen move, Sage's candidates and the engine cost of the evaluation.
 type CheckerChoice = (
     Option<String>,
@@ -110,7 +82,8 @@ async fn chosen_move(bot: &SageEngine, snapshot: &NativeSnapshot) -> Result<Chec
     }
     let mut legal = HashMap::new();
     for choice in &snapshot.legal_moves {
-        let board = resulting_board(&snapshot.board, snapshot.player, &snapshot.dice, choice)?;
+        let board =
+            super::native_move_board(&snapshot.board, snapshot.player, &snapshot.dice, choice)?;
         if board == best.board {
             return Ok((Some(choice.notation.clone()), candidates, cost));
         }
@@ -363,7 +336,7 @@ pub(super) async fn alternatives(
         }
         let mut alternatives = Vec::new();
         for (index, choice) in session.legal_moves.iter().enumerate() {
-            let after = resulting_board(
+            let after = super::native_move_board(
                 &session.position.board,
                 session.position.player,
                 &session.position.dice,

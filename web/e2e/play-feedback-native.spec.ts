@@ -1,11 +1,7 @@
 import { watchOpening } from './play-opening-helpers';
 import { test, expect } from '@playwright/test';
 import type { PlaySession } from '../src/play-api';
-import {
-  matchingCheckerTurns,
-  nativeLegalTurns,
-  nextCheckerSteps,
-} from '../src/play-state';
+import { matchingCheckerTurns, nextCheckerSteps } from '../src/play-state';
 test.skip(
   !process.env.NEONDOJO_FEEDBACK_NATIVE_TEST,
   'Requires isolated native feedback backend',
@@ -69,12 +65,7 @@ for (const mode of ['competition', 'training', 'coach', 'tutor'] as const) {
     const history = state.history.length;
     const moveIndex = state.legal_moves.length - 1;
     if (mode === 'coach') {
-      const turns = nativeLegalTurns(
-        state.position.board,
-        state.human_player,
-        state.position.dice,
-        state.legal_moves,
-      );
+      const turns = state.legal_turns ?? [];
       await page.addInitScript((id) => {
         localStorage.setItem('neondojo.play-session', id);
         localStorage.setItem('neondojo.play-sounds', 'off');
@@ -83,7 +74,7 @@ for (const mode of ['competition', 'training', 'coach', 'tutor'] as const) {
       await page.getByRole('tab', { name: 'Playing', exact: true }).click();
       // The native legal catalog is ranked at 0 ply, the captured analysis depth.
       const turn = turns
-        .toSorted((a, b) => b.moveIndex - a.moveIndex)
+        .toSorted((a, b) => b.move_index - a.move_index)
         .find((turn) => {
           const steps = turn.steps.map((step, index) => ({
             ...step,
@@ -118,7 +109,7 @@ for (const mode of ['competition', 'training', 'coach', 'tutor'] as const) {
       const staged = await confirmMove();
       const pending = staged.pending_decision!;
       expect(pending).toMatchObject({
-        original_move_index: turn.moveIndex,
+        original_move_index: turn.move_index,
         committed: false,
         revealed: true,
         loss: expect.any(Number),
@@ -136,7 +127,7 @@ for (const mode of ['competition', 'training', 'coach', 'tutor'] as const) {
       expect(after.history.length).toBeGreaterThan(history);
       expect(after.decisions?.at(-1)).toMatchObject({
         id: pending.id,
-        original_move_index: turn.moveIndex,
+        original_move_index: turn.move_index,
         committed: true,
         revealed: true,
         loss: pending.loss,

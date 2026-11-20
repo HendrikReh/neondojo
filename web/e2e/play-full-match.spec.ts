@@ -23,11 +23,7 @@ async function archivedMatch(page: Page, session: PlaySession) {
   expect(entry.source_available).toBe(true);
   return entry;
 }
-import {
-  orderedLegalTurns,
-  relativePoint,
-  type CheckerStep,
-} from '../src/play-state';
+import { relativePoint, type CheckerStep } from '../src/play-state';
 
 /** GNUbg writes its own level (one below NeonDojo's 1-ply = raw net) into the SGF. */
 const gnubgLevel = (plies: number) => plies - 1;
@@ -134,11 +130,12 @@ async function create(
     data: {
       ...settings,
       gnubg_path: wrapper,
+      play_engine: 'gnubg',
       play_plies: plies,
       bearoff_direction: direction,
     },
   });
-  expect(response.status()).toBe(200);
+  expect(response.status(), await response.text()).toBe(200);
   if (fromApi) {
     const response = await page.request.post('/api/play/sessions', {
       data: {
@@ -181,34 +178,19 @@ async function create(
   return opening ? await opening(openingSeed?.rolls) : session;
 }
 async function checkerTurn(page: Page, state: PlaySession, swap: boolean) {
-  let dice = [...state.position.dice];
+  const [first, second] = state.position.dice;
   if (state.legal_moves.length === 0)
     return await action(page, 'No legal move — pass');
-  let turns = orderedLegalTurns(
-    state.position.board,
-    state.human_player,
-    dice,
-    state.legal_moves,
-  );
+  const legal = state.legal_turns ?? [];
+  let turns = legal.filter((turn) => turn.dice[0] === first);
   const swapping = page.getByRole('button', { name: /Swap dice order/ });
-  const reversed = orderedLegalTurns(
-    state.position.board,
-    state.human_player,
-    [dice[1], dice[0]],
-    state.legal_moves,
-  );
+  const reversed = legal.filter((turn) => turn.dice[0] === second);
   if (
-    dice[0] !== dice[1] &&
+    first !== second &&
     ((swap && reversed.length > 0) || turns.length === 0)
   ) {
     await swapping.first().click();
-    dice = [dice[1], dice[0]];
-    turns = orderedLegalTurns(
-      state.position.board,
-      state.human_player,
-      dice,
-      state.legal_moves,
-    );
+    turns = reversed;
   }
   expect(
     turns.length,
@@ -270,7 +252,7 @@ async function checkerTurn(page: Page, state: PlaySession, swap: boolean) {
       .join(' ');
     await expect(
       page.locator('.play-selected-steps'),
-      `Human ${state.human_player}, dice${dice}, native${state.position.position_id}:${state.position.gnubg_match_id}, chosen${JSON.stringify(chosen.steps)}`,
+      `Human ${state.human_player}, dice${chosen.dice}, native${state.position.position_id}:${state.position.gnubg_match_id}, chosen${JSON.stringify(chosen.steps)}`,
     ).toHaveText(selected);
   }
   await expect(page.locator('[data-dice-action="confirm"]')).toBeEnabled();
@@ -351,7 +333,9 @@ async function playToEnd(page: Page, initial: PlaySession) {
   await expect(row).toBeVisible();
   await row.getByRole('checkbox').check();
   await expect(
-    page.locator('.library-batch-bar').getByRole('button', { name: 'Resume match', exact: true }),
+    page
+      .locator('.library-batch-bar')
+      .getByRole('button', { name: 'Resume match', exact: true }),
   ).toBeDisabled();
   expect(sgf).toContain('RE[');
   expect(sgf).toContain(`${gnubgLevel(state.engine.plies)}C 0 1 0.000000`);
@@ -452,7 +436,7 @@ for (const config of [
   }) => {
     test.setTimeout(200_000);
     writeFileSync(counter, String(config.seed));
-    const state = await create(page, config.human, 'right', 0, 7, config);
+    const state = await create(page, config.human, 'right', 1, 7, config);
     await reloadUnchanged(page, state);
     expect(['move', 'roll', 'double_response']).toContain(state.phase);
   });

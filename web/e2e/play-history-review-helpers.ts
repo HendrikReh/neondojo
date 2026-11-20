@@ -1,3 +1,4 @@
+import { eitherOrder } from './play-turn-fixtures';
 import { type Page, type Route } from '@playwright/test';
 import { applySteps } from '../src/play-state';
 import { nativeSteps } from '../src/play-sound-events';
@@ -63,6 +64,7 @@ export async function historyFixture(
     },
     phase: 'move',
     can_double: false,
+    legal_turns: eitherOrder([3, 1], '13/10 6/5', human),
     legal_moves: [
       { notation: '13/10 6/5', steps: nativeSteps('13/10 6/5', human) },
     ],

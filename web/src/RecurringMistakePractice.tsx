@@ -1,3 +1,4 @@
+import { useCheckerTurns } from './useCheckerTurns';
 import { interpolate } from './i18n-core';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import Board from './Board';
@@ -221,6 +222,9 @@ function MistakeQuestion({
     }
   }
   const original = result?.original;
+  const checkerTurns = useCheckerTurns(
+    item.kind === 'checker' ? item.position : undefined,
+  );
   const checked = result?.checked;
   const bestProjection =
     original && item.kind === 'checker'
@@ -228,7 +232,11 @@ function MistakeQuestion({
       : undefined;
   const chosenProjection =
     checked?.answer.kind === 'checker'
-      ? projectPracticeSteps(item.position, checked.answer.steps)
+      ? projectPracticeSteps(
+          item.position,
+          checked.answer.steps,
+          checkerTurns.turns,
+        )
       : undefined;
   const projection = preview === 'chosen' ? chosenProjection : bestProjection;
   const revealButton = (
@@ -312,6 +320,7 @@ function MistakeQuestion({
       {!result && item.kind === 'checker' ? (
         <CheckerPracticeBoard
           position={item.position}
+          checkerTurns={checkerTurns}
           players={item.players}
           theme={theme}
           boardClassName="recurring-practice-board"

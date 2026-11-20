@@ -1,3 +1,4 @@
+import { eitherOrder } from './play-turn-fixtures';
 import { applyAndCloseSettings } from './settings-actions';
 import { test, expect } from './test';
 const id = '7a8f98a9-8b48-4d76-95fd-c8c8d4ced0ab';
@@ -52,6 +53,7 @@ function saved(mode = 'coach', pending: unknown = null) {
     },
     phase: 'move',
     can_double: false,
+    legal_turns: eitherOrder([3, 1], '8/5 6/5'),
     legal_moves: [
       {
         notation: '8/5 6/5',
@@ -247,7 +249,10 @@ test('Competition hides pip counts and live feedback', async ({ page }) => {
   const state = saved('competition');
   state.engine.version = 'GNU Backgammon 1.08.003 20261108';
   await resume(page, state);
-  const engine = page.locator('.play-match-engine .engine-label-details');
+  const engine = page
+    .locator('.play-match-engine > span')
+    .first()
+    .locator('.engine-label-details');
   await expect(engine).toHaveText('GNU Backgammon 1.08.003');
   await engine.hover();
   await expect(page.getByRole('tooltip')).toHaveText(
@@ -378,15 +383,19 @@ test('Analysis thresholds and the default play mode apply to new matches', async
     const response = await fetch('/api/configuration');
     return response.json();
   });
-  expect(configuration.current_configuration.analysis.error_thresholds.error).toBe(0.025);
+  expect(
+    configuration.current_configuration.analysis.error_thresholds.error,
+  ).toBe(0.025);
   expect(configuration.current_configuration.analysis.plies).toBe(3);
   expect(configuration.current_configuration.play.plies).toBe(1);
-  expect(configuration.active_profile.configuration.analysis.error_thresholds.error).toBe(
-    0.02,
-  );
+  expect(
+    configuration.active_profile.configuration.analysis.error_thresholds.error,
+  ).toBe(0.02);
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();
   await expect(
-    page.locator('.play-setup').getByRole('radio', { name: 'Tutor', exact: true }),
+    page
+      .locator('.play-setup')
+      .getByRole('radio', { name: 'Tutor', exact: true }),
   ).toBeChecked();
   await expect(
     page.getByText('Tutor warning threshold · 0.025', { exact: true }),

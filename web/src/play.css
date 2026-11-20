@@ -48,8 +48,18 @@
   font-weight: var(--font-weight-semibold);
 }
 .play-match-heading .play-match-engine {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  gap: 2px 12px;
   margin: 0;
   font-size: var(--font-size-meta);
+  order: 1;
+}
+@media (max-width: 600px) {
+  .play-match-heading .play-match-status {
+    flex-basis: 100%;
+  }
 }
 .play-match-actions {
   flex-wrap: nowrap;

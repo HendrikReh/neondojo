@@ -1,3 +1,4 @@
+import { checkerPath, eitherOrder } from './play-turn-fixtures';
 import { botDice, doubleCube, rollDice } from './play-board-actions';
 import { test, expect, type Page } from './test';
 import type { PlaySession } from '../src/play-api';
@@ -261,6 +262,7 @@ test('human roll starts moving immediately, settles on native dice, and animates
     version: 1,
     phase: 'move',
     position: { ...before.position, dice: [3, 1] },
+    legal_turns: eitherOrder([3, 1], '8/5 6/5'),
     legal_moves: [
       {
         notation: '8/5 6/5',
@@ -351,6 +353,7 @@ for (const human of [0, 1])
     before.position.board = Array<number>(26).fill(0);
     before.position.board[from] = human === 0 ? 1 : -1;
     before.position.board[to] = human === 0 ? -1 : 1;
+    before.legal_turns = [checkerPath([2, 1], '3/1 1/off', human)];
     before.legal_moves = [
       {
         notation: '3/1 1/off',
