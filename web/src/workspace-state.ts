@@ -79,3 +79,10 @@ export function saveSelection(
     /* Navigation works without persistent storage. */
   }
 }
+export function clearSelection(storage?: Pick<Storage, 'removeItem'>) {
+  try {
+    (storage ?? localStorage).removeItem(key);
+  } catch {
+    /* Navigation works without persistent storage. */
+  }
+}

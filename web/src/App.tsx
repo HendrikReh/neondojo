@@ -48,6 +48,7 @@ import { useLearningText } from './learning-messages';
 import {
   decodeBulkAnalysisSession,
   readSelection,
+  clearSelection,
   saveSelection,
 } from './workspace-state';
 import { AppError } from './i18n-core';
@@ -342,13 +343,15 @@ export default function App() {
       // Metadata is available even while a Competition source is restricted.
       // Do not restore that source through the analysis endpoints.
       let metadata: LibraryMatch | undefined;
+      let missing = false;
       try {
         metadata = await request<LibraryMatch>(
           `/matches/${previous.matchId}/metadata`,
           { signal: abort.signal },
         );
-      } catch {
+      } catch (e) {
         // Old/missing metadata still uses normal navigation and its real error.
+        missing = e instanceof AppError && String(e.params.status) === '404';
       }
       if (!current()) return;
       if (
@@ -365,9 +368,22 @@ export default function App() {
           currentView === 'analysis' ? 'play' : currentView,
         );
       } else {
-        await (previous.positionId
+        const opening = previous.positionId
           ? navigation.openPosition(previous.positionId)
-          : navigation.openMatch(previous.matchId, previous.gameNo));
+          : navigation.openMatch(previous.matchId, previous.gameNo);
+        // Opening starts a new navigation; a later one must not be cleared.
+        const openIntent = navigation.intent();
+        const opened = await opening;
+        if (
+          !opened &&
+          missing &&
+          !abort.signal.aborted &&
+          navigation.intent() === openIntent
+        ) {
+          // The last match or position no longer exists: start empty.
+          navigation.clear();
+          clearSelection();
+        }
       }
     })().finally(() => {
       if (!abort.signal.aborted) setRestoring(false);
@@ -537,11 +553,7 @@ export default function App() {
     setError(undefined);
     setNotice(undefined);
     setMoveNotes(undefined);
-    try {
-      localStorage.removeItem('neondojo.workspace');
-    } catch {
-      /* Home navigation also works without persistent storage. */
-    }
+    clearSelection();
     window.scrollTo(0, 0);
   }
   function openMatch(match: Match, gameNo?: number, result?: Job) {
@@ -1017,11 +1029,7 @@ export default function App() {
                     navigation.intent() === intent
                   ) {
                     navigation.clear();
-                    try {
-                      localStorage.removeItem('neondojo.workspace');
-                    } catch {
-                      /* Storage unavailable. */
-                    }
+                    clearSelection();
                   }
                 });
               }
@@ -1030,11 +1038,7 @@ export default function App() {
                 deletedIds.includes(navigation.match.id)
               ) {
                 navigation.clear();
-                try {
-                  localStorage.removeItem('neondojo.workspace');
-                } catch {
-                  /* Storage unavailable. */
-                }
+                clearSelection();
               }
             }}
             annotationRevision={annotationRevision}

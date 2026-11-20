@@ -227,8 +227,11 @@ match** and **Paused Matches**. After a finished money game, the result dialog
 offers **Next game**, **Pause match** and **End session**. Escape closes the menu and returns focus to
 its button.
 
-The **New match** form is a modal dialog over the playing view, anchored to
-the board like the other play dialogs. Name, bot engine and strength come
+The **New match** form is a dialog over the playing view, anchored to the
+board like the other play dialogs. It makes the playing view behind it inert
+but leaves the app header usable. Opened from **New match** it takes the
+focus; opened automatically when Playing has no match, the focus stays in the
+header so keyboard navigation across the workspaces continues. Name, bot engine and strength come
 first, followed by color, match length and play mode. Color and play mode are
 radio choices, **Start match** is the primary button, and the gear beside the
 analysis and rules engine line opens **Settings → Playing**. **Close** and
