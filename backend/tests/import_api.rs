@@ -96,6 +96,15 @@ async fn txt_match_transcripts_import_as_mat(pool: PgPool) {
         [summary.white.as_str(), summary.black.as_str()],
         ["Ray Glaeser", "Joe Sylvester"]
     );
+    // The transcript declares no date; the import date must not stand in for it.
+    let (played_on, sgf): (Option<chrono::NaiveDate>, String) =
+        sqlx::query_as("SELECT played_on,sgf FROM matches WHERE id=$1")
+            .bind(summary.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(played_on, None);
+    assert!(!sgf.contains("DT["));
     let response = app
         .clone()
         .oneshot(
@@ -155,6 +164,23 @@ async fn txt_match_transcripts_import_as_mat(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(count, 1);
+
+    // A declared `; [EventDate "2014.08.10"]` header is kept.
+    let response = app
+        .clone()
+        .oneshot(upload("WC2014.mat", include_bytes!("fixtures/WC2014.mat")))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 201);
+    let data = response.into_body().collect().await.unwrap().to_bytes();
+    let result: ImportResponse = serde_json::from_slice(&data).unwrap();
+    let played_on: Option<chrono::NaiveDate> =
+        sqlx::query_scalar("SELECT played_on FROM matches WHERE id=$1")
+            .bind(result.r#match.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(played_on, chrono::NaiveDate::from_ymd_opt(2014, 8, 10));
 }
 
 #[sqlx::test(migrations = "./migrations")]

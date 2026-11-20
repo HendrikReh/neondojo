@@ -594,11 +594,46 @@ pub(crate) fn parse_trees(input: &str) -> Result<Vec<Vec<Node>>> {
     Ok(trees)
 }
 
+/// The match date a MAT transcript declares in a `; [EventDate "YYYY.MM.DD"]`
+/// header comment. A transcript without a valid declaration has no date.
+pub(crate) fn mat_event_date(source: &[u8]) -> Option<chrono::NaiveDate> {
+    String::from_utf8_lossy(source).lines().find_map(|line| {
+        let comment = line
+            .trim_start_matches('\u{feff}')
+            .strip_prefix([';', '#'])?;
+        let value = comment.trim_start().strip_prefix("[EventDate \"")?;
+        let mut parts = value.split('"').next()?.trim().split('.');
+        let year = parts.next()?.parse::<i32>().ok().filter(|year| *year > 0)?;
+        let month = parts.next()?.parse::<u32>().ok()?;
+        let day = parts.next()?.parse::<u32>().ok()?;
+        if parts.next().is_some() {
+            return None;
+        }
+        chrono::NaiveDate::from_ymd_opt(year, month, day)
+    })
+}
+
 /// GNUbg's MAT reader can retain a joined overshoot bearoff in its SGF output
 /// (for example 6/off with 52), despite expanding other joined checker runs.
 /// Expand only the native MAT boundary; public SGF remains explicit and strict.
-pub(crate) fn normalize_mat_sgf(input: &str) -> Result<String> {
+///
+/// Without an `EventDate` header GNUbg writes the modification time of its
+/// temporary input file as `DT`. Its `DT` is therefore replaced by the date
+/// the transcript declares, and a missing date stays missing.
+pub(crate) fn normalize_mat_sgf(
+    input: &str,
+    declared_date: Option<chrono::NaiveDate>,
+) -> Result<String> {
     let mut trees = parse_trees(input)?;
+    for root in trees.iter_mut().filter_map(|nodes| nodes.first_mut()) {
+        root.remove("DT");
+    }
+    if let (Some(date), Some(root)) = (
+        declared_date,
+        trees.first_mut().and_then(|nodes| nodes.first_mut()),
+    ) {
+        root.insert("DT".to_owned(), vec![date.format("%Y-%m-%d").to_string()]);
+    }
     for (game, nodes) in trees.iter_mut().enumerate() {
         let mut board = initial_board();
         let mut ply = 0;
