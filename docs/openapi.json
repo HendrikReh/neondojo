@@ -17132,7 +17132,8 @@
         "type": "object",
         "required": [
           "match",
-          "duplicate"
+          "duplicate",
+          "warnings"
         ],
         "properties": {
           "duplicate": {
@@ -17140,8 +17141,50 @@
           },
           "match": {
             "$ref": "#/components/schemas/MatchSummary"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImportWarning"
+            },
+            "description": "Source irregularities the importer resolved explicitly."
           }
         }
+      },
+      "ImportWarning": {
+        "type": "object",
+        "required": [
+          "kind",
+          "game_no"
+        ],
+        "properties": {
+          "game_no": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 1
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ImportWarningKind"
+          },
+          "source_ply": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Checker move number as counted in the source file.",
+            "minimum": 1
+          }
+        }
+      },
+      "ImportWarningKind": {
+        "type": "string",
+        "description": "An irregularity in the source file that the import kept visible instead\nof rejecting the whole match.",
+        "enum": [
+          "illegal_play_replaced",
+          "custom_start_position",
+          "unfinished_game"
+        ]
       },
       "ImportedAnalysisData": {
         "type": "object",

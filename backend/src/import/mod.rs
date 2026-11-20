@@ -12,7 +12,7 @@ pub use bgf::bgf_to_sgf;
 pub use ogxm::ogxm_to_sgf;
 pub use sgf::parse_sgf;
 pub(crate) use xg::xg_beaver_rule;
-pub use xg::xg_to_sgf;
+pub use xg::{XgImport, convert_xg, xg_to_sgf};
 
 #[derive(Debug, Clone)]
 pub struct ImportedMatch {

@@ -41,14 +41,19 @@ The official XG example uses save version 31, RichGame version 1, 2560-byte
 TSaveRec records, and a compressed 532-byte-per-entry ZLIBArchive registry.
 Observed distinctions from the old prose documentation: checker Moves[] are
 zero-based source/destination pairs (negative destinations bear off); CubeA
-ownership is absolute player 1/player 2; cached PositionI/PositionEnd arrays
-can retain an earlier orientation. The importer replays explicit checker
-moves and cube decisions instead of trusting those cached positions.
+ownership is absolute player 1/player 2; CubeB in cube records uses the same
+encoding. PositionI uses NeonDojo's absolute board (player 1 positive, index 25
+player 1's bar, index 0 player 2's bar); PositionEnd is from the mover's
+perspective. The importer replays explicit checker moves and cube decisions and
+requires every PositionI to equal the replayed board. It takes a recorded
+position only as a game's start (from the first checker record and the first
+cube state) and after a move with InvalidM 2, which XG keeps although it is
+illegal.
 
 Support boundaries: standard backgammon, XG2 save versions 24–40, match play
-and money sessions without automatic doubles. Edited/custom XG positions,
-beavers/raccoons, nonstandard variants, invalid-marked records and unsupported
-versions are rejected explicitly. XG native candidate and cube evaluations, original XG depth labels, and
+and money sessions without automatic doubles. Edits after a game's first
+checker record, beavers/raccoons, nonstandard variants, InvalidM codes other
+than 0 and 2, and unsupported versions are rejected explicitly. XG native candidate and cube evaluations, original XG depth labels, and
 rollout references are retained separately from new GNUbg jobs. Original
 artifacts retain complete rollout streams and comments byte for byte; RTF
 comments are not interpreted. Bounded zlib/base64 SGF extensions transport
@@ -109,8 +114,12 @@ dice use, and never inserts an unrecorded intermediate hit. Public SGF parsing
 still requires explicit individual steps.
 
 Additional rule tests cover interleaved bar entries, both player orientations,
-endpoint hits, bearing-off overshoots and the larger-die rule. Invalid-marked
-records remain rejected with game, checker-ply and record coordinates.
+endpoint hits, bearing-off overshoots and the larger-die rule. Records with an
+unsupported InvalidM code remain rejected with game, checker-ply and record
+coordinates. Derived WC2014 cases cover an XG-accepted illegal move for each
+player, a game starting from a recorded board with and without a doubled cube,
+an in-progress game followed by the next game, and a PositionI that does not
+follow from the replay.
 
 On 2026-11-08, 35 user-provided local XG files (15 distinct contents) were
 checked without adding them to the repository. All 14 distinct valid files
@@ -118,6 +127,13 @@ retained their complete played-checker counts, including a 200-game,
 7,476-position money session. One file carries an explicit invalid-play marker
 and remains rejected. The private files are not required by the regression
 suite.
+
+On 2026-11-20, 41 user-provided local XG files, including tournament
+transcripts, were converted without adding them to the repository. All 41
+convert and replay. Eight contain nine XG-accepted illegal moves, two games start
+from a recorded position, and one in-progress game is followed by the next
+game. The four 200-game sessions (about 30,000 checker records) all pass the
+PositionI replay check.
 
 ## BGF, MAT and interrupted XG corpus coverage
 

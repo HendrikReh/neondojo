@@ -1,6 +1,7 @@
 //! Decoder for the public XG2 RichGame/ZLIBArchive container and TSaveRec.
 //! Format references and fixture provenance live in tests/fixtures/README.md.
 use super::{match_context::MatchContext, sgf::escape_value};
+use crate::model::{ImportWarning, ImportWarningKind};
 use anyhow::{Context, Result, bail, ensure};
 use chrono::{Days, NaiveDate};
 use flate2::read::ZlibDecoder;
@@ -234,6 +235,68 @@ fn match_context(header: &[u8]) -> MatchContext {
     MatchContext::new(date, event.as_deref(), round.as_deref(), place.as_deref())
 }
 
+/// XG positions use NeonDojo's absolute board layout: player 1 (White) is
+/// positive, index 25 is White's bar and index 0 is Black's bar.
+fn xg_board(record: &[u8], at: usize) -> [i32; 26] {
+    std::array::from_fn(|i| i32::from(record[at + i] as i8))
+}
+/// CubeA/CubeB store log2(value) signed by the absolute owner.
+fn cube_state(exponent: i32) -> Result<(i32, i32)> {
+    ensure!((-15..=15).contains(&exponent), "XG: invalid cube exponent");
+    let value = if exponent == 0 {
+        1
+    } else {
+        1 << exponent.abs()
+    };
+    Ok((value, exponent.signum()))
+}
+/// An SGF setup node for a recorded XG position. The SGF replay validates the
+/// checker counts; this only rejects checkers on the opponent's bar index.
+fn setup_node(board: &[i32; 26], turn: Option<char>, cube: Option<(i32, i32)>) -> Result<String> {
+    ensure!(
+        board[0] <= 0 && board[25] >= 0,
+        "XG: recorded position has a checker on the wrong bar"
+    );
+    let mut white = String::new();
+    let mut black = String::new();
+    for (point, &count) in board.iter().enumerate() {
+        // AB[y] is Black's bar (index 0); AW[y] is White's bar (index 25).
+        let label = if point == 0 || point == 25 {
+            'y'
+        } else {
+            char::from(b'a' + point as u8 - 1)
+        };
+        let target = if count > 0 { &mut white } else { &mut black };
+        for _ in 0..count.unsigned_abs() {
+            target.push('[');
+            target.push(label);
+            target.push(']');
+        }
+    }
+    let mut node = String::from("\n;AE[a:y]");
+    if !white.is_empty() {
+        node.push_str("AW");
+        node.push_str(&white);
+    }
+    if !black.is_empty() {
+        node.push_str("AB");
+        node.push_str(&black);
+    }
+    if let Some((value, owner)) = cube {
+        node.push_str(&format!(
+            "CV[{value}]CO[{}]",
+            match owner {
+                1 => 'w',
+                -1 => 'b',
+                _ => 'c',
+            }
+        ));
+    }
+    if let Some(turn) = turn {
+        node.push_str(&format!("PL[{turn}]"));
+    }
+    Ok(node)
+}
 fn color(active: i32) -> Result<char> {
     match active {
         1 => Ok('W'),
@@ -358,9 +421,24 @@ fn analysis_property(out: &mut String, key: &str, value: &serde_json::Value) -> 
     Ok(())
 }
 
+/// A converted XG match and the source irregularities it resolved.
+#[derive(Debug)]
+pub struct XgImport {
+    pub sgf: String,
+    pub warnings: Vec<ImportWarning>,
+}
+
 /// Convert real binary XG2 files, retaining played moves, score and cube state.
 /// Native analysis is retained independently through XGA/XGC SGF extensions.
 pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
+    Ok(convert_xg(input)?.sgf)
+}
+
+/// Transcribed XG matches can start mid-game, contain plays that XG itself
+/// marks as illegal, or start a game before the previous one was finished.
+/// These become explicit SGF setups and import warnings. Every other recorded
+/// position must match the replay of the preceding legal plays.
+pub fn convert_xg(input: &[u8]) -> Result<XgImport> {
     let bytes = main_records(input)?;
     ensure!(
         bytes.len() >= RECORD_BYTES * 2 && bytes.len() % RECORD_BYTES == 0,
@@ -394,6 +472,7 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
         header_text(header, 1138, 50, 40)?,
     ];
     let context = match_context(header);
+    let mut warnings = Vec::new();
     let mut out = String::new();
     let mut in_game = false;
     let mut game_in_progress = false;
@@ -408,10 +487,22 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
     let mut root_end = 0;
     let mut board = super::sgf::initial_board();
     let mut pending_cube_analysis = None;
+    let mut first_checker_record = None;
     for (index, record) in bytes.chunks_exact(RECORD_BYTES).enumerate().skip(1) {
         ensure!(!saw_footer, "XG: records after match footer");
         match record[8] {
             1 => {
+                // An unfinished game followed by the next game was abandoned
+                // in the source. Keep its moves without inventing a result.
+                if in_game && game_in_progress {
+                    out.push_str(")\n");
+                    in_game = false;
+                    warnings.push(ImportWarning {
+                        kind: ImportWarningKind::UnfinishedGame,
+                        game_no: game_count,
+                        source_ply: None,
+                    });
+                }
                 ensure!(!in_game, "XG: game header before previous game footer");
                 // Cumulative money-session totals do not enter GNUbg equity
                 // calculations; Match IDs use zero scores for money games.
@@ -424,11 +515,31 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
                 game_scores = [white_score, black_score];
                 game_crawford = bool_at(record, 20)?;
                 game_in_progress = bool_at(record, 52)?;
-                let initial: Vec<i32> =
-                    record[21..47].iter().map(|b| i32::from(*b as i8)).collect();
+                // The first checker and cube records hold the game's actual
+                // starting board and cube; transcripts can begin mid-game.
+                let game_records = bytes[(index + 1) * RECORD_BYTES..]
+                    .chunks_exact(RECORD_BYTES)
+                    .enumerate()
+                    .take_while(|(_, r)| !matches!(r[8], 1 | 4 | 5));
+                let first_checker = game_records.clone().find(|(_, r)| r[8] == 3);
+                first_checker_record = first_checker.map(|(offset, _)| index + 1 + offset);
+                let start_board = first_checker
+                    .map(|(_, r)| xg_board(r, 9))
+                    .unwrap_or_else(super::sgf::initial_board);
+                let start_cube = match game_records.map(|(_, r)| r).find(|r| matches!(r[8], 2 | 3))
+                {
+                    Some(r) => cube_state(i32_at(r, if r[8] == 2 { 32 } else { 108 })?)?,
+                    None => (1, 0),
+                };
+                // XG keeps the opening setup here when the first checker record
+                // was edited; any other stored board must be the actual start.
+                let initial = xg_board(record, 21);
                 ensure!(
-                    initial.iter().all(|n| *n == 0) || initial == super::sgf::initial_board(),
-                    "XG games with custom starting positions are not supported"
+                    initial.iter().all(|n| *n == 0)
+                        || initial == super::sgf::initial_board()
+                        || initial == start_board,
+                    "XG: game {} header position does not match its first checker record",
+                    game_count + 1
                 );
                 ensure!(
                     version < 26 || i32_at(record, 64)? == 0,
@@ -453,12 +564,22 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
                 }
                 root_end = out.len();
                 in_game = true;
-                board = super::sgf::initial_board();
                 checker_no = 0;
                 game_count += 1;
-                cube = 1;
-                owner = 0;
+                board = start_board;
+                (cube, owner) = start_cube;
                 pending_cube_analysis = None;
+                if board != super::sgf::initial_board() || start_cube != (1, 0) {
+                    let turn = first_checker
+                        .map(|(_, r)| i32_at(r, 64).and_then(color))
+                        .transpose()?;
+                    out.push_str(&setup_node(&board, turn, Some(start_cube))?);
+                    warnings.push(ImportWarning {
+                        kind: ImportWarningKind::CustomStartPosition,
+                        game_no: game_count,
+                        source_ply: None,
+                    });
+                }
             }
             2 => {
                 ensure!(in_game, "XG: cube record outside game");
@@ -518,14 +639,23 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
             }
             3 => {
                 ensure!(in_game, "XG: checker record outside game");
+                // An edit of the first checker record defines the game's
+                // starting setup, which is imported from its recorded board.
                 ensure!(
-                    !bool_at(record, 2528)?,
-                    "XG edited checker positions are not supported"
+                    !bool_at(record, 2528)? || first_checker_record == Some(index),
+                    "XG edited checker positions are not supported (game {game_count}, record {index})"
                 );
                 let invalid = i32_at(record, 2480)?;
+                // Code 2 is a played move that XG accepted although it is not
+                // legal; XG keeps the position after it. Others stay rejected.
                 ensure!(
-                    invalid == 0,
+                    invalid == 0 || invalid == 2,
                     "XG: checker record marked invalid (code {invalid}) in game {game_count}, checker ply {} (record {index})",
+                    checker_no + 1
+                );
+                ensure!(
+                    xg_board(record, 9) == board,
+                    "XG: recorded position does not follow from the previous plays in game {game_count}, checker ply {} (record {index})",
                     checker_no + 1
                 );
                 ensure!(
@@ -538,23 +668,30 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
                 checker_no += 1;
                 let active = i32_at(record, 64)?;
                 let c = color(active)?;
-                let cube_state = i32_at(record, 108)?;
-                ensure!(
-                    (-15..=15).contains(&cube_state),
-                    "XG: invalid cube exponent"
-                );
-                let record_cube = if cube_state == 0 {
-                    1
-                } else {
-                    1 << cube_state.abs()
-                };
                 // Unlike DataMoves.CubePos, CubeA uses absolute player1 /
                 // player2 ownership. Confirmed against the official sample.
-                let record_owner = cube_state.signum();
                 ensure!(
-                    record_cube == cube && record_owner == owner,
+                    cube_state(i32_at(record, 108)?)? == (cube, owner),
                     "XG: inconsistent cube context at record {index}"
                 );
+                if invalid == 2 {
+                    // PositionEnd is from the mover's perspective. Continue
+                    // from it; the illegal play is not a checker decision, so
+                    // its native analysis and the preceding no-double
+                    // analysis have no imported decision to attach to.
+                    board = super::sgf::local_board(
+                        &xg_board(record, 35),
+                        if active == 1 { 0 } else { 1 },
+                    );
+                    out.push_str(&setup_node(&board, Some(color(-active)?), None)?);
+                    pending_cube_analysis = None;
+                    warnings.push(ImportWarning {
+                        kind: ImportWarningKind::IllegalPlayReplaced,
+                        game_no: game_count,
+                        source_ply: Some(checker_no),
+                    });
+                    continue;
+                }
                 let d1 = i32_at(record, 100)?;
                 let d2 = i32_at(record, 104)?;
                 ensure!(
@@ -659,7 +796,7 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
     );
     // Replay validates bars, hits, legal die distances, bearing off, and turns.
     super::parse_sgf(&out).context("XG checker-play validation failed")?;
-    Ok(out)
+    Ok(XgImport { sgf: out, warnings })
 }
 
 #[cfg(test)]
@@ -1106,7 +1243,8 @@ mod tests {
     #[test]
     fn invalid_marked_checker_reports_its_game_and_ply() {
         let mut records = main_records(include_bytes!("../../tests/fixtures/WC2014.xg")).unwrap();
-        set_u32(&mut records, RECORD_BYTES * 3 + 2480, 2);
+        // Code 2 is XG's accepted illegal play; other codes remain errors.
+        set_u32(&mut records, RECORD_BYTES * 3 + 2480, 1);
         let error = xg_to_sgf(&wrap(&records, None)).unwrap_err().to_string();
         assert!(error.contains("invalid"), "{error}");
         assert!(error.contains("game 1"), "{error}");
@@ -1160,7 +1298,9 @@ mod tests {
                 .contains("standard")
         );
         let mut edited = records.clone();
-        edited[RECORD_BYTES * 3 + 2528] = 1;
+        // The first checker record may define an edited start; later ones not.
+        assert_eq!(edited[RECORD_BYTES * 5 + 8], 3);
+        edited[RECORD_BYTES * 5 + 2528] = 1;
         assert!(
             xg_to_sgf(&wrap(&edited, None))
                 .unwrap_err()
@@ -1172,6 +1312,184 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("layout")
+        );
+    }
+
+    fn played_positions(sgf: &str) -> Vec<crate::import::ImportedPosition> {
+        super::super::parse_sgf(sgf).unwrap().positions
+    }
+    fn assert_same_positions(
+        actual: &[crate::import::ImportedPosition],
+        expected: &[&crate::import::ImportedPosition],
+    ) {
+        assert_eq!(actual.len(), expected.len());
+        for (a, b) in actual.iter().zip(expected) {
+            assert_eq!(a.board, b.board);
+            assert_eq!(a.position_id, b.position_id);
+            assert_eq!(a.match_id, b.match_id);
+            assert_eq!(a.game_no, b.game_no);
+        }
+    }
+    /// Index of every played checker record, in the order of parsed positions.
+    fn played_records(records: &[u8]) -> Vec<usize> {
+        records
+            .chunks_exact(RECORD_BYTES)
+            .enumerate()
+            .filter(|(_, r)| r[8] == 3 && r[2308] == 1)
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    #[test]
+    fn xg_accepted_illegal_play_continues_from_its_recorded_position() {
+        let sample = include_bytes!("../../tests/fixtures/WC2014.xg");
+        let expected = played_positions(&xg_to_sgf(sample).unwrap());
+        let original = main_records(sample).unwrap();
+        let played = played_records(&original);
+        // One White and one Black play, so both PositionEnd perspectives are used.
+        for ordinal in [4, 5] {
+            let index = played[ordinal];
+            let start = index * RECORD_BYTES;
+            let mut records = original.clone();
+            set_u32(&mut records, start + 2480, 2);
+            // XG keeps whatever was entered; the moves themselves are ignored.
+            for offset in (68..100).step_by(4) {
+                set_u32(&mut records, start + offset, 3);
+            }
+            let converted = convert_xg(&wrap(&records, None)).unwrap();
+            let actual = played_positions(&converted.sgf);
+            let kept: Vec<_> = expected
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| *i != ordinal)
+                .map(|(_, p)| p)
+                .collect();
+            assert_same_positions(&actual, &kept);
+            assert_eq!(
+                converted.warnings,
+                vec![ImportWarning {
+                    kind: ImportWarningKind::IllegalPlayReplaced,
+                    game_no: expected[ordinal].game_no,
+                    source_ply: Some(expected[ordinal].ply),
+                }]
+            );
+        }
+    }
+
+    #[test]
+    fn recorded_positions_must_follow_from_the_replayed_plays() {
+        let mut records = main_records(include_bytes!("../../tests/fixtures/WC2014.xg")).unwrap();
+        let index = played_records(&records)[6];
+        // Move a White checker from the 6-point to the 5-point before the play.
+        let start = index * RECORD_BYTES + 9;
+        records[start + 6] = (records[start + 6] as i8 - 1) as u8;
+        records[start + 5] = (records[start + 5] as i8 + 1) as u8;
+        let error = xg_to_sgf(&wrap(&records, None)).unwrap_err().to_string();
+        assert!(error.contains("does not follow"), "{error}");
+        assert!(error.contains("game 1, checker ply 7"), "{error}");
+    }
+
+    #[test]
+    fn transcripts_can_start_a_game_from_a_recorded_position_and_cube() {
+        let sample = include_bytes!("../../tests/fixtures/WC2014.xg");
+        let expected = played_positions(&xg_to_sgf(sample).unwrap());
+        let original = main_records(sample).unwrap();
+        let played = played_records(&original);
+        for with_cube in [false, true] {
+            // Start a game at a played checker record; with_cube picks one after
+            // a take, so the start cube must come from the record's cube state.
+            let ordinal = (0..played.len())
+                .find(|&n| {
+                    let cube = i32_at(&original, played[n] * RECORD_BYTES + 108).unwrap();
+                    (cube != 0) == with_cube && expected[n].ply > 3
+                })
+                .unwrap();
+            let first = played[ordinal];
+            let header = original[..first * RECORD_BYTES]
+                .chunks_exact(RECORD_BYTES)
+                .rposition(|r| r[8] == 1)
+                .unwrap();
+            let game_no = expected[ordinal].game_no;
+            let mut records = original[..(header + 1) * RECORD_BYTES].to_vec();
+            records.extend_from_slice(&original[first * RECORD_BYTES..]);
+            // XG flags a hand-entered starting position as edited.
+            records[(header + 1) * RECORD_BYTES + 2528] = 1;
+            let converted = convert_xg(&wrap(&records, None)).unwrap();
+            let actual = played_positions(&converted.sgf);
+            let kept: Vec<_> = expected
+                .iter()
+                .enumerate()
+                .filter(|(i, p)| p.game_no != game_no || *i >= ordinal)
+                .map(|(_, p)| p)
+                .collect();
+            assert_same_positions(&actual, &kept);
+            assert_eq!(actual.iter().find(|p| p.game_no == game_no).unwrap().ply, 1);
+            assert_eq!(
+                converted.warnings,
+                vec![ImportWarning {
+                    kind: ImportWarningKind::CustomStartPosition,
+                    game_no,
+                    source_ply: None,
+                }]
+            );
+            // A standard header still has to agree with the stored start.
+            let mut contradicting = records.clone();
+            let earlier = played[ordinal - 1] * RECORD_BYTES;
+            contradicting[header * RECORD_BYTES + 21..header * RECORD_BYTES + 47]
+                .copy_from_slice(&original[earlier + 9..earlier + 35]);
+            assert!(
+                xg_to_sgf(&wrap(&contradicting, None))
+                    .unwrap_err()
+                    .to_string()
+                    .contains("header position")
+            );
+        }
+        // Edits after the first checker record remain unsupported.
+        let mut edited = original.clone();
+        edited[played[3] * RECORD_BYTES + 2528] = 1;
+        assert!(
+            xg_to_sgf(&wrap(&edited, None))
+                .unwrap_err()
+                .to_string()
+                .contains("edited")
+        );
+    }
+
+    #[test]
+    fn an_unfinished_game_followed_by_the_next_game_keeps_its_moves_without_a_result() {
+        let sample = include_bytes!("../../tests/fixtures/WC2014.xg");
+        let expected_sgf = xg_to_sgf(sample).unwrap();
+        let expected = played_positions(&expected_sgf);
+        let original = main_records(sample).unwrap();
+        let footer = original
+            .chunks_exact(RECORD_BYTES)
+            .position(|r| r[8] == 4)
+            .unwrap();
+        let mut records = original[..footer * RECORD_BYTES].to_vec();
+        records.extend_from_slice(&original[(footer + 1) * RECORD_BYTES..]);
+        // Without InProgress the missing footer stays a damaged record stream.
+        assert!(
+            xg_to_sgf(&wrap(&records, None))
+                .unwrap_err()
+                .to_string()
+                .contains("before previous game footer")
+        );
+        records[RECORD_BYTES + 52] = 1;
+        let converted = convert_xg(&wrap(&records, None)).unwrap();
+        let actual = played_positions(&converted.sgf);
+        assert_same_positions(&actual, &expected.iter().collect::<Vec<_>>());
+        let trees = super::super::sgf::parse_trees(&converted.sgf).unwrap();
+        let expected_trees = super::super::sgf::parse_trees(&expected_sgf).unwrap();
+        assert!(expected_trees[0][0].contains_key("RE"));
+        assert!(!trees[0][0].contains_key("RE"));
+        assert_eq!(trees[1][0].get("RE"), expected_trees[1][0].get("RE"));
+        assert_eq!(
+            converted.warnings,
+            vec![ImportWarning {
+                kind: ImportWarningKind::UnfinishedGame,
+                game_no: 1,
+                source_ply: None,
+            }]
         );
     }
 }

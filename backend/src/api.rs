@@ -295,6 +295,7 @@ async fn upload(
     {
         return Err(ApiError::invalid("Upload one file per request"));
     }
+    let mut warnings = Vec::new();
     let sgf = match format.as_str() {
         "mat" => Engine::new(crate::settings::load(&state).await?.gnubg_path)
             .normalize_mat(&bytes)
@@ -319,10 +320,12 @@ async fn upload(
         }
         "xg" => {
             let data = bytes.clone();
-            tokio::task::spawn_blocking(move || import::xg_to_sgf(&data))
+            let converted = tokio::task::spawn_blocking(move || import::convert_xg(&data))
                 .await
                 .map_err(anyhow::Error::from)?
-                .map_err(|e| ApiError::invalid(format!("XG import failed: {e:#}")))?
+                .map_err(|e| ApiError::invalid(format!("XG import failed: {e:#}")))?;
+            warnings = converted.warnings;
+            converted.sgf
         }
         _ => unreachable!(),
     };
@@ -341,7 +344,7 @@ async fn upload(
             .map_err(anyhow::Error::from)?,
     };
     crate::databases::require_library_destination(&state.pool, database_id).await?;
-    let result = store::import_match_in_database(
+    let mut result = store::import_match_in_database(
         &state.pool,
         &filename,
         &format,
@@ -351,6 +354,9 @@ async fn upload(
         database_id,
     )
     .await?;
+    // Conversion warnings describe the source file, so a duplicate upload of
+    // the same file reports them too.
+    result.warnings = warnings;
     Ok((
         if result.duplicate {
             StatusCode::OK
@@ -948,6 +954,8 @@ async fn events(
         ErrorBody,
         UploadForm,
         ImportResponse,
+        ImportWarning,
+        ImportWarningKind,
         MatchSummary,
         MatchGame,
         MatchPage,

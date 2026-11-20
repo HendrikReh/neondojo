@@ -61,7 +61,8 @@ import {
   type StoredMove,
   type LibraryMatch,
 } from './library-api';
-import { useLibraryText } from './library-messages';
+import { useLibraryText, type ImportWarning } from './library-messages';
+import { ImportWarningList } from './ImportWarningList';
 import { isUnfinishedCompetition } from './library-match-summary';
 import type { PlaySession } from './play-api';
 import { DEFAULT_ANALYSIS_PLIES } from './analysis-depth';
@@ -165,6 +166,7 @@ export default function App() {
       name: string;
       status: 'importedFile' | 'duplicate' | 'error';
       detail?: unknown;
+      warnings?: ImportWarning[];
     }[]
   >([]);
   const annotationNavigation = useRef<AbortController | undefined>(undefined);
@@ -204,7 +206,11 @@ export default function App() {
     'checking',
   );
   const [error, setError] = useState<unknown>();
-  const [notice, setNotice] = useState<{ duplicate: boolean; count: number }>();
+  const [notice, setNotice] = useState<{
+    duplicate: boolean;
+    count: number;
+    warnings: ImportWarning[];
+  }>();
   const [uploading, setUploading] = useState(false);
   const [revision, setRevision] = useState(0);
   const [annotationRevision, setAnnotationRevision] = useState(0);
@@ -483,20 +489,23 @@ export default function App() {
       name: string;
       status: 'importedFile' | 'duplicate' | 'error';
       detail?: unknown;
+      warnings?: ImportWarning[];
     }[] = [];
     for (const file of selected) {
       try {
         if (file.size > 16 * 1024 * 1024) throw new AppError('error.fileSize');
         const body = new FormData();
         body.append('file', file);
-        const imported = await request<{ match: Match; duplicate: boolean }>(
-          `/imports${target}`,
-          { method: 'POST', body },
-        );
+        const imported = await request<{
+          match: Match;
+          duplicate: boolean;
+          warnings: ImportWarning[];
+        }>(`/imports${target}`, { method: 'POST', body });
         setRevision((n) => n + 1);
         results.push({
           name: file.name,
           status: imported.duplicate ? 'duplicate' : 'importedFile',
+          warnings: imported.warnings,
         });
         if (selected.length === 1 && navigation.intent() === navigationIntent) {
           setView('analysis');
@@ -505,6 +514,7 @@ export default function App() {
           setNotice({
             duplicate: imported.duplicate,
             count: imported.match.position_count,
+            warnings: imported.warnings,
           });
         }
       } catch (e) {
@@ -902,6 +912,7 @@ export default function App() {
               label={t('app.closeNotice')}
               compact
             ></ActionButton>
+            <ImportWarningList warnings={notice.warnings} />
           </div>
         )}
         {importResults.length > 1 && (
@@ -921,6 +932,7 @@ export default function App() {
                 <li key={i}>
                   {result.name}: {l(result.status)}
                   {result.detail ? ` · ${formatError(result.detail)}` : ''}
+                  <ImportWarningList warnings={result.warnings} />
                 </li>
               ))}
             </ul>

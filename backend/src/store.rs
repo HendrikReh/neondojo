@@ -153,6 +153,7 @@ pub(crate) async fn insert_match_import(
         return Ok(ImportResponse {
             r#match: existing,
             duplicate: true,
+            warnings: Vec::new(),
         });
     }
     for (batch, positions) in imported.positions.chunks(500).enumerate() {
@@ -183,6 +184,7 @@ pub(crate) async fn insert_match_import(
     Ok(ImportResponse {
         r#match: summary,
         duplicate: false,
+        warnings: Vec::new(),
     })
 }
 
