@@ -28,10 +28,12 @@ Table headings use normal casing and tracking. Italics are not a default UI
 role.
 
 Position IDs and code use the shared monospace stack, including the exact
-position-search input. The brand mark, board SVG lettering and BGBlitz theme
-artwork retain their own fonts. Table actions inherit the table size; compact
-metadata and icon controls can use smaller roles without changing ordinary
-form controls.
+position-search input. Board SVG lettering and BGBlitz theme artwork retain
+their own fonts. The brand mark is the text-free logo
+[`web/public/neondojo-logo.svg`](../web/public/neondojo-logo.svg), which also
+serves as the favicon; the name beside it uses the shared stack. Table actions
+inherit the table size; compact metadata and icon controls can use smaller
+roles without changing ordinary form controls.
 
 The checker candidate table in Analysis is the one table that grows with its
 pane on desktop: headings scale from 12 to 14 px and cells from 13 to 16 px.

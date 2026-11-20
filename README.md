@@ -1,3 +1,5 @@
+<img src="web/public/neondojo-logo.svg" alt="NeonDojo logo: a torii gate whose pillars are backgammon points, in front of a checker as the rising sun" width="128" height="128">
+
 # NeonDojo
 
 NeonDojo is a local backgammon application for importing matches, finding positions, analyzing decisions with GNU Backgammon (GNUbg) or NeonGammon, playing against an engine, and practicing your own mistakes. Its headless Rust backend uses Tokio, Axum, PostgreSQL, and SQLx. The React and TypeScript client connects through REST and server-sent events (SSE).

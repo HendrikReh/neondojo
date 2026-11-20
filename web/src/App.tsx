@@ -745,9 +745,13 @@ export default function App() {
           aria-label={t('app.home')}
           onClick={goHome}
         >
-          <span className="brand-mark">
-            b<span>g</span>
-          </span>
+          <img
+            className="brand-mark"
+            src="/neondojo-logo.svg"
+            alt=""
+            width={30}
+            height={30}
+          />
           <span>NeonDojo</span>
         </a>
         <nav

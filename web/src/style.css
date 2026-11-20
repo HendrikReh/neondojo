@@ -132,21 +132,10 @@ strong {
   color: var(--ui-muted);
 }
 .brand-mark {
+  display: block;
+  flex-shrink: 0;
   height: 45px;
   width: 45px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 13px;
-  background: var(--ui-accent);
-  color: var(--ui-accent-text);
-  letter-spacing: -7px;
-  font-family: Georgia, serif;
-  padding-right: 8px;
-  font-size: 32px;
-}
-.brand-mark span {
-  color: var(--ui-accent-text);
 }
 .eyebrow {
   display: block;
@@ -1137,7 +1126,6 @@ progress::-webkit-progress-value {
   .brand-mark {
     width: 37px;
     height: 37px;
-    font-size: 27px;
   }
   .sidebar {
     padding: 22px 12px 16px;
