@@ -32,7 +32,12 @@ const MAX_DATA_BYTES: u64 = 64 * 1024 * 1024 * 1024;
 
 /// Derived from the backed-up tables and rebuilt on demand. A restore clears
 /// them with the data they describe; they are never written to an archive.
-const DERIVED_TABLES: &[&str] = &["decision_index", "decision_index_matches"];
+const DERIVED_TABLES: &[&str] = &[
+    "decision_index",
+    "decision_index_matches",
+    "review_hits",
+    "review_hit_sets",
+];
 
 // Parent tables precede their children so foreign keys remain enforced. Host
 // installations and the benchmark machine identity belong to the destination.

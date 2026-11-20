@@ -125,7 +125,11 @@ For imported decisions, **Cube details** opens the original evaluation and notes
 When a checker position is selected, **Back to the checker move** closes the
 cube review and returns the board to that position.
 
-`GET /api/matches/{id}/review-decisions` supplies this paginated view. Only
+`GET /api/matches/{id}/review-decisions` supplies this paginated view. Numbered
+pages count and select decisions in a derived list of the analysis's validated
+decisions and project only the requested page; the list is rebuilt when the
+analysis, its checkpoints or the source change, a backup leaves it out and a
+restore clears it. Only
 evaluations with known units and a validated decision context enter imported
 review. GNUbg SGF checker evaluations are supported; SGF cube records without
 unambiguous units and perspective remain visible in their original source view
