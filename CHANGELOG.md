@@ -2,7 +2,13 @@
 
 All notable changes to NeonDojo are recorded in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow [Semantic Versioning](https://semver.org/). Each release is tagged as `v<version>`, and the version matches `backend/Cargo.toml` and `web/package.json`. The backend applies pending database migrations at startup.
 
+NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are its predecessors. From 1.0.0 on, a new major version marks every change that requires action from users: an incompatible change to the REST API, data or backup formats that are not migrated automatically, renamed or removed configuration such as environment variables, and dropped support for an engine version. New features that keep these intact raise the minor version, and fixes raise the patch version.
+
 ## [Unreleased]
+
+## [1.0.0] - 2026-11-20
+
+The first release as NeonDojo (formerly BG Tutor 0.3.0), with NeonGammon 3.0.0 replacing Open Sage. This release breaks compatibility with BG Tutor: the name, environment variables, database, backups, browser preferences and Anki note type change, and only the `neongammon` 3.0.0 package is accepted. Start with a new database, register the NeonGammon 3.0.0 environment again and reimport your matches. Migrations `0082_review_hits` and `0083_neongammon_label` run at startup. The release also speeds up numbered error lists, NeonGammon moves during analyses and job progress.
 
 ### Changed
 
@@ -155,7 +161,8 @@ First tagged release. It covers everything since the first commit on 2026-11-08.
 - An illustrated English user guide, reference pages for each workspace, and development guides for the API, architecture and verification. [#4](https://github.com/HendrikReh/neondojo/pull/4) · [#5](https://github.com/HendrikReh/neondojo/pull/5) · [#6](https://github.com/HendrikReh/neondojo/pull/6) · [#7](https://github.com/HendrikReh/neondojo/pull/7)
 - The local restart procedure on port 8787 and the local Open Sage setup.
 
-[Unreleased]: https://github.com/HendrikReh/neondojo/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/HendrikReh/neondojo/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/HendrikReh/neondojo/compare/v0.3.0...v1.0.0
 [0.3.0]: https://github.com/HendrikReh/neondojo/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/HendrikReh/neondojo/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/HendrikReh/neondojo/releases/tag/v0.1.0

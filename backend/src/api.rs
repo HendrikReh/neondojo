@@ -920,7 +920,7 @@ async fn events(
 #[openapi(
     info(
         title = "NeonDojo API",
-        version = "0.3.0",
+        version = "1.0.0",
         description = "Local headless backgammon library with GNUbg and NeonGammon analysis. No authentication; bind to loopback."
     ),
     paths(
