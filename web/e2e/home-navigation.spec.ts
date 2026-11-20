@@ -173,3 +173,31 @@ test('a finishing import cannot reopen a match after Home', async ({
     release();
   }
 });
+
+for (const stored of [
+  { matchId: '8106b2ea-7fe8-4d57-88c0-999999999991', gameNo: 1 },
+  {
+    matchId: '8106b2ea-7fe8-4d57-88c0-999999999992',
+    gameNo: 1,
+    positionId: '8106b2ea-7fe8-4d57-88c0-999999999993',
+  },
+]) {
+  test(`a deleted ${stored.positionId ? 'position' : 'match'} is forgotten on startup instead of reported`, async ({
+    page,
+  }) => {
+    await page.addInitScript((value) => {
+      localStorage.setItem('neondojo.locale', 'en');
+      localStorage.setItem('neondojo.workspace', JSON.stringify(value));
+    }, stored);
+    await page.goto('/');
+    await expect(
+      page.getByRole('heading', { name: 'Your next move starts here.' }),
+    ).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() => localStorage.getItem('neondojo.workspace')),
+      )
+      .toBeNull();
+    await expect(page.getByRole('alert')).toHaveCount(0);
+  });
+}

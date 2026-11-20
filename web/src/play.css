@@ -123,8 +123,15 @@
 }
 /* New match setup is a modal dialog over the playing view. */
 .play-interruption-dialog.play-setup-dialog {
+  z-index: 10;
   width: min(520px, calc(100vw - 32px));
+  /* Not in the top layer: stay clear of the app header above the board. */
+  max-height: calc(100vh - 140px);
   text-align: left;
+}
+.play-workspace .play-match-heading[inert],
+.play-workspace .play-layout[inert] {
+  opacity: 0.6;
 }
 .play-setup-dialog .play-dialog-heading h2 {
   justify-content: flex-start;

@@ -162,11 +162,15 @@ test('the setup dialog overlays the match and sends this match’s name, engine 
   });
   await (await playMenuItem(page, 'New match')).click();
   const dialog = page.getByRole('dialog', { name: 'New match', exact: true });
-  await expect(dialog).toHaveAttribute('aria-modal', 'true');
   await expect(dialog).toHaveClass(/\bplay-setup-dialog\b/);
-  // The running match stays rendered behind the modal dialog.
+  // The opened dialog takes the focus; the match behind it stays visible but
+  // inert, while the app header remains usable.
+  await expect(dialog.locator('h2')).toBeFocused();
   await expect(page.locator('.play-live-board .board')).toBeVisible();
-  await expect(page.getByTestId('play-board-toolbar')).toBeAttached();
+  await expect(page.locator('.play-layout')).toHaveAttribute('inert', '');
+  await expect(
+    page.getByRole('tab', { name: 'Analysis', exact: true }),
+  ).toBeEnabled();
   const name = dialog.getByRole('textbox', { name: 'Your name', exact: true });
   await name.fill('Guest');
   const engine = dialog.getByRole('combobox', {
@@ -199,10 +203,14 @@ test('without a match the setup dialog can be closed and reopened', async ({
 }) => {
   await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
-  await page.getByRole('tab', { name: 'Playing', exact: true }).click();
+  const playing = page.getByRole('tab', { name: 'Playing', exact: true });
+  await playing.click();
   const dialog = page.getByRole('dialog', { name: 'New match', exact: true });
   await expect(dialog).toBeVisible();
   await expect(page.locator('.play-idle-board .board')).toBeVisible();
+  // Opening automatically leaves the focus on the header tab.
+  await expect(playing).toBeFocused();
+  await dialog.getByRole('textbox', { name: 'Your name', exact: true }).focus();
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   const reopen = page

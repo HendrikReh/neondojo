@@ -139,6 +139,8 @@ export default function PlayWorkspace({
   const pauseTrigger = useRef<HTMLButtonElement>(null);
   const focusResume = useRef(false);
   const newMatchTrigger = useRef<HTMLButtonElement>(null);
+  // Only a setup the user opened takes the focus; an automatic one leaves it.
+  const focusSetup = useRef(false);
   const [pauseWarning, setPauseWarning] = useState(false);
   const autoMoneyReviews = useRef(new Set<string>());
   const [learningReviewOpen, setLearningReviewOpen] = useState(false);
@@ -488,6 +490,7 @@ export default function PlayWorkspace({
     else setSetup(false);
   }
   function openMatchSetup() {
+    focusSetup.current = true;
     setSetupOptions({});
     setPauseWarning(false);
     setForfeitOpen(false);
@@ -1224,7 +1227,7 @@ export default function PlayWorkspace({
   }
   return (
     <div className="play-workspace" aria-busy={uiBusy}>
-      <header className="play-header">
+      <header className="play-header" inert={setupOpen}>
         <h1 className={session ? 'sr-only' : undefined}>{t('title')}</h1>
         {!session && !setup && (
           <div className="play-actions">
@@ -1257,6 +1260,7 @@ export default function PlayWorkspace({
         // The empty table stays visible behind the setup dialog.
         <div
           className="play-board play-idle-board"
+          inert={setupOpen}
           ref={boardAnchor}
           data-human-player={human}
           style={
@@ -1280,6 +1284,8 @@ export default function PlayWorkspace({
           heading={t('newMatch')}
           busy={uiBusy}
           className="play-setup-dialog"
+          modal={false}
+          focusOnOpen={focusSetup.current}
           returnFocus={session ? menuTrigger : newMatchTrigger}
           onClose={closeSetup}
         >
@@ -1502,7 +1508,7 @@ export default function PlayWorkspace({
       )}
       {session && (
         <>
-          <div className="play-match-heading">
+          <div className="play-match-heading" inert={setupOpen}>
             <div className="play-match-summary">
               <h2>
                 {name(0)} {formatNumber(session.scores[0])} :{' '}
@@ -1651,7 +1657,7 @@ export default function PlayWorkspace({
               </div>
             </div>
           </div>
-          <div className="play-layout">
+          <div className="play-layout" inert={setupOpen}>
             <PlayHistory
               history={session.history}
               gameResults={session.game_results}

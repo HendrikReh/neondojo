@@ -12,7 +12,12 @@ import {
 import { usePlayText } from './play-messages';
 type Center = { x: number; y: number };
 
-/** Board-anchored or viewport-centered modal; informational views may be closed. */
+/**
+ * Board-anchored or viewport-centered modal; informational views may be closed.
+ * With `modal={false}` the dialog leaves the rest of the page usable: the
+ * caller makes the content it covers inert, and `focusOnOpen={false}` keeps
+ * the focus where it is when the dialog was not opened by the user.
+ */
 export default function PlayBoardDialog({
   anchor,
   heading,
@@ -21,6 +26,8 @@ export default function PlayBoardDialog({
   className = '',
   onClose,
   returnFocus,
+  modal = true,
+  focusOnOpen = true,
 }: {
   anchor?: RefObject<HTMLDivElement | null>;
   returnFocus?: RefObject<HTMLElement | null>;
@@ -29,6 +36,8 @@ export default function PlayBoardDialog({
   children: ReactNode;
   className?: string;
   onClose?: () => void;
+  modal?: boolean;
+  focusOnOpen?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const title = useRef<HTMLHeadingElement>(null);
@@ -68,7 +77,9 @@ export default function PlayBoardDialog({
     const element = dialog.current;
     const board = anchor?.current?.querySelector('.board') ?? anchor?.current;
     if (!element) return;
-    element.showModal();
+    if (modal) element.showModal();
+    // show() would move the focus; the attribute opens without focusing.
+    else element.open = true;
     function position() {
       const bounds = board?.getBoundingClientRect();
       const center = place(
@@ -80,7 +91,7 @@ export default function PlayBoardDialog({
       if (manualCenter.current) manualCenter.current = center;
     }
     position();
-    title.current?.focus({ preventScroll: true });
+    if (modal || focusOnOpen) title.current?.focus({ preventScroll: true });
     const observer = new ResizeObserver(position);
     if (board) observer.observe(board);
     observer.observe(element);
@@ -99,13 +110,15 @@ export default function PlayBoardDialog({
       )
         target.focus({ preventScroll: true });
     };
+    // The dialog opens once; its modality and initial focus are fixed then.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anchor, place, returnFocus]);
   return (
     <dialog
       ref={dialog}
       className={`play-interruption-dialog ${className}`}
       role={onClose ? 'dialog' : 'alertdialog'}
-      aria-modal="true"
+      aria-modal={modal}
       aria-labelledby={titleId}
       aria-busy={busy}
       onCancel={(event) => {
@@ -113,7 +126,14 @@ export default function PlayBoardDialog({
         onClose?.();
       }}
       onKeyDown={(event) => {
-        if (event.key !== 'Tab') return;
+        // Only a modal dialog receives the browser's cancel event.
+        if (!modal && event.key === 'Escape' && onClose) {
+          event.preventDefault();
+          event.stopPropagation();
+          onClose();
+          return;
+        }
+        if (event.key !== 'Tab' || !modal) return;
         const items = Array.from(
           event.currentTarget.querySelectorAll<HTMLElement>(
             'button, a[href], input, select, textarea, summary, [tabindex]',
