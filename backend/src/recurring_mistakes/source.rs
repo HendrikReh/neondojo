@@ -226,7 +226,7 @@ pub(super) async fn players(pool: &PgPool, database: Option<Uuid>) -> ApiResult<
             "Too many available players; choose a database to narrow this request",
         ));
     }
-    let names = super::player_scope::display_names(pool, names).await?;
+    let names = crate::player_scope::choices(pool, names).await?;
     let mut unique = BTreeMap::new();
     for name in names {
         unique.entry(name.to_lowercase()).or_insert(name);

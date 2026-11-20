@@ -2499,6 +2499,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/virtual-players": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list"];
+        put?: never;
+        post: operations["create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/virtual-players/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["me"];
+        put: operations["set_me"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/virtual-players/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["detail"];
+        put: operations["rename"];
+        post?: never;
+        delete: operations["remove"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/virtual-players/{id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["add_member"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/virtual-players/{id}/members/{profile_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["remove_member"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4559,7 +4639,11 @@ export interface components {
             /** @description All matches of the chosen player in the scope, under any alias. */
             player_matches: number;
             players: string[];
-            /** @description The entry of `players` that covers the name given as `resolve`. */
+            /**
+             * @description The entry of `players` that stands for "me": the virtual profile
+             *     chosen as My player profile, or else the entry that covers the name
+             *     given as `resolve`.
+             */
             resolved_player?: string | null;
             /** @description Those of them without any analyzed decision, whatever the game plan. */
             unanalyzed_matches: number;
@@ -4644,6 +4728,16 @@ export interface components {
          * @enum {string}
          */
         MoveSeverity: "none" | "doubtful" | "bad" | "blunder" | "very_bad";
+        MyPlayerProfile: {
+            profile?: null | components["schemas"]["VirtualPlayerRef"];
+        };
+        MyPlayerProfileWrite: {
+            /**
+             * Format: uuid
+             * @description Null makes no virtual profile "me".
+             */
+            id?: string | null;
+        };
         NativePlayerStatistics: {
             /** Format: int32 */
             close_cube_decisions: number;
@@ -5090,6 +5184,7 @@ export interface components {
             match_count: number;
             /** Format: int64 */
             version: number;
+            virtual_profile?: null | components["schemas"]["VirtualPlayerRef"];
         };
         PlayerRating: {
             /** Format: int64 */
@@ -5982,6 +6077,71 @@ export interface components {
         };
         VersionInfo: {
             version: string;
+        };
+        VirtualPlayerCreate: {
+            name: string;
+        };
+        VirtualPlayerDetails: components["schemas"]["VirtualPlayerProfile"] & {
+            /** @description Members in name order. */
+            members: components["schemas"]["VirtualPlayerMember"][];
+            /**
+             * @description Per-match ratings, oldest first. Bot matches count only when played
+             *     in Competition mode without learning aids.
+             */
+            rating_history: components["schemas"]["PlayerRatingPoint"][];
+            ratings: components["schemas"]["PlayerRating"][];
+        };
+        VirtualPlayerList: {
+            items: components["schemas"]["VirtualPlayerProfile"][];
+        };
+        VirtualPlayerMember: {
+            aliases: components["schemas"]["PlayerAlias"][];
+            display_name: string;
+            /** Format: uuid */
+            id: string;
+            /** Format: int64 */
+            match_count: number;
+        };
+        VirtualPlayerMemberWrite: {
+            /** Format: uuid */
+            profile_id: string;
+            /** Format: int64 */
+            version: number;
+        };
+        VirtualPlayerProfile: {
+            /** Format: int64 */
+            game_count: number;
+            /** Format: uuid */
+            id: string;
+            /** @description Chosen as My player profile in Settings. */
+            is_me: boolean;
+            /**
+             * Format: int64
+             * @description Distinct matches of all members, plus NeonDojo bot matches for "me".
+             */
+            match_count: number;
+            /** Format: int64 */
+            member_count: number;
+            name: string;
+            /**
+             * Format: int64
+             * @description The matches that can enter the PR once analyzed: all but bot matches
+             *     played with learning aids.
+             */
+            rateable_match_count: number;
+            /** Format: int64 */
+            version: number;
+        };
+        /** @description The virtual profile a real profile belongs to. */
+        VirtualPlayerRef: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        VirtualPlayerRename: {
+            name: string;
+            /** Format: int64 */
+            version: number;
         };
         XgBookStatus: {
             available: boolean;
@@ -9337,6 +9497,8 @@ export interface operations {
                 q: string | null;
                 player: string | null;
                 player_id: string | null;
+                /** @description Matches of a virtual player profile; excludes `player_id`. */
+                virtual_player_id: string | null;
                 date_from: string | null;
                 date_to: string | null;
                 date_field: string | null;
@@ -13451,6 +13613,320 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VersionInfo"];
+                };
+            };
+        };
+    };
+    list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VirtualPlayerList"];
+                };
+            };
+        };
+    };
+    create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VirtualPlayerCreate"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VirtualPlayerDetails"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    me: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyPlayerProfile"];
+                };
+            };
+        };
+    };
+    set_me: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MyPlayerProfileWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyPlayerProfile"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    detail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VirtualPlayerDetails"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    rename: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VirtualPlayerRename"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VirtualPlayerDetails"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    remove: {
+        parameters: {
+            query: {
+                /** @description Expected revision of the virtual profile. */
+                version: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    add_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VirtualPlayerMemberWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VirtualPlayerDetails"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    remove_member: {
+        parameters: {
+            query: {
+                /** @description Expected revision of the virtual profile. */
+                version: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VirtualPlayerDetails"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };

@@ -5,6 +5,7 @@ import type { components } from './generated-api';
 import { useI18n } from './i18n';
 import LibrarySortHeading from './LibrarySortHeading';
 import { usePlayerText } from './player-directory-messages';
+import { useVirtualPlayerText } from './virtual-player-messages';
 import { NumberedSearchPagination } from './SearchPagination';
 import { SearchResultRow, SearchResultTable } from './SearchResultList';
 import { useSearchPages, type SearchPage } from './useSearchPages';
@@ -60,6 +61,7 @@ export function PlayerResults({
   selectFirst?: boolean;
 }) {
   const t = usePlayerText();
+  const v = useVirtualPlayerText();
   const { formatError, formatNumber } = useI18n();
   const [order, setOrder] = useState(initialOrder);
   const results = usePlayerPage<Schema['PlayerSearchHit']>(
@@ -158,6 +160,15 @@ export function PlayerResults({
                         {t('matchedAlias')}{' '}
                       </span>
                       {aliasLabel(row.matching_alias)}
+                    </span>
+                  )}
+                  {row.virtual_profile && (
+                    <span
+                      className="player-group-hit"
+                      title={row.virtual_profile.name}
+                    >
+                      <span className="visually-hidden">{v('partOf')} </span>
+                      {row.virtual_profile.name}
                     </span>
                   )}
                 </td>

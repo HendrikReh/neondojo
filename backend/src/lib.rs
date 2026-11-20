@@ -23,6 +23,7 @@ pub mod databases;
 pub mod move_catalog;
 pub mod move_explanation;
 mod player_directory;
+mod player_scope;
 
 pub mod opening_book;
 

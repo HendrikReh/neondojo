@@ -605,8 +605,9 @@ The Player database lists everyone who appears in your matches.
 - **Edit** changes the display name or adds an alias for future imports.
 - **Merge …** combines two profiles, for example *Akiko_Yazawa* and *Akiko Yazawa*. The matches and aliases of the absorbed profile move to the profile you keep.
 - **Analyze unrated matches …** opens the analysis dialog for all of the player's matches that don't have a PR yet.
+- **Virtual profiles** group real profiles without changing them, for example your *leihande* accounts on Galaxy and OpenGammon. Use **New virtual profile …**, then **Add member …** for each account. The virtual profile shows the PR, the PR chart and the matches of all members. **Remove** takes a member out again; the real profiles stay in the list.
 
-> **Advanced:** Merge the profiles of your own online usernames first. Then your PR trend, *My recurring mistakes* and *All analyzed decisions* cover all your matches.
+> **Advanced:** Group your own online accounts in a virtual profile and choose it under **Settings → General → My player profile**. Your games against the bot then count towards it as well, and your PR trend, Study, *My recurring mistakes* and *All analyzed decisions* start with all your matches.
 
 Details: [Player database](../reference/library.md#player-database)
 
@@ -696,7 +697,7 @@ Select the gear in the header. Choose a category on the left. **Apply** saves yo
 
 <table>
 <tr>
-<td width="50%"><img src="images/settings-general.webp" alt="Settings: General"><br><b>General</b>: the app language (Deutsch, English, Español, Français, Italiano, Polski) and your player name for new games.</td>
+<td width="50%"><img src="images/settings-general.webp" alt="Settings: General"><br><b>General</b>: the app language (Deutsch, English, Español, Français, Italiano, Polski) your player name for new games and **My player profile**, the virtual profile that stands for you.</td>
 <td width="50%"><img src="images/settings-appearance.webp" alt="Settings: Appearance"><br><b>Appearance</b>: the <i>Graphite</i>, <i>Club</i> or <i>Paper</i> theme with <i>Light</i>, <i>Dark</i> or <i>System</i> mode, with a live preview.</td>
 </tr>
 <tr>
@@ -765,7 +766,7 @@ flowchart LR
 **Advanced: find and fix your leaks**
 
 1. Import your matches into a database of their own, for example *My Online Games*.
-2. In **Player database**, merge your aliases, then choose **Analyze unrated matches …**.
+2. In **Player database**, group your accounts in a virtual profile, choose it as **My player profile** in Settings, then choose **Analyze unrated matches …**.
 3. In **Study → My recurring mistakes**, sort by equity loss per 100 decisions and practice the top group.
 4. Watch your PR chart in the Player database and the *Earlier → recent* trend.
 5. Use **Cube** with **Inaccuracies only** to go through every cube error in a match. Compare the take point with the winning chances.

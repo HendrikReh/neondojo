@@ -59,7 +59,7 @@ controls sit outside the scrollable table. Edit and merge actions open dialogs
 and return focus to their trigger when closed. The merge dialog focuses its
 search field. **Analyze unrated matches …** beside the PR opens the
 match analysis dialog for the profile's matches without a rating.
-The merge search has its own page controls.
+The merge search has its own page controls. **Virtual profiles** sits between the page title and the player search; its buttons select a virtual profile in place of a real one, and **My player profile** opens first when one is chosen. The virtual profile's member names switch to the member's profile. **Add member …**, **Rename …**, **Delete …** and **New virtual profile …** open dialogs that return focus to their trigger; the member dialog and the name dialog focus their field.
 
 ## Positions
 
