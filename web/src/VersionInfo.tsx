@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react';
 import { shortEngineVersion } from './engine-version';
 import EngineLabel from './EngineLabel';
 import { useI18n } from './i18n';
-import { loadAppVersion, loadEngines, type EngineInfo } from './settings-api';
+import {
+  loadAppVersion,
+  loadEngines,
+  type AppVersion,
+  type EngineInfo,
+} from './settings-api';
 import { versionInfoMessages } from './version-info-messages';
 import './version-info.css';
 
@@ -17,7 +22,7 @@ const engineIds: EngineId[] = ['gnubg', 'bgsage'];
 export default function VersionInfo() {
   const { locale, t } = useI18n();
   const messages = versionInfoMessages[locale];
-  const [appVersion, setAppVersion] = useState<string | null>();
+  const [appVersion, setAppVersion] = useState<AppVersion | null>();
   const [engines, setEngines] = useState<EngineInfo[] | null>();
   const [versionAttempt, setVersionAttempt] = useState(0);
   const [enginesAttempt, setEnginesAttempt] = useState(0);
@@ -29,7 +34,7 @@ export default function VersionInfo() {
     const abort = new AbortController();
     void loadAppVersion(abort.signal).then(
       (version) => {
-        if (!abort.signal.aborted) setAppVersion(version.trim());
+        if (!abort.signal.aborted) setAppVersion(version);
       },
       () => {
         if (!abort.signal.aborted) setAppVersion(null);
@@ -71,15 +76,23 @@ export default function VersionInfo() {
     ...fork,
     url: `https://github.com/${fork.repository}/commit/${fork.revision}`,
   };
+  const appCommit = appVersion?.commit || null;
+  const appLabel =
+    appVersion &&
+    (appCommit
+      ? `${appVersion.release} (${appCommit.slice(0, 7)})`
+      : appVersion.release);
   const technicalDetails = [
-    { name: messages.appCommit, value: appVersion },
+    { name: messages.appVersion, value: appVersion?.release },
+    { name: messages.appCommit, value: appCommit },
     ...engineRows.map((row) => ({ name: row.name, value: row.details })),
   ].filter(({ value }) => Boolean(value));
 
   async function copyVersionInfo() {
     if (copyResult === 'copying') return;
     const lines = [
-      `${messages.appCommit}: ${appVersion || unavailable}`,
+      `${messages.appVersion}: ${appVersion?.release || unavailable}`,
+      `${messages.appCommit}: ${appCommit || unavailable}`,
       ...engineRows.map(
         ({ name, available, details }) =>
           `${name}: ${details ?? (available ? messages.available : unavailable)}`,
@@ -105,8 +118,8 @@ export default function VersionInfo() {
         <div>
           <dt>NeonDojo</dt>
           <dd>
-            {appVersion ? (
-              <code title={appVersion}>{appVersion.slice(0, 7)}</code>
+            {appLabel ? (
+              <code title={appCommit ?? undefined}>{appLabel}</code>
             ) : (
               <span className="version-info-status">
                 {appVersion === undefined ? t('versions.loading') : unavailable}

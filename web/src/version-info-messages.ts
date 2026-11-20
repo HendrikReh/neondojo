@@ -3,6 +3,7 @@ import type { Locale } from './i18n';
 const en = {
   available: 'Available',
   details: 'Technical details',
+  appVersion: 'NeonDojo version',
   appCommit: 'NeonDojo commit',
   copy: 'Copy version information',
   copied: 'Version information copied.',
@@ -16,6 +17,7 @@ export const versionInfoMessages = {
   de: {
     available: 'Verfügbar',
     details: 'Technische Details',
+    appVersion: 'NeonDojo-Version',
     appCommit: 'NeonDojo-Commit',
     copy: 'Versionsinformationen kopieren',
     copied: 'Versionsinformationen kopiert.',
@@ -24,6 +26,7 @@ export const versionInfoMessages = {
   es: {
     available: 'Disponible',
     details: 'Detalles técnicos',
+    appVersion: 'Versión de NeonDojo',
     appCommit: 'Commit de NeonDojo',
     copy: 'Copiar información de versiones',
     copied: 'Se ha copiado la información de versiones.',
@@ -32,6 +35,7 @@ export const versionInfoMessages = {
   fr: {
     available: 'Disponible',
     details: 'Détails techniques',
+    appVersion: 'Version de NeonDojo',
     appCommit: 'Commit de NeonDojo',
     copy: 'Copier les informations sur les versions',
     copied: 'Informations sur les versions copiées.',
@@ -40,6 +44,7 @@ export const versionInfoMessages = {
   it: {
     available: 'Disponibile',
     details: 'Dettagli tecnici',
+    appVersion: 'Versione di NeonDojo',
     appCommit: 'Commit di NeonDojo',
     copy: 'Copia le informazioni sulle versioni',
     copied: 'Informazioni sulle versioni copiate.',
@@ -48,6 +53,7 @@ export const versionInfoMessages = {
   pl: {
     available: 'Dostępny',
     details: 'Szczegóły techniczne',
+    appVersion: 'Wersja NeonDojo',
     appCommit: 'Commit NeonDojo',
     copy: 'Kopiuj informacje o wersjach',
     copied: 'Skopiowano informacje o wersjach.',

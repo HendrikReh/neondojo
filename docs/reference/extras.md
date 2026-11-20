@@ -4,9 +4,9 @@ How version information, engine benchmarks, engine duels and database backups be
 
 ## Version information
 
-Open **Extras → Versions** for the running NeonDojo build and the availability and versions of GNU Backgammon and NeonGammon. **Technical details** shows the complete build commit and engine version output, including the source commit link for recognized NeonGammon forks. **Copy version information** copies the full report for troubleshooting. If one request fails, **Try again** retries that request and keeps the information already loaded.
+Open **Extras → Versions** for the running NeonDojo version with its build commit, for example `1.1.0 (b9bff70)`, and the availability and versions of GNU Backgammon and NeonGammon. **Technical details** shows the complete build commit and engine version output, including the source commit link for recognized NeonGammon forks. **Copy version information** copies the full report for troubleshooting. If one request fails, **Try again** retries that request and keeps the information already loaded.
 
-`GET /api/version` returns the full commit ID in `version`, or an empty string when it is unavailable. `GET /api/engines` includes the repository and full source commit in the optional `fork` field.
+`GET /api/version` returns the release version in `release` and the full commit ID in `commit`, or an empty `commit` when it is unavailable. The deprecated `version` field repeats the commit ID for earlier clients. `GET /api/engines` includes the repository and full source commit in the optional `fork` field.
 
 ## Engine benchmark
 
