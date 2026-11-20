@@ -6,6 +6,15 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ## [Unreleased]
 
+### Added
+
+- **Virtual player profiles.** A virtual profile groups real player profiles without changing them, for example the same person's Galaxy and OpenGammon accounts. Unlike **Merge …** it is reversible: members keep their aliases and their own rows in the player list, which name their group, and can be removed again. Each real profile belongs to at most one virtual profile. The virtual profile shows the consolidated PR, PR chart, matches and opponents of its members. [Virtual player profiles](docs/reference/library.md#virtual-player-profiles)
+  - **Settings → General → My player profile** chooses the virtual profile that stands for you. Study, *My recurring mistakes*, *All analyzed decisions* and the player database start with it, and your NeonDojo bot matches count towards it; their PR contributes only from unassisted Competition play.
+  - In *My recurring mistakes* and *All analyzed decisions* a virtual profile is an additional player choice; members stay selectable on their own.
+  - Merging a member into a profile without a group passes the membership on.
+  - New endpoints under `/api/virtual-players`, `virtual_player_id` on `GET /api/library/matches`, and `virtual_profile` on player profiles. `GET /api/study/mistakes` now returns `resolved_player` for **My player profile** even without `resolve`.
+  - Migration `0084_virtual_player_profiles` adds the tables and the view `virtual_player_sides`. Backups include the virtual profiles and their members.
+
 ## [1.0.0] - 2026-11-20
 
 The first release as NeonDojo (formerly BG Tutor 0.3.0), with NeonGammon 3.0.0 replacing Open Sage. This release breaks compatibility with BG Tutor: the name, environment variables, database, backups, browser preferences and Anki note type change, and only the `neongammon` 3.0.0 package is accepted. Start with a new database, register the NeonGammon 3.0.0 environment again and reimport your matches. Migrations `0082_review_hits` and `0083_neongammon_label` run at startup. The release also speeds up numbered error lists, NeonGammon moves during analyses and job progress.

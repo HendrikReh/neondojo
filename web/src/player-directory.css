@@ -415,3 +415,144 @@ fieldset.player-form legend {
   margin-right: 5px;
   vertical-align: middle;
 }
+
+.virtual-player-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 12px;
+  font-size: var(--font-size-body);
+}
+
+.player-directory .virtual-player-strip h2 {
+  margin: 0;
+  font-size: var(--font-size-panel);
+}
+
+.virtual-player-strip ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.virtual-player-strip li button {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 22rem;
+}
+
+.virtual-player-strip li button[aria-pressed='true'] {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}
+
+.virtual-player-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.virtual-player-empty,
+.virtual-player-note {
+  margin: 0;
+  color: var(--ui-muted);
+  font-size: var(--font-size-meta);
+}
+
+.virtual-player-count {
+  color: var(--ui-muted);
+  font-size: var(--font-size-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.virtual-player-me {
+  display: inline-block;
+  margin-inline-start: 6px;
+  padding: 0 6px;
+  border: 1px solid var(--ui-accent);
+  border-radius: 999px;
+  color: var(--ui-accent);
+  font-size: var(--font-size-micro);
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+.player-group-hit {
+  display: block;
+  overflow: hidden;
+  color: var(--ui-accent);
+  font-size: var(--font-size-meta);
+  text-overflow: ellipsis;
+}
+
+.player-card-header .player-card-group {
+  margin-top: 2px;
+}
+
+.virtual-player-members {
+  margin-top: 12px;
+  font-size: var(--font-size-table);
+}
+
+.player-directory .virtual-player-members h3 {
+  margin: 0 0 6px;
+  color: var(--ui-muted);
+  font-size: var(--font-size-label);
+  font-weight: normal;
+}
+
+.virtual-player-members p {
+  margin: 0;
+}
+
+.virtual-player-members ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.virtual-player-members li {
+  display: grid;
+  grid-template-columns: minmax(8rem, auto) minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
+.virtual-player-sources {
+  overflow: hidden;
+  color: var(--ui-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.virtual-player-field {
+  display: grid;
+  gap: 4px;
+  font-size: var(--font-size-label);
+}
+
+.virtual-player-members .position-preview-link,
+.player-card-group .position-preview-link {
+  overflow: hidden;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ui-accent);
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.virtual-player-members .position-preview-link:hover,
+.player-card-group .position-preview-link:hover {
+  text-decoration: underline;
+}

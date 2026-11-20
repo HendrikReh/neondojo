@@ -49,6 +49,8 @@ const TABLES: &[&str] = &[
     "databases",
     "player_profiles",
     "player_aliases",
+    "virtual_player_profiles",
+    "virtual_player_members",
     "matches",
     "analysis_selections",
     "match_players",

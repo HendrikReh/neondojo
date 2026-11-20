@@ -211,7 +211,7 @@ pub(super) async fn search(
 ) -> ApiResult<Json<DecisionSearchPage>> {
     let q = input.map_err(|e| ApiError::invalid(e.body_text()))?.0;
     let (player, min_loss) = validate(Some(q.player.clone()), q.min_loss.or(Some(0.0)))?;
-    let player = super::player_scope::names(&s.pool, &player.unwrap_or_default()).await?;
+    let player = crate::player_scope::names(&s.pool, &player.unwrap_or_default()).await?;
     if q.max_loss
         .is_some_and(|max| !max.is_finite() || max < min_loss)
     {

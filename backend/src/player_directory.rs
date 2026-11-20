@@ -19,6 +19,9 @@ use std::collections::BTreeMap;
 use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
 
+mod virtual_profiles;
+use virtual_profiles::VirtualPlayerRef;
+
 #[derive(Serialize, ToSchema, sqlx::FromRow)]
 struct PlayerProfile {
     id: Uuid,
@@ -28,6 +31,10 @@ struct PlayerProfile {
     version: i64,
     match_count: i64,
     game_count: i64,
+    /// The virtual profile this profile belongs to, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[sqlx(json(nullable))]
+    virtual_profile: Option<VirtualPlayerRef>,
 }
 
 #[derive(Serialize, Deserialize, ToSchema, sqlx::FromRow)]
@@ -153,6 +160,9 @@ const GAME_COUNT: &str = "(SELECT count(*) FROM match_games g WHERE EXISTS (
         SELECT 1 FROM player_aliases a JOIN match_players mp ON mp.alias_id=a.id
         WHERE a.profile_id=p.id AND mp.match_id=g.match_uuid
     ))";
+const VIRTUAL_PROFILE: &str = "(SELECT jsonb_build_object('id',vp.id,'name',vp.name)
+     FROM virtual_player_members v JOIN virtual_player_profiles vp ON vp.id=v.virtual_id
+     WHERE v.profile_id=p.id)";
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
@@ -160,6 +170,13 @@ pub(crate) fn routes() -> Router<AppState> {
         .route("/api/players/{id}", get(detail).put(update))
         .route("/api/players/{id}/merge", axum::routing::post(merge))
         .route("/api/players/{id}/aliases", axum::routing::post(add_alias))
+        .merge(virtual_profiles::routes())
+}
+
+pub(crate) fn openapi() -> utoipa::openapi::OpenApi {
+    let mut doc = PlayerDoc::openapi();
+    doc.merge(virtual_profiles::VirtualPlayerDoc::openapi());
+    doc
 }
 
 #[utoipa::path(get,path="/api/players",params(PlayerQuery),responses((status=200,body=PlayerPage),(status=422,body=ErrorBody)),tag="Players")]
@@ -236,6 +253,7 @@ async fn list(
          )
          SELECT p.id,p.display_name,p.first_name,p.last_name,p.version,
            {MATCH_COUNT} AS match_count,{GAME_COUNT} AS game_count,
+           {VIRTUAL_PROFILE} AS virtual_profile,
            CASE WHEN $1<>'' AND lower(p.display_name) NOT LIKE $2 THEN (
              SELECT jsonb_build_object('name',a.name,'platform',a.platform)
              {MATCHING_ALIAS} ORDER BY a.name,a.platform LIMIT 1
@@ -275,7 +293,8 @@ async fn detail(
 async fn details(pool: &PgPool, id: Uuid) -> ApiResult<PlayerDetails> {
     let profile = sqlx::query_as(&format!(
         "SELECT p.id,{DISPLAY_NAME} AS display_name,p.first_name,p.last_name,p.version,
-           {MATCH_COUNT} AS match_count,{GAME_COUNT} AS game_count
+           {MATCH_COUNT} AS match_count,{GAME_COUNT} AS game_count,
+           {VIRTUAL_PROFILE} AS virtual_profile
          FROM player_profiles p WHERE p.id=$1"
     ))
     .bind(id)
@@ -290,7 +309,9 @@ async fn details(pool: &PgPool, id: Uuid) -> ApiResult<PlayerDetails> {
     .fetch_all(pool)
     .await
     .map_err(anyhow::Error::from)?;
-    let (ratings, rating_history) = ratings(pool, id).await.map_err(anyhow::Error::from)?;
+    let (ratings, rating_history) = ratings(pool, id, false)
+        .await
+        .map_err(anyhow::Error::from)?;
     Ok(PlayerDetails {
         profile,
         aliases,
@@ -299,25 +320,25 @@ async fn details(pool: &PgPool, id: Uuid) -> ApiResult<PlayerDetails> {
     })
 }
 
+/// Ratings of a real profile, or of a virtual profile when `virtual_profile`.
 async fn ratings(
     pool: &PgPool,
     id: Uuid,
+    virtual_profile: bool,
 ) -> Result<(Vec<PlayerRating>, Vec<PlayerRatingPoint>), sqlx::Error> {
-    let mut rows = sqlx::query_as::<_, (Uuid, i16, serde_json::Value, chrono::NaiveDate, Option<f64>)>(
-        "WITH participants AS (
-           SELECT mp.match_id,mp.side FROM player_aliases a JOIN match_players mp ON mp.alias_id=a.id
-           WHERE a.profile_id=$1
-         ), candidates AS (
+    let sides = crate::player_scope::sides_sql(virtual_profile, true);
+    let sql = format!(
+        "WITH participants AS ({sides}), candidates AS (
            SELECT j.match_uuid,j.result,coalesce(m.played_on,m.created_at::date) AS played,j.id AS job_id
            FROM (SELECT DISTINCT match_id FROM participants) p
            JOIN matches m ON m.id=p.match_id
            CROSS JOIN LATERAL (
-             SELECT DISTINCT ON (result #>> '{performance_rating,profile}') j.match_uuid,j.result,j.id
+             SELECT DISTINCT ON (result #>> '{{performance_rating,profile}}') j.match_uuid,j.result,j.id
              FROM jobs j WHERE j.match_uuid=m.id AND j.source_revision=m.source_revision
                AND j.kind='match' AND j.game_no IS NULL AND j.status='completed'
                AND j.total_games>0 AND j.completed_games=j.total_games
-               AND j.result #>> '{performance_rating,profile}' IS NOT NULL
-             ORDER BY result #>> '{performance_rating,profile}', j.created_at DESC,j.id DESC
+               AND j.result #>> '{{performance_rating,profile}}' IS NOT NULL
+             ORDER BY result #>> '{{performance_rating,profile}}', j.created_at DESC,j.id DESC
            ) j
          )
          SELECT c.match_uuid,p.side,c.result,c.played,
@@ -326,10 +347,12 @@ async fn ratings(
                 (SELECT sum(a.equity_loss)::float8 FROM move_analyses a
                  WHERE a.job_id=c.job_id AND a.kind='checker' AND a.player=p.side) AS checker_loss
          FROM candidates c
-         JOIN participants p ON p.match_id=c.match_uuid ORDER BY c.match_uuid",
-    )
-    .bind(id)
-    .fetch(pool);
+         JOIN participants p ON p.match_id=c.match_uuid ORDER BY c.match_uuid"
+    );
+    let mut rows =
+        sqlx::query_as::<_, (Uuid, i16, serde_json::Value, chrono::NaiveDate, Option<f64>)>(&sql)
+            .bind(id)
+            .fetch(pool);
     let mut totals = BTreeMap::<String, (f64, i64, i64, Option<Uuid>)>::new();
     let mut history = Vec::new();
     while let Some((match_id, side, result, date, checker_loss)) = rows.try_next().await? {
@@ -449,6 +472,21 @@ async fn merge(
         .execute(&mut *tx)
         .await
         .map_err(anyhow::Error::from)?;
+    // The destination keeps its own virtual profile; without one it takes
+    // the source's, so the merged matches stay in the same group.
+    sqlx::query(
+        "WITH inherited AS (
+           INSERT INTO virtual_player_members(profile_id,virtual_id)
+           SELECT $1,virtual_id FROM virtual_player_members WHERE profile_id=$2
+           ON CONFLICT(profile_id) DO NOTHING RETURNING virtual_id
+         ) UPDATE virtual_player_profiles SET version=version+1
+           WHERE id IN (SELECT virtual_id FROM virtual_player_members WHERE profile_id=$2)",
+    )
+    .bind(id)
+    .bind(body.source_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?;
     sqlx::query("DELETE FROM player_profiles WHERE id=$1")
         .bind(body.source_id)
         .execute(&mut *tx)

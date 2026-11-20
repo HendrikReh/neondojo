@@ -149,8 +149,12 @@ export default function DecisionSearch({
   const [selected, setSelected] = useState<string>();
   const [practice, setPractice] = useState<MistakeQuestion[]>();
   const practiceButton = useRef<HTMLButtonElement>(null);
-  const set = (key: keyof Draft) => (value: string) =>
+  // "My player profile" fills the player until one is chosen here.
+  const playerChosen = useRef(false);
+  const set = (key: keyof Draft) => (value: string) => {
+    if (key === 'player') playerChosen.current = true;
     setDraft((current) => ({ ...current, [key]: value }));
+  };
 
   useEffect(() => {
     if (!visible) return;
@@ -170,14 +174,16 @@ export default function DecisionSearch({
       { database_id: draft.database || undefined },
       abort.signal,
     )
-      .then(({ players }) => {
+      .then(({ players, resolved_player }) => {
         if (abort.signal.aborted) return;
         setPlayers(players);
-        setDraft((current) =>
-          current.player && !players.includes(current.player)
+        setDraft((current) => {
+          if (!current.player && !playerChosen.current && resolved_player)
+            return { ...current, player: resolved_player };
+          return current.player && !players.includes(current.player)
             ? { ...current, player: '' }
-            : current,
-        );
+            : current;
+        });
       })
       .catch(() => undefined);
     return () => abort.abort();
