@@ -1459,6 +1459,24 @@ async fn bot_sessions_are_library_matches_from_creation(pool: PgPool) {
     assert_eq!(row["play_phase"], "opening_roll");
     assert_eq!(row["result_state"], "ongoing");
     assert_eq!(row["position_count"], 0);
+    // The human side is a NeonDojo player from the start; the bot is none.
+    let aliases: Vec<(String, String)> =
+        sqlx::query_as("SELECT platform,name FROM player_aliases ORDER BY platform,name")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        aliases,
+        [(
+            "neondojo".to_owned(),
+            session["human_name"].as_str().unwrap().to_owned()
+        )]
+    );
+    let catalogued: i64 = sqlx::query_scalar("SELECT count(*) FROM match_players")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(catalogued, 1);
     let match_id = row["id"].as_str().unwrap();
     for method in ["GET", "POST"] {
         let (status, body) = call(

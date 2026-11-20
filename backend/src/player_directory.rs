@@ -87,6 +87,9 @@ struct PlayerRatingPoint {
 struct PlayerDetails {
     #[serde(flatten)]
     profile: PlayerProfile,
+    /// The matches that can enter the PR once analyzed: all but bot matches
+    /// played with learning aids or still running in Competition mode.
+    rateable_match_count: i64,
     aliases: Vec<PlayerAlias>,
     ratings: Vec<PlayerRating>,
     /// Per-match ratings, oldest first.
@@ -328,11 +331,20 @@ async fn details(pool: &PgPool, id: Uuid) -> ApiResult<PlayerDetails> {
     .fetch_all(pool)
     .await
     .map_err(anyhow::Error::from)?;
+    let rateable_match_count = sqlx::query_scalar(
+        "SELECT count(DISTINCT s.match_id) FROM player_match_sides s
+         WHERE s.profile_id=$1 AND s.rated",
+    )
+    .bind(id)
+    .fetch_one(pool)
+    .await
+    .map_err(anyhow::Error::from)?;
     let (ratings, rating_history) = ratings(pool, id, false)
         .await
         .map_err(anyhow::Error::from)?;
     Ok(PlayerDetails {
         profile,
+        rateable_match_count,
         aliases,
         ratings,
         rating_history,
@@ -529,7 +541,8 @@ async fn add_alias(
     let body = json(body)?;
     let name = clean_name(&body.name, 1024)?;
     if name.is_empty()
-        || !["", "backgammongalaxy.com", "opengammon.com"].contains(&body.platform.as_str())
+        || !["", "backgammongalaxy.com", "opengammon.com", "neondojo"]
+            .contains(&body.platform.as_str())
     {
         return Err(ApiError::invalid("Invalid player alias"));
     }

@@ -112,15 +112,17 @@ async fn rate(pool: &PgPool, match_id: Uuid, side: usize, loss: f64, decisions: 
 }
 
 /// Turns an imported match into a finished NeonDojo bot match, as the bot
-/// library stores it: no catalogued players, a session with the human side.
+/// library stores it: the human side catalogued under the NeonDojo platform,
+/// the bot side uncatalogued, and a session with the human side.
 async fn bot_match(pool: &PgPool, match_id: Uuid, human: i32, mode: &str, assisted: bool) {
     sqlx::query(
-        "UPDATE matches SET play_mode=$2,play_assisted=$3,
+        "UPDATE matches SET play_mode=$2,play_assisted=$3,play_human_side=$4,
            database_id='00000000-0000-0000-0000-000000000003' WHERE id=$1",
     )
     .bind(match_id)
     .bind(mode)
     .bind(assisted)
+    .bind(human as i16)
     .execute(pool)
     .await
     .unwrap();
@@ -507,7 +509,7 @@ async fn merging_a_member_keeps_its_matches_in_the_group(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
-async fn my_virtual_profile_counts_bot_matches_and_is_the_default_study_player(pool: PgPool) {
+async fn bot_matches_are_real_players_that_a_virtual_profile_groups(pool: PgPool) {
     let online = import(&pool, "leihande", "Carol", "OpenGammon", "online").await;
     let competition = import(&pool, "GNUbg", "Hendrik", "", "competition").await;
     let coached = import(&pool, "Hendrik", "GNUbg", "", "coached").await;
@@ -526,6 +528,47 @@ async fn my_virtual_profile_counts_bot_matches_and_is_the_default_study_player(p
     rate(&pool, competition, 1, 0.12, 30).await;
     rate(&pool, coached, 0, 0.4, 10).await;
     let app = app(&pool);
+
+    // The human side of every bot match is a real player on NeonDojo; the
+    // bot side belongs to nobody.
+    let (bot_player, _) = profile_id(&app, "Hendrik", "neondojo").await;
+    let found = call(&app, "GET", "/api/players?q=hendrik", Value::Null, 200).await;
+    assert_eq!(found["items"].as_array().unwrap().len(), 1, "{found}");
+    assert_eq!(found["items"][0]["match_count"], 3);
+    let nobody = call(&app, "GET", "/api/players?q=gnubg", Value::Null, 200).await;
+    assert_eq!(nobody["items"], json!([]), "{nobody}");
+    let real = call(
+        &app,
+        "GET",
+        &format!("/api/players/{bot_player}"),
+        Value::Null,
+        200,
+    )
+    .await;
+    assert_eq!(
+        real["aliases"],
+        json!([{"platform":"neondojo","name":"Hendrik"}])
+    );
+    assert_eq!(real["match_count"], 3);
+    // Coached and still running competition play cannot enter the PR.
+    assert_eq!(real["rateable_match_count"], 1);
+    assert_eq!(real["ratings"][0]["value"], 2.0);
+    assert_eq!(real["ratings"][0]["match_count"], 1);
+    let matches = call(
+        &app,
+        "GET",
+        &format!("/api/library/matches?player_id={bot_player}&page=1"),
+        Value::Null,
+        200,
+    )
+    .await;
+    assert_eq!(matches["total"], 3);
+    for row in matches["items"].as_array().unwrap() {
+        let human = if row["white"] == "GNUbg" { 1 } else { 0 };
+        assert_eq!(row["player_sides"], json!([human]), "{row}");
+        assert_eq!(row["opponent_player_id"], Value::Null, "{row}");
+    }
+
     let (member, _) = profile_id(&app, "leihande", "opengammon.com").await;
     let group = call(
         &app,
@@ -545,40 +588,7 @@ async fn my_virtual_profile_counts_bot_matches_and_is_the_default_study_player(p
         200,
     )
     .await;
-
-    // Without "me", bot matches stay out.
-    let before = call(&app, "GET", &uri, Value::Null, 200).await;
-    assert_eq!(before["match_count"], 1);
-    assert_eq!(before["rateable_match_count"], 1);
-    assert_eq!(
-        call(&app, "GET", "/api/virtual-players/me", Value::Null, 200).await,
-        json!({"profile":null})
-    );
-    let mistakes = call(
-        &app,
-        "GET",
-        "/api/study/mistakes?resolve=Hendrik",
-        Value::Null,
-        200,
-    )
-    .await;
-    assert!(
-        mistakes["players"]
-            .as_array()
-            .unwrap()
-            .contains(&json!("Hendrik Reh"))
-    );
-    assert_eq!(mistakes["resolved_player"], "Hendrik");
-
     call(
-        &app,
-        "PUT",
-        "/api/virtual-players/me",
-        json!({"id":Uuid::new_v4()}),
-        422,
-    )
-    .await;
-    let me = call(
         &app,
         "PUT",
         "/api/virtual-players/me",
@@ -586,14 +596,37 @@ async fn my_virtual_profile_counts_bot_matches_and_is_the_default_study_player(p
         200,
     )
     .await;
+    // "Me" owns no matches of its own: bot matches count once their player
+    // is a member.
+    let alone = call(&app, "GET", &uri, Value::Null, 200).await;
+    assert_eq!(alone["match_count"], 1);
+    assert_eq!(alone["rateable_match_count"], 1);
+    let mistakes = call(
+        &app,
+        "GET",
+        "/api/study/mistakes?player=hendrik%20reh",
+        Value::Null,
+        200,
+    )
+    .await;
+    assert_eq!(mistakes["player_matches"], 1);
+
+    let me = call(&app, "GET", "/api/virtual-players/me", Value::Null, 200).await;
     assert_eq!(me, json!({"profile":{"id":id,"name":"Hendrik Reh"}}));
-    // Finished bot matches count; the live competition game does not.
-    let details = call(&app, "GET", &uri, Value::Null, 200).await;
+    let details = call(
+        &app,
+        "POST",
+        &format!("{uri}/members"),
+        json!({"profile_id":bot_player,"version":alone["version"]}),
+        200,
+    )
+    .await;
     assert_eq!(details["is_me"], true);
-    assert_eq!(details["match_count"], 3);
-    // The coached match can never enter the PR, so it is not waiting for one.
+    assert_eq!(details["match_count"], 4);
+    // The coached and the live match are not waiting for a PR.
     assert_eq!(details["rateable_match_count"], 2);
-    // Only unassisted competition play enters the rating: (0.04 + 0.12) · 500 / 40.
+    // Only unassisted, finished competition play enters the rating:
+    // (0.04 + 0.12) · 500 / 40.
     assert_eq!(details["ratings"][0]["value"], 2.0);
     assert_eq!(details["ratings"][0]["match_count"], 2);
     let matches = call(
@@ -604,7 +637,7 @@ async fn my_virtual_profile_counts_bot_matches_and_is_the_default_study_player(p
         200,
     )
     .await;
-    assert_eq!(matches["total"], 3);
+    assert_eq!(matches["total"], 4);
     for row in matches["items"].as_array().unwrap() {
         let human = if row["white"] == "GNUbg" { 1 } else { 0 };
         assert_eq!(row["player_sides"], json!([human]), "{row}");
@@ -620,10 +653,12 @@ async fn my_virtual_profile_counts_bot_matches_and_is_the_default_study_player(p
     )
     .await;
     assert_eq!(mistakes["resolved_player"], "Hendrik Reh");
-    let mistakes = call(&app, "GET", "/api/study/mistakes", Value::Null, 200).await;
-    assert_eq!(mistakes["resolved_player"], "Hendrik Reh");
-    // Its matches are the members' and the bot matches', under any name; like
-    // every name-based count, coverage includes the live game.
+    assert!(
+        mistakes["players"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("Hendrik Reh"))
+    );
     let mistakes = call(
         &app,
         "GET",
@@ -653,7 +688,8 @@ async fn my_virtual_profile_counts_bot_matches_and_is_the_default_study_player(p
     .await;
     assert_eq!(alone["player_matches"], 1);
 
-    let cleared = call(
+    // Choosing no "me" changes no group.
+    call(
         &app,
         "PUT",
         "/api/virtual-players/me",
@@ -661,8 +697,101 @@ async fn my_virtual_profile_counts_bot_matches_and_is_the_default_study_player(p
         200,
     )
     .await;
-    assert_eq!(cleared, json!({"profile":null}));
     let details = call(&app, "GET", &uri, Value::Null, 200).await;
-    assert_eq!(details["match_count"], 1);
-    assert_eq!(details["rateable_match_count"], 1);
+    assert_eq!(details["match_count"], 4);
+    assert_eq!(details["rateable_match_count"], 2);
+}
+
+#[sqlx::test(migrations = false)]
+#[ignore = "requires PostgreSQL"]
+async fn migration_catalogues_bot_matches_and_keeps_them_in_my_profile(pool: PgPool) {
+    let all = sqlx::migrate!("./migrations");
+    let before = sqlx::migrate::Migrator {
+        migrations: std::borrow::Cow::Owned(
+            all.iter().filter(|m| m.version < 85).cloned().collect(),
+        ),
+        ..sqlx::migrate::Migrator::DEFAULT
+    };
+    before.run(&pool).await.unwrap();
+    let online = import(&pool, "leihande", "Carol", "OpenGammon", "online").await;
+    let played = import(&pool, "GNUbg", "Hendrik", "", "played").await;
+    let orphaned = import(&pool, "Hendrik", "GNUbg", "", "detached").await;
+    for (id, human) in [(played, Some(1)), (orphaned, None)] {
+        sqlx::query(
+            "UPDATE matches SET play_mode='competition',
+               database_id='00000000-0000-0000-0000-000000000003' WHERE id=$1",
+        )
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+        if let Some(human) = human {
+            sqlx::query(
+                "INSERT INTO play_sessions(id,state,gnubg_path,sgf,native_id,library_match_id,library_archived)
+                 VALUES($1,$2,'/unavailable','','saved',$3,true)",
+            )
+            .bind(Uuid::new_v4())
+            .bind(json!({"phase":"match_over","play_mode":"competition","human_player":human,"match_length":7}))
+            .bind(id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+    }
+    let member: Uuid = sqlx::query_scalar(
+        "SELECT profile_id FROM player_aliases WHERE platform='opengammon.com' AND name='leihande'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let me: Uuid = sqlx::query_scalar(
+        "INSERT INTO virtual_player_profiles(name,is_me) VALUES('Hendrik Reh',true) RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO virtual_player_members(profile_id,virtual_id) VALUES($1,$2)")
+        .bind(member)
+        .bind(me)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let sides = |pool: PgPool| async move {
+        let rows: Vec<(Uuid, i16)> =
+            sqlx::query_as("SELECT match_id,side FROM virtual_player_sides ORDER BY match_id,side")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        rows
+    };
+    let mut expected = vec![(online, 0), (played, 1)];
+    expected.sort();
+    assert_eq!(sides(pool.clone()).await, expected);
+
+    all.run(&pool).await.unwrap();
+
+    // The played match now belongs to a real NeonDojo player; the one without
+    // a session has no known human side and stays uncatalogued.
+    let catalogued: Vec<(Uuid, i16, String, String)> = sqlx::query_as(
+        "SELECT mp.match_id,mp.side,a.platform,a.name FROM match_players mp
+         JOIN player_aliases a ON a.id=mp.alias_id
+         WHERE mp.match_id=ANY($1) ORDER BY mp.match_id",
+    )
+    .bind(vec![played, orphaned])
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        catalogued,
+        [(played, 1, "neondojo".to_owned(), "Hendrik".to_owned())]
+    );
+    // That player joins "me", so its results stay the same.
+    assert_eq!(sides(pool.clone()).await, expected);
+    let version: i64 =
+        sqlx::query_scalar("SELECT version FROM virtual_player_profiles WHERE id=$1")
+            .bind(me)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(version, 1);
 }

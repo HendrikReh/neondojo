@@ -133,7 +133,7 @@ function PlayerCard({
       <PlayerRatings
         scope={{ player_id: id }}
         ratings={details.ratings}
-        matchCount={details.match_count}
+        matchCount={details.rateable_match_count}
         onAnalyzeMatches={onAnalyzeMatches}
       />
       <PlayerMatches

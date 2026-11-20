@@ -36,11 +36,11 @@ const en = {
     '“{name}” is deleted. Its member profiles, matches and analyses stay unchanged.',
   partOf: 'Part of',
   botMatches:
-    'Includes your NeonDojo bot matches. They count for the PR only when played in Competition mode without learning aids.',
+    'Your NeonDojo bot matches count once your NeonDojo player is a member. They count for the PR only when played in Competition mode without learning aids.',
   myProfile: 'My player profile',
   myProfileNone: 'None',
   myProfileHelp:
-    'Study, My recurring mistakes, All analyzed decisions and the player database start with this virtual profile. Your games against the bot count towards it.',
+    'Study, My recurring mistakes, All analyzed decisions and the player database start with this virtual profile. Add your NeonDojo player as a member so your games against the bot count towards it.',
   myProfileUnavailable: 'Virtual profiles could not be loaded.',
   applyMyProfile: 'My player profile is saved with the player database.',
 };
@@ -82,11 +82,11 @@ const words: Record<Locale, Record<Key, string>> = {
       '„{name}“ wird gelöscht. Seine Mitgliedsprofile, Matches und Analysen bleiben unverändert.',
     partOf: 'Gehört zu',
     botMatches:
-      'Enthält deine NeonDojo-Partien gegen den Bot. Für den PR zählen sie nur im Modus Competition ohne Lernhilfen.',
+      'Deine NeonDojo-Partien gegen den Bot zählen, sobald dein NeonDojo-Spieler Mitglied ist. Für den PR zählen sie nur im Modus Competition ohne Lernhilfen.',
     myProfile: 'Mein Spielerprofil',
     myProfileNone: 'Keines',
     myProfileHelp:
-      'Study, Meine wiederkehrenden Fehler, Alle analysierten Entscheidungen und die Spielerdatenbank beginnen mit diesem virtuellen Profil. Deine Partien gegen den Bot zählen dazu.',
+      'Study, Meine wiederkehrenden Fehler, Alle analysierten Entscheidungen und die Spielerdatenbank beginnen mit diesem virtuellen Profil. Füge deinen NeonDojo-Spieler als Mitglied hinzu, damit deine Partien gegen den Bot dazuzählen.',
     myProfileUnavailable: 'Virtuelle Profile konnten nicht geladen werden.',
     applyMyProfile:
       'Mein Spielerprofil wird mit der Spielerdatenbank gespeichert.',
@@ -126,11 +126,11 @@ const words: Record<Locale, Record<Key, string>> = {
       'Se elimina «{name}». Sus perfiles miembros, encuentros y análisis no cambian.',
     partOf: 'Forma parte de',
     botMatches:
-      'Incluye tus encuentros de NeonDojo contra el bot. Solo cuentan para el PR si se jugaron en modo Competición sin ayudas de aprendizaje.',
+      'Tus encuentros de NeonDojo contra el bot cuentan cuando tu jugador de NeonDojo es miembro. Solo cuentan para el PR si se jugaron en modo Competición sin ayudas de aprendizaje.',
     myProfile: 'Mi perfil de jugador',
     myProfileNone: 'Ninguno',
     myProfileHelp:
-      'Estudio, Mis errores recurrentes, Todas las decisiones analizadas y la base de datos de jugadores empiezan con este perfil virtual. Tus encuentros contra el bot cuentan para él.',
+      'Estudio, Mis errores recurrentes, Todas las decisiones analizadas y la base de datos de jugadores empiezan con este perfil virtual. Añade tu jugador de NeonDojo como miembro para que tus encuentros contra el bot cuenten para él.',
     myProfileUnavailable: 'No se pudieron cargar los perfiles virtuales.',
     applyMyProfile:
       'Mi perfil de jugador se guarda con la base de datos de jugadores.',
@@ -170,11 +170,11 @@ const words: Record<Locale, Record<Key, string>> = {
       '« {name} » est supprimé. Ses profils membres, matchs et analyses restent inchangés.',
     partOf: 'Fait partie de',
     botMatches:
-      'Comprend vos matchs NeonDojo contre le bot. Ils ne comptent pour le PR que s’ils ont été joués en mode Compétition sans aide à l’apprentissage.',
+      'Vos matchs NeonDojo contre le bot comptent dès que votre joueur NeonDojo est membre. Ils ne comptent pour le PR que s’ils ont été joués en mode Compétition sans aide à l’apprentissage.',
     myProfile: 'Mon profil de joueur',
     myProfileNone: 'Aucun',
     myProfileHelp:
-      'Étude, Mes erreurs récurrentes, Toutes les décisions analysées et la base de joueurs commencent par ce profil virtuel. Vos parties contre le bot y sont comptées.',
+      'Étude, Mes erreurs récurrentes, Toutes les décisions analysées et la base de joueurs commencent par ce profil virtuel. Ajoutez votre joueur NeonDojo comme membre pour que vos parties contre le bot y soient comptées.',
     myProfileUnavailable: 'Impossible de charger les profils virtuels.',
     applyMyProfile:
       'Mon profil de joueur est enregistré avec la base de joueurs.',
@@ -214,11 +214,11 @@ const words: Record<Locale, Record<Key, string>> = {
       '«{name}» viene eliminato. I suoi profili membri, gli incontri e le analisi restano invariati.',
     partOf: 'Fa parte di',
     botMatches:
-      'Include i tuoi incontri NeonDojo contro il bot. Contano per il PR solo se giocati in modalità Competizione senza aiuti didattici.',
+      'I tuoi incontri NeonDojo contro il bot contano quando il tuo giocatore NeonDojo è un membro. Contano per il PR solo se giocati in modalità Competizione senza aiuti didattici.',
     myProfile: 'Il mio profilo giocatore',
     myProfileNone: 'Nessuno',
     myProfileHelp:
-      'Studio, I miei errori ricorrenti, Tutte le decisioni analizzate e il database giocatori partono da questo profilo virtuale. Le tue partite contro il bot vengono conteggiate qui.',
+      'Studio, I miei errori ricorrenti, Tutte le decisioni analizzate e il database giocatori partono da questo profilo virtuale. Aggiungi il tuo giocatore NeonDojo come membro perché le tue partite contro il bot vengano conteggiate qui.',
     myProfileUnavailable: 'Impossibile caricare i profili virtuali.',
     applyMyProfile:
       'Il mio profilo giocatore viene salvato con il database giocatori.',
@@ -260,11 +260,11 @@ const words: Record<Locale, Record<Key, string>> = {
       '„{name}” zostanie usunięty. Jego profile członkowskie, mecze i analizy pozostają bez zmian.',
     partOf: 'Należy do',
     botMatches:
-      'Obejmuje Twoje mecze NeonDojo z botem. Liczą się do PR tylko wtedy, gdy rozegrano je w trybie Rywalizacja bez pomocy w nauce.',
+      'Twoje mecze NeonDojo z botem liczą się, gdy Twój gracz NeonDojo jest członkiem. Liczą się do PR tylko wtedy, gdy rozegrano je w trybie Rywalizacja bez pomocy w nauce.',
     myProfile: 'Mój profil gracza',
     myProfileNone: 'Brak',
     myProfileHelp:
-      'Nauka, Moje powtarzające się błędy, Wszystkie przeanalizowane decyzje i baza graczy zaczynają od tego profilu wirtualnego. Twoje partie z botem są do niego wliczane.',
+      'Nauka, Moje powtarzające się błędy, Wszystkie przeanalizowane decyzje i baza graczy zaczynają od tego profilu wirtualnego. Dodaj swojego gracza NeonDojo jako członka, aby Twoje partie z botem były do niego wliczane.',
     myProfileUnavailable: 'Nie udało się wczytać profili wirtualnych.',
     applyMyProfile: 'Mój profil gracza jest zapisywany w bazie graczy.',
   },

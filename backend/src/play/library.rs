@@ -145,8 +145,10 @@ pub(super) async fn sync(
     };
     let filename = format!("Bot match {}.sgf", session.id);
     if let ArchiveTarget::NewIn(database) = target {
-        sqlx::query("INSERT INTO matches(id,filename,format,sha256,white,black,match_length,position_count,original,sgf,database_id,created_at,played_on,result_state,white_score,black_score,source_metadata_loaded,imported_analysis_loaded) SELECT $1,$2,'sgf',$3,$4,$5,$6,0,$7,$8,$9,created_at,created_at::date,$10,$11,$12,true,true FROM play_sessions WHERE id=$13")
-            .bind(id).bind(filename).bind(&hash).bind(&imported.players[0]).bind(&imported.players[1]).bind(session.match_length).bind(sgf.as_bytes()).bind(&sgf).bind(database).bind(result).bind(session.scores[0]).bind(session.scores[1]).bind(session.id).execute(&mut **tx).await?;
+        // The play mode and the human side are set on insert, so the player
+        // catalog files only the human side, under the NeonDojo platform.
+        sqlx::query("INSERT INTO matches(id,filename,format,sha256,white,black,match_length,position_count,original,sgf,database_id,created_at,played_on,result_state,white_score,black_score,source_metadata_loaded,imported_analysis_loaded,play_mode,play_human_side) SELECT $1,$2,'sgf',$3,$4,$5,$6,0,$7,$8,$9,created_at,created_at::date,$10,$11,$12,true,true,$14,$15 FROM play_sessions WHERE id=$13")
+            .bind(id).bind(filename).bind(&hash).bind(&imported.players[0]).bind(&imported.players[1]).bind(session.match_length).bind(sgf.as_bytes()).bind(&sgf).bind(database).bind(result).bind(session.scores[0]).bind(session.scores[1]).bind(session.id).bind(session.play_mode).bind(i16::try_from(session.human_player)?).execute(&mut **tx).await?;
     }
     update_mode_metadata(tx, session, id).await?;
     let old_source: String = sqlx::query_scalar("SELECT sgf FROM matches WHERE id=$1")
