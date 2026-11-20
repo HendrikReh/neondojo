@@ -40,6 +40,13 @@ async fn source_aliases_stay_separate_until_assigned_and_apply_to_future_imports
     let profiles = call(&app, "GET", "/api/players?q=example", Value::Null, 200).await;
     let items = profiles["items"].as_array().unwrap();
     assert_eq!(items.len(), 2);
+    // Equal display names list each profile's platforms to tell them apart.
+    let mut platforms: Vec<&Value> = items.iter().map(|item| &item["name_platforms"]).collect();
+    platforms.sort_by_key(|value| value.to_string());
+    assert_eq!(
+        platforms,
+        [&json!(["backgammongalaxy.com"]), &json!(["opengammon.com"])]
+    );
     let id = items[0]["id"].as_str().unwrap();
     let version = items[0]["version"].as_i64().unwrap();
     let uri = format!("/api/players/{id}");
@@ -61,6 +68,10 @@ async fn source_aliases_stay_separate_until_assigned_and_apply_to_future_imports
     )
     .await;
     assert_eq!(renamed["items"][0]["id"], id);
+    // Distinct names need no platform.
+    for item in renamed["items"].as_array().unwrap() {
+        assert!(item.get("name_platforms").is_none(), "{item}");
+    }
     assert_eq!(renamed["items"][0]["matching_alias"]["name"], "example");
     assert_eq!(
         renamed["items"][0]["matching_alias"]["platform"],

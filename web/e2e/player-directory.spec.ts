@@ -145,6 +145,49 @@ test('edits an imported player profile and opens its match', async ({
   await expect(page.getByText('Profile zusammengeführt.')).toBeVisible();
 });
 
+test('shows the platform when imported profiles share a name', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  const name = `shared${crypto.randomUUID().slice(0, 8)}`;
+  for (const [file, site] of [
+    ['galaxy.sgf', 'BackgammonGalaxy'],
+    ['opengammon.sgf', 'OpenGammon'],
+  ]) {
+    const imported = await page.request.post('/api/imports', {
+      multipart: {
+        file: {
+          name: file,
+          mimeType: 'application/octet-stream',
+          buffer: Buffer.from(
+            `(;GM[6]PW[${name}]PB[Opponent ${site}]PC[${site}]MI[length:7];W[31hefe])`,
+          ),
+        },
+      },
+    });
+    expect(imported.status()).toBe(201);
+  }
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Player database' }).click();
+  await page.getByRole('searchbox', { name: 'Search players' }).fill(name);
+  const list = page.locator('.player-list');
+  const rows = list.getByRole('row').filter({ hasText: name });
+  await expect(rows).toHaveCount(2);
+  for (const platform of ['backgammongalaxy.com', 'opengammon.com'])
+    await expect(rows.filter({ hasText: `Platform ${platform}` })).toHaveCount(
+      1,
+    );
+  // A name of its own needs no platform.
+  await page
+    .getByRole('searchbox', { name: 'Search players' })
+    .fill('Opponent BackgammonGalaxy');
+  const opponent = list
+    .getByRole('row')
+    .filter({ hasText: 'Opponent BackgammonGalaxy' });
+  await expect(opponent).toHaveCount(1);
+  await expect(opponent.locator('.player-name-platforms')).toHaveCount(0);
+});
+
 test('springs directly between numbered player result pages and resets on search', async ({
   page,
 }) => {

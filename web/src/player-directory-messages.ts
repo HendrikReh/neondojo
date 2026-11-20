@@ -41,6 +41,7 @@ const en = {
   counts:
     '{matches, plural, one {# match} other {# matches}} · {games, plural, one {# game} other {# games}}',
   matchedAlias: 'Matched alias',
+  namePlatforms: 'Platform',
   coverage: '{rated} of {total, plural, one {# match} other {# matches}} rated',
   mergeWith: 'Profile to merge',
   mergeTarget: 'Profile to keep',
@@ -106,6 +107,7 @@ const words: Record<Locale, Record<Key, string>> = {
     counts:
       '{matches, plural, one {# Match} other {# Matches}} · {games, plural, one {# Spiel} other {# Spiele}}',
     matchedAlias: 'Gefundener Alias',
+    namePlatforms: 'Plattform',
     coverage:
       '{rated} von {total, plural, one {# Match} other {# Matches}} gewertet',
     mergeWith: 'Profil zur Übernahme suchen',
@@ -169,6 +171,7 @@ const words: Record<Locale, Record<Key, string>> = {
     counts:
       '{matches, plural, one {# encuentro} other {# encuentros}} · {games, plural, one {# partida} other {# partidas}}',
     matchedAlias: 'Alias encontrado',
+    namePlatforms: 'Plataforma',
     coverage:
       '{total, plural, one {{rated} de # encuentro evaluado} other {{rated} de # encuentros evaluados}}',
     mergeWith: 'Buscar perfil para fusionar',
@@ -232,6 +235,7 @@ const words: Record<Locale, Record<Key, string>> = {
     counts:
       '{matches, plural, one {# match} other {# matchs}} · {games, plural, one {# partie} other {# parties}}',
     matchedAlias: 'Alias trouvé',
+    namePlatforms: 'Plateforme',
     coverage:
       '{rated, plural, one {# match évalué} other {# matchs évalués}} sur {total}',
     mergeWith: 'Rechercher le profil à fusionner',
@@ -295,6 +299,7 @@ const words: Record<Locale, Record<Key, string>> = {
     counts:
       '{matches, plural, one {# incontro} other {# incontri}} · {games, plural, one {# partita} other {# partite}}',
     matchedAlias: 'Alias trovato',
+    namePlatforms: 'Piattaforma',
     coverage:
       '{rated, plural, one {# incontro valutato} other {# incontri valutati}} su {total}',
     mergeWith: 'Cerca il profilo da unire',
@@ -359,6 +364,7 @@ const words: Record<Locale, Record<Key, string>> = {
     counts:
       '{matches, plural, one {# mecz} few {# mecze} many {# meczów}} · {games, plural, one {# partia} few {# partie} many {# partii}}',
     matchedAlias: 'Znaleziony alias',
+    namePlatforms: 'Platforma',
     coverage:
       'Oceniono {rated} z {total, plural, one {# meczu} few {# meczów} many {# meczów}}',
     mergeWith: 'Znajdź profil do połączenia',

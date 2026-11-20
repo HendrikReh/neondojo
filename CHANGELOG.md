@@ -6,10 +6,6 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ## [Unreleased]
 
-### Fixed
-
-- **PR coverage of "My player profile".** Bot matches played with learning aids no longer count as unrated: the coverage beside the PR counts only matches that can enter it, and **Analyze unrated matches …** no longer stays visible for them. Virtual profiles report these matches as `rateable_match_count`. [Virtual player profiles](docs/reference/library.md#virtual-player-profiles)
-
 ### Added
 
 - **Virtual player profiles.** A virtual profile groups real player profiles without changing them, for example the same person's Galaxy and OpenGammon accounts. Unlike **Merge …** it is reversible: members keep their aliases and their own rows in the player list, which name their group, and can be removed again. Each real profile belongs to at most one virtual profile. The virtual profile shows the consolidated PR, PR chart, matches and opponents of its members. [Virtual player profiles](docs/reference/library.md#virtual-player-profiles)
@@ -18,6 +14,14 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
   - Merging a member into a profile without a group passes the membership on.
   - New endpoints under `/api/virtual-players`, `virtual_player_id` on `GET /api/library/matches`, and `virtual_profile` on player profiles. `GET /api/study/mistakes` now returns `resolved_player` for **My player profile** even without `resolve`.
   - Migration `0084_virtual_player_profiles` adds the tables and the view `virtual_player_sides`. Backups include the virtual profiles and their members.
+
+### Changed
+
+- **Players with the same name can be told apart.** When several profiles in **Player database** share a display name, for example the same username on Galaxy and OpenGammon, each row shows its platforms under the name. `GET /api/players` returns them in `name_platforms`. [Player database](docs/reference/library.md#player-database)
+
+### Fixed
+
+- **PR coverage of "My player profile".** Bot matches played with learning aids no longer count as unrated: the coverage beside the PR counts only matches that can enter it, and **Analyze unrated matches …** no longer stays visible for them. Virtual profiles report these matches as `rateable_match_count`. [Virtual player profiles](docs/reference/library.md#virtual-player-profiles)
 
 ## [1.0.0] - 2026-11-20
 
@@ -67,6 +71,7 @@ Adds two features and fixes dice equity and Open Sage fork recognition. This rel
 
 ### Added
 
+
 - **Delete dice equity.** **Checker → Dice equity** can permanently delete the displayed finished calculation after a confirmation. The tab then shows an older calculation of the same engine or stays empty until you request a new one. `DELETE /api/positions/{id}/jobs/{job_id}` deletes finished dice equity jobs only. [#17](https://github.com/HendrikReh/neondojo/pull/17) · [Analysis workspace](docs/reference/analysis.md#analysis-workspace)
 - **Open engine duels in Analysis.** Each result row in **Extras → Engine duels** has an **Analysis** action next to the SGF download. It opens the archived library entry, also after a move to another database, and saves a deleted entry again under **Engine Duels**. [#14](https://github.com/HendrikReh/neondojo/pull/14) · [Engine duels](docs/reference/extras.md#engine-duels)
 
@@ -90,6 +95,7 @@ First tagged release. It covers everything since the first commit on 2026-11-08.
 - **Builds on macOS.** The workspace `Cargo.toml` sets `strip = "none"` for the `dev` and `release` profiles to avoid `mis-aligned LINKEDIT string pool` failures with Rust 1.94.1 on macOS 27. Do not re-enable stripping through environment variables, Cargo config or `RUSTFLAGS`. [Local restart](README.md#restart-bg-tutor-locally-on-port-8787)
 
 ### Added
+
 
 #### Match library and import
 
