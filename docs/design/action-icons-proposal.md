@@ -1,6 +1,6 @@
 # Einheitliche Aktions-Icons
 
-BG Tutor verwendet [Lucide Outline](https://lucide.dev/icons/) mit einer Strichstärke von 1,5 im 24 × 24 SVG-Raster. Die Strichstärke skaliert mit der angezeigten Icon-Größe. Kompakte Routineaktionen verwenden ein Icon mit Tooltip, wichtige Spielaktionen und primäre Formularaktionen ein Icon mit Text. Tooltips erscheinen bei Hover und Tastaturfokus.
+Neondojo verwendet [Lucide Outline](https://lucide.dev/icons/) mit einer Strichstärke von 1,5 im 24 × 24 SVG-Raster. Die Strichstärke skaliert mit der angezeigten Icon-Größe. Kompakte Routineaktionen verwenden ein Icon mit Tooltip, wichtige Spielaktionen und primäre Formularaktionen ein Icon mit Text. Tooltips erscheinen bei Hover und Tastaturfokus.
 
 | Benutzeraktion | Lucide-Icon | Bedeutung |
 | --- | --- | --- |
@@ -9,8 +9,8 @@ BG Tutor verwendet [Lucide Outline](https://lucide.dev/icons/) mit einer Strichs
 | Hint / Hinweis | [lightbulb](https://lucide.dev/icons/lightbulb) | Unterstützung zur aktuellen Entscheidung |
 | Löschen | [trash](https://lucide.dev/icons/trash) | Ausgewähltes Element löschen |
 | Hinzufügen | [plus](https://lucide.dev/icons/plus) | Neues Element anlegen oder hinzufügen |
-| Exportieren | [download](https://lucide.dev/icons/download) | Datei aus BG Tutor herunterladen |
-| Importieren | [upload](https://lucide.dev/icons/upload) | Datei in BG Tutor übernehmen |
+| Exportieren | [download](https://lucide.dev/icons/download) | Datei aus Neondojo herunterladen |
+| Importieren | [upload](https://lucide.dev/icons/upload) | Datei in Neondojo übernehmen |
 | Spiel fortsetzen | [play](https://lucide.dev/icons/play) | Gespeichertes Spiel fortsetzen |
 | Öffnen | [folder-open](https://lucide.dev/icons/folder-open) | Vorhandenes Match oder Datei öffnen |
 | Suchen | [search](https://lucide.dev/icons/search) | Bestand durchsuchen |

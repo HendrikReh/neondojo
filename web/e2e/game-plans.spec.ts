@@ -4,8 +4,8 @@ test.use({ actionTimeout: 10000, viewport: { width: 1800, height: 1169 } });
 
 async function initialize(page: Page) {
   await page.addInitScript(() => {
-    localStorage.setItem('bgtutor.locale', 'en');
-    localStorage.setItem('bgtutor.theme', 'forest');
+    localStorage.setItem('neondojo.locale', 'en');
+    localStorage.setItem('neondojo.theme', 'forest');
   });
   await page.goto('/');
 }

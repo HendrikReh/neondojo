@@ -1,4 +1,4 @@
-# Open Sage lokal in BG Tutor — Architektur und Umsetzungsplan
+# Open Sage lokal in Neondojo — Architektur und Umsetzungsplan
 
 Stand: 12. November 2026. Umsetzung im isolierten Worktree `codex/open-sage-local` auf Basis `d3b1434`; vorhandene und parallel entstandene Änderungen im Hauptworktree bleiben erhalten.
 
@@ -84,7 +84,7 @@ Neue klar abgegrenzte Module unter `backend/src/engines/`:
 - `registry.rs`: geprüfte Installationen und Adapterauswahl.
 - `gnubg.rs`: Anbindung an die bestehende Implementierung ohne fachliche Neuimplementierung.
 - `open_sage.rs` und `open_sage_worker.py`: Prozessverwaltung und schmale Bibliotheksanbindung.
-- `context.rs`: einzige maßgebliche Konvertierung zwischen absolutem BG-Tutor-Brett und Engine-Perspektive.
+- `context.rs`: einzige maßgebliche Konvertierung zwischen absolutem Neondojo-Brett und Engine-Perspektive.
 
 `engine.rs` kann zunächst als Kompatibilitätsfassade bestehen bleiben. Nur tatsächlich gemeinsame Prozess- und Koordinationslogik auslagern; GNUbg-SGF-Parsing bleibt GNUbg-spezifisch.
 
@@ -100,7 +100,7 @@ Rechnerabhängige Installationspfade bleiben außerhalb portabler Benutzerprofil
 
 ## 6. Fachliche Konvertierung und Analyse
 
-BG Tutor speichert absolute Brettkoordinaten. Open Sage erwartet eine Spielerperspektive; auch die Bar-Darstellung muss explizit konvertiert werden. Ein unverändertes Durchreichen von 26 Zahlen ist nicht zulässig. Umkehrung, Spielerfarbe, Cube-Besitz und Away-Scores gemeinsam umrechnen. Quellen: [BG-Sage-Brettfunktionen](https://github.com/markbgsage/bgsage/blob/main/python/bgsage/board.py), [Simulationskontext](https://github.com/markbgsage/bgsage/blob/main/SIMULATION.md).
+Neondojo speichert absolute Brettkoordinaten. Open Sage erwartet eine Spielerperspektive; auch die Bar-Darstellung muss explizit konvertiert werden. Ein unverändertes Durchreichen von 26 Zahlen ist nicht zulässig. Umkehrung, Spielerfarbe, Cube-Besitz und Away-Scores gemeinsam umrechnen. Quellen: [BG-Sage-Brettfunktionen](https://github.com/markbgsage/bgsage/blob/main/python/bgsage/board.py), [Simulationskontext](https://github.com/markbgsage/bgsage/blob/main/SIMULATION.md).
 
 Referenztests decken beide Farben, beide Bars, Schlagen, mehrfach bewegte Steine, Pasch, höheren Einzelwürfel, Ausspielen und blockierte Würfe ab. Open Sage liefert für einen komplett blockierten Wurf laut Brett-API die unveränderte Stellung; diese muss als Pass behandelt werden, nicht als fehlendes Ergebnis. Kandidaten werden über resultierende Bretter mit legalen Zugfolgen verknüpft; vorhandene SGF-Regelprüfung und Notationswerkzeuge wiederverwenden.
 
@@ -122,7 +122,7 @@ Die bestehende native Automatik muss gezielt aufgeteilt werden:
 
 1. GNUbg erzeugt oder lädt den unveränderten Spielstand, würfelt und bestimmt zulässige Aktionen.
 2. Für Open-Sage-Partien bleiben beide GNUbg-Spieler manuell gesteuert. Kein automatischer GNUbg-Botzug, keine automatische Take-/Pass-/Aufgabeentscheidung.
-3. BG Tutor übergibt den Entscheidungskontext an die Spiel-Engine. Deren Antwort wird gegen den aktuellen Zustand und legale Zugfolgen geprüft.
+3. Neondojo übergibt den Entscheidungskontext an die Spiel-Engine. Deren Antwort wird gegen den aktuellen Zustand und legale Zugfolgen geprüft.
 4. GNUbg wendet ausschließlich die gewählte Aktion an und erzeugt SGF, Historie und Folgezustand. Die nächste Bot-Entscheidung läuft erneut durch den gewählten Adapter.
 5. Sitzung, Archiv und relevante Berichte werden mit bestehender Versionsprüfung atomar gespeichert. Ein Fehler oder eine verspätete Antwort lässt den bestätigten Spielstand unangetastet.
 
@@ -227,7 +227,7 @@ Reihenfolge: A → B → C → D → E → F → G → H. Vor jedem Eingriff akt
 
 **Dateien:** `README.md`, `.env.example`, `docs/open-sage-local.md`, neue Lockdatei und Migrationstests.
 
-- Versionierte lokale Umgebung unter `~/Library/Application Support/BG Tutor/engines/open-sage/` dokumentieren; Modell-/Paketdateien nicht im Git-Repository ablegen.
+- Versionierte lokale Umgebung unter `~/Library/Application Support/Neondojo/engines/open-sage/` dokumentieren; Modell-/Paketdateien nicht im Git-Repository ablegen.
 - Reproduzierbares Setup aus gehashten Wheels beschreiben; keine Installation beim normalen App-Start und kein automatisches Upgrade laufender Installationen.
 - Migration auf einer isolierten Kopie historischer Daten testen: GNUbg-Partien, Ergebnisse, Profile, Notizen und Lernfortschritt bleiben erhalten.
 - Abnahmematrix für beide Engines ausführen und Messergebnisse mit Hardware, Datenumfang, Profil und Prozessstrategie dokumentieren.
@@ -250,15 +250,15 @@ npm run test:e2e --prefix web
 `cargo test --workspace` benötigt gemäß README einen geeigneten Testserver. Native Integrationstests nur nach Prüfung von Zielserver/Isolation, GNUbg-Gewichten und eingebettetem Python sowie dem Open-Sage-Probebericht starten. Bestehende gezielte Kommandos:
 
 ```sh
-cargo test -p bgtutor --test play -- --ignored --nocapture
-cargo test -p bgtutor --test match_analysis -- --ignored --nocapture
-cargo test -p bgtutor --test benchmarks -- --ignored --nocapture
+cargo test -p neondojo --test play -- --ignored --nocapture
+cargo test -p neondojo --test match_analysis -- --ignored --nocapture
+cargo test -p neondojo --test benchmarks -- --ignored --nocapture
 ```
 
 Nach Anlage des neuen Integrationstest-Targets zusätzlich:
 
 ```sh
-cargo test -p bgtutor --test open_sage -- --ignored --nocapture
+cargo test -p neondojo --test open_sage -- --ignored --nocapture
 ```
 
 Die neuen Python-Protokolltests erhalten einen eigenen dokumentierten Aufruf mit dem gewählten Sidecar-Interpreter; `test:themes` allein deckt sie nicht ab. Datenbank-Suchänderungen zusätzlich anhand repräsentativer isolierter Daten mit `EXPLAIN (ANALYZE, BUFFERS)` prüfen.

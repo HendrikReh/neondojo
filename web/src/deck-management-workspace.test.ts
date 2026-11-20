@@ -110,7 +110,7 @@ beforeEach(() => {
     removeEventListener: vi.fn(),
   });
   vi.stubGlobal('localStorage', {
-    getItem: (key: string) => (key === 'bgtutor.deck' ? 'a' : 'en'),
+    getItem: (key: string) => (key === 'neondojo.deck' ? 'a' : 'en'),
     setItem: vi.fn(),
     removeItem: vi.fn(),
   });

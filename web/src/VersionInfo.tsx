@@ -103,7 +103,7 @@ export default function VersionInfo() {
       </h1>
       <dl className="version-info-summary" aria-live="polite">
         <div>
-          <dt>BG Tutor</dt>
+          <dt>Neondojo</dt>
           <dd>
             {appVersion ? (
               <code title={appVersion}>{appVersion.slice(0, 7)}</code>

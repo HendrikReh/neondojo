@@ -4,7 +4,7 @@ test('native sessions retain their snapshot across complete profile activation',
   page,
 }) => {
   test.skip(
-    process.env.BGTUTOR_PROFILE_NATIVE !== '1',
+    process.env.NEONDOJO_PROFILE_NATIVE !== '1',
     'Requires the isolated profiles test backend',
   );
   await page.goto('/');

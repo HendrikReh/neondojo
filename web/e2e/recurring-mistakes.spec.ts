@@ -64,7 +64,7 @@ const answer = {
 };
 async function open(page: Page, locale = 'en') {
   await page.addInitScript(
-    (locale) => localStorage.setItem('bgtutor.locale', locale),
+    (locale) => localStorage.setItem('neondojo.locale', locale),
     locale,
   );
   await page.route('**/api/decks', (r) => r.fulfill({ json: [] }));
@@ -697,7 +697,7 @@ test('Next ignores a late reveal and leaving Study cancels pending practice', as
 test('position search exposes the same game plan labels and sends the chosen optional filter', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.route('**/api/decks', (r) => r.fulfill({ json: [] }));
   await page.route('**/api/databases', (r) => r.fulfill({ json: [] }));
   await page.route('**/api/position-filters', (r) => r.fulfill({ json: [] }));

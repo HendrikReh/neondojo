@@ -17,7 +17,7 @@ it('preserves a known theme and falls back safely for missing or invalid values'
 it('can save preferences even when browser storage is unavailable', () => {
   const values = new Map<string, string>();
   saveTheme('slate', { setItem: (key, value) => values.set(key, value) });
-  expect(values.get('bgtutor.theme')).toBe('slate');
+  expect(values.get('neondojo.theme')).toBe('slate');
   expect(() =>
     saveTheme('forest', {
       setItem: () => {

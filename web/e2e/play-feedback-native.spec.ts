@@ -7,7 +7,7 @@ import {
   nextCheckerSteps,
 } from '../src/play-state';
 test.skip(
-  !process.env.BGTUTOR_FEEDBACK_NATIVE_TEST,
+  !process.env.NEONDOJO_FEEDBACK_NATIVE_TEST,
   'Requires isolated native feedback backend',
 );
 test.beforeEach(async ({ page }) => {
@@ -76,8 +76,8 @@ for (const mode of ['competition', 'training', 'coach', 'tutor'] as const) {
         state.legal_moves,
       );
       await page.addInitScript((id) => {
-        localStorage.setItem('bgtutor.play-session', id);
-        localStorage.setItem('bgtutor.play-sounds', 'off');
+        localStorage.setItem('neondojo.play-session', id);
+        localStorage.setItem('neondojo.play-sounds', 'off');
       }, state.id);
       await page.goto('/');
       await page.getByRole('tab', { name: 'Playing', exact: true }).click();
@@ -151,8 +151,8 @@ for (const mode of ['competition', 'training', 'coach', 'tutor'] as const) {
     }
     await action('move', moveIndex);
     await page.addInitScript((id) => {
-      localStorage.setItem('bgtutor.play-session', id);
-      localStorage.setItem('bgtutor.play-sounds', 'off');
+      localStorage.setItem('neondojo.play-session', id);
+      localStorage.setItem('neondojo.play-sounds', 'off');
     }, state.id);
     await page.goto('/');
     await page.getByRole('tab', { name: 'Playing', exact: true }).click();
@@ -234,7 +234,7 @@ for (const mode of ['competition', 'training', 'coach', 'tutor'] as const) {
     );
     await expect(panel).toHaveCount(0);
     await page.screenshot({
-      path: `/tmp/bgtutor-native-${mode}.png`,
+      path: `/tmp/neondojo-native-${mode}.png`,
       fullPage: true,
     });
   });
@@ -252,13 +252,13 @@ test('native Competition startup and live modes preserve the running position', 
   expect(state.library_match_id).toBeTruthy();
   await page.addInitScript((session) => {
     localStorage.setItem(
-      'bgtutor.workspace',
+      'neondojo.workspace',
       JSON.stringify({
         matchId: session.library_match_id,
         gameNo: 1,
       }),
     );
-    localStorage.setItem('bgtutor.play-sounds', 'off');
+    localStorage.setItem('neondojo.play-sounds', 'off');
   }, state);
   const restrictedReads: string[] = [];
   page.on('response', (response) => {

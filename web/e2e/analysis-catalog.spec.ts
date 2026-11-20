@@ -9,7 +9,7 @@ const analysisTimeout = 100_000;
 test('a selected analysis can be deleted while a deeper result remains available', async ({
   page,
 }, info) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   const imported = page.waitForResponse(
     (response) => new URL(response.url()).pathname === '/api/imports',
@@ -89,7 +89,7 @@ test('one saved choice drives every view and remains strict across games and rel
   page,
 }) => {
   const profile = await profileBackend(page);
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   const imported = page.waitForResponse(
     (r) => new URL(r.url()).pathname === '/api/imports',
@@ -192,7 +192,7 @@ test('one saved choice drives every view and remains strict across games and rel
       ),
     ).toBe(true);
     await page.screenshot({
-      path: `/private/tmp/bgtutor-catalog-${width}.png`,
+      path: `/private/tmp/neondojo-catalog-${width}.png`,
     });
   }
   const catalog = await (

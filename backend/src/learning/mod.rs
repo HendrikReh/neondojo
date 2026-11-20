@@ -1352,7 +1352,7 @@ async fn export_deck(
             (header::CONTENT_TYPE, "application/zip"),
             (
                 header::CONTENT_DISPOSITION,
-                "attachment; filename=\"bgtutor.apkg\"",
+                "attachment; filename=\"neondojo.apkg\"",
             ),
         ],
         bytes,

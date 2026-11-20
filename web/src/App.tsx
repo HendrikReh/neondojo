@@ -538,7 +538,7 @@ export default function App() {
     setNotice(undefined);
     setMoveNotes(undefined);
     try {
-      localStorage.removeItem('bgtutor.workspace');
+      localStorage.removeItem('neondojo.workspace');
     } catch {
       /* Home navigation also works without persistent storage. */
     }
@@ -637,7 +637,7 @@ export default function App() {
         if (!uploading) void upload(event.dataTransfer.files);
       }}
     >
-      <span className="eyebrow">BG TUTOR</span>
+      <span className="eyebrow">NEONDOJO</span>
       <h1>{w('welcomeTitle')}</h1>
       <p>{w('welcomeDescription')}</p>
       <div className="welcome-actions">
@@ -748,7 +748,7 @@ export default function App() {
           <span className="brand-mark">
             b<span>g</span>
           </span>
-          <span>BG Tutor</span>
+          <span>Neondojo</span>
         </a>
         <nav
           className="app-tabs text-navigation"
@@ -1014,7 +1014,7 @@ export default function App() {
                   ) {
                     navigation.clear();
                     try {
-                      localStorage.removeItem('bgtutor.workspace');
+                      localStorage.removeItem('neondojo.workspace');
                     } catch {
                       /* Storage unavailable. */
                     }
@@ -1027,7 +1027,7 @@ export default function App() {
               ) {
                 navigation.clear();
                 try {
-                  localStorage.removeItem('bgtutor.workspace');
+                  localStorage.removeItem('neondojo.workspace');
                 } catch {
                   /* Storage unavailable. */
                 }

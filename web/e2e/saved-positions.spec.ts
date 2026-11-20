@@ -2,7 +2,7 @@ import { expect, test, type Locator, type Page } from './test';
 
 test.use({ actionTimeout: 10000 });
 async function imported(page: Page, games = 1) {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   const suffix = crypto.randomUUID();
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();

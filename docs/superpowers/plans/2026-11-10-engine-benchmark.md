@@ -13,7 +13,7 @@
 Files: `backend/migrations/0029_benchmarks.sql`, `backend/src/benchmarks.rs`, `backend/src/benchmarks/machine.rs`, `backend/src/benchmarks/reference.sgf`, `backend/tests/benchmarks.rs`, `backend/src/api.rs`, `backend/src/lib.rs`.
 
 - [x] Write API integration tests before implementation: reference metadata with 10 games/460 moves, invalid/missing/unavailable engine rejection, distinct append-only runs, immutable machine/engine/reference snapshots, cancel queued run, history surviving another AppState, OpenAPI schema.
-- [x] Run `cargo test -p bgtutor --test benchmarks -- --ignored`; before implementation expect missing routes (404).
+- [x] Run `cargo test -p neondojo --test benchmarks -- --ignored`; before implementation expect missing routes (404).
 - [x] Add dedicated tables with status/check constraints, machine UUID singleton and immutable snapshots; expose `GET /api/benchmarks`, `GET /api/benchmarks/reference`, `POST /api/benchmarks`, `POST /api/benchmarks/{id}/cancel`. Request `{engine_id:"gnubg", plies:[0,2]}`; list response `{runs:BenchmarkRun[],active:bool}`, create response array of new runs (202).
 - [x] Validate nonempty distinct 0–4 depths, engine availability and version; resolve executable before storing. Embed a copied unanalysed WC2014 SGF with stable reference ID/version/SHA. Snapshot backend hardware without serial numbers.
 - [x] Run tests and regenerate `docs/openapi.json` / `web/src/generated-api.d.ts` after integration.
@@ -52,7 +52,7 @@ Files: `web/src/BenchmarkWorkspace.tsx`, `web/src/benchmark-api.ts`, `web/src/be
 - Existing settings/native engine regression suite: fourteen ignored integration cases explicitly passed, including 3/4-ply real searches.
 - Frontend: 332 Vitest tests, five deterministic Playwright benchmark cases and production build passed.
 - Original checkout: feature-only transfer preserved concurrent README/API changes; API schema regenerated and local service restarted with migration.
-- Real browser/worker/database/engine smoke test passed, creating retained 0-ply results and checking history after reload (explicit opt-in `BGTUTOR_NATIVE_BENCHMARK=1`).
+- Real browser/worker/database/engine smoke test passed, creating retained 0-ply results and checking history after reload (explicit opt-in `NEONDOJO_NATIVE_BENCHMARK=1`).
 - Independent spec compliance and code quality reviews passed after health/cancellation/recovery fixes.
 
 ## User change: unlimited benchmark execution (2026-11-10)

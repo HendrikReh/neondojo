@@ -69,7 +69,7 @@ import type {
   ImportedAnkiDeck,
 } from './learning-api';
 
-const practiceStorageKey = 'bgtutor.card-practice-round';
+const practiceStorageKey = 'neondojo.card-practice-round';
 const defaultCardFilters = emptyCardFilters();
 
 function storedPracticeRound() {
@@ -82,7 +82,7 @@ function storedPracticeRound() {
 
 function savedDeck() {
   try {
-    return localStorage.getItem('bgtutor.deck') || ALL_CARDS;
+    return localStorage.getItem('neondojo.deck') || ALL_CARDS;
   } catch {
     return ALL_CARDS;
   }
@@ -694,7 +694,7 @@ export default function LearningWorkspace({
         status === '503' ? practiceT('ankiUnavailable') : formatError(failure),
       );
     } finally {
-      // Anki may have stopped responding after BG Tutor saved incoming reviews.
+      // Anki may have stopped responding after Neondojo saved incoming reviews.
       setHistoryRevision((value) => value + 1);
       onChanged();
       setSyncingAnki(false);
@@ -906,7 +906,7 @@ export default function LearningWorkspace({
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = `${(decks.find((d) => d.id === id)?.name || 'BG Tutor').replace(/[^\p{L}\p{N}_ -]/gu, '_')}.apkg`;
+      anchor.download = `${(decks.find((d) => d.id === id)?.name || 'Neondojo').replace(/[^\p{L}\p{N}_ -]/gu, '_')}.apkg`;
       anchor.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (error) {

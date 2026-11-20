@@ -24,7 +24,7 @@ for (const scenario of ['missing', 'filtered', 'clean'] as const) {
     page,
   }) => {
     await page.addInitScript(() =>
-      localStorage.setItem('bgtutor.locale', 'en'),
+      localStorage.setItem('neondojo.locale', 'en'),
     );
     page.setDefaultTimeout(10000);
 

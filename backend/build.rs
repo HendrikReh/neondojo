@@ -7,7 +7,7 @@ fn main() {
     println!("cargo:rerun-if-changed=migrations");
 
     let commit = git_commit().unwrap_or_default();
-    println!("cargo:rustc-env=BGTUTOR_GIT_COMMIT={commit}");
+    println!("cargo:rustc-env=NEONDOJO_GIT_COMMIT={commit}");
 }
 
 fn git_commit() -> Option<String> {

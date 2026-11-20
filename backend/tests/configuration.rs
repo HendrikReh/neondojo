@@ -1,9 +1,9 @@
 use axum::{body::Body, http::Request};
-use bgtutor::{
+use http_body_util::BodyExt;
+use neondojo::{
     api::{self, AppState},
     engine::Engine,
 };
-use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -55,7 +55,7 @@ async fn play_uses_default_thresholds_when_configuration_cannot_be_loaded(pool: 
     assert_eq!(status, 201, "{session}");
     assert_eq!(
         session["tutor_threshold"],
-        bgtutor::configuration::ErrorThresholds::default().error,
+        neondojo::configuration::ErrorThresholds::default().error,
     );
 }
 

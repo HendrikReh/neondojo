@@ -61,7 +61,7 @@ test('shows the running app and engine versions under Extras', async ({
   expect(commit).toMatch(/^[a-f\d]{40}$/i);
   const panel = page.getByRole('region', { name: 'Version information' });
   const appRow = panel.locator('dl > div').filter({
-    has: page.getByText('BG Tutor', { exact: true }),
+    has: page.getByText('Neondojo', { exact: true }),
   });
   const appCommit = appRow.getByText(commit.slice(0, 7), { exact: true });
   await expect(appCommit).toBeVisible();

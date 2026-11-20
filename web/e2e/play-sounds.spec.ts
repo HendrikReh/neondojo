@@ -59,7 +59,7 @@ async function install(
   action?: (data: { action: string }) => PlaySession | null,
 ) {
   await page.addInitScript((sessionId) => {
-    localStorage.setItem('bgtutor.play-session', sessionId);
+    localStorage.setItem('neondojo.play-session', sessionId);
     window.__playAudio = [];
     window.__playContexts = [];
     window.__decodedRecordings = 0;
@@ -272,7 +272,7 @@ test('sound setting cancels, saves, survives reload and applies to ongoing games
   await dialog.getByLabel('Game sounds', { exact: true }).uncheck();
   await applyAndCloseSettings(dialog);
   expect(
-    await page.evaluate(() => localStorage.getItem('bgtutor.play-sounds')),
+    await page.evaluate(() => localStorage.getItem('neondojo.play-sounds')),
   ).toBe('off');
   const configuration = await page.evaluate(async () => {
     const response = await fetch('/api/configuration');
@@ -418,7 +418,7 @@ for (const muted of [false, true])
   }) => {
     await page.addInitScript(
       (muted) =>
-        localStorage.setItem('bgtutor.play-sounds', muted ? 'off' : 'on'),
+        localStorage.setItem('neondojo.play-sounds', muted ? 'off' : 'on'),
       muted,
     );
     const before = fixture();

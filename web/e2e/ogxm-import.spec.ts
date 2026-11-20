@@ -3,7 +3,7 @@ import { expect, test } from './test';
 test('the match file picker imports an OGXM archive match', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.setViewportSize({ width: 1800, height: 1169 });
   await page.goto('/');
   await expect(page.locator('.match-drop-zone-formats')).toContainText('OGXM');

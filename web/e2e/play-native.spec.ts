@@ -9,7 +9,7 @@ declare global {
 }
 import { orderedLegalTurns } from '../src/play-state';
 test.skip(
-  !process.env.BGTUTOR_NATIVE_PLAY_TEST,
+  !process.env.NEONDOJO_NATIVE_PLAY_TEST,
   'Requires disposable PostgreSQL/backend with actual GNUbg',
 );
 for (const config of [
@@ -247,7 +247,7 @@ for (const config of [
     expect(sgf.ok()).toBeTruthy();
     expect(await sgf.text()).toContain('GM[6]');
     await page.screenshot({
-      path: `/tmp/bgtutor-native-${config.direction}.png`,
+      path: `/tmp/neondojo-native-${config.direction}.png`,
       fullPage: true,
     });
   });

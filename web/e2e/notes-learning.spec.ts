@@ -9,8 +9,8 @@ import type { Job } from '../src/api';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
-    if (localStorage.getItem('bgtutor.locale') === null)
-      localStorage.setItem('bgtutor.locale', 'de');
+    if (localStorage.getItem('neondojo.locale') === null)
+      localStorage.setItem('neondojo.locale', 'de');
   });
 });
 

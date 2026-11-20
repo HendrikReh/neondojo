@@ -41,9 +41,9 @@ for (const width of [1440, 390])
   }) => {
     await page.setViewportSize({ width, height: 1100 });
     await page.addInitScript((id) => {
-      localStorage.setItem('bgtutor.locale', 'de');
+      localStorage.setItem('neondojo.locale', 'de');
       localStorage.setItem(
-        'bgtutor.workspace',
+        'neondojo.workspace',
         JSON.stringify({ matchId: id, gameNo: 6 }),
       );
     }, id);
@@ -105,7 +105,7 @@ for (const width of [1440, 390])
     const resultBox = await summary.boundingBox();
     expect(resultBox!.y).toBeGreaterThanOrEqual(moveBox!.y + moveBox!.height);
     await page.screenshot({
-      path: `/tmp/bgtutor-game-result-analysis-${width}.png`,
+      path: `/tmp/neondojo-game-result-analysis-${width}.png`,
       fullPage: true,
     });
   });
@@ -151,9 +151,9 @@ test('playing shows each completed game result at its history boundary', async (
     ],
   };
   await page.addInitScript((id) => {
-    localStorage.setItem('bgtutor.locale', 'en');
-    localStorage.setItem('bgtutor.play-session', id);
-    localStorage.setItem('bgtutor.play-sounds', 'off');
+    localStorage.setItem('neondojo.locale', 'en');
+    localStorage.setItem('neondojo.play-session', id);
+    localStorage.setItem('neondojo.play-sounds', 'off');
   }, id);
   await page.route(`**/api/play/sessions/${id}`, (r) =>
     r.fulfill({ json: state }),

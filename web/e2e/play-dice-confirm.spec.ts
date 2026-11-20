@@ -88,8 +88,8 @@ for (const config of [
     });
     await page.addInitScript(
       ({ id, theme }) => {
-        localStorage.setItem('bgtutor.play-session', id);
-        localStorage.setItem('bgtutor.theme', theme);
+        localStorage.setItem('neondojo.play-session', id);
+        localStorage.setItem('neondojo.theme', theme);
       },
       { id, theme: config.theme },
     );
@@ -264,8 +264,8 @@ for (const mode of ['double', 'double_archive', 'single_usable'] as const)
     const writes: unknown[] = [];
     await page.addInitScript(
       ({ id, theme }) => {
-        localStorage.setItem('bgtutor.play-session', id);
-        localStorage.setItem('bgtutor.theme', theme);
+        localStorage.setItem('neondojo.play-session', id);
+        localStorage.setItem('neondojo.theme', theme);
       },
       { id, theme: mode === 'double_archive' ? 'bgblitz:bg-earth' : 'forest' },
     );
@@ -316,7 +316,7 @@ for (const mode of ['double', 'double_archive', 'single_usable'] as const)
             );
         }
         await page.screenshot({
-          path: `/tmp/bgtutor-double-fade-${mode}-${consumed}.png`,
+          path: `/tmp/neondojo-double-fade-${mode}-${consumed}.png`,
           fullPage: true,
         });
       }

@@ -17,7 +17,7 @@ Files: `web/e2e/workspace.spec.ts`, `web/src/i18n.test.ts`, `backend/tests/setti
 - [x] Add a browser regression that imports a unique two-game SGF and checks Analysis / Match database / Learn tabs, one active main tab, no permanent library sidebar in analysis, board and move list together, local Evaluation / Errors / Notes tabs, note draft retained across main-tab switches, and direct database-to-analysis navigation.
 
 ```ts
-await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
+await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'de'));
 await page.goto('/');
 await expect(page.getByRole('tab', { name: 'Analyse', exact: true })).toHaveAttribute('aria-selected', 'true');
 ```
@@ -75,7 +75,7 @@ Files: `web/src/App.tsx`, new AnalysisWorkspace/MatchDatabase/useWorkspaceNaviga
 Files: generated OpenAPI/TS, existing E2E suites updated to real navigation and settings entry points, README/spec status.
 
 - [x] Regenerate with `npm run api:types`; build Rust and apply migration by controlled dev-backend restart. Keep PostgreSQL data intact.
-- [x] Run `cargo test -p bgtutor -- --include-ignored` with PostgreSQL and local GNUbg, including optional local corpus; inspect all results.
+- [x] Run `cargo test -p neondojo -- --include-ignored` with PostgreSQL and local GNUbg, including optional local corpus; inspect all results.
 - [x] Run frontend Vitest, themes tests, production build, fmt/clippy/Prettier and diff whitespace checks.
 - [x] Run all browser tests after source edits have settled, adapting old tests to the new tabs/dialog/default language while preserving their behavioral assertions. New tests exercise save/cancel/conflict/default profile, engine path validation, genuine theme preview and drafts/subscriptions across views.
 - [x] Review the completed integration independently; fix concrete findings and rerun affected checks. Visually inspect screenshots of analysis, database and settings on desktop/mobile. Record actual results and any intentionally later database-management features. No commit requested in this turn.

@@ -4,12 +4,12 @@ test('native play-turn latency uses the saved playing depth and persists', async
   page,
 }) => {
   test.skip(
-    process.env.BGTUTOR_NATIVE_BENCHMARK !== '1',
+    process.env.NEONDOJO_NATIVE_BENCHMARK !== '1',
     'requires explicit native benchmark opt-in',
   );
   await page.addInitScript(() => {
     localStorage.clear();
-    localStorage.setItem('bgtutor.locale', 'en');
+    localStorage.setItem('neondojo.locale', 'en');
   });
   const settings = await (await page.request.get('/api/settings')).json();
   await page.goto('/');
@@ -51,12 +51,12 @@ test('native 1-ply benchmark completes and survives a page reload', async ({
   page,
 }) => {
   test.skip(
-    process.env.BGTUTOR_NATIVE_BENCHMARK !== '1',
+    process.env.NEONDOJO_NATIVE_BENCHMARK !== '1',
     'requires explicit native benchmark opt-in',
   );
   await page.addInitScript(() => {
     localStorage.clear();
-    localStorage.setItem('bgtutor.locale', 'en');
+    localStorage.setItem('neondojo.locale', 'en');
   });
   await page.goto('/');
   await page.getByRole('tab', { name: 'Extras', exact: true }).click();
@@ -140,7 +140,7 @@ test('native 1-ply benchmark completes and survives a page reload', async ({
     error: null,
   });
   await page.screenshot({
-    path: '/tmp/bgtutor-benchmark-native.png',
+    path: '/tmp/neondojo-benchmark-native.png',
     fullPage: true,
   });
   console.log(

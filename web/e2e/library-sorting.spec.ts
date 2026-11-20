@@ -86,8 +86,8 @@ test('numeric IDs and every data column sort through the API and reset paged sel
   expect(new Set(expectedIds).size).toBe(55);
 
   await page.addInitScript((id) => {
-    localStorage.setItem('bgtutor.locale', 'en');
-    localStorage.setItem('bgtutor.database', id);
+    localStorage.setItem('neondojo.locale', 'en');
+    localStorage.setItem('neondojo.database', id);
   }, database.id);
   await page.goto('/');
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();

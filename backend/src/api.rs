@@ -186,7 +186,7 @@ struct VersionInfo {
 #[utoipa::path(get, path="/api/version", responses((status=200, body=VersionInfo)), tag="System")]
 async fn version() -> Json<VersionInfo> {
     Json(VersionInfo {
-        version: env!("BGTUTOR_GIT_COMMIT"),
+        version: env!("NEONDOJO_GIT_COMMIT"),
     })
 }
 
@@ -919,7 +919,7 @@ async fn events(
 #[derive(OpenApi)]
 #[openapi(
     info(
-        title = "BG Tutor API",
+        title = "Neondojo API",
         version = "0.3.0",
         description = "Local headless backgammon library with GNUbg and Open Sage analysis. No authentication; bind to loopback."
     ),

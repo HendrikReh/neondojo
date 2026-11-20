@@ -129,9 +129,9 @@ async function setup(
       writes.push(r.url());
   });
   await page.addInitScript((id) => {
-    localStorage.setItem('bgtutor.locale', 'en');
-    localStorage.setItem('bgtutor.theme', 'forest');
-    localStorage.setItem('bgtutor.play-session', id);
+    localStorage.setItem('neondojo.locale', 'en');
+    localStorage.setItem('neondojo.theme', 'forest');
+    localStorage.setItem('neondojo.play-session', id);
   }, id);
   await page.route('**/api/decks', (r) => r.fulfill({ json: [] }));
   await page.route('**/api/study/reports?group_by=session', (r) =>

@@ -70,8 +70,8 @@ async function setup(page: Page, boardTheme = 'walnut') {
     }),
   );
   await page.addInitScript((boardTheme) => {
-    localStorage.setItem('bgtutor.locale', 'en');
-    localStorage.setItem('bgtutor.theme', boardTheme);
+    localStorage.setItem('neondojo.locale', 'en');
+    localStorage.setItem('neondojo.theme', boardTheme);
   }, boardTheme);
   return {
     writes,
@@ -270,7 +270,7 @@ for (const theme of ['graphite', 'club', 'paper'] as const) {
         backgrounds[theme][mode],
       );
       expect(
-        await page.evaluate(() => localStorage.getItem('bgtutor.theme')),
+        await page.evaluate(() => localStorage.getItem('neondojo.theme')),
       ).toBe('walnut');
       await page.reload();
       await expect(page.locator('html')).toHaveAttribute(
@@ -340,7 +340,7 @@ test('interface appearance preserves selected original ZIP artwork', async ({
   await expect(
     dialog.locator('.settings-preview .bgblitz-board image').first(),
   ).toHaveAttribute('href', originalImage!);
-  expect(await page.evaluate(() => localStorage.getItem('bgtutor.theme'))).toBe(
+  expect(await page.evaluate(() => localStorage.getItem('neondojo.theme'))).toBe(
     archive!.id,
   );
 });
@@ -367,7 +367,7 @@ test('cancel and save conflicts retain the applied appearance and board preferen
   expect(
     JSON.parse(
       (await page.evaluate(() =>
-        localStorage.getItem('bgtutor.ui-appearance'),
+        localStorage.getItem('neondojo.ui-appearance'),
       ))!,
     ),
   ).toEqual({ version: 1, theme: 'graphite', mode: 'system' });
@@ -403,7 +403,7 @@ test('cancel and save conflicts retain the applied appearance and board preferen
   await expect(
     dialog.getByRole('combobox', { name: 'Display mode', exact: true }),
   ).toHaveValue('system');
-  expect(await page.evaluate(() => localStorage.getItem('bgtutor.theme'))).toBe(
+  expect(await page.evaluate(() => localStorage.getItem('neondojo.theme'))).toBe(
     'walnut',
   );
 });
@@ -445,6 +445,6 @@ test('loading errors prevent saving appearance before settings are available', a
     dialog.getByRole('combobox', { name: 'Interface theme', exact: true }),
   ).toHaveCount(0);
   expect(
-    await page.evaluate(() => localStorage.getItem('bgtutor.ui-appearance')),
+    await page.evaluate(() => localStorage.getItem('neondojo.ui-appearance')),
   ).toBeNull();
 });

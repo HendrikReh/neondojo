@@ -11,7 +11,7 @@ The desktop table gains a resizable, sortable Decks column. Names stay on one li
 - [x] Add the compact Decks column, full preview/summary, six-language labels and deck-change refresh; preserve existing widths.
 - [x] Run relevant backend/frontend/browser regressions on a disposable database, review, then activate verified assets/backend after a private main-database backup. Clean test resources. Do not commit or add demo/private data.
 
-Validation: `cargo test -p bgtutor --test position_browser -- --ignored`, learning and saved-position retention integration suites; frontend unit tests, production build and format check; real-browser membership addition/duplicate/context/refresh/pagination and existing desktop position/learning flows.
+Validation: `cargo test -p neondojo --test position_browser -- --ignored`, learning and saved-position retention integration suites; frontend unit tests, production build and format check; real-browser membership addition/duplicate/context/refresh/pagination and existing desktop position/learning flows.
 
 TDD evidence: both backend cases failed before implementation (missing decks field / unsupported decks sort); three frontend cases failed for the missing column, empty-state text and width migration. After implementation, 57 relevant PostgreSQL integration tests, 94 Rust unit/contract tests and 198 frontend tests pass. The production build and both format checks pass. The focused browser case passes with 28 saved positions across two pages, two deck transfers, duplicate transfer, persistent membership and legacy widths. It also tolerates preexisting shared learning cards when rerun against the same disposable database. Independent read-only review found no actionable issue.
 

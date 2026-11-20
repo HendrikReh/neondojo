@@ -168,39 +168,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
-name = "bgtutor"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "async-stream",
- "axum",
- "base64",
- "chrono",
- "dotenvy",
- "flate2",
- "fsrs",
- "futures-util",
- "http-body-util",
- "regex",
- "rusqlite",
- "serde",
- "serde-smile",
- "serde_json",
- "sha2",
- "sqlx",
- "tempfile",
- "tokio",
- "tokio-util",
- "tower",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "utoipa",
- "uuid",
- "zip",
-]
-
-[[package]]
 name = "bitflags"
 version = "2.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1205,6 +1172,39 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "rawpointer",
+]
+
+[[package]]
+name = "neondojo"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "async-stream",
+ "axum",
+ "base64",
+ "chrono",
+ "dotenvy",
+ "flate2",
+ "fsrs",
+ "futures-util",
+ "http-body-util",
+ "regex",
+ "rusqlite",
+ "serde",
+ "serde-smile",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "utoipa",
+ "uuid",
+ "zip",
 ]
 
 [[package]]

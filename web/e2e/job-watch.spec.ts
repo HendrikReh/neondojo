@@ -11,7 +11,7 @@ test('a running dice job uses one event stream and no full read per progress eve
   // 3-ply sends 21 progress events over about two seconds.
   configuration.analysis.plies = 3;
   await profileBackend(page, { configuration });
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   const streams: string[] = [];
   const reads: string[] = [];
   page.on('request', (request) => {

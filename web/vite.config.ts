@@ -8,7 +8,7 @@ export default defineConfig(({ mode }) => ({
     strictPort: true,
     proxy: {
       '/api':
-        loadEnv(mode, '.', 'BGTUTOR_').BGTUTOR_API_URL ??
+        loadEnv(mode, '.', 'NEONDOJO_').NEONDOJO_API_URL ??
         'http://127.0.0.1:8787',
     },
   },

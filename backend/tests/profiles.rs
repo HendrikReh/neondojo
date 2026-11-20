@@ -206,17 +206,17 @@ async fn failed_target_validation_rolls_back_source_save_and_all_projections(poo
 async fn profile_activation_preserves_queued_and_recovered_job_snapshots(pool: PgPool) {
     let (app, initial) = initialized(&pool, true).await;
     let sgf = "(;GM[6]FF[4]PW[Alice]PB[Bob]MI[length:7][game:0][ws:0][bs:0];W[31hefe])";
-    let imported = bgtutor::store::import_match(
+    let imported = neondojo::store::import_match(
         &pool,
         "profile.sgf",
         "sgf",
         sgf.as_bytes(),
         sgf,
-        &bgtutor::import::parse_sgf(sgf).unwrap(),
+        &neondojo::import::parse_sgf(sgf).unwrap(),
     )
     .await
     .unwrap();
-    let position = bgtutor::store::positions(&pool, Some(imported.r#match.id), None, None, 10)
+    let position = neondojo::store::positions(&pool, Some(imported.r#match.id), None, None, 10)
         .await
         .unwrap()
         .items

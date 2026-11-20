@@ -34,7 +34,7 @@ for (const width of [1440, 390])
       dialog.getByRole('button', { name: 'Resign game', exact: true }),
     ).toBeVisible();
     await page.screenshot({
-      path: `/tmp/bgtutor-resign-${width}.png`,
+      path: `/tmp/neondojo-resign-${width}.png`,
       fullPage: true,
     });
     expect(
@@ -271,7 +271,7 @@ for (const human of [0, 1])
       'If accepted, the match ends. Bot wins.',
     );
     await page.screenshot({
-      path: `/tmp/bgtutor-resign-match-score-${human}.png`,
+      path: `/tmp/neondojo-resign-match-score-${human}.png`,
       fullPage: true,
     });
     await dialog

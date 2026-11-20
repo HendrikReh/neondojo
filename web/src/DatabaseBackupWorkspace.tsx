@@ -15,7 +15,7 @@ type CheckResponse =
   paths['/api/database-backup/check']['post']['responses'][200]['content']['application/json'];
 type Restore = paths['/api/database-backup']['post'];
 const mediaType: keyof Restore['requestBody']['content'] =
-  'application/vnd.bgtutor.backup';
+  'application/vnd.neondojo.backup';
 
 type TransferState =
   { phase: 'idle' | 'pending' | 'done' } | { phase: 'error'; error: unknown };
@@ -120,7 +120,7 @@ export default function DatabaseBackupWorkspace() {
     setExportState({ phase: 'pending' });
     try {
       const response = await requestResponse(path);
-      await downloadResponse(response, 'bgtutor.bgtutor-backup');
+      await downloadResponse(response, 'neondojo.neondojo-backup');
       setExportState({ phase: 'done' });
     } catch (error) {
       setExportState({ phase: 'error', error });
@@ -230,7 +230,7 @@ export default function DatabaseBackupWorkspace() {
             ref={fileInput}
             type="file"
             hidden
-            accept={`.bgtutor-backup,${mediaType}`}
+            accept={`.neondojo-backup,${mediaType}`}
             disabled={busy}
             onChange={(event) => {
               const selected = event.currentTarget.files?.[0];
@@ -413,7 +413,7 @@ export default function DatabaseBackupWorkspace() {
 function backupFilenameTimestamp(filename: string): string | undefined {
   // The backend formats its export filenames in UTC.
   const match =
-    /^bgtutor-(\d{4}-\d{2}-\d{2})-(\d{2})(\d{2})(\d{2})\.bgtutor-backup$/.exec(
+    /^neondojo-(\d{4}-\d{2}-\d{2})-(\d{2})(\d{2})(\d{2})\.neondojo-backup$/.exec(
       filename,
     );
   if (!match || match[0] !== filename) return undefined;

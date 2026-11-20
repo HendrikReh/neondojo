@@ -1,8 +1,8 @@
 //! End-to-end oracle: a real GNUbg result remains usable through grouping and practice.
 use axum::{body::Body, http::Request};
 use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
-use bgtutor::{api, engine::Engine, import, jobs, store};
 use http_body_util::BodyExt;
+use neondojo::{api, engine::Engine, import, jobs, store};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;

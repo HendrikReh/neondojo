@@ -36,15 +36,15 @@ describe('legacy preferences import', () => {
       settings,
       book,
       storage({
-        'bgtutor.locale': 'de',
-        'bgtutor.theme': 'walnut',
-        'bgtutor.play-sounds': 'off',
-        'bgtutor.ui-appearance': JSON.stringify({
+        'neondojo.locale': 'de',
+        'neondojo.theme': 'walnut',
+        'neondojo.play-sounds': 'off',
+        'neondojo.ui-appearance': JSON.stringify({
           version: 1,
           theme: 'paper',
           mode: 'dark',
         }),
-        'bgtutor.workspace': 'private selection',
+        'neondojo.workspace': 'private selection',
       }),
     );
     expect(result.general).toEqual({
@@ -72,10 +72,10 @@ describe('legacy preferences import', () => {
       settings,
       book,
       storage({
-        'bgtutor.locale': 'no-such-language',
-        'bgtutor.theme': 'unknown',
-        'bgtutor.library.visibleColumns': '{broken',
-        'bgtutor.database': 'invalid',
+        'neondojo.locale': 'no-such-language',
+        'neondojo.theme': 'unknown',
+        'neondojo.library.visibleColumns': '{broken',
+        'neondojo.database': 'invalid',
       }),
     );
     expect(result.general.locale).toBe('en');

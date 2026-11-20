@@ -4,7 +4,7 @@ import { expect, test } from './test';
 test('move history filters the selected game by the saved grade without moving the board', async ({
   page,
 }, testInfo) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   const imported = await page.request.post('/api/imports', {
     multipart: {
       file: {
@@ -84,7 +84,7 @@ test('move history filters the selected game by the saved grade without moving t
   );
   await page.addInitScript((matchId) => {
     localStorage.setItem(
-      'bgtutor.workspace',
+      'neondojo.workspace',
       JSON.stringify({ matchId, gameNo: 1 }),
     );
   }, match.id);

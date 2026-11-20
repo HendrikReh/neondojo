@@ -1,9 +1,9 @@
 use axum::{body::Body, http::Request};
-use bgtutor::{
+use http_body_util::BodyExt;
+use neondojo::{
     api::{self, AppState},
     engine::Engine,
 };
-use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -131,7 +131,7 @@ async fn bot_matches_is_provisioned_and_protected_before_play(pool: PgPool) {
         .iter()
         .find(|database| database["name"] == "Bot Matches")
         .unwrap();
-    assert_eq!(bot["id"], bgtutor::play::BOT_DATABASE_ID.to_string());
+    assert_eq!(bot["id"], neondojo::play::BOT_DATABASE_ID.to_string());
     assert_eq!(bot["is_system"], true);
     assert_eq!(bot["is_default"], false);
     let id = bot["id"].as_str().unwrap();
@@ -161,7 +161,7 @@ async fn bot_matches_is_provisioned_and_protected_before_play(pool: PgPool) {
     );
     let imported = target(&pool, "Bot fixture").await;
     sqlx::query("UPDATE matches SET database_id=$1 WHERE id=$2")
-        .bind(bgtutor::play::BOT_DATABASE_ID)
+        .bind(neondojo::play::BOT_DATABASE_ID)
         .bind(imported)
         .execute(&pool)
         .await
@@ -433,7 +433,7 @@ async fn deletion_guards_active_jobs_and_nonempty_database(pool: PgPool) {
 }
 #[test]
 fn source_metadata_uses_explicit_sgf_context_and_rejects_guesses() {
-    let m = bgtutor::databases::source_metadata(
+    let m = neondojo::databases::source_metadata(
         "(;MI[length:7][ws:5][bs:4]DT[2025-04-03]EV[Open]RO[Final]PC[Berlin]RE[W+2R])",
     );
     assert_eq!(m.played_on.unwrap().to_string(), "2025-04-03");
@@ -441,7 +441,7 @@ fn source_metadata_uses_explicit_sgf_context_and_rejects_guesses() {
     assert_eq!(m.result_state, "completed");
     assert_eq!(m.white_score, Some(7));
     assert_eq!(m.black_score, Some(4));
-    let m = bgtutor::databases::source_metadata("(;DT[2025]RE[W+2])");
+    let m = neondojo::databases::source_metadata("(;DT[2025]RE[W+2])");
     assert!(m.played_on.is_none());
     assert_eq!(m.result_state, "unknown");
     assert!(m.white_score.is_none());
@@ -580,9 +580,9 @@ async fn exports_preserve_bytes_and_reject_missing_or_oversized_selection(pool: 
 #[ignore = "requires PostgreSQL"]
 async fn imports_deduplicate_within_each_database(pool: PgPool) {
     let source = include_str!("fixtures/analysis-game1.sgf");
-    let imported = bgtutor::import::parse_sgf(source).unwrap();
+    let imported = neondojo::import::parse_sgf(source).unwrap();
     let db = database(&pool, "Imports").await;
-    let one = bgtutor::store::import_match(
+    let one = neondojo::store::import_match(
         &pool,
         "source.sgf",
         "sgf",
@@ -593,7 +593,7 @@ async fn imports_deduplicate_within_each_database(pool: PgPool) {
     .await
     .unwrap();
     assert!(!one.duplicate);
-    let two = bgtutor::store::import_match_in_database(
+    let two = neondojo::store::import_match_in_database(
         &pool,
         "source.sgf",
         "sgf",
@@ -606,7 +606,7 @@ async fn imports_deduplicate_within_each_database(pool: PgPool) {
     .unwrap();
     assert!(!two.duplicate);
     assert_ne!(one.r#match.id, two.r#match.id);
-    let duplicate = bgtutor::store::import_match_in_database(
+    let duplicate = neondojo::store::import_match_in_database(
         &pool,
         "source.sgf",
         "sgf",
@@ -644,7 +644,7 @@ async fn exact_position_occurrences_can_be_scoped_to_a_database(pool: PgPool) {
         Some(json!({"action":"move","match_ids":[b],"target_database_id":db})),
     )
     .await;
-    let scoped = bgtutor::store::positions_scoped_in_database(
+    let scoped = neondojo::store::positions_scoped_in_database(
         &pool,
         None,
         Some("position"),
@@ -657,7 +657,7 @@ async fn exact_position_occurrences_can_be_scoped_to_a_database(pool: PgPool) {
     .unwrap();
     assert_eq!(scoped.items.len(), 1);
     assert_eq!(scoped.items[0].match_uuid, b);
-    let all = bgtutor::store::positions(&pool, None, Some("position"), None, 50)
+    let all = neondojo::store::positions(&pool, None, Some("position"), None, 50)
         .await
         .unwrap();
     assert_eq!(all.items.len(), 2);
@@ -743,7 +743,7 @@ async fn every_sort_cursor_roundtrips_with_nulls_last(pool: PgPool) {
 }
 
 fn native_result(white: f64, black: f64) -> Value {
-    use bgtutor::model::{
+    use neondojo::model::{
         MatchAnalysisSummary, PerformanceRatingSummary, PlayerAnalysisSummary,
         PlayerPerformanceRating,
     };
@@ -787,7 +787,7 @@ fn native_result(white: f64, black: f64) -> Value {
         }),
     };
     let json = serde_json::to_value(result).unwrap();
-    assert!(bgtutor::match_analysis::match_performance_rating(&json).is_some());
+    assert!(neondojo::match_analysis::match_performance_rating(&json).is_some());
     json
 }
 #[sqlx::test(migrations = "./migrations")]
@@ -827,7 +827,7 @@ async fn position_submission_respects_match_deletion_lock(pool: PgPool) {
         .unwrap();
     let submit_pool = pool.clone();
     let mut submission = tokio::spawn(async move {
-        bgtutor::store::create_job(&submit_pool, position, "analysis", 1).await
+        neondojo::store::create_job(&submit_pool, position, "analysis", 1).await
     });
     assert!(
         tokio::time::timeout(std::time::Duration::from_millis(200), &mut submission)
@@ -1114,7 +1114,7 @@ async fn source_metadata_backfill_recovers_original_results_and_preserves_manual
     pool: PgPool,
 ) {
     let bytes = include_bytes!("fixtures/WC2014.xg");
-    let converted = bgtutor::import::xg_to_sgf(bytes).unwrap();
+    let converted = neondojo::import::xg_to_sgf(bytes).unwrap();
     let old_canonical = regex::Regex::new(r"RE\[[^\]]*\]")
         .unwrap()
         .replace_all(&converted, "")
@@ -1135,7 +1135,7 @@ async fn source_metadata_backfill_recovers_original_results_and_preserves_manual
         .rows_affected();
     assert_eq!(changed, 1);
     assert_eq!(
-        bgtutor::databases::backfill_source_metadata(&pool)
+        neondojo::databases::backfill_source_metadata(&pool)
             .await
             .unwrap(),
         1
@@ -1166,7 +1166,7 @@ async fn source_metadata_backfill_recovers_original_results_and_preserves_manual
         )
     );
     assert_eq!(
-        bgtutor::databases::backfill_source_metadata(&pool)
+        neondojo::databases::backfill_source_metadata(&pool)
             .await
             .unwrap(),
         0
@@ -1177,7 +1177,7 @@ async fn source_metadata_backfill_recovers_original_results_and_preserves_manual
 #[ignore = "requires PostgreSQL"]
 async fn native_context_backfill_fills_gaps_and_preserves_manual_saves(pool: PgPool) {
     let bytes = include_bytes!("fixtures/WC2014.xg");
-    let canonical = bgtutor::import::xg_to_sgf(bytes).unwrap();
+    let canonical = neondojo::import::xg_to_sgf(bytes).unwrap();
     let legacy = regex::Regex::new(r"(?:DT|EV|RO|PC)\[[^\]]*\]")
         .unwrap()
         .replace_all(&canonical, "");
@@ -1217,13 +1217,13 @@ async fn native_context_backfill_fills_gaps_and_preserves_manual_saves(pool: PgP
         .unwrap();
 
     assert_eq!(
-        bgtutor::databases::backfill_source_metadata(&pool)
+        neondojo::databases::backfill_source_metadata(&pool)
             .await
             .unwrap(),
         2
     );
     assert_eq!(
-        bgtutor::databases::backfill_source_metadata(&pool)
+        neondojo::databases::backfill_source_metadata(&pool)
             .await
             .unwrap(),
         0
@@ -1296,7 +1296,7 @@ async fn bgf_import_and_backfill_agree_on_match_context(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(
-        bgtutor::databases::backfill_source_metadata(&pool)
+        neondojo::databases::backfill_source_metadata(&pool)
             .await
             .unwrap(),
         1
@@ -1318,9 +1318,9 @@ async fn bgf_import_and_backfill_agree_on_match_context(pool: PgPool) {
 #[ignore = "requires PostgreSQL"]
 async fn new_native_import_stores_final_result_in_the_library(pool: PgPool) {
     let bytes = include_bytes!("fixtures/WC2014.xg");
-    let sgf = bgtutor::import::xg_to_sgf(bytes).unwrap();
-    let imported = bgtutor::import::parse_sgf(&sgf).unwrap();
-    let result = bgtutor::store::import_match(&pool, "sample.xg", "xg", bytes, &sgf, &imported)
+    let sgf = neondojo::import::xg_to_sgf(bytes).unwrap();
+    let imported = neondojo::import::parse_sgf(&sgf).unwrap();
+    let result = neondojo::store::import_match(&pool, "sample.xg", "xg", bytes, &sgf, &imported)
         .await
         .unwrap();
     let (status, page) = request(&pool, "GET", "/api/library/matches", None).await;

@@ -1,11 +1,11 @@
 use axum::{body::Body, http::Request};
-use bgtutor::{
+use http_body_util::BodyExt;
+use neondojo::{
     api,
     engine::Engine,
     jobs,
     model::{ImportResponse, Job, PositionPage},
 };
-use http_body_util::BodyExt;
 use sqlx::PgPool;
 use tower::ServiceExt;
 
@@ -175,23 +175,23 @@ async fn imports_searches_analyzes_and_replays_sse(pool: PgPool) {
     assert_eq!(status, 422);
 
     // Duplicate active jobs converge; a stale worker lease is reclaimed exactly once.
-    let dice_job = bgtutor::store::create_job(&pool, pos.id, "dice", 1)
+    let dice_job = neondojo::store::create_job(&pool, pos.id, "dice", 1)
         .await
         .unwrap();
-    let duplicate = bgtutor::store::create_job(&pool, pos.id, "dice", 1)
+    let duplicate = neondojo::store::create_job(&pool, pos.id, "dice", 1)
         .await
         .unwrap();
     assert_eq!(dice_job.id, duplicate.id);
     sqlx::query("UPDATE jobs SET status='running',attempts=1,lease_token=$2,lease_until=now()-interval '1 second' WHERE id=$1").bind(dice_job.id).bind(uuid::Uuid::new_v4()).execute(&pool).await.unwrap();
     let (one, two) = tokio::join!(jobs::run_one(&state), jobs::run_one(&state));
     assert_ne!(one.unwrap(), two.unwrap());
-    let done = bgtutor::store::get_job(&pool, dice_job.id)
+    let done = neondojo::store::get_job(&pool, dice_job.id)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(done.status, "completed", "{:?}", done.error);
     assert_eq!(done.attempts, 2);
-    let result: bgtutor::engine::Distribution =
+    let result: neondojo::engine::Distribution =
         serde_json::from_value(done.result.unwrap()).unwrap();
     assert_eq!(result.rolls.len(), 21);
     assert_eq!(result.rolls.iter().map(|r| r.weight).sum::<i32>(), 36);
@@ -208,7 +208,7 @@ async fn imports_searches_analyzes_and_replays_sse(pool: PgPool) {
     );
 
     // Open SSE must end when the service stops, even while its job is queued.
-    let queued = bgtutor::store::create_job(&pool, pos.id, "dice", 1)
+    let queued = neondojo::store::create_job(&pool, pos.id, "dice", 1)
         .await
         .unwrap();
     let response = app

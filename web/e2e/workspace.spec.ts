@@ -10,7 +10,7 @@ import { defaultConfiguration } from '../src/configuration-model';
 test('analysis-first tabs preserve the selected game, notes and database navigation', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'de'));
   await page.goto('/');
   const analysisTab = page.getByRole('tab', { name: 'Analyse', exact: true });
   await expect(analysisTab).toHaveAttribute('aria-selected', 'true');
@@ -57,7 +57,7 @@ test('analysis-first tabs preserve the selected game, notes and database navigat
 test('a delayed initial settings response cannot replace a newer saved profile', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'de'));
   const configuration = structuredClone(defaultConfiguration);
   configuration.general.locale = 'de';
   configuration.analysis.plies = 2;
@@ -121,7 +121,7 @@ test('a delayed initial settings response cannot replace a newer saved profile',
 test('inspector tabs support arrow, Home and End navigation', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'de'));
   await page.goto('/');
   await page
     .getByLabel('Matchdatei')
@@ -147,7 +147,7 @@ test('inspector tabs support arrow, Home and End navigation', async ({
 test('an analysis submission error appears once in the errors view', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'de'));
   await page.goto('/');
   await page
     .getByLabel('Matchdatei')
@@ -174,7 +174,7 @@ test('an analysis submission error appears once in the errors view', async ({
 test('accepted position jobs remain tracked without a duplicate banner after a position switch', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'de'));
   await page.goto('/');
   await page
     .getByLabel('Matchdatei')
@@ -225,7 +225,7 @@ test('accepted position jobs remain tracked without a duplicate banner after a p
 test('accepted game jobs remain tracked when the game changes during submission', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'de'));
   await page.goto('/');
   await page.getByLabel('Matchdatei').setInputFiles({
     name: 'job-switch.sgf',
@@ -275,7 +275,7 @@ test('accepted game jobs remain tracked when the game changes during submission'
 });
 
 test('next position error respects the player filter', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'de'));
   await page.goto('/');
   await page.getByLabel('Matchdatei').setInputFiles({
     name: 'filtered-errors.sgf',
@@ -322,7 +322,7 @@ test('next position error respects the player filter', async ({ page }) => {
 test('the last game and exact move restore without starting an analysis', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'de'));
   await page.goto('/');
   await page
     .getByLabel('Matchdatei')

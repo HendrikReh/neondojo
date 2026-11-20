@@ -8,18 +8,18 @@ test('imports legacy preferences once and preserves unrelated workspace state', 
   await page.addInitScript(() => {
     if (sessionStorage.getItem('legacy-installed')) return;
     sessionStorage.setItem('legacy-installed', 'yes');
-    localStorage.setItem('bgtutor.locale', 'de');
-    localStorage.setItem('bgtutor.theme', 'walnut');
+    localStorage.setItem('neondojo.locale', 'de');
+    localStorage.setItem('neondojo.theme', 'walnut');
     localStorage.setItem(
-      'bgtutor.ui-appearance',
+      'neondojo.ui-appearance',
       JSON.stringify({ version: 1, theme: 'paper', mode: 'dark' }),
     );
-    localStorage.setItem('bgtutor.play-sounds', 'off');
+    localStorage.setItem('neondojo.play-sounds', 'off');
     localStorage.setItem(
-      'bgtutor.library.visibleColumns',
+      'neondojo.library.visibleColumns',
       JSON.stringify({ version: 2, columns: ['id'] }),
     );
-    localStorage.setItem('bgtutor.jobs.unrelated', 'kept');
+    localStorage.setItem('neondojo.jobs.unrelated', 'kept');
   });
   await page.goto('/');
   await expect(
@@ -41,7 +41,7 @@ test('imports legacy preferences once and preserves unrelated workspace state', 
     backend.calls.filter((c) => c.path === '/configuration/initialize'),
   ).toHaveLength(1);
   expect(
-    await page.evaluate(() => localStorage.getItem('bgtutor.jobs.unrelated')),
+    await page.evaluate(() => localStorage.getItem('neondojo.jobs.unrelated')),
   ).toBe('kept');
 });
 
@@ -53,7 +53,7 @@ test('recovers pending current settings without overwriting the saved profile', 
   pending.general.player_name = 'Recovered local name';
   await page.addInitScript((config) => {
     localStorage.setItem(
-      'bgtutor.configuration-pending.v1',
+      'neondojo.configuration-pending.v1',
       JSON.stringify({ base_revision: 1, configuration: config }),
     );
   }, pending);

@@ -444,7 +444,7 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
                 if jacoby && length == 0 {
                     rules.push("Jacoby");
                 }
-                out.push_str(&format!("(;FF[4]GM[6]CA[UTF-8]AP[BGTutor:XG2]PW[{}]PB[{}]MI[length:{length}][game:{game_count}][ws:{white_score}][bs:{black_score}]",escape_value(&players[0]),escape_value(&players[1])));
+                out.push_str(&format!("(;FF[4]GM[6]CA[UTF-8]AP[Neondojo:XG2]PW[{}]PB[{}]MI[length:{length}][game:{game_count}][ws:{white_score}][bs:{black_score}]",escape_value(&players[0]),escape_value(&players[1])));
                 if game_count == 0 {
                     context.write_sgf(&mut out);
                 }

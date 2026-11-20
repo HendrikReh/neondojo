@@ -1,12 +1,12 @@
 use axum::{body::Body, http::Request};
-use bgtutor::{
+use http_body_util::BodyExt;
+use neondojo::{
     api::{self, AppState},
     engine::Engine,
     jobs,
     model::ImportResponse,
     store,
 };
-use http_body_util::BodyExt;
 use sqlx::PgPool;
 use tower::ServiceExt;
 
@@ -142,7 +142,7 @@ async fn all_four_formats_are_atomic_and_engine_failures_are_persisted(pool: PgP
         .unwrap();
     let broken_state = AppState::new(
         pool.clone(),
-        Engine::new("/nonexistent/bgtutor/gnubg".into()),
+        Engine::new("/nonexistent/neondojo/gnubg".into()),
     );
     jobs::run_one(&broken_state).await.unwrap();
     let failed = store::get_job(&pool, job.id).await.unwrap().unwrap();

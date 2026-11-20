@@ -72,8 +72,8 @@ test('search results add, move, remove and delete selected cards', async ({
   ).toBeOK();
 
   await page.addInitScript(() => {
-    localStorage.setItem('bgtutor.locale', 'en');
-    localStorage.setItem('bgtutor.deck', '__all__');
+    localStorage.setItem('neondojo.locale', 'en');
+    localStorage.setItem('neondojo.deck', '__all__');
   });
   await page.goto('/');
   await page.getByRole('tab', { name: 'Study', exact: true }).click();

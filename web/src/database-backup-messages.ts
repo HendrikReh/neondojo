@@ -9,13 +9,13 @@ const en = {
   exported: 'Backup download started.',
   importTitle: 'Restore backup',
   importHelp:
-    'Use a .bgtutor-backup file from a BG Tutor installation with the same database schema.',
+    'Use a .neondojo-backup file from a Neondojo installation with the same database schema.',
   file: 'Backup file',
   chooseFile: 'Choose backup file',
   noFile: 'No file selected',
   review: 'Review database replacement',
   warning:
-    'Restoring replaces all BG Tutor data in the destination installation. Export the current database first if you want to keep it. Queued or running work in the backup will be ended.',
+    'Restoring replaces all Neondojo data in the destination installation. Export the current database first if you want to keep it. Queued or running work in the backup will be ended.',
   contents: 'Backup contents',
   compareContents: 'Compare contents',
   backupColumn: 'Backup',
@@ -37,12 +37,12 @@ const en = {
   checkFailure: 'The backup could not be checked.',
   checkRetry: 'Retry backup check',
   validation:
-    'BG Tutor checks the archive and database constraints again during restore.',
+    'Neondojo checks the archive and database constraints again during restore.',
   cancel: 'Cancel',
   replace: 'Replace database',
   restoring: 'Restoring backup …',
-  done: 'Backup restored. Reload BG Tutor to open the restored database.',
-  reload: 'Reload BG Tutor',
+  done: 'Backup restored. Reload Neondojo to open the restored database.',
+  reload: 'Reload Neondojo',
 };
 type Messages = Record<keyof typeof en, string>;
 
@@ -57,13 +57,13 @@ export const databaseBackupMessages = {
     exported: 'Der Download der Sicherung wurde gestartet.',
     importTitle: 'Sicherung wiederherstellen',
     importHelp:
-      'Verwende eine .bgtutor-backup-Datei aus einer BG-Tutor-Installation mit demselben Datenbankschema.',
+      'Verwende eine .neondojo-backup-Datei aus einer Neondojo-Installation mit demselben Datenbankschema.',
     file: 'Sicherungsdatei',
     chooseFile: 'Sicherungsdatei wählen',
     noFile: 'Keine Datei ausgewählt',
     review: 'Wiederherstellung ansehen',
     warning:
-      'Die Wiederherstellung ersetzt den gesamten BG-Tutor-Datenbestand der Zielinstallation. Exportiere den aktuellen Bestand zuerst, wenn du ihn behalten möchtest. Wartende und laufende Aufträge aus der Sicherung werden beendet.',
+      'Die Wiederherstellung ersetzt den gesamten Neondojo-Datenbestand der Zielinstallation. Exportiere den aktuellen Bestand zuerst, wenn du ihn behalten möchtest. Wartende und laufende Aufträge aus der Sicherung werden beendet.',
     contents: 'Inhalt der Sicherung',
     compareContents: 'Bestände vergleichen',
     backupColumn: 'Sicherung',
@@ -85,12 +85,12 @@ export const databaseBackupMessages = {
     checkFailure: 'Die Sicherung konnte nicht geprüft werden.',
     checkRetry: 'Prüfung wiederholen',
     validation:
-      'BG Tutor prüft das Archiv und die Datenbankregeln beim Wiederherstellen erneut.',
+      'Neondojo prüft das Archiv und die Datenbankregeln beim Wiederherstellen erneut.',
     cancel: 'Abbrechen',
     replace: 'Datenbank ersetzen',
     restoring: 'Sicherung wird eingespielt …',
-    done: 'Die Sicherung wurde eingespielt. Lade BG Tutor neu, um den wiederhergestellten Bestand zu öffnen.',
-    reload: 'BG Tutor neu laden',
+    done: 'Die Sicherung wurde eingespielt. Lade Neondojo neu, um den wiederhergestellten Bestand zu öffnen.',
+    reload: 'Neondojo neu laden',
   },
   es: {
     title: 'Copia de la base de datos',
@@ -101,13 +101,13 @@ export const databaseBackupMessages = {
     exported: 'Se ha iniciado la descarga de la copia.',
     importTitle: 'Restaurar copia',
     importHelp:
-      'Usa un archivo .bgtutor-backup de una instalación de BG Tutor con el mismo esquema de base de datos.',
+      'Usa un archivo .neondojo-backup de una instalación de Neondojo con el mismo esquema de base de datos.',
     file: 'Archivo de copia',
     chooseFile: 'Elegir archivo de copia',
     noFile: 'Ningún archivo seleccionado',
     review: 'Ver reemplazo de la base de datos',
     warning:
-      'La restauración reemplaza todos los datos de BG Tutor en la instalación de destino. Exporta primero la base de datos actual si quieres conservarla. Las tareas pendientes o en curso de la copia se detendrán.',
+      'La restauración reemplaza todos los datos de Neondojo en la instalación de destino. Exporta primero la base de datos actual si quieres conservarla. Las tareas pendientes o en curso de la copia se detendrán.',
     contents: 'Contenido de la copia',
     compareContents: 'Comparar contenidos',
     backupColumn: 'Copia de seguridad',
@@ -130,12 +130,12 @@ export const databaseBackupMessages = {
     checkFailure: 'No se pudo comprobar la copia.',
     checkRetry: 'Repetir comprobación',
     validation:
-      'BG Tutor vuelve a comprobar el archivo y las restricciones de la base de datos durante la restauración.',
+      'Neondojo vuelve a comprobar el archivo y las restricciones de la base de datos durante la restauración.',
     cancel: 'Cancelar',
     replace: 'Reemplazar base de datos',
     restoring: 'Restaurando la copia…',
-    done: 'Copia restaurada. Recarga BG Tutor para abrir la base de datos restaurada.',
-    reload: 'Recargar BG Tutor',
+    done: 'Copia restaurada. Recarga Neondojo para abrir la base de datos restaurada.',
+    reload: 'Recargar Neondojo',
   },
   fr: {
     title: 'Sauvegarde de la base de données',
@@ -146,13 +146,13 @@ export const databaseBackupMessages = {
     exported: 'Le téléchargement de la sauvegarde a démarré.',
     importTitle: 'Restaurer une sauvegarde',
     importHelp:
-      'Utilisez un fichier .bgtutor-backup provenant d’une installation de BG Tutor ayant le même schéma de base de données.',
+      'Utilisez un fichier .neondojo-backup provenant d’une installation de Neondojo ayant le même schéma de base de données.',
     file: 'Fichier de sauvegarde',
     chooseFile: 'Choisir le fichier de sauvegarde',
     noFile: 'Aucun fichier sélectionné',
     review: 'Voir le remplacement de la base',
     warning:
-      'La restauration remplace toutes les données de BG Tutor dans l’installation de destination. Exportez d’abord la base actuelle si vous souhaitez la conserver. Les tâches en attente ou en cours dans la sauvegarde seront arrêtées.',
+      'La restauration remplace toutes les données de Neondojo dans l’installation de destination. Exportez d’abord la base actuelle si vous souhaitez la conserver. Les tâches en attente ou en cours dans la sauvegarde seront arrêtées.',
     contents: 'Contenu de la sauvegarde',
     compareContents: 'Comparer les contenus',
     backupColumn: 'Sauvegarde',
@@ -175,12 +175,12 @@ export const databaseBackupMessages = {
     checkFailure: 'La sauvegarde n’a pas pu être vérifiée.',
     checkRetry: 'Relancer la vérification',
     validation:
-      'BG Tutor vérifie à nouveau l’archive et les contraintes de la base lors de la restauration.',
+      'Neondojo vérifie à nouveau l’archive et les contraintes de la base lors de la restauration.',
     cancel: 'Annuler',
     replace: 'Remplacer la base de données',
     restoring: 'Restauration de la sauvegarde…',
-    done: 'Sauvegarde restaurée. Rechargez BG Tutor pour ouvrir la base restaurée.',
-    reload: 'Recharger BG Tutor',
+    done: 'Sauvegarde restaurée. Rechargez Neondojo pour ouvrir la base restaurée.',
+    reload: 'Recharger Neondojo',
   },
   it: {
     title: 'Backup del database',
@@ -191,13 +191,13 @@ export const databaseBackupMessages = {
     exported: 'Il download del backup è iniziato.',
     importTitle: 'Ripristina backup',
     importHelp:
-      'Usa un file .bgtutor-backup da un’installazione di BG Tutor con lo stesso schema del database.',
+      'Usa un file .neondojo-backup da un’installazione di Neondojo con lo stesso schema del database.',
     file: 'File di backup',
     chooseFile: 'Scegli file di backup',
     noFile: 'Nessun file selezionato',
     review: 'Rivedi la sostituzione del database',
     warning:
-      'Il ripristino sostituisce tutti i dati di BG Tutor nell’installazione di destinazione. Esporta prima il database attuale se vuoi conservarlo. Le attività in attesa o in corso nel backup saranno interrotte.',
+      'Il ripristino sostituisce tutti i dati di Neondojo nell’installazione di destinazione. Esporta prima il database attuale se vuoi conservarlo. Le attività in attesa o in corso nel backup saranno interrotte.',
     contents: 'Contenuto del backup',
     compareContents: 'Confronta i contenuti',
     backupColumn: 'Backup',
@@ -220,12 +220,12 @@ export const databaseBackupMessages = {
     checkFailure: 'Non è stato possibile controllare il backup.',
     checkRetry: 'Ripeti il controllo',
     validation:
-      'Durante il ripristino, BG Tutor controlla nuovamente l’archivio e i vincoli del database.',
+      'Durante il ripristino, Neondojo controlla nuovamente l’archivio e i vincoli del database.',
     cancel: 'Annulla',
     replace: 'Sostituisci database',
     restoring: 'Ripristino del backup…',
-    done: 'Backup ripristinato. Ricarica BG Tutor per aprire il database ripristinato.',
-    reload: 'Ricarica BG Tutor',
+    done: 'Backup ripristinato. Ricarica Neondojo per aprire il database ripristinato.',
+    reload: 'Ricarica Neondojo',
   },
   pl: {
     title: 'Kopia zapasowa bazy danych',
@@ -236,13 +236,13 @@ export const databaseBackupMessages = {
     exported: 'Rozpoczęto pobieranie kopii zapasowej.',
     importTitle: 'Przywróć kopię',
     importHelp:
-      'Użyj pliku .bgtutor-backup z instalacji BG Tutor z tym samym schematem bazy danych.',
+      'Użyj pliku .neondojo-backup z instalacji Neondojo z tym samym schematem bazy danych.',
     file: 'Plik kopii zapasowej',
     chooseFile: 'Wybierz plik kopii zapasowej',
     noFile: 'Nie wybrano pliku',
     review: 'Zobacz szczegóły zastąpienia bazy',
     warning:
-      'Przywrócenie zastąpi wszystkie dane BG Tutor w instalacji docelowej. Najpierw wyeksportuj obecną bazę, jeśli chcesz ją zachować. Oczekujące i trwające zadania z kopii zostaną przerwane.',
+      'Przywrócenie zastąpi wszystkie dane Neondojo w instalacji docelowej. Najpierw wyeksportuj obecną bazę, jeśli chcesz ją zachować. Oczekujące i trwające zadania z kopii zostaną przerwane.',
     contents: 'Zawartość kopii zapasowej',
     compareContents: 'Porównaj zawartość',
     backupColumn: 'Kopia zapasowa',
@@ -264,11 +264,11 @@ export const databaseBackupMessages = {
     checkFailure: 'Nie udało się sprawdzić kopii zapasowej.',
     checkRetry: 'Powtórz sprawdzanie',
     validation:
-      'Podczas przywracania BG Tutor ponownie sprawdza archiwum i ograniczenia bazy danych.',
+      'Podczas przywracania Neondojo ponownie sprawdza archiwum i ograniczenia bazy danych.',
     cancel: 'Anuluj',
     replace: 'Zastąp bazę danych',
     restoring: 'Przywracanie kopii…',
-    done: 'Kopia została przywrócona. Odśwież BG Tutor, aby otworzyć przywróconą bazę.',
-    reload: 'Odśwież BG Tutor',
+    done: 'Kopia została przywrócona. Odśwież Neondojo, aby otworzyć przywróconą bazę.',
+    reload: 'Odśwież Neondojo',
   },
 } satisfies Record<Locale, Messages>;

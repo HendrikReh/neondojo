@@ -41,7 +41,7 @@ const hit = (decision_no: number, loss: number) => ({
 test('all analyzed decisions are filtered on the server, previewed and practiced', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.route('**/api/study/mistakes?*', (route) =>
     route.fulfill({
       json: {

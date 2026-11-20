@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import './action-controls.css';
 
-const eventName = 'bgtutor-action-tooltip';
+const eventName = 'neondojo-action-tooltip';
 export type TooltipText = string | ((anchor: Element) => string | undefined);
 
 /** A manual popover stays above native dialogs without changing the trigger's DOM layout. */

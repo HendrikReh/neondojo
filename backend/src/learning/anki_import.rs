@@ -1,4 +1,4 @@
-//! Import the structured decision model emitted by BG Tutor APKG exports.
+//! Import the structured decision model emitted by Neondojo APKG exports.
 use super::*;
 use axum::extract::Multipart;
 use rusqlite::{Connection, OpenFlags};
@@ -127,7 +127,7 @@ pub(super) fn read_package(bytes: &[u8]) -> anyhow::Result<Vec<(CardContent, BTr
         let data: String = row.get(0)?;
         anyhow::ensure!(data.len() <= 65536, "Structured decision is too large");
         let mut content: CardContent = serde_json::from_str(&data)
-            .map_err(|_| anyhow::anyhow!("Expected the BG Tutor structured decision model"))?;
+            .map_err(|_| anyhow::anyhow!("Expected the Neondojo structured decision model"))?;
         let position = &mut content.position;
         anyhow::ensure!(
             matches!(position.player, 0 | 1)

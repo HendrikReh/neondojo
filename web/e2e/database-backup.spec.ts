@@ -45,7 +45,7 @@ test('exports a backup and restores it only after confirmation', async ({
   ).toBeVisible();
   await expect(review).toBeDisabled();
   await expect(
-    restore.getByText('Restoring replaces all BG Tutor data', { exact: false }),
+    restore.getByText('Restoring replaces all Neondojo data', { exact: false }),
   ).toBeVisible();
   await expect(chooseFile).toBeVisible();
   await expect(restore.getByText('No file selected')).toBeVisible();
@@ -73,7 +73,7 @@ test('exports a backup and restores it only after confirmation', async ({
     }),
     page.getByRole('button', { name: 'Export backup' }).click(),
   ]);
-  expect(download.suggestedFilename()).toMatch(/^bgtutor-.*\.bgtutor-backup$/);
+  expect(download.suggestedFilename()).toMatch(/^neondojo-.*\.neondojo-backup$/);
   const archive = testInfo.outputPath(download.suggestedFilename());
   await download.saveAs(archive);
   await expect(
@@ -119,13 +119,13 @@ test('exports a backup and restores it only after confirmation', async ({
     comparison.getByRole('row', { name: /^Matches/ }).getByRole('cell'),
   ).toHaveText([number(counts.matches), number(counts.matches + 1), '-1']);
   await expect(
-    dialog.getByText('Restoring replaces all BG Tutor data', { exact: false }),
+    dialog.getByText('Restoring replaces all Neondojo data', { exact: false }),
   ).toBeVisible();
   await expect(
     dialog.getByText(download.suggestedFilename(), { exact: true }),
   ).toBeVisible();
   await expect(dialog).toContainText(
-    'BG Tutor checks the archive and database constraints again during restore.',
+    'Neondojo checks the archive and database constraints again during restore.',
   );
   await page.screenshot({
     path: testInfo.outputPath('database-backup-confirm.png'),
@@ -140,12 +140,12 @@ test('exports a backup and restores it only after confirmation', async ({
   );
 
   await pickBackup({
-    name: 'invalid.bgtutor-backup',
-    mimeType: 'application/vnd.bgtutor.backup',
+    name: 'invalid.neondojo-backup',
+    mimeType: 'application/vnd.neondojo.backup',
     buffer: Buffer.from('Invalid backup'),
   });
   await expect(restore.getByRole('alert')).toContainText(
-    'Invalid BG Tutor backup archive',
+    'Invalid Neondojo backup archive',
   );
   await expect(review).toBeDisabled();
   await expect(dialog).toBeHidden();
@@ -178,7 +178,7 @@ test('exports a backup and restores it only after confirmation', async ({
   expect(restoredResponse.status(), 'Database restore status').toBe(204);
   await expect(dialog.getByRole('status')).toContainText('Backup restored.');
   await expect(
-    dialog.getByRole('button', { name: 'Reload BG Tutor' }),
+    dialog.getByRole('button', { name: 'Reload Neondojo' }),
   ).toBeFocused();
   const restored = await (await request.get('/api/databases')).json();
   expect(restored).toEqual(
@@ -191,7 +191,7 @@ test('exports a backup and restores it only after confirmation', async ({
       expect.objectContaining({ name: 'Target fixture' }),
     ]),
   );
-  await dialog.getByRole('button', { name: 'Reload BG Tutor' }).click();
+  await dialog.getByRole('button', { name: 'Reload Neondojo' }).click();
   await expect(
     page.getByRole('tab', { name: 'Extras', exact: true }),
   ).toBeVisible();
@@ -232,8 +232,8 @@ test('only the latest selected archive can enable review', async ({ page }) => {
     name: 'Review database replacement',
   });
   const file = (name: string) => ({
-    name: `${name}.bgtutor-backup`,
-    mimeType: 'application/vnd.bgtutor.backup',
+    name: `${name}.neondojo-backup`,
+    mimeType: 'application/vnd.neondojo.backup',
     buffer: Buffer.from(name),
   });
   const firstStarted = page.waitForRequest('**/api/database-backup/check');
@@ -248,7 +248,7 @@ test('only the latest selected archive can enable review', async ({ page }) => {
     'different database schema',
   );
   finishFirst();
-  await expect(restore.getByText('second.bgtutor-backup')).toBeVisible();
+  await expect(restore.getByText('second.neondojo-backup')).toBeVisible();
   await expect(
     restore
       .getByRole('region', { name: 'Backup contents' })
@@ -257,7 +257,7 @@ test('only the latest selected archive can enable review', async ({ page }) => {
   await expect(review).toBeDisabled();
 });
 
-test('dates older backups from a valid BG Tutor filename', async ({ page }) => {
+test('dates older backups from a valid Neondojo filename', async ({ page }) => {
   const archivedDate = '2025-03-01T10:11:12Z';
   await page.route('**/api/database-backup/target-counts', (route) =>
     route.fulfill({
@@ -289,15 +289,15 @@ test('dates older backups from a valid BG Tutor filename', async ({ page }) => {
     .getByRole('tab', { name: 'Datenbanksicherung', exact: true })
     .click();
   const contents = page.getByRole('region', { name: 'Inhalt der Sicherung' });
-  const input = page.locator('input[type=file][accept*=".bgtutor-backup"]');
+  const input = page.locator('input[type=file][accept*=".neondojo-backup"]');
   const selectArchive = (name: string, body = 'legacy') =>
     input.setInputFiles({
       name,
-      mimeType: 'application/vnd.bgtutor.backup',
+      mimeType: 'application/vnd.neondojo.backup',
       buffer: Buffer.from(body),
     });
 
-  const goodName = 'bgtutor-2024-02-29-230405.bgtutor-backup';
+  const goodName = 'neondojo-2024-02-29-230405.neondojo-backup';
   await selectArchive(goodName);
   await expect(contents.locator('time')).toHaveAttribute(
     'datetime',
@@ -349,9 +349,9 @@ test('dates older backups from a valid BG Tutor filename', async ({ page }) => {
   await dialog.getByRole('button', { name: 'Abbrechen', exact: true }).click();
 
   for (const name of [
-    'bgtutor-2025-02-29-230405.bgtutor-backup',
-    'bgtutor-2024-02-29-240000.bgtutor-backup',
-    'renamed-bgtutor-2024-02-29-230405.bgtutor-backup',
+    'neondojo-2025-02-29-230405.neondojo-backup',
+    'neondojo-2024-02-29-240000.neondojo-backup',
+    'renamed-neondojo-2024-02-29-230405.neondojo-backup',
   ]) {
     await selectArchive(name);
     await expect(

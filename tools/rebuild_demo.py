@@ -20,10 +20,10 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 REPO = Path(__file__).resolve().parents[1]
-DATA = Path.home() / 'Library/Application Support/BG Tutor'
+DATA = Path.home() / 'Library/Application Support/Neondojo'
 DEFAULT = '00000000-0000-0000-0000-000000000001'
 API = 'http://127.0.0.1:8787/api'
-CONTAINER = 'bgtutor-db-1'
+CONTAINER = 'neondojo-db-1'
 IDENTITY_SQL = """SELECT jsonb_build_object(
     'system_identifier',s.system_identifier::text,
     'database_oid',d.oid::text,'database_name',current_database())
@@ -31,7 +31,7 @@ FROM pg_control_system() s JOIN pg_database d ON d.datname=current_database()"""
 
 
 def sql(statement):
-    return subprocess.run(['docker', 'exec', '-i', CONTAINER, 'psql', '-U', 'bgtutor', '-d', 'bgtutor', '-v', 'ON_ERROR_STOP=1', '-At'], input=statement, text=True, check=True, capture_output=True).stdout
+    return subprocess.run(['docker', 'exec', '-i', CONTAINER, 'psql', '-U', 'neondojo', '-d', 'neondojo', '-v', 'ON_ERROR_STOP=1', '-At'], input=statement, text=True, check=True, capture_output=True).stdout
 
 
 def request(path, body=None, content_type='application/json'):
@@ -184,7 +184,7 @@ def stage(args):
     stamp = datetime.now(ZoneInfo('Europe/Berlin')).strftime('%Y-%m-%d-%H%M%S')
     backup = output/f'pre-demo-{stamp}.dump'
     with backup.open('wb') as file:
-        subprocess.run(['docker', 'exec', CONTAINER, 'pg_dump', '-U', 'bgtutor', '-d', 'bgtutor', '-Fc'], stdout=file, check=True)
+        subprocess.run(['docker', 'exec', CONTAINER, 'pg_dump', '-U', 'neondojo', '-d', 'neondojo', '-Fc'], stdout=file, check=True)
     backup.chmod(0o600)
     with backup.open('rb') as file:
         subprocess.run(['docker', 'exec', '-i', CONTAINER, 'pg_restore', '--file=/dev/null'], stdin=file, check=True)
@@ -203,7 +203,7 @@ def stage(args):
             raise SystemExit('Created API staging database is absent from the verified container database')
         for path in paths:
             data = path.read_bytes()
-            boundary = 'bgtutor-demo-'+uuid.uuid4().hex
+            boundary = 'neondojo-demo-'+uuid.uuid4().hex
             filename = path.name.replace('"', '_').replace('\r', '_').replace('\n', '_')
             body = f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{filename}"\r\nContent-Type: application/octet-stream\r\n\r\n'.encode()+data+f'\r\n--{boundary}--\r\n'.encode()
             status, result = request('/imports?database_id='+database['id'], body, 'multipart/form-data; boundary='+boundary)

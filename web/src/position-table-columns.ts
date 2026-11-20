@@ -50,7 +50,7 @@ export const POSITION_COLUMNS = [
 ] as const;
 const baseLayout = createColumnLayout(
   POSITION_COLUMNS,
-  'bgtutor.positions.columns',
+  'neondojo.positions.columns',
   { decks: 144 },
 );
 export const POSITION_COLUMN_LAYOUT: typeof baseLayout = {
@@ -85,7 +85,7 @@ export const POSITION_DATA_COLUMNS = POSITION_COLUMNS.map(
 export const DEFAULT_POSITION_COLUMNS = POSITION_DATA_COLUMNS.filter((id) =>
   configurationOptions.default_position_columns.includes(id),
 );
-export const POSITION_PLAYED_KEY = 'bgtutor.positions.showPlayed';
+export const POSITION_PLAYED_KEY = 'neondojo.positions.showPlayed';
 export function readPositionPlayed() {
   try {
     return localStorage.getItem(POSITION_PLAYED_KEY) === 'true';

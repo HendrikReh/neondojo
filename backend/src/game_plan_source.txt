@@ -37,7 +37,7 @@ the same MPL-2.0 SPDX header. No AGPL-licensed source was used in this port.
 Adaptations
 -----------
 
-BG Tutor's board uses absolute White-positive/Black-negative point counts,
+Neondojo's board uses absolute White-positive/Black-negative point counts,
 with Black's bar negative at index 0 and White's bar positive at index 25.
 Open Sage uses the same White-oriented points but both bars are nonnegative.
 The adapter negates index 0, classifies White, then uses the upstream flip
@@ -51,7 +51,7 @@ Rust sums/range predicates replace the corresponding C++ loops. Validated
 counts are bounded before addition or negation. Missing checkers are treated
 as borne off, as upstream does.
 
-The separate game_over field is a BG Tutor presentation signal: either
+The separate game_over field is a Neondojo presentation signal: either
 absolute side has no checkers remaining, including on the bar. An empty
 board is accepted and terminal. The rule classifier itself is not overridden
 for terminal positions; a terminal position involving a bar can still have
@@ -79,7 +79,7 @@ started at STARTING_BOARD, emitted the position, stopped at check_game_over,
 otherwise chose dice 1 + random()%6 twice, selected a result with
 possible_boards(board, die1, die2)[random()%moves.size()], and flipped for
 the next player. A 1000-ply cap applied per game. Each emitted board was
-converted to BG Tutor's index-0 sign, and expected labels were obtained by
+converted to Neondojo's index-0 sign, and expected labels were obtained by
 classify_game_plan(board) and classify_game_plan(flip(board)).
 
 The Rust port matched all 18,743 emitted legal positions for both colors,
@@ -93,7 +93,7 @@ repository artifacts or runtime dependencies. No upstream scripts ran.
 When updating the reference, pin the new full commit, verify each file's
 SPDX header and LICENSE, regenerate the C++ expectations, rerun both-color
 and reflection parity, and update SOURCE_REVISION and these provenance hashes.
-BG Tutor adds one label of its own on top of these rules: "opening", when
+Neondojo adds one label of its own on top of these rules: "opening", when
 both sides have at most four checkers off their starting points. It is not
 part of the Open Sage reference; the classifier name carries the suffix
 "_opening1" for it. Keep the "opensage_rules_v1" prefix tied to these rule semantics; a deliberate

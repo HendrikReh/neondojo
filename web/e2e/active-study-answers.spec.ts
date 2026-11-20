@@ -77,7 +77,7 @@ test('actively answers and reviews all three card types, with an idempotent retr
   test.setTimeout(90_000);
   const deck = await createDeck(page);
   const nextUrl = `/api/decks/${deck.id}/next`;
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   const study = await openDeck(page, deck);
   const seen = new Set<string>();
@@ -294,7 +294,7 @@ test('switching decks while a response is pending keeps the new question hidden'
 }) => {
   const first = await createDeck(page, 1);
   const second = await createDeck(page, 2);
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   const study = await openDeck(page, first);
   const card = study.locator('.study-card');

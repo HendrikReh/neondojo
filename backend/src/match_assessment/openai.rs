@@ -24,7 +24,7 @@ pub(super) fn configured() -> bool {
 }
 
 pub(super) fn model() -> String {
-    std::env::var("BGTUTOR_ASSESSMENT_MODEL")
+    std::env::var("NEONDOJO_ASSESSMENT_MODEL")
         .ok()
         .filter(|name| !name.trim().is_empty())
         .unwrap_or_else(|| DEFAULT_MODEL.into())
@@ -47,7 +47,7 @@ fn request(model: &str, input: &Value) -> Value {
         "instructions": include_str!("prompt.txt"),
         "input": input.to_string(),
         "text": {"format":{
-            "type":"json_schema","name":"bg_tutor_match_assessment","strict":true,
+            "type":"json_schema","name":"neondojo_match_assessment","strict":true,
             "schema": object(json!({
                 "summary": string,
                 "next_match_focus": string,

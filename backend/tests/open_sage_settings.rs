@@ -1,9 +1,9 @@
 use axum::{body::Body, http::Request};
-use bgtutor::{
+use http_body_util::BodyExt;
+use neondojo::{
     api::{self, AppState},
     engine::Engine,
 };
-use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -112,9 +112,9 @@ async fn saved_result_catalog_is_engine_independent_and_legacy_remains_gnubg(poo
     let app = api::router(AppState::new(pool.clone(), Engine::new("gnubg".into())));
     assert_eq!(call(app, "GET", "/api/settings", Value::Null).await.0, 200);
     let sgf = "(;GM[6]FF[4]MI[length:5][ws:0][bs:0];W[31hefe])";
-    let imported = bgtutor::import::parse_sgf(sgf).unwrap();
+    let imported = neondojo::import::parse_sgf(sgf).unwrap();
     let saved =
-        bgtutor::store::import_match(&pool, "provider.sgf", "sgf", sgf.as_bytes(), sgf, &imported)
+        neondojo::store::import_match(&pool, "provider.sgf", "sgf", sgf.as_bytes(), sgf, &imported)
             .await
             .unwrap();
     let position: Uuid = sqlx::query_scalar("SELECT id FROM positions WHERE match_uuid=$1 LIMIT 1")
@@ -214,7 +214,7 @@ async fn sage_benchmark_snapshots_are_independent_and_complete(pool: PgPool) {
         .0,
         422
     );
-    assert!(bgtutor::benchmarks::run_one(&state).await.unwrap());
+    assert!(neondojo::benchmarks::run_one(&state).await.unwrap());
     let (_, history) = call(app.clone(), "GET", "/api/benchmarks", Value::Null).await;
     let run = &history["runs"][0];
     assert_eq!(run["status"], "completed", "{run}");
@@ -232,13 +232,13 @@ async fn sage_benchmark_snapshots_are_independent_and_complete(pool: PgPool) {
         200
     );
     let sgf = "(;GM[6]FF[4]MI[length:5][ws:0][bs:0];W[31hefe])";
-    let source = bgtutor::store::import_match(
+    let source = neondojo::store::import_match(
         &pool,
         "eta.sgf",
         "sgf",
         sgf.as_bytes(),
         sgf,
-        &bgtutor::import::parse_sgf(sgf).unwrap(),
+        &neondojo::import::parse_sgf(sgf).unwrap(),
     )
     .await
     .unwrap();
@@ -249,7 +249,7 @@ async fn sage_benchmark_snapshots_are_independent_and_complete(pool: PgPool) {
     assert_eq!(estimate["benchmark"]["id"], benchmark_id, "{estimate}");
     let (status, job) = call(app.clone(), "POST", &uri, json!({})).await;
     assert_eq!(status, 202, "{job}");
-    assert!(bgtutor::jobs::run_one(&state).await.unwrap());
+    assert!(neondojo::jobs::run_one(&state).await.unwrap());
     let job_id = uuid::Uuid::parse_str(job["id"].as_str().unwrap()).unwrap();
     let saved_id: Option<uuid::Uuid> =
         sqlx::query_scalar("SELECT benchmark_id FROM match_analysis_timing WHERE job_id=$1")
@@ -267,7 +267,7 @@ async fn sage_benchmark_snapshots_are_independent_and_complete(pool: PgPool) {
     )
     .await;
     assert_eq!(status, 202, "{play}");
-    assert!(bgtutor::benchmarks::run_one(&state).await.unwrap());
+    assert!(neondojo::benchmarks::run_one(&state).await.unwrap());
     let (_, history) = call(app, "GET", "/api/benchmarks", Value::Null).await;
     let run = &history["runs"][0];
     assert_eq!(run["status"], "completed", "{run}");
@@ -279,7 +279,7 @@ async fn sage_benchmark_snapshots_are_independent_and_complete(pool: PgPool) {
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires isolated PostgreSQL, GNUbg and locked Open Sage"]
 async fn jobs_pin_provider_across_settings_changes_and_dice_keep_36_weight(pool: PgPool) {
-    use bgtutor::{import, jobs, store};
+    use neondojo::{import, jobs, store};
     let python = std::env::var("OPEN_SAGE_TEST_PYTHON").expect("explicit native interpreter");
     let state = AppState::new(pool.clone(), Engine::new("gnubg".into()));
     let app = api::router(state.clone());
@@ -396,13 +396,13 @@ async fn provider_lookup_uses_index_with_many_other_engine_results(pool: PgPool)
         200
     );
     let sgf = "(;GM[6]FF[4]MI[length:5][ws:0][bs:0];W[31hefe])";
-    let saved = bgtutor::store::import_match(
+    let saved = neondojo::store::import_match(
         &pool,
         "performance.sgf",
         "sgf",
         sgf.as_bytes(),
         sgf,
-        &bgtutor::import::parse_sgf(sgf).unwrap(),
+        &neondojo::import::parse_sgf(sgf).unwrap(),
     )
     .await
     .unwrap();
@@ -525,7 +525,7 @@ async fn fork_depths_are_pinned_in_sessions_duels_and_benchmarks(pool: PgPool) {
     }
     // Exercise both complete analysis depths through the durable benchmark worker.
     for _ in 0..2 {
-        assert!(bgtutor::benchmarks::run_one(&state).await.unwrap());
+        assert!(neondojo::benchmarks::run_one(&state).await.unwrap());
     }
     let complete: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM benchmark_runs WHERE status='completed' AND analyzed_moves=460",
@@ -542,18 +542,18 @@ async fn fork_depths_are_pinned_in_sessions_duels_and_benchmarks(pool: PgPool) {
     )
     .await;
     assert_eq!(status, 202, "{play}");
-    assert!(bgtutor::benchmarks::run_one(&state).await.unwrap());
+    assert!(neondojo::benchmarks::run_one(&state).await.unwrap());
     let (_, history) = call(app.clone(), "GET", "/api/benchmarks", Value::Null).await;
     assert_eq!(history["runs"][0]["status"], "completed", "{history}");
     assert_eq!(history["runs"][0]["completed_turns"], 11);
     let sgf = "(;GM[6]FF[4]MI[length:5][ws:0][bs:0];W[31hefe])";
-    let source = bgtutor::store::import_match(
+    let source = neondojo::store::import_match(
         &pool,
         "depth.sgf",
         "sgf",
         sgf.as_bytes(),
         sgf,
-        &bgtutor::import::parse_sgf(sgf).unwrap(),
+        &neondojo::import::parse_sgf(sgf).unwrap(),
     )
     .await
     .unwrap();
@@ -570,7 +570,7 @@ async fn fork_depths_are_pinned_in_sessions_duels_and_benchmarks(pool: PgPool) {
         saved["open_sage"]["plies"], 2,
         "request overrides the 1-ply default"
     );
-    assert!(bgtutor::jobs::run_one(&state).await.unwrap());
+    assert!(neondojo::jobs::run_one(&state).await.unwrap());
     let status: String = sqlx::query_scalar("SELECT status FROM jobs WHERE id=$1")
         .bind(job_id)
         .fetch_one(&pool)

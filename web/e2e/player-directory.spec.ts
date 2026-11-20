@@ -3,7 +3,7 @@ import { expect, test } from './test';
 test('edits an imported player profile and opens its match', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'de'));
   await page.setViewportSize({ width: 1800, height: 1169 });
   const alias = `Spieler ${crypto.randomUUID()}`;
   const imported = await page.request.post('/api/imports', {
@@ -148,7 +148,7 @@ test('edits an imported player profile and opens its match', async ({
 test('springs directly between numbered player result pages and resets on search', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'de'));
   const requestedPages: number[] = [];
   await page.route('**/api/players?*', async (route) => {
     const params = new URL(route.request().url()).searchParams;
@@ -197,7 +197,7 @@ test('springs directly between numbered player result pages and resets on search
 test('offers profiles with a similar name before a merge search is typed', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'de'));
   const id = '7b0f6f0e-6a55-4d0c-9a53-2f6a3c1d9e10';
   const queries: (string | null)[] = [];
   await page.route('**/api/players?*', async (route) => {
@@ -260,7 +260,7 @@ test('offers profiles with a similar name before a merge search is typed', async
 });
 
 test('sorts the player list from its column headings', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'de'));
   const orders: string[] = [];
   await page.route('**/api/players?*', async (route) => {
     const params = new URL(route.request().url()).searchParams;

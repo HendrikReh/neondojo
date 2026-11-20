@@ -57,7 +57,7 @@ async function backend(page: Page, savedSettings = settings) {
   let reads = 0;
   await page.addInitScript(() => {
     localStorage.clear();
-    localStorage.setItem('bgtutor.locale', 'en');
+    localStorage.setItem('neondojo.locale', 'en');
   });
   await page.route('**/api/**', (route) =>
     /\/api\/(?:configuration|profiles|opening-book)(?:\/|$)/.test(
@@ -350,7 +350,7 @@ test('Extras shows reference, saved history and only the saved default ply', asy
   ]);
   expect(api.starts).toHaveLength(0);
   await page.screenshot({
-    path: '/tmp/bgtutor-benchmark-desktop.png',
+    path: '/tmp/neondojo-benchmark-desktop.png',
     fullPage: true,
   });
   await page.getByRole('checkbox', { name: '3-ply', exact: true }).uncheck();
@@ -516,7 +516,7 @@ test('failed starts show backend diagnostics and narrow view keeps actions reach
     alertBox!.y + alertBox!.height,
   );
   await page.screenshot({
-    path: '/tmp/bgtutor-benchmark-narrow.png',
+    path: '/tmp/neondojo-benchmark-narrow.png',
     fullPage: true,
   });
 });

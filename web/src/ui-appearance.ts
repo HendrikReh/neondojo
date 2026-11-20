@@ -7,7 +7,7 @@ export interface UiAppearance {
   mode: UiMode;
 }
 
-export const uiAppearanceStorageKey = 'bgtutor.ui-appearance';
+export const uiAppearanceStorageKey = 'neondojo.ui-appearance';
 export const defaultUiAppearance: UiAppearance = {
   theme: 'graphite',
   mode: 'system',

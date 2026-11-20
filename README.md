@@ -1,8 +1,8 @@
-# BG Tutor
+# Neondojo
 
-BG Tutor is a local backgammon application for importing matches, finding positions, analyzing decisions with GNU Backgammon (GNUbg) or Open Sage, playing against an engine, and practicing your own mistakes. Its headless Rust backend uses Tokio, Axum, PostgreSQL, and SQLx. The React and TypeScript client connects through REST and server-sent events (SSE).
+Neondojo is a local backgammon application for importing matches, finding positions, analyzing decisions with GNU Backgammon (GNUbg) or Open Sage, playing against an engine, and practicing your own mistakes. Its headless Rust backend uses Tokio, Axum, PostgreSQL, and SQLx. The React and TypeScript client connects through REST and server-sent events (SSE).
 
-[User guide](docs/user-guide/README.md) · [Quick start](#quick-start) · [Restart on port 8787](#restart-bg-tutor-locally-on-port-8787) · [Analyze a match](#analyze-your-first-match) · [Documentation](#documentation) · [API](docs/development/api.md) · [Verification](docs/development/testing.md) · [Repository guidance](AGENTS.md) · [Changelog](CHANGELOG.md)
+[User guide](docs/user-guide/README.md) · [Quick start](#quick-start) · [Restart on port 8787](#restart-neondojo-locally-on-port-8787) · [Analyze a match](#analyze-your-first-match) · [Documentation](#documentation) · [API](docs/development/api.md) · [Verification](docs/development/testing.md) · [Repository guidance](AGENTS.md) · [Changelog](CHANGELOG.md)
 
 ## Quick start
 
@@ -12,7 +12,7 @@ BG Tutor is a local backgammon application for importing matches, finding positi
 - Python 3.10 or later for the frontend build and development scripts
 - A local GNUbg installation with its neural network weights. Playing also requires GNUbg's embedded Python module. Analysis and playing were tested with GNUbg 1.08.003 on macOS. Earlier analysis checks used 1.05.002.
 
-From the repository root, create `.env` if needed and start PostgreSQL. Use the Compose command below for the bundled database. To use another server, set `DATABASE_URL` in `.env` to the intended database. If you change the Compose port with `BGTUTOR_DB_PORT`, update `DATABASE_URL` to match.
+From the repository root, create `.env` if needed and start PostgreSQL. Use the Compose command below for the bundled database. To use another server, set `DATABASE_URL` in `.env` to the intended database. If you change the Compose port with `NEONDOJO_DB_PORT`, update `DATABASE_URL` to match.
 
 ```sh
 [ -f .env ] || cp .env.example .env
@@ -25,34 +25,34 @@ Check that `gnubg --version` works. If the executable is outside the backend's `
 
 ### Local use with the built frontend
 
-For regular local use, the backend serves the built frontend and the API on port `8787`. Keep PostgreSQL running and stop any BG Tutor backend already listening on that port before starting the release build with `BGTUTOR_WEB_DIR` set.
+For regular local use, the backend serves the built frontend and the API on port `8787`. Keep PostgreSQL running and stop any Neondojo backend already listening on that port before starting the release build with `NEONDOJO_WEB_DIR` set.
 
 ```sh
 npm ci --prefix web
 npm run build --prefix web
-BGTUTOR_WEB_DIR=web/dist cargo run -p bgtutor --release
+NEONDOJO_WEB_DIR=web/dist cargo run -p neondojo --release
 ```
 
-Open <http://127.0.0.1:8787> to use BG Tutor. By default the services listen on loopback. BG Tutor has no built-in user accounts, so network access requires separate access control.
+Open <http://127.0.0.1:8787> to use Neondojo. By default the services listen on loopback. Neondojo has no built-in user accounts, so network access requires separate access control.
 
 | Service     | Address                                                               |
 | ----------- | --------------------------------------------------------------------- |
 | API health  | <http://127.0.0.1:8787/api/health>                                     |
 | OpenAPI 3.1 | <http://127.0.0.1:8787/api/openapi.json>                               |
-| PostgreSQL  | `127.0.0.1:54329`, backed by the `bgtutor_postgres_data` Docker volume |
+| PostgreSQL  | `127.0.0.1:54329`, backed by the `neondojo_postgres_data` Docker volume |
 
 ### Frontend development with Vite
 
-Start the backend from the repository root with `cargo run -p bgtutor`. In a second terminal at the repository root, start the Vite development server.
+Start the backend from the repository root with `cargo run -p neondojo`. In a second terminal at the repository root, start the Vite development server.
 
 ```sh
 npm ci --prefix web
 npm run dev --prefix web
 ```
 
-Open <http://127.0.0.1:5173>. Vite forwards `/api` to `http://127.0.0.1:8787` by default. Set `BGTUTOR_API_URL` in Vite's environment to point it at a different backend. If port `5173` is in use, Vite reports the conflict at startup.
+Open <http://127.0.0.1:5173>. Vite forwards `/api` to `http://127.0.0.1:8787` by default. Set `NEONDOJO_API_URL` in Vite's environment to point it at a different backend. If port `5173` is in use, Vite reports the conflict at startup.
 
-### Restart BG Tutor locally on port 8787
+### Restart Neondojo locally on port 8787
 
 1. From the repository root, keep the existing PostgreSQL database and `.env` configuration. Reuse any `DATABASE_URL` and `GNUBG_BIN` overrides from the previous launch. If you use the Compose database and it is stopped, start it with `docker compose up -d --wait db`. If the frontend dependencies are missing or the lockfile changed, run `npm ci --prefix web`.
 2. Build the updated application before stopping the running server.
@@ -61,20 +61,20 @@ Open <http://127.0.0.1:5173>. Vite forwards `/api` to `http://127.0.0.1:8787` by
    ./tools/build_local_restart.sh
    ```
 
-   The script builds from the current checkout, including uncommitted changes. It uses `target/local-restart` to keep the restart build separate from other Cargo builds and recompiles the BG Tutor package on each run so SQLx embeds the current migration files. Continue once both builds succeed and the script prints the path to the new binary.
+   The script builds from the current checkout, including uncommitted changes. It uses `target/local-restart` to keep the restart build separate from other Cargo builds and recompiles the Neondojo package on each run so SQLx embeds the current migration files. Continue once both builds succeed and the script prints the path to the new binary.
 
    The workspace `Cargo.toml` explicitly sets `strip = "none"` for the `dev` and `release` profiles; `test` and `bench` inherit these settings. This also covers direct Cargo commands and fresh build directories. No `CARGO_PROFILE_RELEASE_STRIP` prefix is needed. Release optimization remains enabled, but the artifacts can be larger.
 
    Keep these explicit settings while supporting Rust 1.94.1 on macOS 27: Cargo can implicitly strip debug information when no `strip` setting is present, and the bundled LLVM can then produce procedural-macro libraries that fail to load with `mis-aligned LINKEDIT string pool`. Removing an explicit `strip` option is therefore not equivalent to disabling stripping. Environment variables, Cargo config overrides, and `RUSTFLAGS` must not re-enable stripping. After a toolchain or profile change, verify a release build in a fresh target directory without a strip override. [Rust issue](https://github.com/rust-lang/rust/issues/157750)
 
-3. Stop BG Tutor with `Ctrl+C` in its terminal. If it runs in the background, use `lsof -nP -iTCP:8787 -sTCP:LISTEN` to find the listener. Confirm that it is the `bgtutor` process, then replace `PID` with its process ID in `kill -TERM PID`. Wait until the listener has stopped.
+3. Stop Neondojo with `Ctrl+C` in its terminal. If it runs in the background, use `lsof -nP -iTCP:8787 -sTCP:LISTEN` to find the listener. Confirm that it is the `neondojo` process, then replace `PID` with its process ID in `kill -TERM PID`. Wait until the listener has stopped.
 4. From the repository root, start the binary produced by step 2. It applies pending migrations at startup and serves the built frontend on the same port.
 
    ```sh
-   BGTUTOR_BIND=127.0.0.1:8787 BGTUTOR_WEB_DIR="$PWD/web/dist" ./target/local-restart/bgtutor
+   NEONDOJO_BIND=127.0.0.1:8787 NEONDOJO_WEB_DIR="$PWD/web/dist" ./target/local-restart/neondojo
    ```
 
-5. Check the health endpoint from another terminal, then open or reload BG Tutor and verify the workflow you changed. A response with `"status":"ok"` confirms PostgreSQL responds and the configured GNUbg reports its version. Allow up to five seconds for the GNUbg version command. During a benchmark, the health check can reuse the recorded engine version. **Check installation** runs the evaluation probe. [BG Tutor on port 8787](http://127.0.0.1:8787/)
+5. Check the health endpoint from another terminal, then open or reload Neondojo and verify the workflow you changed. A response with `"status":"ok"` confirms PostgreSQL responds and the configured GNUbg reports its version. Allow up to five seconds for the GNUbg version command. During a benchmark, the health check can reuse the recorded engine version. **Check installation** runs the evaluation probe. [Neondojo on port 8787](http://127.0.0.1:8787/)
 
    ```sh
    curl --fail --silent --show-error http://127.0.0.1:8787/api/health

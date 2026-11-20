@@ -546,7 +546,7 @@ test('English default, alphabetical languages, draft cancellation, focus trap an
   await expect(trigger).toBeFocused();
   expect(backend.writes).toHaveLength(0);
   expect(
-    await page.evaluate(() => localStorage.getItem('bgtutor.theme')),
+    await page.evaluate(() => localStorage.getItem('neondojo.theme')),
   ).not.toBe('walnut');
   await openSettings(page);
   await expect(page.getByLabel('Language', { exact: true })).toHaveValue('en');

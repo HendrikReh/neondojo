@@ -31,10 +31,10 @@ async function fixture(
   const position = positions.items[0];
   await page.addInitScript(
     ({ id, locale, databaseId }) => {
-      localStorage.setItem('bgtutor.locale', locale);
-      if (databaseId) localStorage.setItem('bgtutor.database', databaseId);
+      localStorage.setItem('neondojo.locale', locale);
+      if (databaseId) localStorage.setItem('neondojo.database', databaseId);
       localStorage.setItem(
-        'bgtutor.workspace',
+        'neondojo.workspace',
         JSON.stringify({ matchId: id, gameNo: 1 }),
       );
     },

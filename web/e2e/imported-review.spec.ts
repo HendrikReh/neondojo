@@ -2,7 +2,7 @@ import { expect, test } from './test';
 
 test('all-games Cube review wraps across games', async ({ page }) => {
   test.setTimeout(90_000);
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await page
     .getByLabel('Match file', { exact: true })
@@ -63,7 +63,7 @@ test('all-games Cube review wraps across games', async ({ page }) => {
 test('imported decisions work in error navigation without a local job', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   const response = await page.request.post('/api/imports', {
     multipart: {
       file: {
@@ -168,7 +168,7 @@ test('imported decisions work in error navigation without a local job', async ({
   await page.addInitScript(
     (id) =>
       localStorage.setItem(
-        'bgtutor.workspace',
+        'neondojo.workspace',
         JSON.stringify({ matchId: id, gameNo: 1 }),
       ),
     match.id,
@@ -220,7 +220,7 @@ test('imported decisions work in error navigation without a local job', async ({
 test('real XG review opens checker and cube decisions with original source and responsive desktop comparisons', async ({
   page,
 }, testInfo) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'de'));
   const { readFileSync } = await import('node:fs');
   const response = await page.request.post('/api/imports', {
     multipart: {
@@ -236,7 +236,7 @@ test('real XG review opens checker and cube decisions with original source and r
   await page.addInitScript(
     (id) =>
       localStorage.setItem(
-        'bgtutor.workspace',
+        'neondojo.workspace',
         JSON.stringify({ matchId: id, gameNo: 1 }),
       ),
     match.id,
@@ -308,7 +308,7 @@ test('real XG review opens checker and cube decisions with original source and r
       ),
     ).toBe(true);
     await page.screenshot({
-      path: `/tmp/bgtutor-review-${viewport.width}.png`,
+      path: `/tmp/neondojo-review-${viewport.width}.png`,
     });
     const candidateWidth = await page
       .locator('.analysis-panel > .source-analysis .source-candidates')
@@ -396,7 +396,7 @@ test('the board crosses a late review page without scanning the earlier pages ag
   page,
 }) => {
   test.setTimeout(90_000);
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   const source = await page.request.post('/api/imports', {
     multipart: {
       file: {
@@ -433,7 +433,7 @@ test('the board crosses a late review page without scanning the earlier pages ag
   await page.addInitScript(
     ({ matchId, gameNo }) => {
       localStorage.setItem(
-        'bgtutor.workspace',
+        'neondojo.workspace',
         JSON.stringify({ matchId, gameNo }),
       );
     },

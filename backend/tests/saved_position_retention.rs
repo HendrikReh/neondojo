@@ -1,12 +1,12 @@
 use axum::{body::Body, http::Request};
-use bgtutor::{
+use http_body_util::BodyExt;
+use neondojo::{
     api::{self, AppState},
     engine::Engine,
     import,
     model::Position,
     store,
 };
-use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -46,7 +46,7 @@ async fn imported(pool: &PgPool) -> (Uuid, Vec<Position>) {
     .await
     .unwrap();
     let id = result.r#match.id;
-    bgtutor::move_catalog::ensure_catalog(pool, id)
+    neondojo::move_catalog::ensure_catalog(pool, id)
         .await
         .unwrap();
     let positions = store::positions(pool, Some(id), None, None, 100)
@@ -597,7 +597,7 @@ async fn deletion_without_saved_positions_removes_the_entire_source_and_busy_job
 async fn native_decisions_survive_only_for_saved_positions_without_fabricating_match_pr(
     pool: PgPool,
 ) {
-    use bgtutor::model::PlayerAnalysisSummary;
+    use neondojo::model::PlayerAnalysisSummary;
     let (source, positions) = imported(&pool).await;
     let saved = positions[0].id;
     save(&pool, saved).await;
@@ -617,7 +617,7 @@ async fn native_decisions_survive_only_for_saved_positions_without_fabricating_m
         "performance_rating":{"method":"gnubg_emg_500_v1","profile":"GNUbg; 1-ply cubeful deterministic","games":2,"players":[
             {"player":0,"value":2.5,"normalized_equity_loss":0.005,"unforced_checker_moves":1,"close_cube_decisions":0},
             {"player":1,"value":4.0,"normalized_equity_loss":0.008,"unforced_checker_moves":1,"close_cube_decisions":0}]}});
-    assert!(bgtutor::match_analysis::match_performance_rating(&result).is_some());
+    assert!(neondojo::match_analysis::match_performance_rating(&result).is_some());
     let job = Uuid::new_v4();
     sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,completed_games,result) VALUES($1,$2,'match',1,'completed',2,2,$3)").bind(job).bind(source).bind(&result).execute(&pool).await.unwrap();
     let snapshot = json!({"engine_id":"gnubg","gnubg_path":"/fixture/native-gnubg","engine_version":"GNUbg original"});
@@ -663,7 +663,7 @@ async fn native_decisions_survive_only_for_saved_positions_without_fabricating_m
     assert_eq!(retained.plies, 1);
     assert_eq!(retained.result.as_ref().unwrap()["engine"], "GNUbg");
     assert!(
-        bgtutor::match_analysis::match_performance_rating(retained.result.as_ref().unwrap())
+        neondojo::match_analysis::match_performance_rating(retained.result.as_ref().unwrap())
             .is_none()
     );
     let provenance: (String, Value) =
@@ -914,7 +914,7 @@ async fn retention_migration_only_adds_infrastructure_and_preserves_existing_use
     );
     let paused = databases
         .iter()
-        .find(|db| db["id"] == bgtutor::play::PAUSED_MATCHES_DATABASE_ID.to_string())
+        .find(|db| db["id"] == neondojo::play::PAUSED_MATCHES_DATABASE_ID.to_string())
         .unwrap();
     assert_eq!(paused["name"], "Paused Matches");
     assert_eq!(paused["is_system"], true);

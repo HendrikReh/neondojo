@@ -15,8 +15,8 @@ test('import target can differ from the active library collection', async ({
   const source = await create(`Import browsing ${id}`);
   const target = await create(`Import destination ${id}`);
   await page.addInitScript((sourceId) => {
-    localStorage.setItem('bgtutor.locale', 'en');
-    localStorage.setItem('bgtutor.database', sourceId);
+    localStorage.setItem('neondojo.locale', 'en');
+    localStorage.setItem('neondojo.database', sourceId);
   }, source.id);
   await page.goto('/');
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();
@@ -78,7 +78,7 @@ test('import target can differ from the active library collection', async ({
 test('system databases keep their names and can be emptied', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.setViewportSize({ width: 1800, height: 1169 });
   const response = await page.request.get('/api/databases');
   expect(response.ok()).toBeTruthy();
@@ -145,7 +145,7 @@ test('system databases keep their names and can be emptied', async ({
 test('collections, independent copies, filters and metadata work together', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();
   await page.getByRole('button', { name: 'New database', exact: true }).click();
@@ -266,7 +266,7 @@ test('collections, independent copies, filters and metadata work together', asyn
 test('a game and an explicit cube action have separate searchable notes', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await page.getByLabel('Match file', { exact: true }).setInputFiles({
     name: 'cube-notes.sgf',
@@ -320,7 +320,7 @@ test('a game and an explicit cube action have separate searchable notes', async 
 test('source dialog and main checker notes share one retained draft', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await page.getByLabel('Match file', { exact: true }).setInputFiles({
     name: 'draft-modal.sgf',
@@ -352,7 +352,7 @@ test('source dialog and main checker notes share one retained draft', async ({
 test('delayed cube note search cannot replace a newer game selection', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   const imported = page.waitForResponse(
     (r) => new URL(r.url()).pathname === '/api/imports',
@@ -422,8 +422,8 @@ test('multiple import outcomes and batch tags, move, ZIP export and delete', asy
     dbs.push(await response.json());
   }
   await page.addInitScript((id) => {
-    localStorage.setItem('bgtutor.locale', 'en');
-    localStorage.setItem('bgtutor.database', id);
+    localStorage.setItem('neondojo.locale', 'en');
+    localStorage.setItem('neondojo.database', id);
   }, dbs[0].id);
   await page.goto('/');
   const file = (name: string, player: string) => ({
@@ -513,7 +513,7 @@ test('multiple import outcomes and batch tags, move, ZIP export and delete', asy
 test('a native full-match analysis supplies GNUbg PR to the match overview', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   const imported = page.waitForResponse(
     (r) => new URL(r.url()).pathname === '/api/imports',

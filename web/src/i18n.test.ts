@@ -51,7 +51,7 @@ describe('language selection and translation', () => {
     expect(readLocale({ getItem: (key) => values.get(key) ?? null })).toBe(
       'pl',
     );
-    expect(values.get('bgtutor.locale')).toBe('pl');
+    expect(values.get('neondojo.locale')).toBe('pl');
     expect(() =>
       saveLocale('es', {
         setItem: () => {

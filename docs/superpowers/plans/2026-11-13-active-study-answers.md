@@ -1,6 +1,6 @@
-# Aktive Checker- und Cube-Antworten in BG Tutor
+# Aktive Checker- und Cube-Antworten in Neondojo
 
-**Ziel.** Unter **Study → Lernkarten & Anki → Jetzt lernen** beantwortet der Nutzer jede Karte aktiv. BG Tutor bewertet den ersten abgegebenen Versuch anhand einer konkreten Analyse. Die vier bestehenden FSRS-Bewertungen bleiben der Schritt, der die nächste Wiederholung festlegt.
+**Ziel.** Unter **Study → Lernkarten & Anki → Jetzt lernen** beantwortet der Nutzer jede Karte aktiv. Neondojo bewertet den ersten abgegebenen Versuch anhand einer konkreten Analyse. Die vier bestehenden FSRS-Bewertungen bleiben der Schritt, der die nächste Wiederholung festlegt.
 
 **Architektur.** Das Brett und seine Zuginteraktion werden mit „Ähnliche Stellungen üben“ geteilt. Der Rust-Dienst prüft die Eingabe gegen den gespeicherten Kartensnapshot, bewertet sie und speichert den Versuch in der vorhandenen Review-Session. PostgreSQL bleibt die Quelle für Karte, Versuch und Wiederholung. Der Client nutzt die aus OpenAPI generierten Typen.
 
@@ -86,10 +86,10 @@ CREATE UNIQUE INDEX review_sessions_first_attempt
 - [ ] **Engine-Integration.** Die native GNUbg-Integration gezielt mit Netzgewichten ausführen und die betroffenen Play-Regressionen mit eingebettetem Python prüfen. Open Sage mit der verifizierten lokalen Installation und einem erzwungen aufgenommenen Checker-Kandidaten sowie einer Cube-Antwort prüfen. Messpunkte für die initiale Latenzgrenze sind mindestens ein gespeicherter Fall, eine Checker-Neuberechnung pro Provider und eine Cube-Neuberechnung pro Provider. Zeiten und effektive Ply getrennt dokumentieren. Bei fehlender Testvoraussetzung ausdrücklich benennen, welche Prüfung aussteht.
 
 ```sh
-cargo test -p bgtutor practice --lib
-cargo test -p bgtutor --test learning
-cargo test -p bgtutor --test learning -- --ignored --nocapture
-cargo test -p bgtutor --test open_sage native_checker_cube_and_match_analysis -- --ignored --nocapture
+cargo test -p neondojo practice --lib
+cargo test -p neondojo --test learning
+cargo test -p neondojo --test learning -- --ignored --nocapture
+cargo test -p neondojo --test open_sage native_checker_cube_and_match_analysis -- --ignored --nocapture
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace

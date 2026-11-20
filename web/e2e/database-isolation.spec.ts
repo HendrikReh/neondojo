@@ -5,9 +5,9 @@ import { randomUUID } from 'node:crypto';
 test('browser imports reach the disposable PostgreSQL database', async ({
   request,
 }) => {
-  const database = process.env.BGTUTOR_E2E_DATABASE_URL;
+  const database = process.env.NEONDOJO_E2E_DATABASE_URL;
   expect(database, 'Playwright must provision a test database').toBeDefined();
-  expect(new URL(database!).pathname).toMatch(/^\/bgtutor_e2e_[a-f0-9]+$/);
+  expect(new URL(database!).pathname).toMatch(/^\/neondojo_e2e_[a-f0-9]+$/);
 
   const player = `E2E isolation ${randomUUID()}`;
   const imported = await request.post('/api/imports', {

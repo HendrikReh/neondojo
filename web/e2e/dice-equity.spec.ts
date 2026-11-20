@@ -11,7 +11,7 @@ async function openPosition(page: Page) {
   const configuration = structuredClone(defaultConfiguration);
   configuration.analysis.plies = 1;
   const profile = await profileBackend(page, { configuration });
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await expect(
     page.getByText('GNUbg connected', { exact: true }),

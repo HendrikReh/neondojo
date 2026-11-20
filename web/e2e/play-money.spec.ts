@@ -54,7 +54,7 @@ test('starts a match while preserving conflicting profile changes for recovery',
   });
   await page.addInitScript((draft) => {
     localStorage.setItem(
-      'bgtutor.configuration-pending.v1',
+      'neondojo.configuration-pending.v1',
       JSON.stringify(draft),
     );
   }, pending);
@@ -93,7 +93,7 @@ test('starts a match while preserving conflicting profile changes for recovery',
   expect(profile.calls.filter(({ method }) => method !== 'GET')).toEqual([]);
   expect(
     await page.evaluate(() =>
-      JSON.parse(localStorage.getItem('bgtutor.configuration-pending.v1')!),
+      JSON.parse(localStorage.getItem('neondojo.configuration-pending.v1')!),
     ),
   ).toEqual(pending);
   await (await playMenuItem(page, 'New match')).click();

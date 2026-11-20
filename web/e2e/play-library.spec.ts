@@ -74,7 +74,7 @@ const row = (sessionId: string | null = id, phase: string | null = 'move') => ({
 test('German Playing setup has one New match heading and a localized paused collection', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'de'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'de'));
   await page.goto('/');
   const play = page.getByRole('tabpanel', { name: 'Spielen', exact: true });
   await page.getByRole('tab', { name: 'Spielen', exact: true }).click();
@@ -99,8 +99,8 @@ test('bot matches resume from Match Database and Playing has no Saved Matches li
 }) => {
   let reads = 0;
   await page.addInitScript((last) => {
-    localStorage.setItem('bgtutor.locale', 'en');
-    localStorage.setItem('bgtutor.play-session', last);
+    localStorage.setItem('neondojo.locale', 'en');
+    localStorage.setItem('neondojo.play-session', last);
   }, other);
   await page.route('**/api/play/sessions', (route) => {
     reads++;
@@ -151,7 +151,7 @@ test('bot matches resume from Match Database and Playing has no Saved Matches li
   ).toHaveAttribute('aria-selected', 'true');
   await expect
     .poll(() =>
-      page.evaluate(() => localStorage.getItem('bgtutor.play-session')),
+      page.evaluate(() => localStorage.getItem('neondojo.play-session')),
     )
     .toBe(id);
   await page.reload();
@@ -166,7 +166,7 @@ for (const [label, sessionId, phase] of [
 ] as const)
   test(`${label} matches disable the resume action`, async ({ page }) => {
     await page.addInitScript(() =>
-      localStorage.setItem('bgtutor.locale', 'en'),
+      localStorage.setItem('neondojo.locale', 'en'),
     );
     await page.route('**/api/library/matches?*', (route) =>
       route.fulfill({
@@ -201,8 +201,8 @@ for (const retry of [false, true])
       release = resolve;
     });
     await page.addInitScript((last) => {
-      localStorage.setItem('bgtutor.locale', 'en');
-      localStorage.setItem('bgtutor.play-session', last);
+      localStorage.setItem('neondojo.locale', 'en');
+      localStorage.setItem('neondojo.play-session', last);
     }, other);
     await page.route(`**/api/play/sessions/${other}`, async (route) => {
       if (retry && ++reads === 1) {
@@ -249,7 +249,7 @@ for (const retry of [false, true])
       await expect(page.locator('.play-board')).toBeVisible({ timeout: 3000 });
       await expect
         .poll(() =>
-          page.evaluate(() => localStorage.getItem('bgtutor.play-session')),
+          page.evaluate(() => localStorage.getItem('neondojo.play-session')),
         )
         .toBe(id);
     } finally {
@@ -272,14 +272,14 @@ for (const primary of ['white', 'black'] as const) {
     };
     await page.addInitScript(
       ({ db, primary }) => {
-        localStorage.setItem('bgtutor.locale', 'en');
-        localStorage.setItem('bgtutor.database', db);
+        localStorage.setItem('neondojo.locale', 'en');
+        localStorage.setItem('neondojo.database', db);
         if (
           primary === 'black' &&
-          !localStorage.getItem('bgtutor.library.visibleColumns')
+          !localStorage.getItem('neondojo.library.visibleColumns')
         )
           localStorage.setItem(
-            'bgtutor.library.visibleColumns',
+            'neondojo.library.visibleColumns',
             JSON.stringify({
               version: 1,
               columns: [
@@ -342,7 +342,7 @@ for (const primary of ['white', 'black'] as const) {
       'Competition · Independent',
     );
     await page.screenshot({
-      path: `/tmp/bgtutor-match-name-${primary}.png`,
+      path: `/tmp/neondojo-match-name-${primary}.png`,
       fullPage: true,
     });
     await page.locator('.library-column-picker > summary').click();

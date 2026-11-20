@@ -176,7 +176,7 @@ test('a lost opening-roll response resumes from the committed dice after reload'
   let saved = pending();
   const writes: unknown[] = [];
   await page.addInitScript(
-    (id) => localStorage.setItem('bgtutor.play-session', id),
+    (id) => localStorage.setItem('neondojo.play-session', id),
     id,
   );
   await page.route(`**/api/play/sessions/${id}`, (route) =>

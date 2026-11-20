@@ -1,6 +1,6 @@
 use axum::{body::Body, http::Request};
-use bgtutor::{api, engine::Engine, import, jobs, store};
 use http_body_util::BodyExt;
+use neondojo::{api, engine::Engine, import, jobs, store};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -1452,7 +1452,7 @@ async fn anki_exports_update_monotonically_for_annotations_and_locales(pool: PgP
     .await;
     assert_eq!(status, 201);
     let target_id = target["id"].as_str().unwrap();
-    let boundary = "bg-tutor-package-test";
+    let boundary = "neondojo-package-test";
     let mut multipart = format!("--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"study.apkg\"\r\nContent-Type: application/octet-stream\r\n\r\n").into_bytes();
     multipart.extend_from_slice(&before);
     multipart.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
@@ -1517,14 +1517,14 @@ async fn anki_exports_update_monotonically_for_annotations_and_locales(pool: PgP
         .await
         .unwrap();
     assert_eq!(entries, 1);
-    if let Ok(dir) = std::env::var("BGTUTOR_EXPORT_FIXTURES") {
+    if let Ok(dir) = std::env::var("NEONDOJO_EXPORT_FIXTURES") {
         std::fs::write(
-            std::path::Path::new(&dir).join("bgtutor-export-before.apkg"),
+            std::path::Path::new(&dir).join("neondojo-export-before.apkg"),
             before,
         )
         .unwrap();
         std::fs::write(
-            std::path::Path::new(&dir).join("bgtutor-export-after.apkg"),
+            std::path::Path::new(&dir).join("neondojo-export-after.apkg"),
             after,
         )
         .unwrap();

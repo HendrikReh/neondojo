@@ -7,8 +7,8 @@ import { test, expect, type Page } from './test';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
-    if (!localStorage.getItem('bgtutor.locale'))
-      localStorage.setItem('bgtutor.locale', 'de');
+    if (!localStorage.getItem('neondojo.locale'))
+      localStorage.setItem('neondojo.locale', 'de');
   });
 });
 

@@ -34,7 +34,7 @@ pub(super) struct Client {
 impl Client {
     pub(super) fn local() -> Self {
         Self {
-            key: std::env::var("BGTUTOR_ANKI_CONNECT_KEY")
+            key: std::env::var("NEONDOJO_ANKI_CONNECT_KEY")
                 .ok()
                 .filter(|key| !key.is_empty()),
         }
@@ -124,7 +124,7 @@ pub(super) async fn send(
     let _transfer = reserve()?;
     let bytes = build_deck_package(&state, id, query).await?;
     let directory = tempfile::tempdir().map_err(anyhow::Error::from)?;
-    let package = directory.path().join("bg-tutor.apkg");
+    let package = directory.path().join("neondojo.apkg");
     tokio::fs::write(&package, bytes)
         .await
         .map_err(anyhow::Error::from)?;
@@ -261,7 +261,7 @@ mod tests {
                 assert_eq!(
                     serde_json::from_slice::<serde_json::Value>(&body).unwrap(),
                     serde_json::json!({
-                        "action":"importPackage","version":6,"params":{"path":"/tmp/bg tutor.apkg"},"key":"test-key"
+                        "action":"importPackage","version":6,"params":{"path":"/tmp/neon dojo.apkg"},"key":"test-key"
                     })
                 );
                 let header = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n", reply.len());
@@ -270,7 +270,7 @@ mod tests {
             });
             let stream = TcpStream::connect(address).await.unwrap();
             let key = Some("test-key");
-            let body = package_request(FilePath::new("/tmp/bg tutor.apkg"), key).unwrap();
+            let body = package_request(FilePath::new("/tmp/neon dojo.apkg"), key).unwrap();
             let result = confirm_import(&exchange(stream, "/", &body, None).await.unwrap(), key);
             assert_eq!(result.is_ok(), accepted, "{result:?}");
             server.await.unwrap();

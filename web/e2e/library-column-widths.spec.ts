@@ -1,11 +1,11 @@
 import { expect, test, type Page } from './test';
 
 const localWidths = (page: Page) =>
-  page.evaluate(() => JSON.parse(localStorage.getItem('bgtutor.layout.library.columns.v1') ?? 'null'));
+  page.evaluate(() => JSON.parse(localStorage.getItem('neondojo.layout.library.columns.v1') ?? 'null'));
 
 async function openLibrary(page: Page, width = 1800, height = 1169) {
   await page.setViewportSize({ width, height });
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.route('**/api/library/matches?*', (route) =>
     route.fulfill({
       json: {

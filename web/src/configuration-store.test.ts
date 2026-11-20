@@ -360,7 +360,7 @@ describe('configuration writing', () => {
       }));
       expect(h.store.getSnapshot().current?.general.player_name).toBe('');
       const beforeHide = JSON.parse(
-        h.storage.get('bgtutor.configuration-pending.v1')!,
+        h.storage.get('neondojo.configuration-pending.v1')!,
       );
       expect(beforeHide).toMatchObject({
         base_revision: 1,
@@ -465,7 +465,7 @@ describe('configuration writing', () => {
     const pending = structuredClone(defaultConfiguration);
     pending.general.player_name = 'Recovered';
     h.storage.set(
-      'bgtutor.configuration-pending.v1',
+      'neondojo.configuration-pending.v1',
       JSON.stringify({ base_revision: 1, configuration: pending }),
     );
     await h.store.load();
@@ -494,7 +494,7 @@ describe('configuration writing', () => {
     const pending = structuredClone(defaultConfiguration);
     pending.general.player_name = 'Local';
     h.storage.set(
-      'bgtutor.configuration-pending.v1',
+      'neondojo.configuration-pending.v1',
       JSON.stringify({ base_revision: 1, configuration: pending }),
     );
     await h.store.load();
@@ -510,7 +510,7 @@ describe('configuration writing', () => {
     const pending = structuredClone(defaultConfiguration);
     pending.general.player_name = 'Recovered';
     h.storage.set(
-      'bgtutor.configuration-pending.v1',
+      'neondojo.configuration-pending.v1',
       JSON.stringify({ base_revision: 1, configuration: pending }),
     );
     const loading = h.store.load();

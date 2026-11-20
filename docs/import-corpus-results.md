@@ -65,7 +65,7 @@ Behoben wurden gültige XG-Zwischenstände ohne Matchabschluss, MAT-Aufgabezeile
 ## Wiederholen
 
 ```sh
-DATABASE_URL=postgres://bgtutor:bgtutor_local@127.0.0.1:54329/bgtutor BGTUTOR_CORPUS_REPORT=/tmp/bgtutor-import-results.json cargo test -p bgtutor --test import_corpus -- --ignored --nocapture
+DATABASE_URL=postgres://neondojo:neondojo_local@127.0.0.1:54329/neondojo NEONDOJO_CORPUS_REPORT=/tmp/neondojo-import-results.json cargo test -p neondojo --test import_corpus -- --ignored --nocapture
 ```
 
-`BGTUTOR_GAMES_DIR` kann einen anderen Stammordner mit den drei Format-Unterordnern angeben. Die lokalen Spieldateien bleiben unversioniert. Ohne diese Dateien überspringt der optionale Bestandstest seine Ausführung; die portablen Format- und Regeltests laufen unabhängig davon.
+`NEONDOJO_GAMES_DIR` kann einen anderen Stammordner mit den drei Format-Unterordnern angeben. Die lokalen Spieldateien bleiben unversioniert. Ohne diese Dateien überspringt der optionale Bestandstest seine Ausführung; die portablen Format- und Regeltests laufen unabhängig davon.

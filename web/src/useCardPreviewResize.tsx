@@ -2,7 +2,7 @@ import { useId, useLayoutEffect, useRef, useState } from 'react';
 import Tooltip from './Tooltip';
 import { useCardSearchText } from './card-search-messages';
 
-const storageKey = 'bgtutor.cardPreviewWidth';
+const storageKey = 'neondojo.cardPreviewWidth';
 const defaultWidth = 400;
 const minWidth = 320;
 const listMinWidth = 440;

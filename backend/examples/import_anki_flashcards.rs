@@ -1,11 +1,11 @@
-use bgtutor::learning::anki_flashcards::import_rendered_package;
+use neondojo::learning::anki_flashcards::import_rendered_package;
 use sqlx::postgres::PgPoolOptions;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::from_path(".env").ok();
     let url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://bgtutor:bgtutor_local@127.0.0.1:54329/bgtutor".into());
+        .unwrap_or_else(|_| "postgres://neondojo:neondojo_local@127.0.0.1:54329/neondojo".into());
     let pool = PgPoolOptions::new()
         .max_connections(1)
         .connect(&url)

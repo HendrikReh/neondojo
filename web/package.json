@@ -1,5 +1,5 @@
 {
-  "name": "bgtutor-web",
+  "name": "neondojo-web",
   "private": true,
   "version": "0.3.0",
   "type": "module",
@@ -11,7 +11,7 @@
     "test:e2e": "playwright test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "api:types": "cargo run -q --manifest-path ../Cargo.toml -p bgtutor --example openapi > ../docs/openapi.json && openapi-typescript ../docs/openapi.json -o src/generated-api.d.ts",
+    "api:types": "cargo run -q --manifest-path ../Cargo.toml -p neondojo --example openapi > ../docs/openapi.json && openapi-typescript ../docs/openapi.json -o src/generated-api.d.ts",
     "themes:prepare": "python3 ../tools/prepare_themes.py",
     "predev": "npm run themes:prepare",
     "prebuild": "npm run themes:prepare",

@@ -58,7 +58,7 @@ const list = (groups: MistakeGroup[]) => ({
 });
 
 async function openOverview(page: Page) {
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
   return page.getByRole('tabpanel', { name: 'Overview', exact: true });

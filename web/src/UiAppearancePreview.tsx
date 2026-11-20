@@ -18,7 +18,7 @@ export default function UiAppearancePreview({
     >
       <figcaption>{t('preview')}</figcaption>
       <div className="ui-preview-header">
-        <strong>BG Tutor</strong>
+        <strong>Neondojo</strong>
         <span className="ui-preview-tab">{t('analysis')}</span>
         <span>{t('database')}</span>
       </div>

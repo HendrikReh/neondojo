@@ -1,9 +1,9 @@
 use axum::{body::Body, http::Request};
-use bgtutor::{
+use http_body_util::BodyExt;
+use neondojo::{
     api::{self, AppState},
     engine::Engine,
 };
-use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -66,7 +66,7 @@ async fn play_latency_migration_preserves_existing_analysis_history(pool: PgPool
         ..sqlx::migrate::Migrator::DEFAULT
     };
     previous.run(&pool).await.unwrap();
-    let reference = serde_json::to_value(bgtutor::benchmarks::reference()).unwrap();
+    let reference = serde_json::to_value(neondojo::benchmarks::reference()).unwrap();
     let machine = json!({
         "id": uuid::Uuid::new_v4(), "name": "Historical backend",
         "os": "macOS", "architecture": "aarch64",
@@ -75,7 +75,7 @@ async fn play_latency_migration_preserves_existing_analysis_history(pool: PgPool
     for status in ["queued", "running", "completed", "failed", "cancelled"] {
         sqlx::query("INSERT INTO benchmark_runs(id,status,machine,engine_id,engine_name,engine_version,engine_path,plies,reference,protocol,reference_sgf,completed_games,analyzed_moves,total_elapsed_ms,average_move_ms,finished_at) VALUES($1,$2,$3,'gnubg','GNUbg','historical version','/historical/gnubg',2,$4,$5,$6,CASE WHEN $2='completed' THEN 10 ELSE 0 END,CASE WHEN $2='completed' THEN 460 ELSE 0 END,CASE WHEN $2='completed' THEN 4600 END,CASE WHEN $2='completed' THEN 10 END,CASE WHEN $2 IN ('completed','failed','cancelled') THEN now() END)")
             .bind(uuid::Uuid::new_v4()).bind(status).bind(&machine).bind(&reference)
-            .bind(&reference["protocol"]).bind(bgtutor::benchmarks::REFERENCE_SGF)
+            .bind(&reference["protocol"]).bind(neondojo::benchmarks::REFERENCE_SGF)
             .execute(&pool).await.unwrap();
     }
     let before: Vec<Value> =
@@ -120,10 +120,10 @@ async fn interrupted_play_measurements_never_publish_partial_times(pool: PgPool)
         sqlx::query("UPDATE benchmark_runs SET status='running',started_at=now(),completed_turns=1,worker_token=$2,lease_until=now()-interval '1 second' WHERE id=$1")
             .bind(id).bind(uuid::Uuid::new_v4()).execute(&pool).await.unwrap();
         match interruption {
-            "restart" => bgtutor::benchmarks::recover_interrupted(&pool)
+            "restart" => neondojo::benchmarks::recover_interrupted(&pool)
                 .await
                 .unwrap(),
-            "lease expired" => assert!(!bgtutor::benchmarks::run_one(&state).await.unwrap()),
+            "lease expired" => assert!(!neondojo::benchmarks::run_one(&state).await.unwrap()),
             _ => {
                 let (status, _) = call(
                     app.clone(),
@@ -260,7 +260,7 @@ async fn native_zero_ply_run_completes_all_games_and_moves(pool: PgPool) {
     )
     .await;
     assert_eq!(status, 202, "{runs}");
-    assert!(bgtutor::jobs::run_one(&state).await.unwrap());
+    assert!(neondojo::jobs::run_one(&state).await.unwrap());
     let (_, list) = call(app, "GET", "/api/benchmarks", Value::Null).await;
     let run = &list["runs"][0];
     assert_eq!(run["status"], "completed", "{run}");
@@ -295,7 +295,7 @@ async fn interrupted_runs_do_not_resume_and_queued_runs_keep_their_snapshots(poo
     let id = uuid::Uuid::parse_str(runs[0]["id"].as_str().unwrap()).unwrap();
     sqlx::query("UPDATE benchmark_runs SET status='running',started_at=now(),completed_games=1,analyzed_moves=10,worker_token=$2 WHERE id=$1")
         .bind(id).bind(uuid::Uuid::new_v4()).execute(&pool).await.unwrap();
-    bgtutor::benchmarks::recover_interrupted(&pool)
+    neondojo::benchmarks::recover_interrupted(&pool)
         .await
         .unwrap();
     let (_, list) = call(app, "GET", "/api/benchmarks", Value::Null).await;
@@ -335,7 +335,7 @@ async fn changed_engine_fails_without_a_partial_timing(pool: PgPool) {
     assert_eq!(status, 202);
     let id = uuid::Uuid::parse_str(runs[0]["id"].as_str().unwrap()).unwrap();
     sqlx::query("UPDATE benchmark_runs SET engine_version='GNU Backgammon incompatible-version' WHERE id=$1").bind(id).execute(&pool).await.unwrap();
-    assert!(bgtutor::jobs::run_one(&state).await.unwrap());
+    assert!(neondojo::jobs::run_one(&state).await.unwrap());
     let (_, list) = call(app, "GET", "/api/benchmarks", Value::Null).await;
     assert_eq!(list["runs"][0]["status"], "failed");
     assert!(
@@ -412,7 +412,7 @@ os.execv(real,[real]+sys.argv[1:])
     .await;
     let runs = if play { json!([response]) } else { response };
     assert_eq!(status, 202, "{runs}");
-    let worker = tokio::spawn(async move { bgtutor::jobs::run_one(&state).await.unwrap() });
+    let worker = tokio::spawn(async move { neondojo::jobs::run_one(&state).await.unwrap() });
     tokio::time::timeout(std::time::Duration::from_secs(5), async {
         while !pidfile.exists() {
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
@@ -496,7 +496,7 @@ async fn expired_worker_is_failed_without_resuming_or_publishing_partial_times(p
     let id = uuid::Uuid::parse_str(runs[0]["id"].as_str().unwrap()).unwrap();
     sqlx::query("UPDATE benchmark_runs SET status='running', started_at=now(), completed_games=1,analyzed_moves=10,worker_token=$2,lease_until=now()-interval '1 second' WHERE id=$1")
         .bind(id).bind(uuid::Uuid::new_v4()).execute(&pool).await.unwrap();
-    assert!(!bgtutor::jobs::run_one(&state).await.unwrap());
+    assert!(!neondojo::jobs::run_one(&state).await.unwrap());
     let (_, list) = call(app, "GET", "/api/benchmarks", Value::Null).await;
     assert_eq!(list["runs"][0]["status"], "failed");
     assert!(

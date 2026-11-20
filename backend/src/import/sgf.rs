@@ -1126,14 +1126,14 @@ pub(crate) fn encode_retained_analysis(value: &serde_json::Value) -> Result<Stri
     let mut encoder = ZlibEncoder::new(Vec::new(), Compression::fast());
     encoder.write_all(&bytes)?;
     Ok(format!(
-        "BGTUTOR-ZLIB:{}",
+        "NEONDOJO-ZLIB:{}",
         STANDARD_NO_PAD.encode(encoder.finish()?)
     ))
 }
 pub(crate) fn decode_retained_analysis(value: &str) -> Result<serde_json::Value> {
     use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
     use std::io::Read;
-    if let Some(value) = value.strip_prefix("BGTUTOR-ZLIB:") {
+    if let Some(value) = value.strip_prefix("NEONDOJO-ZLIB:") {
         let bytes = STANDARD_NO_PAD.decode(value)?;
         let mut decoder = flate2::read::ZlibDecoder::new(bytes.as_slice());
         let mut output = Vec::new();

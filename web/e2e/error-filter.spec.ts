@@ -10,7 +10,7 @@ test('error review restores the configured threshold and navigates all decisions
 }) => {
   test.setTimeout(45000);
   page.setDefaultTimeout(10000);
-  await page.addInitScript(() => localStorage.setItem('bgtutor.locale', 'en'));
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
   await page.getByLabel('Match file', { exact: true }).setInputFiles({
     name: 'error-filter.sgf',

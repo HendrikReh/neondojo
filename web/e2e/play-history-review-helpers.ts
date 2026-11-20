@@ -76,9 +76,9 @@ export async function historyFixture(
   let reads = 0;
   await page.addInitScript(
     ({ id, human }) => {
-      localStorage.setItem('bgtutor.locale', 'en');
-      localStorage.setItem('bgtutor.play-session', id);
-      if (human) localStorage.setItem('bgtutor.theme', 'bgblitz:bg-earth');
+      localStorage.setItem('neondojo.locale', 'en');
+      localStorage.setItem('neondojo.play-session', id);
+      if (human) localStorage.setItem('neondojo.theme', 'bgblitz:bg-earth');
     },
     { id, human },
   );

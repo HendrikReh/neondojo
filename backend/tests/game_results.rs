@@ -1,4 +1,4 @@
-use bgtutor::import::parse_sgf;
+use neondojo::import::parse_sgf;
 use serde_json::{Value, json};
 
 fn result(source: &str) -> Value {
@@ -77,8 +77,8 @@ fn imported_xg_terminal_game_without_re_is_gammon_at_actual_cube() {
 }
 
 use axum::{body::Body, http::Request};
-use bgtutor::{api, engine::Engine, store};
 use http_body_util::BodyExt;
+use neondojo::{api, engine::Engine, store};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;

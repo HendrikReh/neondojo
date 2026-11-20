@@ -4,7 +4,7 @@ import { compactCheckerNotation, type CheckerPosition } from './move-preview';
 export type Locale = keyof typeof catalogs;
 export type TranslationParams = Record<string, string | number>;
 export const defaultLocale: Locale = 'en';
-export const localeStorageKey = 'bgtutor.locale';
+export const localeStorageKey = 'neondojo.locale';
 export const matchEventLabels = {
   en: 'Event',
   de: 'Event',

@@ -183,7 +183,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires locked native Open Sage; no database"]
     async fn native_opening_analysis_retains_all_ranked_checker_candidates() {
-        let python = std::env::var("BGTUTOR_SAGE_PYTHON").unwrap();
+        let python = std::env::var("NEONDOJO_SAGE_PYTHON").unwrap();
         for plies in [2, 4] {
             let profile = SageEngine::probe_profile(python.clone(), plies, 4)
                 .await
@@ -215,7 +215,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires locked native Open Sage; compares all WC2014 decisions; no database"]
     async fn native_atomic_games_match_individual_requests() {
-        let python = std::env::var("BGTUTOR_SAGE_PYTHON").unwrap();
+        let python = std::env::var("NEONDOJO_SAGE_PYTHON").unwrap();
         let engine = SageEngine::new(SageEngine::probe(python, 4).await.unwrap()).unwrap();
         let source = crate::benchmarks::REFERENCE_SGF;
         let mut checkers = 0;

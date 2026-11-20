@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render and import APKG files into BG Tutor using Anki's package reader."""
+"""Render and import APKG files into Neondojo using Anki's package reader."""
 import argparse
 from collections import Counter
 from hashlib import file_digest
@@ -114,7 +114,7 @@ def main() -> None:
     importer = args.importer.resolve(strict=True)
     root = Path(__file__).resolve().parent.parent
     for path in files:
-        with TemporaryDirectory(prefix="bgtutor-anki-") as temporary:
+        with TemporaryDirectory(prefix="neondojo-anki-") as temporary:
             directory = Path(temporary)
             count = render_package(path, directory)
             print(f"{path.name} — {count} cards", flush=True)

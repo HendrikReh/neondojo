@@ -1,4 +1,4 @@
-# Umsetzungsplan für die BG-Tutor-Performance
+# Umsetzungsplan für die Neondojo-Performance
 
 Die Wartezeit bei der Entscheidungssuche, bei Dice Equity und beim Wechsel zwischen Zügen senken. Die folgenden Arbeitspakete basieren auf dem Review von `main` bei `d3a21e1` am 19. November 2026. Jedes Paket lässt sich einzeln umsetzen und abnehmen.
 
@@ -118,7 +118,7 @@ Messung (Engine-Schicht, Open Sage `2.0.20261119`, Bot 1-ply mit 2 Threads in de
 ## Abschluss je Arbeitspaket
 
 - [ ] Fokussierte Tests zuerst ausführen. Danach bei Rust-Änderungen `cargo fmt --all --check` und `cargo clippy --workspace --all-targets -- -D warnings` ausführen. Bei Frontend-Änderungen `npm test --prefix web` und `npm run build --prefix web` ausführen. Betroffene ignorierte SQLx- und native Tests explizit starten. [Verifikationsanleitung](../../development/testing.md)
-- [ ] Nach der Änderung dieselbe Messung wiederholen. Metriken mit Commit und Messbedingungen dokumentieren. Dokumentation aktualisieren, wenn sich Verhalten oder Betrieb ändern. Bei einem beauftragten Check auf Port 8787 erst bauen und dann mit den bestehenden Datenbank- und Engine-Einstellungen neu starten. [Lokaler Neustart](../../../README.md#restart-bg-tutor-locally-on-port-8787)
+- [ ] Nach der Änderung dieselbe Messung wiederholen. Metriken mit Commit und Messbedingungen dokumentieren. Dokumentation aktualisieren, wenn sich Verhalten oder Betrieb ändern. Bei einem beauftragten Check auf Port 8787 erst bauen und dann mit den bestehenden Datenbank- und Engine-Einstellungen neu starten. [Lokaler Neustart](../../../README.md#restart-neondojo-locally-on-port-8787)
 
 ## Messrezepte
 
@@ -133,8 +133,8 @@ set -euo pipefail
 export LC_ALL=C
 perf_root="$(git rev-parse --show-toplevel)"
 cd "$perf_root"
-perf_dir="$(mktemp -d /tmp/bgtutor-perf.XXXXXX)"
-export BGTUTOR_PERF_DIR="$perf_dir"
+perf_dir="$(mktemp -d /tmp/neondojo-perf.XXXXXX)"
+export NEONDOJO_PERF_DIR="$perf_dir"
 perf_pg="$(pg_config --bindir)"
 read -r perf_pg_port perf_api_port < <(python3 - <<'PY'
 import socket
@@ -145,21 +145,21 @@ with socket.socket() as pg, socket.socket() as api:
 PY
 )
 perf_gnubg="$(command -v "${GNUBG_BIN:-gnubg}")"
-export BGTUTOR_PERF_GNUBG="$(python3 -c 'import os, sys; print(os.path.abspath(sys.argv[1]))' "$perf_gnubg")"
+export NEONDOJO_PERF_GNUBG="$(python3 -c 'import os, sys; print(os.path.abspath(sys.argv[1]))' "$perf_gnubg")"
 cat > "$perf_dir/gnubg-counted" <<'SH'
 #!/bin/sh
-printf '%s\n' "$1" >> "$BGTUTOR_PERF_DIR/gnubg-launches"
-exec "$BGTUTOR_PERF_GNUBG" "$@"
+printf '%s\n' "$1" >> "$NEONDOJO_PERF_DIR/gnubg-launches"
+exec "$NEONDOJO_PERF_GNUBG" "$@"
 SH
 chmod +x "$perf_dir/gnubg-counted"
 
 # Eigenes Zielverzeichnis: kollidiert nicht mit tools/build_local_restart.sh und
 # startet nie dessen kopierte Binärdatei. Der Clean erzwingt wie dort, dass
 # sqlx::migrate! die Migrationen dieses Checkouts einbettet.
-cargo clean --release --package bgtutor --target-dir target/perf
-cargo build --release --package bgtutor --bin bgtutor --target-dir target/perf
-perf_bin="$perf_root/target/perf/release/bgtutor"
-"$perf_pg/initdb" -D "$perf_dir/db" -U bgtutor_perf --no-locale --encoding=UTF8 --auth=trust > "$perf_dir/initdb.log"
+cargo clean --release --package neondojo --target-dir target/perf
+cargo build --release --package neondojo --bin neondojo --target-dir target/perf
+perf_bin="$perf_root/target/perf/release/neondojo"
+"$perf_pg/initdb" -D "$perf_dir/db" -U neondojo_perf --no-locale --encoding=UTF8 --auth=trust > "$perf_dir/initdb.log"
 "$perf_pg/pg_ctl" -D "$perf_dir/db" -l "$perf_dir/postgres.log" \
   -o "-h 127.0.0.1 -p $perf_pg_port -k $perf_dir" -w start
 perf_app_pid=''
@@ -172,25 +172,25 @@ perf_stop() {
 }
 trap perf_stop EXIT
 
-export DATABASE_URL="postgresql://bgtutor_perf@127.0.0.1:$perf_pg_port/bgtutor_e2e_perf"
-export BGTUTOR_E2E_DATABASE_NAME=bgtutor_e2e_perf
-export BGTUTOR_PERF_URL="http://127.0.0.1:$perf_api_port"
-"$perf_pg/createdb" -h 127.0.0.1 -p "$perf_pg_port" -U bgtutor_perf bgtutor_e2e_perf
+export DATABASE_URL="postgresql://neondojo_perf@127.0.0.1:$perf_pg_port/neondojo_e2e_perf"
+export NEONDOJO_E2E_DATABASE_NAME=neondojo_e2e_perf
+export NEONDOJO_PERF_URL="http://127.0.0.1:$perf_api_port"
+"$perf_pg/createdb" -h 127.0.0.1 -p "$perf_pg_port" -U neondojo_perf neondojo_e2e_perf
 (
   cd "$perf_dir"
-  exec env -u BGTUTOR_WEB_DIR BGTUTOR_BIND="127.0.0.1:$perf_api_port" \
+  exec env -u NEONDOJO_WEB_DIR NEONDOJO_BIND="127.0.0.1:$perf_api_port" \
     GNUBG_BIN="$perf_dir/gnubg-counted" "$perf_bin"
 ) > "$perf_dir/backend.log" 2>&1 &
 perf_app_pid=$!
 for attempt in $(seq 1 120); do
-  if curl -fsS "$BGTUTOR_PERF_URL/api/version" > /dev/null 2>&1; then break; fi
+  if curl -fsS "$NEONDOJO_PERF_URL/api/version" > /dev/null 2>&1; then break; fi
   sleep 0.15
 done
 # Der Build bettet den Commit ein. Uncommittete Änderungen bleiben unsichtbar;
 # den Arbeitsbaum deshalb zusätzlich mit git status protokollieren.
-test "$(curl -fsS "$BGTUTOR_PERF_URL/api/version" | jq -er '.version')" = "$(git rev-parse HEAD)"
+test "$(curl -fsS "$NEONDOJO_PERF_URL/api/version" | jq -er '.version')" = "$(git rev-parse HEAD)"
 git status --short > "$perf_dir/git-status.txt"
-test "$("$perf_pg/psql" -XAt "$DATABASE_URL" -c 'SELECT current_database()')" = bgtutor_e2e_perf
+test "$("$perf_pg/psql" -XAt "$DATABASE_URL" -c 'SELECT current_database()')" = neondojo_e2e_perf
 printf '\nMessordner %s\n' "$perf_dir"
 ```
 
@@ -259,7 +259,7 @@ idsum, replacements = re.subn(
 )
 assert replacements == 1
 pg = Path(subprocess.check_output(["pg_config", "--bindir"], text=True).strip())
-dir_path = Path(os.environ["BGTUTOR_PERF_DIR"])
+dir_path = Path(os.environ["NEONDOJO_PERF_DIR"])
 
 def sql(statement):
     return subprocess.check_output(
@@ -296,8 +296,8 @@ Für die Umsetzung dieselbe Datengröße und Verteilung mit dem neuen Schema lad
 ### B · HTTP-Latenz der Review-Seiten
 
 ```bash
-export BGTUTOR_PERF_MATCH="$(
-  curl -fsS -F 'file=@backend/tests/fixtures/WC2014.xg' "$BGTUTOR_PERF_URL/api/imports" |
+export NEONDOJO_PERF_MATCH="$(
+  curl -fsS -F 'file=@backend/tests/fixtures/WC2014.xg' "$NEONDOJO_PERF_URL/api/imports" |
   jq -er '.match.id'
 )"
 "$perf_pg/psql" -X -v ON_ERROR_STOP=1 "$DATABASE_URL" -c 'ANALYZE'
@@ -312,8 +312,8 @@ import time
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
-match = os.environ["BGTUTOR_PERF_MATCH"]
-path = f'{os.environ["BGTUTOR_PERF_URL"]}/api/matches/{match}/review-decisions'
+match = os.environ["NEONDOJO_PERF_MATCH"]
+path = f'{os.environ["NEONDOJO_PERF_URL"]}/api/matches/{match}/review-decisions'
 cases = {
     "numbered-first": {"page": 1},
     "numbered-tenth": {"page": 10},
@@ -354,7 +354,7 @@ if query and not git_diff:
         [pg / "psql", "-XAt", "-v", "ON_ERROR_STOP=1", os.environ["DATABASE_URL"]],
         input=statement, text=True,
     ).split("\n", 1)[1]
-    (Path(os.environ["BGTUTOR_PERF_DIR"]) / "review-first-batch.json").write_text(output)
+    (Path(os.environ["NEONDOJO_PERF_DIR"]) / "review-first-batch.json").write_text(output)
     plan = json.loads(output)[0]
     print("SQL batch rows and ms", plan["Plan"]["Actual Rows"], plan["Execution Time"])
 PY
@@ -366,8 +366,8 @@ Review-Baseline in derselben Reihenfolge war **162,0 / 167,5 / 86,4 / 161,3 ms**
 
 ```bash
 printf '%s\n' '(;GM[6]FF[4]PW[Alice]PB[Bob]MI[length:7][game:0][ws:0][bs:0];W[31hefe])' > "$perf_dir/opening.sgf"
-export BGTUTOR_PERF_OPENING="$(
-  curl -fsS -F "file=@$perf_dir/opening.sgf" "$BGTUTOR_PERF_URL/api/imports" |
+export NEONDOJO_PERF_OPENING="$(
+  curl -fsS -F "file=@$perf_dir/opening.sgf" "$NEONDOJO_PERF_URL/api/imports" |
   jq -er '.match.id'
 )"
 python3 - <<'PY'
@@ -378,11 +378,11 @@ from pathlib import Path
 import time
 from urllib.request import Request, urlopen
 
-base = os.environ["BGTUTOR_PERF_URL"]
-match = os.environ["BGTUTOR_PERF_OPENING"]
-log = Path(os.environ["BGTUTOR_PERF_DIR"]) / "gnubg-launches"
-plies = int(os.environ.get("BGTUTOR_PERF_PLIES", "1"))
-timeout = float(os.environ.get("BGTUTOR_PERF_TIMEOUT", "180"))
+base = os.environ["NEONDOJO_PERF_URL"]
+match = os.environ["NEONDOJO_PERF_OPENING"]
+log = Path(os.environ["NEONDOJO_PERF_DIR"]) / "gnubg-launches"
+plies = int(os.environ.get("NEONDOJO_PERF_PLIES", "1"))
+timeout = float(os.environ.get("NEONDOJO_PERF_TIMEOUT", "180"))
 
 def get(path):
     with urlopen(base + path, timeout=30) as reply:
@@ -416,4 +416,4 @@ print(job["result"]["engine"], dict(Counter(log.read_text().splitlines())))
 PY
 ```
 
-Review-Baseline mit GNUbg 1.08.003 war **43 Versionsaufrufe**, **21 Auswertungsstarts** und **8,1 s** bis zum beobachteten Abschluss eines Auftrags. Die Gegenprobe am 19. November 2026 ergab dieselben Startzahlen und **5,1 s**. Für den Vorher-nachher-Vergleich pro Build mindestens fünf frische Aufträge ausführen und Median sowie Spannweite festhalten. Dafür je Lauf eine frische Testdatenbank verwenden oder die Spielernamen der Import-Fixture variieren und so bei gleicher Stellung unterschiedliche Match-IDs erzeugen. Die Profiltiefe über `BGTUTOR_PERF_PLIES` setzen. Bei tieferen Läufen gegebenenfalls das Beobachtungsfenster mit `BGTUTOR_PERF_TIMEOUT` in Sekunden verlängern. Die Aufrufklassifikation bei einem neuen Engine-Batch an dessen tatsächliche Startargumente anpassen.
+Review-Baseline mit GNUbg 1.08.003 war **43 Versionsaufrufe**, **21 Auswertungsstarts** und **8,1 s** bis zum beobachteten Abschluss eines Auftrags. Die Gegenprobe am 19. November 2026 ergab dieselben Startzahlen und **5,1 s**. Für den Vorher-nachher-Vergleich pro Build mindestens fünf frische Aufträge ausführen und Median sowie Spannweite festhalten. Dafür je Lauf eine frische Testdatenbank verwenden oder die Spielernamen der Import-Fixture variieren und so bei gleicher Stellung unterschiedliche Match-IDs erzeugen. Die Profiltiefe über `NEONDOJO_PERF_PLIES` setzen. Bei tieferen Läufen gegebenenfalls das Beobachtungsfenster mit `NEONDOJO_PERF_TIMEOUT` in Sekunden verlängern. Die Aufrufklassifikation bei einem neuen Engine-Batch an dessen tatsächliche Startargumente anpassen.

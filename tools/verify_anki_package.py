@@ -1,7 +1,7 @@
 """Optional integration check against Anki's own import library in a fresh profile.
 
 Run with a Python environment containing the official `anki` package. This is a
-development check only; BG Tutor's export and learning implementation is Rust.
+development check only; Neondojo's export and learning implementation is Rust.
 """
 
 import argparse
@@ -13,7 +13,7 @@ import tempfile
 def verify(package: Path, expected: int | None = None, updated: Path | None = None):
     from anki.collection import Collection, ImportAnkiPackageRequest
 
-    with tempfile.TemporaryDirectory(prefix="bgtutor-anki-import-") as directory:
+    with tempfile.TemporaryDirectory(prefix="neondojo-anki-import-") as directory:
         collection = Collection(str(Path(directory) / "collection.anki2"))
         try:
             collection.import_anki_package(

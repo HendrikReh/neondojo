@@ -14,7 +14,7 @@ test('uses native benchmarks at every depth for both analysis scopes without sta
   request,
 }) => {
   test.skip(
-    process.env.BGTUTOR_NATIVE_ESTIMATE !== '1',
+    process.env.NEONDOJO_NATIVE_ESTIMATE !== '1',
     'requires explicit native estimate opt-in',
   );
   test.setTimeout(benchmarkTimeout + 60_000);
@@ -106,9 +106,9 @@ test('uses native benchmarks at every depth for both analysis scopes without sta
       starts.push(path);
   });
   await page.addInitScript((id) => {
-    localStorage.setItem('bgtutor.locale', 'en');
+    localStorage.setItem('neondojo.locale', 'en');
     localStorage.setItem(
-      'bgtutor.workspace',
+      'neondojo.workspace',
       JSON.stringify({ matchId: id, gameNo: 1 }),
     );
   }, matchId);

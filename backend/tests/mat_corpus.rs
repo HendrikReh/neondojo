@@ -1,11 +1,11 @@
 //! Optional native MAT regression coverage without a database or private fixtures.
-use bgtutor::{engine::Engine, import::parse_sgf};
+use neondojo::{engine::Engine, import::parse_sgf};
 use std::path::{Path, PathBuf};
 
 #[tokio::test]
 #[ignore = "requires GNUbg and the optional local games/mat corpus"]
 async fn local_mat_corpus_normalizes_to_strictly_replayable_sgf() {
-    let root = std::env::var_os("BGTUTOR_GAMES_DIR")
+    let root = std::env::var_os("NEONDOJO_GAMES_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             Path::new(env!("CARGO_MANIFEST_DIR"))
