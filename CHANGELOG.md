@@ -4,6 +4,10 @@ All notable changes to BG Tutor are recorded in this file. The format follows [K
 
 ## [Unreleased]
 
+### Changed
+
+- **Faster numbered error lists.** A numbered page of the error list in Analysis no longer projects every decision of the analysis to count them and pick its 50. Migration `0082_review_hits` adds a derived list of each analysis's validated decisions, built once from the saved analysis and rebuilt when the analysis, its checkpoints or the source change. Pages count and select there with the current error thresholds and project only their own decisions. On WC2014 a page takes about 11 ms instead of 48 ms. Cursor pages are unchanged. [Analysis workspace](docs/reference/analysis.md#analysis-workspace)
+
 ## [0.3.0] - 2026-11-19
 
 Supports the Open Sage fork release 2.0.20261119 and speeds up the decision index, the analysis catalog, GNUbg dice equity and moving between moves in Analysis. Migrations `0080_decision_index_row_fingerprint` and `0081_catalog_native_lookup` run at startup. Open Sage results change with the new fork release; existing analyses keep their values.
