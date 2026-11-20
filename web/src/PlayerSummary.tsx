@@ -30,7 +30,17 @@ export type AnalyzeMatches = (
 ) => void;
 const ANALYSIS_BATCH_LIMIT = 2000;
 
-/** Every match of a player that has neither a PR for it nor a pending or finished analysis. */
+/** A bot match played with learning aids never enters the PR. */
+export function canEnterRating(
+  match: Pick<LibraryMatch, 'play_mode' | 'play_assisted'>,
+) {
+  return (
+    match.play_mode == null ||
+    (match.play_mode === 'competition' && !match.play_assisted)
+  );
+}
+
+/** Every match of a player that can enter the PR but has neither a PR for it nor a pending or finished analysis. */
 export async function unratedMatches(scope: PlayerScope) {
   const matches: LibraryMatch[] = [];
   let after: string | undefined;
@@ -51,6 +61,7 @@ export async function unratedMatches(scope: PlayerScope) {
     );
     return (
       !rated &&
+      canEnterRating(match) &&
       !['queued', 'running', 'completed'].includes(match.analysis_status ?? '')
     );
   });
@@ -255,6 +266,7 @@ export function PlayerRatings({
 }: {
   scope: PlayerScope;
   ratings: Schema['PlayerRating'][];
+  /** The matches that can enter the PR. */
   matchCount: number;
   onAnalyzeMatches?: AnalyzeMatches;
 }) {

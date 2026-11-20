@@ -23544,6 +23544,7 @@
           "version",
           "member_count",
           "match_count",
+          "rateable_match_count",
           "game_count"
         ],
         "properties": {
@@ -23570,6 +23571,11 @@
           },
           "name": {
             "type": "string"
+          },
+          "rateable_match_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The matches that can enter the PR once analyzed: all but bot matches\nplayed with learning aids."
           },
           "version": {
             "type": "integer",
