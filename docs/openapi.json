@@ -20430,6 +20430,7 @@
           {
             "type": "object",
             "required": [
+              "rateable_match_count",
               "aliases",
               "ratings",
               "rating_history"
@@ -20440,6 +20441,11 @@
                 "items": {
                   "$ref": "#/components/schemas/PlayerAlias"
                 }
+              },
+              "rateable_match_count": {
+                "type": "integer",
+                "format": "int64",
+                "description": "The matches that can enter the PR once analyzed: all but bot matches\nplayed with learning aids or still running in Competition mode."
               },
               "rating_history": {
                 "type": "array",
@@ -23717,7 +23723,7 @@
           "match_count": {
             "type": "integer",
             "format": "int64",
-            "description": "Distinct matches of all members, plus NeonDojo bot matches for \"me\"."
+            "description": "Distinct matches of all members."
           },
           "member_count": {
             "type": "integer",
@@ -23729,7 +23735,7 @@
           "rateable_match_count": {
             "type": "integer",
             "format": "int64",
-            "description": "The matches that can enter the PR once analyzed: all but bot matches\nplayed with learning aids."
+            "description": "The matches that can enter the PR once analyzed: all but bot matches\nplayed with learning aids or still running in Competition mode."
           },
           "version": {
             "type": "integer",

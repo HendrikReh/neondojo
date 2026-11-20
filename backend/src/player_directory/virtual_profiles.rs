@@ -38,10 +38,10 @@ struct VirtualPlayerProfile {
     is_me: bool,
     version: i64,
     member_count: i64,
-    /// Distinct matches of all members, plus NeonDojo bot matches for "me".
+    /// Distinct matches of all members.
     match_count: i64,
     /// The matches that can enter the PR once analyzed: all but bot matches
-    /// played with learning aids.
+    /// played with learning aids or still running in Competition mode.
     rateable_match_count: i64,
     game_count: i64,
 }

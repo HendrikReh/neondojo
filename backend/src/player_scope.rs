@@ -6,9 +6,10 @@
 //! player; mistake statistics, the decision search, transfer practice, the
 //! player directory and the library follow it.
 //!
-//! Match sides of a virtual profile come from the `virtual_player_sides` view:
-//! its members' catalogued sides, plus the human side of NeonDojo bot matches
-//! when the virtual profile is "me".
+//! NeonDojo bot matches catalogue their human side like an import, under the
+//! NeonDojo platform. The views `player_match_sides` and `virtual_player_sides`
+//! define a real profile's sides and a virtual profile's members' sides, and
+//! which of them can enter a performance rating.
 
 use crate::api::ApiResult;
 use crate::player_directory::DISPLAY_NAME;
@@ -20,9 +21,12 @@ use uuid::Uuid;
 /// performance rating.
 pub(crate) fn sides_sql(virtual_profile: bool, rated_only: bool) -> &'static str {
     match (virtual_profile, rated_only) {
-        (false, _) => {
+        (false, false) => {
             "SELECT mp.match_id,mp.side FROM player_aliases a
              JOIN match_players mp ON mp.alias_id=a.id WHERE a.profile_id=$1"
+        }
+        (false, true) => {
+            "SELECT s.match_id,s.side FROM player_match_sides s WHERE s.profile_id=$1 AND s.rated"
         }
         (true, false) => {
             "SELECT s.match_id,s.side FROM virtual_player_sides s WHERE s.virtual_id=$1"
@@ -44,20 +48,15 @@ pub(crate) fn match_sides_from(virtual_profile: bool) -> &'static str {
 }
 
 /// The lowercase match names that belong to the chosen player. A virtual
-/// profile's name selects every alias of its members and, for "me", the names
-/// played under in NeonDojo. Otherwise the name as given plus every alias of
-/// its profile; a name that matches several profiles stays on its own, because
-/// merging would mix different people.
+/// profile's name selects every alias of its members. Otherwise the name as
+/// given plus every alias of its profile; a name that matches several profiles
+/// stays on its own, because merging would mix different people.
 pub(crate) async fn names(pool: &PgPool, player: &str) -> ApiResult<Vec<String>> {
     let player = player.trim().to_lowercase();
     if let Some(id) = virtual_by_name(pool, &player).await? {
         let mut names: Vec<String> = sqlx::query_scalar(
-            "SELECT lower(btrim(a.name)) FROM virtual_player_members v
-             JOIN player_aliases a ON a.profile_id=v.profile_id WHERE v.virtual_id=$1
-             UNION
-             SELECT lower(btrim(CASE s.side WHEN 0 THEN m.white ELSE m.black END))
-             FROM virtual_player_sides s JOIN matches m ON m.id=s.match_id
-             WHERE s.virtual_id=$1 AND btrim(CASE s.side WHEN 0 THEN m.white ELSE m.black END)<>''",
+            "SELECT DISTINCT lower(btrim(a.name)) FROM virtual_player_members v
+             JOIN player_aliases a ON a.profile_id=v.profile_id WHERE v.virtual_id=$1",
         )
         .bind(id)
         .fetch_all(pool)
@@ -127,8 +126,8 @@ pub(crate) async fn display_names(pool: &PgPool, names: Vec<String>) -> ApiResul
 }
 
 /// The player choices for match names that occur in the chosen matches: the
-/// display names, plus every virtual profile that played under one of the
-/// names. Members stay choices of their own.
+/// display names, plus every virtual profile whose members played under one
+/// of the names. Members stay choices of their own.
 pub(crate) async fn choices(pool: &PgPool, names: Vec<String>) -> ApiResult<Vec<String>> {
     let lowercase: Vec<String> = names
         .iter()
@@ -139,10 +138,7 @@ pub(crate) async fn choices(pool: &PgPool, names: Vec<String>) -> ApiResult<Vec<
         "SELECT vp.name FROM virtual_player_profiles vp
          WHERE EXISTS(SELECT 1 FROM virtual_player_members v
                       JOIN player_aliases a ON a.profile_id=v.profile_id
-                      WHERE v.virtual_id=vp.id AND lower(btrim(a.name))=ANY($1))
-            OR EXISTS(SELECT 1 FROM virtual_player_sides s JOIN matches m ON m.id=s.match_id
-                      WHERE s.virtual_id=vp.id
-                        AND lower(btrim(CASE s.side WHEN 0 THEN m.white ELSE m.black END))=ANY($1))",
+                      WHERE v.virtual_id=vp.id AND lower(btrim(a.name))=ANY($1))",
     )
     .bind(lowercase)
     .fetch_all(pool)
