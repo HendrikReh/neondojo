@@ -419,8 +419,8 @@ impl Engine {
                 String::from_utf8_lossy(&err)
             );
             // GNUbg can return exit code 0 after a failed command. Validate diagnostics and artifacts too.
-            let err = String::from_utf8_lossy(&err);
-            ensure!(err.trim().is_empty(), "GNUbg: {}", err.trim());
+            let err = gnubg_diagnostics(&String::from_utf8_lossy(&err));
+            ensure!(err.is_empty(), "GNUbg: {err}");
             Ok::<_, anyhow::Error>(String::from_utf8_lossy(&out).into_owned())
         };
         let output = if let Some(timeout) = timeout {
@@ -809,6 +809,19 @@ pub(crate) fn decision_hint_commands(
     Ok(commands)
 }
 
+/// GNUbg's standard-error diagnostics, each distinct line once in first-seen
+/// order. GNUbg repeats some messages, such as the MAT reader's "not a valid
+/// .mat file", once per parse attempt.
+fn gnubg_diagnostics(stderr: &str) -> String {
+    let mut seen = std::collections::HashSet::new();
+    stderr
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && seen.insert(*line))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn normalize_mat_resignations(bytes: &[u8]) -> Result<Vec<u8>> {
     const MARKER: &[u8] = b"wants to resign";
     static RESULT: OnceLock<Regex> = OnceLock::new();
@@ -1036,6 +1049,20 @@ fn parse_pass(output: &str, plies: i32) -> Result<Candidate> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn reports_each_gnubg_diagnostic_line_once() {
+        let stderr = "input.mat: not a valid .mat file\n".repeat(6);
+        assert_eq!(
+            super::gnubg_diagnostics(&stderr),
+            "input.mat: not a valid .mat file"
+        );
+        assert_eq!(
+            super::gnubg_diagnostics("  first\n\nsecond\r\nfirst\n second \n"),
+            "first\nsecond"
+        );
+        assert_eq!(super::gnubg_diagnostics(" \n\t\n"), "");
+    }
+
     #[test]
     fn parses_ranked_engine_hints_and_rejects_missing_results() {
         let output = "    1. Cubeful 0-ply    8/5 6/5                      Eq.: +0.219\n       0.551 0.174 0.013 - 0.449 0.124 0.005\n        0-ply cubeful prune [expert]\n    2. Cubeful 0-ply    24/23 13/10                  Eq.: -0.012 (-0.231)\n       0.497 0.137 0.008 - 0.503 0.140 0.007\n";
