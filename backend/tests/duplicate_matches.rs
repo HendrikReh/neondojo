@@ -214,3 +214,86 @@ async fn one_different_position_or_match_length_is_no_duplicate(pool: PgPool) {
     let two = Uuid::from_u128(2).to_string();
     assert_eq!(member_ids(&page["groups"][0]), [&one, &two]);
 }
+
+async fn stored_and_computed(pool: &PgPool, id: &str) -> (Option<Vec<u8>>, Option<Vec<u8>>) {
+    sqlx::query_as(
+        "SELECT played_record_fingerprint,played_record_fingerprint(id) FROM matches WHERE id=$1::uuid",
+    )
+    .bind(id)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
+async fn stored_fingerprint_follows_every_write_to_positions(pool: PgPool) {
+    let app = api::router(AppState::new(
+        pool.clone(),
+        Engine::new("/unavailable".into()),
+    ));
+    let a = database(&pool, "Fingerprint A").await;
+    let b = database(&pool, "Fingerprint B").await;
+    let source = import(&app, a, "WC2014.xg", include_bytes!("fixtures/WC2014.xg")).await;
+    let (stored, computed) = stored_and_computed(&pool, &source).await;
+    assert!(stored.is_some(), "an import stores the played record");
+    assert_eq!(stored, computed);
+    let original = stored;
+
+    // A copy receives its positions in a separate statement and the same record.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/library/actions")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "action": "copy",
+                        "match_ids": [source],
+                        "database_id": a,
+                        "target_database_id": b,
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let result: Value = serde_json::from_slice(&body).unwrap();
+    let copy = result["results"][0]["created_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(stored_and_computed(&pool, &copy).await.0, original);
+
+    // An appended position, as an archived play session writes it, changes the record.
+    sqlx::query("INSERT INTO positions(id,match_uuid,ordinal,game_no,ply,player,dice,board,position_id,gnubg_match_id,notation) SELECT gen_random_uuid(),match_uuid,ordinal+1,game_no,ply+1,player,dice,board,position_id,gnubg_match_id,notation FROM positions WHERE match_uuid=$1::uuid ORDER BY ordinal DESC LIMIT 1")
+        .bind(&copy)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (appended, computed) = stored_and_computed(&pool, &copy).await;
+    assert_eq!(appended, computed);
+    assert_ne!(appended, original);
+
+    // Moving a position refreshes both matches; removing all positions clears it.
+    sqlx::query("UPDATE positions SET match_uuid=$2::uuid WHERE id=(SELECT id FROM positions WHERE match_uuid=$1::uuid ORDER BY ordinal DESC LIMIT 1)")
+        .bind(&copy)
+        .bind(&source)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(stored_and_computed(&pool, &copy).await.0, original);
+    let (moved, computed) = stored_and_computed(&pool, &source).await;
+    assert_eq!(moved, computed);
+    assert_ne!(moved, original);
+    sqlx::query("DELETE FROM positions WHERE match_uuid=$1::uuid")
+        .bind(&copy)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(stored_and_computed(&pool, &copy).await, (None, None));
+}

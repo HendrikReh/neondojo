@@ -1,6 +1,7 @@
 //! Strict standard-backgammon imports. The board is absolute: White moves
 //! 24 -> 1, positive checkers; Black moves 1 -> 24, negative checkers.
-//! Index 0 is Black's bar, and index 25 is White's bar.
+//! Index 0 is Black's bar, and index 25 is White's bar. The same module owns
+//! the XG writer, so both directions share one reading of the binary format.
 
 mod bgf;
 pub(crate) mod ids;
@@ -9,11 +10,13 @@ pub(crate) mod match_context;
 pub(crate) mod ogxm;
 pub(crate) mod sgf;
 mod xg;
+mod xg_export;
 pub use bgf::bgf_to_sgf;
 pub use ogxm::ogxm_to_sgf;
 pub use sgf::parse_sgf;
 pub(crate) use xg::xg_beaver_rule;
 pub use xg::{XgImport, convert_xg, xg_to_sgf};
+pub use xg_export::{XgExportMetadata, sgf_to_xg};
 
 /// Canonical SGF of a MAT transcript and the irregularities its import resolved.
 #[derive(Debug, Clone)]

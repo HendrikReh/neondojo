@@ -8,6 +8,9 @@
 //! records the dice, so it also recognizes one match imported from different
 //! source formats. A group whose members all share the original-file SHA-256
 //! consists of identical files.
+//!
+//! The record itself is defined once, by the database function
+//! `played_record_fingerprint`, and stored in `matches.played_record_fingerprint`.
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
 use crate::databases::{DatabaseMatch, database_matches, query};
 use crate::play::PAUSED_MATCHES_DATABASE_ID;
@@ -117,41 +120,20 @@ pub async fn find(pool: &PgPool, q: DuplicateMatchQuery) -> ApiResult<DuplicateM
             return Err(ApiError::missing());
         }
     }
-    // Only matches sharing match length and position count can have the same
-    // record, so the position fingerprint is computed for those candidates only.
+    // The played record is stored per match by the database function
+    // `played_record_fingerprint` (migration 0086), refreshed on every write to
+    // positions; grouping reads only the matches table.
     let rows: Vec<GroupRow> = sqlx::query_as(
-        "WITH scoped AS (
-            SELECT m.id,m.match_no,m.match_length,m.sha256,
-                   count(*) OVER (PARTITION BY m.match_length,m.position_count) AS peers
+        "WITH grouped AS (
+            SELECT min(m.match_no) AS first_match_no,
+                   (array_agg(m.id ORDER BY m.match_no))[1:$3::int] AS ids,
+                   count(*) AS match_count,
+                   count(DISTINCT m.sha256)=1 AS identical_files
             FROM matches m JOIN databases d ON d.id=m.database_id
             WHERE NOT m.collection_only AND NOT d.collection_only AND m.database_id<>$1
               AND ($2::uuid IS NULL OR m.database_id=$2)
-        ), fingerprinted AS (
-            SELECT s.id,s.match_no,s.match_length,s.sha256,f.fingerprint
-            FROM scoped s
-            CROSS JOIN LATERAL (
-                SELECT sha256(convert_to(string_agg(
-                           p.game_no::text||' '||p.position_id||' '||
-                           CASE WHEN p.source_cube_value IS NULL THEN p.gnubg_match_id ELSE
-                               least(p.dice[1],p.dice[2])::text||greatest(p.dice[1],p.dice[2])::text
-                               ||' '||p.source_cube_value::text||' '||
-                               CASE WHEN p.source_cube_owner=-1 THEN 'c'
-                                    WHEN p.source_cube_owner=p.player THEN 'r' ELSE 'o' END
-                               ||' '||p.source_crawford::int::text||' '||
-                               CASE WHEN p.player=0 THEN p.source_white_score::text||' '||p.source_black_score::text
-                                    ELSE p.source_black_score::text||' '||p.source_white_score::text END
-                           END,
-                           ',' ORDER BY p.ordinal),'UTF8')) AS fingerprint
-                FROM positions p WHERE p.match_uuid=s.id
-            ) f
-            WHERE s.peers>1 AND f.fingerprint IS NOT NULL
-        ), grouped AS (
-            SELECT min(match_no) AS first_match_no,
-                   (array_agg(id ORDER BY match_no))[1:$3::int] AS ids,
-                   count(*) AS match_count,
-                   count(DISTINCT sha256)=1 AS identical_files
-            FROM fingerprinted
-            GROUP BY match_length,fingerprint
+              AND m.played_record_fingerprint IS NOT NULL
+            GROUP BY m.match_length,m.played_record_fingerprint
             HAVING count(*)>1
         ), counted AS (
             SELECT *,count(*) OVER () AS total_groups,

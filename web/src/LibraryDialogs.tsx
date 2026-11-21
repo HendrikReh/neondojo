@@ -10,6 +10,7 @@ import {
 import {
   acceptsLibraryMatches,
   exportMatches,
+  type ExportFormat,
   type Database,
   type LibraryMatch,
   type BatchAction,
@@ -56,7 +57,7 @@ export default function LibraryDialogs({
   const [target, setTarget] = useState(targets[0]?.id ?? '');
   const [add, setAdd] = useState(''),
     [remove, setRemove] = useState(''),
-    [format, setFormat] = useState<'sgf' | 'original'>('sgf');
+    [format, setFormat] = useState<ExportFormat>('sgf');
   const [played, setPlayed] = useState(match?.played_on ?? ''),
     [tournament, setTournament] = useState(match?.tournament ?? ''),
     [round, setRound] = useState(match?.round ?? ''),
@@ -337,12 +338,19 @@ export default function LibraryDialogs({
                   <select
                     aria-label={l('exportFormat')}
                     value={format}
-                    onChange={(e) =>
-                      setFormat(e.target.value as 'original' | 'sgf')
-                    }
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (
+                        value === 'sgf' ||
+                        value === 'xg' ||
+                        value === 'original'
+                      )
+                        setFormat(value);
+                    }}
                     disabled={busy}
                   >
                     <option value="sgf">SGF</option>
+                    <option value="xg">XG</option>
                     <option value="original">{l('original')}</option>
                   </select>
                 </label>

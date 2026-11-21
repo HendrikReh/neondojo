@@ -729,6 +729,16 @@ pub(crate) fn parse_sgf_source_moves(input: &str) -> Result<(ImportedMatch, Vec<
     Ok((imported, moves))
 }
 
+/// The played events together with every game's validated context, including
+/// games without checker plays. Exporters replay the stored SGF through this.
+pub(crate) fn parse_sgf_events(
+    input: &str,
+) -> Result<(ImportedMatch, Vec<GameContext>, Vec<SourceMove>)> {
+    let mut moves = Vec::new();
+    let (imported, contexts) = parse_sgf_context(input, false, Some(&mut moves))?;
+    Ok((imported, contexts, moves))
+}
+
 pub(crate) fn parse_native_sgf_source_moves(
     input: &str,
 ) -> Result<(ImportedMatch, Vec<SourceMove>)> {

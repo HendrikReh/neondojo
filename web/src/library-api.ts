@@ -185,7 +185,8 @@ export const loadImportWarnings = (matchId: string, signal: AbortSignal) =>
 export type ActionItem = Schema['ActionItem'];
 export type ActionResponse = Schema['ActionResponse'];
 export type BatchAction = 'copy' | 'move' | 'delete' | 'tags';
-export async function exportMatches(ids: string[], format: 'original' | 'sgf') {
+export type ExportFormat = 'original' | 'sgf' | 'xg';
+export async function exportMatches(ids: string[], format: ExportFormat) {
   const response = await requestResponse('/library/export', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

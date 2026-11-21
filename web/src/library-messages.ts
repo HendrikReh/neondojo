@@ -856,12 +856,12 @@ const rows = {
     'File originali',
   ],
   exportHelp: [
-    'Multiple matches download as ZIP. Source exports do not contain NeonDojo notes or learning history.',
-    'Mehrere Matches werden als ZIP heruntergeladen. Quellexporte enthalten keine NeonDojo-Notizen oder Lerndaten.',
-    'Varios matches se descargan como ZIP. No incluye notas ni historial de NeonDojo.',
-    'Plusieurs matchs sont téléchargés en ZIP. Les notes et l’historique NeonDojo sont exclus.',
-    'Wiele meczów pobierzesz jako ZIP. Eksport nie obejmuje notatek i nauki NeonDojo.',
-    'Più match vengono scaricati come ZIP. Note e cronologia NeonDojo non sono incluse.',
+    'Multiple matches download as ZIP. Source exports do not contain NeonDojo notes or learning history. XG files contain the played moves without analysis.',
+    'Mehrere Matches werden als ZIP heruntergeladen. Quellexporte enthalten keine NeonDojo-Notizen oder Lerndaten. XG-Dateien enthalten die gespielten Züge ohne Analyse.',
+    'Varios matches se descargan como ZIP. No incluye notas ni historial de NeonDojo. Los archivos XG contienen las jugadas sin análisis.',
+    'Plusieurs matchs sont téléchargés en ZIP. Les notes et l’historique NeonDojo sont exclus. Les fichiers XG contiennent les coups joués, sans analyse.',
+    'Wiele meczów pobierzesz jako ZIP. Eksport nie obejmuje notatek i nauki NeonDojo. Pliki XG zawierają rozegrane ruchy bez analizy.',
+    'Più match vengono scaricati come ZIP. Note e cronologia NeonDojo non sono incluse. I file XG contengono le mosse giocate senza analisi.',
   ],
   batchLimit: [
     'Select up to 100 matches per action, or 50 for export.',

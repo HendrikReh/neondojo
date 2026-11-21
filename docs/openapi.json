@@ -4866,7 +4866,7 @@
         },
         "responses": {
           "200": {
-            "description": "Original/SGF file or ZIP for multiple matches",
+            "description": "Original, SGF or XG file, or a ZIP for multiple matches",
             "content": {
               "application/octet-stream": {}
             }
