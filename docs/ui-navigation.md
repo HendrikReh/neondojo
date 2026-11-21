@@ -6,21 +6,24 @@ settings categories and database collections.
 
 Navigation has a transparent background, muted inactive text and no rounded
 button frame. The current item uses the theme accent, semibold text and a 2 px
-underline. Hover remains transparent; keyboard focus has a visible accent
-outline. Disabled choices retain native disabled behavior and reduced opacity.
-The settings appearance preview depicts the same navigation.
+underline. On hover the background stays transparent; an inactive item turns
+the accent color over a subtle underline. Keyboard focus has a visible accent
+outline. Disabled choices keep native disabled behavior and reduced opacity.
+The settings appearance preview shows the same navigation.
 
 In the match database sidebar, system databases use a database-with-gear icon
 in the theme's accent color. The underline identifies the selected database.
 
 Use `text-navigation` on the container and keep buttons as direct children.
-Existing `aria-selected="true"`, `aria-pressed="true"`, `aria-current="page"` or
-`active` state drives the underline. Keep existing keyboard handlers and ARIA
-relationships. `text-navigation--compact` reduces vertical padding in dense
+An `aria-selected="true"`, `aria-pressed="true"` or `aria-current="page"`
+attribute, or the `active` class, drives the underline. Keep existing keyboard
+handlers and ARIA relationships. `text-navigation--compact` reduces vertical padding in dense
 analysis panels; `text-navigation--stacked` arranges sidebar choices vertically.
 The main header retains its 20 px gap; other horizontal groups use 16 px.
 The header orders its workspaces as Playing, Analysis, Study, Positions,
-Match database, Player database, and Extras. The arrow keys follow this order.
+Match database, Player database, and Extras. Rendering and keyboard navigation
+share the `views` list in `web/src/App.tsx`: Left/Right move through it and
+wrap, and Home/End select the first and last workspace.
 
 The shared rules live in `web/src/text-navigation.css`, imported after the other
 styles. Local CSS manages surrounding layout and should not reintroduce filled
@@ -30,10 +33,12 @@ Action buttons, field controls, bookmarks, sortable table headers, selected rows
 error badges, candidate previews and artwork/theme tiles retain their existing
 visual roles. This keeps navigation, actions and content selection recognizable.
 
-`web/e2e/text-navigation.spec.ts` verifies active, hover, disabled and keyboard
-focus states in all six light/dark theme variants, actual spacing between labels,
-and the established desktop viewports. Related workflow tests cover settings,
-notes, sources, board views and header navigation.
+`web/e2e/text-navigation.spec.ts` verifies the active and hover states and the
+spacing between labels in all six light/dark theme variants. It also checks the
+header order with mouse and keyboard, keyboard focus in the analysis and notes
+tabs, and the absence of horizontal overflow at the desktop viewports
+1800×1169, 2560×1440 and 3840×2160. Related workflow tests cover settings,
+notes, sources and board views.
 
 ## Search results
 
@@ -52,14 +57,21 @@ play session. Batch actions are available when the selected matches support them
 The player database uses the Positions layout with a result table on the left
 and the selected profile on the right. Click a row or use the arrow keys to
 change the profile. The column headings sort the result table by name, matches
-or games; it starts with the most matches and shows the first profile. The profile header shows the PR, and the match list begins
-below it. Click a match row or press Enter on it to open the match; the
+or games. The table starts sorted by most matches and shows the first profile.
+The profile header shows the PR, and the match list begins below it. Click a match row or press Enter on it to open the match; the
 opponent's name switches to that player's profile. The database filter and page
 controls sit outside the scrollable table. Edit and merge actions open dialogs
 and return focus to their trigger when closed. The merge dialog focuses its
 search field. **Analyze unrated matches …** beside the PR opens the
 match analysis dialog for the profile's matches without a rating.
-The merge search has its own page controls. **Virtual profiles** sits between the page title and the player search; its buttons select a virtual profile in place of a real one, and **My player profile** opens first when one is chosen. The virtual profile's member names switch to the member's profile. **Add member …**, **Rename …**, **Delete …** and **New virtual profile …** open dialogs that return focus to their trigger; the member dialog and the name dialog focus their field.
+The merge search has its own page controls.
+
+**Virtual profiles** sits between the page title and the player search. Its
+buttons select a virtual profile in place of a real one, and **My player
+profile** opens first when one is chosen. A virtual profile's member names
+switch to that member's profile. **Add member …**, **Rename …**, **Delete …**
+and **New virtual profile …** open dialogs that return focus to their trigger;
+the member and name dialogs focus their field.
 
 ## Positions
 
@@ -91,22 +103,31 @@ decision in Analysis. The **Loss** heading reverses the order.
 
 ## Keyboard shortcuts in practice and review
 
-Buttons that have a shortcut name it in their tooltip and expose it through
-`aria-keyshortcuts`. **N**, **D**, **T** and **P** choose a cube action,
-**Enter** checks an answer and continues, **A** shows the answer, **1**–**4**
-rate a flashcard (a study card shows these keys on its buttons), and
-**E** / **Shift+E** move to the next or previous error in Analysis. In
-**Playing**, **Enter** rolls, confirms a complete turn or passes, **D**
-doubles, **H** requests a hint, **Z** undoes a checker step, and **Escape**
-returns from a reviewed move to the game. The
-shortcuts are declared with the `shortcut` property of `ActionButton` and
-handled once in `web/src/useButtonShortcuts.ts`. They are ignored in text
-fields, and an open dialog confines them to its own buttons.
+Buttons that have a shortcut name it in their tooltip, for example
+`Undo step (Z)`, and expose it through `aria-keyshortcuts`. **N**, **D**,
+**T** and **P** choose a cube action, **Enter** checks an answer and then
+continues, **A** shows the answer, **1**–**4** rate a flashcard, and **E** /
+**Shift+E** move to the next or previous error (or decision, without an error
+filter) in Analysis. In **Playing**, **Enter** rolls, confirms a complete turn
+or passes, **D** doubles, **H** requests a hint, **Z** undoes a checker step,
+and **Escape** returns from a reviewed move to the game.
+
+The shortcuts are declared with the `shortcut` property of `ActionButton` and
+handled once in `web/src/useButtonShortcuts.ts`. Only visible, enabled buttons
+respond. Shortcuts are ignored in text fields, and **Enter** is left to a
+focused button, link, tab or row. An open dialog confines them to its own
+buttons.
+
+Left and Right have separate handlers. In Analysis, outside controls and tab
+lists, they step to the previous or next position of the game. While a
+candidate or dice-grid preview is selected in Analysis, or a move from the
+history is reviewed in Playing, they show the **Initial** and **Final** board
+instead (`web/src/useBoardReviewShortcuts.ts`).
 
 ## Match analysis
 
 **Checker** places the position analysis beside the board. Its analysis views
-are **Candidates**, **Dice equity**, and **Game rolls**. Move history defaults to
+are **Candidate moves**, **Dice equity**, and **Game rolls**. Move history defaults to
 **All moves**. Filter by **All errors** or by a specific grade without changing
 the board selection. Unrated moves remain visible under **All moves**.
 **Cube** reviews cube decisions on the board. Native match and
@@ -117,18 +138,17 @@ with engine and evaluation depth, followed by scope and date. The selected
 entry's details include origin and coverage.
 The choice persists per match and is independent of calculation preferences.
 Missing results remain explicitly unavailable. Older results are paginated;
-**Load more analyses** includes them in the same selector. The **Candidates**
+**Load more analyses** includes them in the same selector. The **Candidate moves**
 table shows rank, equity, outcome probabilities, and evaluation depth for
 imported and local analyses. Imported XG checker moves are ranked by descending
 equity and show the original depth on every row. Older game and match results may
 only show the played and best moves. Recalculate the game or match to save its
 candidates.
-Open **Compare moves** beside **Candidates** to see eXtreme Gammon, GNU Backgammon,
+Open **Compare moves** beside **Candidate moves** to see eXtreme Gammon, GNU Backgammon,
 and NeonGammon for the current position. The table aligns moves by their ending
 boards and shows rank, equity, and actual depth per candidate. The XG column
 shows the rank by equity when the saved values are comparable. Choose a
-different saved analysis in a column when available. The
-comparison starts with the deepest loaded result per engine and prefers the
+different saved analysis in a column when available. The comparison starts with the deepest loaded result per engine and prefers the
 latest result at that depth. The local columns show their equity minus XG
 equity for candidates with comparable saved values. Rank arrows compare each
 local rank with the XG rank by equity. A dash indicates a missing value. Select
@@ -205,8 +225,8 @@ rows scroll. **Statistics** places the player summaries side by side when
 their pane is wide enough. The comment field in **Notes** grows with the
 available height. On wide screens, **Study cards** gives deck controls more
 room and enlarges the board previews in the suggestions list. The board scales
-to the available height above the
-move navigation and position ID in every analysis tab. The default width grows
+to the available height above the move navigation and position ID in every
+analysis tab. The default width grows
 with the window and leaves room for the analysis pane. A saved manual width
 controls the board column within the current window's limits.
 
@@ -224,15 +244,15 @@ During a match, one bar above the board replaces the page title. It shows the
 score, format, engine and turn status, then the play mode, **Resign game**,
 **Pause match** and the **More actions** menu with **Forfeit match**, **New
 match** and **Paused Matches**. After a finished money game, the result dialog
-offers **Next game**, **Pause match** and **End session**. Escape closes the menu and returns focus to
-its button.
+offers **Next game**, **Pause match** and **End session**. Escape closes the
+**More actions** menu and returns focus to its button.
 
 The **New match** form is a dialog over the playing view, anchored to the
 board like the other play dialogs. It makes the playing view behind it inert
 but leaves the app header usable. Opened from **New match** it takes the
 focus; opened automatically when Playing has no match, the focus stays in the
-header so keyboard navigation across the workspaces continues. Name, bot engine and strength come
-first, followed by color, match length and play mode. Color and play mode are
+header so keyboard navigation across the workspaces continues. Name, bot
+engine and strength come first, followed by color, match length and play mode. Color and play mode are
 radio choices, **Start match** is the primary button, and the gear beside the
 analysis and rules engine line opens **Settings → Playing**. **Close** and
 Escape dismiss the dialog; without a match, **New match** above the empty
@@ -266,8 +286,7 @@ card directly. When no cards are due, it recommends the selected player's
 eligible mistake group with the highest equity loss per 100 decisions, if
 available. Recommendations require at least 30 evaluable decisions and errors
 in at least two matches. The existing practice dialog opens from the
-recommendation or the group table and
-returns focus to the button on close. Overview also shows the next scheduled
+recommendation or the group table and returns focus to the button on close. Overview also shows the next scheduled
 card when the due list is empty.
 
 In Flashcards & Anki, **Manage decks** opens a list searchable by deck name.
@@ -302,10 +321,10 @@ view when their last error is resolved.
 open errors on success. Its results show each deck's status, sent and received
 reviews for the attempt, and remaining open errors.
 On wide windows, drag the divider between the card list and the preview. The
-Left and Right arrow keys move the focused divider. Double-click it or press
-Enter to restore the default width. The browser remembers the chosen width.
-The results have selection
-checkboxes and actions above the table. Cards can be added to a deck or deleted
+Left and Right arrow keys move the focused divider, Shift uses larger steps,
+and Home/End select the limits. Double-click it or press Enter to restore the
+default width; Escape cancels a drag. The browser remembers the chosen width.
+The results have selection checkboxes and actions above the table. Cards can be added to a deck or deleted
 from the collection after confirmation. Select a deck to move cards or remove
 its memberships, or choose **Without a deck** to find unassigned cards. **Find duplicates**
 shows shared deck memberships and duplicate records, with confirmation before
@@ -366,16 +385,16 @@ Analysis shows the engine and default depth side by side, followed by four
 editable error thresholds and the configured opening-book source. The thresholds
 classify normalized equity loss in error review, move history and statistics.
 In new matches, the Error threshold sets when Coach pauses for checker errors
-and missed doubles, and sets the initial Tutor warning threshold. Expand **Engines on this computer** for paths,
-installation checks, and thread limits. The collapsed section shows the
+and missed doubles, and sets the initial Tutor warning threshold. Expand
+**Engines on this computer** for paths, installation checks, and thread limits. The collapsed section shows the
 availability of GNUbg and NeonGammon.
 
 Closing **Opening books** returns to **Analysis** in Settings and restores focus
 to **Manage opening books**.
 
 **Playing** puts the engine and strength for new matches side by side.
-The next group contains the default play mode and automatic training analysis. Game sounds and bear-off direction are grouped
-below them.
+The next group contains the default play mode and automatic training analysis.
+Game sounds and bear-off direction are grouped below them.
 
 Closing Settings or opening Profiles, Opening books, or Benchmark with an
 unapplied draft asks whether to apply it, discard it, or keep editing. Escape
@@ -388,19 +407,19 @@ the workspace. If an earlier automatic save is in conflict, unrelated
 edits remain available for recovery in **Profiles**. **Verify and save** stores
 the NeonGammon Python path on the NeonDojo computer.
 
-## Profile in der Navigation
+## Profiles in navigation
 
-Die globale Kopfzeile enthält die Profilauswahl mit aktivem Namen, Änderungsmarkierung und Sicherungsstatus. „Profile verwalten“ öffnet direkt die Kategorie „Profile“ im Einstellungsdialog.
+The global header contains the profile switcher with the active name, change marker, and save status. **Manage profiles** opens the **Profiles** category directly in the Settings dialog.
 
-Datenbankauswahl, Suchfilter, Ergebnissortierung, aktives Lernkartendeck, Kartenerzeugung und Analysefilter gehören zur Sitzung des Browser-Tabs. Spalten, Spaltenbreiten und das Layout des Analysebretts speichert der Browser lokal. Profilwechsel und Neuladen erhalten diese Ansichten.
+Database selection, search filters, result sorting, the active Study deck, card creation, and analysis filters belong to the browser tab's session. The browser stores columns, column widths, and the analysis board layout locally. Profile switches and reloads preserve these views.
 
-Die Profilkategorie zeigt oben das aktive Profil und die Zahl der Abweichungen vom Profilstand. Die Profilauswahl bestimmt den Vergleich mit der aktuellen Konfiguration. Die vollständige gespeicherte Konfiguration lässt sich darunter aufklappen. Die Zeitstempel in der Profilliste folgen der App-Sprache.
+The profile category shows the active profile and the number of changes from the saved profile at the top. The selected profile determines the comparison with the current configuration. The full saved configuration can be expanded below. Timestamps in the profile list follow the app language.
 
-„Im Profil speichern“ zeigt das gewählte Zielprofil. „Als neues Profil speichern“ steht daneben. „Profilaktionen“ enthält „Umbenennen“ und „Löschen“. Mit „Profilstand wiederherstellen“ werden nach Bestätigung die gespeicherten Werte des aktiven Profils übernommen. Im Vergleich behalten die Spalten ihre Breite, und lange Werte brechen in ihrer Zelle um.
+**Save in profile** shows the selected target profile. **Save as new profile** sits next to it. **Profile actions** contains **Rename** and **Delete**. **Restore saved profile** applies the active profile's saved values after confirmation. In the comparison, columns keep their width and long values wrap within their cell.
 
-Bei einem Profilkonflikt steht der Hinweis in der App-Sprache direkt unter „Aktives Profil“, vor der Profilliste und den Speicheraktionen. Dort kannst du den Serverstand laden oder lokale Änderungen als neues Profil sichern.
+On a profile conflict, the notice appears in the app language directly below **Active profile**, before the profile list and the save actions. There you can choose **Load server settings** or **Save local changes as a new profile**.
 
-„Anwenden“ übernimmt die aktuellen Vorgaben. Benannte Profile werden in der Kategorie „Profile“ gespeichert. Schlägt das Laden fehl, bieten die Profilsteuerung und die Profilverwaltung „Wiederholen“ an. Spiel und Analyse verwenden die zuletzt bestätigten Einstellungen oder die eingebauten Standardwerte. Laufende Aufträge behalten die beim Start erfassten Einstellungen.
+**Apply** adopts the current settings. Named profiles are saved in the **Profiles** category. If loading fails, the profile controls and profile management offer **Retry**. Playing and analysis use the last confirmed settings or the built-in defaults. Running jobs keep the settings captured when they started.
 
 ## Extras
 
@@ -411,7 +430,8 @@ The selected tab names the tool, so the tools show no separate page title; each
 keeps its heading for assistive technology.
 
 Benchmark uses one engine selector for **Match analysis** and **Play-turn
-latency**, which share a segmented switch below it. Each engine keeps its own depth selections while the app is open.
+latency**, which share a segmented switch below it. Each engine keeps its own
+depth selections while the app is open.
 The selected measurement type determines the setup, result columns and
 comparison. Active runs remain visible across both measurement types.
 The comparison table lists the median and range of the three most recent
@@ -452,8 +472,8 @@ recognized NeonGammon forks. **Copy version information** copies the report.
 ## Dice equity
 
 Selecting **Dice equity** in the position evaluation loads the latest saved
-calculation for the current position from the active analysis engine. If one is still running, the tab waits
-for it. A missing calculation starts with the active engine and profile depth
+calculation for the current position from the active analysis engine. If one
+is still running, the tab waits for it. A missing calculation starts with the active engine and profile depth
 and evaluates the 21 dice pairs used by the 36-cell grid.
 Changing position requests missing results while this tab is visible.
 Running jobs keep their captured depth and configuration.

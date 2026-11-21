@@ -4777,6 +4777,77 @@
         }
       }
     },
+    "/api/library/duplicates": {
+      "get": {
+        "tags": [
+          "Databases"
+        ],
+        "operationId": "duplicate_matches",
+        "parameters": [
+          {
+            "name": "database_id",
+            "in": "query",
+            "description": "Compare only matches in this database; omitted compares all library\ndatabases. Paused Matches and saved-position context are never included.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "description": "`next_cursor` of the previous page.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Groups per page, 1–100 (default 50).",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicateMatchPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/library/export": {
       "post": {
         "tags": [
@@ -16501,6 +16572,70 @@
           "version": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "DuplicateMatchGroup": {
+        "type": "object",
+        "required": [
+          "kind",
+          "match_count",
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DatabaseMatch"
+            },
+            "description": "Up to 50 members, oldest library entry (lowest ID) first."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/DuplicateMatchKind"
+          },
+          "match_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of matches in the group, including any beyond `items`."
+          }
+        }
+      },
+      "DuplicateMatchKind": {
+        "type": "string",
+        "enum": [
+          "identical_files",
+          "same_moves"
+        ]
+      },
+      "DuplicateMatchPage": {
+        "type": "object",
+        "required": [
+          "groups",
+          "total_groups",
+          "total_matches"
+        ],
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DuplicateMatchGroup"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "total_groups": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Duplicate groups in the scope, across all pages."
+          },
+          "total_matches": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Matches that belong to a duplicate group, across all pages."
           }
         }
       },

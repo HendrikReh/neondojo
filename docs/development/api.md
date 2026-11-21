@@ -19,6 +19,7 @@ Existing cursor clients can continue to use `after` on its own.
 | PUT / DELETE | `/api/databases/{id}`                                            | Edit with `version` or delete a user-created database. Deletion requires `version` and `delete_matches=true` when it contains matches.                                        |
 | DELETE       | `/api/databases/{id}/matches?version=`                           | Empty a system database while retaining it. Returns HTTP 204 on success and 409 for a stale version, an ineligible database or active analysis.                               |
 | GET          | `/api/library/matches`                                           | Filter and sort matches or occurrences before pagination. Limit 1–200. The cursor is bound to the filters and sort.                                                           |
+| GET          | `/api/library/duplicates`                                        | Groups of matches with the same played record in `database_id` or all library databases, 1–100 groups per page with a keyset cursor. `kind` is `identical_files` or `same_moves`.|
 | GET / PUT    | `/api/matches/{id}/metadata`                                     | Read or update match details with version checks.                                                                                                                             |
 | POST         | `/api/library/actions`                                           | Bulk action with `action`, `match_ids` and optional source or destination database and tags. Returns individual outcomes.                                                     |
 | POST         | `/api/library/export`                                            | Export `match_ids` with `format` set to `original` or `sgf`. Returns a file or ZIP.                                                                                           |
@@ -49,7 +50,7 @@ curl 'http://127.0.0.1:8787/api/matches?q=Tutor'
 
 | Method     | Path                                                                         | Purpose                                                                                                                                                                                                                    |
 | ---------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET        | `/api/health`, `/api/engines`                                                | PostgreSQL and GNUbg health, or available engines, versions and depths.                                                                                                                                                    |
+| GET        | `/api/health`, `/api/engines`                                                | PostgreSQL and GNUbg health, or available engines, versions and depths. Health returns HTTP 200 with `status` `ok`, or 503 with `degraded` when the database or the GNUbg version check fails.                            |
 | GET        | `/api/database-backup` | Export a compressed NeonDojo backup as a file. |
 | POST       | `/api/database-backup/check` | Check a raw backup archive and report schema compatibility and archive contents. |
 | GET        | `/api/database-backup/target-counts` | Read the current match, saved position, and flashcard counts in the destination. |
@@ -94,3 +95,18 @@ curl 'http://127.0.0.1:8787/api/matches?q=Tutor'
 | GET          | `/api/study/learning-summary`                                                                                               | Count distinct decked cards and due cards, and get the next due date and recommended deck.                                                                                                      |
 | POST         | `/api/cards/{id}/attempt`                                                                                                   | Check a complete checker turn or cube action against the card version. A stable `request_id` lets the client retry the same submission.                                                            |
 | POST         | `/api/cards/{id}/reveal`, `/api/cards/{id}/review`                                                                           | Reveal a card's answer or submit a review.                                                                                                                                                        |
+
+### Other endpoint groups
+
+The remaining endpoints are listed in [OpenAPI](../openapi.json) under these tags. The linked references describe their behavior.
+
+| Path prefix | OpenAPI tag | Behavior |
+| --- | --- | --- |
+| `/api/play/` | Playing | [Play API and persistence](../reference/playing.md#play-api-and-persistence) |
+| `/api/study/`, `/api/cards/`, further `/api/decks/` paths, `/api/anki-media/` | Study, Learning | [Study](../reference/study.md#study), [Flashcards and Anki](../reference/study.md#flashcards-and-anki) |
+| `/api/positions/{id}/similar`, `/api/positions/{id}/bookmark`, `/api/positions/{id}/practice-answer`, `/api/positions/{id}/practice-score` | Positions | [Saved positions and searches](../reference/library.md#saved-positions-and-searches), [Similar positions](../reference/library.md#similar-positions) |
+| `/api/game-plans`, `/api/move-explanations`, `/api/cube-context`, `/api/cube-chances` | Positions, Match analysis | [Analysis](../reference/analysis.md#analysis-workspace) |
+| `/api/matches/{id}/analysis/estimate`, `/api/jobs/{id}/remaining-time` | Match analysis | [Analysis time estimates](../reference/analysis.md#analysis-time-estimates) |
+| `/api/players`, `/api/virtual-players` | Players | [Player database](../reference/library.md#player-database) |
+| `/api/configuration`, `/api/profiles`, `/api/engines/bgsage` | Configuration, Profiles, Settings | [Settings, engines and profiles](../reference/settings.md#settings-and-engines) |
+| `/api/benchmarks`, `/api/engine-matches`, `/api/version` | Benchmark, Engine matches, System | [Extras](../reference/extras.md#extras) |

@@ -1082,6 +1082,20 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
         total,
     })
 }
+/// Library rows for `ids`, in the order of `ids`; missing matches are omitted.
+pub(crate) async fn database_matches(
+    pool: &PgPool,
+    ids: &[Uuid],
+) -> anyhow::Result<Vec<DatabaseMatch>> {
+    let rows: Vec<DatabaseMatch> = sqlx::query_as(&format!(
+        "SELECT {MATCH_COLUMNS} FROM matches m{MATCH_PLAY_JOIN}{MATCH_NOTE_JOIN}{MATCH_ANALYSIS_JOINS} WHERE m.id=ANY($1)"
+    ))
+    .bind(ids)
+    .fetch_all(pool)
+    .await?;
+    let mut rows: HashMap<Uuid, DatabaseMatch> = rows.into_iter().map(|m| (m.id, m)).collect();
+    Ok(ids.iter().filter_map(|id| rows.remove(id)).collect())
+}
 async fn database_match(pool: &PgPool, id: Uuid) -> ApiResult<DatabaseMatch> {
     sqlx::query_as(&format!(
         "SELECT {MATCH_COLUMNS} FROM matches m{MATCH_PLAY_JOIN}{MATCH_NOTE_JOIN}{MATCH_ANALYSIS_JOINS} WHERE m.id=$1"

@@ -7,6 +7,7 @@ Images are copied verbatim. Nothing is downloaded or extracted as executable cod
 import io
 import json
 import math
+import os
 from pathlib import Path, PurePosixPath
 import struct
 import xml.etree.ElementTree as ET
@@ -16,6 +17,8 @@ import zlib
 ROOT = Path(__file__).resolve().parents[1]
 MAX_ARCHIVE = 32 * 1024 * 1024
 MAX_EXPANDED = 64 * 1024 * 1024
+BUILTIN_THEMES = ("forest", "walnut", "slate")
+ALLOW_MISSING_ENV = "NEONDOJO_ALLOW_MISSING_THEMES"
 MAX_CHECKER_PIXELS = 1024 * 1024
 
 
@@ -382,7 +385,17 @@ def load_archive(path, output, used):
         )
 
 
-def prepare(source, output, manifest, options_manifest=None):
+def missing_archives(options, catalog):
+    """Return listed archive theme IDs that the current ZIPs no longer provide."""
+    generated = {theme["id"] for theme in catalog}
+    return [
+        theme
+        for theme in options.get("board_themes", [])
+        if theme not in BUILTIN_THEMES and theme not in generated
+    ]
+
+
+def prepare(source, output, manifest, options_manifest=None, allow_missing=False):
     used = set()
     catalog = []
     archives = sorted(source.glob("*.zip"))
@@ -395,6 +408,21 @@ def prepare(source, output, manifest, options_manifest=None):
             ValueError, KeyError, BadZipFile, ET.ParseError, struct.error, zlib.error
         ) as error:
             raise ValueError(f"{archive.name}: {error}") from error
+    options = None
+    if options_manifest is not None:
+        options = json.loads(options_manifest.read_text()) if options_manifest.exists() else {}
+        # A checkout without the local ZIPs must not silently ship a client that
+        # rejects the saved board theme and serves no theme images.
+        missing = missing_archives(options, catalog)
+        if missing and not allow_missing:
+            names = ", ".join(
+                theme.removeprefix("bgblitz:") + ".zip" for theme in missing
+            )
+            raise ValueError(
+                f"Missing theme archives in {source}: {names}. "
+                f"Copy them there, or set {ALLOW_MISSING_ENV}=1 to remove "
+                f"these themes from {options_manifest.name}."
+            )
     if output.exists():
         for stale in output.rglob("*"):
             if stale.is_file() and stale not in used:
@@ -402,9 +430,8 @@ def prepare(source, output, manifest, options_manifest=None):
     write_changed(
         manifest, (json.dumps(catalog, ensure_ascii=False, indent=2) + "\n").encode()
     )
-    if options_manifest is not None:
-        options = json.loads(options_manifest.read_text()) if options_manifest.exists() else {}
-        options["board_themes"] = ["forest", "walnut", "slate"] + [theme["id"] for theme in catalog]
+    if options is not None:
+        options["board_themes"] = list(BUILTIN_THEMES) + [theme["id"] for theme in catalog]
         write_changed(
             options_manifest,
             (json.dumps(options, indent=2) + "\n").encode(),
@@ -419,6 +446,7 @@ if __name__ == "__main__":
             ROOT / "web/public/themes",
             ROOT / "web/src/generated-themes.json",
             ROOT / "shared/configuration-options.json",
+            allow_missing=os.environ.get(ALLOW_MISSING_ENV) == "1",
         )
         print(f"Prepared {len(result)} local BGBlitz themes")
     except (ValueError, OSError) as error:

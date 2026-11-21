@@ -53,6 +53,7 @@ import {
   ChevronUp,
   GripVertical,
   Flag,
+  Files,
   type LucideProps,
 } from 'lucide-react';
 const icons = {
@@ -114,6 +115,7 @@ const icons = {
   collapse: ChevronUp,
   grip: GripVertical,
   resign: Flag,
+  duplicates: Files,
 } as const;
 export type ActionIconName = keyof typeof icons;
 export default function ActionIcon({
