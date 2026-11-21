@@ -2,9 +2,33 @@
 
 # NeonDojo
 
-NeonDojo is a local backgammon application for importing matches, finding positions, analyzing decisions with GNU Backgammon (GNUbg) or NeonGammon, playing against an engine, and practicing your own mistakes. Its headless Rust backend uses Tokio, Axum, PostgreSQL, and SQLx. The React and TypeScript client connects through REST and server-sent events (SSE).
+<!-- Static badges: the repository is private, so dynamic GitHub badges cannot read it. Update the version badge together with backend/Cargo.toml and web/package.json for each release. -->
+[![Version 1.1.0](https://img.shields.io/badge/version-1.1.0-2ea44f)](CHANGELOG.md)
+[![Platform: macOS on Apple Silicon](https://img.shields.io/badge/platform-macOS%20%7C%20Apple%20Silicon-000000?logo=apple&logoColor=white)](#requirements)
+[![Rust 1.94.1](https://img.shields.io/badge/Rust-1.94.1-CE422B?logo=rust&logoColor=white)](#requirements)
+[![Node.js 22.12+ or 24+](https://img.shields.io/badge/Node.js-22.12%2B%20%7C%2024%2B-5FA04E?logo=nodedotjs&logoColor=white)](#requirements)
+[![PostgreSQL 17](https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white)](#database-and-engine)
+[![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](web/package.json)
+[![TypeScript 5.9](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](web/package.json)
+[![Vite 7](https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=white)](web/package.json)
+[![OpenAPI 3.1](https://img.shields.io/badge/OpenAPI-3.1-6BA539?logo=openapiinitiative&logoColor=white)](docs/development/api.md)
+[![GNUbg 1.08.003](https://img.shields.io/badge/GNUbg-1.08.003-6F42C1)](#requirements)
+[![NeonGammon 3.0.0 optional](https://img.shields.io/badge/NeonGammon-3.0.0%20optional-8250DF)](docs/open-sage-local.md)
+[![Languages: 6](https://img.shields.io/badge/languages-EN%20%7C%20DE%20%7C%20ES%20%7C%20FR%20%7C%20IT%20%7C%20PL-0969DA)](docs/reference/settings.md#interface-appearance-and-language)
 
-[User guide](docs/user-guide/README.md) · [Quick start](#quick-start) · [Restart on port 8787](#restart-neondojo-locally-on-port-8787) · [Analyze a match](#analyze-your-first-match) · [Documentation](#documentation) · [API](docs/development/api.md) · [Verification](docs/development/testing.md) · [Repository guidance](AGENTS.md) · [Changelog](CHANGELOG.md)
+NeonDojo is a local backgammon application for importing matches, finding positions, analyzing decisions with GNU Backgammon (GNUbg) or NeonGammon, playing against an engine, and practicing your own mistakes. It runs on your own computer and is designed for dense desktop use on Apple Silicon Macs. Its headless Rust backend uses Tokio, Axum, PostgreSQL, and SQLx. The React and TypeScript client connects through REST and server-sent events (SSE).
+
+## Features
+
+- **Match library.** Import MAT (also as plain-text `.txt` transcripts), XG, SGF, BGF and OGXM files one by one or as a whole folder. Search by player or file name, find duplicate matches, and export the original file, SGF or XG. [Match library](docs/reference/library.md#match-databases)
+- **Positions.** Find an exact GNUbg position ID in the library, save positions and searches, and practice similar positions. [Saved positions](docs/reference/library.md#saved-positions-and-searches)
+- **Analysis.** Analyze positions, games and matches as persistent background jobs with GNUbg up to 5-ply or NeonGammon up to 4-ply. Imported analyses stay separate from local ones. Review candidates and cube decisions, dice equity, error statistics, game plans and opening books. [Analysis](docs/reference/analysis.md#analysis-workspace)
+- **Playing.** Play matches against GNUbg or NeonGammon in Competition, Training, Coach or Tutor feedback mode. [Playing](docs/reference/playing.md#playing-against-an-engine)
+- **Study.** Reports, optional AI assessment, recurring mistakes, and flashcards scheduled with FSRS that export to and import from Anki. [Study](docs/reference/study.md#study)
+- **Players.** A player database with profiles, merging and virtual player profiles. [Player database](docs/reference/library.md#player-database)
+- **Extras.** Engine benchmark, engine duels and database backup. [Extras](docs/reference/extras.md)
+
+[User guide](docs/user-guide/README.md) · [Features](#features) · [Quick start](#quick-start) · [Restart on port 8787](#restart-neondojo-locally-on-port-8787) · [Analyze a match](#analyze-your-first-match) · [Documentation](#documentation) · [API](docs/development/api.md) · [Verification](docs/development/testing.md) · [Repository guidance](AGENTS.md) · [Changelog](CHANGELOG.md)
 
 ## Quick start
 
@@ -16,6 +40,7 @@ NeonDojo is a local backgammon application for importing matches, finding positi
 - Python 3.10 or later for the frontend build and development scripts
 - A local GNUbg installation with its neural network weights. Playing also requires GNUbg's embedded Python module. Analysis and playing were tested with GNUbg 1.08.003 on macOS. Earlier analysis checks used 1.05.002.
 - Optional: NeonGammon 3.0.0 as a second engine. See [Local NeonGammon setup](docs/open-sage-local.md).
+- The BGBlitz theme archives listed in `shared/configuration-options.json`, copied into `themes/`. They are local third-party files and not part of the repository. Without them, `npm run build` and `npm run dev` stop and name the missing ZIP files. See [Board artwork](docs/reference/settings.md#board-artwork) and [Board theme formats](themes/README.md).
 
 ### Database and engine
 
@@ -104,7 +129,7 @@ Open <http://127.0.0.1:5173>. Vite forwards `/api` to `http://127.0.0.1:8787` by
 
 ## Analyze your first match
 
-1. In **Match database**, choose **Import match** and open [tutorial.mat](backend/tests/fixtures/tutorial.mat) or the reference match [WC2014.xg](backend/tests/fixtures/WC2014.xg). You can also drop a file on the welcome screen. Search by player or file name to find an imported match. Use the numbered navigation to browse results or jump to the first or last page.
+1. In **Match database**, choose **Import match** and open [tutorial.mat](backend/tests/fixtures/tutorial.mat) or the reference match [WC2014.xg](backend/tests/fixtures/WC2014.xg). **Import folder** imports every supported file of a folder and its subfolders. You can also drop files or a folder on the welcome screen. Search by player or file name to find an imported match. Use the numbered navigation to browse results or jump to the first or last page.
 2. In **Analysis**, use **Select game** or its adjacent arrows to choose a game. The selector shows the game number, starting score, move count, and Crawford status when applicable. The move history stays within the selected game and loads more moves as needed.
 3. Select a move. The board shows the decision position before the recorded play, together with the score and doubling cube. Point numbering and notation follow the player on roll. Pip counts include checkers on the bar.
 4. In the Analysis header, open **Analysis options → Recalculate position …**, choose a depth, then select **Analyze position** to queue a persistent job. The default is 3-ply. Depths follow [one ply convention](docs/reference/settings.md#ply-convention) for both engines. The result includes up to five candidate moves, cubeful equity, and win probabilities.
