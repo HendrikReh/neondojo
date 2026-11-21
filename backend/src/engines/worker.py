@@ -10,11 +10,14 @@ import os
 import resource
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from types import ModuleType
 
 MAX_REQUEST = 262144
 MAX_RESPONSE = 2097152
 ADAPTER_VERSION = 1
+TOP_TWO_GAP = 0.010
 
 
 def process_cpu_us():
@@ -65,6 +68,7 @@ class Runtime:
         if type(self.cubeless) is not bool:
             raise ValueError('Invalid NeonGammon cubeless flag')
         self.batch_active = False
+        self.top_two_pool = None
         self.opponent_policies = {}
         self.identity = self.check_identity()
         expected = profile.get('artifact_fingerprint')
@@ -104,6 +108,45 @@ class Runtime:
     def verify(self):
         if self.check_identity() != self.identity:
             raise ValueError('NeonGammon installation changed during evaluation')
+
+    def top_two_candidates(self, before, moves, context):
+        if len(moves) < 2 or self.sage.board.is_race(before):
+            return moves, '2-ply'
+        first, second = moves[:2]
+        if any(move.eval_level != '2-ply' for move in (first, second)):
+            raise ValueError('NeonGammon did not evaluate both leading candidates at 2-ply')
+        if first.equity - second.equity > TOP_TWO_GAP:
+            return moves, '2-ply'
+
+        analyzer = self.sage.analyzer
+        inner = self.analyzer._analyzer._inner
+        owner = analyzer._FLIP_OWNER[analyzer.resolve_owner(context['cube_owner'])]
+        away1, away2 = context['away1'], context['away2']
+        money = not away1 and not away2
+
+        def evaluate(move):
+            # The native checker search roots routing at the board before the move.
+            result = self.native.cubeful_probs_and_equity_nply(
+                self.native.flip_board(move.board), owner, inner._strategy_1ply, 3,
+                filter_max_moves=inner.FILTER_MAX_MOVES,
+                filter_threshold=inner.FILTER_THRESHOLD, n_threads=1,
+                cube_value=context['cube_value'], away1=away2, away2=away1,
+                is_crawford=context['is_crawford'], jacoby=context['jacoby'],
+                beaver=context['beaver'], root_board=before,
+                contact_x=analyzer._contact_cube_life(3, away1, away2) if money else -1.0,
+                contact_x_pip_slope=analyzer._contact_cube_slope(3, away1, away2) if money else 0.0,
+            )
+            win, gammon_win, bg_win, gammon_loss, bg_loss = result['probs']
+            probs = [1.0 - win, gammon_loss, bg_loss, gammon_win, bg_win]
+            cubeless = 2.0 * probs[0] - 1.0 + gammon_loss - gammon_win + bg_loss - bg_win
+            return replace(move, equity=-result['equity'], cubeless_equity=cubeless,
+                           probs=type(move.probs).from_list(probs), eval_level='3-ply')
+
+        if self.top_two_pool is None:
+            self.top_two_pool = ThreadPoolExecutor(max_workers=2)
+        scored = sorted(self.top_two_pool.map(evaluate, (first, second)),
+                        key=lambda move: (-move.equity, -move.cubeless_equity, move.board))
+        return scored, '3-ply'
 
     def opponent_policy(self, difficulty, seed):
         module_name = 'neondojo_opponent_policy'
@@ -169,7 +212,10 @@ class Runtime:
             elif operation == 'checker':
                 forced = request.get('force_board')
                 all_legal = request.get('all_legal', False)
-                if type(all_legal) is not bool or all_legal and forced is not None:
+                top_two = request.get('top_two', False)
+                if (type(all_legal) is not bool or type(top_two) is not bool
+                        or sum((all_legal, top_two, forced is not None)) > 1
+                        or top_two and (self.cubeless or self.profile['plies'] != 2)):
                     raise ValueError('Invalid checker candidate scope')
                 force_boards = None
                 if forced is not None:
@@ -181,14 +227,17 @@ class Runtime:
                     # Hints rate every legal move, so search all of them at full depth.
                     force_boards = [board(list(move)) for move in self.sage.possible_moves(before, *dice)]
                 result = self.analyzer.checker_play(before, *dice, force_boards=force_boards, **kwargs)
+                candidates, depth = result.moves, f"{self.profile['plies']}-ply"
+                if top_two:
+                    candidates, depth = self.top_two_candidates(before, candidates, kwargs)
                 from neongammon.text_export import compute_move_notation
                 moves = []
-                for move in result.moves:
+                for move in candidates:
                     try:
                         self.integrity['validate_result'](move, probabilities)
                     except Exception as error:
                         raise ValueError(f'Invalid checker evaluation: probabilities={move.probs.to_list()}, board={before}, dice={dice}, context={context}; {error}') from error
-                    if move.eval_level != f"{self.profile['plies']}-ply":
+                    if move.eval_level != depth:
                         # The cubeless path and, from fork release 2.0.20261119,
                         # cubeful 2-ply prune weaker candidates to 1-ply. Keep
                         # only fully searched ones, which include the engine's

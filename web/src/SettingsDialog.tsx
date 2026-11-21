@@ -30,6 +30,7 @@ import {
   isAnalysisDepth,
   PLAY_PLIES,
   preferredDepth,
+  TOP_TWO_PLAY_STRENGTH,
 } from './analysis-depth';
 import {
   useEffect,
@@ -808,7 +809,11 @@ export default function SettingsDialog({
             update(
               area === 'analysis'
                 ? { analysis_engine: value, analysis_plies: depth }
-                : { play_engine: value, play_plies: depth },
+                : {
+                    play_engine: value,
+                    play_plies: depth,
+                    play_top_two: false,
+                  },
             );
           }}
         >
@@ -1364,10 +1369,19 @@ export default function SettingsDialog({
                       <select
                         id={`${id}-play-strength`}
                         aria-label={t('playStrength')}
-                        value={draft.play_plies}
-                        onChange={(event) =>
-                          update({ play_plies: Number(event.target.value) })
+                        value={
+                          draft.play_top_two
+                            ? TOP_TWO_PLAY_STRENGTH
+                            : draft.play_plies
                         }
+                        onChange={(event) => {
+                          const topTwo =
+                            event.target.value === TOP_TWO_PLAY_STRENGTH;
+                          update({
+                            play_plies: topTwo ? 2 : Number(event.target.value),
+                            play_top_two: topTwo,
+                          });
+                        }}
                       >
                         {PLAY_PLIES.map((ply) => (
                           <option
@@ -1378,6 +1392,12 @@ export default function SettingsDialog({
                             {playStrengthLabel(t, ply, draft.play_engine)}
                           </option>
                         ))}
+                        {draft.play_engine === 'bgsage' &&
+                          playPlies.includes(2) && (
+                            <option value={TOP_TWO_PLAY_STRENGTH}>
+                              {playStrengthLabel(t, 2, draft.play_engine, true)}
+                            </option>
+                          )}
                       </select>
                     </label>
                   </div>

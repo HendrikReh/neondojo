@@ -161,6 +161,30 @@ class BatchTests(unittest.TestCase):
         self.assertEqual(calls, [legal])
         self.assertEqual([move['board'] for move in moves], legal)
 
+    def test_top_two_only_changes_the_checker_request_and_keeps_cube_at_two_ply(self):
+        boards = [[0, 0, 0, 0, 0, 0, n] + [0] * 19 for n in (1, 2, 3)]
+        probs = SimpleNamespace(to_list=lambda: [.6, .1, .02, .1, .01])
+        moves = [SimpleNamespace(eval_level='2-ply', board=b, equity=e, probs=probs)
+                 for b, e in zip(boards, [.15, .145, .14])]
+        self.runtime.analyzer.checker_play = Mock(return_value=SimpleNamespace(moves=moves))
+        self.runtime.analyzer.cube_action = Mock(wraps=self.runtime.analyzer.cube_action)
+        self.runtime.top_two_candidates = Mock(return_value=([
+            SimpleNamespace(eval_level='3-ply', board=b, equity=e, probs=probs)
+            for b, e in zip(boards[1::-1], [.16, .15])], '3-ply'))
+        checker = dict(self.cube, operation='checker', dice=[3, 1])
+        notation = SimpleNamespace(compute_move_notation=lambda *args: '8/5 6/5')
+        with patch.dict(sys.modules, {'neongammon.text_export': notation}):
+            standard, _ = self.runtime.dispatch(checker)
+            selected, _ = self.runtime.dispatch(dict(checker, top_two=True))
+            self.assertEqual([move['board'] for move in standard], boards)
+            self.assertEqual([move['board'] for move in selected], boards[1::-1])
+            self.runtime.top_two_candidates.assert_called_once()
+            with self.assertRaisesRegex(ValueError, 'Invalid checker candidate scope'):
+                self.runtime.dispatch(dict(checker, top_two=True, all_legal=True))
+        cube, _ = self.runtime.dispatch(self.cube)
+        self.assertEqual(cube['take'], .3)
+        self.runtime.analyzer.cube_action.assert_called_once()
+
     def test_rejects_cube_depth_below_profile(self):
         self.runtime.profile = {'plies': 3}
         with self.assertRaisesRegex(ValueError, 'below the requested depth'):

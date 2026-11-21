@@ -67,6 +67,7 @@ export function settingsFromConfiguration(
     analysis_plies: configuration.analysis.plies,
     play_engine: configuration.play.engine,
     play_plies: configuration.play.plies,
+    play_top_two: configuration.play.top_two ?? false,
     default_play_mode: configuration.play.default_mode,
     tutor_threshold: configuration.play.tutor_threshold,
     training_auto_analysis: configuration.play.training_auto_analysis,
@@ -98,6 +99,7 @@ function profileSettings(draft: SettingsDraft) {
     play: {
       engine: settings.play_engine,
       plies: settings.play_plies,
+      top_two: settings.play_top_two ?? false,
       default_mode:
         settings.default_play_mode ?? defaultConfiguration.play.default_mode,
       tutor_threshold:
@@ -146,12 +148,17 @@ export function applySettingsDraft(
     )
   )
     analysis.error_thresholds = thresholds;
-  // Engine and depth form one setting because supported depths depend on the engine.
+  // Keep each engine profile together when merging a draft into a newer profile.
   if (analysis.engine !== undefined || analysis.plies !== undefined)
     Object.assign(analysis, values.analysis);
-  if (play.engine !== undefined || play.plies !== undefined) {
+  if (
+    play.engine !== undefined ||
+    play.plies !== undefined ||
+    play.top_two !== undefined
+  ) {
     play.engine = values.play.engine;
     play.plies = values.play.plies;
+    play.top_two = values.play.top_two;
   }
   return {
     ...current,

@@ -618,9 +618,12 @@ export const playStrengthLabel = (
   t: SettingsText,
   ply: number,
   engine: string,
+  topTwo = false,
 ) =>
-  depthOptionLabel(t, ply, engine, [
-    'strengthQuick',
-    'strengthStronger',
-    'strengthStrongest',
-  ]);
+  topTwo
+    ? '2-ply + Top-2 (10 mEq)'
+    : depthOptionLabel(t, ply, engine, [
+        'strengthQuick',
+        'strengthStronger',
+        'strengthStrongest',
+      ]);

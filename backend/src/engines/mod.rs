@@ -91,6 +91,8 @@ enum CheckerScope {
     Played([i32; 26]),
     /// Every legal move.
     AllLegal,
+    /// The playing bot's selective 3-ply search over the two leading candidates.
+    BotTopTwo,
 }
 
 #[derive(Clone)]
@@ -305,6 +307,15 @@ impl SageEngine {
             .await
     }
 
+    pub(crate) async fn top_two_checker_boards(
+        &self,
+        position_id: &str,
+        match_id: &str,
+    ) -> Result<(Vec<SageCheckerCandidate>, Option<EngineCost>)> {
+        self.checker_boards_scoped(position_id, match_id, None, CheckerScope::BotTopTwo, None)
+            .await
+    }
+
     async fn checker_boards_with_batch(
         &self,
         position_id: &str,
@@ -359,6 +370,7 @@ impl SageEngine {
                 payload["force_board"] = json!(context::to_sage(&played, context.player));
             }
             CheckerScope::AllLegal => payload["all_legal"] = json!(true),
+            CheckerScope::BotTopTwo => payload["top_two"] = json!(true),
         }
         let (result, cost) = self.request_with_batch(payload, batch).await?;
         let mut candidates: Vec<SageCheckerCandidate> = serde_json::from_value(result)?;

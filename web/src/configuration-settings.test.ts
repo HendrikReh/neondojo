@@ -126,4 +126,27 @@ describe('settings/profile boundary', () => {
     expect(JSON.stringify(updated)).not.toContain('/different/path');
     expect(current.general.player_name).not.toBe('After');
   });
+
+  it('keeps the Top-2 profile valid when the current engine changed in another tab', () => {
+    const initial = {
+      settings: { ...installed, play_engine: 'bgsage' as const, play_plies: 2 },
+      locale: 'en' as const,
+      theme: 'walnut',
+      appearance: { theme: 'paper' as const, mode: 'dark' as const },
+      sounds: false,
+    };
+    const updated = applySettingsDraft(
+      defaultConfiguration,
+      {
+        ...initial,
+        settings: { ...initial.settings, play_top_two: true },
+      },
+      initial,
+    );
+    expect(updated.play).toMatchObject({
+      engine: 'bgsage',
+      plies: 2,
+      top_two: true,
+    });
+  });
 });

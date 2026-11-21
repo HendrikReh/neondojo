@@ -90,6 +90,10 @@ function parseSettings(value: unknown): AppSettings {
       typeof value.training_auto_analysis !== 'boolean') ||
     typeof value.analysis_plies !== 'number' ||
     typeof value.play_plies !== 'number' ||
+    (value.play_top_two !== undefined &&
+      typeof value.play_top_two !== 'boolean') ||
+    (value.play_top_two === true &&
+      (value.play_engine !== 'bgsage' || value.play_plies !== 2)) ||
     typeof value.gnubg_path !== 'string' ||
     !isThreadLimit(value.gnubg_threads, 'gnubg') ||
     !isThreadLimit(value.gnubg_play_threads, 'gnubg') ||

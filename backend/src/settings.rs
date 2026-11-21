@@ -35,6 +35,9 @@ pub struct AppSettings {
     /// Depth in NeonDojo's ply convention; 1-ply is the raw evaluation.
     #[schema(minimum = 1, maximum = 3, default = 1)]
     pub play_plies: i32,
+    /// Rescore the two closest NeonGammon 2-ply checker plays at 3-ply.
+    #[serde(default)]
+    pub play_top_two: bool,
     pub gnubg_path: String,
     /// Host-local override for analyses and engine duels. Null uses one GNUbg calculation thread. Omit on PUT to keep the saved value.
     #[schema(minimum = 1)]
@@ -59,6 +62,7 @@ pub struct AppSettings {
 struct SettingsUpdate {
     #[serde(flatten)]
     settings: AppSettings,
+    play_top_two: Option<bool>,
     #[serde(default, deserialize_with = "thread_override")]
     gnubg_threads: Option<Option<i32>>,
     #[serde(default, deserialize_with = "thread_override")]
@@ -343,6 +347,12 @@ fn validate_path(path: &str) -> ApiResult<()> {
     }
     Ok(())
 }
+
+pub(crate) const TOP_TWO_PROFILE_ERROR: &str = "Top-2 play requires NeonGammon 2-ply";
+
+pub(crate) fn supports_top_two(engine: &str, plies: i32) -> bool {
+    engine == "bgsage" && plies == 2
+}
 fn validate_threads(engine: &str, threads: Option<i32>) -> ApiResult<()> {
     let Some(threads) = threads else {
         return Ok(());
@@ -386,6 +396,9 @@ fn validate(settings: &AppSettings) -> ApiResult<()> {
     if !valid_player_name(&settings.player_name) {
         return Err(ApiError::invalid(PLAYER_NAME_RULE));
     }
+    if settings.play_top_two && !supports_top_two(&settings.play_engine, settings.play_plies) {
+        return Err(ApiError::invalid(TOP_TWO_PROFILE_ERROR));
+    }
     for (id, purpose, plies) in [
         (
             &settings.analysis_engine,
@@ -418,16 +431,21 @@ async fn put_settings(
 ) -> ApiResult<Json<AppSettings>> {
     let Json(SettingsUpdate {
         mut settings,
+        play_top_two,
         gnubg_threads,
         gnubg_play_threads,
         open_sage_threads,
         open_sage_play_threads,
         parallel_analysis_jobs,
     }) = payload.map_err(|e| ApiError::invalid(e.body_text()))?;
+    settings.play_top_two = play_top_two.unwrap_or(false);
     validate(&settings)?;
     let current = load(&state).await?;
     if current.version != settings.version {
         return Err(conflict());
+    }
+    if play_top_two.is_none() && supports_top_two(&settings.play_engine, settings.play_plies) {
+        settings.play_top_two = current.play_top_two;
     }
     settings.gnubg_threads = gnubg_threads.unwrap_or(current.gnubg_threads);
     settings.gnubg_play_threads = gnubg_play_threads.unwrap_or(current.gnubg_play_threads);
@@ -492,12 +510,13 @@ async fn put_settings(
     crate::configuration::store::lock(&mut tx)
         .await
         .map_err(anyhow::Error::from)?;
-    let saved: Option<AppSettings> = sqlx::query_as("UPDATE app_settings SET version=version+1,player_name=$2,analysis_engine=$3,analysis_plies=$4,play_engine=$5,play_plies=$6,gnubg_path=$7,gnubg_version=$8,bearoff_direction=$9,default_play_mode=$10,tutor_threshold=$11,training_auto_analysis=$12,gnubg_threads=$13,open_sage_threads=$14,gnubg_play_threads=$15,open_sage_play_threads=$16,parallel_analysis_jobs=$17 WHERE singleton=true AND version=$1 RETURNING *")
+    let saved: Option<AppSettings> = sqlx::query_as("UPDATE app_settings SET version=version+1,player_name=$2,analysis_engine=$3,analysis_plies=$4,play_engine=$5,play_plies=$6,gnubg_path=$7,gnubg_version=$8,bearoff_direction=$9,default_play_mode=$10,tutor_threshold=$11,training_auto_analysis=$12,gnubg_threads=$13,open_sage_threads=$14,gnubg_play_threads=$15,open_sage_play_threads=$16,parallel_analysis_jobs=$17,play_top_two=$18 WHERE singleton=true AND version=$1 RETURNING *")
         .bind(settings.version).bind(settings.player_name).bind(settings.analysis_engine).bind(settings.analysis_plies)
         .bind(settings.play_engine).bind(settings.play_plies).bind(settings.gnubg_path).bind(version).bind(settings.bearoff_direction).bind(settings.default_play_mode).bind(settings.tutor_threshold).bind(settings.training_auto_analysis)
         .bind(settings.gnubg_threads).bind(settings.open_sage_threads)
         .bind(settings.gnubg_play_threads).bind(settings.open_sage_play_threads)
         .bind(settings.parallel_analysis_jobs)
+        .bind(settings.play_top_two)
         .fetch_optional(&mut *tx).await.map_err(anyhow::Error::from)?;
     let saved = saved.ok_or_else(conflict)?;
     crate::configuration::store::legacy_app(&mut tx, &saved)

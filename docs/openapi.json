@@ -12900,6 +12900,10 @@
             "maximum": 3,
             "minimum": 1
           },
+          "play_top_two": {
+            "type": "boolean",
+            "description": "Rescore the two closest NeonGammon 2-ply checker plays at 3-ply."
+          },
           "player_name": {
             "type": "string"
           },
@@ -15259,6 +15263,9 @@
             "type": "integer",
             "format": "int32"
           },
+          "top_two": {
+            "type": "boolean"
+          },
           "training_auto_analysis": {
             "type": "boolean"
           },
@@ -15552,6 +15559,13 @@
             ],
             "format": "int32",
             "description": "Bot strength for this match only; must be a verified play depth of the chosen engine."
+          },
+          "play_top_two": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Selective 3-ply for NeonGammon's two leading checker candidates."
           },
           "training_auto_analysis": {
             "type": [
@@ -20052,6 +20066,10 @@
           "plies": {
             "type": "integer",
             "format": "int32"
+          },
+          "top_two": {
+            "type": "boolean",
+            "description": "Pinned checker selection policy for this session."
           },
           "version": {
             "type": "string"

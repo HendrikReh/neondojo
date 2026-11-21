@@ -191,6 +191,7 @@ pub(crate) fn apply_app(config: &mut ProfileConfiguration, app: &crate::settings
     };
     config.analysis.plies = app.analysis_plies;
     config.play.plies = app.play_plies;
+    config.play.top_two = app.play_top_two;
     config.play.default_mode = app.default_play_mode;
     config.play.tutor_threshold = app.tutor_threshold;
     config.play.training_auto_analysis = app.training_auto_analysis;
@@ -221,8 +222,8 @@ pub(crate) async fn projections(
 ) -> Result<()> {
     let a = &config.analysis;
     let p = &config.play;
-    sqlx::query("UPDATE app_settings SET version=version+1,player_name=$1,analysis_engine=$2,analysis_plies=$3,play_engine=$4,play_plies=$5,bearoff_direction=$6,default_play_mode=$7,tutor_threshold=$8,training_auto_analysis=$9 WHERE singleton=true AND (player_name,analysis_engine,analysis_plies,play_engine,play_plies,bearoff_direction,default_play_mode,tutor_threshold,training_auto_analysis) IS DISTINCT FROM ($1,$2,$3,$4,$5,$6,$7,$8,$9)")
-        .bind(&config.general.player_name).bind(enum_string(&a.engine)).bind(a.plies).bind(enum_string(&p.engine)).bind(p.plies).bind(enum_string(&config.appearance.bearoff_direction)).bind(p.default_mode).bind(p.tutor_threshold).bind(p.training_auto_analysis).execute(&mut **tx).await?;
+    sqlx::query("UPDATE app_settings SET version=version+1,player_name=$1,analysis_engine=$2,analysis_plies=$3,play_engine=$4,play_plies=$5,bearoff_direction=$6,default_play_mode=$7,tutor_threshold=$8,training_auto_analysis=$9,play_top_two=$10 WHERE singleton=true AND (player_name,analysis_engine,analysis_plies,play_engine,play_plies,bearoff_direction,default_play_mode,tutor_threshold,training_auto_analysis,play_top_two) IS DISTINCT FROM ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)")
+        .bind(&config.general.player_name).bind(enum_string(&a.engine)).bind(a.plies).bind(enum_string(&p.engine)).bind(p.plies).bind(enum_string(&config.appearance.bearoff_direction)).bind(p.default_mode).bind(p.tutor_threshold).bind(p.training_auto_analysis).bind(p.top_two).execute(&mut **tx).await?;
     let b = &config.opening_book;
     sqlx::query("UPDATE opening_book_settings SET version=version+1,provider=$1,path=$2,xg_path=$3 WHERE singleton=true AND (provider,path,xg_path) IS DISTINCT FROM ($1,$2,$3)").bind(enum_string(&b.provider)).bind(&b.path).bind(&b.xg_path).execute(&mut **tx).await?;
     Ok(())
@@ -256,7 +257,8 @@ pub(crate) async fn update(
         let old = &before.current_configuration;
         let engine = value(&config)["analysis"]["engine"] != value(old)["analysis"]["engine"]
             || config.analysis.plies != old.analysis.plies
-            || config.play.plies != old.play.plies;
+            || config.play.plies != old.play.plies
+            || config.play.top_two != old.play.top_two;
         let book = value(&config)["opening_book"] != value(old)["opening_book"];
         let issues = resources(state_ref, &mut tx, &config, engine, book).await?;
         if !issues.is_empty() {

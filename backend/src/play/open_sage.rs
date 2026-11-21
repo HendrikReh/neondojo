@@ -58,14 +58,21 @@ type CheckerChoice = (
     Option<EngineCost>,
 );
 
-async fn chosen_move(bot: &SageEngine, snapshot: &NativeSnapshot) -> Result<CheckerChoice> {
+async fn chosen_move(
+    bot: &SageEngine,
+    snapshot: &NativeSnapshot,
+    top_two: bool,
+) -> Result<CheckerChoice> {
     let (position, context) = snapshot
         .native_id
         .split_once(':')
         .context("Invalid native ID")?;
-    let (mut candidates, cost) = bot
-        .checker_boards_costed(position, context, None, None)
-        .await?;
+    let (mut candidates, cost) = if top_two {
+        bot.top_two_checker_boards(position, context).await?
+    } else {
+        bot.checker_boards_costed(position, context, None, None)
+            .await?
+    };
     let best = candidates
         .first()
         .context("NeonGammon returned no chosen move")?;
@@ -127,7 +134,11 @@ pub(super) struct ChosenAction {
     pub cost: Option<EngineCost>,
 }
 
-pub(super) async fn choose(bot: &SageEngine, snapshot: &NativeSnapshot) -> Result<ChosenAction> {
+pub(super) async fn choose(
+    bot: &SageEngine,
+    snapshot: &NativeSnapshot,
+    top_two: bool,
+) -> Result<ChosenAction> {
     let (position, context) = snapshot
         .native_id
         .split_once(':')
@@ -138,7 +149,7 @@ pub(super) async fn choose(bot: &SageEngine, snapshot: &NativeSnapshot) -> Resul
     let mut cost = Some(EngineCost::default());
     let action = match snapshot.phase {
         PlayPhase::Move => {
-            let (chosen, candidates, measured) = chosen_move(bot, snapshot).await?;
+            let (chosen, candidates, measured) = chosen_move(bot, snapshot, top_two).await?;
             cost = measured;
             notation = chosen;
             checker = Some(candidates);
@@ -312,7 +323,7 @@ pub(super) async fn advance(
                 )
                 .await?
             } else {
-                let choice = choose(bot, &snapshot).await?;
+                let choice = choose(bot, &snapshot, session.engine.top_two).await?;
                 (choice.action, choice.notation)
             };
             let request = NativeRequest {
@@ -364,7 +375,7 @@ pub(super) async fn benchmark_checker_turn(
             before.player == bot_player && before.dice == dice,
             "Benchmark checkpoint differs from reference"
         );
-        let (notation, _, _) = chosen_move(bot, &before).await?;
+        let (notation, _, _) = chosen_move(bot, &before, false).await?;
         request.action = if notation.is_some() { "move" } else { "pass" };
         request.notation = notation.as_deref();
         request.native_id = &before.native_id;

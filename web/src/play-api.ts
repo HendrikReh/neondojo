@@ -61,6 +61,7 @@ export const createPlaySession = (
     | 'human_name'
     | 'play_engine'
     | 'play_plies'
+    | 'play_top_two'
     | 'play_difficulty'
   >,
 ) =>

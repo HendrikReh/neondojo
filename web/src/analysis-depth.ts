@@ -10,6 +10,8 @@ export type DepthEngine = keyof typeof configurationOptions.engine_profiles;
 /** GNUbg's former 2-ply default, unchanged in strength. */
 export const DEFAULT_ANALYSIS_PLIES = 3;
 
+export const TOP_TWO_PLAY_STRENGTH = 'top-two';
+
 /** All analysis depths any engine supports, ascending. */
 export const ANALYSIS_PLIES: readonly number[] = [
   ...new Set(

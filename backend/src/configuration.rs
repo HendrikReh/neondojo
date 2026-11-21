@@ -182,6 +182,8 @@ pub struct ConfigurationAnalysis {
 pub struct ConfigurationPlay {
     pub engine: ConfigurationEngine,
     pub plies: i32,
+    #[serde(default)]
+    pub top_two: bool,
     pub default_mode: crate::play::PlayMode,
     pub tutor_threshold: f64,
     pub training_auto_analysis: bool,

@@ -80,6 +80,7 @@ export interface ProfileConfiguration {
   play: {
     engine: 'gnubg' | 'bgsage';
     plies: number;
+    top_two?: boolean;
     default_mode: PlayMode;
     tutor_threshold: number;
     training_auto_analysis: boolean;
@@ -145,6 +146,7 @@ export const defaultConfiguration: ProfileConfiguration = {
   play: {
     engine: 'gnubg',
     plies: 1,
+    top_two: false,
     default_mode: 'coach',
     tutor_threshold: 0.04,
     training_auto_analysis: true,
@@ -267,7 +269,9 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
           ? ['visible_columns']
           : key === 'analysis'
             ? ['error_thresholds']
-            : [];
+            : key === 'play'
+              ? ['top_two']
+              : [];
     exactKeys(
       value[key],
       Object.keys(
@@ -300,12 +304,15 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
     c.analysis.error_thresholds = { ...defaultErrorThresholds };
   if (!validErrorThresholds(c.analysis.error_thresholds))
     invalid('analysis.error_thresholds');
+  if (c.play.top_two === undefined) c.play.top_two = false;
   if (
     !['gnubg', 'bgsage'].includes(c.play.engine) ||
     !Number.isInteger(c.play.plies) ||
     !configurationOptions.engine_profiles[c.play.engine].play.includes(
       c.play.plies,
     ) ||
+    typeof c.play.top_two !== 'boolean' ||
+    (c.play.top_two && (c.play.engine !== 'bgsage' || c.play.plies !== 2)) ||
     !isPlayMode(c.play.default_mode) ||
     !Number.isFinite(c.play.tutor_threshold) ||
     c.play.tutor_threshold <= 0 ||

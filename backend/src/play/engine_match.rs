@@ -228,7 +228,7 @@ pub(crate) async fn play(
             let Some(AnalysisEngine::OpenSage(bot)) = bots.get(side) else {
                 anyhow::bail!("GNUbg did not yield to an external engine");
             };
-            let chosen = open_sage::choose(bot, &snapshot).await?;
+            let chosen = open_sage::choose(bot, &snapshot, false).await?;
             meter.add(side, chosen.cost);
             if let Some(candidates) = chosen.checker {
                 checker_evaluations.push((

@@ -1,7 +1,11 @@
 import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
 import { playStrengthLabel, useSettingsText } from './settings-messages';
 import { loadEngines, type EngineInfo } from './settings-api';
-import { preferredDepth, type DepthEngine } from './analysis-depth';
+import {
+  preferredDepth,
+  TOP_TWO_PLAY_STRENGTH,
+  type DepthEngine,
+} from './analysis-depth';
 import EngineLabel from './EngineLabel';
 import Tooltip from './Tooltip';
 import { useConfirmedConfiguration } from './ConfigurationProvider';
@@ -246,6 +250,7 @@ export default function PlayWorkspace({
     name?: string;
     engine?: DepthEngine;
     plies?: number;
+    topTwo?: boolean;
     difficulty?: SageDifficulty;
   }>({});
   const confirmed = useConfirmedConfiguration();
@@ -275,29 +280,41 @@ export default function PlayWorkspace({
     confirmed?.general.player_name ??
     settings?.player_name ??
     '';
-  const botEngine =
-    setupOptions.engine ??
-    confirmed?.play.engine ??
-    settings?.play_engine ??
-    defaults.engine;
+  const savedBotEngine =
+    confirmed?.play.engine ?? settings?.play_engine ?? defaults.engine;
+  const botEngine = setupOptions.engine ?? savedBotEngine;
   const botDepths = configurationOptions.engine_profiles[botEngine].play;
   const botDifficulty =
     botEngine === 'bgsage' ? setupOptions.difficulty : undefined;
   const requestedPlies =
     setupOptions.plies ??
-    confirmed?.play.plies ??
-    settings?.play_plies ??
-    defaults.plies;
+    (botEngine === savedBotEngine
+      ? (confirmed?.play.plies ?? settings?.play_plies ?? defaults.plies)
+      : preferredDepth(botEngine));
   const botPlies = botDepths.includes(requestedPlies)
     ? requestedPlies
     : botDepths.includes(preferredDepth(botEngine))
       ? preferredDepth(botEngine)
       : botDepths[0];
+  const botTopTwo =
+    botEngine === 'bgsage' &&
+    botPlies === 2 &&
+    (setupOptions.topTwo ??
+      confirmed?.play.top_two ??
+      settings?.play_top_two ??
+      false);
   const sessionStrength =
     session &&
     (session.engine.difficulty
       ? t(session.engine.difficulty)
-      : `${session.engine.plies}-ply`);
+      : session.engine.top_two
+        ? playStrengthLabel(
+            settingsT,
+            session.engine.plies,
+            session.engine.id,
+            true,
+          )
+        : `${session.engine.plies}-ply`);
   const setupOpen = visible && setup;
   const [idleFlipX, idleFlipY] = boardFlips(
     human,
@@ -538,7 +555,11 @@ export default function PlayWorkspace({
           : setupOptions.engine === undefined &&
               setupOptions.plies === undefined
             ? {}
-            : { play_engine: botEngine, play_plies: botPlies }),
+            : {
+                play_engine: botEngine,
+                play_plies: botPlies,
+                play_top_two: botTopTwo,
+              }),
       }),
     );
   }
@@ -1345,6 +1366,8 @@ export default function PlayWorkspace({
                         setSetupOptions({
                           ...setupOptions,
                           engine: value,
+                          plies: undefined,
+                          topTwo: false,
                           difficulty: undefined,
                         });
                     }}
@@ -1369,17 +1392,26 @@ export default function PlayWorkspace({
                 <label>
                   {t('strength')}
                   <select
-                    value={botDifficulty ?? botPlies}
+                    value={
+                      botDifficulty ??
+                      (botTopTwo ? TOP_TWO_PLAY_STRENGTH : botPlies)
+                    }
                     disabled={setupDisabled}
                     onChange={(event) => {
                       const value = event.target.value;
                       const difficulty = sageDifficulties.find(
                         ({ id }) => id === value,
                       );
+                      const topTwo = value === TOP_TWO_PLAY_STRENGTH;
                       setSetupOptions({
                         ...setupOptions,
                         engine: botEngine,
-                        plies: difficulty ? undefined : Number(value),
+                        plies: difficulty
+                          ? undefined
+                          : topTwo
+                            ? 2
+                            : Number(value),
+                        topTwo,
                         difficulty: difficulty?.id,
                       });
                     }}
@@ -1413,6 +1445,11 @@ export default function PlayWorkspace({
                         {playStrengthLabel(settingsT, ply, botEngine)}
                       </option>
                     ))}
+                    {botEngine === 'bgsage' && botDepths.includes(2) && (
+                      <option value={TOP_TWO_PLAY_STRENGTH}>
+                        {playStrengthLabel(settingsT, 2, botEngine, true)}
+                      </option>
+                    )}
                   </select>
                 </label>
               </div>

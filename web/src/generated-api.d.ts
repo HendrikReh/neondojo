@@ -2948,6 +2948,8 @@ export interface components {
              * @default 1
              */
             play_plies: number;
+            /** @description Rescore the two closest NeonGammon 2-ply checker plays at 3-ply. */
+            play_top_two?: boolean;
             player_name: string;
             training_auto_analysis?: boolean;
             /** Format: double */
@@ -3577,6 +3579,7 @@ export interface components {
             match_length: number;
             /** Format: int32 */
             plies: number;
+            top_two?: boolean;
             training_auto_analysis: boolean;
             /** Format: double */
             tutor_threshold: number;
@@ -3657,6 +3660,8 @@ export interface components {
              * @description Bot strength for this match only; must be a verified play depth of the chosen engine.
              */
             play_plies?: number | null;
+            /** @description Selective 3-ply for NeonGammon's two leading checker candidates. */
+            play_top_two?: boolean | null;
             training_auto_analysis?: boolean | null;
             /** Format: double */
             tutor_threshold?: number | null;
@@ -5035,6 +5040,8 @@ export interface components {
             id: string;
             /** Format: int32 */
             plies: number;
+            /** @description Pinned checker selection policy for this session. */
+            top_two?: boolean;
             version: string;
         };
         PlayEngineSnapshots: {

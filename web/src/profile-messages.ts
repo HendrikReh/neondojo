@@ -553,6 +553,14 @@ const rows = {
     'Profondità (ply)',
     'Głębokość (ply)',
   ],
+  top_two: [
+    'Top-2 re-evaluation (10 mEq)',
+    'Top-2-Nachbewertung (10 mEq)',
+    'Reevaluación de las dos mejores jugadas (10 mEq)',
+    'Réévaluation des deux meilleurs coups (10 mEq)',
+    'Rivalutazione delle due mosse migliori (10 mEq)',
+    'Ponowna ocena dwóch najlepszych ruchów (10 mEq)',
+  ],
   scope: [
     'Analysis scope',
     'Analyseumfang',

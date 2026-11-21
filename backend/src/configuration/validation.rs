@@ -134,6 +134,14 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
             "Play depth is not verified for the selected engine",
         ));
     }
+    if config.play.top_two
+        && !crate::settings::supports_top_two(&enum_string(&config.play.engine), config.play.plies)
+    {
+        return Err(ConfigurationError::invalid(
+            "play.top_two",
+            crate::settings::TOP_TWO_PROFILE_ERROR,
+        ));
+    }
     if !(0..=1).contains(&config.play.human_player) || !(0..=25).contains(&config.play.match_length)
     {
         return Err(ConfigurationError::invalid(

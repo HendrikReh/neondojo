@@ -121,6 +121,107 @@ test('independent native engines, immutable sessions and desktop settings', asyn
   expect(resumed.engine_snapshots).toEqual(first.engine_snapshots);
 });
 
+test('NeonGammon Top-2 is opt-in and saved with the match', async ({
+  page,
+}, info) => {
+  test.setTimeout(90_000);
+  const { version } = await (
+    await page.request.get('/api/engines/bgsage')
+  ).json();
+  const installed = await page.request.put('/api/engines/bgsage', {
+    data: { version, path: process.env.NEONDOJO_SAGE_PYTHON },
+  });
+  expect(installed.status(), await installed.text()).toBe(200);
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
+  await settings.getByRole('button', { name: 'Playing', exact: true }).click();
+  const futureStrength = settings.getByLabel('Strength for future games', {
+    exact: true,
+  });
+  await expect(futureStrength.locator('option[value="top-two"]')).toHaveCount(
+    0,
+  );
+  await settings
+    .getByLabel('Engine for future games', { exact: true })
+    .selectOption('bgsage');
+  await expect(futureStrength).toHaveValue('2');
+  await futureStrength.selectOption('top-two');
+  await applyAndCloseSettings(settings);
+  const profile = await (await page.request.get('/api/configuration')).json();
+  expect(profile.current_configuration.play).toMatchObject({
+    engine: 'bgsage',
+    plies: 2,
+    top_two: true,
+  });
+  const legacy = await (await page.request.get('/api/settings')).json();
+  expect(legacy.play_top_two).toBe(true);
+
+  await page.getByRole('tab', { name: 'Playing', exact: true }).click();
+  const playing = page.getByRole('tabpanel', { name: 'Playing', exact: true });
+  const strength = playing.getByRole('combobox', {
+    name: 'Playing strength',
+    exact: true,
+  });
+  await expect(strength).toHaveValue('top-two');
+  for (const [width, height] of [
+    [1800, 1169],
+    [2560, 1440],
+    [3840, 2160],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await expect(strength).toBeInViewport();
+    await playing
+      .getByRole('dialog')
+      .screenshot({ path: info.outputPath(`top-two-${width}.png`) });
+  }
+  const create = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/api/play/sessions') &&
+      response.request().method() === 'POST',
+  );
+  await playing
+    .getByRole('button', { name: 'Start match', exact: true })
+    .click();
+  const started = await create;
+  expect(started.status(), await started.text()).toBe(201);
+  const match = await started.json();
+  expect(match.engine).toMatchObject({ id: 'bgsage', plies: 2, top_two: true });
+  await expect(
+    playing.getByText('2-ply + Top-2 (10 mEq)', { exact: true }),
+  ).toBeVisible();
+
+  const rejected = await page.request.post('/api/play/sessions', {
+    data: {
+      human_player: 0,
+      match_length: 1,
+      play_plies: 1,
+      play_top_two: true,
+    },
+  });
+  expect(rejected.status()).toBe(422);
+  profile.current_configuration.play.top_two = false;
+  const saved = await page.request.put('/api/configuration', {
+    data: {
+      expected_revision: profile.revision,
+      configuration: profile.current_configuration,
+    },
+  });
+  expect(saved.status(), await saved.text()).toBe(200);
+  const existing = await (
+    await page.request.get(`/api/play/sessions/${match.id}`)
+  ).json();
+  expect(existing.engine).toEqual(match.engine);
+  const plain = await page.request.post('/api/play/sessions', {
+    data: { human_player: 0, match_length: 1, play_mode: 'competition' },
+  });
+  expect(plain.status(), await plain.text()).toBe(201);
+  const ordinary = await plain.json();
+  expect(ordinary.engine).toMatchObject({ id: 'bgsage', plies: 2 });
+  expect(ordinary.engine.top_two).toBeFalsy();
+});
+
 test('completes NeonGammon 4-ply for one game and the entire match', async ({
   page,
 }) => {
@@ -163,11 +264,17 @@ test('completes NeonGammon 4-ply for one game and the entire match', async ({
     );
     if (scope === 'match') {
       const dialog = await openFullMatchAnalysis(page);
-      await dialog.getByLabel('Analysis engine', { exact: true }).selectOption('bgsage');
-      await dialog.getByLabel('Match analysis depth', { exact: true }).selectOption('4');
+      await dialog
+        .getByLabel('Analysis engine', { exact: true })
+        .selectOption('bgsage');
+      await dialog
+        .getByLabel('Match analysis depth', { exact: true })
+        .selectOption('4');
       await submitFullMatchAnalysis(page, dialog);
     } else {
-      await page.getByRole('button', { name: 'Analyze game', exact: true }).click();
+      await page
+        .getByRole('button', { name: 'Analyze game', exact: true })
+        .click();
     }
     const response = await accepted;
     expect(response.status(), await response.text()).toBe(202);
@@ -205,6 +312,7 @@ test.afterEach(async ({ request }) => {
   state.current_configuration.analysis.plies = 3;
   state.current_configuration.play.engine = 'gnubg';
   state.current_configuration.play.plies = 1;
+  state.current_configuration.play.top_two = false;
   const response = await request.put('/api/configuration', {
     data: {
       expected_revision: state.revision,

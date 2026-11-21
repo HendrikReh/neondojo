@@ -44,6 +44,9 @@ pub struct PlayEngine {
     pub id: String,
     pub version: String,
     pub plies: i32,
+    /// Pinned checker selection policy for this session.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub top_two: bool,
     /// Named NeonGammon opponent policy pinned to the match.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub difficulty: Option<crate::engines::SageDifficulty>,
@@ -274,6 +277,8 @@ pub struct CreatePlaySession {
     pub play_engine: Option<String>,
     /// Bot strength for this match only; must be a verified play depth of the chosen engine.
     pub play_plies: Option<i32>,
+    /// Selective 3-ply for NeonGammon's two leading checker candidates.
+    pub play_top_two: Option<bool>,
     /// Named NeonGammon opponent policy for this match only.
     pub play_difficulty: Option<crate::engines::SageDifficulty>,
 }
@@ -290,7 +295,10 @@ impl CreatePlaySession {
                 name.clone_into(&mut settings.player_name);
             }
         }
-        if self.play_engine.is_none() && self.play_plies.is_none() && self.play_difficulty.is_none()
+        if self.play_engine.is_none()
+            && self.play_plies.is_none()
+            && self.play_top_two.is_none()
+            && self.play_difficulty.is_none()
         {
             return Ok(());
         }
@@ -301,6 +309,7 @@ impl CreatePlaySession {
         let depths = crate::configuration::engine_depths(&engine, "play");
         if let Some(difficulty) = self.play_difficulty
             && (engine != "bgsage"
+                || self.play_top_two == Some(true)
                 || self
                     .play_plies
                     .is_some_and(|plies| plies != difficulty.plies()))
@@ -312,6 +321,7 @@ impl CreatePlaySession {
         let plies = match (self.play_plies, self.play_difficulty) {
             (Some(plies), _) => plies,
             (None, Some(difficulty)) => difficulty.plies(),
+            (None, None) if engine == "bgsage" && engine != settings.play_engine => 2,
             (None, None) if depths.contains(&settings.play_plies) => settings.play_plies,
             (None, None) => depths.first().copied().unwrap_or_default(),
         };
@@ -320,8 +330,13 @@ impl CreatePlaySession {
                 "Engine or depth is not verified for this purpose",
             ));
         }
+        let top_two = self.play_top_two.unwrap_or(false);
+        if top_two && !crate::settings::supports_top_two(&engine, plies) {
+            return Err(ApiError::invalid(crate::settings::TOP_TWO_PROFILE_ERROR));
+        }
         settings.play_engine = engine;
         settings.play_plies = plies;
+        settings.play_top_two = top_two;
         Ok(())
     }
 }
@@ -906,6 +921,7 @@ async fn create_session(
             id: settings.play_engine,
             version,
             plies: settings.play_plies,
+            top_two: settings.play_top_two,
             difficulty: request.play_difficulty,
         },
         position: Position {
