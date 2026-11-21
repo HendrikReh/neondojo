@@ -196,13 +196,19 @@ class Runtime:
                     raise ValueError('Invalid dice')
             if operation in ('opponent_checker', 'opponent_cube'):
                 difficulty, seed = request['difficulty'], request['seed']
-                expected_plies = 2 if difficulty == 'full_strength' else 1
-                if (self.cubeless or self.profile['plies'] != expected_plies
+                # Older Full Strength sessions pin 2-ply for both decisions.
+                allowed_plies = (2, 3) if difficulty == 'full_strength' else (1,)
+                if (self.cubeless or self.profile['plies'] not in allowed_plies
                         or type(seed) is not int or not 0 <= seed < 2**64):
                     raise ValueError('Invalid opponent policy request')
                 policy = self.opponent_policy(difficulty, seed)
                 if operation == 'opponent_checker':
-                    result = board(policy.select_checker_move(before, *dice, **kwargs))
+                    if self.profile['plies'] == 3:
+                        # NeonDojo pins a deeper checker search for new Full Strength matches.
+                        selected = self.analyzer.checker_play(before, *dice, **kwargs).moves[0].board
+                    else:
+                        selected = policy.select_checker_move(before, *dice, **kwargs)
+                    result = board(selected)
                 else:
                     decision = policy.cube_decision(before, **kwargs)
                     result = {'should_double': decision.should_double, 'should_take': decision.should_take}

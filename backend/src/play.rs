@@ -43,6 +43,7 @@ use uuid::Uuid;
 pub struct PlayEngine {
     pub id: String,
     pub version: String,
+    /// Checker search depth. The NeonGammon Full Strength preset uses 2-ply for cube decisions.
     pub plies: i32,
     /// Pinned checker selection policy for this session.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -275,7 +276,7 @@ pub struct CreatePlaySession {
     pub human_name: Option<String>,
     /// Bot engine for this match only (`gnubg` or `bgsage`); defaults to the saved play engine.
     pub play_engine: Option<String>,
-    /// Bot strength for this match only; must be a verified play depth of the chosen engine.
+    /// Bot checker depth for this match only. A named preset pins its own depth.
     pub play_plies: Option<i32>,
     /// Selective 3-ply for NeonGammon's two leading checker candidates.
     pub play_top_two: Option<bool>,
@@ -312,20 +313,21 @@ impl CreatePlaySession {
                 || self.play_top_two == Some(true)
                 || self
                     .play_plies
-                    .is_some_and(|plies| plies != difficulty.plies()))
+                    .is_some_and(|plies| !difficulty.accepts_checker_plies(plies)))
         {
             return Err(ApiError::invalid(
                 "A NeonGammon difficulty preset requires NeonGammon and its own playing depth",
             ));
         }
         let plies = match (self.play_plies, self.play_difficulty) {
-            (Some(plies), _) => plies,
-            (None, Some(difficulty)) => difficulty.plies(),
+            (_, Some(difficulty)) => difficulty.checker_plies(),
+            (Some(plies), None) => plies,
             (None, None) if engine == "bgsage" && engine != settings.play_engine => 2,
             (None, None) if depths.contains(&settings.play_plies) => settings.play_plies,
             (None, None) => depths.first().copied().unwrap_or_default(),
         };
-        if !depths.contains(&plies) {
+        // A named preset pins its own depth independently of the manual picker.
+        if self.play_difficulty.is_none() && !depths.contains(&plies) {
             return Err(ApiError::invalid(
                 "Engine or depth is not verified for this purpose",
             ));

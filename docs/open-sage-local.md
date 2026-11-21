@@ -71,11 +71,44 @@ The regular Python tests need neither NumPy nor NeonGammon and check in particul
 5. Under **Extras → Benchmark**, set the engine and depth independently. The NeonGammon reference protocols always use 4 threads for analysis and 2 for playing decisions, regardless of these settings.
 
 The sidecar uses `neongammon.DifficultyPolicy` from the verified 3.1.0 wheel.
-Preset selections and decisions apply to live NeonGammon opponents. A saved
-named-preset match pinned to 3.0.0
+Preset selections and decisions apply to live NeonGammon opponents. New Full
+Strength matches use NeonDojo's verified 3-ply checker search and the wheel
+policy's 2-ply cube decisions. A saved named-preset match pinned to 3.0.0
 requires the earlier NeonDojo build with the bundled policy. [Opponent presets](reference/playing.md#neongammon-difficulty-presets)
 
 The application process stays fully local. The sidecar has no download path; installation and updates are explicitly separate steps. Unknown or modified models, a missing Python environment and engine crashes produce errors, not substitute evaluations. NeonDojo never falls back to another engine on its own.
+
+### Five-point preset PR benchmark
+
+On November 21, 2026, the Apple M4 Pro validation ran 100 simulated five-point
+matches per preset against NeonDojo's Full Strength with 3-ply checker play and
+2-ply cube decisions. The bots used the bundled policies and the installed
+NeonGammon 3.0.0 Stage 11 weights. Each preset used match seeds 720000–720099,
+alternated sides and sampled each turn with 22% probability for scoring at
+Stage 11 3-ply. Each benchmark worker used one engine thread.
+
+| Preset | PR | 95% interval | Counted decisions | Match wins |
+|--------|---:|-------------:|------------------:|-----------:|
+| Beginner | 21.99 | 20.31–23.77 | 1,125 | 10/100 |
+| Casual | 16.17 | 14.83–17.55 | 1,232 | 22/100 |
+| Intermediate | 8.11 | 7.39–8.91 | 1,430 | 34/100 |
+
+The simulation and scoring use NeonGammon's `calibrate_difficulty.py` validation
+at `6e285eb`, with the then-bundled Full Strength policy as the opponent. PR
+pools equity loss across counted checker and cube decisions. The 95% intervals
+come from 4,000 bootstrap resamples of whole matches. The chooser rounds the
+measured PR to one decimal place.
+
+### Full Strength rollout PR
+
+Full Strength measured **0.975 PR** (95% interval **0.890–1.069**) on the
+NeonGammon five-point rollout benchmark.
+The score pools 6,610 checker choices at 3-ply and 302 cube choices at 2-ply
+across archived positions from 130 matches. The choices were scored using the
+same full-rollout equities as the comparison of 2-ply and 3-ply. For checker
+play, the reference best move and the 2-ply and 3-ply picks all had to have
+full rollout values. The 95% interval comes from resampling whole matches. The
+five-point chooser rounds this result to **≈ 1.0 PR**. [NeonGammon rollout benchmark](https://github.com/HendrikReh/neongammon/blob/6e285eb/XG_COMPARISON.md#match-play)
 
 ## Tests with a real installation
 
@@ -169,7 +202,7 @@ An analysis or installation check does not displace the playing process. Changes
 
 ### 3- and 4-ply analysis and duels
 
-In the options of **Analyze game** (Analysis header) or **Analyze entire match**, choose NeonGammon as the **Analysis engine** and 3- or 4-ply as the **Analysis depth**. Each job checks and stores the engine, depth and model fingerprint. 3- and 4-ply are also allowed as a saved analysis default and for engine duels (formerly migration 0047, now part of the schema baseline). The sidecar controls the thread limit, the installation identity and the evaluation depth reported by NeonGammon. The results apply to the requested profile and the stored model fingerprint. Regular games against the computer still use the 1- and 2-ply playing profiles.
+In the options of **Analyze game** (Analysis header) or **Analyze entire match**, choose NeonGammon as the **Analysis engine** and 3- or 4-ply as the **Analysis depth**. Each job checks and stores the engine, depth and model fingerprint. 3- and 4-ply are also allowed as a saved analysis default and for engine duels (formerly migration 0047, now part of the schema baseline). The sidecar controls the thread limit, the installation identity and the evaluation depth reported by NeonGammon. The results apply to the requested profile and the stored model fingerprint. The manual live playing depths are 1- and 2-ply. The Full Strength preset pins 3-ply for checker moves in new matches.
 
 On November 13, 2026, the fork installed at the time, `5b146c7d86fa965f2185e3871f3c56df030fd76f`, was checked for both higher levels with a real checker and cube evaluation in a 5-point context. For 3.0.0, the browser test with 4-ply for one game and for the whole match passed on November 20, 2026.
 

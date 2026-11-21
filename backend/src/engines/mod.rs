@@ -76,11 +76,16 @@ pub enum SageDifficulty {
 }
 
 impl SageDifficulty {
-    pub(crate) fn plies(self) -> i32 {
+    pub(crate) fn checker_plies(self) -> i32 {
         match self {
-            Self::FullStrength => 2,
+            Self::FullStrength => 3,
             _ => 1,
         }
+    }
+
+    pub(crate) fn accepts_checker_plies(self, plies: i32) -> bool {
+        // Older clients may still send the former Full Strength depth explicitly.
+        plies == self.checker_plies() || (self == Self::FullStrength && plies == 2)
     }
 }
 

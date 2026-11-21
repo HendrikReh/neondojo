@@ -494,6 +494,57 @@ pub(super) async fn alternatives(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    #[ignore = "requires locked NeonGammon; no database"]
+    async fn full_strength_uses_pinned_checker_depth_and_two_ply_cube() {
+        use crate::import::ids::{match_id, position_id};
+
+        let python = std::env::var("NEONDOJO_SAGE_PYTHON").unwrap();
+        let mut profile = SageEngine::probe_profile(python, 2, 2).await.unwrap();
+        let opening = [
+            0, -2, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, -5, 5, 0, 0, 0, -3, 0, -5, 0, 0, 0, 0, 2, 0,
+        ];
+        let old_move = [
+            0, -2, 0, 0, 0, 1, 4, 0, 3, 0, 0, 1, -5, 4, 0, 0, 0, -3, 0, -5, 0, 0, 0, 0, 2, 0,
+        ];
+        let new_move = [
+            0, -2, 0, 0, 0, 0, 5, 0, 3, 0, 0, 1, -5, 4, 0, 0, 0, -3, 0, -5, 0, 0, 0, 1, 1, 0,
+        ];
+        // At 5-away/4-away, 2-ply doubles and 3-ply waits in this position.
+        let cube_board = [
+            0, -1, 0, 2, -1, 0, 4, 2, 2, 0, 0, 0, -4, 3, 0, 0, 0, -3, 2, -4, -2, 0, 0, 0, 0, 0,
+        ];
+        let checker_position = position_id(&opening, 0);
+        let checker_context = match_id(5, [0, 0], 1, 3, false, false, 0, [2, 1]);
+        let cube_position = position_id(&cube_board, 0);
+        let cube_context = match_id(5, [0, 1], 1, 3, false, false, 0, [0, 0]);
+        for (plies, expected_move) in [(2, old_move), (3, new_move)] {
+            profile.plies = plies;
+            let bot = SageEngine::for_play(profile.clone()).unwrap();
+            let chosen = bot
+                .opponent_checker_board(
+                    &checker_position,
+                    &checker_context,
+                    SageDifficulty::FullStrength,
+                    42,
+                )
+                .await
+                .unwrap();
+            assert_eq!(chosen, expected_move);
+            let cube = bot
+                .opponent_cube(
+                    &cube_position,
+                    &cube_context,
+                    SageDifficulty::FullStrength,
+                    42,
+                )
+                .await
+                .unwrap();
+            assert!(cube.should_double && cube.should_take);
+        }
+    }
+
     #[tokio::test]
     #[ignore = "requires locked NeonGammon and GNUbg with embedded Python; no database"]
     async fn sage_executes_reference_checker_turns_using_gnubg_rules() {
