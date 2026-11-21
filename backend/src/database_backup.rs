@@ -40,9 +40,9 @@ const DERIVED_TABLES: &[&str] = &[
     "review_hits",
     "review_hit_sets",
 ];
-// These migrations only affect derived data. The backed-up table layout and
-// format stay compatible with archives made before them.
-const DERIVED_ONLY_MIGRATIONS: &[i64] = &[89];
+// These migrations leave the backed-up table layout and format compatible
+// with earlier archives. They only affect derived data or notifications.
+const ARCHIVE_COMPATIBLE_MIGRATIONS: &[i64] = &[89, 90];
 
 // Parent tables precede their children so foreign keys remain enforced. Host
 // installations and the benchmark machine identity belong to the destination.
@@ -143,7 +143,7 @@ async fn schema(connection: &mut PgConnection) -> Result<String> {
     .await?;
     let mut digest = Sha256::new();
     for (version, checksum) in crate::schema_migrations::expanded_history(migrations) {
-        if DERIVED_ONLY_MIGRATIONS.contains(&version) {
+        if ARCHIVE_COMPATIBLE_MIGRATIONS.contains(&version) {
             continue;
         }
         digest.update(version.to_be_bytes());
@@ -457,14 +457,14 @@ mod tests {
     use super::TABLES;
 
     #[sqlx::test(migrations = "./migrations")]
-    async fn decision_revision_migration_keeps_existing_backup_fingerprint(pool: sqlx::PgPool) {
+    async fn derived_and_notification_migrations_keep_backup_fingerprint(pool: sqlx::PgPool) {
         let mut tx = pool.begin().await.unwrap();
         let after = super::schema(&mut tx).await.unwrap();
-        let removed = sqlx::query("DELETE FROM _sqlx_migrations WHERE version=89")
+        let removed = sqlx::query("DELETE FROM _sqlx_migrations WHERE version IN (89,90)")
             .execute(&mut *tx)
             .await
             .unwrap();
-        assert_eq!(removed.rows_affected(), 1);
+        assert_eq!(removed.rows_affected(), 2);
         let before = super::schema(&mut tx).await.unwrap();
         tx.rollback().await.unwrap();
         assert_eq!(before, after);

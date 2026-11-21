@@ -228,6 +228,29 @@ NEONDOJO_SAGE_PYTHON=/path/to/venv/bin/python cargo test -p neondojo --lib \
 | Jobüberwachung · *umgesetzt am 20. November 2026: `web/src/job-watch.ts` führt je Job-ID eine gemeinsame Überwachung für `useJobs`, `useMatchAnalysis` und `useBackgroundJobs`. Sichtbare Ansichten öffnen einen Stream; Fortschritt kommt aus den SSE-Daten und wird nur übernommen, wenn er zum Versuch des letzten `running`-Events gehört und nicht zurückgeht. Vollständige Lesevorgänge nur zu Beginn, am Ende, nach Verbindungsfehlern und alle 15 s als Absicherung. Nur global verfolgte Aufträge (Bulk-Analysen) lesen weiter alle 3 s, weil Browser über HTTP/1.1 nur wenige Verbindungen je Server erlauben. 3-ply-Würfelauftrag mit 21 Fortschrittsereignissen: 25 → 3 vollständige GETs, 1 Stream (`e2e/job-watch.spec.ts`); Replay, Versuchswechsel, geteilte Überwachung, Wiederverbindung, geschlossener Stream, gelöschter und fertiger Auftrag in `job-watch.test.ts`.* | Je Job-ID eine Überwachung für globale und lokale Anzeigen nutzen. Fortschritt aus SSE übernehmen, vollständiges Ergebnis bei Abschluss oder erforderlicher Synchronisierung abrufen. Ohne `Last-Event-ID` spielt der Server beim Verbinden alle bisherigen Events ab, und heute löst jedes davon einen vollständigen GET aus. Serverseitig fragt jede SSE-Verbindung alle 350 ms `job_events` und den Job ab. Weniger Verbindungen entlasten also auch PostgreSQL. [SSE-Endpunkt](../../../backend/src/api.rs#L867) · [Lokale Überwachung](../../../web/src/useJobs.ts#L76) · [Globale Überwachung](../../../web/src/useBackgroundJobs.ts#L32) | Eine SSE-Verbindung pro beobachtetem Job. Ein Replay mit 21 Fortschrittsereignissen löst keine Serie vollständiger GETs aus. Wiederverbindung, verpasste Events, terminale Zustände und Fehler sind abgedeckt. |
 | Checkpoint-Schreibvorgang · *umgesetzt am 21. November 2026* | Entscheidungszeilen werden vor der Lease-Sperre vorbereitet und in Batches von bis zu 500 Zeilen eingefügt. Die Inserts mit variabler Zeilenzahl belegen keinen SQLx-Statement-Cache. [Checkpoint-Transaktion](../../../backend/src/match_jobs.rs#L142) | Ein Entscheidungs-Insert je Batch. Entscheidungen, Revisionsmarke, Zusammenfassung, Timing und Fortschritt bleiben atomar. SQLx-Tests decken die gespeicherte Vollanalyse, Lease-Ablauf, Wiederaufnahme, Rollback und leere Spiele ab. |
 
+### Jobereignisse ohne häufige Leerlaufabfragen
+
+Auf `main` (`6e52172`) fragte jeder offene SSE-Stream alle 350 ms die gespeicherten Ereignisse und den Auftrag ab. Migration `0090_job_event_notifications` meldet neue Ereignisse gesammelt je Auftrag nach dem Commit. Eine gemeinsame Listener-Verbindung weckt die betroffenen Streams. Jeder Stream liest weiterhin ab seiner letzten Ereignis-ID aus der Tabelle. Nach einer Wiederverbindung oder einem überlaufenen Benachrichtigungspuffer prüft der Stream die gespeicherten Zeilen erneut. Im Leerlauf prüft er vorsorglich alle zehn Sekunden. Der Listener nutzt eine eigene Verbindung außerhalb des Anfrage-Pools. Die Migration lässt das Backup-Format kompatibel.
+
+Der Abnahmetest nutzt einen Anfrage-Pool mit nur einer Verbindung. Er prüft die Auslieferung nach dem Commit, beendet die Listener-Verbindung und speichert 106 Ereignisse einschließlich des Terminalereignisses ohne Benachrichtigung. Die Prüfung nach der Wiederverbindung liefert sie in ID-Reihenfolge über die 100er-Seitengrenze hinweg. Ein erneuter Abruf mit `Last-Event-ID` setzt an der erwarteten Stelle fort. Ein bereits empfangenes Terminalereignis beendet die Verbindung ohne erneute Zustellung.
+
+Der Benchmark öffnet zwölf Streams für einen ruhenden Auftrag, wartet 500 ms nach dem Start und zählt für 2,1 Sekunden die Leseabfragen über `pg_stat_statements`. Umgebung sind macOS 27.0.1 auf einem Mac mini M4 Pro, ein Rust-Debug-Build und isoliertes PostgreSQL 16.13 auf Loopback. Die Leser rufen den Axum-Handler auf und lesen seine SSE-Frames. Die Messung enthält keine Engine-Arbeit und erfasst PostgreSQL-Ausführungszeit.
+
+| Leerlaufmessung | Vorher | Nachher |
+| --- | ---: | ---: |
+| Ereignisabfragen | 72 | 0 |
+| Auftragsabfragen | 72 | 0 |
+| PostgreSQL-Ausführungszeit | 1,169 ms | 0,000 ms |
+
+Zur Wiederholung `shared_preload_libraries=pg_stat_statements` auf dem isolierten Testserver setzen und `DATABASE_URL` gemäß [Testanleitung](../../development/testing.md#postgresql-test-server) bereitstellen. Auf `6e52172` nur die neuen Testfunktionen und ihre Hilfsfunktionen aus `backend/tests/workflow.rs` übernehmen. Dort meldet die Leerlaufprüfung nach der Messung erwartungsgemäß einen Testfehler.
+
+```bash
+cargo test -p neondojo --test integration workflow::benchmark_idle_job_event_streams \
+  -- --ignored --exact --nocapture
+cargo test -p neondojo --test integration workflow::job_events_replay_committed_rows_after_listener_disconnect \
+  -- --exact
+```
+
 ### Nachmessung zum Checkpoint-Schreibvorgang
 
 Ausgangsstand `main` (`70af44a)), Mac mini M4 Pro (14 Kerne, 64 GB, macOS 27.0.1), PostgreSQL 16.13 auf Loopback, Rust-Debug-Build, GNU Backgammon 1.08.003 bei 1-ply. `WC2014.gnubg.sgf` enthält 10 Spiele und 460 Checkerzüge. Das längste Spiel (Nr. 8) hat 83 Checkerzüge und 138 gespeicherte Entscheidungen. Der Benchmark berechnet das Spiel einmal je Testlauf und speichert dasselbe Ergebnis je Runde in 5 neuen Aufträgen zum Aufwärmen und 30 neuen Aufträgen zur Messung.
