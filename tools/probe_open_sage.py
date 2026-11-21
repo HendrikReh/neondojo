@@ -21,7 +21,7 @@ import time
 
 # Supported NeonGammon package versions (HendrikReh/neongammon releases).
 # The worker and the Rust snapshot validation use this list as well.
-SUPPORTED_VERSIONS = ('3.0.0',)
+SUPPORTED_VERSIONS = ('3.0.0', '3.1.0',)
 NUMPY_VERSION = '2.5.4'
 
 

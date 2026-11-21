@@ -1,17 +1,17 @@
 # Local NeonGammon installation and compatibility evidence
 
-NeonGammon ([HendrikReh/neongammon](https://github.com/HendrikReh/neongammon)) is the project's own fork of Open Sage (`markbgsage/bgsage`). Since version 3.0.0, the Python package is called `neongammon`. From version 1.0.0, NeonDojo supports only `neongammon==3.0.0`; installations of the earlier `bgsage` 2.0.x packages are no longer accepted. In NeonDojo the engine is called "NeonGammon"; its internal identifier remains `bgsage`. The original Open Sage wheel is not a prerequisite for any installation or test.
+NeonGammon ([HendrikReh/neongammon](https://github.com/HendrikReh/neongammon)) is the project's own fork of Open Sage (`markbgsage/bgsage`). Since version 3.0.0, the Python package is called `neongammon`. NeonDojo uses `neongammon==3.1.0` for the named opponent presets. Version 3.0.0 remains supported for analysis and ordinary play using existing snapshots. In NeonDojo the engine is called "NeonGammon"; its internal identifier remains `bgsage`. The original Open Sage wheel is not a prerequisite for any installation or test.
 
 This page is divided into the current state and the history:
 
-- **Current:** [Installation](#reproducible-installation), [Verified scope](#verified-scope-and-source-identity), [Use in NeonDojo](#use-in-neondojo), [Tests with a real installation](#tests-with-a-real-installation), [NeonGammon 3.0.0 – November 20, 2026](#neongammon-300--november-20-2026) and [Engine contract and adapter](#engine-contract-and-adapter).
+- **Current:** [Installation](#reproducible-installation), [Verified scope](#verified-scope-and-source-identity), [Use in NeonDojo](#use-in-neondojo), [Tests with a real installation](#tests-with-a-real-installation), [NeonGammon 3.1.0 – November 21, 2026](#neongammon-310--november-21-2026) and [Engine contract and adapter](#engine-contract-and-adapter).
 - **History:** The dated sections under [Earlier Open Sage builds](#earlier-open-sage-builds) document the `bgsage` 2.0.x builds with their measurements and are kept unchanged as a record.
 
 This is local evidence for these builds and reference positions, not a statement about playing strength or general GNUbg equivalence.
 
 ## Reproducible installation
 
-Prerequisites: a native ARM64 Python 3.12 interpreter, macOS 14 or later (NumPy wheel), and enough local storage. No Rosetta interpreter and no source build. NeonGammon is published only as a GitHub release asset, not on PyPI. The lock [`tools/open-sage/requirements-macos-arm64.lock`](../tools/open-sage/requirements-macos-arm64.lock) therefore points to the release wheel and contains the SHA256 hashes of the two ARM64 wheels (`neongammon` 3.0.0 and NumPy 2.5.4). Models and bear-off data are included in the NeonGammon wheel.
+Prerequisites: a native ARM64 Python 3.12 interpreter, macOS 14 or later (NumPy wheel), and enough local storage. No Rosetta interpreter and no source build. NeonGammon is published only as a GitHub release asset, not on PyPI. The lock [`tools/open-sage/requirements-macos-arm64.lock`](../tools/open-sage/requirements-macos-arm64.lock) therefore points to the release wheel and contains the SHA256 hashes of the two ARM64 wheels (`neongammon` 3.1.0 and NumPy 2.5.4). Models and bear-off data are included in the NeonGammon wheel.
 
 **1. Install the environment.** From the repository root, with an installation directory of your choice outside the repository:
 
@@ -22,13 +22,13 @@ python3.12 -m venv "$HOME/Library/Application Support/NeonDojo/neongammon-venv"
   -r tools/open-sage/requirements-macos-arm64.lock
 ```
 
-Offline: download both wheels unchanged beforehand (`gh release download v3.0.0 --repo HendrikReh/neongammon --pattern '*cp312*'` and NumPy 2.5.4) and use a lock with `neongammon==3.0.0` and the same hashes. The local installation under `local-data/neongammon-3.0.0/` contains exactly this combination (`wheels/`, `requirements.lock`):
+Offline: download both wheels unchanged beforehand (`gh release download v3.1.0 --repo HendrikReh/neongammon --pattern '*cp312*'` and NumPy 2.5.4) and use a lock with `neongammon==3.1.0` and the same hashes. The local installation under `local-data/neongammon-3.1.0/` contains exactly this combination (`wheels/`, `requirements.lock`):
 
 ```sh
 python3.12 -m venv /path/to/new-venv
 /path/to/new-venv/bin/python -m pip install --no-index --only-binary=:all: --require-hashes \
-  --find-links local-data/neongammon-3.0.0/wheels \
-  -r local-data/neongammon-3.0.0/requirements.lock
+  --find-links local-data/neongammon-3.1.0/wheels \
+  -r local-data/neongammon-3.1.0/requirements.lock
 ```
 
 **2. Verify the installation.** The probe's Python tests do not need a NeonGammon installation; the probe itself runs with the new environment's interpreter:
@@ -45,7 +45,7 @@ Exit code 0 means that **all requested** checks passed. Missing dependencies, a 
 
 ## Verified scope and source identity
 
-The report for the current build is [probe-neongammon-3.0.0-macos-arm64.json](../tools/open-sage/probe-neongammon-3.0.0-macos-arm64.json). It contains the platform, package versions, production model `stage11`, strategy `backgame_pair_phased`, 24 model slots, and the SHA256 of every Python module, the native library and all assets. Files are checked against the SHA256 entries of the installed wheel's RECORD. The installation lock protects the original wheels; a RECORD that was tampered with together with the files cannot be detected by this local integrity check alone. The reports for the earlier builds are [probe-macos-arm64-2ply.json](../tools/open-sage/probe-macos-arm64-2ply.json) and [probe-macos-arm64.json](../tools/open-sage/probe-macos-arm64.json) (both `bgsage` 2.0.20260907, November 12, 2026, see [history](#limitation-of-the-original-wheel-1-ply-thread-budget)).
+The report for the current build is [probe-neongammon-3.1.0-macos-arm64.json](../tools/open-sage/probe-neongammon-3.1.0-macos-arm64.json). It contains the platform, package versions, production model `stage11`, strategy `backgame_pair_phased`, 24 model slots, and the SHA256 of every Python module, the native library and all assets. Files are checked against the SHA256 entries of the installed wheel's RECORD. The installation lock protects the original wheels; a RECORD that was tampered with together with the files cannot be detected by this local integrity check alone. The reports for the earlier builds are [probe-macos-arm64-2ply.json](../tools/open-sage/probe-macos-arm64-2ply.json) and [probe-macos-arm64.json](../tools/open-sage/probe-macos-arm64.json) (both `bgsage` 2.0.20260907, November 12, 2026, see [history](#limitation-of-the-original-wheel-1-ply-thread-budget)).
 
 For each requested level, the functional check covers:
 
@@ -64,23 +64,22 @@ The regular Python tests need neither NumPy nor NeonGammon and check in particul
 
 ## Use in NeonDojo
 
-1. Install the NeonGammon environment as described above. For this local deployment, it lives permanently under `local-data/neongammon-3.0.0/venv` in the main repository; `local-data/` is excluded from Git. Packages and weights are not copied into the source code.
+1. Install the NeonGammon environment as described above. For this local deployment, it lives permanently under `local-data/neongammon-3.1.0/venv` in the main repository; `local-data/` is excluded from Git. Packages and weights are not copied into the source code.
 2. Build and start the backend and frontend as described in the [README](../README.md#restart-neondojo-locally-on-port-8787). No separate migration is needed: the `engine_installations` table with its `bgsage` record is part of the [schema baseline](development/architecture.md#database-schema) `0001_schema.sql` (formerly migration 0041). Database and browser tests use their own test databases.
 3. Under **Settings → Analysis → Engines on this computer → Local NeonGammon installation**, enter the absolute path to the venv interpreter as **Python path** and choose **Verify and save**. The backend checks package and model integrity and runs a real evaluation before the engine becomes selectable. Then choose the analysis engine and the engine for future games separately and apply the draft.
 4. Under **Settings → Analysis → Engines on this computer**, **NeonGammon threads for analysis** and **NeonGammon threads for playing** can each be set from 2 up to the number of logical CPUs. With **Default**, NeonGammon uses 4 threads for analyses and engine duels and 2 for playing. New sessions, jobs and duel series store the value in effect. The worker checks the configured limit with a real position evaluation; the serial cubeful 1-ply checker path stays serial.
 5. Under **Extras → Benchmark**, set the engine and depth independently. The NeonGammon reference protocols always use 4 threads for analysis and 2 for playing decisions, regardless of these settings.
 
-The four optional opponent presets are implemented by the bundled
-[MPL-2.0 NeonGammon policy snapshot](../backend/src/engines/opponent_policy.py).
-The sidecar runs that policy with the verified 3.0.0 package and its installed
-Stage 11 weights. Preset selections and decisions are confined to live
-NeonGammon opponents. [Opponent presets](reference/playing.md#neongammon-difficulty-presets)
+The sidecar uses `neongammon.DifficultyPolicy` from the verified 3.1.0 wheel.
+Preset selections and decisions apply to live NeonGammon opponents. A saved
+named-preset match pinned to 3.0.0
+requires the earlier NeonDojo build with the bundled policy. [Opponent presets](reference/playing.md#neongammon-difficulty-presets)
 
 The application process stays fully local. The sidecar has no download path; installation and updates are explicitly separate steps. Unknown or modified models, a missing Python environment and engine crashes produce errors, not substitute evaluations. NeonDojo never falls back to another engine on its own.
 
 ## Tests with a real installation
 
-`NEONDOJO_SAGE_PYTHON` and `OPEN_SAGE_TEST_PYTHON` expect the interpreter of the NeonGammon environment (locally `local-data/neongammon-3.0.0/venv/bin/python`). The regular Python and Rust unit tests need no installation. Tests with a database run only against an isolated PostgreSQL test server, see [PostgreSQL and GNUbg integration tests](development/testing.md#postgresql-and-gnubg-integration-tests); SQLx creates its own test databases there.
+`NEONDOJO_SAGE_PYTHON` and `OPEN_SAGE_TEST_PYTHON` expect the interpreter of the NeonGammon environment (locally `local-data/neongammon-3.1.0/venv/bin/python`). The regular Python and Rust unit tests need no installation. Tests with a database run only against an isolated PostgreSQL test server, see [PostgreSQL and GNUbg integration tests](development/testing.md#postgresql-and-gnubg-integration-tests); SQLx creates its own test databases there.
 
 ```sh
 python3 -m unittest discover -s tools -p 'test_*open_sage*.py'
@@ -96,11 +95,21 @@ The test targets run individually and with `--test-threads=1`. A combined run of
 
 The probe and the worker reject earlier `bgsage` builds already at the version check; no test needs the original wheel or an earlier fork.
 
+## NeonGammon 3.1.0 – November 21, 2026
+
+The [official CPython 3.12 arm64 wheel](https://github.com/HendrikReh/neongammon/releases/tag/v3.1.0)
+comes from tag commit `04e0bb7`. Its SHA256 is pinned in the installation
+lock. The verified wheel with NumPy 2.5.4 has runtime fingerprint
+`26e7701c27c6c5e0cd3cc864768e27675f0d72149c2ad545ffb0c5293ff705d5`.
+The 1-ply and 2-ply checks passed and Extras → Versions identifies the source
+revision. The probe and Rust runtime keep 3.0.0 in their supported list for
+older snapshots.
+
 ## NeonGammon 3.0.0 – November 20, 2026
 
-Since November 20, 2026, NeonDojo has used release [v3.0.0](https://github.com/HendrikReh/neongammon/releases/tag/v3.0.0) (tag commit `cbfcb01`). The installed wheel is the official cp312 wheel from the release assets, SHA256 `4ed211b7…`, checked against the digest from the release API, with NumPy 2.5.4 under uv CPython 3.12.13 in `local-data/neongammon-3.0.0/venv`. Wheels, lock and provenance are in the same folder (`wheels/`, `requirements.lock`, `provenance.json`, `probe-1ply-2ply.json`). The previous installation `local-data/open-sage-fork-2.0.20261119/` remains in place unchanged, but NeonDojo no longer accepts it.
+On November 20, 2026, NeonDojo switched to release [v3.0.0](https://github.com/HendrikReh/neongammon/releases/tag/v3.0.0) (tag commit `cbfcb01`). The installed wheel is the official cp312 wheel from the release assets, SHA256 `4ed211b7…`, checked against the digest from the release API, with NumPy 2.5.4 under uv CPython 3.12.13 in `local-data/neongammon-3.0.0/venv`. Wheels, lock and provenance are in the same folder (`wheels/`, `requirements.lock`, `provenance.json`, `probe-1ply-2ply.json`). The previous installation `local-data/open-sage-fork-2.0.20261119/` remains in place unchanged, but NeonDojo no longer accepts it.
 
-The supported package versions are listed in `SUPPORTED_VERSIONS` in `tools/probe_open_sage.py` (sidecar and probe). `SUPPORTED_SAGE_PACKAGE_VERSIONS` in `backend/src/engines/mod.rs` must contain the same list; a unit test compares the two. Both contain only `3.0.0`.
+The supported package versions are listed in `SUPPORTED_VERSIONS` in `tools/probe_open_sage.py` (sidecar and probe). `SUPPORTED_SAGE_PACKAGE_VERSIONS` in `backend/src/engines/mod.rs` must contain the same list; a unit test compares the two. At that release, both listed only `3.0.0`.
 
 - **Package.** The worker and the probe now import only `neongammon` and check the wheel RECORD under `neongammon/`. Models and the bear-off database are unchanged (production model `stage11`, strategy `backgame_pair_phased`, 24 model slots). Because the package files and the manifest change, the runtime fingerprint is new: `621c3554…`. **Extras → Versions** recognizes the release by this fingerprint and shows **NeonGammon source** `HendrikReh/neongammon` with the tag commit.
 - **Thread budget.** 3.0.0 evaluates cubeful checker moves from 2-ply upward in the native routine `bgbot_cpp.checker_play_nply` and passes the budget there as `n_threads`; no Python pool is created anymore. The previous check, which observed only `ThreadPoolExecutor`, therefore rejected 2-ply. The probe and the worker now share `observe_thread_budgets`, which additionally observes this argument. Both observers delegate unchanged to the real implementation. Observed: 2-ply with 2 or 4 threads yields `[2]` or `[4]`, respectively; 1-ply stays serial without a pool. What is measured is the budget passed, not a count of concurrently running native threads.
@@ -289,7 +298,7 @@ Only in post-Crawford games did "no double" shift by more than 0.03, and there i
 
 From November 19, 2026, NeonDojo used the fork release [`v2.0.20261119`](https://github.com/HendrikReh/bgsage/releases/tag/v2.0.20261119) (commit `0dee4f321c0437dc142da2ae68d26f7da3038db1`, model still `stage11`). It was the first fork package with its own version number. Earlier fork builds still reported `2.0.20260907`. The installation is under `local-data/open-sage-fork-2.0.20261119/`. It contains `wheels/`, `requirements.lock`, `provenance.json`, `probe-1ply-2ply.json` (passed) and `venv/`. The official cp312 wheel from the GitHub release with SHA256 `c476a0b6edbc32021a0c7c4a7397ffcd2d869502c04bbf060a2a12b37baec4d9` was used. The digest was checked against the release API. The runtime fingerprint in NeonDojo was `9b3ffc5c…`.
 
-At that time, `SUPPORTED_VERSIONS` and `SUPPORTED_SAGE_PACKAGE_VERSIONS` contained `2.0.20261119` and still `2.0.20260907`, so that stored job and duel snapshots and the `open-sage-fork-340fc53` installation kept working. Since NeonGammon 3.0.0, both lists contain only `3.0.0`.
+At that time, `SUPPORTED_VERSIONS` and `SUPPORTED_SAGE_PACKAGE_VERSIONS` contained `2.0.20261119` and still `2.0.20260907`, so that stored job and duel snapshots and the `open-sage-fork-340fc53` installation kept working. The upgrade to NeonGammon 3.0.0 reduced both lists to `3.0.0`.
 
 According to the release notes, the results change: at 1- and 2-ply, the cube lifetime in money contact play depends on depth and pip count. In addition, the cubeful 2-ply checker path now searches only the candidates that survive the move filter at full depth. Open Sage returns the remaining candidates with 1-ply values in the same list. NeonDojo does not mix depths. The sidecar therefore discards candidates below the requested depth, as it already did for the cubeless path. The played move is always evaluated at full depth through `force_boards`; if the engine returns it at a shallower depth, the request fails. Play hints and the evaluation of the player's own move need every legal move. For them, NeonDojo requests all legal moves (`all_legal`). For opening 31 at 2-ply, this took about 35 ms instead of 12 ms. New 2-ply analyses therefore show fewer candidates, 5 instead of 16 in the test case. 3- and 4-ply still evaluate all candidates at full depth. This behavior applies unchanged to NeonGammon 3.0.0.
 

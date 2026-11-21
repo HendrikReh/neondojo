@@ -10,7 +10,6 @@ import os
 import resource
 import sys
 import time
-from types import ModuleType
 
 MAX_REQUEST = 262144
 MAX_RESPONSE = 2097152
@@ -67,6 +66,8 @@ class Runtime:
         self.batch_active = False
         self.opponent_policies = {}
         self.identity = self.check_identity()
+        if self.identity['package_version'] == '3.1.0' and not callable(getattr(self.sage, 'DifficultyPolicy', None)):
+            raise ValueError('NeonGammon 3.1.0 did not export DifficultyPolicy')
         expected = profile.get('artifact_fingerprint')
         if expected and expected != self.identity['artifact_fingerprint']:
             raise ValueError('NeonGammon assets changed since submission; restore the saved installation')
@@ -106,19 +107,15 @@ class Runtime:
             raise ValueError('NeonGammon installation changed during evaluation')
 
     def opponent_policy(self, difficulty, seed):
-        module_name = 'neondojo_opponent_policy'
-        module = sys.modules.get(module_name)
-        if module is None:
-            module = ModuleType(module_name)
-            module.__package__ = 'neongammon'
-            sys.modules[module_name] = module
-            exec(compile(OPPONENT_POLICY_SOURCE, 'neongammon/difficulty.py', 'exec'), module.__dict__)
         policy = self.opponent_policies.get(difficulty)
         if policy is None:
-            policy = module.DifficultyPolicy(difficulty, seed=seed, parallel_threads=self.profile['threads'])
+            factory = getattr(self.sage, 'DifficultyPolicy', None)
+            if factory is None:
+                raise ValueError('NeonGammon difficulty presets require the 3.1.0 wheel')
+            policy = factory(difficulty, seed=seed, parallel_threads=self.profile['threads'])
             self.opponent_policies[difficulty] = policy
         else:
-            # The bundled policy has one RNG. Re-seed it independently of dice and other sessions.
+            # Reuse the installed policy's analyzer and seed this decision independently.
             policy._rng.seed(seed)
         return policy
 

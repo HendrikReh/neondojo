@@ -249,13 +249,12 @@ class OpponentPolicyTests(unittest.TestCase):
         runtime.opponent_policies = {}
         constructor = Mock(side_effect=lambda difficulty, seed, parallel_threads:
                            SimpleNamespace(_rng=Random(seed)))
-        module = SimpleNamespace(DifficultyPolicy=constructor)
-        with patch.dict(sys.modules, {'neondojo_opponent_policy': module}):
-            first = runtime.opponent_policy('beginner', 61)
-            value = first._rng.random()
-            self.assertIs(runtime.opponent_policy('beginner', 61), first)
-            self.assertEqual(first._rng.random(), value)
-        constructor.assert_called_once()
+        runtime.sage = SimpleNamespace(DifficultyPolicy=constructor)
+        first = runtime.opponent_policy('beginner', 61)
+        value = first._rng.random()
+        self.assertIs(runtime.opponent_policy('beginner', 61), first)
+        self.assertEqual(first._rng.random(), value)
+        constructor.assert_called_once_with('beginner', seed=61, parallel_threads=2)
 
     def test_opponent_requests_use_the_choice_from_the_preset(self):
         spec = importlib.util.spec_from_file_location('sage_worker', PATH)
