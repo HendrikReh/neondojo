@@ -177,6 +177,11 @@ export const loadDecisions = (
   request<GameDecisions>(`/matches/${matchId}/games/${gameNo}/decisions`, {
     signal,
   });
+/** Source irregularities the import of this match resolved, in game order. */
+export const loadImportWarnings = (matchId: string, signal: AbortSignal) =>
+  request<Schema['ImportWarning'][]>(`/matches/${matchId}/import-warnings`, {
+    signal,
+  });
 export type ActionItem = Schema['ActionItem'];
 export type ActionResponse = Schema['ActionResponse'];
 export type BatchAction = 'copy' | 'move' | 'delete' | 'tags';

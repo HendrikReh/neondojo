@@ -36,7 +36,35 @@ pub async fn import_match_in_database(
     imported: &ImportedMatch,
     database_id: Uuid,
 ) -> Result<ImportResponse> {
-    let prepared = MatchImport::prepare(filename, format, bytes, sgf, imported).await?;
+    import_source_in_database(
+        pool,
+        filename,
+        format,
+        bytes,
+        sgf,
+        imported,
+        Vec::new(),
+        database_id,
+    )
+    .await
+}
+
+/// Import a source file together with the irregularities its conversion
+/// resolved. They are saved with the match and returned in the response.
+#[allow(clippy::too_many_arguments)]
+pub async fn import_source_in_database(
+    pool: &PgPool,
+    filename: &str,
+    format: &str,
+    bytes: &[u8],
+    sgf: &str,
+    imported: &ImportedMatch,
+    warnings: Vec<ImportWarning>,
+    database_id: Uuid,
+) -> Result<ImportResponse> {
+    let prepared = MatchImport::prepare(filename, format, bytes, sgf, imported)
+        .await?
+        .with_warnings(warnings);
     let mut tx = pool.begin().await?;
     let result = insert_match_import(&mut tx, database_id, prepared).await?;
     tx.commit().await?;
@@ -75,6 +103,7 @@ pub(crate) struct MatchImport<'a> {
     hash: String,
     metadata: crate::databases::SourceMetadata,
     source_analysis: Vec<crate::imported_analysis::ImportedAnalysisData>,
+    warnings: Vec<ImportWarning>,
 }
 
 impl<'a> MatchImport<'a> {
@@ -109,7 +138,13 @@ impl<'a> MatchImport<'a> {
             hash,
             metadata,
             source_analysis,
+            warnings: Vec::new(),
         })
+    }
+
+    pub(crate) fn with_warnings(mut self, warnings: Vec<ImportWarning>) -> Self {
+        self.warnings = warnings;
+        self
     }
 }
 
@@ -127,6 +162,7 @@ pub(crate) async fn insert_match_import(
         hash,
         metadata,
         source_analysis,
+        warnings,
     } = prepared;
     let id = Uuid::new_v4();
     // Match moves and database deletion lock the owner before touching matches.
@@ -138,9 +174,9 @@ pub(crate) async fn insert_match_import(
     .fetch_optional(&mut **tx)
     .await?;
     ensure!(available.is_some(), "Database not found");
-    let inserted: Option<Uuid> = sqlx::query_scalar("INSERT INTO matches(id,filename,format,sha256,white,black,match_length,position_count,original,sgf,database_id,played_on,tournament,round,place,result_state,white_score,black_score,source_metadata_loaded) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,true) ON CONFLICT(database_id,sha256) DO NOTHING RETURNING id")
+    let inserted: Option<Uuid> = sqlx::query_scalar("INSERT INTO matches(id,filename,format,sha256,white,black,match_length,position_count,original,sgf,database_id,played_on,tournament,round,place,result_state,white_score,black_score,source_metadata_loaded,import_warnings) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,true,$19) ON CONFLICT(database_id,sha256) DO NOTHING RETURNING id")
         .bind(id).bind(filename).bind(format).bind(&hash).bind(&imported.players[0]).bind(&imported.players[1])
-        .bind(imported.match_length).bind(imported.positions.len() as i32).bind(bytes).bind(sgf).bind(database_id).bind(metadata.played_on).bind(metadata.tournament).bind(metadata.round).bind(metadata.place).bind(metadata.result_state).bind(metadata.white_score).bind(metadata.black_score)
+        .bind(imported.match_length).bind(imported.positions.len() as i32).bind(bytes).bind(sgf).bind(database_id).bind(metadata.played_on).bind(metadata.tournament).bind(metadata.round).bind(metadata.place).bind(metadata.result_state).bind(metadata.white_score).bind(metadata.black_score).bind(sqlx::types::Json(&warnings))
         .fetch_optional(&mut **tx).await?;
     if inserted.is_none() {
         let existing = sqlx::query_as::<_, MatchSummary>(&format!(
@@ -184,7 +220,7 @@ pub(crate) async fn insert_match_import(
     Ok(ImportResponse {
         r#match: summary,
         duplicate: false,
-        warnings: Vec::new(),
+        warnings,
     })
 }
 
@@ -250,6 +286,15 @@ pub async fn game_catalog(pool: &PgPool, match_id: Uuid) -> Result<Option<Vec<Ma
 }
 
 /// The game catalog with each game's result, derived from the stored SGF.
+pub async fn import_warnings(pool: &PgPool, match_id: Uuid) -> Result<Option<Vec<ImportWarning>>> {
+    let warnings: Option<sqlx::types::Json<Vec<ImportWarning>>> =
+        sqlx::query_scalar("SELECT import_warnings FROM matches WHERE id=$1")
+            .bind(match_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(warnings.map(|sqlx::types::Json(warnings)| warnings))
+}
+
 pub async fn match_games(pool: &PgPool, match_id: Uuid) -> Result<Option<Vec<MatchGame>>> {
     match game_catalog(pool, match_id).await? {
         Some(games) => Ok(Some(enrich_game_results(pool, match_id, games).await?)),

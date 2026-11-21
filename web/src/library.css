@@ -526,6 +526,12 @@
   text-align: right;
   font-weight: var(--font-weight-semibold);
 }
+.import-notes-marker {
+  display: inline-flex;
+  margin-left: 4px;
+  vertical-align: -2px;
+  color: var(--ui-warning-text);
+}
 .match-database .database-table tr:focus-within td {
   background: var(--ui-selected);
 }

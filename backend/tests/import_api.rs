@@ -4,7 +4,7 @@ use neondojo::{
     api::{self, AppState},
     engine::Engine,
     jobs,
-    model::{ImportResponse, MatchGame},
+    model::{GameResultReason, ImportResponse, ImportWarning, ImportWarningKind, MatchGame},
     store,
 };
 use sqlx::PgPool;
@@ -183,6 +183,181 @@ async fn txt_match_transcripts_import_as_mat(pool: PgPool) {
     assert_eq!(played_on, chrono::NaiveDate::from_ymd_opt(2014, 8, 10));
 }
 
+async fn get_json<T: serde::de::DeserializeOwned>(app: &axum::Router, uri: String) -> T {
+    let response = app
+        .clone()
+        .oneshot(Request::get(uri).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let status = response.status();
+    let data = response.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&data));
+    serde_json::from_slice(&data).unwrap()
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL and local GNUbg"]
+async fn mat_errors_end_their_game_and_stay_with_the_match(pool: PgPool) {
+    let app = api::router(AppState::new(
+        pool.clone(),
+        Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into())),
+    ));
+    let original: &[u8] = include_bytes!("fixtures/WC1988-final.txt");
+    let edit = |source: &[u8], old: &str, new: &str| {
+        let text = std::str::from_utf8(source).unwrap();
+        assert_eq!(text.matches(old).count(), 1, "{old}");
+        text.replacen(old, new, 1).into_bytes()
+    };
+    // Line 49: 24/20 does not fit the 21 it is played with. Line 57: xx is no point.
+    let faulty = edit(
+        &edit(
+            original,
+            "  3) 21: 24/21                   54: 13/4*",
+            "  3) 21: 24/20                   54: 13/4*",
+        ),
+        "  2) 41: 24/20 21/20 ",
+        "  2) 41: 24/20 xx/20 ",
+    );
+    let response = app
+        .clone()
+        .oneshot(upload("WC1988-faulty.txt", &faulty))
+        .await
+        .unwrap();
+    let status = response.status();
+    let data = response.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(status, 201, "{}", String::from_utf8_lossy(&data));
+    let result: ImportResponse = serde_json::from_slice(&data).unwrap();
+    let located = |w: &ImportWarning| {
+        (
+            w.kind,
+            w.game_no,
+            w.source_ply,
+            w.source_line,
+            w.source_text.clone(),
+        )
+    };
+    assert_eq!(
+        result.warnings.iter().map(located).collect::<Vec<_>>(),
+        [
+            (
+                ImportWarningKind::IllegalPlayTruncated,
+                2,
+                Some(3),
+                Some(49),
+                Some("21: 24/20".into())
+            ),
+            (
+                ImportWarningKind::UnreadablePlayTruncated,
+                3,
+                Some(2),
+                Some(57),
+                Some("41: 24/20 xx/20".into())
+            ),
+            // Game 10 ends with a dropped 2-cube (12:6), but game 11 starts at 12:8.
+            (ImportWarningKind::ScoreMismatch, 11, None, Some(236), None),
+        ]
+    );
+    assert_eq!(result.warnings[2].expected_score, Some([12, 6]));
+    assert_eq!(result.warnings[2].recorded_score, Some([12, 8]));
+    let id = result.r#match.id;
+    let games: Vec<MatchGame> = get_json(&app, format!("/api/matches/{id}/games")).await;
+    let complete: Vec<MatchGame> = {
+        let response = app
+            .clone()
+            .oneshot(upload("WC1988-final.txt", original))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 201);
+        let data = response.into_body().collect().await.unwrap().to_bytes();
+        let result: ImportResponse = serde_json::from_slice(&data).unwrap();
+        // The archive itself has the score mismatch but no rejected move.
+        assert_eq!(
+            result
+                .warnings
+                .iter()
+                .map(|w| (w.kind, w.game_no))
+                .collect::<Vec<_>>(),
+            [(ImportWarningKind::ScoreMismatch, 11)]
+        );
+        get_json(&app, format!("/api/matches/{}/games", result.r#match.id)).await
+    };
+    assert_eq!(games.len(), 45);
+    for (game, reference) in games.iter().zip(&complete) {
+        assert_eq!(
+            (game.white_score, game.black_score, game.crawford),
+            (
+                reference.white_score,
+                reference.black_score,
+                reference.crawford
+            ),
+            "game {}",
+            game.game_no
+        );
+        if [2, 3].contains(&game.game_no) {
+            // Each faulty game keeps only the moves before its rejected cell;
+            // the next header still establishes its award, not how it was won.
+            assert!(game.position_count < reference.position_count);
+            let result = game.result.as_ref().unwrap();
+            assert_eq!(
+                result.reason,
+                GameResultReason::Recorded,
+                "game {}",
+                game.game_no
+            );
+            assert_eq!(
+                result.scores_after,
+                reference.result.as_ref().unwrap().scores_after
+            );
+        } else {
+            assert_eq!(game.position_count, reference.position_count);
+            assert_eq!(game.result, reference.result);
+        }
+    }
+    // The warnings are saved with the match and counted in the library row.
+    let stored: Vec<ImportWarning> =
+        get_json(&app, format!("/api/matches/{id}/import-warnings")).await;
+    assert_eq!(stored, result.warnings);
+    let row: serde_json::Value = get_json(&app, format!("/api/matches/{id}/metadata")).await;
+    assert_eq!(row["import_warning_count"], 3);
+    // A duplicate upload reports them again without a second record.
+    let response = app
+        .clone()
+        .oneshot(upload("again.txt", &faulty))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    let data = response.into_body().collect().await.unwrap().to_bytes();
+    let again: ImportResponse = serde_json::from_slice(&data).unwrap();
+    assert_eq!(again.warnings, result.warnings);
+    // A copy in another database keeps the warnings of its source file.
+    let target: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO databases(id,name) VALUES(gen_random_uuid(),'Copies') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/library/actions")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({"action":"copy","match_ids":[id],"target_database_id":target})
+                        .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let data = response.into_body().collect().await.unwrap().to_bytes();
+    let copied: serde_json::Value = serde_json::from_slice(&data).unwrap();
+    assert_eq!(copied["results"][0]["status"], "copied", "{copied}");
+    let copy = copied["results"][0]["created_id"].as_str().unwrap();
+    let stored: Vec<ImportWarning> =
+        get_json(&app, format!("/api/matches/{copy}/import-warnings")).await;
+    assert_eq!(stored, result.warnings);
+}
+
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL and local GNUbg"]
 async fn all_four_formats_are_atomic_and_engine_failures_are_persisted(pool: PgPool) {
@@ -191,7 +366,8 @@ async fn all_four_formats_are_atomic_and_engine_failures_are_persisted(pool: PgP
         Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into())),
     );
     let app = api::router(state.clone());
-    let bad=b"7 point match\n\n Game 1\n Alice : 0                         Bob : 0\n 1) 31: 8/5 6/5                    42: 8/4 6/4\n 2) 65: 24/22 22/13\n";
+    // An illegal first move leaves the only game without any checker move.
+    let bad=b"7 point match\n\n Game 1\n Alice : 0                         Bob : 0\n 1) 65: 24/22 22/13\n";
     assert_eq!(
         app.clone()
             .oneshot(upload("broken.mat", bad))

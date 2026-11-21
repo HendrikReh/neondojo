@@ -1887,3 +1887,16 @@ progress::-webkit-progress-value {
 .notes-scope-panel .annotation-panel {
   margin-top: 0;
 }
+.import-notes {
+  margin: 0 0 12px;
+}
+.import-notes h3 {
+  margin: 0;
+  font-size: var(--font-size-panel);
+  font-weight: var(--font-weight-semibold);
+}
+.import-notes-hint {
+  margin: 2px 0 0;
+  color: var(--ui-muted);
+  font-size: var(--font-size-meta);
+}

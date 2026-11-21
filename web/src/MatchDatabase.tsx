@@ -463,6 +463,23 @@ export default function MatchDatabase({
       </button>
     );
   }
+  /** PRs from a source whose import resolved irregularities. */
+  function importNotesMarker(match: LibraryMatch) {
+    if (!match.import_warning_count) return null;
+    const label = l('importNotesCount', {
+      count: match.import_warning_count,
+    });
+    return (
+      <span
+        className="import-notes-marker"
+        role="img"
+        aria-label={label}
+        title={label}
+      >
+        <ActionIcon name="warning" size={13} />
+      </span>
+    );
+  }
   function rowKey(
     e: KeyboardEvent<HTMLTableRowElement>,
     match: LibraryMatch,
@@ -1096,6 +1113,7 @@ export default function MatchDatabase({
                         {showColumn('white_pr') && (
                           <td className="library-pr-cell">
                             {pr(canShowMatchPr(m) ? m.white_pr : null)}
+                            {importNotesMarker(m)}
                           </td>
                         )}
                         {showColumn('black') && (
@@ -1112,6 +1130,7 @@ export default function MatchDatabase({
                         {showColumn('black_pr') && (
                           <td className="library-pr-cell">
                             {pr(canShowMatchPr(m) ? m.black_pr : null)}
+                            {importNotesMarker(m)}
                           </td>
                         )}
                         {showColumn('play_mode') && (

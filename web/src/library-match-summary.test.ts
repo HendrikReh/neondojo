@@ -15,6 +15,7 @@ const match: LibraryMatch = {
   match_length: 11,
   position_count: 460,
   game_count: 10,
+  import_warning_count: 0,
   created_at: '2026-11-09T12:00:00Z',
   played_on: '2026-11-08',
   tournament: 'Autumn Open',

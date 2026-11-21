@@ -509,11 +509,11 @@ pub fn convert_xg(input: &[u8]) -> Result<XgImport> {
                 if in_game && game_in_progress {
                     out.push_str(")\n");
                     in_game = false;
-                    warnings.push(ImportWarning {
-                        kind: ImportWarningKind::UnfinishedGame,
-                        game_no: game_count,
-                        source_ply: None,
-                    });
+                    warnings.push(ImportWarning::at(
+                        ImportWarningKind::UnfinishedGame,
+                        game_count,
+                        None,
+                    ));
                 }
                 ensure!(!in_game, "XG: game header before previous game footer");
                 // Cumulative money-session totals do not enter GNUbg equity
@@ -586,11 +586,11 @@ pub fn convert_xg(input: &[u8]) -> Result<XgImport> {
                         .map(|(_, r)| i32_at(r, 64).and_then(color))
                         .transpose()?;
                     out.push_str(&setup_node(&board, turn, Some(start_cube))?);
-                    warnings.push(ImportWarning {
-                        kind: ImportWarningKind::CustomStartPosition,
-                        game_no: game_count,
-                        source_ply: None,
-                    });
+                    warnings.push(ImportWarning::at(
+                        ImportWarningKind::CustomStartPosition,
+                        game_count,
+                        None,
+                    ));
                 }
             }
             2 => {
@@ -697,11 +697,11 @@ pub fn convert_xg(input: &[u8]) -> Result<XgImport> {
                     );
                     out.push_str(&setup_node(&board, Some(color(-active)?), None)?);
                     pending_cube_analysis = None;
-                    warnings.push(ImportWarning {
-                        kind: ImportWarningKind::IllegalPlayReplaced,
-                        game_no: game_count,
-                        source_ply: Some(checker_no),
-                    });
+                    warnings.push(ImportWarning::at(
+                        ImportWarningKind::IllegalPlayReplaced,
+                        game_count,
+                        Some(checker_no),
+                    ));
                     continue;
                 }
                 let d1 = i32_at(record, 100)?;
@@ -1379,11 +1379,11 @@ mod tests {
             assert_same_positions(&actual, &kept);
             assert_eq!(
                 converted.warnings,
-                vec![ImportWarning {
-                    kind: ImportWarningKind::IllegalPlayReplaced,
-                    game_no: expected[ordinal].game_no,
-                    source_ply: Some(expected[ordinal].ply),
-                }]
+                vec![ImportWarning::at(
+                    ImportWarningKind::IllegalPlayReplaced,
+                    expected[ordinal].game_no,
+                    Some(expected[ordinal].ply)
+                )]
             );
         }
     }
@@ -1438,11 +1438,11 @@ mod tests {
             assert_eq!(actual.iter().find(|p| p.game_no == game_no).unwrap().ply, 1);
             assert_eq!(
                 converted.warnings,
-                vec![ImportWarning {
-                    kind: ImportWarningKind::CustomStartPosition,
+                vec![ImportWarning::at(
+                    ImportWarningKind::CustomStartPosition,
                     game_no,
-                    source_ply: None,
-                }]
+                    None
+                )]
             );
             // A standard header still has to agree with the stored start.
             let mut contradicting = records.clone();
@@ -1497,11 +1497,11 @@ mod tests {
         assert_eq!(trees[1][0].get("RE"), expected_trees[1][0].get("RE"));
         assert_eq!(
             converted.warnings,
-            vec![ImportWarning {
-                kind: ImportWarningKind::UnfinishedGame,
-                game_no: 1,
-                source_ply: None,
-            }]
+            vec![ImportWarning::at(
+                ImportWarningKind::UnfinishedGame,
+                1,
+                None
+            )]
         );
     }
 }

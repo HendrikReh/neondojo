@@ -3,8 +3,13 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import AnnotationPanel from './AnnotationPanel';
 import type { AnnotationKind } from './annotation-api';
 import { useAnnotationI18n } from './annotation-messages';
-import { loadDecisions, type GameDecisions } from './library-api';
-import { useLibraryText } from './library-messages';
+import { ImportNotes } from './ImportNotes';
+import {
+  loadDecisions,
+  loadImportWarnings,
+  type GameDecisions,
+} from './library-api';
+import { useLibraryText, type ImportWarning } from './library-messages';
 interface NotesPanelProps {
   matchId: string;
   suspended?: boolean;
@@ -32,11 +37,29 @@ export default function NotesPanel({
   >({});
   const [preferred, setPreferred] = useState<AnnotationKind>('position'),
     [catalog, setCatalog] = useState<GameDecisions>(),
-    [error, setError] = useState<unknown>();
+    [error, setError] = useState<unknown>(),
+    // Owned per match; the scope tabs only filter it.
+    [importWarnings, setImportWarnings] = useState<{
+      matchId: string;
+      warnings: ImportWarning[];
+    }>(),
+    [importError, setImportError] = useState<unknown>();
   useEffect(() => {
     if (scopeRequest && scopeRequest.kind !== 'move')
       setPreferred(scopeRequest.kind);
   }, [scopeRequest]);
+  useEffect(() => {
+    setImportError(undefined);
+    const abort = new AbortController();
+    void loadImportWarnings(matchId, abort.signal)
+      .then((warnings) => {
+        if (!abort.signal.aborted) setImportWarnings({ matchId, warnings });
+      })
+      .catch((e) => {
+        if (!abort.signal.aborted) setImportError(e);
+      });
+    return () => abort.abort();
+  }, [matchId]);
   useEffect(() => {
     setCatalog(undefined);
     setError(undefined);
@@ -65,6 +88,14 @@ export default function NotesPanel({
         : 'match';
   const annotationId =
     active === 'position' ? positionId! : active === 'game' ? gameId! : matchId;
+  const matchWarnings =
+    importWarnings?.matchId === matchId ? importWarnings.warnings : [];
+  const scopeWarnings =
+    active === 'match'
+      ? matchWarnings
+      : active === 'game'
+        ? matchWarnings.filter((warning) => warning.game_no === gameNo)
+        : [];
   function navigate(
     e: KeyboardEvent<HTMLButtonElement>,
     current: AnnotationKind,
@@ -115,6 +146,11 @@ export default function NotesPanel({
           {formatError(error)}
         </p>
       )}
+      {!!importError && (
+        <p role="alert" className="error">
+          {formatError(importError)}
+        </p>
+      )}
       {scopes.map((scope) => (
         <div
           key={scope}
@@ -124,6 +160,7 @@ export default function NotesPanel({
           aria-labelledby={`${htmlId}-${scope}-tab`}
           hidden={active !== scope}
         >
+          {active === scope && <ImportNotes warnings={scopeWarnings} />}
           {active === scope && !suspended && (
             <AnnotationPanel
               key={`${active}:${annotationId}`}

@@ -5,6 +5,7 @@
 
 mod bgf;
 pub(crate) mod ids;
+pub(crate) mod mat;
 pub(crate) mod match_context;
 pub(crate) mod ogxm;
 pub(crate) mod sgf;
@@ -16,6 +17,13 @@ pub use sgf::parse_sgf;
 pub(crate) use xg::xg_beaver_rule;
 pub use xg::{XgImport, convert_xg, xg_to_sgf};
 pub use xg_export::{XgExportMetadata, sgf_to_xg};
+
+/// Canonical SGF of a MAT transcript and the irregularities its import resolved.
+#[derive(Debug, Clone)]
+pub struct MatImport {
+    pub sgf: String,
+    pub warnings: Vec<crate::model::ImportWarning>,
+}
 
 #[derive(Debug, Clone)]
 pub struct ImportedMatch {
