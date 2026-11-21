@@ -27,7 +27,7 @@ async function importStudy(
       `(;GM[6]PW[Study ${suffix}]PB[Opponent]${metadata};W[31xufe];B[42qusu])`,
     ),
   });
-  await expect(page.locator('.board')).toBeVisible();
+  await expect(page.locator('.analysis-workspace .board')).toBeVisible();
 }
 
 test('match and position notes persist, search jumps to the exact move, and conflicts retain the draft', async ({
@@ -513,7 +513,7 @@ test('a whole-match deck trains checker, double and response cards with the sele
       `(;GM[6]PW[Bulk ${suffix}]PB[Opponent]${metadata};W[31hefe])(;GM[6]${metadata}AE[a:y]AW[f]AB[s]PL[W];W[double];B[drop])`,
     ),
   });
-  await expect(page.locator('.board')).toBeVisible();
+  await expect(page.locator('.analysis-workspace .board')).toBeVisible();
   const panel = page.getByRole('region', {
     name: 'Vollständige Matchanalyse',
     exact: true,

@@ -371,7 +371,7 @@ test('switching profiles preserves an unsaved note without submitting it', async
       `(;GM[6]PW[Profile ${marker}]PB[Opponent]MI[length:7][ws:0][bs:0];W[31hefe])`,
     ),
   });
-  await expect(page.locator('.board').first()).toBeVisible();
+  await expect(page.locator('.analysis-workspace .board')).toBeVisible();
   await page.getByRole('tab', { name: 'Notes', exact: true }).click();
   const comment = page
     .locator('.annotation-panel')
