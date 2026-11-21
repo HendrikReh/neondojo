@@ -6,6 +6,10 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ## [Unreleased]
 
+### Added
+
+- **Duplicate match finder.** **Duplicates** in the Match database groups matches with the same played record in the selected database or in all databases, including the same match imported from different formats or with the sides swapped. Groups of byte-identical files are marked. **Select copies** selects all but the oldest match of each group for the existing bulk actions. New endpoint `GET /api/library/duplicates`. [Duplicate match finder](docs/reference/library.md#duplicate-match-finder)
+
 ### Fixed
 
 - **Builds without local theme archives stop.** `npm run build`, `npm run dev` and `npm test` in `web/` no longer drop BGBlitz themes from `shared/configuration-options.json` when their ZIPs are missing from `themes/`, for example in a fresh worktree. Such a build served no theme images and showed "The theme image could not be loaded" or "Invalid configuration: appearance". Theme preparation now names the missing archives and stops; `NEONDOJO_ALLOW_MISSING_THEMES=1` removes the themes on purpose. [Board themes](docs/reference/settings.md#board-artwork)

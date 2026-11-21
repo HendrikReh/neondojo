@@ -11,12 +11,24 @@ NeonDojo automatically provides **Unsorted** for imports without an explicit tar
 ### Filtering and navigating matches
 
 - The match list loads when you open **Match database**. It requests 50 results at a time and fetches another page when you select it.
-- Use the search bar to find matches by player, file name, display name, event or round, or by the text of their tags and comments. **Filters** opens the advanced match filters, **Notes** searches tags and comments, and **Position ID** finds exact board occurrences. Opening a panel collapses the previous panel and keeps its inputs. The match list and the exact position search share the table filters.
+- Use the search bar to find matches by player, file name, display name, event or round, or by the text of their tags and comments. **Filters** opens the advanced match filters, **Notes** searches tags and comments, **Position ID** finds exact board occurrences, and **Duplicates** opens the [duplicate match finder](#duplicate-match-finder). Opening a panel collapses the previous panel and keeps its inputs. The match list and the exact position search share the table filters.
 - The advanced match filters cover player, match name, event, round, a date range on either the played or the import date, tag, comment, match type (match or money), result (completed, White won, Black won, draw, ongoing or unknown) and a range of match points.
 - Applied table filters appear below the search field, even when the filter panel is collapsed. Remove a chip to rerun the search with the remaining filters.
 - An exact GNUbg Position ID filter shows every occurrence as its own row in the match table, including repeats in the same game. Use the **Database**, **Game** and **Move** columns to locate or sort the occurrences. Click the move number to open that exact occurrence. The result count refers to occurrences. A checkbox selects the entire match, and the bulk action bar counts each selected match once.
 - Select a single match and choose **Open match** above the list, or open it from a linked player name, by pressing Enter or by double-clicking the row. With a position filter active, this opens the exact occurrence. Use the arrow keys to move between rows.
 - Sorting applies to all results before pagination. Click a data column header to sort ascending, then click again to sort descending. Names sort case-insensitively. IDs, PR, position counts, scores, game numbers and move numbers sort numerically. Scores sort by White, then Black. Missing values appear last in both directions. Changing the sort returns to the first page and clears the selection. Without a position filter, the occurrence-specific sorts fall back to import date.
+
+### Duplicate match finder
+
+**Duplicates** above the match table lists matches that occur more than once, in groups. It searches the selected database, or all databases under **All databases**. **Paused Matches** and the context of saved positions are not included.
+
+- Two matches are duplicates when they have the same match length and every game has the same sequence of checker decisions: the board, the roll, the cube value and owner, Crawford and the score, each seen from the player on roll. The file format, file name, player names, metadata, notes and the order in which a source records the dice do not matter, nor does which side a source calls White. The same match imported as MAT, SGF and XG therefore forms one group.
+- **Same moves** marks a group whose original files differ. **Identical files** marks a group whose members were all imported from byte-identical files, for example the same file in two databases. Within one database, the import already rejects an identical file.
+- Each group lists its matches oldest first by **ID**, with database, format, import date, match length and analysis status. Click the match name or double-click the row to open the match.
+- The checkboxes share the selection with the match table, so the actions above the list apply: for example **Delete**, **Move** or **Tags**. **Select copies** selects every match except the oldest of each listed group, up to 100 matches. Notes and analyses belong to their own match, so check which copy holds them before deleting the others.
+- The list loads 50 groups at a time; **Show more groups** loads the next ones. A group lists up to 50 matches and names its full size. **Search again** refreshes the list; it also refreshes after an action in the library.
+
+`GET /api/library/duplicates` compares a position fingerprint only for matches that share match length and position count with another match in the scope. On November 20, 2026, in a throwaway database with 10,200 synthetic matches and 2,034,800 positions, where every match shared both values with others and 200 groups of two were duplicates, `EXPLAIN (ANALYZE, BUFFERS)` measured about 1.7 s for the first page. On the local library with 128 matches and 24,221 positions it took 8 ms. These are PostgreSQL execution times, not API or UI latency.
 
 ### Table and metadata
 

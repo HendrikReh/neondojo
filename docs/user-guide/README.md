@@ -539,7 +539,7 @@ The Match database stores all your matches in named collections.
 | 1 | **Import match** and destination | Import one or more files into the database selected beside the button. |
 | 2 | **Databases** | Choose a collection, or **All databases**. Use **+** to create a new one. |
 | 3 | **Search** | Find matches by player or file name. |
-| 4 | **Filters / Notes / Position ID** | Advanced filters, a search of tags and comments, and an exact board search. |
+| 4 | **Filters / Notes / Position ID / Duplicates** | Advanced filters, a search of tags and comments, an exact board search, and the duplicate match finder. |
 | 5 | **Actions** | Actions for the selected matches. They become available once you select a match. |
 | 6 | **Match table** | Sortable columns with PR, score, dates, event, analysis status and tags. |
 
@@ -573,6 +573,7 @@ Details: [Import formats](../reference/library.md#import-formats)
 - **Filters** searches by player, match name, event, round, date range, tag, comment, match type, result and match points.
 - **Notes** searches tags and comments. Free text must be 3 to 200 characters. You can add an exact tag, a note type and a database.
 - **Position ID** finds every occurrence of an exact board in the library. Each occurrence gets its own row with its game and move. Click the move number to open exactly that occurrence.
+- **Duplicates** groups matches that were imported more than once, even in different formats or with different file names. **Select copies** selects all but the oldest match of each group; delete or move them with the actions above the list. Details: [Duplicate match finder](../reference/library.md#duplicate-match-finder)
 - Applied filters appear as chips below the search field.
 
 Click a column heading to sort ascending, and click it again to sort descending. **Columns** shows, hides and reorders columns. Drag a header edge to resize a column, and use **Reset column widths** to restore the defaults. Hover over a row to see a summary with PR, analysis profile and excerpts from the notes.

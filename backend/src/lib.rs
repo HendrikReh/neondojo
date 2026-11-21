@@ -20,6 +20,7 @@ pub mod settings;
 
 mod database_backup;
 pub mod databases;
+pub mod duplicate_matches;
 pub mod move_catalog;
 pub mod move_explanation;
 mod player_directory;
