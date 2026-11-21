@@ -15,7 +15,7 @@ use axum::{
 };
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
+use sqlx::{FromRow, Postgres, postgres::PgArguments, query::QueryAs};
 use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
 
@@ -145,6 +145,12 @@ struct Row {
     player: i32,
     equity_loss: Option<f64>,
     position: Option<serde_json::Value>,
+}
+
+fn review_rows_query<'q>() -> QueryAs<'q, Postgres, Row, PgArguments> {
+    // The analysis source, cursor and page IDs can change the join plan.
+    // Keep these plans specific to each request's values.
+    sqlx::query_as(REVIEW_SQL).persistent(false)
 }
 
 pub fn routes() -> Router<AppState> {
@@ -436,7 +442,7 @@ async fn load_review_bounded(
     let mut items = Vec::new();
     let mut matched = 0;
     loop {
-        let rows: Vec<Row> = sqlx::query_as(REVIEW_SQL)
+        let rows = review_rows_query()
             .bind(id)
             .bind(job_id)
             .bind(game)
@@ -627,7 +633,7 @@ async fn build_hits(
     let mut hits = Vec::new();
     let mut cursor: Option<(i32, i32, bool, String)> = None;
     loop {
-        let rows: Vec<Row> = sqlx::query_as(REVIEW_SQL)
+        let rows = review_rows_query()
             .bind(match_id)
             .bind(job_id)
             .bind(None::<i32>)
@@ -781,7 +787,7 @@ impl HitPage<'_> {
             .collect();
         let mut items = Vec::new();
         if !page.is_empty() {
-            let rows: Vec<Row> = sqlx::query_as(REVIEW_SQL)
+            let rows = review_rows_query()
                 .bind(self.match_id)
                 .bind(self.job_id)
                 .bind(self.game)

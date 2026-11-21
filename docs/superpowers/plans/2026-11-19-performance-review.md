@@ -20,9 +20,13 @@ Rust, Axum und PostgreSQL bleiben für Ergebnisse, Quellen und Jobzustände maß
 
 ## P0 · Baselines und Vergleich
 
-- [ ] Die drei Messrezepte unten auf `d3a21e1` wiederholen. Bei abweichendem Implementierungsstartpunkt dort eine weitere Baseline erheben.
+- [x] Messrezepte A, B und C auf `d3a21e1` und `main` (`2cb191e`) wiederholt. Die Vergleiche mit den jeweiligen Implementierungsstartpunkten stehen bei den Arbeitspaketen.
 - [ ] Je Paket einen fokussierten Regressionstest und eine wiederholbare Messung etablieren. Revisionswechsel, Competition-Sichtbarkeit, leere oder teilweise analysierte Spiele, erzwungene Pässe und verspätete Antworten in den jeweils betroffenen Pfaden prüfen.
 - [ ] Für den Vergleich Commit, macOS, Hardware, PostgreSQL- und Engine-Version, Tiefe, Threads, Datenumfang und Trefferquote erfassen. SQL-Ausführungszeit, API-Antwortzeit und Zeit bis zur Browseranzeige jeweils separat ausweisen. Vergleichsläufe ohne parallele Builds oder Analyseaufträge durchführen.
+
+Die Wiederholung am 21. November 2026 nutzte Release-Builds auf einem Mac mini M4 Pro mit macOS 27.0.1 und PostgreSQL 16.13 auf Loopback. Rezept A verglich 2.000 Matches, davon 1.000 mit passendem Spieler und insgesamt 200.000 Entscheidungen. Auf beiden Ständen waren genau 1.000 native Fingerabdrücke aktuell. Die drei warmen SQL-Läufe ergaben **1.247,7 → 14,2 ms** Median für die Aktualitätsprüfung. Die mittleren JSON-Größen betrugen 1.670 Textbytes und 655 gespeicherte Bytes.
+
+Rezept C nutzte GNU Backgammon 1.08.003 mit einem Thread und je fünf frischen Aufträgen pro Tiefe und Stand. Die beobachtete Zeit bis zum Abschluss sank von **5,13 auf 0,58 s** bei 1-ply und von **6,67 auf 1,83 s** bei 3-ply. Pro Auftrag sanken die Versionsstarts von **43 auf 3** und die Auswertungsstarts von **21 auf 1**. Alle Stichproben enthielten die 21 erwarteten Würfelpaare mit Gesamtgewicht 36. Rezept B misst die HTTP-Antwortzeit. Seine Ergebnisse stehen bei der [nummerierten Fehlerliste](#p2--nummerierte-fehlerliste).
 
 ## P1 · Entscheidungssuche
 
@@ -63,7 +67,7 @@ Ergebnis auf der lokalen Bibliothek (858 Matches, 65.796 Entscheidungen; Spieler
 
 Das deckt auch ältere Importe ab, deren Laden `moves_cataloged` umschaltet. Die zusätzliche Abfrage kostet auf der lokalen Bibliothek ~0,4 ms je neu aufgebautem Match. Der Test `slower_rebuilds_never_publish_an_older_fingerprint` in `index.rs` schlägt ohne die Prüfung fehl.
 
-Die Messrezepte unten extrahieren die Abfrage über `let candidates: Vec<Candidate> = sqlx::query_as(`. Sie gelten für den Review-Stand `d3a21e1`. Für spätere Stände die Konstante `CANDIDATES` mit `$1` als Indexversion verwenden.
+Rezept A extrahiert die Aktualitätsabfrage aus dem jeweiligen Checkout. Auf dem Review-Stand misst es zusätzlich die Kontrollabfrage und die ID-Summe aus Stufe 1.
 
 - [x] Zwei identische Suchen auf aktuellem Bestand lösen null Rebuilds aus und lesen im Pfad zur Aktualitätsprüfung kein natives Entscheidungs-JSON. Auswahllogik, Trefferzahl, Sortierung und Rückverweise stimmen mit der Baseline überein. Das Messziel für A war mindestens 70 % weniger PostgreSQL-Ausführungszeit gegenüber dem Review-Stand auf demselben warmen Datensatz. Die Wiederverwendung prüft `decision_index_follows_saved_decisions`.
 - [x] Wechsel zwischen nativem und importiertem Ergebnis, spätere Checkpoints, Löschung, Positionsretention, Namensänderung, Restore und eine neue Klassifikatorversion invalidieren die betroffenen Einträge. Ein konkurrierender Rebuild überschreibt keine bereits veröffentlichte neuere Projektion. Bestehende Datenbanken werden migriert. Fehlergruppen liefern dieselben Gruppen und Raten wie zuvor. Stufe 2 prüft auch Korrekturen mit unveränderter Zeilen-ID, den Austausch eines Checkpoints und einen vorübergehenden Analysewechsel.
@@ -118,6 +122,19 @@ Messung B, je drei abwechselnde Runden à 12 warme Läufe auf getrennten Datenba
 - [x] Die Detailprojektion verarbeitet pro nummerierter Seite höchstens die Treffer der Seite. Zählung und Auswahl berücksichtigen weiterhin jede gültige Zeile. Vorgeschlagenes Messziel für B sind mindestens 30 % niedrigere Mediane für die erste, späte und gefilterte nummerierte Seite. Den Cursor-Median mitberichten und Verschlechterungen anhand mehrerer Läufe prüfen.
 - [x] `analysis_catalog`, `move_assessments` und den vorhandenen isolierten `explain_real_xg_review_page`-Test ausführen. Einen nativen Fall mit unvollständigem Checkpoint ergänzen. Messung B wiederholen und die SQL-Pläne zusätzlich sichern.
 
+**Nachmessung am 21. November 2026.** Beim Wechsel zwischen nummerierten Seiten und Cursor-Seiten konnte PostgreSQL für das gemeinsame, dauerhaft vorbereitete `REVIEW_SQL` auf einen generischen Plan wechseln. Im langsamen Fall protokollierte PostgreSQL über 210 ms für einen einzelnen Detail-SELECT. Der Kontrolllauf mit `plan_cache_mode=force_custom_plan` brachte nummerierte Seiten wieder auf 11–13 ms. Die Abfrage verwendet jetzt an allen drei Aufrufstellen ein nicht persistentes SQLx-Statement. PostgreSQL kann damit für die konkrete Quelle, den Cursor und die Treffer-IDs planen. Der SQLx-Regressionstest prüft auf einer einzelnen Verbindung die Ergebnisparität beim Wechsel der Seitentypen und die Abwesenheit eines dauerhaft vorbereiteten Review-Statements.
+
+Rezept B mit unverändertem `plan_cache_mode` auf `main` (`2cb191e`) und mit diesem Patch. Drei abwechselnde Runden mit separaten Testdatenbanken und je zwölf warmen HTTP-Anfragen pro Fall und Runde. Je Testfall stimmten Reihenfolge und Fachdaten aller 50 Treffer in sämtlichen Läufen überein. Die ungefilterte Gesamttrefferzahl betrug 738, bei Fehlern 74.
+
+| HTTP-Latenz | Median vorher | Median nachher | p95 vorher | p95 nachher |
+| --- | ---: | ---: | ---: | ---: |
+| Nummeriert, erste Seite | 213,4 ms | 12,0 ms | 230,2 ms | 13,3 ms |
+| Nummeriert, zehnte Seite | 215,6 ms | 11,5 ms | 229,2 ms | 13,1 ms |
+| Cursor, erste Seite | 66,0 ms | 29,1 ms | 69,1 ms | 31,8 ms |
+| Nummeriert, Fehlerseite | 218,0 ms | 12,4 ms | 233,2 ms | 14,2 ms |
+
+Auf `d3a21e1` lieferte derselbe Benchmark Mediane von 123,0 / 124,1 / 65,2 / 123,2 ms. Der dort separat gemessene erste SQL-Batch las 513 Zeilen in 9,6 ms.
+
 ## P2 · Open Sage unter Hintergrundlast
 
 Die gemeinsame Sperre ist laut Codekommentar gewollt: Spiel- und Analyseslot teilen sie, damit die Auswertungsparallelität der Engine und das Benchmark-Gate unverändert bleiben. Eine Spielanfrage wartet deshalb bis zum Ende eines ganzen Spielblocks, und ihr Timeout beginnt erst danach. Den Abtausch zwischen Zuglatenz und CPU-Budget vor der Umsetzung als Produktentscheidung klären. Zuerst die Zeit bis zum Erwerb der Worker-Sperre und die reine Auswertungszeit separat erfassen. Bevorzugter Entwurf sind getrennte Spiel- und Analyseslots mit gemeinsamem CPU-Budget und einer Frist für die gesamte interaktive Anfrage. Falls das Budget gleichzeitige Auswertung ausschließt, verifizierte Analyseblöcke verkürzen und interaktive Anfragen zwischen Blöcken vorziehen. [Gemeinsame Sperre](../../../backend/src/engines/process.rs#L14) · [Batch-Integrität](../../../backend/src/engines/process.rs#L207) · [Play-Pfad](../../../backend/src/play/open_sage.rs#L248)
@@ -165,7 +182,7 @@ cargo test -p neondojo --lib match_jobs::checkpoint_tests::benchmark_game_checkp
 
 ## Messrezepte
 
-Je Messung den Vorbereitungsblock und genau einen der Blöcke A, B oder C zusammen als Bash-Skript aus dem Repository ausführen. Voraussetzung sind ein verfügbares `pg_config`, Rust, Python 3, `curl`, `jq` und GNUbg mit installierten Gewichten. Vorher und nachher mit je einer frischen Datenbank messen. Das Rezept baut in `target/perf` und prüft, dass das gestartete Backend den Commit von `HEAD` meldet. Das Backend startet in einem temporären Arbeitsverzeichnis und nutzt einen eigenen PostgreSQL-Cluster und Loopback-Port. Beim Skriptende werden Backend und Testcluster gestoppt. SQL-Pläne und Logs stehen im ausgegebenen Messordner.
+Je Messung den Vorbereitungsblock und genau einen der Blöcke A, B oder C zusammen als Bash-Skript aus der Wurzel des zu messenden Checkouts ausführen. Die Blöcke aus dieser Planfassung für beide Stände verwenden. Voraussetzung sind ein verfügbares `pg_config`, Rust, Python 3, `curl`, `jq` und GNUbg mit installierten Gewichten. Das Rezept baut in `target/perf`. Wer beide Release-Binaries vorab bauen möchte, kann dem Rezept über `NEONDOJO_PERF_BIN` den absoluten Pfad zum passenden Binary übergeben. Der Test prüft in beiden Fällen, dass das gestartete Backend den Commit von `HEAD` meldet. Der Start erfolgt mit frischer Datenbank, eigenem PostgreSQL-Cluster und Loopback-Ports. Beim Skriptende werden Backend und Testcluster gestoppt. SQL-Pläne, Messumgebung und Logs stehen im ausgegebenen Messordner.
 
 ### Vorbereitung
 
@@ -178,15 +195,15 @@ perf_root="$(git rev-parse --show-toplevel)"
 cd "$perf_root"
 perf_dir="$(mktemp -d /tmp/neondojo-perf.XXXXXX)"
 export NEONDOJO_PERF_DIR="$perf_dir"
+printf '\nMessordner %s\n' "$perf_dir"
 perf_pg="$(pg_config --bindir)"
-read -r perf_pg_port perf_api_port < <(python3 - <<'PY'
+perf_pg_port="$(python3 - <<'PY'
 import socket
-with socket.socket() as pg, socket.socket() as api:
-    for listener in (pg, api):
-        listener.bind(("127.0.0.1", 0))
-    print(pg.getsockname()[1], api.getsockname()[1])
+with socket.socket() as pg:
+    pg.bind(("127.0.0.1", 0))
+    print(pg.getsockname()[1])
 PY
-)
+)"
 perf_gnubg="$(command -v "${GNUBG_BIN:-gnubg}")"
 export NEONDOJO_PERF_GNUBG="$(python3 -c 'import os, sys; print(os.path.abspath(sys.argv[1]))' "$perf_gnubg")"
 cat > "$perf_dir/gnubg-counted" <<'SH'
@@ -196,12 +213,21 @@ exec "$NEONDOJO_PERF_GNUBG" "$@"
 SH
 chmod +x "$perf_dir/gnubg-counted"
 
-# Eigenes Zielverzeichnis: kollidiert nicht mit tools/build_local_restart.sh und
-# startet nie dessen kopierte Binärdatei. Der Clean erzwingt wie dort, dass
-# sqlx::migrate! die Migrationen dieses Checkouts einbettet.
-cargo clean --release --package neondojo --target-dir target/perf
-cargo build --release --package neondojo --bin neondojo --target-dir target/perf
-perf_bin="$perf_root/target/perf/release/neondojo"
+# Der Review-Stand verwendet noch bgtutor für das Paket und die Servervariablen.
+perf_package="$(sed -nE 's/^name = "(bgtutor|neondojo)"$/\1/p' backend/Cargo.toml)"
+case "$perf_package" in
+  bgtutor|neondojo) ;;
+  *) printf 'Unbekanntes Backend-Paket: %s\n' "$perf_package" >&2; exit 1 ;;
+esac
+perf_bin="${NEONDOJO_PERF_BIN:-}"
+if [ -z "$perf_bin" ]; then
+  cargo build --locked --release --package "$perf_package" --bin "$perf_package" --target-dir target/perf
+  perf_bin="$perf_root/target/perf/release/$perf_package"
+fi
+case "$perf_bin" in
+  /*) test -x "$perf_bin" ;;
+  *) printf 'Der Binary-Pfad muss absolut sein.\n' >&2; exit 1 ;;
+esac
 "$perf_pg/initdb" -D "$perf_dir/db" -U neondojo_perf --no-locale --encoding=UTF8 --auth=trust > "$perf_dir/initdb.log"
 "$perf_pg/pg_ctl" -D "$perf_dir/db" -l "$perf_dir/postgres.log" \
   -o "-h 127.0.0.1 -p $perf_pg_port -k $perf_dir" -w start
@@ -215,31 +241,49 @@ perf_stop() {
 }
 trap perf_stop EXIT
 
-export DATABASE_URL="postgresql://neondojo_perf@127.0.0.1:$perf_pg_port/neondojo_e2e_perf"
-export NEONDOJO_E2E_DATABASE_NAME=neondojo_e2e_perf
-export NEONDOJO_PERF_URL="http://127.0.0.1:$perf_api_port"
-"$perf_pg/createdb" -h 127.0.0.1 -p "$perf_pg_port" -U neondojo_perf neondojo_e2e_perf
+perf_database="${perf_package}_e2e_perf"
+export DATABASE_URL="postgresql://neondojo_perf@127.0.0.1:$perf_pg_port/$perf_database"
+"$perf_pg/createdb" -h 127.0.0.1 -p "$perf_pg_port" -U neondojo_perf "$perf_database"
 (
   cd "$perf_dir"
-  exec env -u NEONDOJO_WEB_DIR NEONDOJO_BIND="127.0.0.1:$perf_api_port" \
-    GNUBG_BIN="$perf_dir/gnubg-counted" "$perf_bin"
+  exec env -u NEONDOJO_WEB_DIR -u BGTUTOR_WEB_DIR \
+    BGTUTOR_BIND=127.0.0.1:0 NEONDOJO_BIND=127.0.0.1:0 \
+    BGTUTOR_E2E_DATABASE_NAME="$perf_database" NEONDOJO_E2E_DATABASE_NAME="$perf_database" \
+    RUST_LOG="$perf_package=info" GNUBG_BIN="$perf_dir/gnubg-counted" "$perf_bin"
 ) > "$perf_dir/backend.log" 2>&1 &
 perf_app_pid=$!
 for attempt in $(seq 1 120); do
-  if curl -fsS "$NEONDOJO_PERF_URL/api/version" > /dev/null 2>&1; then break; fi
+  perf_api_port="$(sed -nE 's/.*listening.*127\.0\.0\.1:([0-9]+).*/\1/p' "$perf_dir/backend.log")"
+  if [ -n "$perf_api_port" ]; then break; fi
+  if ! kill -0 "$perf_app_pid" 2>/dev/null; then
+    printf 'Backend-Start fehlgeschlagen, siehe %s/backend.log\n' "$perf_dir" >&2
+    exit 1
+  fi
   sleep 0.15
 done
+test -n "$perf_api_port"
+export NEONDOJO_PERF_URL="http://127.0.0.1:$perf_api_port"
 # Der Build bettet den Commit ein. Uncommittete Änderungen bleiben unsichtbar;
 # den Arbeitsbaum deshalb zusätzlich mit git status protokollieren.
 test "$(curl -fsS "$NEONDOJO_PERF_URL/api/version" | jq -er '.version')" = "$(git rev-parse HEAD)"
 git status --short > "$perf_dir/git-status.txt"
-test "$("$perf_pg/psql" -XAt "$DATABASE_URL" -c 'SELECT current_database()')" = neondojo_e2e_perf
-printf '\nMessordner %s\n' "$perf_dir"
+test "$("$perf_pg/psql" -XAt "$DATABASE_URL" -c 'SELECT current_database()')" = "$perf_database"
+{
+  git rev-parse HEAD
+  uname -sm
+  if command -v sw_vers >/dev/null; then
+    sw_vers -productVersion
+    sysctl -n machdep.cpu.brand_string
+  fi
+  "$perf_pg/psql" -XAt "$DATABASE_URL" -c 'SHOW server_version'
+  "$NEONDOJO_PERF_GNUBG" --version
+  uptime
+} > "$perf_dir/environment.txt"
 ```
 
 ### A · Aktualitätsprüfung des Entscheidungsindex
 
-Auf dem Review-Stand die folgende synthetische Fixture anlegen. Sie bildet 2.000 Matches, 50 % Spieler-Selektivität und 200 Entscheidungen je passendem Job nach. Die Analyse-JSONs sind synthetische Nutzlasten für den SQL-Plan. Die Kontrollvariante isoliert die Kosten des Hashs. Im Review auf PostgreSQL 16.13 dauerte der Kandidaten-SELECT bei 1.658 Textbytes und 714 gespeicherten Bytes je JSON **1,59–1,62 s**, die Kontrollabfrage **155–162 ms**. Das folgende Rezept erzeugte bei der Verifikation **1.670 Textbytes und 655 gespeicherte Bytes** im Mittel. Bei Vorher-nachher-Vergleichen die gleiche Fixture verwenden und beide Größen mitprotokollieren.
+Auf beiden Ständen dieselbe synthetische Fixture anlegen. Sie bildet 2.000 Matches, 50 % Spieler-Selektivität und 200 Entscheidungen je passendem Job nach. Die Analyse-JSONs sind synthetische Nutzlasten für den SQL-Plan. Die Kontrollvariante isoliert die Kosten des Hashs. Im Review auf PostgreSQL 16.13 dauerte der Kandidaten-SELECT bei 1.658 Textbytes und 714 gespeicherten Bytes je JSON **1,59–1,62 s**, die Kontrollabfrage **155–162 ms**. Das folgende Rezept erzeugte bei der Verifikation **1.670 Textbytes und 655 gespeicherte Bytes** im Mittel.
 
 ```bash
 "$perf_pg/psql" -X -v ON_ERROR_STOP=1 "$DATABASE_URL" <<'SQL'
@@ -286,21 +330,15 @@ import re
 import subprocess
 
 source = Path("backend/src/recurring_mistakes/index.rs").read_text()
-query = re.search(r'let candidates: Vec<Candidate> = sqlx::query_as\(\s*"(.*?)",', source, re.S)[1]
-query = query.replace("$1", "NULL").replace("$2", "ARRAY['perf player']").replace("$3", "'1:perf'")
-control, replacements = re.subn(
-    r"\(SELECT coalesce\(sum\(hashtextextended\(a\.data::text,0\)\),0\)::text\s+"
-    r"FROM move_analyses a WHERE a\.job_id=sel\.job_id\)", "'control'", query,
-)
-assert replacements == 1
-# Kandidat für Stufe 1: Anzahl und ID-Summe statt JSON-Hash.
-idsum, replacements = re.subn(
-    r"\(SELECT coalesce\(sum\(hashtextextended\(a\.data::text,0\)\),0\)::text\s+"
-    r"FROM move_analyses a WHERE a\.job_id=sel\.job_id\)",
-    "(SELECT count(*)::text||':'||coalesce(sum(a.id),0)::text"
-    " FROM move_analyses a WHERE a.job_id=sel.job_id)", query,
-)
-assert replacements == 1
+candidates = re.search(r'const CANDIDATES: &str = "(.*?)";', source, re.S)
+if candidates:
+    scope = re.search(r'"\{CANDIDATES\}( AND \(\$2::uuid.*?)"', source, re.S)[1]
+    query = candidates[1] + scope
+    parameters = ("'1:perf'", "NULL", "ARRAY['perf player']")
+else:
+    query = re.search(r'let candidates: Vec<Candidate> = sqlx::query_as\(\s*"(.*?)",', source, re.S)[1]
+    parameters = ("NULL", "ARRAY['perf player']", "'1:perf'")
+query = re.sub(r"\$([123])\b", lambda match: parameters[int(match[1]) - 1], query)
 pg = Path(subprocess.check_output(["pg_config", "--bindir"], text=True).strip())
 dir_path = Path(os.environ["NEONDOJO_PERF_DIR"])
 
@@ -312,10 +350,15 @@ def sql(statement):
 
 sql(f"INSERT INTO decision_index_matches(match_id,fingerprint) SELECT id,fingerprint FROM ({query}) c; ANALYZE;")
 counts = sql(
-    "SELECT count(*), count(*) FILTER (WHERE stored IS DISTINCT FROM fingerprint)"
-    f" FROM ({query}) c;"
+    "SELECT count(*), count(*) FILTER (WHERE stored IS DISTINCT FROM fingerprint),"
+    " count(*) FILTER (WHERE split_part(fingerprint,'|',3)='native'"
+    " AND split_part(fingerprint,'|',4)=j.id::text)"
+    f" FROM ({query}) c LEFT JOIN jobs j ON j.match_uuid=c.id;"
 )
-assert counts.strip() == "1000|0", counts
+assert counts.strip() == "1000|0|1000", counts
+print("candidates|stale|expected native job", counts.strip())
+
+
 def measure(name, statement):
     for sample in range(4):
         result = sql(f"EXPLAIN (ANALYZE, BUFFERS) {statement};")
@@ -323,12 +366,20 @@ def measure(name, statement):
         if sample:
             print(name, re.search(r"Execution Time: .*", result)[0])
 
-# Kandidat und Kontrolle wie im Review ohne VACUUM messen.
+# Beide Produktionsabfragen unter denselben Bedingungen messen.
 measure("candidate", query)
-measure("control", control)
-# Die ID-Summe nutzt den Index move_analyses_page; VACUUM füllt die Visibility Map.
-sql("VACUUM (ANALYZE) move_analyses;")
-measure("idsum", idsum)
+json_hash = (
+    r"\(SELECT coalesce\(sum\(hashtextextended\(a\.data::text,0\)\),0\)::text\s+"
+    r"FROM move_analyses a WHERE a\.job_id=sel\.job_id\)"
+)
+if not candidates:
+    control, replacements = re.subn(json_hash, "'control'", query)
+    assert replacements == 1
+    ids = "(SELECT count(*)::text||':'||coalesce(sum(a.id),0)::text FROM move_analyses a WHERE a.job_id=sel.job_id)"
+    measure("control", control)
+    # VACUUM füllt die Visibility Map für den Index-Only Scan.
+    sql("VACUUM (ANALYZE) move_analyses;")
+    measure("idsum", re.sub(json_hash, ids, query))
 PY
 ```
 
@@ -339,10 +390,11 @@ Für die Umsetzung dieselbe Datengröße und Verteilung mit dem neuen Schema lad
 ### B · HTTP-Latenz der Review-Seiten
 
 ```bash
-export NEONDOJO_PERF_MATCH="$(
+NEONDOJO_PERF_MATCH="$(
   curl -fsS -F 'file=@backend/tests/fixtures/WC2014.xg' "$NEONDOJO_PERF_URL/api/imports" |
   jq -er '.match.id'
 )"
+export NEONDOJO_PERF_MATCH
 "$perf_pg/psql" -X -v ON_ERROR_STOP=1 "$DATABASE_URL" -c 'ANALYZE'
 python3 - <<'PY'
 import json
@@ -364,6 +416,8 @@ cases = {
     "numbered-errors": {"page": 1, "errors_only": "true"},
 }
 samples = {name: [] for name in cases}
+pages = {}
+fields = ("game_no", "decision_no", "kind", "player", "played", "equity_loss")
 for iteration in range(14):
     for name, filters in cases.items():
         query = urlencode(dict(analysis_id=f"imported:{match}", limit=50, **filters))
@@ -375,10 +429,16 @@ for iteration in range(14):
         assert len(data["items"]) == 50
         if name.startswith("numbered"):
             assert data["total"] == (74 if name == "numbered-errors" else 738)
+        # Vergleichbare Felder ohne zufällige Match-, Job- und Positions-IDs.
+        page = [[item[field] for field in fields] for item in data["items"]]
+        assert page == pages.setdefault(name, page), name
         if iteration >= 2:
             samples[name].append(elapsed)
 for name, values in samples.items():
     print(f"{name} ms median={statistics.median(values):.1f} range={min(values):.1f}–{max(values):.1f}")
+directory = Path(os.environ["NEONDOJO_PERF_DIR"])
+(directory / "review-pages.json").write_text(json.dumps(pages))
+(directory / "review-times-ms.json").write_text(json.dumps(samples))
 
 # SQL-Messung der ungefilterten ersten Charge auf d3a21e1.
 source = Path("backend/src/review_decisions.rs").read_text()
@@ -403,26 +463,30 @@ if query and not git_diff:
 PY
 ```
 
-Review-Baseline in derselben Reihenfolge war **162,0 / 167,5 / 86,4 / 161,3 ms**. Die Fehlerseite wählte 74 von 738 Entscheidungen aus. Der erste ungefilterte SQL-Batch lieferte 513 Zeilen in **13,2 ms** bei 3.943 Treffern im Shared Buffer und 0 Reads. Die API-Messung umfasst auch die folgenden Abfragen und die Projektion. Nach der Umstellung die neuen produktiven Anweisungen für Zählung und Seite mit denselben Filtern messen. Der bestehende Test `explain_real_xg_review_page` prüft zusätzlich den SQL-Plan für Spiel 1, Spieler 0 und Checker. Gegenprobe am 19. November 2026: Mediane **124,5 / 124,7 / 66,2 / 123,3 ms**, SQL-Batch 513 Zeilen in **12,3 ms**. Die Einzelwerte streuten zwischen etwa 50 und 129 ms. Deshalb Median und Spannweite berichten.
+Review-Baseline in derselben Reihenfolge war **162,0 / 167,5 / 86,4 / 161,3 ms**. Die Fehlerseite wählte 74 von 738 Entscheidungen aus. Der erste ungefilterte SQL-Batch lieferte 513 Zeilen in **13,2 ms** bei 3.943 Treffern im Shared Buffer und 0 Reads. Die API-Messung umfasst auch die folgenden Abfragen und die Projektion. Nach der Umstellung die neuen produktiven Anweisungen für Zählung und Seite mit denselben Filtern messen. Der bestehende Test `explain_real_xg_review_page` prüft zusätzlich den SQL-Plan für Spiel 1, Spieler 0 und Checker. Gegenprobe am 19. November 2026: Mediane **124,5 / 124,7 / 66,2 / 123,3 ms**, SQL-Batch 513 Zeilen in **12,3 ms**. Die Einzelwerte streuten zwischen etwa 50 und 129 ms. Deshalb Median und Spannweite berichten. Die beiden Dateien `review-pages.json` mit `cmp` vergleichen, um Reihenfolge und Fachdaten der Treffer abzugleichen.
 
 ### C · GNUbg-Prozessstarts und Jobdauer
 
 ```bash
-printf '%s\n' '(;GM[6]FF[4]PW[Alice]PB[Bob]MI[length:7][game:0][ws:0][bs:0];W[31hefe])' > "$perf_dir/opening.sgf"
-export NEONDOJO_PERF_OPENING="$(
-  curl -fsS -F "file=@$perf_dir/opening.sgf" "$NEONDOJO_PERF_URL/api/imports" |
-  jq -er '.match.id'
+NEONDOJO_PERF_OPENINGS="$(
+  for sample in $(seq 1 5); do
+    printf '(;GM[6]FF[4]PW[Alice %s]PB[Bob]MI[length:7][game:0][ws:0][bs:0];W[31hefe])\n' "$sample" > "$perf_dir/opening.sgf"
+    curl -fsS -F "file=@$perf_dir/opening.sgf" "$NEONDOJO_PERF_URL/api/imports" | jq -er '.match.id' || exit 1
+  done
 )"
+export NEONDOJO_PERF_OPENINGS
 python3 - <<'PY'
 from collections import Counter
 import json
 import os
 from pathlib import Path
+import statistics
 import time
 from urllib.request import Request, urlopen
 
 base = os.environ["NEONDOJO_PERF_URL"]
-match = os.environ["NEONDOJO_PERF_OPENING"]
+matches = os.environ["NEONDOJO_PERF_OPENINGS"].splitlines()
+assert len(set(matches)) == len(matches) == 5, matches
 log = Path(os.environ["NEONDOJO_PERF_DIR"]) / "gnubg-launches"
 plies = int(os.environ.get("NEONDOJO_PERF_PLIES", "1"))
 timeout = float(os.environ.get("NEONDOJO_PERF_TIMEOUT", "180"))
@@ -431,32 +495,41 @@ def get(path):
     with urlopen(base + path, timeout=30) as reply:
         return json.load(reply)
 
-position = get(f"/api/positions?match_id={match}")["items"][0]["id"]
-log.write_text("")
-request = Request(
-    base + "/api/jobs",
-    json.dumps(dict(position_id=position, kind="dice", engine_id="gnubg", plies=plies)).encode(),
-    {"Content-Type": "application/json"},
-)
-start = time.perf_counter()
-with urlopen(request, timeout=30) as reply:
-    job_id = json.load(reply)["id"]
-submit_ms = (time.perf_counter() - start) * 1000
-deadline = start + timeout
-while time.perf_counter() < deadline:
-    job = get("/api/jobs/" + job_id)
-    if job["status"] in ("completed", "failed"):
-        break
-    time.sleep(0.05)
-else:
-    raise TimeoutError(f"Dice job did not reach a terminal state within {timeout:g} s")
-elapsed_ms = (time.perf_counter() - start) * 1000
-assert job["status"] == "completed", job.get("error")
-rolls = job["result"]["rolls"]
-assert len(rolls) == 21 and sum(roll["weight"] for roll in rolls) == 36
-print(f"plies={plies} submit_ms={submit_ms:.1f} terminal_ms={elapsed_ms:.1f}")
-print(job["result"]["engine"], dict(Counter(log.read_text().splitlines())))
+expected = {(a, b): 1 if a == b else 2 for a in range(1, 7) for b in range(a, 7)}
+submissions = []
+durations = []
+for match in matches:
+    position = get(f"/api/positions?match_id={match}")["items"][0]["id"]
+    log.write_text("")
+    request = Request(
+        base + "/api/jobs",
+        json.dumps(dict(position_id=position, kind="dice", engine_id="gnubg", plies=plies)).encode(),
+        {"Content-Type": "application/json"},
+    )
+    start = time.perf_counter()
+    with urlopen(request, timeout=30) as reply:
+        job_id = json.load(reply)["id"]
+    submissions.append((time.perf_counter() - start) * 1000)
+    while time.perf_counter() < start + timeout:
+        job = get("/api/jobs/" + job_id)
+        if job["status"] in ("completed", "failed"):
+            break
+        time.sleep(0.05)
+    else:
+        raise TimeoutError(f"Dice job did not reach a terminal state within {timeout:g} s")
+    durations.append((time.perf_counter() - start) * 1000)
+    assert job["status"] == "completed", job.get("error")
+    rolls = job["result"]["rolls"]
+    weights = {tuple(sorted(roll["dice"])): roll["weight"] for roll in rolls}
+    assert len(rolls) == 21 and weights == expected, weights
+    launches = Counter(log.read_text().splitlines())
+    assert set(launches) == {"--version", "-t"}, launches
+    threads = (job.get("engine_snapshot") or {}).get("gnubg_threads") or 1
+    print(job["result"]["engine"], f"plies={plies} threads={threads} terminal_ms={durations[-1]:.1f}",
+          f"version_starts={launches['--version']} evaluation_starts={launches['-t']}", flush=True)
+for name, values in (("submit", submissions), ("terminal", durations)):
+    print(f"{name} ms median={statistics.median(values):.1f} range={min(values):.1f}–{max(values):.1f}")
 PY
 ```
 
-Review-Baseline mit GNUbg 1.08.003 war **43 Versionsaufrufe**, **21 Auswertungsstarts** und **8,1 s** bis zum beobachteten Abschluss eines Auftrags. Die Gegenprobe am 19. November 2026 ergab dieselben Startzahlen und **5,1 s**. Für den Vorher-nachher-Vergleich pro Build mindestens fünf frische Aufträge ausführen und Median sowie Spannweite festhalten. Dafür je Lauf eine frische Testdatenbank verwenden oder die Spielernamen der Import-Fixture variieren und so bei gleicher Stellung unterschiedliche Match-IDs erzeugen. Die Profiltiefe über `NEONDOJO_PERF_PLIES` setzen. Bei tieferen Läufen gegebenenfalls das Beobachtungsfenster mit `NEONDOJO_PERF_TIMEOUT` in Sekunden verlängern. Die Aufrufklassifikation bei einem neuen Engine-Batch an dessen tatsächliche Startargumente anpassen.
+Review-Baseline mit GNUbg 1.08.003 war **43 Versionsaufrufe**, **21 Auswertungsstarts** und **8,1 s** bis zum beobachteten Abschluss eines Auftrags. Die Gegenprobe am 19. November 2026 ergab dieselben Startzahlen und **5,1 s**. Für jede Profiltiefe einen eigenen Lauf starten und `NEONDOJO_PERF_PLIES` setzen. Bei tieferen Läufen gegebenenfalls das Beobachtungsfenster mit `NEONDOJO_PERF_TIMEOUT` in Sekunden verlängern.

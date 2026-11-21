@@ -664,6 +664,36 @@ async fn numbered_pages_follow_the_cursor_order_for_every_filter(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn review_query_plans_use_the_current_page_parameters(pool: PgPool) {
+    let (id, _) = imported(&pool).await;
+    let session = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with((*pool.connect_options()).clone())
+        .await
+        .unwrap();
+    let app = app(&session);
+    let base = format!("/api/matches/{id}/review-decisions?analysis_id=imported:{id}&limit=1");
+    for _ in 0..6 {
+        let (status, numbered) = call(&app, "GET", &format!("{base}&page=1"), Value::Null).await;
+        assert_eq!(status, 200, "{numbered}");
+        assert_eq!(numbered["total"], 2);
+        let (status, cursor) = call(&app, "GET", &base, Value::Null).await;
+        assert_eq!(status, 200, "{cursor}");
+        assert_eq!(numbered["items"], cursor["items"]);
+    }
+    let cached: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM pg_prepared_statements WHERE statement LIKE $1")
+            .bind("%WITH native_order AS (%")
+            .fetch_one(&session)
+            .await
+            .unwrap();
+    assert_eq!(
+        cached, 0,
+        "the review query must keep parameter-specific plans"
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn numbered_pages_follow_native_checkpoints_and_in_place_updates(pool: PgPool) {
     let (id, _) = imported(&pool).await;
     let job = store::create_match_job(&pool, id, 2, 2).await.unwrap();
