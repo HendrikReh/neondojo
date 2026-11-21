@@ -87,9 +87,8 @@ impl Worker {
     async fn start(profile: &SageSnapshot) -> Result<Self> {
         let probe = include_str!("../../../tools/probe_open_sage.py");
         let script = format!(
-            "integrity = {{'__name__': 'neondojo_integrity'}}\nexec({}, integrity)\nOPPONENT_POLICY_SOURCE = {}\n{}\nmain(integrity)\n",
+            "integrity = {{'__name__': 'neondojo_integrity'}}\nexec({}, integrity)\n{}\nmain(integrity)\n",
             serde_json::to_string(probe)?,
-            serde_json::to_string(include_str!("opponent_policy.py"))?,
             include_str!("worker.py")
         );
         let mut child = Command::new(&profile.python)

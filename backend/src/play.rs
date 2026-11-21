@@ -863,6 +863,16 @@ async fn create_session(
     )
     .await
     .map_err(native_error)?;
+    if request.play_difficulty.is_some()
+        && !bot
+            .open_sage
+            .as_ref()
+            .is_some_and(crate::engines::SageSnapshot::supports_difficulty_presets)
+    {
+        return Err(ApiError::invalid(
+            "NeonGammon difficulty presets require the 3.1.0 wheel",
+        ));
+    }
     let analysis = crate::settings::snapshot_for(
         &state,
         &settings.analysis_engine,

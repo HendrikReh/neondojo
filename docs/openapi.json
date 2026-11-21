@@ -16874,6 +16874,13 @@
           "available": {
             "type": "boolean"
           },
+          "difficulty_presets": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether the verified NeonGammon wheel provides named opponent presets."
+          },
           "fork": {
             "oneOf": [
               {
