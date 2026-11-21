@@ -18,7 +18,7 @@ use utoipa::{OpenApi, ToSchema};
 use uuid::Uuid;
 
 macro_rules! string_enum {
-    ($name:ident { $($variant:ident => $value:literal),+ $(,)? }) => {
+    ($name:ident { $($variant:ident => $value:tt),+ $(,)? }) => {
         #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
         pub enum $name { $(#[serde(rename=$value)] $variant),+ }
     };
