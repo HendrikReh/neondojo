@@ -19,7 +19,7 @@ async function importNotesMatch(page: Page) {
       `(;GM[6]PW[Notes ${marker}]PB[Opponent]MI[length:7][ws:0][bs:0];W[31xufe];B[42qusu])`,
     ),
   });
-  await expect(page.locator('.board')).toBeVisible();
+  await expect(page.locator('.analysis-workspace .board')).toBeVisible();
   await page.getByRole('tab', { name: 'Notizen', exact: true }).click();
   return marker;
 }
