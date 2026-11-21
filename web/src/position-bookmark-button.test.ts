@@ -375,7 +375,7 @@ it('uses the real source occurrence beside review controls during candidate and 
     },
     theme: 'forest',
     defaultPlies: 2,
-    sourceRevision: 0,
+    openingBookRevision: 0,
     configured: true,
     detail: 'overview',
     onDetail: noop,

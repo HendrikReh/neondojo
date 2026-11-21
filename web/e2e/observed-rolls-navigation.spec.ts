@@ -179,3 +179,79 @@ test('observed rolls load on demand and stay scoped to the selected game', async
     release();
   }
 });
+
+test('saving opening-book settings keeps the selected game rolls and analysis catalog', async ({
+  page,
+}) => {
+  const matchId = await openMatch(page);
+  const rolls = diceRequests(page, matchId);
+  const workspace = analysisWorkspace(page);
+  const observed = workspace.locator('.analysis-panel .observed');
+  await workspace.getByRole('tab', { name: 'Spielwürfe', exact: true }).click();
+  await expect(observed).toContainText('Spiel 1');
+  expect(rolls).toEqual(['1']);
+  const table = await observed.innerText();
+
+  const nextBook = page.waitForResponse((response) =>
+    /^\/api\/positions\/[^/]+\/opening-book$/.test(
+      new URL(response.url()).pathname,
+    ),
+  );
+  await workspace
+    .getByRole('button', { name: 'Nächster Zug', exact: true })
+    .click();
+  const bookPath = new URL((await nextBook).url()).pathname;
+  await page.waitForLoadState('networkidle');
+  await expect(observed).toHaveText(table, { useInnerText: true });
+  expect(rolls).toEqual(['1']);
+
+  const settings = page.getByRole('dialog', {
+    name: 'Einstellungen',
+    exact: true,
+  });
+  const books = page.getByRole('dialog', {
+    name: 'Eröffnungsbücher',
+    exact: true,
+  });
+  const provider = books.getByRole('combobox', {
+    name: 'Eröffnungsbuch-Quelle',
+    exact: true,
+  });
+  await page
+    .getByRole('button', { name: 'Einstellungen', exact: true })
+    .click();
+  await settings.getByRole('button', { name: 'Analyse', exact: true }).click();
+
+  const catalogPath = `/api/matches/${matchId}/analyses`;
+  let bookReads = 0;
+  let catalogReads = 0;
+  page.on('request', (request) => {
+    const { pathname } = new URL(request.url());
+    if (pathname === bookPath) bookReads++;
+    if (pathname === catalogPath) catalogReads++;
+  });
+  rolls.length = 0;
+  for (let save = 0; save < 5; save++) {
+    await settings
+      .getByRole('button', { name: 'Eröffnungsbücher verwalten', exact: true })
+      .click();
+    const previous = await provider.inputValue();
+    await provider.selectOption(previous === 'off' ? 'automatic' : 'off');
+    const refreshed = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === bookPath,
+    );
+    await books.getByRole('button', { name: 'Anwenden', exact: true }).click();
+    await expect(books).not.toBeVisible();
+    expect((await refreshed).ok()).toBe(true);
+    await page.waitForLoadState('networkidle');
+  }
+  await page.keyboard.press('Escape');
+  await expect(settings).not.toBeVisible();
+  await expect(observed).toHaveText(table, { useInnerText: true });
+  console.log(
+    `Opening book, 5 saves: ${bookReads} book lookups, ${rolls.length} dice reads, ${catalogReads} catalog reads`,
+  );
+  expect(bookReads).toBeGreaterThanOrEqual(5);
+  expect.soft(rolls).toEqual([]);
+  expect(catalogReads).toBe(0);
+});
