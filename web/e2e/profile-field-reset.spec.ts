@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { backendTest as test, expect, type Page } from './test';
 import { profileBackend } from './profile-backend';
 import { defaultConfiguration } from '../src/configuration-model';
 

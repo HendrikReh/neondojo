@@ -33,7 +33,6 @@ mod tests {
     use std::time::Duration;
 
     #[sqlx::test(migrations = false)]
-    #[ignore = "requires PostgreSQL"]
     async fn cancelled_begin_cannot_leak_a_transaction_to_the_next_borrower(db: PgPool) {
         let pool = options()
             .max_connections(1)

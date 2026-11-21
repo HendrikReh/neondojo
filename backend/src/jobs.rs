@@ -276,7 +276,6 @@ mod tests {
     use super::*;
 
     #[sqlx::test(migrations = "./migrations")]
-    #[ignore = "requires PostgreSQL"]
     async fn claims_run_one_open_sage_job_at_a_time(pool: PgPool) {
         let sgf = "(;GM[6]FF[4]PW[Alice]PB[Bob]MI[length:7][game:0][ws:0][bs:0];W[31hefe])";
         let imported = store::import_match(
@@ -327,7 +326,6 @@ mod tests {
         assert_eq!(third.job.plies, 2);
     }
     #[sqlx::test(migrations = "./migrations")]
-    #[ignore = "requires PostgreSQL"]
     async fn heartbeat_does_not_deadlock_a_checkpoint_holding_the_job_lock(pool: PgPool) {
         let sgf = "(;GM[6]FF[4]PW[Alice]PB[Bob]MI[length:7][game:0][ws:0][bs:0];W[31hefe])";
         let imported = store::import_match(

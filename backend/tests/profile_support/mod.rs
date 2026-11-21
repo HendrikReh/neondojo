@@ -1,30 +1,12 @@
 #![allow(dead_code)]
-use axum::{body::Body, http::Request};
-use http_body_util::BodyExt;
+pub use crate::support::call;
 use neondojo::{
     api::{self, AppState},
     engine::Engine,
 };
 use serde_json::{Value, json};
 use sqlx::PgPool;
-use tower::ServiceExt;
 
-pub async fn call(app: axum::Router, method: &str, path: &str, body: Value) -> (u16, Value) {
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method(method)
-                .uri(path)
-                .header("content-type", "application/json")
-                .body(Body::from(body.to_string()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let code = response.status().as_u16();
-    let bytes = response.into_body().collect().await.unwrap().to_bytes();
-    (code, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
-}
 pub fn config() -> Value {
     let columns = vec![
         "id",

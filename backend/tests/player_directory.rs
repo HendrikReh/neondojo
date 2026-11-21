@@ -24,7 +24,6 @@ async fn call(app: &axum::Router, method: &str, uri: &str, data: Value, status: 
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn source_aliases_stay_separate_until_assigned_and_apply_to_future_imports(pool: PgPool) {
     let app = api::router(AppState::new(pool.clone(), Engine::new("gnubg".into())));
     for (file, site, player) in [
@@ -154,7 +153,6 @@ async fn source_aliases_stay_separate_until_assigned_and_apply_to_future_imports
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn numbered_player_pages_preserve_search_order_and_total(pool: PgPool) {
     sqlx::query(
         "INSERT INTO player_profiles(source_name,first_name)
@@ -191,7 +189,6 @@ async fn numbered_player_pages_preserve_search_order_and_total(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn players_sort_by_name_or_counts_with_name_as_tie_break(pool: PgPool) {
     for (index, (white, black)) in [
         ("Anna", "Bob"),
@@ -264,7 +261,6 @@ async fn players_sort_by_name_or_counts_with_name_as_tie_break(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn ratings_weight_decisions_and_keep_analysis_profiles_separate(pool: PgPool) {
     use neondojo::model::{
         MatchAnalysisSummary, PerformanceRatingSummary, PlayerAnalysisSummary,

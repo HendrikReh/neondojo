@@ -1,29 +1,11 @@
-use axum::{body::Body, http::Request};
-use http_body_util::BodyExt;
 use neondojo::{
     api::{self, AppState},
     engine::Engine,
 };
 use serde_json::{Value, json};
 use sqlx::PgPool;
-use tower::ServiceExt;
-
-async fn call(app: axum::Router, method: &str, uri: &str, body: Value) -> (u16, Value) {
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method(method)
-                .uri(uri)
-                .header("content-type", "application/json")
-                .body(Body::from(body.to_string()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let status = response.status().as_u16();
-    let data = response.into_body().collect().await.unwrap().to_bytes();
-    (status, serde_json::from_slice(&data).unwrap_or(Value::Null))
-}
+mod support;
+use support::call;
 
 async fn setup(pool: &PgPool) -> axum::Router {
     let python =

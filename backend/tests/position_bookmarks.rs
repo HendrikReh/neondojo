@@ -62,7 +62,6 @@ async fn imported(pool: &PgPool) -> (Uuid, Vec<Position>) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn bookmark_save_is_explicit_idempotent_and_persists_after_reopening(pool: PgPool) {
     let (_, positions) = imported(&pool).await;
     let id = positions[0].id;
@@ -87,7 +86,6 @@ async fn bookmark_save_is_explicit_idempotent_and_persists_after_reopening(pool:
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn simultaneous_saves_retain_one_original_timestamp(pool: PgPool) {
     let (_, positions) = imported(&pool).await;
     let path = bookmark(positions[0].id);
@@ -98,7 +96,6 @@ async fn simultaneous_saves_retain_one_original_timestamp(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn removal_is_idempotent_and_retains_source_notes_analysis_and_learning_card(pool: PgPool) {
     let (match_id, positions) = imported(&pool).await;
     let id = positions[0].id;
@@ -143,7 +140,6 @@ async fn removal_is_idempotent_and_retains_source_notes_analysis_and_learning_ca
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn identical_checker_boards_in_opposite_colors_are_saved_as_exact_occurrences(pool: PgPool) {
     let (_, positions) = imported(&pool).await;
     assert_eq!(positions.len(), 2);
@@ -165,7 +161,6 @@ async fn identical_checker_boards_in_opposite_colors_are_saved_as_exact_occurren
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn unknown_and_invalid_position_ids_do_not_create_membership(pool: PgPool) {
     for method in ["GET", "PUT", "DELETE"] {
         assert_eq!(
@@ -179,7 +174,6 @@ async fn unknown_and_invalid_position_ids_do_not_create_membership(pool: PgPool)
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn deleting_the_source_removes_only_its_saved_occurrences(pool: PgPool) {
     let (match_id, positions) = imported(&pool).await;
     for position in &positions {
@@ -201,7 +195,6 @@ async fn deleting_the_source_removes_only_its_saved_occurrences(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn bookmark_operations_wait_for_source_deletion_and_then_return_not_found(pool: PgPool) {
     let (match_id, positions) = imported(&pool).await;
     let id = positions[0].id;
@@ -283,7 +276,6 @@ async fn browser(pool: &PgPool, fields: Value, after: Option<&str>, limit: usize
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn imported_positions_notes_analysis_and_cards_never_implicitly_enter_the_collection(
     pool: PgPool,
 ) {
@@ -324,7 +316,6 @@ async fn imported_positions_notes_analysis_and_cards_never_implicitly_enter_the_
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn every_browser_sort_and_direction_lists_only_explicit_saved_occurrences(pool: PgPool) {
     let (_, positions) = imported(&pool).await;
     let id = positions[1].id;
@@ -366,7 +357,6 @@ async fn every_browser_sort_and_direction_lists_only_explicit_saved_occurrences(
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn all_browser_cursor_forms_reject_removed_and_unsaved_anchors(pool: PgPool) {
     use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
     let (_, positions) = imported(&pool).await;

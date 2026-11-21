@@ -4,8 +4,7 @@ import {
   openPositionCalculation,
   submitFullMatchAnalysis,
 } from './analysis-controls';
-import { expect, test, type Page } from './test';
-import { test as nativeTest } from '@playwright/test';
+import { backendTest as nativeTest, expect, test, type Page } from './test';
 
 test.use({ actionTimeout: 10000 });
 

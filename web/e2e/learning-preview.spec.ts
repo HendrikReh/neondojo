@@ -1,3 +1,5 @@
+import type { Position } from '../src/api';
+import type { CardPage } from '../src/learning-api';
 import { expect, test } from './test';
 
 test.use({ actionTimeout: 10000, viewport: { width: 1800, height: 1169 } });
@@ -17,7 +19,7 @@ test('flashcard browsing previews the selected question without changing learnin
       },
     })
   ).json();
-  const positions = (
+  const positions: Position[] = (
     await (
       await page.request.get(
         `/api/positions?match_id=${imported.match.id}&limit=100`,
@@ -57,7 +59,7 @@ test('flashcard browsing previews the selected question without changing learnin
     expect(result.ok()).toBe(true);
     decks.push(deck);
   }
-  const questions = (
+  const questions: CardPage['items'] = (
     await (await page.request.get(`/api/decks/${decks[0].id}/cards`)).json()
   ).items;
   const other = (
@@ -132,7 +134,7 @@ test('flashcard browsing previews the selected question without changing learnin
   await expect(preview.locator('.board')).toBeVisible();
   await page.unroute(`**/api/decks/${decks[1].id}/cards?*`);
   expect(writes).toEqual([]);
-  const after = (
+  const after: CardPage['items'] = (
     await (await page.request.get(`/api/decks/${decks[0].id}/cards`)).json()
   ).items;
   expect(
@@ -179,7 +181,7 @@ test('more cards preserve the preview and a late page cannot survive a deck roun
       },
     })
   ).json();
-  const positions = (
+  const positions: Position[] = (
     await (
       await page.request.get(
         `/api/positions?match_id=${imported.match.id}&limit=100`,

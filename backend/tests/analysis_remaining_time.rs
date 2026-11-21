@@ -49,7 +49,6 @@ async fn read(app: &axum::Router, id: Uuid) -> (u16, Value) {
     (status, serde_json::from_slice(&body).unwrap())
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn legacy_job_read_is_unknown_and_read_only(pool: PgPool) {
     let (app, id) = setup(&pool).await;
     sqlx::query("UPDATE jobs SET status='running' WHERE id=$1")
@@ -77,7 +76,6 @@ async fn legacy_job_read_is_unknown_and_read_only(pool: PgPool) {
     }
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn remaining_uses_move_weighted_observed_rate_and_active_elapsed(pool: PgPool) {
     let (app, id) = setup(&pool).await;
     let token = Uuid::new_v4();
@@ -127,7 +125,6 @@ async fn remaining_uses_move_weighted_observed_rate_and_active_elapsed(pool: PgP
     }
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn benchmark_zero_move_sections_and_stale_attempt_are_safe(pool: PgPool) {
     let (app, id) = setup(&pool).await;
     let token = Uuid::new_v4();
@@ -192,7 +189,6 @@ async fn native_game_commits_timing_with_checkpoint(pool: PgPool) {
     assert!(events.iter().filter(|e| e.event == "progress").count() >= 3);
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn timing_endpoint_honors_source_and_competition_guards(pool: PgPool) {
     let (app, id) = setup(&pool).await;
     let job = store::get_job(&pool, id).await.unwrap().unwrap();
@@ -284,7 +280,6 @@ async fn timing_calibration_uses_saved_job_installation_and_plies(pool: PgPool) 
     );
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn wall_clock_corrections_cannot_change_persisted_active_elapsed(pool: PgPool) {
     let (app, id) = setup(&pool).await;
     let token = Uuid::new_v4();

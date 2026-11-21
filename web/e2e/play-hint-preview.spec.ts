@@ -122,7 +122,7 @@ for (const human of [0, 1])
       'before',
     );
     await page.screenshot({
-      path: `/tmp/neondojo-hint-${human}.png`,
+      path: test.info().outputPath(`hint-${human}.png`),
       fullPage: true,
     });
     await modal.getByRole('button', { name: 'Close', exact: true }).click();
@@ -215,7 +215,7 @@ test('mobile Hint fits viewport and an invalid move never changes the preview bo
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(390);
   await page.screenshot({
-    path: '/tmp/neondojo-hint-mobile.png',
+    path: test.info().outputPath('hint-mobile.png'),
     fullPage: true,
   });
   await modal.getByRole('button', { name: 'Close', exact: true }).click();
@@ -289,7 +289,7 @@ test('Training hint shows full analysis and a usable preview on mobile', async (
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(390);
   await page.screenshot({
-    path: '/tmp/neondojo-hint-mobile-training.png',
+    path: test.info().outputPath('hint-mobile-training.png'),
     fullPage: true,
   });
   await modal.getByRole('button', { name: 'Close', exact: true }).click();

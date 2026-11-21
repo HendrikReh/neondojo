@@ -177,7 +177,6 @@ mod tests {
     use tower::ServiceExt;
 
     #[sqlx::test(migrations = "./migrations")]
-    #[ignore = "requires PostgreSQL"]
     async fn saves_rounds_once_and_pages_through_equal_completion_times(pool: sqlx::PgPool) {
         let app = crate::api::router(AppState::new(
             pool,

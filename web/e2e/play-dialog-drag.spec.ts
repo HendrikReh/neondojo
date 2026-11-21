@@ -80,7 +80,7 @@ for (const kind of ['cube', 'coach'] as const)
     }
     expect(writes).toEqual([]);
     await page.screenshot({
-      path: `/tmp/neondojo-drag-${kind}.png`,
+      path: test.info().outputPath(`drag-${kind}.png`),
       fullPage: true,
     });
   });

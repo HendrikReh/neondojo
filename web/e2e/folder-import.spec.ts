@@ -177,8 +177,15 @@ test('a folder dropped on the welcome drop zone imports like a chosen folder', a
           file: (ok: (file: File) => void) => ok(new File([content], name)),
         };
       };
-      type Entry = ReturnType<typeof file> | ReturnType<typeof folder>;
-      function folder(fullPath: string, children: Entry[]) {
+      interface FolderEntry {
+        isFile: false;
+        isDirectory: true;
+        name: string;
+        fullPath: string;
+        createReader(): { readEntries(ok: (entries: Entry[]) => void): void };
+      }
+      type Entry = ReturnType<typeof file> | FolderEntry;
+      function folder(fullPath: string, children: Entry[]): FolderEntry {
         return {
           isFile: false,
           isDirectory: true,

@@ -1,39 +1,18 @@
-use axum::{body::Body, http::Request};
-use http_body_util::BodyExt;
 use neondojo::{
     api::{self, AppState},
     engine::Engine,
 };
 use serde_json::{Value, json};
 use sqlx::PgPool;
-use tower::ServiceExt;
+mod support;
+use support::call;
 
-async fn call(app: axum::Router, method: &str, uri: &str, body: Value) -> (u16, Value) {
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method(method)
-                .uri(uri)
-                .header("content-type", "application/json")
-                .body(Body::from(body.to_string()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let status = response.status().as_u16();
-    let bytes = response.into_body().collect().await.unwrap().to_bytes();
-    (
-        status,
-        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
-    )
-}
 fn engine() -> Engine {
     Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()))
 }
 
 #[cfg(unix)]
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn health_allows_gnubg_version_startup_past_300_ms(pool: PgPool) {
     use std::os::unix::fs::PermissionsExt;
 
@@ -105,19 +84,16 @@ async fn interrupted_play_measurements_never_publish_partial_times(pool: PgPool)
     }
 }
 
-#[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
-async fn reference_and_openapi_describe_the_fixed_workload(pool: PgPool) {
-    let app = api::router(AppState::new(pool, engine()));
-    let (status, reference) =
-        call(app.clone(), "GET", "/api/benchmarks/reference", Value::Null).await;
-    assert_eq!(status, 200, "{reference}");
+#[test]
+fn reference_and_openapi_describe_the_fixed_workload() {
+    use utoipa::OpenApi;
+    let reference = serde_json::to_value(neondojo::benchmarks::reference()).unwrap();
     assert_eq!(reference["total_games"], 10);
     assert_eq!(reference["total_moves"], 460);
     assert_eq!(reference["sha256"].as_str().unwrap().len(), 64);
     assert!(reference["protocol"]["game_timeout_seconds"].is_null());
     assert_eq!(reference["protocol"]["id"], "gnubg-match-v2-unlimited");
-    let (_, schema) = call(app, "GET", "/api/openapi.json", Value::Null).await;
+    let schema = serde_json::to_value(api::ApiDoc::openapi()).unwrap();
     for path in [
         "/api/benchmarks",
         "/api/benchmarks/play",
@@ -152,7 +128,6 @@ async fn insert_run(pool: &PgPool, status: &str) -> uuid::Uuid {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn deletes_only_finished_runs_from_the_history(pool: PgPool) {
     let app = api::router(AppState::new(pool.clone(), engine()));
     let mut kept = Vec::new();
@@ -247,7 +222,6 @@ async fn runs_are_immutable_snapshots_and_cancellation_survives_reload(pool: PgP
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn rejects_invalid_depths_and_unavailable_engines_without_partial_runs(pool: PgPool) {
     let app = api::router(AppState::new(pool, Engine::new("/missing/gnubg".into())));
     for body in [

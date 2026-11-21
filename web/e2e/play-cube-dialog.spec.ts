@@ -105,7 +105,7 @@ for (const width of [1440, 390])
       ).toBe(true);
     }
     await page.screenshot({
-      path: `/tmp/neondojo-cube-dialog-${width}.png`,
+      path: test.info().outputPath(`cube-dialog-${width}.png`),
       fullPage: true,
     });
     await dialog

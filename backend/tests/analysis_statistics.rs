@@ -7,6 +7,7 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 mod profile_support;
+mod support;
 
 const SOURCE: &str = "(;GM[6]FF[4]PW[Alice]PB[Bob]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])\n(;GM[6]FF[4]MI[length:7][ws:1][bs:0];W[double];B[drop])\n(;GM[6]FF[4]MI[length:7][ws:6][bs:0]RU[CrawfordGame])";
 
@@ -62,7 +63,6 @@ async fn decision(
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn statistics_use_checkpoint_coverage_and_preserve_authoritative_summary(pool: PgPool) {
     let (_, app, match_id) = setup(&pool).await;
     let job = store::create_match_job(&pool, match_id, 1, 3)
@@ -130,7 +130,6 @@ async fn statistics_use_checkpoint_coverage_and_preserve_authoritative_summary(p
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn statistics_scope_empty_checkpoint_missing_and_wrong_kind(pool: PgPool) {
     let (_, app, match_id) = setup(&pool).await;
     let job = store::create_match_job_scoped(&pool, match_id, 1, 1, Some(3))
@@ -242,7 +241,6 @@ async fn native_statistics_are_persisted_per_game_without_averaging_pr(pool: PgP
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn severity_filters_intersect_and_cursor_is_bound_to_severity(pool: PgPool) {
     let (_, app, match_id) = setup(&pool).await;
     let job = store::create_match_job(&pool, match_id, 1, 3)
@@ -364,7 +362,6 @@ fn openapi_documents_statistics_and_severity_values() {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn statistics_read_legacy_source_catalog_without_writes(pool: PgPool) {
     let (_, app, match_id) = setup(&pool).await;
     let job = store::create_match_job_scoped(&pool, match_id, 1, 1, Some(3))
@@ -400,7 +397,6 @@ fn breakdown(checker: [i32; 4], cube: [i32; 4], player: i32) -> Value {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn typed_errors_use_all_checkpointed_games_and_preserve_legacy_json(pool: PgPool) {
     let (_, _, match_id) = setup(&pool).await;
     let (app, profile) = profile_support::initialized(&pool, false).await;
@@ -568,7 +564,6 @@ async fn typed_errors_use_all_checkpointed_games_and_preserve_legacy_json(pool: 
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn legacy_cube_only_checkpoint_needs_declared_durable_coverage(pool: PgPool) {
     let (_, app, match_id) = setup(&pool).await;
     let job = store::create_match_job_scoped(&pool, match_id, 1, 1, Some(2))
@@ -615,7 +610,6 @@ async fn legacy_cube_only_checkpoint_needs_declared_durable_coverage(pool: PgPoo
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn statistics_review_guard_works_with_a_single_connection_pool(pool: PgPool) {
     let (_, _, match_id) = setup(&pool).await;
     let job = store::create_match_job(&pool, match_id, 1, 3)

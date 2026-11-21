@@ -344,7 +344,7 @@ for (const primary of ['white', 'black'] as const) {
       'Competition · Independent',
     );
     await page.screenshot({
-      path: `/tmp/neondojo-match-name-${primary}.png`,
+      path: test.info().outputPath(`match-name-${primary}.png`),
       fullPage: true,
     });
     await page.locator('.library-column-picker > summary').click();

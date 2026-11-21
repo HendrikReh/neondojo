@@ -321,7 +321,7 @@ for (const mode of ['double', 'double_archive', 'single_usable'] as const)
             );
         }
         await page.screenshot({
-          path: `/tmp/neondojo-double-fade-${mode}-${consumed}.png`,
+          path: test.info().outputPath(`double-fade-${mode}-${consumed}.png`),
           fullPage: true,
         });
       }

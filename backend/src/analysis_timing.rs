@@ -305,7 +305,6 @@ pub(crate) async fn confirm_game(
 mod tests {
     use super::*;
     #[sqlx::test(migrations = "./migrations")]
-    #[ignore = "requires PostgreSQL"]
     async fn timing_writes_are_fenced_and_retry_preserves_confirmed_work(pool: PgPool) {
         let sgf = "(;GM[6]FF[4]MI[length:7][ws:0][bs:0];W[31hefe])";
         let imported = store::import_match(

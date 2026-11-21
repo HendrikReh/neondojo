@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
 mod profile_support;
+mod support;
 
 async fn call(app: axum::Router, method: &str, uri: &str, body: Value) -> (u16, Value) {
     let response = app

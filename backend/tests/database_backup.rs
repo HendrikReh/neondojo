@@ -78,7 +78,6 @@ async fn analysis_snapshot(pool: &PgPool, match_id: uuid::Uuid) -> serde_json::V
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn restores_data_and_keeps_target_installation_settings(pool: PgPool) {
     let app = router(AppState::new(pool.clone(), Engine::new("gnubg".into())));
     let (source_id, source_number) = insert_match(&pool, "source-ä.sgf").await;
@@ -528,7 +527,6 @@ fn rewrite_entry(archive: &Bytes, changed_entry: &str, replacement: &[u8]) -> Ve
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn invalid_rows_roll_back_the_target_after_the_restore_starts(pool: PgPool) {
     let app = router(AppState::new(pool.clone(), Engine::new("gnubg".into())));
     insert_match(&pool, "source.sgf").await;
@@ -570,7 +568,6 @@ async fn invalid_rows_roll_back_the_target_after_the_restore_starts(pool: PgPool
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn restores_anki_review_history(pool: PgPool) {
     let app = router(AppState::new(pool.clone(), Engine::new("gnubg".into())));
     let card = uuid::Uuid::new_v4();
@@ -653,7 +650,6 @@ async fn restores_anki_review_history(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn restored_deck_requires_new_opt_in_for_automatic_anki_sync(pool: PgPool) {
     let app = router(AppState::new(pool.clone(), Engine::new("gnubg".into())));
     let deck: uuid::Uuid = sqlx::query_scalar(

@@ -1,76 +1,14 @@
-use axum::{body::Body, http::Request};
-use http_body_util::BodyExt;
-use neondojo::{
-    api::{self, AppState},
-    engine::Engine,
-    import, store,
-};
+use neondojo::{import, store};
 use serde_json::{Value, json};
 use sqlx::PgPool;
-use tower::ServiceExt;
 use uuid::Uuid;
-const SOURCE: &str = "(;GM[6]PW[Alice]PB[Bob]MI[length:7];W[31hefe])(;GM[6]PW[Alice]PB[Bob]MI[length:7][ws:1];W[31hefe])";
+mod support;
+use support::{foreign_analysis as imported, send as call};
 fn app(pool: &PgPool) -> axum::Router {
-    api::router(AppState::new(
-        pool.clone(),
-        Engine::new("/unavailable".into()),
-    ))
-}
-async fn call(app: &axum::Router, method: &str, uri: &str, body: Value) -> (u16, Value) {
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method(method)
-                .uri(uri)
-                .header("content-type", "application/json")
-                .body(if body.is_null() {
-                    Body::empty()
-                } else {
-                    Body::from(body.to_string())
-                })
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let status = response.status().as_u16();
-    let bytes = response.into_body().collect().await.unwrap().to_bytes();
-    (
-        status,
-        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
-    )
-}
-async fn imported(pool: &PgPool) -> (Uuid, Vec<Uuid>) {
-    let id = store::import_match(
-        pool,
-        "foreign.sgf",
-        "sgf",
-        SOURCE.as_bytes(),
-        SOURCE,
-        &import::parse_sgf(SOURCE).unwrap(),
-    )
-    .await
-    .unwrap()
-    .r#match
-    .id;
-    sqlx::query("UPDATE matches SET format='xg',imported_analysis_loaded=true WHERE id=$1")
-        .bind(id)
-        .execute(pool)
-        .await
-        .unwrap();
-    let mut ids = vec![];
-    for game in 1..=2 {
-        let (position,position_id,gnubg_match_id):(Uuid,String,String)=sqlx::query_as("SELECT id,position_id,gnubg_match_id FROM positions WHERE match_uuid=$1 AND game_no=$2").bind(id).bind(game).fetch_one(pool).await.unwrap();
-        let record = json!({"game_no":game,"source_move_no":1,"checker_ply":1,"position_id":position_id,"gnubg_match_id":gnubg_match_id,"dice":[3,1],"kind":"checker","player":0,"played":"8/5 6/5","engine":"eXtreme Gammon","engine_version":"2.19","method":"evaluation","depth":"XGRoller++","depth_plies":null,"candidates":[{"rank":1,"notation":"6/3 6/5","equity":0.2,"equity_kind":"cubeful","probabilities":{},"depth":"XGRoller++","raw":{}},{"rank":2,"notation":"8/5 6/5","equity":0.0,"equity_kind":"cubeful","probabilities":{},"raw":{}}],"cube":null,"raw":{}});
-        let row = Uuid::new_v4();
-        sqlx::query("INSERT INTO imported_analyses(id,match_uuid,position_uuid,source_ordinal,game_no,source_move_no,kind,data) VALUES($1,$2,$3,$4,$5,1,'checker',$6)").bind(row).bind(id).bind(position).bind(game-1).bind(game).bind(record).execute(pool).await.unwrap();
-        ids.push(row);
-    }
-    (id, ids)
+    support::app(pool, "/unavailable")
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn duplicate_import_records_use_one_primary_decision_in_every_projection(pool: PgPool) {
     let (id, ids) = imported(&pool).await;
     sqlx::query("INSERT INTO imported_analyses(id,match_uuid,position_uuid,source_ordinal,game_no,source_move_no,kind,data) SELECT $2,match_uuid,position_uuid,50,game_no,source_move_no,kind,jsonb_set(data,'{candidates,1,equity}','0.16') FROM imported_analyses WHERE id=$1")
@@ -131,7 +69,6 @@ async fn duplicate_import_records_use_one_primary_decision_in_every_projection(p
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn imported_catalog_statistics_preserve_unknown_depth_and_do_not_invent_pr(pool: PgPool) {
     let (id, _) = imported(&pool).await;
     let (status, data) = call(
@@ -168,7 +105,6 @@ async fn imported_catalog_statistics_preserve_unknown_depth_and_do_not_invent_pr
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn catalog_selection_is_shared_by_review_and_marks_without_source_fallback(pool: PgPool) {
     let (id, _) = imported(&pool).await;
     let job = store::create_match_job(&pool, id, 2, 2).await.unwrap();
@@ -243,7 +179,6 @@ async fn catalog_selection_is_shared_by_review_and_marks_without_source_fallback
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn paginated_imports_have_provenance_filtering_and_scope_bound_cursors(pool: PgPool) {
     let (id, ids) = imported(&pool).await;
     let router = app(&pool);
@@ -324,7 +259,6 @@ async fn paginated_imports_have_provenance_filtering_and_scope_bound_cursors(poo
     }
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn pending_and_empty_jobs_do_not_fall_back_to_imports(pool: PgPool) {
     let (id, _) = imported(&pool).await;
     let job = store::create_match_job(&pool, id, 1, 2).await.unwrap();
@@ -349,7 +283,6 @@ async fn pending_and_empty_jobs_do_not_fall_back_to_imports(pool: PgPool) {
     assert_eq!(imported["items"].as_array().unwrap().len(), 2);
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn imported_sgf_checker_analysis_remains_reviewable_without_jobs(pool: PgPool) {
     let source = include_str!("fixtures/analysis-game1.sgf");
     let id = store::import_match(
@@ -382,7 +315,6 @@ async fn imported_sgf_checker_analysis_remains_reviewable_without_jobs(pool: PgP
     );
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn native_checkpoints_preserve_values_without_imported_fallback(pool: PgPool) {
     let (id, _) = imported(&pool).await;
     let job = store::create_match_job(&pool, id, 2, 2).await.unwrap();
@@ -430,7 +362,6 @@ async fn native_checkpoints_preserve_values_without_imported_fallback(pool: PgPo
     );
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn native_cube_checkpoints_recover_exact_source_context(pool: PgPool) {
     let sgf = "(;GM[6]PW[Alice]PB[Bob]MI[length:7];W[31hefe];B[double];W[take];B[42qusu])";
     let id = store::import_match(
@@ -504,7 +435,6 @@ async fn native_cube_checkpoints_recover_exact_source_context(pool: PgPool) {
     assert_eq!(rows[1]["cube_evaluation"]["double_pass"], -1.0);
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn imported_cube_uses_validated_actor_loss_and_source_event(pool: PgPool) {
     let (id, _) = imported(&pool).await;
     sqlx::query("INSERT INTO imported_analyses(match_uuid,position_uuid,source_ordinal,game_no,source_move_no,kind,data) SELECT match_uuid,position_uuid,2,game_no,source_move_no,'cube',(data - 'gnubg_match_id') || $2 FROM imported_analyses WHERE match_uuid=$1 AND game_no=1")
@@ -531,7 +461,6 @@ async fn imported_cube_uses_validated_actor_loss_and_source_event(pool: PgPool) 
     assert_eq!(unknown["items"], json!([]));
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn cursor_rejects_changed_selection_and_foreign_jobs(pool: PgPool) {
     let (id, _) = imported(&pool).await;
     let router = app(&pool);
@@ -568,7 +497,6 @@ async fn cursor_rejects_changed_selection_and_foreign_jobs(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn native_forced_and_unavailable_rows_keep_status_and_never_become_errors(pool: PgPool) {
     let source = include_str!("fixtures/analysis-game1.sgf");
     let id = store::import_match(
@@ -615,7 +543,6 @@ async fn native_forced_and_unavailable_rows_keep_status_and_never_become_errors(
     assert_eq!(errors["items"], json!([]));
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn sgf_decimal_threshold_errors_are_not_lost_to_float_subtraction(pool: PgPool) {
     let (id, _) = imported(&pool).await;
     sqlx::query("UPDATE matches SET format='sgf' WHERE id=$1")
@@ -682,7 +609,6 @@ async fn assert_numbered_pages_match_cursor(app: &axum::Router, base: &str) -> u
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn numbered_pages_follow_the_cursor_order_for_every_filter(pool: PgPool) {
     let bytes = include_bytes!("fixtures/WC2014.xg");
     let sgf = import::xg_to_sgf(bytes).unwrap();
@@ -738,7 +664,6 @@ async fn numbered_pages_follow_the_cursor_order_for_every_filter(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn numbered_pages_follow_native_checkpoints_and_in_place_updates(pool: PgPool) {
     let (id, _) = imported(&pool).await;
     let job = store::create_match_job(&pool, id, 2, 2).await.unwrap();

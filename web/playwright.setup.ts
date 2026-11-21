@@ -1,220 +1,33 @@
-import { execFile, spawn, type ChildProcess } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { once } from 'node:events';
-import { createWriteStream } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { createServer as createHttpServer, type Server } from 'node:http';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
-import { createServer, type ViteDevServer } from 'vite';
+import {
+  buildBackend,
+  dropRegisteredDatabases,
+  maintenanceUrl,
+  sql,
+  stackEnvironment,
+  templateDatabase,
+} from './e2e/stack';
 
-const exec = promisify(execFile);
-const root = fileURLToPath(new URL('../', import.meta.url));
-const web = join(root, 'web');
-const localPostgres =
-  'postgres://neondojo:neondojo_local@127.0.0.1:54329/postgres';
-
-async function sql(url: URL, statement: string) {
-  try {
-    const { stdout } = await exec('psql', [
-      url.href,
-      '-XAt',
-      '-v',
-      'ON_ERROR_STOP=1',
-      '-c',
-      statement,
-    ]);
-    return stdout.trim();
-  } catch (error) {
-    const failure = error as { code?: string; stderr?: string };
-    throw new Error(
-      failure.code === 'ENOENT'
-        ? 'Browser tests require the psql command.'
-        : `Browser test PostgreSQL command failed. ${failure.stderr?.trim() ?? ''}`,
-    );
-  }
-}
-
-async function stopBackend(child: ChildProcess) {
-  if (!child.pid || child.exitCode !== null || child.signalCode !== null)
-    return;
-  const exited = once(child, 'exit');
-  const force = setTimeout(() => child.kill('SIGKILL'), 5_000);
-  try {
-    child.kill('SIGTERM');
-    await exited;
-  } finally {
-    clearTimeout(force);
-  }
-}
-
-function listeningUrl(child: ChildProcess) {
-  return new Promise<string>((resolve, reject) => {
-    let log = '';
-    const timer = setTimeout(
-      () => finish(new Error(`Browser test backend did not start.\n${log}`)),
-      45_000,
-    );
-    const exited = () =>
-      finish(new Error(`Browser test backend exited during startup.\n${log}`));
-    const output = (chunk: Buffer) => {
-      log = (log + chunk.toString()).slice(-12_000);
-      const bound = /NeonDojo listening[^\n]*127\.0\.0\.1:(\d+)/.exec(log);
-      if (bound) finish(undefined, `http://127.0.0.1:${bound[1]}`);
-    };
-    function finish(error?: Error, url?: string) {
-      clearTimeout(timer);
-      child.removeListener('error', finish);
-      child.removeListener('exit', exited);
-      child.stdout?.off('data', output);
-      child.stderr?.off('data', output);
-      // Keep draining the pipes after startup. NEONDOJO_E2E_BACKEND_LOG names
-      // a file that receives the backend's output for diagnosing a failed run.
-      const sink = process.env.NEONDOJO_E2E_BACKEND_LOG
-        ? createWriteStream(process.env.NEONDOJO_E2E_BACKEND_LOG, { flags: 'a' })
-        : undefined;
-      if (sink) {
-        sink.write(log);
-        child.stdout?.pipe(sink, { end: false });
-        child.stderr?.pipe(sink, { end: false });
-      } else {
-        child.stdout?.resume();
-        child.stderr?.resume();
-      }
-      if (error) reject(error);
-      else resolve(url!);
-    }
-    child.once('error', finish);
-    child.once('exit', exited);
-    child.stdout?.on('data', output);
-    child.stderr?.on('data', output);
-  });
-}
-
+// Runs once per Playwright run. Each worker starts its own disposable stack
+// from the backend built here; see e2e/stack.ts and the fixture in e2e/test.ts.
 export default async function setup() {
-  const maintenance = new URL(
-    process.env.NEONDOJO_E2E_POSTGRES_URL ?? localPostgres,
-  );
-  const template = process.env.NEONDOJO_E2E_POSTGRES_TEMPLATE ?? 'template0';
-  if (
-    template !== 'template0' &&
-    !/^neondojo_e2e_template_[a-z0-9_]+$/.test(template)
-  )
-    throw new Error(
-      'Use a neondojo_e2e_template_* PostgreSQL fixture database.',
-    );
-  const name = `neondojo_e2e_${randomUUID().replaceAll('-', '')}`;
-  const database = new URL(maintenance);
-  database.pathname = `/${name}`;
-  database.searchParams.delete('dbname');
-  const temporary = await mkdtemp(join(tmpdir(), 'neondojo-e2e-'));
-  let created = false;
-  let backend: ChildProcess | undefined;
-  let frontend: ViteDevServer | undefined;
-  let listener: Server | undefined;
+  templateDatabase();
+  await sql(maintenanceUrl(), 'SELECT 1');
+  const temporary = await mkdtemp(join(tmpdir(), 'neondojo-e2e-run-'));
+  const registry = join(temporary, 'databases');
+  await writeFile(registry, '');
   const cleanup = async () => {
     try {
-      try {
-        await frontend?.close();
-      } finally {
-        if (listener?.listening) {
-          const closed = once(listener, 'close');
-          listener.close();
-          listener.closeAllConnections();
-          await closed;
-        }
-      }
+      await dropRegisteredDatabases(registry);
     } finally {
-      try {
-        if (backend) await stopBackend(backend);
-        if (created)
-          await sql(maintenance, `DROP DATABASE "${name}" WITH (FORCE)`);
-      } finally {
-        await rm(temporary, { recursive: true, force: true });
-      }
+      await rm(temporary, { recursive: true, force: true });
     }
   };
-
   try {
-    await sql(maintenance, `CREATE DATABASE "${name}" TEMPLATE "${template}"`);
-    created = true;
-    if ((await sql(database, 'SELECT current_database()')) !== name)
-      throw new Error('PostgreSQL URL did not select the new test database.');
-
-    await exec('npm', ['run', 'themes:prepare'], { cwd: web });
-    const { stdout } = await exec(
-      'cargo',
-      ['build', '-p', 'neondojo', '--bin', 'neondojo', '--message-format=json'],
-      { cwd: root, maxBuffer: 8 * 1024 * 1024 },
-    );
-    const executable = stdout
-      .trim()
-      .split('\n')
-      .map((line) => JSON.parse(line))
-      .find(
-        (message) => message.target?.name === 'neondojo' && message.executable,
-      )?.executable;
-    if (!executable)
-      throw new Error('Cargo did not build the NeonDojo backend.');
-
-    backend = spawn(executable, [], {
-      cwd: root,
-      env: {
-        ...process.env,
-        DATABASE_URL: database.href,
-        NEONDOJO_E2E_DATABASE_NAME: name,
-        NEONDOJO_BIND: '127.0.0.1:0',
-        RUST_LOG: 'neondojo=info',
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    const backendUrl = await listeningUrl(backend);
-    const http = createHttpServer();
-    listener = http;
-    frontend = await createServer({
-      root: web,
-      cacheDir: join(temporary, 'vite'),
-      server: {
-        middlewareMode: true,
-        // Vite injects its dev client in middleware mode. Serve its WebSocket
-        // on the same loopback listener as the browser tests.
-        hmr: { server: http },
-        // Vite discards null options when merging the project's config.
-        watch: { ignored: () => true },
-        proxy: { '/api': backendUrl },
-      },
-    });
-    listener.on('request', frontend.middlewares);
-    const listening = once(listener, 'listening');
-    listener.listen(0, '127.0.0.1');
-    await listening;
-    const address = listener.address();
-    if (!address || typeof address === 'string')
-      throw new Error('Vite did not publish a local test URL.');
-    const url = `http://127.0.0.1:${address.port}/`;
-
-    // Verify the proxy reaches this database before allowing any test writes.
-    const probe = randomUUID();
-    await sql(
-      database,
-      `INSERT INTO databases (id, name) VALUES ('${probe}', 'Playwright connection check')`,
-    );
-    const response = await fetch(new URL('/api/databases', url), {
-      signal: AbortSignal.timeout(10_000),
-    });
-    const databases = response.ok ? await response.json() : null;
-    if (
-      !Array.isArray(databases) ||
-      !databases.some((entry) => entry.id === probe)
-    )
-      throw new Error('Vite API requests did not reach the test database.');
-    await sql(database, `DELETE FROM databases WHERE id = '${probe}'`);
-
-    // Playwright reads this environment variable for its built-in baseURL.
-    process.env.PLAYWRIGHT_TEST_BASE_URL = url;
-    process.env.NEONDOJO_E2E_DATABASE_URL = database.href;
+    process.env[stackEnvironment.backend] = await buildBackend();
+    process.env[stackEnvironment.registry] = registry;
     return cleanup;
   } catch (error) {
     await cleanup();

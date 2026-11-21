@@ -64,7 +64,6 @@ async fn save(
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn empty_annotations_are_distinct_from_missing_targets(pool: PgPool) {
     let (match_id, position_id) = targets(&pool, "empty").await;
     for (kind, id, target_kind) in [
@@ -101,7 +100,6 @@ async fn empty_annotations_are_distinct_from_missing_targets(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn annotations_normalize_tags_and_preserve_plaintext(pool: PgPool) {
     let (match_id, position_id) = targets(&pool, "normalization").await;
     let comment = "## Cube decision\nKeep <script> as text\t& study.";
@@ -137,7 +135,6 @@ async fn annotations_normalize_tags_and_preserve_plaintext(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn concurrent_first_saves_and_updates_have_one_winner(pool: PgPool) {
     let (match_id, _) = targets(&pool, "concurrency").await;
     for version in [0, 1] {
@@ -176,7 +173,6 @@ async fn concurrent_first_saves_and_updates_have_one_winner(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn annotation_validation_is_bounded_and_does_not_change_existing_data(pool: PgPool) {
     let (match_id, _) = targets(&pool, "validation").await;
     let path = format!("/api/matches/{match_id}/annotation");
@@ -197,7 +193,6 @@ async fn annotation_validation_is_bounded_and_does_not_change_existing_data(pool
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn unicode_limits_and_learning_annotation_reads_use_characters(pool: PgPool) {
     let (match_id, _) = targets(&pool, "unicode").await;
     let empty = neondojo::annotations::get_annotation(&pool, "match", match_id)
@@ -253,7 +248,6 @@ async fn unicode_limits_and_learning_annotation_reads_use_characters(pool: PgPoo
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn search_filters_paginates_and_returns_jump_metadata_without_source(pool: PgPool) {
     let (match_id, position_id) = targets(&pool, "search").await;
     assert_eq!(
@@ -362,7 +356,6 @@ async fn search_filters_paginates_and_returns_jump_metadata_without_source(pool:
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn tags_are_unique_sorted_normalized_and_searchable(pool: PgPool) {
     let (match_id, position_id) = targets(&pool, "tags").await;
     assert_eq!(
@@ -401,7 +394,6 @@ async fn tags_are_unique_sorted_normalized_and_searchable(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn library_search_includes_match_and_child_position_annotations(pool: PgPool) {
     let (match_id, position_id) = targets(&pool, "library").await;
     assert_eq!(
@@ -431,7 +423,6 @@ async fn library_search_includes_match_and_child_position_annotations(pool: PgPo
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn deleting_targets_cascades_annotations(pool: PgPool) {
     let (match_id, position_id) = targets(&pool, "cascade").await;
     assert_eq!(

@@ -1,4 +1,5 @@
 mod profile_support;
+mod support;
 use profile_support::{activate, call, create, initialized};
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -303,7 +304,6 @@ async fn overwriting_an_inactive_profile_does_not_activate_it(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn saving_non_engine_preferences_does_not_require_an_available_engine(pool: PgPool) {
     let (app, state) = initialized(&pool, false).await;
     let mut config = state["current_configuration"].clone();

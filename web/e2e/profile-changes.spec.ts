@@ -1,5 +1,5 @@
 import { applyAndCloseSettings } from './settings-actions';
-import { test, expect } from '@playwright/test';
+import { backendTest as test, expect } from './test';
 import { profileBackend } from './profile-backend';
 import { defaultConfiguration } from '../src/configuration-model';
 

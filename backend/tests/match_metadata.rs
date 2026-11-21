@@ -76,7 +76,6 @@ async fn assert_library_projection(pool: &PgPool, expected: &Value) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn metadata_get_returns_stored_context_final_scores_and_persistent_numeric_id(pool: PgPool) {
     let id = import(&pool, SOURCE).await;
     let initial = metadata(&pool, id).await;
@@ -117,7 +116,6 @@ async fn metadata_get_returns_stored_context_final_scores_and_persistent_numeric
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn metadata_get_preserves_unknown_values_and_money_game_without_backfill(pool: PgPool) {
     let id = import(&pool, &SOURCE.replace("length:7", "length:0")).await;
     // A legacy row may still need startup backfill. Reading must neither parse
@@ -148,7 +146,6 @@ async fn metadata_get_preserves_unknown_values_and_money_game_without_backfill(p
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn metadata_get_missing_match_returns_json_404(pool: PgPool) {
     let (status, value) = call(
         &pool,
@@ -218,7 +215,6 @@ fn assert_unknown_pr(value: &Value) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn metadata_get_uses_only_authoritative_whole_match_native_pr(pool: PgPool) {
     let id = import(&pool, SOURCE).await;
     let mut game_result = native_result();
@@ -243,7 +239,6 @@ async fn metadata_get_uses_only_authoritative_whole_match_native_pr(pool: PgPool
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn metadata_get_does_not_revive_older_pr_when_latest_native_result_is_partial(pool: PgPool) {
     let id = import(&pool, SOURCE).await;
     analysis(&pool, id, None, native_result(), 0).await;
@@ -289,7 +284,6 @@ fn openapi_documents_metadata_get_and_existing_update() {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn learning_history_never_exposes_corrected_native_pr_as_independent_competition(
     pool: PgPool,
 ) {

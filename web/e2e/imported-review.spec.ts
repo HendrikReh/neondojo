@@ -163,7 +163,9 @@ test('imported decisions work in error navigation without a local job', async ({
             }))
           : errors;
     expect(query.get('analysis_id')).toBe(importedEntry.id);
-    return route.fulfill({ json: { items, next_cursor: null, total: items.length } });
+    return route.fulfill({
+      json: { items, next_cursor: null, total: items.length },
+    });
   });
   await page.addInitScript(
     (id) =>
@@ -308,7 +310,7 @@ test('real XG review opens checker and cube decisions with original source and r
       ),
     ).toBe(true);
     await page.screenshot({
-      path: `/tmp/neondojo-review-${viewport.width}.png`,
+      path: test.info().outputPath(`review-${viewport.width}.png`),
     });
     const candidateWidth = await page
       .locator('.analysis-panel > .source-analysis .source-candidates')

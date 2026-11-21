@@ -56,7 +56,6 @@ async fn database(pool: &PgPool, name: &str) -> Uuid {
     Uuid::parse_str(v["id"].as_str().unwrap()).unwrap()
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn default_database_and_optimistic_update(pool: PgPool) {
     let (status, list) = request(&pool, "GET", "/api/databases", None).await;
     assert_eq!(status, 200, "{list}");
@@ -122,7 +121,6 @@ async fn default_database_and_optimistic_update(pool: PgPool) {
     );
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn bot_matches_is_provisioned_and_protected_before_play(pool: PgPool) {
     let (_, databases) = request(&pool, "GET", "/api/databases", None).await;
     let bot = databases
@@ -188,7 +186,6 @@ async fn bot_matches_is_provisioned_and_protected_before_play(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn clearing_unsorted_preserves_the_system_database_and_other_matches(pool: PgPool) {
     let (_, databases) = request(&pool, "GET", "/api/databases", None).await;
     let system = &databases[0];
@@ -253,7 +250,6 @@ async fn clearing_unsorted_preserves_the_system_database_and_other_matches(pool:
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn filters_metadata_and_scope_bound_cursor(pool: PgPool) {
     let a = target(&pool, "A").await;
     let b = target(&pool, "B").await;
@@ -309,7 +305,6 @@ async fn filters_metadata_and_scope_bound_cursor(pool: PgPool) {
     );
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn copy_is_independent_and_move_skips_target_duplicate(pool: PgPool) {
     let id = target(&pool, "Copy").await;
     let db = database(&pool, "Copies").await;
@@ -370,7 +365,6 @@ async fn copy_is_independent_and_move_skips_target_duplicate(pool: PgPool) {
     assert_eq!(tags, vec!["new tag"]);
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn deletion_guards_active_jobs_and_nonempty_database(pool: PgPool) {
     let id = target(&pool, "Busy").await;
     let db = database(&pool, "Busy database").await;
@@ -448,7 +442,6 @@ fn source_metadata_uses_explicit_sgf_context_and_rejects_guesses() {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn deep_copy_preserves_all_completed_analyses_and_remaps_selection(pool: PgPool) {
     let id = target(&pool, "Deep").await;
     let db = database(&pool, "Deep copies").await;
@@ -530,7 +523,6 @@ async fn deep_copy_preserves_all_completed_analyses_and_remaps_selection(pool: P
     assert_eq!(selected_config, "old");
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn exports_preserve_bytes_and_reject_missing_or_oversized_selection(pool: PgPool) {
     let a = target(&pool, "One").await;
     let b = target(&pool, "Two").await;
@@ -577,7 +569,6 @@ async fn exports_preserve_bytes_and_reject_missing_or_oversized_selection(pool: 
     );
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn xg_export_writes_the_played_line_with_edited_library_details(pool: PgPool) {
     let original = include_bytes!("fixtures/WC2014.xg");
     let sgf = neondojo::import::xg_to_sgf(original).unwrap();
@@ -644,7 +635,6 @@ async fn xg_export_writes_the_played_line_with_edited_library_details(pool: PgPo
     );
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn imports_deduplicate_within_each_database(pool: PgPool) {
     let source = include_str!("fixtures/analysis-game1.sgf");
     let imported = neondojo::import::parse_sgf(source).unwrap();
@@ -699,7 +689,6 @@ async fn imports_deduplicate_within_each_database(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn exact_position_occurrences_can_be_scoped_to_a_database(pool: PgPool) {
     let a = target(&pool, "Scoped A").await;
     let b = target(&pool, "Scoped B").await;
@@ -732,7 +721,6 @@ async fn exact_position_occurrences_can_be_scoped_to_a_database(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn malformed_cursor_values_are_validation_errors(pool: PgPool) {
     use base64::Engine as _;
     target(&pool, "Cursor A").await;
@@ -767,7 +755,6 @@ async fn malformed_cursor_values_are_validation_errors(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn every_sort_cursor_roundtrips_with_nulls_last(pool: PgPool) {
     let a = target(&pool, "Sort A").await;
     target(&pool, "Sort B").await;
@@ -858,7 +845,6 @@ fn native_result(white: f64, black: f64) -> Value {
     json
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn latest_completed_missing_native_statistics_suppresses_older_pr(pool: PgPool) {
     let id = target(&pool, "No stale PR").await;
     for (n, result) in [
@@ -878,7 +864,6 @@ async fn latest_completed_missing_native_statistics_suppresses_older_pr(pool: Pg
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn position_submission_respects_match_deletion_lock(pool: PgPool) {
     let id = target(&pool, "Deletion race").await;
     let position: Uuid = sqlx::query_scalar("SELECT id FROM positions WHERE match_uuid=$1")
@@ -919,7 +904,6 @@ async fn position_submission_respects_match_deletion_lock(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn exact_position_cursor_cannot_cross_database_filter(pool: PgPool) {
     let id = target(&pool, "Cursor source").await;
     let db = database(&pool, "Other database").await;
@@ -939,7 +923,6 @@ async fn exact_position_cursor_cannot_cross_database_filter(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn scoped_game_analysis_has_partial_status_and_never_whole_match_pr(pool: PgPool) {
     let id = target(&pool, "Scoped analysis status").await;
     let scoped = Uuid::new_v4();
@@ -1001,7 +984,6 @@ async fn scoped_game_analysis_has_partial_status_and_never_whole_match_pr(pool: 
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn actual_result_filters_require_completed_known_scores(pool: PgPool) {
     let white_win = target(&pool, "White wins").await;
     let ongoing = target(&pool, "Ongoing white lead").await;
@@ -1051,7 +1033,6 @@ async fn actual_result_filters_require_completed_known_scores(pool: PgPool) {
     assert_eq!(ongoing_page["items"][0]["id"], ongoing.to_string());
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn round_filter_is_literal_case_insensitive_and_combines_with_scope(pool: PgPool) {
     let db = database(&pool, "Round search").await;
     let matching = target(&pool, "Round match").await;
@@ -1108,7 +1089,6 @@ async fn round_filter_is_literal_case_insensitive_and_combines_with_scope(pool: 
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn library_text_search_includes_round_metadata(pool: PgPool) {
     let matching = target(&pool, "Neutral A").await;
     target(&pool, "Neutral B").await;
@@ -1132,7 +1112,6 @@ async fn library_text_search_includes_round_metadata(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn library_round_filter_is_bound_to_cursor_scope(pool: PgPool) {
     for name in ["First", "Second"] {
         let id = target(&pool, name).await;
@@ -1163,7 +1142,6 @@ async fn library_round_filter_is_bound_to_cursor_scope(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn library_round_filter_rejects_overlong_text(pool: PgPool) {
     let (status, body) = request(
         &pool,
@@ -1176,7 +1154,6 @@ async fn library_round_filter_rejects_overlong_text(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn source_metadata_backfill_recovers_original_results_and_preserves_manual_edits(
     pool: PgPool,
 ) {
@@ -1244,7 +1221,6 @@ async fn source_metadata_backfill_recovers_original_results_and_preserves_manual
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn native_context_backfill_fills_gaps_and_preserves_manual_saves(pool: PgPool) {
     let bytes = include_bytes!("fixtures/WC2014.xg");
     let canonical = neondojo::import::xg_to_sgf(bytes).unwrap();
@@ -1326,7 +1302,6 @@ async fn native_context_backfill_fills_gaps_and_preserves_manual_saves(pool: PgP
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn bgf_import_and_backfill_agree_on_match_context(pool: PgPool) {
     let (header, payload) = include_str!("fixtures/tutorial.bgf")
         .split_once('\n')
@@ -1386,7 +1361,6 @@ async fn bgf_import_and_backfill_agree_on_match_context(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn new_native_import_stores_final_result_in_the_library(pool: PgPool) {
     let bytes = include_bytes!("fixtures/WC2014.xg");
     let sgf = neondojo::import::xg_to_sgf(bytes).unwrap();
@@ -1407,7 +1381,6 @@ async fn new_native_import_stores_final_result_in_the_library(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn copying_a_stale_import_selection_does_not_promote_its_revision(pool: PgPool) {
     let source = target(&pool, "Stale selection").await;
     let destination = database(&pool, "Stale selection copy").await;

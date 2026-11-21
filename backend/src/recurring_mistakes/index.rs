@@ -463,7 +463,6 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "./migrations")]
-    #[ignore = "requires PostgreSQL"]
     async fn slower_rebuilds_never_publish_an_older_fingerprint(pool: PgPool) {
         let parsed = crate::import::parse_sgf(SOURCE).unwrap();
         let id = crate::store::import_match(

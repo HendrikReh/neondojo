@@ -9,6 +9,7 @@
     "preview": "vite preview --host 127.0.0.1",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "typecheck:e2e": "tsc -p tsconfig.e2e.json",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "api:types": "cargo run -q --manifest-path ../Cargo.toml -p neondojo --example openapi > ../docs/openapi.json && openapi-typescript ../docs/openapi.json -o src/generated-api.d.ts",
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.56.0",
+    "@types/node": "^22.20.5",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.0.0",

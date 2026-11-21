@@ -191,21 +191,21 @@ test('played move arrows and before/after remain tied to the original decision',
   await expect(page.locator('.analysis-workspace .move-arrows')).toBeVisible();
   await page.getByRole('button', { name: 'Initial', exact: true }).click();
   await expect(page.locator('.analysis-workspace .move-arrows')).toHaveCount(0);
-  await expect(page.locator('.board-shell .player-bar').last()).toContainText(
-    '167 pips',
-  );
+  await expect(
+    page.locator('.analysis-workspace .board-shell .player-bar').last(),
+  ).toContainText('167 pips');
   await page.getByRole('button', { name: 'Final', exact: true }).click();
-  await expect(page.locator('.board-shell .player-bar').last()).toContainText(
-    '163 pips',
-  );
+  await expect(
+    page.locator('.analysis-workspace .board-shell .player-bar').last(),
+  ).toContainText('163 pips');
   await expect(page.locator('.position-code code')).toHaveText(code);
   await expect(page.locator('.board-review-help')).toHaveCount(0);
   await page.getByRole('button', { name: 'Next move', exact: true }).click();
   await expect(page.locator('.board-review-selection')).toHaveCount(0);
   await expect(page.locator('.board-navigation')).toContainText('8/4 6/4');
-  await expect(page.locator('.board-shell .player-bar').first()).toContainText(
-    '161 pips',
-  );
+  await expect(
+    page.locator('.analysis-workspace .board-shell .player-bar').first(),
+  ).toContainText('161 pips');
   await page
     .getByRole('button', { name: 'Previous move', exact: true })
     .click();
@@ -232,12 +232,13 @@ test('file, book and native candidates preview explicitly and source changes res
   await expect(page.locator('.board-review-selection')).toContainText(
     'GNU Backgammon',
   );
-  await expect(page.locator('.board-shell .move-arrows')).toBeVisible();
+  await expect(
+    page.locator('.analysis-workspace .board-shell .move-arrows'),
+  ).toBeVisible();
   await page.getByRole('button', { name: 'Final', exact: true }).click();
-  await expect(page.locator('.board-shell')).toHaveAttribute(
-    'data-preview-mode',
-    'after',
-  );
+  await expect(
+    page.locator('.analysis-workspace .board-shell'),
+  ).toHaveAttribute('data-preview-mode', 'after');
   await page.locator('.analysis-book-reference > summary').click();
   await expect(page.locator('.board-review-selection')).toHaveCount(0);
   await page

@@ -44,7 +44,6 @@ async fn setup(pool: &PgPool) -> (api::AppState, axum::Router, uuid::Uuid) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn game_catalog_preserves_all_games_and_queries_stay_inside_selected_game(pool: PgPool) {
     let (_, app, id) = setup(&pool).await;
     let catalog_count: i64 =
@@ -437,7 +436,6 @@ async fn selected_game_analysis_is_isolated_deduplicated_and_recoverable(pool: P
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn legacy_catalog_backfills_once_under_concurrent_requests(pool: PgPool) {
     let (_, app, id) = setup(&pool).await;
     // Simulate a pre-migration match; checker rows alone cannot recover games 2/3.

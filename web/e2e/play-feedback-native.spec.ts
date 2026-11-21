@@ -1,5 +1,5 @@
 import { watchOpening } from './play-opening-helpers';
-import { test, expect } from '@playwright/test';
+import { backendTest as test, expect } from './test';
 import type { PlaySession } from '../src/play-api';
 import { matchingCheckerTurns, nextCheckerSteps } from '../src/play-state';
 test.skip(
@@ -225,7 +225,7 @@ for (const mode of ['competition', 'training', 'coach', 'tutor'] as const) {
     );
     await expect(panel).toHaveCount(0);
     await page.screenshot({
-      path: `/tmp/neondojo-native-${mode}.png`,
+      path: test.info().outputPath(`native-${mode}.png`),
       fullPage: true,
     });
   });

@@ -34,7 +34,7 @@ for (const config of [
       await page.evaluate(() => document.documentElement.scrollWidth),
     ).toBeLessThanOrEqual(config.width);
     await page.screenshot({
-      path: `/tmp/neondojo-undo-toolbar-${config.width}.png`,
+      path: test.info().outputPath(`undo-toolbar-${config.width}.png`),
       fullPage: true,
     });
     await undo.click();

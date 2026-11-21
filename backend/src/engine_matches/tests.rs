@@ -911,7 +911,6 @@ async fn mixed_duel_preserves_legal_moves_for_retained_seed() {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires isolated PostgreSQL"]
 async fn library_match_finds_moved_entries_and_restores_deleted_ones(pool: sqlx::PgPool) {
     let router = crate::api::router(crate::api::AppState::new(
         pool.clone(),

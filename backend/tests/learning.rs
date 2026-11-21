@@ -1258,7 +1258,6 @@ async fn match_cards_include_cube_offers_responses_and_recover_original_boards(p
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn malformed_learning_payloads_use_json_error_contract(pool: PgPool) {
     let app = api::router(api::AppState::new(pool, Engine::new("gnubg".into())));
     for (path, body) in [

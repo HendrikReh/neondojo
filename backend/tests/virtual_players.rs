@@ -172,7 +172,6 @@ async fn profile_id(app: &axum::Router, name: &str, platform: &str) -> (String, 
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn virtual_profiles_group_members_reversibly_and_consolidate_results(pool: PgPool) {
     let galaxy = import(&pool, "leihande", "Carol", "BackgammonGalaxy", "galaxy").await;
     let open = import(&pool, "Dave", "leihande", "OpenGammon", "open").await;
@@ -411,7 +410,6 @@ async fn virtual_profiles_group_members_reversibly_and_consolidate_results(pool:
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn merging_a_member_keeps_its_matches_in_the_group(pool: PgPool) {
     import(&pool, "anna", "Bob", "BackgammonGalaxy", "one").await;
     import(&pool, "anna", "Bob", "OpenGammon", "two").await;
@@ -508,7 +506,6 @@ async fn merging_a_member_keeps_its_matches_in_the_group(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn bot_matches_are_real_players_that_a_virtual_profile_groups(pool: PgPool) {
     let online = import(&pool, "leihande", "Carol", "OpenGammon", "online").await;
     let competition = import(&pool, "GNUbg", "Hendrik", "", "competition").await;
@@ -703,7 +700,6 @@ async fn bot_matches_are_real_players_that_a_virtual_profile_groups(pool: PgPool
 }
 
 #[sqlx::test(migrations = false)]
-#[ignore = "requires PostgreSQL"]
 async fn migration_catalogues_bot_matches_and_keeps_them_in_my_profile(pool: PgPool) {
     let all = sqlx::migrate!("./migrations");
     let before = sqlx::migrate::Migrator {
@@ -713,9 +709,31 @@ async fn migration_catalogues_bot_matches_and_keeps_them_in_my_profile(pool: PgP
         ..sqlx::migrate::Migrator::DEFAULT
     };
     before.run(&pool).await.unwrap();
-    let online = import(&pool, "leihande", "Carol", "OpenGammon", "online").await;
-    let played = import(&pool, "GNUbg", "Hendrik", "", "played").await;
-    let orphaned = import(&pool, "Hendrik", "GNUbg", "", "detached").await;
+    // The current importer writes columns from later migrations, so the
+    // pre-0085 matches are inserted with that schema's columns only.
+    let legacy = |white: &'static str, black: &'static str, platform: &'static str| {
+        let pool = pool.clone();
+        async move {
+            let id = Uuid::new_v4();
+            sqlx::query(
+                "INSERT INTO matches(id,filename,format,sha256,white,black,match_length,position_count,original,sgf,player_source_platform)
+                 VALUES($1,$2,'sgf',$3,$4,$5,7,1,''::bytea,'',$6)",
+            )
+            .bind(id)
+            .bind(format!("{id}.sgf"))
+            .bind(id.to_string())
+            .bind(white)
+            .bind(black)
+            .bind(platform)
+            .execute(&pool)
+            .await
+            .unwrap();
+            id
+        }
+    };
+    let online = legacy("leihande", "Carol", "opengammon.com").await;
+    let played = legacy("GNUbg", "Hendrik", "").await;
+    let orphaned = legacy("Hendrik", "GNUbg", "").await;
     for (id, human) in [(played, Some(1)), (orphaned, None)] {
         sqlx::query(
             "UPDATE matches SET play_mode='competition',

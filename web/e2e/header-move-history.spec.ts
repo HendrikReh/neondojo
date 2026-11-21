@@ -1,3 +1,4 @@
+import type { Position } from '../src/api';
 import { expect, test, type Page } from './test';
 
 test.use({ viewport: { width: 1800, height: 1169 }, actionTimeout: 10000 });
@@ -45,7 +46,7 @@ async function openMatch(
         (await (await page.request.get(`/api/jobs/${job.id}`)).json()).status,
     )
     .toBe('completed');
-  const positions = (
+  const positions: Position[] = (
     await (
       await page.request.get(
         `/api/positions?match_id=${imported.match.id}&game_no=1&limit=100`,
@@ -86,78 +87,74 @@ async function openMatch(
   return { positions, match: imported.match };
 }
 
-for (const theme of ['graphite', 'club', 'paper'])
-  for (const mode of ['light', 'dark']) {
-    test(`${theme} ${mode}: underlined navigation and two-line loss rows match the reference`, async ({
-      page,
-    }) => {
-      await openMatch(page, theme, mode);
-      const tab = page.getByRole('tab', { name: 'Analysis', exact: true });
-      await expect(tab).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-      await expect(tab).toHaveCSS('border-bottom-width', '2px');
-      const accent = await page.evaluate(() => {
-        const probe = document.createElement('span');
-        probe.style.color = 'var(--ui-accent)';
-        document.body.append(probe);
-        const color = getComputedStyle(probe).color;
-        probe.remove();
-        return color;
-      });
-      await expect(tab).toHaveCSS('color', accent);
-      await expect(tab).toHaveCSS('border-bottom-color', accent);
-      await tab.hover();
-      await expect(tab).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-      const rows = page.locator('.moves-list .move-history-row');
-      await expect(rows.first().locator('.move-history-context')).toContainText(
-        'Hendrik',
-      );
-      await expect(rows.nth(1).locator('.move-history-context')).toContainText(
-        'Mochy',
-      );
-      await expect(rows.nth(1).locator('.move-dice')).toHaveText('4–2');
-      for (const [index, value] of [
-        '0.000',
-        '0.045',
-        '0.092',
-        '0.188',
-      ].entries())
-        await expect(rows.nth(index).locator('.move-loss-value')).toHaveText(
-          value,
-        );
-      await expect(
-        rows.nth(4).locator('.move-assessment-unavailable'),
-      ).toHaveText('—Not evaluated');
-      await expect(rows.nth(4).locator('.move-assessment-marker')).toHaveCount(
-        0,
-      );
-      const assessedRow = rows.nth(2);
-      await assessedRow.focus();
-      const tooltip = page.getByRole('tooltip');
-      const assessment = /Reference GNUbg.*3-ply/;
-      await expect(tooltip).toBeVisible();
-      await expect(tooltip).toContainText(assessment);
-      await expect(assessedRow).toHaveAccessibleDescription(assessment);
-      await assessedRow.click();
-      await expect(assessedRow).toHaveAttribute('aria-current', 'step');
-      await expect(page.locator('.board-heading')).toContainText('Move 3');
-      await expect(rows.nth(2)).toHaveCSS(
-        'background-color',
-        await rows.nth(2).evaluate((element) => {
-          const probe = document.createElement('span');
-          probe.style.backgroundColor = 'var(--ui-selected)';
-          element.append(probe);
-          const value = getComputedStyle(probe).backgroundColor;
-          probe.remove();
-          return value;
-        }),
-      );
-      expect(
-        await page.evaluate(
-          () => document.documentElement.scrollWidth <= innerWidth,
-        ),
-      ).toBe(true);
+// One theme suffices: themes only change colour tokens, and
+// text-navigation.spec.ts covers the tab underline in light and dark palettes.
+{
+  const theme = 'graphite';
+  const mode = 'light';
+  test(`${theme} ${mode}: underlined navigation and two-line loss rows match the reference`, async ({
+    page,
+  }) => {
+    await openMatch(page, theme, mode);
+    const tab = page.getByRole('tab', { name: 'Analysis', exact: true });
+    await expect(tab).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(tab).toHaveCSS('border-bottom-width', '2px');
+    const accent = await page.evaluate(() => {
+      const probe = document.createElement('span');
+      probe.style.color = 'var(--ui-accent)';
+      document.body.append(probe);
+      const color = getComputedStyle(probe).color;
+      probe.remove();
+      return color;
     });
-  }
+    await expect(tab).toHaveCSS('color', accent);
+    await expect(tab).toHaveCSS('border-bottom-color', accent);
+    await tab.hover();
+    await expect(tab).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    const rows = page.locator('.moves-list .move-history-row');
+    await expect(rows.first().locator('.move-history-context')).toContainText(
+      'Hendrik',
+    );
+    await expect(rows.nth(1).locator('.move-history-context')).toContainText(
+      'Mochy',
+    );
+    await expect(rows.nth(1).locator('.move-dice')).toHaveText('4–2');
+    for (const [index, value] of ['0.000', '0.045', '0.092', '0.188'].entries())
+      await expect(rows.nth(index).locator('.move-loss-value')).toHaveText(
+        value,
+      );
+    await expect(
+      rows.nth(4).locator('.move-assessment-unavailable'),
+    ).toHaveText('—Not evaluated');
+    await expect(rows.nth(4).locator('.move-assessment-marker')).toHaveCount(0);
+    const assessedRow = rows.nth(2);
+    await assessedRow.focus();
+    const tooltip = page.getByRole('tooltip');
+    const assessment = /Reference GNUbg.*3-ply/;
+    await expect(tooltip).toBeVisible();
+    await expect(tooltip).toContainText(assessment);
+    await expect(assessedRow).toHaveAccessibleDescription(assessment);
+    await assessedRow.click();
+    await expect(assessedRow).toHaveAttribute('aria-current', 'step');
+    await expect(page.locator('.board-heading')).toContainText('Move 3');
+    await expect(rows.nth(2)).toHaveCSS(
+      'background-color',
+      await rows.nth(2).evaluate((element) => {
+        const probe = document.createElement('span');
+        probe.style.backgroundColor = 'var(--ui-selected)';
+        element.append(probe);
+        const value = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+        return value;
+      }),
+    );
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  });
+}
 
 test('header keyboard navigation and history navigation retain selection, focus and real source context', async ({
   page,
@@ -190,10 +187,9 @@ test('header keyboard navigation and history navigation retain selection, focus 
   await page.keyboard.press('Enter');
   await expect(page.locator('.board-heading')).toContainText('Move 2');
   await page.getByRole('button', { name: 'Next move', exact: true }).click();
-  await expect(page.locator('.moves-list .move-history-row').nth(2)).toHaveAttribute(
-    'aria-current',
-    'step',
-  );
+  await expect(
+    page.locator('.moves-list .move-history-row').nth(2),
+  ).toHaveAttribute('aria-current', 'step');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page
     .getByRole('dialog', { name: 'Settings', exact: true })

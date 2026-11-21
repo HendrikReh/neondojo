@@ -89,7 +89,6 @@ async fn page(app: &axum::Router, filters: Value, after: Option<&str>, limit: us
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn memberships_follow_the_learning_identity_and_refresh_without_duplicate_rows(pool: PgPool) {
     let first = position(&pool, "Original", "31hefe", 0).await;
     let equivalent = position(&pool, "Equivalent", "31hefe", 0).await;
@@ -169,7 +168,6 @@ async fn memberships_follow_the_learning_identity_and_refresh_without_duplicate_
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn deck_name_sorting_keeps_empty_memberships_last_and_pagination_unique(pool: PgPool) {
     let a = position(&pool, "Last match name", "31hefe", 0).await;
     let b = position(&pool, "First match name", "42hdfd", 0).await;

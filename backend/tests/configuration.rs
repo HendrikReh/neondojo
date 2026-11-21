@@ -1,33 +1,14 @@
-use axum::{body::Body, http::Request};
-use http_body_util::BodyExt;
 use neondojo::{
     api::{self, AppState},
     engine::Engine,
 };
 use serde_json::{Value, json};
 use sqlx::PgPool;
-use tower::ServiceExt;
 mod profile_support;
-
-async fn call(app: axum::Router, method: &str, path: &str, body: Value) -> (u16, Value) {
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method(method)
-                .uri(path)
-                .header("content-type", "application/json")
-                .body(Body::from(body.to_string()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let code = response.status().as_u16();
-    let bytes = response.into_body().collect().await.unwrap().to_bytes();
-    (code, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
-}
+mod support;
+use support::call;
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn configuration_requires_explicit_initialization(pool: PgPool) {
     let app = api::router(AppState::new(pool, Engine::new("/missing/gnubg".into())));
     let (code, error) = call(app, "GET", "/api/configuration", json!(null)).await;
@@ -60,7 +41,6 @@ async fn play_uses_default_thresholds_when_configuration_cannot_be_loaded(pool: 
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn initialization_imports_browser_values_and_keeps_backend_authority(pool: PgPool) {
     let (app, state) = profile_support::initialized(&pool, false).await;
     assert_eq!(state["active_profile"]["name"], "Standard");
@@ -83,7 +63,6 @@ async fn initialization_imports_browser_values_and_keeps_backend_authority(pool:
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn updates_are_durable_dirty_and_compare_and_swap_without_requiring_an_engine(pool: PgPool) {
     let (app, state) = profile_support::initialized(&pool, false).await;
     let mut config = state["current_configuration"].clone();
@@ -104,7 +83,6 @@ async fn updates_are_durable_dirty_and_compare_and_swap_without_requiring_an_eng
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn stale_concurrent_writes_cannot_mix_projection_values(pool: PgPool) {
     let (app, state) = profile_support::initialized(&pool, false).await;
     let mut a = state["current_configuration"].clone();
@@ -145,7 +123,6 @@ async fn stale_concurrent_writes_cannot_mix_projection_values(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn invalid_configuration_is_rejected_before_any_projection_changes(pool: PgPool) {
     let (app, state) = profile_support::initialized(&pool, false).await;
     let mut config = state["current_configuration"].clone();
@@ -165,7 +142,6 @@ async fn invalid_configuration_is_rejected_before_any_projection_changes(pool: P
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn initialization_is_concurrent_and_warns_about_missing_legacy_references(pool: PgPool) {
     let app = api::router(AppState::new(
         pool.clone(),
@@ -236,7 +212,6 @@ async fn legacy_settings_and_book_writes_update_current_only(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn a_failure_in_the_second_projection_rolls_back_the_first(pool: PgPool) {
     let (app, state) = profile_support::initialized(&pool, false).await;
     let (_, settings_before) = call(app.clone(), "GET", "/api/settings", Value::Null).await;
@@ -259,7 +234,6 @@ async fn a_failure_in_the_second_projection_rolls_back_the_first(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn current_availability_reports_outages_without_changing_configuration(pool: PgPool) {
     let (app, state) = profile_support::initialized(&pool, false).await;
     let (code, availability) = call(
@@ -278,7 +252,6 @@ async fn current_availability_reports_outages_without_changing_configuration(poo
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn occurrence_sort_choices_are_persisted_in_configuration(pool: PgPool) {
     let (app, mut state) = profile_support::initialized(&pool, false).await;
     for sort in ["occurrence_database", "occurrence_game", "occurrence_move"] {
@@ -298,7 +271,6 @@ async fn occurrence_sort_choices_are_persisted_in_configuration(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn position_column_choices_persist_without_changing_widths(pool: PgPool) {
     let (app, state) = profile_support::initialized(&pool, false).await;
     let mut config = state["current_configuration"].clone();
@@ -338,7 +310,6 @@ async fn position_column_choices_persist_without_changing_widths(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn legacy_deck_references_do_not_block_configuration_updates(pool: PgPool) {
     let (app, state) = profile_support::initialized(&pool, false).await;
     let deck = uuid::Uuid::new_v4();
@@ -390,7 +361,6 @@ async fn legacy_deck_references_do_not_block_configuration_updates(pool: PgPool)
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn occurrence_widths_roundtrip_without_changing_column_visibility_or_order(pool: PgPool) {
     let (app, state) = profile_support::initialized(&pool, false).await;
     let mut config = state["current_configuration"].clone();
@@ -430,7 +400,6 @@ async fn occurrence_widths_roundtrip_without_changing_column_visibility_or_order
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn money_game_target_is_a_valid_persisted_play_preference(pool: PgPool) {
     let (app, state) = profile_support::initialized(&pool, false).await;
     let mut config = state["current_configuration"].clone();
@@ -461,7 +430,6 @@ async fn money_game_target_is_a_valid_persisted_play_preference(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn loads_pre_play_mode_profiles_without_changing_saved_preferences(pool: PgPool) {
     let (app, state) = profile_support::initialized(&pool, false).await;
     let mut legacy = state["current_configuration"].clone();

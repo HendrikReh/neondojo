@@ -81,7 +81,6 @@ async fn ordered(pool: &PgPool, sort: &str, direction: &str, limit: usize) -> Ve
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn numeric_ids_are_persistent_and_independent_of_uuid_and_row_order(pool: PgPool) {
     let mut ids = Vec::new();
     for n in (1..=12).rev() {
@@ -166,7 +165,6 @@ async fn numeric_ids_are_persistent_and_independent_of_uuid_and_row_order(pool: 
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn new_sort_fields_use_visible_values_ties_and_nulls_last_on_every_page(pool: PgPool) {
     let mut ids = Vec::new();
     for n in 1..=5 {
@@ -255,7 +253,6 @@ async fn new_sort_fields_use_visible_values_ties_and_nulls_last_on_every_page(po
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn analysis_sort_uses_selected_results_and_keeps_unavailable_results_last(pool: PgPool) {
     let mut ids = Vec::new();
     for n in 1..=7 {
@@ -349,7 +346,6 @@ fn altered_cursor(cursor: &str, field: &str, value: Value) -> String {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn full_unicode_annotations_use_compact_scope_bound_anchor_cursors(pool: PgPool) {
     let a = target(&pool, 1).await;
     let b = target(&pool, 2).await;
@@ -444,7 +440,6 @@ async fn full_unicode_annotations_use_compact_scope_bound_anchor_cursors(pool: P
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn numeric_cursor_validation_rejects_bad_bigints_and_score_arrays(pool: PgPool) {
     target(&pool, 1).await;
     target(&pool, 2).await;
@@ -487,7 +482,6 @@ async fn numeric_cursor_validation_rejects_bad_bigints_and_score_arrays(pool: Pg
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn score_sort_compares_each_side_numerically_before_the_uuid_tie_breaker(pool: PgPool) {
     let low_white = target(&pool, 4).await;
     let low_black = target(&pool, 3).await;

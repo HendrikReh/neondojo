@@ -1,10 +1,9 @@
-use axum::{body::Body, http::Request};
-use http_body_util::BodyExt;
 use neondojo::{api, engine::Engine, import, model::Position, store};
 use serde_json::{Value, json};
 use sqlx::PgPool;
-use tower::ServiceExt;
 use uuid::Uuid;
+mod support;
+use support::call;
 
 const SOURCE: &str = "(;GM[6]PW[Alice]PB[Bob]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])";
 
@@ -13,26 +12,6 @@ fn app(pool: &PgPool) -> axum::Router {
         pool.clone(),
         Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into())),
     ))
-}
-
-async fn call(app: axum::Router, method: &str, uri: &str, body: Value) -> (u16, Value) {
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method(method)
-                .uri(uri)
-                .header("content-type", "application/json")
-                .body(Body::from(body.to_string()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let status = response.status().as_u16();
-    let bytes = response.into_body().collect().await.unwrap().to_bytes();
-    (
-        status,
-        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
-    )
 }
 
 async fn positions(pool: &PgPool, source: &str) -> Vec<Position> {
@@ -95,7 +74,6 @@ async fn alias(pool: &PgPool, position: Uuid) -> Uuid {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn bulk_reports_each_input_and_maps_repeated_identities_without_fake_answers(pool: PgPool) {
     let positions = positions(&pool, SOURCE).await;
     let analyzed = &positions[0];
@@ -183,7 +161,6 @@ async fn bulk_reports_each_input_and_maps_repeated_identities_without_fake_answe
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn bulk_strictly_validates_bounded_requests_and_missing_decks(pool: PgPool) {
     let app = app(&pool);
     let deck = create_deck(&app).await;
@@ -224,7 +201,6 @@ async fn bulk_strictly_validates_bounded_requests_and_missing_decks(pool: PgPool
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn bulk_preserves_fsrs_history_and_only_versions_changed_native_payloads(pool: PgPool) {
     let position = positions(&pool, SOURCE).await.remove(0);
     native_analysis(&pool, position.id, 1, "first native answer").await;
@@ -328,7 +304,6 @@ async fn bulk_preserves_fsrs_history_and_only_versions_changed_native_payloads(p
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn bulk_keeps_dice_score_and_cube_contexts_as_distinct_questions(pool: PgPool) {
     let mut selected = Vec::new();
     for source in [
@@ -377,7 +352,6 @@ async fn bulk_keeps_dice_score_and_cube_contexts_as_distinct_questions(pool: PgP
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn bulk_reuses_one_selected_match_solution_without_individual_override(pool: PgPool) {
     let positions = positions(&pool, SOURCE).await;
     let match_job = Uuid::new_v4();
@@ -429,7 +403,6 @@ async fn bulk_reuses_one_selected_match_solution_without_individual_override(poo
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn bulk_rejects_unprojectable_imported_analysis_and_empty_native_candidates(pool: PgPool) {
     let source = include_str!("fixtures/analysis-game1.sgf");
     let position = positions(&pool, source).await.remove(0);
@@ -473,7 +446,6 @@ async fn bulk_rejects_unprojectable_imported_analysis_and_empty_native_candidate
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn bulk_deck_limit_rolls_back_memberships_and_shared_payload_refreshes(pool: PgPool) {
     let positions = independent_positions(&pool).await;
     for position in &positions {
@@ -529,7 +501,6 @@ async fn bulk_deck_limit_rolls_back_memberships_and_shared_payload_refreshes(poo
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn bulk_propagates_unexpected_database_errors_and_rolls_back_valid_writes(pool: PgPool) {
     let positions = independent_positions(&pool).await;
     native_analysis(&pool, positions[0].id, 1, "valid native answer").await;
@@ -563,7 +534,6 @@ async fn bulk_propagates_unexpected_database_errors_and_rolls_back_valid_writes(
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn bulk_and_legacy_imports_share_stable_lock_order_and_card_identity(pool: PgPool) {
     let positions = independent_positions(&pool).await;
     for position in &positions {
@@ -622,7 +592,6 @@ async fn bulk_and_legacy_imports_share_stable_lock_order_and_card_identity(pool:
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn bulk_requires_a_usable_selected_native_match_solution_and_accepts_forced_moves(
     pool: PgPool,
 ) {
@@ -703,7 +672,6 @@ async fn bulk_requires_a_usable_selected_native_match_solution_and_accepts_force
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn bulk_does_not_fall_back_from_the_selected_individual_hint_with_an_empty_answer(
     pool: PgPool,
 ) {
@@ -737,7 +705,6 @@ async fn bulk_does_not_fall_back_from_the_selected_individual_hint_with_an_empty
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn catalog_cards_use_explicit_selection_without_engine_or_depth_override(pool: PgPool) {
     let position = positions(&pool, SOURCE).await.remove(0);
     let selected = native_analysis(&pool, position.id, 1, "selected shallow answer").await;
@@ -777,7 +744,6 @@ async fn catalog_cards_use_explicit_selection_without_engine_or_depth_override(p
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn catalog_cards_keep_imported_provenance_and_reject_other_position_scope(pool: PgPool) {
     let position = positions(&pool, include_str!("fixtures/analysis-game1.sgf"))
         .await
@@ -823,7 +789,6 @@ async fn catalog_cards_keep_imported_provenance_and_reject_other_position_scope(
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn catalog_imported_readiness_filters_match_card_creation(pool: PgPool) {
     let position = positions(&pool, include_str!("fixtures/analysis-game1.sgf"))
         .await
@@ -906,7 +871,6 @@ async fn catalog_imported_readiness_filters_match_card_creation(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn catalog_batch_cards_reject_unavailable_selected_decisions(pool: PgPool) {
     let position = positions(&pool, SOURCE).await.remove(0);
     let job = Uuid::new_v4();
@@ -938,7 +902,6 @@ async fn catalog_batch_cards_reject_unavailable_selected_decisions(pool: PgPool)
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn catalog_consumers_keep_open_sage_checkpoint_provenance_without_job_summary(pool: PgPool) {
     let position = positions(&pool, SOURCE).await.remove(0);
     let job = Uuid::new_v4();

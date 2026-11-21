@@ -2,22 +2,45 @@
 
 ## Verification
 
-Run the checks relevant to the change from the repository root. Install the frontend dependencies with `npm ci --prefix web`. For the full Rust suite, configure `DATABASE_URL` as described below. Use `cargo test --workspace --lib` to run the Rust library tests without the SQLx integration targets.
+Run the checks relevant to the change from the repository root. Install the frontend dependencies with `npm ci --prefix web`. `cargo test --workspace` includes every SQLx test that needs only PostgreSQL, so export `DATABASE_URL` as described under [PostgreSQL test server](#postgresql-test-server) first. Use `cargo test --workspace --lib` to run the Rust library tests without the SQLx integration targets.
 
 ```sh
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 npm test --prefix web
+npm run typecheck:e2e --prefix web
 npm run test:themes --prefix web
 npm run build --prefix web
 ```
 
-After changing an API contract, run `npm run api:types --prefix web` before the frontend checks. It regenerates [OpenAPI](../openapi.json) and [the TypeScript types](../../web/src/generated-api.d.ts) from the Rust API. The `test:themes` script discovers the Python tests under `tools/`, including tests for tools beyond theme preparation.
+After changing an API contract, run `npm run api:types --prefix web` before the frontend checks. It regenerates [OpenAPI](../openapi.json) and [the TypeScript types](../../web/src/generated-api.d.ts) from the Rust API. `typecheck:e2e` then checks the browser specs, their API mocks, and the components they mount against the regenerated types. Playwright itself only strips types, so a mock that has fallen behind the API would otherwise still run. The `test:themes` script discovers the Python tests under `tools/`, including tests for tools beyond theme preparation.
+
+[cargo-nextest](https://nexte.st/) runs the same Rust tests in separate processes and in parallel across test targets. With nextest installed, `cargo nextest run --workspace` replaces `cargo test --workspace` and does not run doctests. On November 21, 2026, on the Mac mini M4 Pro, the default suite of 601 tests took 91 s with `cargo test` and 53 s with nextest, after the build.
+
+### Which Rust tests run by default
+
+| Requirement | Default `cargo test --workspace` | Marked |
+| --- | --- | --- |
+| Nothing external | Runs | No attribute |
+| PostgreSQL only | Runs; needs `DATABASE_URL` | `#[sqlx::test]` |
+| GNUbg, NeonGammon, Anki, opening books, local corpora, or large synthetic datasets | Skipped | `#[ignore = "requires …"]` naming the resource |
+
+Mark a test `#[ignore]` only for a resource beyond PostgreSQL and name that resource in the reason. Pure checks of OpenAPI or of fixed reference data need no database; use `#[test]` and `api::ApiDoc::openapi()` for them. Shared HTTP helpers for the integration targets are in [`backend/tests/support/mod.rs`](../../backend/tests/support/mod.rs); a target uses them with `mod support;`.
+
+### PostgreSQL test server
+
+Start PostgreSQL with `docker compose up -d --wait db` or use a dedicated test server. Export `DATABASE_URL` for a maintenance database on that server using a role with `CREATEDB`. For the default local Compose instance, use the connection settings from [.env.example](../../.env.example) with `/postgres` as the database name:
+
+```sh
+export DATABASE_URL=postgres://neondojo:neondojo_local@127.0.0.1:54329/postgres
+```
+
+SQLx creates and drops a separate database for each test and keeps its bookkeeping in a `_sqlx_test` schema of the database that `DATABASE_URL` names. Without an exported value, the tests read `DATABASE_URL` from `.env`, which names the local library, so export the maintenance URL before running them. A failed test leaves its `_sqlx_test_*` database behind for inspection.
 
 ### PostgreSQL and GNUbg integration tests
 
-Start PostgreSQL with `docker compose up -d --wait db` or use a dedicated test server. Export `DATABASE_URL` for a maintenance database on that server using a role with `CREATEDB`. For the default local Compose instance, use the connection settings from [.env.example](../../.env.example) with `/postgres` as the database name. SQLx creates and drops separate test databases. Set `GNUBG_BIN` if GNUbg is outside `PATH`. Native analysis needs the neural-network weights, and native play tests also need GNUbg's embedded Python support.
+The ignored tests need a native engine or other local resources in addition to the [PostgreSQL test server](#postgresql-test-server). Set `GNUBG_BIN` if GNUbg is outside `PATH`. Native analysis needs the neural-network weights, and native play tests also need GNUbg's embedded Python support. `--ignored` runs only the ignored tests; `--include-ignored` runs them together with the default suite.
 
 ```sh
 cargo test --workspace -- --ignored --nocapture --skip all_local_game_files_import_atomically_and_deduplicate
@@ -46,11 +69,17 @@ The November 8, 2026 rerun imported 33 of 42 files and rejected nine XG tourname
 
 ### Browser tests
 
-Playwright requires Google Chrome, `psql`, PostgreSQL, and the frontend dependencies. GNUbg workflows require a working local engine. The harness creates a fresh database, verifies that the API is using it, starts a dedicated backend and Vite on local ports, and removes the test database after the run. Vite serves HTTP and its development WebSocket on the same loopback port. Screenshots and other test artifacts are written to `web/test-results/`.
+Playwright requires Google Chrome, `psql`, PostgreSQL, and the frontend dependencies. GNUbg workflows require a working local engine. Global setup builds the backend once. Each Playwright worker then creates its own database, verifies that the API is using it, starts its own backend and Vite on local ports, and removes its database when the worker stops. Global teardown drops any database that a crashed worker left behind. Vite serves HTTP and its development WebSocket on the same loopback port. The harness lives in [`web/e2e/stack.ts`](../../web/e2e/stack.ts) and [`web/e2e/test.ts`](../../web/e2e/test.ts).
 
 ```sh
 npm run test:e2e --prefix web
 ```
+
+The suite runs four workers by default. Set `NEONDOJO_E2E_WORKERS` or pass `--workers` to change that; every worker runs its own GNUbg processes, so more workers mainly help the mocked specs. On November 21, 2026, on the Mac mini M4 Pro, 614 tests ran in 6.3 minutes with four workers and 24 opt-in tests were skipped. The previous single-worker harness had needed 7.2 minutes for its first 200 tests.
+
+Tests of one spec file run in order on one worker and may build on each other's data. Tests in different files can share a worker's database, so a spec must not assume an empty library: give imported matches and created databases unique names, select its own database, and assert on its own rows rather than on global counts. Import specs from `./test`. Its `test` fixture also isolates the personal configuration of each test with a mocked profile backend, and `backendTest` uses the real configuration of the worker's backend. `NEONDOJO_E2E_DATABASE_URL` and the `databaseUrl` fixture name the worker's database for direct SQL checks.
+
+Write screenshots for visual review with `test.info().outputPath(...)`. Playwright stores them with the other artifacts of the test under `web/test-results/`, or under the directory passed with `--output`. To keep the backend output for diagnosis, set `NEONDOJO_E2E_BACKEND_LOG` to a file; the worker with index 1 and higher appends `-1`, `-2` and so on to its name.
 
 Pass a spec path to run only the affected workflow. These specs cover native
 match analysis, automatic dice equity, and the Study overview with its two
@@ -70,7 +99,7 @@ restored progress and persisted job IDs in the disposable database.
 npm run test:e2e --prefix web -- e2e/analysis-calculation-controls.spec.ts --grep "reload resumes native bulk"
 ```
 
-The default PostgreSQL connection targets the Compose instance. For another server or port, set `NEONDOJO_E2E_POSTGRES_URL` to a connection with `CREATEDB`. For tests that need prepared data, set `NEONDOJO_E2E_POSTGRES_TEMPLATE` to a dedicated fixture database named `neondojo_e2e_template_*`. The harness copies the template for each run. Unset the obsolete `NEONDOJO_TEST_URL` before running Playwright.
+The default PostgreSQL connection targets the Compose instance. For another server or port, set `NEONDOJO_E2E_POSTGRES_URL` to a connection with `CREATEDB`. For tests that need prepared data, set `NEONDOJO_E2E_POSTGRES_TEMPLATE` to a dedicated fixture database named `neondojo_e2e_template_*`. The harness copies the template for each worker. Unset the obsolete `NEONDOJO_TEST_URL` before running Playwright.
 
 Coverage includes import and analysis, game selection and move pagination, search and filters, saved notes and revision conflicts, deck creation, review and Anki exports, themes and all six locales, and selection changes while responses are in flight.
 

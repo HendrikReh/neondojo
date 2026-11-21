@@ -139,7 +139,7 @@ test('analysis header shows a compact single-line identity and metadata while da
   expect(titleFont).toBeGreaterThan(metadataFont);
   await page.setViewportSize({ width: 1800, height: 1169 });
   await page.screenshot({
-    path: '/tmp/neondojo-analysis-header-1800.png',
+    path: test.info().outputPath('analysis-header-1800.png'),
     fullPage: true,
   });
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();

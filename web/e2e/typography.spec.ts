@@ -125,98 +125,100 @@ const views = [
   ],
 ] as const;
 
-for (const theme of ['graphite', 'club', 'paper'])
-  for (const mode of ['light', 'dark']) {
-    test(`${theme} ${mode}: equivalent text roles share family, size, weight and style across workspaces`, async ({
-      page,
-    }) => {
-      await fixture(page, theme, mode);
-      const family = await page
-        .locator('.app-shell')
-        .evaluate((el) => getComputedStyle(el).fontFamily);
-      for (const [id, name, title, table, control] of views) {
-        await page.getByRole('tab', { name, exact: true }).click();
-        const panel = page.locator(`#workspace-panel-${id}`);
-        const heading = panel.locator(title);
-        await expect(heading).toHaveCSS('font-family', family);
-        await expect(heading).toHaveCSS('font-size', '24px');
-        await expect(heading).toHaveCSS('font-weight', '600');
-        await expect(heading).toHaveCSS('font-style', 'normal');
-        await expect(panel.locator(control).first()).toHaveCSS(
+// Interface themes only redefine colour tokens, so one theme covers every font role.
+{
+  const theme = 'graphite';
+  const mode = 'light';
+  test(`${theme} ${mode}: equivalent text roles share family, size, weight and style across workspaces`, async ({
+    page,
+  }) => {
+    await fixture(page, theme, mode);
+    const family = await page
+      .locator('.app-shell')
+      .evaluate((el) => getComputedStyle(el).fontFamily);
+    for (const [id, name, title, table, control] of views) {
+      await page.getByRole('tab', { name, exact: true }).click();
+      const panel = page.locator(`#workspace-panel-${id}`);
+      const heading = panel.locator(title);
+      await expect(heading).toHaveCSS('font-family', family);
+      await expect(heading).toHaveCSS('font-size', '24px');
+      await expect(heading).toHaveCSS('font-weight', '600');
+      await expect(heading).toHaveCSS('font-style', 'normal');
+      await expect(panel.locator(control).first()).toHaveCSS(
+        'font-size',
+        '13px',
+      );
+      await expect(panel.locator(control).first()).toHaveCSS(
+        'font-family',
+        family,
+      );
+      for (const field of await panel
+        .locator(
+          'input:visible:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select:visible, textarea:visible',
+        )
+        .all()) {
+        await expect(field).toHaveCSS('font-size', '13px');
+        await expect(field).toHaveCSS('font-style', 'normal');
+      }
+      const head = panel.locator(`${table} thead th`).first();
+      const cell = panel.locator(`${table} tbody td`).first();
+      // The checker candidate table grows with its pane on desktop:
+      // 12-14 px headings and 13-16 px cells. Other tables use the scale.
+      if (id === 'analysis') {
+        expect(await fontSize(head)).toBeGreaterThanOrEqual(12);
+        expect(await fontSize(head)).toBeLessThanOrEqual(14);
+        expect(await fontSize(cell)).toBeGreaterThanOrEqual(13);
+        expect(await fontSize(cell)).toBeLessThanOrEqual(16);
+      } else {
+        await expect(head).toHaveCSS('font-size', '11px');
+        await expect(cell).toHaveCSS('font-size', '12px');
+      }
+      await expect(head).toHaveCSS('font-weight', '600');
+      await expect(head).toHaveCSS('text-transform', 'none');
+      await expect(cell).toHaveCSS('font-family', family);
+      if (id === 'analysis')
+        await expect(panel.locator('.moves-panel h3')).toHaveCSS(
+          'font-size',
+          '14px',
+        );
+      if (id === 'analysis') {
+        // The move button follows its growing candidate cell.
+        expect(
+          await fontSize(panel.locator('.candidate-preview-button').first()),
+        ).toBe(await fontSize(cell));
+        await expect(
+          panel.locator('.board-view-buttons button').first(),
+        ).toHaveCSS('font-size', '13px');
+        await expect(panel.locator('.board-focus-toggle')).toHaveCount(0);
+      }
+      if (id === 'database')
+        await expect(panel.locator('.position-search input')).toHaveCSS(
+          'font-family',
+          /monospace/,
+        );
+      if (id === 'database')
+        await expect(panel.locator('.library-width-reset')).toHaveCSS(
           'font-size',
           '13px',
         );
-        await expect(panel.locator(control).first()).toHaveCSS(
-          'font-family',
-          family,
+      if (id === 'positions')
+        await expect(panel.locator('.position-preview h3')).toHaveCSS(
+          'font-size',
+          '16px',
         );
-        for (const field of await panel
-          .locator(
-            'input:visible:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select:visible, textarea:visible',
-          )
-          .all()) {
-          await expect(field).toHaveCSS('font-size', '13px');
-          await expect(field).toHaveCSS('font-style', 'normal');
-        }
-        const head = panel.locator(`${table} thead th`).first();
-        const cell = panel.locator(`${table} tbody td`).first();
-        // The checker candidate table grows with its pane on desktop:
-        // 12-14 px headings and 13-16 px cells. Other tables use the scale.
-        if (id === 'analysis') {
-          expect(await fontSize(head)).toBeGreaterThanOrEqual(12);
-          expect(await fontSize(head)).toBeLessThanOrEqual(14);
-          expect(await fontSize(cell)).toBeGreaterThanOrEqual(13);
-          expect(await fontSize(cell)).toBeLessThanOrEqual(16);
-        } else {
-          await expect(head).toHaveCSS('font-size', '11px');
-          await expect(cell).toHaveCSS('font-size', '12px');
-        }
-        await expect(head).toHaveCSS('font-weight', '600');
-        await expect(head).toHaveCSS('text-transform', 'none');
-        await expect(cell).toHaveCSS('font-family', family);
-        if (id === 'analysis')
-          await expect(panel.locator('.moves-panel h3')).toHaveCSS(
-            'font-size',
-            '14px',
-          );
-        if (id === 'analysis') {
-          // The move button follows its growing candidate cell.
-          expect(
-            await fontSize(panel.locator('.candidate-preview-button').first()),
-          ).toBe(await fontSize(cell));
-          await expect(
-            panel.locator('.board-view-buttons button').first(),
-          ).toHaveCSS('font-size', '13px');
-          await expect(panel.locator('.board-focus-toggle')).toHaveCount(0);
-        }
-        if (id === 'database')
-          await expect(panel.locator('.position-search input')).toHaveCSS(
-            'font-family',
-            /monospace/,
-          );
-        if (id === 'database')
-          await expect(panel.locator('.library-width-reset')).toHaveCSS(
-            'font-size',
-            '13px',
-          );
-        if (id === 'positions')
-          await expect(panel.locator('.position-preview h3')).toHaveCSS(
-            'font-size',
-            '16px',
-          );
-        if (id === 'learning')
-          await expect(panel.locator('.learning-card-preview h4')).toHaveCSS(
-            'font-size',
-            '16px',
-          );
-        expect(
-          await page.evaluate(
-            () => document.documentElement.scrollWidth <= innerWidth,
-          ),
-        ).toBe(true);
-      }
-    });
-  }
+      if (id === 'learning')
+        await expect(panel.locator('.learning-card-preview h4')).toHaveCSS(
+          'font-size',
+          '16px',
+        );
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+    }
+  });
+}
 
 test('comment editors, modal titles and study questions follow their roles while code and board fonts remain distinct', async ({
   page,

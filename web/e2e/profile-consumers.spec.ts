@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { backendTest as test, expect, type Page } from './test';
 import { profileBackend, secondProfileId } from './profile-backend';
 import {
   defaultConfiguration,
@@ -155,12 +155,7 @@ test('filters and local column layouts survive profile switches and reload', asy
   await page.goto('/');
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();
   await expect(page.locator('.database-table tbody tr')).toHaveCount(1);
-  expect(await headers(page)).toEqual([
-    'select',
-    'white',
-    'id',
-    'black',
-  ]);
+  expect(await headers(page)).toEqual(['select', 'white', 'id', 'black']);
   await expect(
     page.getByRole('textbox', { name: 'Search matches' }),
   ).toHaveValue('Alpha');
@@ -171,11 +166,13 @@ test('filters and local column layouts survive profile switches and reload', asy
   await expect(page.locator('.database-table tbody tr')).toContainText(
     'Current search black',
   );
-  const width = async () => (await page
-    .locator('th[data-column="white"]')
-    .boundingBox())!.width;
+  const width = async () =>
+    (await page.locator('th[data-column="white"]').boundingBox())!.width;
   expect(await width()).toBeCloseTo(240, 0);
-  await page.locator('th[data-column="white"]').getByRole('separator').press('ArrowRight');
+  await page
+    .locator('th[data-column="white"]')
+    .getByRole('separator')
+    .press('ArrowRight');
   await expect.poll(width).toBeCloseTo(250, 0);
   await page.getByRole('tab', { name: 'Positions', exact: true }).click();
   await switchProfile(page, 'Deep analysis');
@@ -202,12 +199,7 @@ test('filters and local column layouts survive profile switches and reload', asy
   await expect(
     page.getByRole('textbox', { name: 'Search matches' }),
   ).toHaveValue('Current search');
-  expect(await headers(page)).toEqual([
-    'select',
-    'white',
-    'id',
-    'black',
-  ]);
+  expect(await headers(page)).toEqual(['select', 'white', 'id', 'black']);
   expect(
     controller.calls
       .filter((call) => call.method !== 'GET')

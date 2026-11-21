@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, backendTest as test } from './test';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 

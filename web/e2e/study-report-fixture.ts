@@ -45,7 +45,12 @@ export function detail(reportId = id) {
       assisted: true,
       analysis_plies: 3,
       first_attempt_loss: 0.12,
+      final_choice_loss: 0.08,
       first_attempt_rating: 4.5,
+      first_attempt_rating_decisions: 3,
+      first_attempt_rating_method:
+        'gnubg-original-choices-emg500-reached-positions-v1',
+      first_attempt_rating_profile: 'fixture',
       first_attempt_count: 3,
       retry_count: 1,
       independent_first_attempt_count: 2,
@@ -53,13 +58,17 @@ export function detail(reportId = id) {
       games: [
         {
           game_no: 1,
+          engine: 'GNUbg',
           decisions: [
             {
               player: 0,
               decision_no: 1,
+              kind: 'checker',
               played: '13/10 6/5',
               best: '13/10 6/5',
               equity_loss: 0,
+              severity: 'none',
+              evaluation_status: 'evaluated',
             },
           ],
         },

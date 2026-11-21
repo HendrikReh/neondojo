@@ -46,7 +46,6 @@ async fn bookmark(pool: PgPool, position: Uuid, method: &str) -> u16 {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn waiting_bookmark_reads_saves_and_new_position_jobs_follow_the_retained_owner(
     pool: PgPool,
 ) {
@@ -115,7 +114,6 @@ async fn waiting_bookmark_reads_saves_and_new_position_jobs_follow_the_retained_
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn waiting_bookmark_removal_only_removes_membership_from_the_retained_position(pool: PgPool) {
     let (source, position) = source(&pool).await;
     let mut deletion = pool.begin().await.unwrap();
@@ -160,7 +158,6 @@ async fn waiting_bookmark_removal_only_removes_membership_from_the_retained_posi
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn concurrent_first_game_note_is_preserved_before_the_old_game_cascades(pool: PgPool) {
     let (source, position) = source(&pool).await;
     let game: Uuid =

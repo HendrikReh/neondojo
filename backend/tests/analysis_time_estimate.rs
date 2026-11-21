@@ -237,7 +237,6 @@ async fn incompatible_snapshots_never_replace_a_valid_older_basis(pool: PgPool) 
     }
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn unavailable_engine_and_zero_moves_do_not_return_zero_seconds(pool: PgPool) {
     let (app, id) = setup(&pool).await;
     sqlx::query("INSERT INTO app_settings(singleton,gnubg_path) VALUES(true,'/missing/gnubg') ON CONFLICT(singleton) DO UPDATE SET gnubg_path='/missing/gnubg'").execute(&pool).await.unwrap();
@@ -268,7 +267,6 @@ async fn unavailable_engine_and_zero_moves_do_not_return_zero_seconds(pool: PgPo
     assert!(estimate["estimated_ms"].is_null());
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn validates_scope_and_honors_removed_sources(pool: PgPool) {
     let (app, id) = setup(&pool).await;
     for query in [
@@ -312,7 +310,6 @@ async fn validates_scope_and_honors_removed_sources(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn active_competition_source_cannot_be_used_for_an_estimate(pool: PgPool) {
     let (app, id) = setup(&pool).await;
     sqlx::query("INSERT INTO play_sessions(id,state,gnubg_path,sgf,native_id,library_match_id) VALUES($1,$2,'/missing','source','native',$3)")

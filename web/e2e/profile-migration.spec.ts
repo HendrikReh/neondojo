@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { backendTest as test, expect } from './test';
 import { profileBackend } from './profile-backend';
 
 test('imports legacy preferences once and preserves unrelated workspace state', async ({

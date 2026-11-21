@@ -97,7 +97,7 @@ for (const width of [1440, 390])
       .getByTestId('play-feedback');
     await expect(coach).toBeVisible();
     await page.screenshot({
-      path: `/tmp/neondojo-coach-modal-${width}.png`,
+      path: test.info().outputPath(`coach-modal-${width}.png`),
       fullPage: true,
     });
     await expect(page.getByRole('alertdialog')).toHaveCount(0);

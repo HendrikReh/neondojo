@@ -192,7 +192,7 @@ test('one saved choice drives every view and remains strict across games and rel
       ),
     ).toBe(true);
     await page.screenshot({
-      path: `/private/tmp/neondojo-catalog-${width}.png`,
+      path: test.info().outputPath(`catalog-${width}.png`),
     });
   }
   const catalog = await (

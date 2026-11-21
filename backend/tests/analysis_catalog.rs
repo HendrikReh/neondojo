@@ -1,10 +1,9 @@
-use axum::{body::Body, http::Request};
-use http_body_util::BodyExt;
 use neondojo::{api, engine::Engine, import, model::Job, store};
 use serde_json::{Value, json};
 use sqlx::PgPool;
-use tower::ServiceExt;
 use uuid::Uuid;
+mod support;
+use support::send as request;
 
 const SOURCE: &str = "(;GM[6]FF[4]PW[Alice]PB[Bob]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])\n(;GM[6]FF[4]MI[length:7][ws:1][bs:0];W[31hefe];B[42qusu])";
 
@@ -34,30 +33,6 @@ async fn setup(pool: &PgPool) -> (axum::Router, Uuid, Vec<Uuid>) {
         )),
         id,
         positions,
-    )
-}
-async fn request(app: &axum::Router, method: &str, uri: &str, body: Value) -> (u16, Value) {
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method(method)
-                .uri(uri)
-                .header("content-type", "application/json")
-                .body(if body.is_null() {
-                    Body::empty()
-                } else {
-                    Body::from(body.to_string())
-                })
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let status = response.status().as_u16();
-    let bytes = response.into_body().collect().await.unwrap().to_bytes();
-    (
-        status,
-        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
     )
 }
 async fn get(app: &axum::Router, uri: &str) -> (u16, Value) {
@@ -135,7 +110,6 @@ async fn position_job(pool: &PgPool, position: Uuid, plies: i32) -> Job {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn deleting_a_saved_analysis_removes_only_that_result_and_clears_its_selection(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
     imported(&pool, id, p[0]).await;
@@ -187,7 +161,6 @@ async fn deleting_a_saved_analysis_removes_only_that_result_and_clears_its_selec
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn deleting_imported_analysis_does_not_modify_the_match_source_or_restore_removed_values(
     pool: PgPool,
 ) {
@@ -232,7 +205,6 @@ async fn deleting_imported_analysis_does_not_modify_the_match_source_or_restore_
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn catalog_preserves_history_and_selected_entry_across_pages(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
     imported(&pool, id, p[0]).await;
@@ -300,7 +272,6 @@ async fn catalog_preserves_history_and_selected_entry_across_pages(pool: PgPool)
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn automatic_selection_is_engine_independent_and_never_merges_scopes(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
     imported(&pool, id, p[0]).await;
@@ -345,7 +316,6 @@ async fn automatic_selection_is_engine_independent_and_never_merges_scopes(pool:
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn selection_requires_committed_current_results_and_keeps_stale_selection_explicit(
     pool: PgPool,
 ) {
@@ -394,7 +364,6 @@ async fn selection_requires_committed_current_results_and_keeps_stale_selection_
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn exact_position_results_preserve_candidates_units_and_source_revision(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
     imported(&pool, id, p[0]).await;
@@ -448,7 +417,6 @@ async fn exact_position_results_preserve_candidates_units_and_source_revision(po
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn placeholders_and_empty_or_malformed_results_do_not_become_selections(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
     imported(&pool, id, p[0]).await;
@@ -497,7 +465,6 @@ async fn placeholders_and_empty_or_malformed_results_do_not_become_selections(po
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn all_catalog_reads_and_writes_honor_live_competition_visibility(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
     let hint = position_job(&pool, p[0], 2).await;
@@ -526,7 +493,6 @@ async fn all_catalog_reads_and_writes_honor_live_competition_visibility(pool: Pg
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn retained_native_occurrences_remain_automatically_readable_without_full_match_claim(
     pool: PgPool,
 ) {
@@ -544,7 +510,6 @@ async fn retained_native_occurrences_remain_automatically_readable_without_full_
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn calculation_monitor_uses_explicit_engine_filter_only(pool: PgPool) {
     let (_, id, p) = setup(&pool).await;
     let legacy = match_job(&pool, id, p[0], None, "GNU Backgammon", 2, "completed").await;
@@ -581,7 +546,6 @@ async fn calculation_monitor_uses_explicit_engine_filter_only(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn explicit_imported_selection_is_bound_to_the_selected_source_revision(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
     imported(&pool, id, p[0]).await;
@@ -611,7 +575,6 @@ async fn explicit_imported_selection_is_bound_to_the_selected_source_revision(po
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn summary_only_source_evaluations_remain_visible_but_legacy_placeholders_do_not(
     pool: PgPool,
 ) {
@@ -649,7 +612,6 @@ async fn summary_only_source_evaluations_remain_visible_but_legacy_placeholders_
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn imported_primary_is_stable_and_original_records_are_preserved(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
     imported(&pool, id, p[0]).await;
@@ -690,7 +652,6 @@ async fn dice_job(pool: &PgPool, position: Uuid, plies: i32, status: &str) -> Jo
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn deleting_dice_equity_removes_only_that_finished_dice_job(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
     let older = dice_job(&pool, p[0], 1, "completed").await;
@@ -784,7 +745,6 @@ async fn deleting_dice_equity_removes_only_that_finished_dice_job(pool: PgPool) 
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn native_eligibility_needs_a_checkpointed_decision_and_selection_skips_the_counts(
     pool: PgPool,
 ) {

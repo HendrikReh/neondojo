@@ -1,4 +1,4 @@
-import { expect, test, type FileChooser } from '@playwright/test';
+import { expect, backendTest as test, type FileChooser } from './test';
 import type { components } from '../src/generated-api';
 import { defaultConfiguration } from '../src/configuration-model';
 import { profileBackend } from './profile-backend';
@@ -62,9 +62,12 @@ test('exports a backup and restores it only after confirmation', async ({
   }
   await page.setViewportSize({ width: 1800, height: 1169 });
 
-  const countsResponse = await request.get('/api/database-backup/target-counts');
+  const countsResponse = await request.get(
+    '/api/database-backup/target-counts',
+  );
   expect(countsResponse.ok()).toBe(true);
-  const counts: components['schemas']['BackupTargetCounts'] = await countsResponse.json();
+  const counts: components['schemas']['BackupTargetCounts'] =
+    await countsResponse.json();
   const number = (value: number) => new Intl.NumberFormat('en').format(value);
   const [download] = await Promise.all([
     page.waitForEvent('download'),
@@ -73,7 +76,9 @@ test('exports a backup and restores it only after confirmation', async ({
     }),
     page.getByRole('button', { name: 'Export backup' }).click(),
   ]);
-  expect(download.suggestedFilename()).toMatch(/^neondojo-.*\.neondojo-backup$/);
+  expect(download.suggestedFilename()).toMatch(
+    /^neondojo-.*\.neondojo-backup$/,
+  );
   const archive = testInfo.outputPath(download.suggestedFilename());
   await download.saveAs(archive);
   await expect(

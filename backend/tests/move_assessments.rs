@@ -113,7 +113,6 @@ async fn hint(pool: &PgPool, position: Uuid, with_played: bool) -> Uuid {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn catalog_result_reuses_saved_analysis_independently_of_calculation_profile(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
     sqlx::query("UPDATE app_settings SET analysis_engine='bgsage', analysis_plies=2")
@@ -158,7 +157,6 @@ async fn catalog_result_reuses_saved_analysis_independently_of_calculation_profi
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn imported_assessments_match_replayed_actual_moves_and_never_cross_games(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
     imported(&pool, id, p[0], 1, 0.16, "cubeful").await;
@@ -181,7 +179,6 @@ async fn imported_assessments_match_replayed_actual_moves_and_never_cross_games(
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn selected_native_checkpoint_wins_and_recomputes_documented_thresholds(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
     imported(&pool, id, p[0], 1, 0.2, "cubeful").await;
@@ -224,7 +221,6 @@ async fn selected_native_checkpoint_wins_and_recomputes_documented_thresholds(po
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn absent_invalid_or_incomparable_equities_remain_unknown(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
     imported(&pool, id, p[0], 1, 0.2, "mwc").await;
@@ -245,7 +241,6 @@ async fn absent_invalid_or_incomparable_equities_remain_unknown(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn invalid_best_answer_or_mismatched_actual_move_is_unknown(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
     let job = store::create_match_job(&pool, id, 1, 2).await.unwrap();
@@ -276,7 +271,6 @@ async fn invalid_best_answer_or_mismatched_actual_move_is_unknown(pool: PgPool) 
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn a_forced_label_on_a_playable_position_cannot_imply_zero_loss(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
     let job = store::create_match_job(&pool, id, 1, 2).await.unwrap();
@@ -291,7 +285,6 @@ async fn a_forced_label_on_a_playable_position_cannot_imply_zero_loss(pool: PgPo
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn genuine_forced_native_decision_has_explicit_zero_loss(pool: PgPool) {
     let source = include_str!("fixtures/analysis-game1.sgf");
     let id = import_source(&pool, source).await;
@@ -318,7 +311,6 @@ async fn genuine_forced_native_decision_has_explicit_zero_loss(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn legacy_source_catalog_is_loaded_without_changing_original_or_manual_metadata(
     pool: PgPool,
 ) {
@@ -373,7 +365,6 @@ async fn legacy_source_catalog_is_loaded_without_changing_original_or_manual_met
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn individual_hint_requires_explicit_choice_and_actual_play(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
     imported(&pool, id, p[0], 1, 0.16, "cubeful").await;
@@ -434,7 +425,6 @@ async fn actual_gnubg_game_results_assess_every_saved_checker_decision(pool: PgP
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn automatic_selection_respects_scope_and_explicit_selection_never_borrows(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
     let job = store::create_match_job_scoped(&pool, id, 1, 1, Some(1))
@@ -479,7 +469,6 @@ async fn automatic_selection_respects_scope_and_explicit_selection_never_borrows
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn invalid_game_job_identity_and_scope_are_rejected(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
     let job = store::create_match_job_scoped(&pool, id, 1, 1, Some(1))

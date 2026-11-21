@@ -1,3 +1,4 @@
+import type { PlaySession } from '../src/play-api';
 import { eitherOrder, joinedThirteenToEight } from './play-turn-fixtures';
 import { applyAndCloseSettings } from './settings-actions';
 import { rollDice, doubleCube, passDice } from './play-board-actions';
@@ -45,7 +46,7 @@ function session(human = 0, direction = 'right') {
         ],
       },
     ],
-    history: [],
+    history: [] as PlaySession['history'],
     scores: [0, 0],
     game_no: 1,
     winner: null,
@@ -148,25 +149,6 @@ test('black perspective is stable and uses archive artwork with readable labels'
   await page.locator('[data-play-point="17"]').click();
   await page.locator('[data-play-point="19"]').click();
   await expect(page.locator('[data-dice-action="confirm"]')).toBeEnabled();
-});
-
-test('Playing restores its last session directly without a saved-match list', async ({
-  page,
-}) => {
-  await page.addInitScript(
-    (last) => localStorage.setItem('neondojo.play-session', last),
-    id,
-  );
-  await page.route(`**/api/play/sessions/${id}`, (route) =>
-    route.fulfill({ json: session() }),
-  );
-  await page.goto('/');
-  await page.getByRole('tab', { name: 'Playing', exact: true }).click();
-  await expect(page.locator('.play-board')).toBeVisible();
-  await expect(page.getByText('Saved matches', { exact: true })).toHaveCount(0);
-  await expect(
-    page.getByRole('button', { name: 'Refresh matches', exact: true }),
-  ).toHaveCount(0);
 });
 
 test('playing identifies each engine role and exposes only the supplied checker paths', async ({

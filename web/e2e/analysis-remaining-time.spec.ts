@@ -1,3 +1,4 @@
+import type { Job } from '../src/api';
 import { expect, test, type Page } from './test';
 const timing = (overrides: Record<string, unknown> = {}) => ({
   job_id: 'fixture',
@@ -14,13 +15,17 @@ const timing = (overrides: Record<string, unknown> = {}) => ({
   attempt: 1,
   ...overrides,
 });
-const job = (overrides: Record<string, unknown> = {}) => ({
+const job = (overrides: Partial<Job> = {}): Job => ({
   id: 'fixture',
   kind: 'match',
   status: 'running',
   attempts: 1,
+  created_at: '2026-11-10T11:59:00Z',
   updated_at: '2026-11-10T12:00:00Z',
+  plies: 3,
+  progress: 0,
   completed_games: 1,
+  total_games: 3,
   ...overrides,
 });
 async function mount(page: Page, value = job()) {
@@ -38,7 +43,7 @@ async function mount(page: Page, value = job()) {
     host.style.cssText = 'padding:24px;max-width:700px';
     document.body.append(host);
     const root = createRoot(host);
-    const render = (next: unknown) =>
+    const render = (next: Parameters<typeof Remaining>[0]['job']) =>
       root.render(
         React.createElement(I18nProvider, {
           children: React.createElement(Remaining, { job: next }),
@@ -49,11 +54,11 @@ async function mount(page: Page, value = job()) {
     render(value);
   }, value);
 }
-async function replace(page: Page, value: Record<string, unknown>) {
+async function replace(page: Page, value: Job) {
   await page.evaluate(
     (value) =>
       (
-        window as unknown as { setRemainingJob: (v: unknown) => void }
+        window as unknown as { setRemainingJob: (v: Job) => void }
       ).setRemainingJob(value),
     value,
   );

@@ -63,7 +63,6 @@ async fn database(pool: &PgPool, name: &str) -> Uuid {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn duplicates_group_the_same_played_record_across_formats_and_databases(pool: PgPool) {
     let app = api::router(AppState::new(
         pool.clone(),
@@ -151,7 +150,6 @@ async fn duplicates_group_the_same_played_record_across_formats_and_databases(po
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn duplicates_ignore_paused_matches_and_saved_position_context(pool: PgPool) {
     let app = api::router(AppState::new(
         pool.clone(),
@@ -183,7 +181,6 @@ async fn duplicates_ignore_paused_matches_and_saved_position_context(pool: PgPoo
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn one_different_position_or_match_length_is_no_duplicate(pool: PgPool) {
     let app = api::router(AppState::new(
         pool.clone(),
@@ -226,7 +223,6 @@ async fn stored_and_computed(pool: &PgPool, id: &str) -> (Option<Vec<u8>>, Optio
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn stored_fingerprint_follows_every_write_to_positions(pool: PgPool) {
     let app = api::router(AppState::new(
         pool.clone(),

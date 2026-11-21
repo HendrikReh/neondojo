@@ -54,7 +54,6 @@ fn current() -> Vec<(i64, Vec<u8>)> {
 }
 
 #[sqlx::test(migrations = false)]
-#[ignore = "requires PostgreSQL"]
 async fn new_databases_apply_the_baseline_and_later_migrations(pool: PgPool) {
     schema_migrations::run(&pool).await.unwrap();
     schema_migrations::run(&pool).await.unwrap();
@@ -79,7 +78,6 @@ async fn new_databases_apply_the_baseline_and_later_migrations(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-#[ignore = "requires PostgreSQL"]
 async fn former_history_is_adopted_and_keeps_user_rows(pool: PgPool) {
     MIGRATOR.run(&pool).await.unwrap();
     record_legacy_history(&pool, 84).await;
@@ -99,7 +97,6 @@ async fn former_history_is_adopted_and_keeps_user_rows(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-#[ignore = "requires PostgreSQL"]
 async fn former_history_before_later_migrations_is_adopted_and_migrated(pool: PgPool) {
     let baseline_only = sqlx::migrate::Migrator {
         migrations: std::borrow::Cow::Owned(
@@ -120,7 +117,6 @@ async fn former_history_before_later_migrations_is_adopted_and_migrated(pool: Pg
 }
 
 #[sqlx::test(migrations = false)]
-#[ignore = "requires PostgreSQL"]
 async fn release_1_0_databases_receive_the_former_0084_and_are_adopted(pool: PgPool) {
     let baseline_only = sqlx::migrate::Migrator {
         migrations: std::borrow::Cow::Owned(
@@ -154,7 +150,6 @@ async fn release_1_0_databases_receive_the_former_0084_and_are_adopted(pool: PgP
 }
 
 #[sqlx::test(migrations = false)]
-#[ignore = "requires PostgreSQL"]
 async fn incomplete_or_changed_former_history_is_rejected_unchanged(pool: PgPool) {
     MIGRATOR.run(&pool).await.unwrap();
     record_legacy_history(&pool, 60).await;

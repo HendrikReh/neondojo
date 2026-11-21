@@ -105,7 +105,6 @@ async fn save_match(pool: &PgPool, id: Uuid) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn similar_search_ranks_unsaved_occurrences_and_excludes_the_whole_match_by_default(
     pool: PgPool,
 ) {
@@ -158,7 +157,6 @@ async fn similar_search_ranks_unsaved_occurrences_and_excludes_the_whole_match_b
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn similar_context_filters_combine_and_follow_the_player_on_roll(pool: PgPool) {
     let target_source = "(;GM[6]PW[Alice]PB[Bob]MI[length:9][ws:4][bs:2]CV[2]CO[w];W[31hefe])";
     let other_source = "(;GM[6]PW[Carol]PB[Dan]MI[length:9][ws:2][bs:4]CV[2]CO[b];B[13qtst])";
@@ -216,7 +214,6 @@ async fn similar_context_filters_combine_and_follow_the_player_on_roll(pool: PgP
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn similar_practice_reveals_the_saved_checker_answer(pool: PgPool) {
     let (app, match_id, positions) = setup(&pool).await;
     let position = &positions[0];
@@ -262,7 +259,6 @@ async fn similar_practice_reveals_the_saved_checker_answer(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn similar_practice_uses_imported_answers_and_respects_competition(pool: PgPool) {
     let (app, match_id, positions) = setup(&pool).await;
     let position = &positions[0];
@@ -387,7 +383,6 @@ async fn similar_practice_scores_a_forced_pass(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn similar_practice_history_persists_rounds_and_deduplicates_save_retries(pool: PgPool) {
     let uri = "/api/study/similar-practice";
     let app = api::router(AppState::new(pool.clone(), Engine::new("unused".into())));
@@ -513,7 +508,6 @@ async fn note(pool: &PgPool, column: &str, target: Uuid, text: &str) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn notes_belong_to_the_exact_game_position_and_checker_move(pool: PgPool) {
     let (app, id, positions) = setup(&pool).await;
     let game: Uuid =
@@ -573,7 +567,6 @@ async fn notes_belong_to_the_exact_game_position_and_checker_move(pool: PgPool) 
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn source_context_dice_player_and_duplicate_boards_stay_distinct(pool: PgPool) {
     let (app, _, positions) = setup(&pool).await;
     let all = search(app.clone(), json!({})).await;
@@ -614,7 +607,6 @@ async fn source_context_dice_player_and_duplicate_boards_stay_distinct(pool: PgP
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn cursor_is_stable_and_bound_to_every_filter_and_sort(pool: PgPool) {
     let (app, _, _) = setup(&pool).await;
     let filters = encoded(&definition(json!({})));
@@ -665,7 +657,6 @@ async fn cursor_is_stable_and_bound_to_every_filter_and_sort(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn saved_filters_validate_names_schema_and_optimistic_versions(pool: PgPool) {
     let (app, _, _) = setup(&pool).await;
     let body = json!({"name":"  My Search  ","definition":definition(json!({"player":"Alice"}))});
@@ -768,7 +759,6 @@ async fn saved_filters_validate_names_schema_and_optimistic_versions(pool: PgPoo
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn deleted_database_reference_is_preserved_and_explicitly_rejected(pool: PgPool) {
     let (app, _, _) = setup(&pool).await;
     let id = Uuid::new_v4();
@@ -838,7 +828,6 @@ async fn native(
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn native_loss_and_readiness_use_one_latest_completed_full_match(pool: PgPool) {
     let (app, id, positions) = setup(&pool).await;
     native(&pool, id, &positions[0], 1, 0.5, "completed").await;
@@ -902,7 +891,6 @@ fn openapi_covers_browser_and_strict_persisted_filter_contract() {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn filters_are_database_scoped_and_do_not_merge_copied_positions(pool: PgPool) {
     let (app, original, _) = setup(&pool).await;
     let database = Uuid::new_v4();
@@ -953,7 +941,6 @@ async fn filters_are_database_scoped_and_do_not_merge_copied_positions(pool: PgP
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn loss_pagination_covers_known_losses_and_unknowns_once(pool: PgPool) {
     let (app, id, positions) = setup(&pool).await;
     native(&pool, id, &positions[0], 2, 0.04, "completed").await;
@@ -993,7 +980,6 @@ async fn loss_pagination_covers_known_losses_and_unknowns_once(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn generated_position_context_works_with_the_restore_search_path(pool: PgPool) {
     let (_, _, positions) = setup(&pool).await;
     let mut tx = pool.begin().await.unwrap();
@@ -1021,7 +1007,6 @@ async fn generated_position_context_works_with_the_restore_search_path(pool: PgP
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn malformed_legacy_ids_remain_unknown_and_saved_filter_count_is_bounded(pool: PgPool) {
     let (app, _, positions) = setup(&pool).await;
     sqlx::query("UPDATE positions SET gnubg_match_id='legacy-dummy' WHERE id=$1")
@@ -1051,7 +1036,6 @@ async fn malformed_legacy_ids_remain_unknown_and_saved_filter_count_is_bounded(p
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn readiness_keeps_stale_explicit_hint_unavailable_without_using_older_answer(pool: PgPool) {
     let (app, match_id, positions) = setup(&pool).await;
     for (plies, candidates) in [
@@ -1091,7 +1075,6 @@ async fn readiness_keeps_stale_explicit_hint_unavailable_without_using_older_ans
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn an_empty_selected_individual_hint_blocks_match_solution_fallback(pool: PgPool) {
     let (app, id, positions) = setup(&pool).await;
     native(&pool, id, &positions[0], 2, 0.08, "completed").await;
@@ -1116,7 +1099,6 @@ async fn an_empty_selected_individual_hint_blocks_match_solution_fallback(pool: 
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn unavailable_selected_native_decisions_do_not_become_zero_loss_or_fall_back_to_old_errors(
     pool: PgPool,
 ) {
@@ -1140,7 +1122,6 @@ async fn unavailable_selected_native_decisions_do_not_become_zero_loss_or_fall_b
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn forced_zero_loss_is_ready_but_missing_native_equities_or_blank_answers_are_not(
     pool: PgPool,
 ) {
@@ -1309,7 +1290,6 @@ fn table_tie(hit: &Value) -> (String, String, i64, String) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn table_columns_sort_both_directions_with_nulls_last_ties_and_keyset_pages(pool: PgPool) {
     let (app, first_match, first) = setup(&pool).await;
     let database = Uuid::new_v4();
@@ -1424,7 +1404,9 @@ async fn table_columns_sort_both_directions_with_nulls_last_ties_and_keyset_page
                 .iter()
                 .map(|h| h["position"]["id"].as_str().unwrap().to_owned())
                 .collect();
-            for limit in [1, 2, 100] {
+            // Single-item pages cross every keyset boundary; one large page
+            // checks the complete order without a cursor.
+            for limit in [1, 100] {
                 assert_eq!(
                     table_ids(
                         app.clone(),
@@ -1460,7 +1442,6 @@ async fn table_columns_sort_both_directions_with_nulls_last_ties_and_keyset_page
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn table_hit_keeps_numeric_match_number_across_metadata_and_database_changes(pool: PgPool) {
     let (app, id, _) = setup(&pool).await;
     let no: i64 = sqlx::query_scalar("SELECT match_no FROM matches WHERE id=$1")
@@ -1495,7 +1476,6 @@ async fn table_hit_keeps_numeric_match_number_across_metadata_and_database_chang
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn table_cursors_reject_wrong_direction_forged_unfiltered_or_deleted_anchors(pool: PgPool) {
     let (app, _, positions) = setup(&pool).await;
     let fields = json!({"sort":"tags","direction":"asc","player":"Alice"});
@@ -1569,7 +1549,6 @@ async fn table_cursors_reject_wrong_direction_forged_unfiltered_or_deleted_ancho
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn table_note_sort_keys_use_full_scoped_content_and_keep_cursors_bounded(pool: PgPool) {
     let (app, id, positions) = setup(&pool).await;
     let common = "x".repeat(19_999);
@@ -1644,7 +1623,6 @@ async fn table_note_sort_keys_use_full_scoped_content_and_keep_cursors_bounded(p
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn mochy_player_filter_matches_on_roll_in_both_colors_without_opponent_leaks(pool: PgPool) {
     let app = api::router(AppState::new(pool.clone(), Engine::new("unused".into())));
     let mut expected = vec![];
@@ -1719,7 +1697,6 @@ fn legacy_v1_saved_definition_serialization_preserves_the_original_definition_by
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn global_cursors_are_invalidated_while_v1_saved_definitions_still_round_trip(pool: PgPool) {
     use neondojo::position_browser::PositionFilterDefinition;
     let (app, id, positions) = setup(&pool).await;
@@ -1804,7 +1781,6 @@ fn game_plan_filters_round_trip_without_changing_legacy_serialization() {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn game_plan_filter_uses_the_player_on_roll_and_precedes_pagination(pool: PgPool) {
     let (app, _, positions) = setup(&pool).await;
     for plan in ["pure_race", "racing", "attacking", "priming", "anchoring"] {
@@ -1854,7 +1830,6 @@ async fn game_plan_filter_uses_the_player_on_roll_and_precedes_pagination(pool: 
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn game_plan_cache_is_versioned_and_retained_positions_remain_searchable(pool: PgPool) {
     let (app, id, positions) = setup(&pool).await;
     // Past the opening, so the pinned rules decide the labels.
@@ -1917,7 +1892,6 @@ async fn game_plan_cache_is_versioned_and_retained_positions_remain_searchable(p
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn large_game_plan_backfill_is_bounded_and_requires_retry_before_searching(pool: PgPool) {
     let (app, _, positions) = setup(&pool).await;
     sqlx::query("INSERT INTO positions(id,match_uuid,ordinal,game_no,ply,player,dice,board,position_id,gnubg_match_id,notation) SELECT gen_random_uuid(),p.match_uuid,100+n,p.game_no,p.ply,p.player,p.dice,p.board,p.position_id,p.gnubg_match_id,p.notation FROM positions p CROSS JOIN generate_series(1,4100) n WHERE p.id=$1").bind(positions[0].id).execute(&pool).await.unwrap();
@@ -1938,7 +1912,6 @@ async fn large_game_plan_backfill_is_bounded_and_requires_retry_before_searching
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn readiness_agrees_with_transfer_after_match_source_revision_changes(pool: PgPool) {
     let (app, match_id, positions) = setup(&pool).await;
     let id = positions[0].id;

@@ -23,7 +23,6 @@ async fn call(app: axum::Router, method: &str, uri: &str, body: Value) -> (u16, 
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires isolated PostgreSQL"]
 async fn explicit_match_analysis_engine_leaves_the_saved_provider_intact(pool: PgPool) {
     let sgf = "(;GM[6]FF[4]MI[length:5][ws:0][bs:0];W[31hefe])";
     let imported = store::import_match(
@@ -69,7 +68,6 @@ async fn explicit_match_analysis_engine_leaves_the_saved_provider_intact(pool: P
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires isolated PostgreSQL"]
 async fn match_analysis_history_includes_both_providers_for_the_current_full_match(pool: PgPool) {
     let sgf = "(;GM[6]FF[4]MI[length:5][ws:0][bs:0];W[31hefe])";
     let imported = store::import_match(
@@ -418,7 +416,6 @@ async fn full_match_analysis_is_persisted_paginated_and_replayable(pool: PgPool)
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn engine_failure_is_visible_and_empty_job_results_remain_readable(pool: PgPool) {
     let sgf = "(;GM[6]FF[4]PW[Alice]PB[Bob]MI[length:7][game:0][ws:0][bs:0];W[31hefe])";
     let parsed = import::parse_sgf(sgf).unwrap();

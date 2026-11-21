@@ -12,7 +12,7 @@
 | [`backend/src/learning/`](../../backend/src/learning/), [`backend/src/recurring_mistakes.rs`](../../backend/src/recurring_mistakes.rs), [`backend/src/practice.rs`](../../backend/src/practice.rs) | Flashcards and FSRS, recurring mistakes, and shared answer evaluation |
 | [`backend/src/store.rs`](../../backend/src/store.rs), [`backend/migrations/`](../../backend/migrations/)                       | SQLx persistence, schema, and search indexes                        |
 | [`web/src/`](../../web/src/)                                                                                             | React client, SVG board, and generated API types                    |
-| [`web/e2e/`](../../web/e2e/), [`web/playwright.setup.ts`](../../web/playwright.setup.ts) | Browser workflows and isolated PostgreSQL test setup |
+| [`web/e2e/`](../../web/e2e/), [`web/playwright.setup.ts`](../../web/playwright.setup.ts) | Browser workflows; one isolated PostgreSQL database, backend and Vite server per Playwright worker ([`web/e2e/stack.ts`](../../web/e2e/stack.ts)) |
 
 The Rust backend runs independently of the browser. A future Tauri shell could start it as a sidecar and reuse the HTTP API.
 

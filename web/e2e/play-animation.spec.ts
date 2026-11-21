@@ -284,8 +284,9 @@ test('human roll starts moving immediately, settles on native dice, and animates
   await rollDice(page).click();
   await expect(page.locator('.play-die-rolling')).toHaveCount(2);
   const faces = await page.locator('.die-value').allTextContents();
-  await page.waitForTimeout(85);
-  expect(await page.locator('.die-value').allTextContents()).not.toEqual(faces);
+  await expect
+    .poll(() => page.locator('.die-value').allTextContents())
+    .not.toEqual(faces);
   release();
   await expect(page.locator('.play-board')).toHaveAttribute(
     'data-play-animation',

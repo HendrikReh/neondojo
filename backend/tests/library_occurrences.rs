@@ -43,7 +43,6 @@ async fn seed(pool: &PgPool) -> (Uuid, Uuid, Vec<Uuid>) {
     (db_a, db_b, expected)
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn every_occurrence_has_its_exact_identity_and_paginate_within_a_match(pool: PgPool) {
     let (db_a, _, expected) = seed(&pool).await;
     let app = api::router(AppState::new(pool, Engine::new("/unavailable".into())));
@@ -133,7 +132,6 @@ async fn every_occurrence_has_its_exact_identity_and_paginate_within_a_match(poo
     assert_eq!(get(&app,&format!("/api/library/matches?position_id={NEEDLE}&sort=id&direction=asc&limit=2&database_id={db_a}&after={cursor}")).await.0,422);
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn compact_occurrence_cursor_rejects_a_deleted_source_anchor(pool: PgPool) {
     seed(&pool).await;
     let app = api::router(AppState::new(
@@ -170,7 +168,6 @@ async fn compact_occurrence_cursor_rejects_a_deleted_source_anchor(pool: PgPool)
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn occurrence_columns_sort_all_occurrences_before_paginating(pool: PgPool) {
     seed(&pool).await;
     sqlx::query(

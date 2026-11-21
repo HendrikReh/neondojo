@@ -141,7 +141,9 @@ test('starts GNUbg 5-ply for the selected game with a NeonGammon profile', async
   await expect(depth).toHaveValue('2');
   await engine.selectOption('gnubg');
   await depth.selectOption('5');
-  await page.screenshot({ path: '/tmp/neondojo-analysis-engine-desktop.png' });
+  await page.screenshot({
+    path: test.info().outputPath('analysis-engine-desktop.png'),
+  });
   const accepted = page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname ===
@@ -239,7 +241,7 @@ test('shows benchmark basis before any job and follows game, scope and depth', a
   await expect(estimate(page)).toContainText('5 Ply');
   expect(starts).toEqual([]);
   await page.screenshot({
-    path: '/tmp/neondojo-analysis-estimate-desktop.png',
+    path: test.info().outputPath('analysis-estimate-desktop.png'),
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -249,7 +251,7 @@ test('shows benchmark basis before any job and follows game, scope and depth', a
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
     .toBe(390);
   await page.screenshot({
-    path: '/tmp/neondojo-analysis-estimate-mobile.png',
+    path: test.info().outputPath('analysis-estimate-mobile.png'),
     fullPage: true,
   });
 });
@@ -404,6 +406,7 @@ async function mountEstimateHarness(page: Page) {
     const store = new ConfigurationStore(
       {
         read: async () => state,
+        initialize: async () => state,
         listProfiles: async () => [profile],
         write: async (_revision: number, configuration: typeof config) => {
           await gate;
@@ -413,6 +416,9 @@ async function mountEstimateHarness(page: Page) {
             current_configuration: configuration,
           };
           return state;
+        },
+        mutate: async () => {
+          throw new Error('The estimate harness does not mutate profiles.');
         },
       },
       { getItem: () => null, setItem: () => {}, removeItem: () => {} },
@@ -429,15 +435,19 @@ async function mountEstimateHarness(page: Page) {
     function Harness() {
       const [installationKey, setInstallation] = react.useState('/old/gnubg');
       const [positionCount, setPositionCount] = react.useState(1000);
-      return react.createElement(
-        ConfigurationProvider,
-        { store },
+      const children = [
         react.createElement(ConfirmedMatch, {
+          key: 'match',
           match: {
             id: 'fixture',
+            filename: 'fixture.sgf',
+            format: 'sgf',
             white: 'Fixture',
             black: 'Opponent',
+            match_length: 7,
             position_count: positionCount,
+            source_available: true,
+            created_at: '2026-11-10T12:00:00Z',
           },
           catalog: catalogFixture(),
           gameNo: 1,
@@ -448,6 +458,7 @@ async function mountEstimateHarness(page: Page) {
         react.createElement(
           'button',
           {
+            key: 'edit',
             onClick: () =>
               store.updateCurrent((c: typeof config) => ({
                 ...c,
@@ -458,20 +469,21 @@ async function mountEstimateHarness(page: Page) {
         ),
         react.createElement(
           'button',
-          { onClick: release },
+          { key: 'confirm', onClick: release },
           'Confirm engine edit',
         ),
         react.createElement(
           'button',
-          { onClick: () => setInstallation('/new/gnubg') },
+          { key: 'replace', onClick: () => setInstallation('/new/gnubg') },
           'Replace engine installation',
         ),
         react.createElement(
           'button',
-          { onClick: () => setPositionCount(1002) },
+          { key: 'append', onClick: () => setPositionCount(1002) },
           'Append checker moves',
         ),
-      );
+      ];
+      return react.createElement(ConfigurationProvider, { store, children });
     }
     createRoot(root).render(react.createElement(Harness));
   });

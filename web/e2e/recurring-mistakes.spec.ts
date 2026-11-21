@@ -427,7 +427,10 @@ test('requires an exact player, filters groups and reveals saved answers only on
     if (
       r.method() !== 'GET' &&
       p.startsWith('/api/') &&
-      !/^\/api\/(configuration|profiles|study\/mistakes)(\/|$)/.test(p)
+      // Legal checker paths are computed without persisting anything.
+      !/^\/api\/(configuration|profiles|study\/mistakes|play\/checker-turns)(\/|$)/.test(
+        p,
+      )
     )
       writes.push(p);
   });

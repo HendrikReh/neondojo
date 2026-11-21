@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { backendTest as test, expect } from './test';
 
 test('native sessions retain their snapshot across complete profile activation', async ({
   page,

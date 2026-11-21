@@ -93,12 +93,16 @@ impl GnubgMoveFilter {
     }
 }
 
+/// Upper bound for the version probe plus one raw evaluation.
+const INSTALLATION_CHECK_TIMEOUT: Duration = Duration::from_secs(10);
+
 #[derive(Clone)]
 pub struct Engine {
     binary: String,
     expected_version: Option<String>,
     threads: Option<i32>,
     move_filter: Option<GnubgMoveFilter>,
+    installation_timeout: Duration,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -181,7 +185,15 @@ impl Engine {
             expected_version: None,
             threads: None,
             move_filter: None,
+            installation_timeout: INSTALLATION_CHECK_TIMEOUT,
         }
+    }
+
+    /// Lets tests prove the bound without waiting the production ten seconds.
+    #[cfg(test)]
+    pub(crate) fn with_installation_timeout(mut self, timeout: Duration) -> Self {
+        self.installation_timeout = timeout;
+        self
     }
 
     pub(crate) fn with_threads(mut self, threads: Option<i32>) -> Self {
@@ -242,7 +254,7 @@ impl Engine {
         let _permit = engine_permit().await;
         ENGINE_ACCESS
             .scope((), async {
-                tokio::time::timeout(Duration::from_secs(10), async {
+                tokio::time::timeout(self.installation_timeout, async {
                     let version = self.version().await?;
                     ensure!(
                         version.starts_with("GNU Backgammon "),
@@ -259,7 +271,12 @@ impl Engine {
                     Ok(version)
                 })
                 .await
-                .context("GNUbg installation check timed out after 10 seconds")?
+                .with_context(|| {
+                    format!(
+                        "GNUbg installation check timed out after {} seconds",
+                        self.installation_timeout.as_secs()
+                    )
+                })?
             })
             .await
     }
@@ -1077,6 +1094,28 @@ mod tests {
         // GNUbg's native 0-ply is NeonDojo's 1-ply raw evaluation.
         assert_eq!(super::parse_full_checker_hints(single, 1).unwrap().1, 1);
         assert_eq!(hints[0].plies, Some(1));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn installation_check_bounds_a_hanging_evaluation() {
+        use std::os::unix::fs::PermissionsExt;
+        use std::time::{Duration, Instant};
+        let directory = tempfile::tempdir().unwrap();
+        let binary = directory.path().join("hanging-gnubg");
+        std::fs::write(
+            &binary,
+            "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'GNU Backgammon fixture'; exit 0; fi\nexec sleep 60\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let engine = super::Engine::new(binary.to_str().unwrap().to_owned())
+            .with_installation_timeout(Duration::from_millis(300));
+        let started = Instant::now();
+        let error = engine.check_installation().await.unwrap_err();
+        assert!(error.to_string().contains("timed out"), "{error:#}");
+        // The timed-out evaluation is dropped, which kills the hanging child.
+        assert!(started.elapsed() < Duration::from_secs(5));
     }
 
     #[cfg(unix)]

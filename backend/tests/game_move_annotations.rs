@@ -83,7 +83,6 @@ async fn save(
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn played_move_catalog_is_stable_and_snapshots_precede_actions(pool: PgPool) {
     let (app, id) = setup(&pool).await;
     let page = catalog(app.clone(), id, 1).await;
@@ -178,7 +177,6 @@ async fn played_move_catalog_is_stable_and_snapshots_precede_actions(pool: PgPoo
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn game_and_cube_notes_are_independent_searchable_and_versioned(pool: PgPool) {
     let (app, id) = setup(&pool).await;
     let page = catalog(app.clone(), id, 1).await;
@@ -244,7 +242,6 @@ async fn game_and_cube_notes_are_independent_searchable_and_versioned(pool: PgPo
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn checker_move_notes_use_the_existing_position_annotation(pool: PgPool) {
     let (app, id) = setup(&pool).await;
     let page = catalog(app.clone(), id, 1).await;
@@ -297,7 +294,6 @@ async fn checker_move_notes_use_the_existing_position_annotation(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn legacy_catalog_backfills_once_under_concurrent_requests(pool: PgPool) {
     let (app, id) = setup(&pool).await;
     sqlx::query("DELETE FROM match_games WHERE match_uuid=$1")
@@ -324,7 +320,6 @@ async fn legacy_catalog_backfills_once_under_concurrent_requests(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn all_note_scopes_respect_database_search_and_tag_filters(pool: PgPool) {
     let (app, id) = setup(&pool).await;
     let default_db: Uuid = sqlx::query_scalar("SELECT database_id FROM matches WHERE id=$1")
@@ -438,7 +433,6 @@ async fn all_note_scopes_respect_database_search_and_tag_filters(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn deleting_match_cascades_game_and_move_notes(pool: PgPool) {
     let (app, id) = setup(&pool).await;
     let page = catalog(app.clone(), id, 1).await;
@@ -483,7 +477,6 @@ async fn deleting_match_cascades_game_and_move_notes(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn native_result_resignation_is_a_commentable_terminal_source_event(pool: PgPool) {
     // GNUbg stores accepted resignations in RE, and synthesizes MOVE_RESIGN
     // after restoring the played checker/cube nodes.

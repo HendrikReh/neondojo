@@ -291,7 +291,9 @@ for (const source of ['engine', 'file', 'book'] as const)
         'data-preview-selected',
         'false',
       );
-      await expect(page.locator('.board-shell .move-arrows')).toBeVisible();
+      await expect(
+        page.locator('.analysis-workspace .board-shell .move-arrows'),
+      ).toBeVisible();
     }
     const first = rows
       .first()
@@ -321,10 +323,14 @@ for (const source of ['engine', 'file', 'book'] as const)
     );
     await expect(page.locator('.board-review-selection')).toContainText('13/9');
     await expect(
-      page.locator('.board-shell .move-arrows [data-from="13"][data-to="10"]'),
+      page.locator(
+        '.analysis-workspace .board-shell .move-arrows [data-from="13"][data-to="10"]',
+      ),
     ).toBeVisible();
     await expect(
-      page.locator('.board-shell .move-arrows [data-from="10"][data-to="9"]'),
+      page.locator(
+        '.analysis-workspace .board-shell .move-arrows [data-from="10"][data-to="9"]',
+      ),
     ).toBeVisible();
     await rows.first().locator('td').first().click();
     await first.focus();
@@ -334,7 +340,9 @@ for (const source of ['engine', 'file', 'book'] as const)
     );
     await expect(second).toBeFocused();
     await expect(
-      page.locator('.board-shell .move-arrows [data-from]').first(),
+      page
+        .locator('.analysis-workspace .board-shell .move-arrows [data-from]')
+        .first(),
     ).toHaveAttribute('data-from', '13');
     await page.keyboard.press('ArrowDown');
     await expect(page.locator('.board-review-selection')).toContainText(
@@ -346,7 +354,9 @@ for (const source of ['engine', 'file', 'book'] as const)
     );
     await expect(first).toBeFocused();
     await expect(
-      page.locator('.board-shell .move-arrows [data-from]').first(),
+      page
+        .locator('.analysis-workspace .board-shell .move-arrows [data-from]')
+        .first(),
     ).toHaveAttribute('data-from', '8');
     await page.keyboard.press('ArrowUp');
     await expect(page.locator('.board-review-selection')).toContainText(
@@ -366,7 +376,7 @@ for (const source of ['engine', 'file', 'book'] as const)
     const positionCodes = await page
       .locator('.position-code code')
       .allTextContents();
-    const board = page.locator('.board-shell');
+    const board = page.locator('.analysis-workspace .board-shell');
     await page.keyboard.press('ArrowLeft');
     await expect(board).toHaveAttribute('data-preview-mode', 'before');
     await expect(
@@ -472,7 +482,7 @@ for (const source of ['engine', 'file', 'book'] as const)
       await page.setViewportSize({ width, height });
       await expect(rows.last().locator('td').last()).toBeInViewport();
       await page.screenshot({
-        path: `/tmp/neondojo-candidates-${source}-${width}.png`,
+        path: test.info().outputPath(`candidates-${source}-${width}.png`),
       });
     }
     await expect(board.locator('[data-point="13"]')).toHaveAttribute(

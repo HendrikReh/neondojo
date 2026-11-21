@@ -23,7 +23,6 @@ fn upload(filename: &str, bytes: &[u8]) -> Request<Body> {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn import_uses_unsorted_unless_a_database_is_selected(pool: PgPool) {
     let app = api::router(AppState::new(pool.clone(), Engine::new("gnubg".into())));
     let original = b"(;GM[6]PW[Alice]PB[Bob]MI[length:7];W[31hefe])";
@@ -486,7 +485,6 @@ async fn all_four_formats_are_atomic_and_engine_failures_are_persisted(pool: PgP
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn ogxm_import_preserves_the_source_and_rejects_truncation(pool: PgPool) {
     let app = api::router(AppState::new(pool.clone(), Engine::new("gnubg".into())));
     let original = include_bytes!("fixtures/hedgehog-cdf.ogxm");
@@ -527,7 +525,6 @@ async fn ogxm_import_preserves_the_source_and_rejects_truncation(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn ogxm_import_keeps_checker_and_cube_analysis_in_source_units(pool: PgPool) {
     let app = api::router(AppState::new(pool.clone(), Engine::new("gnubg".into())));
     let original = include_bytes!("fixtures/hedgehog-analysis.ogxm");

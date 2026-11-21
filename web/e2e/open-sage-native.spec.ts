@@ -4,7 +4,7 @@ import {
   openMatchAnalysisOptions,
   submitFullMatchAnalysis,
 } from './analysis-controls';
-import { test, expect } from '@playwright/test';
+import { backendTest as test, expect } from './test';
 import type { components } from '../src/generated-api';
 test.skip(
   !process.env.NEONDOJO_SAGE_PYTHON,

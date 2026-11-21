@@ -43,7 +43,9 @@ test('drop zone aligns with both buttons, highlights nested file drags and reset
   await page.evaluate(() => window.dispatchEvent(new Event('blur')));
   await expect(zone).toHaveAttribute('data-drag-active', 'false');
 });
-for (const extension of ['mat', 'txt', 'xg', 'sgf', 'bgf'])
+// Drops do not branch on the extension; match-import.test.ts covers which
+// extensions are accepted. One text and one binary format suffice here.
+for (const extension of ['mat', 'xg'])
   test(`dropped ${extension} uses the existing importer once and clears highlighting`, async ({
     page,
   }) => {

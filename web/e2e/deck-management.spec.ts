@@ -1,3 +1,4 @@
+import type { CardPage } from '../src/learning-api';
 import { expect, test, type Locator, type Page } from './test';
 
 test.use({ viewport: { width: 1800, height: 1169 }, actionTimeout: 5000 });
@@ -503,10 +504,10 @@ test('real renamed decks update position membership and Anki; deleting one share
       })
     ).ok(),
   ).toBe(true);
-  const before = (
+  const before: CardPage['items'] = (
     await (await page.request.get(`/api/decks/${decks[1].id}/cards`)).json()
   ).items;
-  expect(before.find((card) => card.id === originalCard.id).review_count).toBe(
+  expect(before.find((card) => card.id === originalCard.id)?.review_count).toBe(
     originalCard.review_count + 1,
   );
   await page.addInitScript((id) => {
@@ -603,7 +604,7 @@ test('real renamed decks update position membership and Anki; deleting one share
   const after = (
     await (await page.request.get(`/api/decks/${decks[1].id}/cards`)).json()
   ).items;
-  const history = (cards) =>
+  const history = (cards: CardPage['items']) =>
     cards.map((card) => [
       card.id,
       card.version,

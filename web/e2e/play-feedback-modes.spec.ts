@@ -1,3 +1,4 @@
+import type { PlayDecision } from '../src/play-api';
 import { eitherOrder } from './play-turn-fixtures';
 import { applyAndCloseSettings } from './settings-actions';
 import { test, expect } from './test';
@@ -34,7 +35,7 @@ function saved(mode = 'coach', pending: unknown = null) {
     tutor_threshold: 0.04,
     training_auto_analysis: true,
     pending_decision: pending,
-    decisions: [],
+    decisions: [] as PlayDecision[],
     position: {
       id,
       match_uuid: id,
@@ -430,7 +431,7 @@ test('Training displays complete equities and probabilities', async ({
   await expect(panel).toContainText('0.777');
   await expect(panel).toContainText('99.1%');
   await page.screenshot({
-    path: '/tmp/neondojo-training-feedback.png',
+    path: test.info().outputPath('training-feedback.png'),
     fullPage: true,
   });
 });
@@ -691,7 +692,7 @@ test('mode switching preserves partial checker steps', async ({ page }) => {
     'true',
   );
   await page.screenshot({
-    path: '/tmp/neondojo-active-mode.png',
+    path: test.info().outputPath('active-mode.png'),
     fullPage: true,
   });
 });
@@ -879,7 +880,7 @@ test('running Tutor threshold saves on blur without a button or duplicate writes
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();
   await expect(threshold).toHaveValue('0.075');
   await page.screenshot({
-    path: '/tmp/neondojo-blur-threshold.png',
+    path: test.info().outputPath('blur-threshold.png'),
     fullPage: true,
   });
 });
@@ -974,7 +975,7 @@ for (const locale of ['en', 'de'] as const) {
     release();
     await expect(status).toHaveText(locale === 'de' ? 'Gespeichert' : 'Saved');
     await page.screenshot({
-      path: `/tmp/neondojo-threshold-status-${locale}.png`,
+      path: test.info().outputPath(`threshold-status-${locale}.png`),
       fullPage: true,
     });
     await expect(status).toHaveText('', { timeout: 4500 });

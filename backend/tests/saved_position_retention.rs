@@ -95,7 +95,6 @@ async fn owner(pool: &PgPool, position: Uuid) -> Uuid {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn saved_positions_with_mixed_legacy_context_share_their_known_catalog_game(pool: PgPool) {
     let (source, positions) = imported(&pool).await;
     assert_eq!(positions[0].game_no, positions[1].game_no);
@@ -124,7 +123,6 @@ async fn saved_positions_with_mixed_legacy_context_share_their_known_catalog_gam
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn uncatalogued_legacy_saved_positions_retain_one_game_with_available_score_context(
     pool: PgPool,
 ) {
@@ -167,7 +165,6 @@ async fn uncatalogued_legacy_saved_positions_retain_one_game_with_available_scor
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn match_deletion_retains_exact_saved_occurrences_with_source_context_and_no_ghosts(
     pool: PgPool,
 ) {
@@ -265,7 +262,6 @@ async fn match_deletion_retains_exact_saved_occurrences_with_source_context_and_
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn database_deletion_uses_the_same_retention_and_internal_hosts_are_protected(pool: PgPool) {
     let original_database_count = get(&pool, "/api/databases").await.as_array().unwrap().len();
     let (source, positions) = imported(&pool).await;
@@ -418,7 +414,6 @@ async fn hint(pool: &PgPool, position: Uuid) -> Uuid {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn retained_notes_analyses_and_existing_cards_remain_usable_without_resetting_learning(
     pool: PgPool,
 ) {
@@ -541,7 +536,6 @@ async fn retained_notes_analyses_and_existing_cards_remain_usable_without_resett
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn deletion_without_saved_positions_removes_the_entire_source_and_busy_jobs_still_guard_it(
     pool: PgPool,
 ) {
@@ -593,7 +587,6 @@ async fn deletion_without_saved_positions_removes_the_entire_source_and_busy_job
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn native_decisions_survive_only_for_saved_positions_without_fabricating_match_pr(
     pool: PgPool,
 ) {
@@ -740,7 +733,6 @@ async fn native_decisions_survive_only_for_saved_positions_without_fabricating_m
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn match_and_database_deletion_leave_running_job_lease_and_engine_snapshot_unchanged(
     pool: PgPool,
 ) {
@@ -804,7 +796,6 @@ async fn match_and_database_deletion_leave_running_job_lease_and_engine_snapshot
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn retained_learning_positions_keep_mode_and_assistance_metadata(pool: PgPool) {
     let (source, positions) = imported(&pool).await;
     sqlx::query("UPDATE matches SET play_mode='tutor',play_assisted=true WHERE id=$1")

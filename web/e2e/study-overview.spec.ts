@@ -16,6 +16,7 @@ const cube: MistakeGroup = {
     error_rate: 0.1,
     loss_per_100: 1.5,
     small_sample: false,
+    trend: null,
   },
 };
 const checker: MistakeGroup = {
@@ -29,6 +30,7 @@ const checker: MistakeGroup = {
     error_rate: 0.0375,
     loss_per_100: 1,
     small_sample: false,
+    trend: null,
   },
 };
 const small: MistakeGroup = {
@@ -42,6 +44,7 @@ const small: MistakeGroup = {
     error_rate: 0.5,
     loss_per_100: 25,
     small_sample: true,
+    trend: null,
   },
 };
 const empty = {

@@ -1,6 +1,6 @@
 import { rollDice, doubleCube, passDice } from './play-board-actions';
 import { finishNextGame, watchOpening } from './play-opening-helpers';
-import { test, expect, type Page } from '@playwright/test';
+import { backendTest as test, expect, type Page } from './test';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, chmodSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';

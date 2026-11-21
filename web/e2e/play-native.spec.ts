@@ -1,6 +1,6 @@
 import { rollDice } from './play-board-actions';
 import { watchOpening } from './play-opening-helpers';
-import { test, expect } from '@playwright/test';
+import { backendTest as test, expect } from './test';
 import type { PlaySession } from '../src/play-api';
 declare global {
   interface Window {
@@ -239,7 +239,7 @@ for (const config of [
     expect(sgf.ok()).toBeTruthy();
     expect(await sgf.text()).toContain('GM[6]');
     await page.screenshot({
-      path: `/tmp/neondojo-native-${config.direction}.png`,
+      path: test.info().outputPath(`native-${config.direction}.png`),
       fullPage: true,
     });
   });

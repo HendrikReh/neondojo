@@ -40,7 +40,6 @@ fn app(pool: PgPool) -> axum::Router {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn existing_reports_are_paginated_beyond_100_sessions_and_read_without_engine(pool: PgPool) {
     let router = app(pool.clone());
     let mut ids = Vec::new();
@@ -113,7 +112,6 @@ async fn existing_reports_are_paginated_beyond_100_sessions_and_read_without_eng
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn validates_archive_queries_and_handles_empty_missing_and_legacy_reports(pool: PgPool) {
     let router = app(pool.clone());
     assert_eq!(
@@ -153,7 +151,6 @@ async fn validates_archive_queries_and_handles_empty_missing_and_legacy_reports(
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn reports_remain_accessible_after_their_library_match_is_deleted(pool: PgPool) {
     let id = Uuid::new_v4();
     let match_id = Uuid::new_v4();
@@ -187,7 +184,6 @@ async fn reports_remain_accessible_after_their_library_match_is_deleted(pool: Pg
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn match_metadata_exposes_only_its_existing_finished_report(pool: PgPool) {
     let router = app(pool.clone());
     for (index, phase, review, available) in [
@@ -233,7 +229,6 @@ async fn match_metadata_exposes_only_its_existing_finished_report(pool: PgPool) 
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn money_report_groups_page_complete_sessions_with_authoritative_totals(pool: PgPool) {
     let session_a = Uuid::new_v4();
     let session_b = Uuid::new_v4();

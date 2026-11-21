@@ -93,123 +93,115 @@ async function activeText(item: Locator, color: string) {
   await expect(item).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(item).toHaveCSS('border-bottom-color', color);
 }
-for (const theme of ['graphite', 'club', 'paper'])
-  for (const mode of ['light', 'dark'])
-    test(`${theme} ${mode}: navigation uses text and active underlines throughout the workspaces`, async ({
-      page,
-    }) => {
-      await fixture(page, theme, mode);
-      const color = await accent(page);
-      await activeText(page.locator('.app-tabs [aria-selected="true"]'), color);
-      await activeText(
-        page.locator('.analysis-detail-navigation [aria-selected="true"]'),
-        color,
-      );
-      await activeText(
-        page.locator('.board-view-buttons [aria-pressed="true"]'),
-        color,
-      );
-      await activeText(
-        page
-          .getByRole('tablist', { name: 'Results', exact: true })
-          .getByRole('tab', { selected: true }),
-        color,
-      );
-      const selection = page.getByLabel('Displayed analysis', { exact: true });
-      await expect(selection).toBeVisible();
-      await expect(selection).toHaveValue('');
-      await page.locator('.analysis-book-reference > summary').click();
-      await expect(page.locator('.analysis-book-reference')).toHaveAttribute(
-        'open',
-        '',
-      );
-      await activeText(
-        page.locator('.source-book-selector [aria-pressed="true"]'),
-        color,
-      );
-      await activeText(
-        page.locator('.source-decision-buttons [aria-pressed="true"]'),
-        color,
-      );
-      await expect(
-        page.getByRole('tab', { name: 'Imported analysis', exact: true }),
-      ).toHaveCount(0);
-      await page
-        .locator('.source-decision-buttons')
-        .getByRole('button', { name: 'Cube', exact: true })
-        .click();
-      await activeText(
-        page.locator('.source-decision-buttons [aria-pressed="true"]'),
-        color,
-      );
-      await openMatchAnalysisOptions(page);
-      const action = page.getByRole('button', {
-        name: 'Recalculate position …',
-        exact: true,
-      });
-      await expect(action).not.toHaveCSS(
-        'background-color',
-        'rgba(0, 0, 0, 0)',
-      );
-      await page.getByRole('tab', { name: 'Notes', exact: true }).click();
-      await activeText(
-        page.locator('.notes-scope-tabs [aria-selected="true"]'),
-        color,
-      );
-      await page.getByRole('button', { name: 'Settings', exact: true }).click();
-      const settings = page.getByRole('dialog', {
-        name: 'Settings',
-        exact: true,
-      });
-      await activeText(settings.locator('.settings-categories .active'), color);
-      await settings
-        .getByRole('button', { name: 'Appearance', exact: true })
-        .click();
-      await activeText(settings.locator('.settings-categories .active'), color);
-      await activeText(settings.locator('.ui-preview-tab'), color);
-      await settings
-        .getByRole('button', { name: 'Board', exact: true })
-        .click();
-      await expect(
-        settings.locator('.settings-theme-choice').first(),
-      ).toHaveCSS('border-top-width', '1px');
-      await settings
-        .getByRole('button', { name: 'Close', exact: true })
-        .click();
-      await page
-        .getByRole('tab', { name: 'Match database', exact: true })
-        .click();
-      await activeText(
-        page.locator('.database-collections [aria-pressed="true"]'),
-        color,
-      );
-      const collections = page.locator('.database-collections');
-      for (const name of ['Unsorted', 'Bot Matches', 'Paused Matches']) {
-        const entry = collections.getByRole('button', {
-          name: new RegExp(`\\b${name}\\b`),
-        });
-        const icon = entry.locator('[data-action-glyph="system-database"]');
-        await expect(icon).toBeVisible();
-        await expect(entry).toHaveAccessibleDescription(/System database/);
-        await expect(icon).toHaveCSS('color', color);
-        await expect(icon).not.toHaveCSS(
-          'background-color',
-          'rgba(0, 0, 0, 0)',
-        );
-      }
-      await page.locator('.database-collections button').last().click();
-      await activeText(
-        page.locator('.database-collections [aria-pressed="true"]'),
-        color,
-      );
-      for (const name of ['Positions', 'Study']) {
-        await page.getByRole('tab', { name, exact: true }).click();
-        await activeText(
-          page.locator('.app-tabs [aria-selected="true"]'),
-          color,
-        );
-      }
+// Themes only change colour tokens; ui-themes.spec.ts checks the literal
+// palettes. One light and one dark palette cover the underline rules.
+for (const [theme, mode] of [
+  ['graphite', 'light'],
+  ['club', 'dark'],
+] as const)
+  test(`${theme} ${mode}: navigation uses text and active underlines throughout the workspaces`, async ({
+    page,
+  }) => {
+    await fixture(page, theme, mode);
+    const color = await accent(page);
+    await activeText(page.locator('.app-tabs [aria-selected="true"]'), color);
+    await activeText(
+      page.locator('.analysis-detail-navigation [aria-selected="true"]'),
+      color,
+    );
+    await activeText(
+      page.locator('.board-view-buttons [aria-pressed="true"]'),
+      color,
+    );
+    await activeText(
+      page
+        .getByRole('tablist', { name: 'Results', exact: true })
+        .getByRole('tab', { selected: true }),
+      color,
+    );
+    const selection = page.getByLabel('Displayed analysis', { exact: true });
+    await expect(selection).toBeVisible();
+    await expect(selection).toHaveValue('');
+    await page.locator('.analysis-book-reference > summary').click();
+    await expect(page.locator('.analysis-book-reference')).toHaveAttribute(
+      'open',
+      '',
+    );
+    await activeText(
+      page.locator('.source-book-selector [aria-pressed="true"]'),
+      color,
+    );
+    await activeText(
+      page.locator('.source-decision-buttons [aria-pressed="true"]'),
+      color,
+    );
+    await expect(
+      page.getByRole('tab', { name: 'Imported analysis', exact: true }),
+    ).toHaveCount(0);
+    await page
+      .locator('.source-decision-buttons')
+      .getByRole('button', { name: 'Cube', exact: true })
+      .click();
+    await activeText(
+      page.locator('.source-decision-buttons [aria-pressed="true"]'),
+      color,
+    );
+    await openMatchAnalysisOptions(page);
+    const action = page.getByRole('button', {
+      name: 'Recalculate position …',
+      exact: true,
     });
+    await expect(action).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await page.getByRole('tab', { name: 'Notes', exact: true }).click();
+    await activeText(
+      page.locator('.notes-scope-tabs [aria-selected="true"]'),
+      color,
+    );
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    const settings = page.getByRole('dialog', {
+      name: 'Settings',
+      exact: true,
+    });
+    await activeText(settings.locator('.settings-categories .active'), color);
+    await settings
+      .getByRole('button', { name: 'Appearance', exact: true })
+      .click();
+    await activeText(settings.locator('.settings-categories .active'), color);
+    await activeText(settings.locator('.ui-preview-tab'), color);
+    await settings.getByRole('button', { name: 'Board', exact: true }).click();
+    await expect(settings.locator('.settings-theme-choice').first()).toHaveCSS(
+      'border-top-width',
+      '1px',
+    );
+    await settings.getByRole('button', { name: 'Close', exact: true }).click();
+    await page
+      .getByRole('tab', { name: 'Match database', exact: true })
+      .click();
+    await activeText(
+      page.locator('.database-collections [aria-pressed="true"]'),
+      color,
+    );
+    const collections = page.locator('.database-collections');
+    for (const name of ['Unsorted', 'Bot Matches', 'Paused Matches']) {
+      const entry = collections.getByRole('button', {
+        name: new RegExp(`\\b${name}\\b`),
+      });
+      const icon = entry.locator('[data-action-glyph="system-database"]');
+      await expect(icon).toBeVisible();
+      await expect(entry).toHaveAccessibleDescription(/System database/);
+      await expect(icon).toHaveCSS('color', color);
+      await expect(icon).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    }
+    await page.locator('.database-collections button').last().click();
+    await activeText(
+      page.locator('.database-collections [aria-pressed="true"]'),
+      color,
+    );
+    for (const name of ['Positions', 'Study']) {
+      await page.getByRole('tab', { name, exact: true }).click();
+      await activeText(page.locator('.app-tabs [aria-selected="true"]'), color);
+    }
+  });
 
 test('header tabs follow the workspace order with mouse and keyboard', async ({
   page,

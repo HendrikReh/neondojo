@@ -14,7 +14,9 @@ test('duplicate match finder groups copies and deletes the selected ones', async
   };
   const first = await create(`Duplicates first ${id}`);
   const second = await create(`Duplicates second ${id}`);
-  const record = `PW[Twin ${id}]PB[Opponent]MI[length:7];W[31hefe]`;
+  // Duplicates group by match length and moves; an unusual length keeps other
+  // specs' one-move matches out of this group.
+  const record = `PW[Twin ${id}]PB[Opponent]MI[length:17];W[31hefe]`;
   const upload = async (database: Database, name: string, sgf: string) => {
     const response = await page.request.post(
       `/api/imports?database_id=${database.id}`,
@@ -46,6 +48,12 @@ test('duplicate match finder groups copies and deletes the selected ones', async
   await page.goto('/');
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();
   const workspace = page.locator('.match-database');
+  // Other specs on this worker may own matches in other databases, so the
+  // test selects its own database explicitly.
+  await workspace
+    .locator('.database-collections')
+    .getByRole('button', { name: new RegExp(`Duplicates first ${id}`) })
+    .click();
   await expect(workspace.locator('.database-table tbody tr')).toHaveCount(3);
   const toggle = workspace.getByRole('button', {
     name: 'Duplicates',
@@ -80,13 +88,14 @@ test('duplicate match finder groups copies and deletes the selected ones', async
     .locator('.database-collections')
     .getByRole('button', { name: /All databases/ })
     .click();
-  await expect(finder.getByRole('status')).toHaveText('1 group · 2 matches');
-  await expect(
-    finder
-      .getByRole('region', { name: 'Duplicate group 1' })
-      .getByRole('heading'),
-  ).toHaveText('Identical files · 2 matches');
-  await expect(
-    finder.getByRole('region', { name: 'Duplicate group 1' }),
-  ).toContainText(second.name);
+  // Other specs' matches may form further groups across all databases, so the
+  // check follows this test's group instead of the overall counts.
+  const twins = finder
+    .getByRole('region', { name: /^Duplicate group \d+$/ })
+    .filter({ hasText: `Twin ${id}` });
+  await expect(twins).toHaveCount(1);
+  await expect(twins.getByRole('heading')).toHaveText(
+    'Identical files · 2 matches',
+  );
+  await expect(twins).toContainText(second.name);
 });

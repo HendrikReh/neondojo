@@ -1,32 +1,13 @@
-use axum::{body::Body, http::Request};
-use http_body_util::BodyExt;
 use neondojo::{
     api::{self, AppState},
     engine::Engine,
 };
 use serde_json::{Value, json};
 use sqlx::PgPool;
-use tower::ServiceExt;
-
-async fn call(app: axum::Router, method: &str, uri: &str, body: Value) -> (u16, Value) {
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method(method)
-                .uri(uri)
-                .header("content-type", "application/json")
-                .body(Body::from(body.to_string()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let status = response.status().as_u16();
-    let data = response.into_body().collect().await.unwrap().to_bytes();
-    (status, serde_json::from_slice(&data).unwrap_or(Value::Null))
-}
+mod support;
+use support::call;
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires isolated PostgreSQL"]
 async fn installation_is_separate_revisioned_and_rejects_invalid_python(pool: PgPool) {
     let app = api::router(AppState::new(pool, Engine::new("gnubg".into())));
     let (status, initial) = call(app.clone(), "GET", "/api/engines/bgsage", Value::Null).await;
@@ -106,7 +87,6 @@ async fn verified_installation_allows_independent_analysis_and_preserves_snapsho
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires isolated PostgreSQL"]
 async fn saved_result_catalog_is_engine_independent_and_legacy_remains_gnubg(pool: PgPool) {
     use uuid::Uuid;
     let app = api::router(AppState::new(pool.clone(), Engine::new("gnubg".into())));

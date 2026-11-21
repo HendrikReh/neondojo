@@ -49,7 +49,6 @@ async fn imported(pool: &PgPool) -> Uuid {
     .id
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn source_analysis_is_persisted_exactly_and_copied_independently(pool: PgPool) {
     let id = imported(&pool).await;
     let (status, summary) = call(
@@ -160,7 +159,6 @@ async fn engine_reanalysis_does_not_overwrite_imported_analysis(pool: PgPool) {
     assert_eq!(before, after);
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn legacy_xg_recovers_analysis_from_exact_original_and_keeps_source_move_mapping(
     pool: PgPool,
 ) {
@@ -227,7 +225,6 @@ async fn legacy_xg_recovers_analysis_from_exact_original_and_keeps_source_move_m
     assert_eq!(summary, again);
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn source_statistics_do_not_claim_decision_analysis(pool: PgPool) {
     let sgf = "(;FF[4]GM[6]AP[GNU Backgammon:1.05.002]GS[M:0 0 0 0];W[31hefe])";
     let parsed = import::parse_sgf(sgf).unwrap();
@@ -251,7 +248,6 @@ async fn source_statistics_do_not_claim_decision_analysis(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn bgf_native_numeric_strings_are_numbers_in_the_api_and_strings_in_raw(pool: PgPool) {
     let fixture = include_bytes!("fixtures/tutorial.bgf");
     let newline = fixture.iter().position(|b| *b == b'\n').unwrap();
@@ -302,7 +298,6 @@ async fn bgf_native_numeric_strings_are_numbers_in_the_api_and_strings_in_raw(po
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn library_distinguishes_imported_analysis_from_native_job_status_and_pr(pool: PgPool) {
     async fn item(pool: &PgPool, id: Uuid) -> Value {
         let (status, page) = call(pool, "GET", "/api/library/matches", None).await;

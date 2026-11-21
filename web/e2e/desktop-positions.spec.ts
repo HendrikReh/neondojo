@@ -132,7 +132,7 @@ test('compact position rows retain a right-hand board preview at desktop sizes',
   }
   await page.setViewportSize({ width: 1800, height: 1169 });
   await page.screenshot({
-    path: '/tmp/neondojo-desktop-positions-1800.png',
+    path: test.info().outputPath('desktop-positions-1800.png'),
     fullPage: true,
   });
   const positionPanel = page.locator('#workspace-panel-positions');

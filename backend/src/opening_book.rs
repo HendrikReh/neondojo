@@ -1534,7 +1534,6 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "./migrations")]
-    #[ignore = "requires PostgreSQL"]
     async fn settings_routes_preserve_cas_and_position_lookup(pool: sqlx::PgPool) {
         use axum::{body::Body, http::Request};
         use http_body_util::BodyExt;
@@ -1713,7 +1712,6 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "./migrations")]
-    #[ignore = "requires PostgreSQL"]
     async fn source_money_rules_are_explicit_and_unknown_mat_rules_miss(pool: sqlx::PgPool) {
         let sgf = "(;GM[6]RU[Jacoby];W[31hefe])";
         let parsed = crate::import::parse_sgf(sgf).unwrap();

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, backendTest as test } from './test';
 
 test('native play-turn latency uses the saved playing depth and persists', async ({
   page,
@@ -140,7 +140,7 @@ test('native 1-ply benchmark completes and survives a page reload', async ({
     error: null,
   });
   await page.screenshot({
-    path: '/tmp/neondojo-benchmark-native.png',
+    path: test.info().outputPath('benchmark-native.png'),
     fullPage: true,
   });
   console.log(

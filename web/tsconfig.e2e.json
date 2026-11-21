@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "types": ["node", "vite/client"],
+    "allowImportingTsExtensions": true,
+    "paths": { "/src/*": ["./src/*"], "/e2e/*": ["./e2e/*"] }
+  },
+  "include": ["e2e", "playwright.config.ts", "playwright.setup.ts"]
+}

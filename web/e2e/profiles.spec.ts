@@ -1,5 +1,5 @@
 import { applyAndCloseSettings } from './settings-actions';
-import { test, expect } from '@playwright/test';
+import { backendTest as test, expect } from './test';
 import { profileBackend } from './profile-backend';
 import { defaultConfiguration } from '../src/configuration-model';
 
@@ -247,14 +247,25 @@ test('supports cancel, save and discard decisions when switching changed profile
   await page
     .getByRole('menuitemradio', { name: 'Deep analysis', exact: true })
     .click();
-  const switchDialog = page.getByRole('dialog', { name: 'Switch profile', exact: true });
-  await expect(switchDialog.getByRole('button', { name: 'Save and switch', exact: true })).toHaveCount(0);
-  await switchDialog.getByRole('button', { name: 'Manage profiles', exact: true }).click();
+  const switchDialog = page.getByRole('dialog', {
+    name: 'Switch profile',
+    exact: true,
+  });
+  await expect(
+    switchDialog.getByRole('button', { name: 'Save and switch', exact: true }),
+  ).toHaveCount(0);
+  await switchDialog
+    .getByRole('button', { name: 'Manage profiles', exact: true })
+    .click();
   const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
   await settings.getByRole('button', { name: /^Deep analysis/ }).click();
   await settings.getByRole('button', { name: 'Activate', exact: true }).click();
-  await page.getByRole('button', { name: 'Save and switch', exact: true }).click();
-  await settings.getByRole('button', { name: 'Close settings', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Save and switch', exact: true })
+    .click();
+  await settings
+    .getByRole('button', { name: 'Close settings', exact: true })
+    .click();
   await expect(
     page.getByRole('button', { name: /Profile: Deep analysis/ }),
   ).toBeVisible();

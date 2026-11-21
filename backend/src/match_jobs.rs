@@ -298,7 +298,6 @@ mod tests {
     use crate::{engine::Engine, import, jobs, store};
 
     #[sqlx::test(migrations = "./migrations")]
-    #[ignore = "requires PostgreSQL"]
     async fn saved_snapshot_is_ready_while_waiting_for_the_engine_gate(pool: PgPool) {
         let sgf = "(;GM[6]FF[4]MI[length:7][ws:0][bs:0];W[31hefe])";
         let imported = store::import_match(

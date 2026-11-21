@@ -63,7 +63,6 @@ async fn imported(pool: &PgPool) -> neondojo::model::ImportResponse {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn defaults_use_injected_engine_and_survive_new_app_states(pool: PgPool) {
     let app = api::router(AppState::new(
         pool.clone(),
@@ -266,7 +265,6 @@ async fn thread_settings_are_validated_and_pinned_in_new_jobs(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn analysis_depth_applies_to_position_dice_game_and_match_jobs(pool: PgPool) {
     let imported = imported(&pool).await;
     let position = store::positions(&pool, Some(imported.r#match.id), None, None, 10)
@@ -891,19 +889,6 @@ async fn installation_check_rejects_an_executable_without_evaluation_data() {
     assert!(engine.check_installation().await.is_err());
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn installation_check_bounds_a_hanging_evaluation() {
-    use std::time::{Duration, Instant};
-    let (_temp, engine) = fixture_engine(
-        "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'GNU Backgammon fixture'; exit 0; fi\nexec sleep 60\n",
-    );
-    let started = Instant::now();
-    let error = engine.check_installation().await.unwrap_err();
-    assert!(error.to_string().contains("timed out"), "{error:#}");
-    assert!(started.elapsed() < Duration::from_secs(12));
-}
-
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL and GNUbg"]
 async fn initial_jobs_capture_version_without_settings_reads_validating_the_engine(pool: PgPool) {
@@ -952,7 +937,6 @@ async fn initial_jobs_capture_version_without_settings_reads_validating_the_engi
 
 #[cfg(unix)]
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn jobs_detect_an_engine_version_change_at_the_same_path(pool: PgPool) {
     let (temp, engine) = fixture_engine("#!/bin/sh\necho 'GNU Backgammon fixture-A'\n");
     let imported = imported(&pool).await;
@@ -1004,7 +988,6 @@ fn versioned_fixture_engine(change_during_evaluation: bool) -> (tempfile::TempDi
 
 #[cfg(unix)]
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn queued_and_recovered_jobs_refuse_a_replaced_engine_version(pool: PgPool) {
     let (temp, engine) = versioned_fixture_engine(false);
     let imported = imported(&pool).await;
@@ -1237,7 +1220,6 @@ fn count(launches: &[String], kind: &str) -> usize {
 
 #[cfg(unix)]
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn dice_job_evaluates_all_rolls_in_one_process_between_two_version_checks(pool: PgPool) {
     let (temp, engine) = counting_fixture_engine(None);
     let (done, launches) = run_dice_job(&pool, &temp, engine).await;
@@ -1260,7 +1242,6 @@ async fn dice_job_evaluates_all_rolls_in_one_process_between_two_version_checks(
 
 #[cfg(unix)]
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn dice_job_discards_all_rolls_when_the_version_changes_during_the_batch(pool: PgPool) {
     let (temp, engine) = counting_fixture_engine(Some(1));
     let (done, launches) = run_dice_job(&pool, &temp, engine).await;
@@ -1276,7 +1257,6 @@ async fn dice_job_discards_all_rolls_when_the_version_changes_during_the_batch(p
 
 #[cfg(unix)]
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn dice_job_fails_without_a_result_when_gnubg_skips_a_roll(pool: PgPool) {
     let (temp, engine) = fixture_engine(
         "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'GNU Backgammon fixture'; exit 0; fi\necho 'GNU Backgammon fixture'\ngrep '^set dice' commands.txt | head -n 20 | while read -r _ _ a b; do\n  echo \"The dice have been set to $a and $b.\"\n  echo '    1. Cubeful 0-ply    8/5 6/5                      Eq.: +0.219'\n  echo '       0.551 0.174 0.013 - 0.449 0.124 0.005'\ndone\n",

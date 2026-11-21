@@ -105,7 +105,7 @@ for (const width of [1440, 390])
     const resultBox = await summary.boundingBox();
     expect(resultBox!.y).toBeGreaterThanOrEqual(moveBox!.y + moveBox!.height);
     await page.screenshot({
-      path: `/tmp/neondojo-game-result-analysis-${width}.png`,
+      path: test.info().outputPath(`game-result-analysis-${width}.png`),
       fullPage: true,
     });
   });

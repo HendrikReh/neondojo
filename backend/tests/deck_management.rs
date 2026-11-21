@@ -715,10 +715,10 @@ async fn rejected_membership_batches_rollback_cards_memberships_and_versions(poo
     assert_eq!(cards, 1000);
 }
 
-#[sqlx::test(migrations = "./migrations")]
-async fn openapi_describes_required_versions_and_mutation_errors(pool: PgPool) {
-    let (status, doc) = call(&app(&pool), "GET", "/api/openapi.json", Value::Null).await;
-    assert_eq!(status, 200);
+#[test]
+fn openapi_describes_required_versions_and_mutation_errors() {
+    use utoipa::OpenApi;
+    let doc = serde_json::to_value(neondojo::api::ApiDoc::openapi()).unwrap();
     let schema = &doc["components"]["schemas"];
     assert_eq!(schema["Deck"]["properties"]["version"]["type"], "integer");
     assert!(

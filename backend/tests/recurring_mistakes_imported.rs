@@ -1,72 +1,11 @@
-use axum::{body::Body, http::Request};
-use http_body_util::BodyExt;
-use neondojo::{
-    api::{self, AppState},
-    engine::Engine,
-    import, store,
-};
+use neondojo::{import, store};
 use serde_json::{Value, json};
 use sqlx::PgPool;
-use tower::ServiceExt;
 use uuid::Uuid;
-const SOURCE: &str = "(;GM[6]PW[Alice]PB[Bob]MI[length:7];W[31hefe])(;GM[6]PW[Alice]PB[Bob]MI[length:7][ws:1];W[31hefe])";
+mod support;
+use support::{foreign_analysis as imported, send as call};
 fn app(pool: &PgPool) -> axum::Router {
-    api::router(AppState::new(
-        pool.clone(),
-        Engine::new("/unavailable".into()),
-    ))
-}
-async fn call(app: &axum::Router, method: &str, uri: &str, body: Value) -> (u16, Value) {
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method(method)
-                .uri(uri)
-                .header("content-type", "application/json")
-                .body(if body.is_null() {
-                    Body::empty()
-                } else {
-                    Body::from(body.to_string())
-                })
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let status = response.status().as_u16();
-    let bytes = response.into_body().collect().await.unwrap().to_bytes();
-    (
-        status,
-        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
-    )
-}
-async fn imported(pool: &PgPool) -> (Uuid, Vec<Uuid>) {
-    let id = store::import_match(
-        pool,
-        "foreign.sgf",
-        "sgf",
-        SOURCE.as_bytes(),
-        SOURCE,
-        &import::parse_sgf(SOURCE).unwrap(),
-    )
-    .await
-    .unwrap()
-    .r#match
-    .id;
-    sqlx::query("UPDATE matches SET format='xg',imported_analysis_loaded=true WHERE id=$1")
-        .bind(id)
-        .execute(pool)
-        .await
-        .unwrap();
-    let mut ids = vec![];
-    for game in 1..=2 {
-        let (position,position_id,gnubg_match_id):(Uuid,String,String)=sqlx::query_as("SELECT id,position_id,gnubg_match_id FROM positions WHERE match_uuid=$1 AND game_no=$2").bind(id).bind(game).fetch_one(pool).await.unwrap();
-        let record = json!({"game_no":game,"source_move_no":1,"checker_ply":1,"position_id":position_id,"gnubg_match_id":gnubg_match_id,"dice":[3,1],"kind":"checker","player":0,"played":"8/5 6/5","engine":"eXtreme Gammon","engine_version":"2.19","method":"evaluation","depth":"XGRoller++","depth_plies":null,"candidates":[{"rank":1,"notation":"6/3 6/5","equity":0.2,"equity_kind":"cubeful","probabilities":{},"depth":"XGRoller++","raw":{}},{"rank":2,"notation":"8/5 6/5","equity":0.0,"equity_kind":"cubeful","probabilities":{},"raw":{}}],"cube":null,"raw":{}});
-        let row = Uuid::new_v4();
-        sqlx::query("INSERT INTO imported_analyses(id,match_uuid,position_uuid,source_ordinal,game_no,source_move_no,kind,data) VALUES($1,$2,$3,$4,$5,1,'checker',$6)").bind(row).bind(id).bind(position).bind(game-1).bind(game).bind(record).execute(pool).await.unwrap();
-        ids.push(row);
-    }
-    (id, ids)
+    support::app(pool, "/unavailable")
 }
 async fn checkpoint(pool: &PgPool, id: Uuid, game: i32) {
     let job = Uuid::new_v4();
@@ -82,7 +21,6 @@ async fn checkpoint(pool: &PgPool, id: Uuid, game: i32) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn imports_are_eligible_private_and_reveal_preserves_metadata(pool: PgPool) {
     let (_, ids) = imported(&pool).await;
     let router = app(&pool);
@@ -151,7 +89,6 @@ async fn imports_are_eligible_private_and_reveal_preserves_metadata(pool: PgPool
     }
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn selected_native_checkpoint_stales_all_imported_references_without_cross_game_fallback(
     pool: PgPool,
 ) {
@@ -203,7 +140,6 @@ async fn selected_native_checkpoint_stales_all_imported_references_without_cross
     );
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn imported_reference_validation_and_visibility(pool: PgPool) {
     let (id, ids) = imported(&pool).await;
     let router = app(&pool);
@@ -268,7 +204,6 @@ async fn imported_reference_validation_and_visibility(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn real_binary_xg_legacy_catalog_is_loaded_without_engine_jobs(pool: PgPool) {
     let original = include_bytes!("fixtures/WC2014.xg");
     let sgf = import::xg_to_sgf(original).unwrap();
@@ -334,7 +269,6 @@ async fn real_binary_xg_legacy_catalog_is_loaded_without_engine_jobs(pool: PgPoo
     assert_eq!(jobs, 0);
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn cataloged_imports_use_source_events_without_fetching_large_analysis_artifacts(
     pool: PgPool,
 ) {
@@ -367,7 +301,6 @@ async fn cataloged_imports_use_source_events_without_fetching_large_analysis_art
     assert_eq!(groups["analyzed_decisions"], 2, "{groups}");
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn unknown_units_and_source_identity_mismatches_are_not_counted(pool: PgPool) {
     let (_, ids) = imported(&pool).await;
     let router = app(&pool);
@@ -392,7 +325,6 @@ async fn unknown_units_and_source_identity_mismatches_are_not_counted(pool: PgPo
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn legacy_catalog_batches_make_progress_without_returning_partial_counts(pool: PgPool) {
     for n in 0..17 {
         let sgf = format!("(;GM[6]PW[Alice]PB[Bob]MI[length:100][ws:{n}];W[31hefe])");
@@ -441,7 +373,6 @@ async fn legacy_catalog_batches_make_progress_without_returning_partial_counts(p
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn foreign_position_ownership_and_best_candidate_method_are_preserved(pool: PgPool) {
     let (_, ids) = imported(&pool).await;
     let router = app(&pool);

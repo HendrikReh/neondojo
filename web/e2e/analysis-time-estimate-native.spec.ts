@@ -1,5 +1,8 @@
-import { openFullMatchAnalysis, openMatchAnalysisOptions } from './analysis-controls';
-import { expect, test } from '@playwright/test';
+import {
+  openFullMatchAnalysis,
+  openMatchAnalysisOptions,
+} from './analysis-controls';
+import { expect, backendTest as test } from './test';
 import type { AnalysisTimeEstimateResult } from '../src/analysis-time-estimate-api';
 import { formatAnalysisDuration } from '../src/analysis-time-estimate-messages';
 import type { components } from '../src/generated-api';

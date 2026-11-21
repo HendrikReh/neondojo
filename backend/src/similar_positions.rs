@@ -406,7 +406,6 @@ mod tests {
         assert_eq!(distance(&origin, &profile(&board, 0).unwrap()), 4);
     }
     #[sqlx::test(migrations = "./migrations")]
-    #[ignore = "requires PostgreSQL"]
     async fn ranks_real_positions_and_filters_their_source_and_context(pool: sqlx::PgPool) {
         use crate::import::ids::{match_id, position_id};
         use axum::{

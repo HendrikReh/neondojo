@@ -1,46 +1,14 @@
-use axum::{body::Body, http::Request};
-use http_body_util::BodyExt;
-use neondojo::{
-    api::{self, AppState},
-    engine::Engine,
-    import, store,
-};
+use neondojo::{import, store};
 use serde_json::{Value, json};
 use sqlx::PgPool;
-use tower::ServiceExt;
 use uuid::Uuid;
+mod support;
+use support::send as call;
+fn app(pool: &PgPool) -> axum::Router {
+    support::app(pool, "/unavailable")
+}
 
 const SOURCE: &str = "(;GM[6]PW[Alice]PB[Bob]MI[length:7];W[31hefe];B[double];W[take];B[42qusu])(;GM[6]MI[length:7][ws:2][bs:3]AE[a:y]AW[e]AB[s]PL[B]CV[2]CO[b];B[double];W[drop])";
-fn app(pool: &PgPool) -> axum::Router {
-    api::router(AppState::new(
-        pool.clone(),
-        Engine::new("/unavailable".into()),
-    ))
-}
-async fn call(app: &axum::Router, method: &str, uri: &str, body: Value) -> (u16, Value) {
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method(method)
-                .uri(uri)
-                .header("content-type", "application/json")
-                .body(if body.is_null() {
-                    Body::empty()
-                } else {
-                    Body::from(body.to_string())
-                })
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let status = response.status().as_u16();
-    let bytes = response.into_body().collect().await.unwrap().to_bytes();
-    (
-        status,
-        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
-    )
-}
 async fn source(pool: &PgPool) -> Uuid {
     store::import_match(
         pool,
@@ -155,7 +123,6 @@ async fn transfer_balances_unseen_cube_responses_and_records_first_pass(pool: Pg
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn database_player_choices_include_matches_without_analysis(pool: PgPool) {
     source(&pool).await;
     let database = Uuid::new_v4();
@@ -316,7 +283,6 @@ async fn active_practice_scores_all_three_decisions_without_writing_learning_sta
     assert_eq!(writes, 0);
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn selects_persisted_game_before_filters_without_mixing_other_game_sources(pool: PgPool) {
     let id = source(&pool).await;
     let deep = job(&pool, id, 4, Some(1), &game1(0.1)).await;
@@ -426,7 +392,6 @@ async fn selects_persisted_game_before_filters_without_mixing_other_game_sources
     );
 }
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn excludes_uncheckpointed_stale_incomplete_and_competition_sources(pool: PgPool) {
     let id = source(&pool).await;
     let j = job(&pool, id, 3, None, &game1(0.2)).await;
@@ -503,7 +468,6 @@ async fn excludes_uncheckpointed_stale_incomplete_and_competition_sources(pool: 
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn no_double_is_preroll_and_malformed_or_forced_evaluations_are_excluded(pool: PgPool) {
     use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
     let sgf = "(;GM[6]PW[ Alice ]PB[Bob]MI[length:7]AE[a:y]AW[f]AB[s]PL[W];W[31fccb])";
@@ -569,7 +533,6 @@ async fn no_double_is_preroll_and_malformed_or_forced_evaluations_are_excluded(p
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn missed_double_practice_mixes_correct_rolls_and_keeps_answers_hidden(pool: PgPool) {
     let sgf = concat!(
         "(;GM[6]PW[Alice]PB[Bob]MI[length:7];W[31hefe])",
@@ -689,7 +652,6 @@ async fn missed_double_practice_mixes_correct_rolls_and_keeps_answers_hidden(poo
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn take_and_pass_rounds_mix_both_best_actions_and_score_the_responder(pool: PgPool) {
     let mut sgf = "(;GM[6]PW[Alice]PB[Bob]MI[length:9];W[31hefe])".to_owned();
     let mut decisions = Vec::new();
@@ -806,7 +768,6 @@ async fn take_and_pass_rounds_mix_both_best_actions_and_score_the_responder(pool
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn occurrence_counts_are_complete_but_practice_is_distinct_and_limited_to_twenty(
     pool: PgPool,
 ) {
@@ -875,7 +836,6 @@ async fn occurrence_counts_are_complete_but_practice_is_distinct_and_limited_to_
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn player_choices_and_selected_player_do_not_scan_unrelated_large_sources(pool: PgPool) {
     let id = source(&pool).await;
     job(&pool, id, 1, None, &game1(0.2)).await;
@@ -925,7 +885,6 @@ async fn player_choices_and_selected_player_do_not_scan_unrelated_large_sources(
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn equal_depth_ties_use_timestamp_then_uuid_and_invalid_winner_never_falls_back(
     pool: PgPool,
 ) {
@@ -990,7 +949,6 @@ async fn equal_depth_ties_use_timestamp_then_uuid_and_invalid_winner_never_falls
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn database_and_exact_names_scope_native_sources_without_opponent_leaks(pool: PgPool) {
     let id = source(&pool).await;
     job(&pool, id, 1, None, &game1(0.2)).await;
@@ -1087,7 +1045,6 @@ async fn database_and_exact_names_scope_native_sources_without_opponent_leaks(po
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL"]
 async fn native_source_bytes_are_counted_once_per_match_and_keep_every_game(pool: PgPool) {
     let sgf = (0..3)
         .map(|score| format!("(;GM[6]PW[Alice]PB[Bob]MI[length:7][ws:{score}];W[31hefe])"))
