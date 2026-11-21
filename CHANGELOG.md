@@ -25,6 +25,7 @@ NeonDojo 1.2.0 adds calibrated NeonGammon playing strengths, finds duplicate mat
 - **NeonGammon 3.1.0.** NeonDojo accepts the NeonGammon 3.1.0 wheel beside 3.0.0; the difficulty presets use its `DifficultyPolicy`. Register a 3.1.0 environment to offer them. [Local NeonGammon setup](docs/open-sage-local.md)
 - **Game rolls load on demand.** **Game rolls** and **Match rolls** load the recorded roll frequencies when the tab opens instead of with every move, so stepping through a game makes fewer requests. [Analysis workspace](docs/reference/analysis.md#analysis-workspace)
 - **Faster dice equity and analysis checkpoints.** A GNUbg dice equity job evaluates all 21 rolls in one engine run instead of starting GNUbg per roll: in five fresh jobs per depth with one GNUbg thread, the time to completion fell from 5.13 to 0.58 s at 1-ply and from 6.67 to 1.83 s at 3-ply. Match analyses write their checkpoints in batches, and the review list keeps fast plans when switching between numbered and cursor pages.
+- **NeonGammon threads from one budget.** The analysis and playing workers reserve their configured threads for each evaluation from one shared budget. When an analysis and a move together exceed it, a waiting move runs between analysis evaluations instead of competing for the CPU. A saved profile from a larger machine keeps its thread count and runs on its own. [Local NeonGammon setup](docs/open-sage-local.md)
 
 ### Fixed
 
