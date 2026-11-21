@@ -87,8 +87,9 @@ impl Worker {
     async fn start(profile: &SageSnapshot) -> Result<Self> {
         let probe = include_str!("../../../tools/probe_open_sage.py");
         let script = format!(
-            "integrity = {{'__name__': 'neondojo_integrity'}}\nexec({}, integrity)\n{}\nmain(integrity)\n",
+            "integrity = {{'__name__': 'neondojo_integrity'}}\nexec({}, integrity)\nOPPONENT_POLICY_SOURCE = {}\n{}\nmain(integrity)\n",
             serde_json::to_string(probe)?,
+            serde_json::to_string(include_str!("opponent_policy.py"))?,
             include_str!("worker.py")
         );
         let mut child = Command::new(&profile.python)
@@ -273,10 +274,14 @@ pub(super) async fn request_costed(
     timeout: Duration,
     slot: Slot,
 ) -> Result<(Value, Option<EngineCost>)> {
+    let operation = payload["operation"].as_str();
     ensure!(
         matches!(
-            payload["operation"].as_str(),
+            operation,
             Some("identity" | "checker" | "cube" | "resignation")
+        ) || matches!(
+            (slot, operation),
+            (Slot::Play, Some("opponent_checker" | "opponent_cube"))
         ),
         "Unsupported NeonGammon single-request operation"
     );
@@ -405,6 +410,17 @@ fn validate_payload(profile: &SageSnapshot, request: &Value, result: &Value) -> 
             for equity in [cube.no_double, cube.take, cube.pass] {
                 super::validate_evaluation(equity, &cube.probabilities)?;
             }
+            Ok(())
+        }
+        Some("opponent_checker") => {
+            let board: [i32; 26] = serde_json::from_value(result.clone())
+                .context("Invalid NeonGammon opponent board")?;
+            super::context::from_sage(&board, 0)?;
+            Ok(())
+        }
+        Some("opponent_cube") => {
+            serde_json::from_value::<super::SageOpponentCube>(result.clone())
+                .context("Invalid NeonGammon opponent cube response")?;
             Ok(())
         }
         Some("resignation") => {

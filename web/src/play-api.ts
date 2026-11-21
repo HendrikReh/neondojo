@@ -3,6 +3,7 @@ import type { BearoffDirection } from './play-state';
 import type { PlayMode } from './play-mode-messages';
 type Schema = import('./generated-api').components['schemas'];
 export type PlaySeverity = Schema['MoveSeverity'];
+export type SageDifficulty = Schema['SageDifficulty'];
 import { errorGrades } from './move-severity';
 
 export const playSeverity = (value: string | null | undefined): PlaySeverity =>
@@ -60,6 +61,7 @@ export const createPlaySession = (
     | 'human_name'
     | 'play_engine'
     | 'play_plies'
+    | 'play_difficulty'
   >,
 ) =>
   request<PlaySession>(

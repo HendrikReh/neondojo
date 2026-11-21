@@ -44,6 +44,9 @@ pub struct PlayEngine {
     pub id: String,
     pub version: String,
     pub plies: i32,
+    /// Named NeonGammon opponent policy pinned to the match.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub difficulty: Option<crate::engines::SageDifficulty>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PlayStep {
@@ -271,6 +274,8 @@ pub struct CreatePlaySession {
     pub play_engine: Option<String>,
     /// Bot strength for this match only; must be a verified play depth of the chosen engine.
     pub play_plies: Option<i32>,
+    /// Named NeonGammon opponent policy for this match only.
+    pub play_difficulty: Option<crate::engines::SageDifficulty>,
 }
 
 impl CreatePlaySession {
@@ -285,7 +290,8 @@ impl CreatePlaySession {
                 name.clone_into(&mut settings.player_name);
             }
         }
-        if self.play_engine.is_none() && self.play_plies.is_none() {
+        if self.play_engine.is_none() && self.play_plies.is_none() && self.play_difficulty.is_none()
+        {
             return Ok(());
         }
         let engine = self
@@ -293,10 +299,21 @@ impl CreatePlaySession {
             .clone()
             .unwrap_or_else(|| settings.play_engine.clone());
         let depths = crate::configuration::engine_depths(&engine, "play");
-        let plies = match self.play_plies {
-            Some(plies) => plies,
-            None if depths.contains(&settings.play_plies) => settings.play_plies,
-            None => depths.first().copied().unwrap_or_default(),
+        if let Some(difficulty) = self.play_difficulty
+            && (engine != "bgsage"
+                || self
+                    .play_plies
+                    .is_some_and(|plies| plies != difficulty.plies()))
+        {
+            return Err(ApiError::invalid(
+                "A NeonGammon difficulty preset requires NeonGammon and its own playing depth",
+            ));
+        }
+        let plies = match (self.play_plies, self.play_difficulty) {
+            (Some(plies), _) => plies,
+            (None, Some(difficulty)) => difficulty.plies(),
+            (None, None) if depths.contains(&settings.play_plies) => settings.play_plies,
+            (None, None) => depths.first().copied().unwrap_or_default(),
         };
         if !depths.contains(&plies) {
             return Err(ApiError::invalid(
@@ -889,6 +906,7 @@ async fn create_session(
             id: settings.play_engine,
             version,
             plies: settings.play_plies,
+            difficulty: request.play_difficulty,
         },
         position: Position {
             id,

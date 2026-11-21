@@ -57,6 +57,31 @@ impl SageSnapshot {
     }
 }
 
+/// Named opponent presets backed by the calibrated NeonGammon policy.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SageDifficulty {
+    Beginner,
+    Casual,
+    Intermediate,
+    FullStrength,
+}
+
+impl SageDifficulty {
+    pub(crate) fn plies(self) -> i32 {
+        match self {
+            Self::FullStrength => 2,
+            _ => 1,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+pub(crate) struct SageOpponentCube {
+    pub should_double: bool,
+    pub should_take: bool,
+}
+
 /// Which checker candidates the sidecar must search at the profile depth.
 #[derive(Clone, Copy)]
 enum CheckerScope {
@@ -362,6 +387,48 @@ impl SageEngine {
         }
         candidates.sort_by(|a, b| b.equity.total_cmp(&a.equity));
         Ok((candidates, cost))
+    }
+
+    pub(crate) async fn opponent_checker_board(
+        &self,
+        position_id: &str,
+        match_id: &str,
+        difficulty: SageDifficulty,
+        seed: u64,
+    ) -> Result<[i32; 26]> {
+        let context = context::Context::decode(match_id)?;
+        ensure!(
+            !context.pending_double,
+            "Cannot play checkers before cube response"
+        );
+        let board = context.board(position_id, match_id)?;
+        let (result, _) = self
+            .request_with_batch(
+                json!({"operation":"opponent_checker", "board":board, "context":context,
+                       "dice":context.dice, "difficulty":difficulty, "seed":seed}),
+                None,
+            )
+            .await?;
+        context::from_sage(&serde_json::from_value(result)?, context.player)
+    }
+
+    pub(crate) async fn opponent_cube(
+        &self,
+        position_id: &str,
+        match_id: &str,
+        difficulty: SageDifficulty,
+        seed: u64,
+    ) -> Result<SageOpponentCube> {
+        let context = context::Context::decode(match_id)?;
+        let board = context.board(position_id, match_id)?;
+        let (result, _) = self
+            .request_with_batch(
+                json!({"operation":"opponent_cube", "board":board, "context":context,
+                       "difficulty":difficulty, "seed":seed}),
+                None,
+            )
+            .await?;
+        Ok(serde_json::from_value(result)?)
     }
 
     pub async fn analyze(

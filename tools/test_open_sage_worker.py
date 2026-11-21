@@ -238,5 +238,54 @@ class BatchTests(unittest.TestCase):
                         with self.assertRaises(ValueError):
                             self.runtime.dispatch({'operation': boundary})
 
+class OpponentPolicyTests(unittest.TestCase):
+    def test_repeated_preset_decisions_reuse_analyzer_with_request_seed(self):
+        from random import Random
+        spec = importlib.util.spec_from_file_location('sage_worker', PATH)
+        worker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(worker)
+        runtime = worker.Runtime.__new__(worker.Runtime)
+        runtime.profile = {'plies': 1, 'threads': 2}
+        runtime.opponent_policies = {}
+        constructor = Mock(side_effect=lambda difficulty, seed, parallel_threads:
+                           SimpleNamespace(_rng=Random(seed)))
+        module = SimpleNamespace(DifficultyPolicy=constructor)
+        with patch.dict(sys.modules, {'neondojo_opponent_policy': module}):
+            first = runtime.opponent_policy('beginner', 61)
+            value = first._rng.random()
+            self.assertIs(runtime.opponent_policy('beginner', 61), first)
+            self.assertEqual(first._rng.random(), value)
+        constructor.assert_called_once()
+
+    def test_opponent_requests_use_the_choice_from_the_preset(self):
+        spec = importlib.util.spec_from_file_location('sage_worker', PATH)
+        worker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(worker)
+        runtime = worker.Runtime.__new__(worker.Runtime)
+        runtime.verify = lambda: None
+        runtime.batch_active = False
+        runtime.cubeless = False
+        runtime.profile = {'plies': 1, 'threads': 2}
+        before = [0] * 26
+        before[6], before[19] = 2, -2
+        selected = [0] * 26
+        selected[2], selected[19] = 2, -2
+        policy = SimpleNamespace(
+            select_checker_move=Mock(return_value=selected),
+            cube_decision=Mock(return_value=SimpleNamespace(should_double=True, should_take=False)),
+        )
+        runtime.opponent_policy = Mock(return_value=policy)
+        context = dict(cube_value=1, cube_owner='centered', away1=5, away2=3,
+                       is_crawford=False, jacoby=False)
+        request = dict(board=before, context=context, difficulty='beginner', seed=61)
+        checker, _ = runtime.dispatch(dict(request, operation='opponent_checker', dice=[3, 1]))
+        cube, _ = runtime.dispatch(dict(request, operation='opponent_cube'))
+        self.assertEqual(checker, selected)
+        self.assertEqual(cube, {'should_double': True, 'should_take': False})
+        runtime.opponent_policy.assert_called_with('beginner', 61)
+        policy.select_checker_move.assert_called_once_with(before, 3, 1, beaver=False, **context)
+        policy.cube_decision.assert_called_once_with(before, beaver=False, **context)
+
+
 if __name__ == '__main__':
     unittest.main()

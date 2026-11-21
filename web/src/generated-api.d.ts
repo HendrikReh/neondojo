@@ -3648,6 +3648,7 @@ export interface components {
              * @description Zero starts a continuous money-game session; 1..25 starts a point match.
              */
             match_length: number;
+            play_difficulty?: null | components["schemas"]["SageDifficulty"];
             /** @description Bot engine for this match only (`gnubg` or `bgsage`); defaults to the saved play engine. */
             play_engine?: string | null;
             play_mode?: null | components["schemas"]["PlayMode"];
@@ -5030,6 +5031,7 @@ export interface components {
             warning: boolean;
         };
         PlayEngine: {
+            difficulty?: null | components["schemas"]["SageDifficulty"];
             id: string;
             /** Format: int32 */
             plies: number;
@@ -5824,6 +5826,11 @@ export interface components {
             /** Format: int64 */
             version: number;
         };
+        /**
+         * @description Named opponent presets backed by the calibrated NeonGammon policy.
+         * @enum {string}
+         */
+        SageDifficulty: "beginner" | "casual" | "intermediate" | "full_strength";
         SageSnapshot: {
             /** Format: int32 */
             adapter_version: number;

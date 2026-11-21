@@ -15517,6 +15517,17 @@
             "maximum": 25,
             "minimum": 0
           },
+          "play_difficulty": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SageDifficulty",
+                "description": "Named NeonGammon opponent policy for this match only."
+              }
+            ]
+          },
           "play_engine": {
             "type": [
               "string",
@@ -20024,6 +20035,17 @@
           "plies"
         ],
         "properties": {
+          "difficulty": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SageDifficulty",
+                "description": "Named NeonGammon opponent policy pinned to the match."
+              }
+            ]
+          },
           "id": {
             "type": "string"
           },
@@ -22560,6 +22582,16 @@
           }
         },
         "additionalProperties": false
+      },
+      "SageDifficulty": {
+        "type": "string",
+        "description": "Named opponent presets backed by the calibrated NeonGammon policy.",
+        "enum": [
+          "beginner",
+          "casual",
+          "intermediate",
+          "full_strength"
+        ]
       },
       "SageSnapshot": {
         "type": "object",

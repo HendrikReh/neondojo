@@ -10,6 +10,7 @@ import os
 import resource
 import sys
 import time
+from types import ModuleType
 
 MAX_REQUEST = 262144
 MAX_RESPONSE = 2097152
@@ -64,6 +65,7 @@ class Runtime:
         if type(self.cubeless) is not bool:
             raise ValueError('Invalid NeonGammon cubeless flag')
         self.batch_active = False
+        self.opponent_policies = {}
         self.identity = self.check_identity()
         expected = profile.get('artifact_fingerprint')
         if expected and expected != self.identity['artifact_fingerprint']:
@@ -103,6 +105,23 @@ class Runtime:
         if self.check_identity() != self.identity:
             raise ValueError('NeonGammon installation changed during evaluation')
 
+    def opponent_policy(self, difficulty, seed):
+        module_name = 'neondojo_opponent_policy'
+        module = sys.modules.get(module_name)
+        if module is None:
+            module = ModuleType(module_name)
+            module.__package__ = 'neongammon'
+            sys.modules[module_name] = module
+            exec(compile(OPPONENT_POLICY_SOURCE, 'neongammon/difficulty.py', 'exec'), module.__dict__)
+        policy = self.opponent_policies.get(difficulty)
+        if policy is None:
+            policy = module.DifficultyPolicy(difficulty, seed=seed, parallel_threads=self.profile['threads'])
+            self.opponent_policies[difficulty] = policy
+        else:
+            # The bundled policy has one RNG. Re-seed it independently of dice and other sessions.
+            policy._rng.seed(seed)
+        return policy
+
     def dispatch(self, request):
         operation = request['operation']
         if operation == 'begin_batch':
@@ -131,10 +150,23 @@ class Runtime:
             # Only explicit, validated context is passed; never arbitrary kwargs.
             kwargs = {key: context[key] for key in ('cube_value', 'cube_owner', 'away1', 'away2', 'is_crawford', 'jacoby')}
             kwargs['beaver'] = False
-            if request['operation'] == 'checker':
+            if operation in ('checker', 'opponent_checker'):
                 dice = request['dice']
                 if len(dice) != 2 or any(type(x) is not int or x < 1 or x > 6 for x in dice):
                     raise ValueError('Invalid dice')
+            if operation in ('opponent_checker', 'opponent_cube'):
+                difficulty, seed = request['difficulty'], request['seed']
+                expected_plies = 2 if difficulty == 'full_strength' else 1
+                if (self.cubeless or self.profile['plies'] != expected_plies
+                        or type(seed) is not int or not 0 <= seed < 2**64):
+                    raise ValueError('Invalid opponent policy request')
+                policy = self.opponent_policy(difficulty, seed)
+                if operation == 'opponent_checker':
+                    result = board(policy.select_checker_move(before, *dice, **kwargs))
+                else:
+                    decision = policy.cube_decision(before, **kwargs)
+                    result = {'should_double': decision.should_double, 'should_take': decision.should_take}
+            elif operation == 'checker':
                 forced = request.get('force_board')
                 all_legal = request.get('all_legal', False)
                 if type(all_legal) is not bool or all_legal and forced is not None:

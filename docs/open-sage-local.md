@@ -70,6 +70,12 @@ The regular Python tests need neither NumPy nor NeonGammon and check in particul
 4. Under **Settings → Analysis → Engines on this computer**, **NeonGammon threads for analysis** and **NeonGammon threads for playing** can each be set from 2 up to the number of logical CPUs. With **Default**, NeonGammon uses 4 threads for analyses and engine duels and 2 for playing. New sessions, jobs and duel series store the value in effect. The worker checks the configured limit with a real position evaluation; the serial cubeful 1-ply checker path stays serial.
 5. Under **Extras → Benchmark**, set the engine and depth independently. The NeonGammon reference protocols always use 4 threads for analysis and 2 for playing decisions, regardless of these settings.
 
+The four optional opponent presets are implemented by the bundled
+[MPL-2.0 NeonGammon policy snapshot](../backend/src/engines/opponent_policy.py).
+The sidecar runs that policy with the verified 3.0.0 package and its installed
+Stage 11 weights. Preset selections and decisions are confined to live
+NeonGammon opponents. [Opponent presets](reference/playing.md#neongammon-difficulty-presets)
+
 The application process stays fully local. The sidecar has no download path; installation and updates are explicitly separate steps. Unknown or modified models, a missing Python environment and engine crashes produce errors, not substitute evaluations. NeonDojo never falls back to another engine on its own.
 
 ## Tests with a real installation

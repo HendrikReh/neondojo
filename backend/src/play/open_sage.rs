@@ -5,9 +5,10 @@ use super::{
 };
 use crate::{
     engine::Engine,
-    engines::{EngineCost, SageCheckerCandidate, SageEngine},
+    engines::{EngineCost, SageCheckerCandidate, SageDifficulty, SageEngine},
 };
 use anyhow::{Context, Result, ensure};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
 use tokio::sync::Semaphore;
@@ -92,13 +93,8 @@ async fn chosen_move(bot: &SageEngine, snapshot: &NativeSnapshot) -> Result<Chec
 
     // Sage can stop at a winning bear-off before using all playable dice.
     // Use its highest-ranked native candidate only for this terminal discrepancy.
-    let checker_sign = if snapshot.player == 0 { 1 } else { -1 };
-    let bore_off = |candidate: &SageCheckerCandidate| {
-        candidate
-            .board
-            .iter()
-            .all(|point| point.signum() != checker_sign)
-    };
+    let bore_off =
+        |candidate: &SageCheckerCandidate| all_borne_off(&candidate.board, snapshot.player);
     let first_legal = candidates
         .iter()
         .find(|candidate| legal.contains_key(&candidate.board));
@@ -181,6 +177,80 @@ pub(super) async fn choose(bot: &SageEngine, snapshot: &NativeSnapshot) -> Resul
     })
 }
 
+fn all_borne_off(board: &[i32; 26], player: i32) -> bool {
+    let checker_sign = if player == 0 { 1 } else { -1 };
+    board.iter().all(|point| point.signum() != checker_sign)
+}
+
+async fn choose_difficulty(
+    bot: &SageEngine,
+    snapshot: &NativeSnapshot,
+    difficulty: SageDifficulty,
+    seed: u64,
+) -> Result<(&'static str, Option<String>)> {
+    let (position, context) = snapshot
+        .native_id
+        .split_once(':')
+        .context("Invalid native ID")?;
+    let action = match snapshot.phase {
+        PlayPhase::Move if snapshot.legal_moves.is_empty() => "pass",
+        PlayPhase::Move => {
+            let chosen = bot
+                .opponent_checker_board(position, context, difficulty, seed)
+                .await?;
+            let mut winning = None;
+            for choice in &snapshot.legal_moves {
+                let board = super::native_move_board(
+                    &snapshot.board,
+                    snapshot.player,
+                    &snapshot.dice,
+                    choice,
+                )?;
+                if chosen == board {
+                    return Ok(("move", Some(choice.notation.clone())));
+                }
+                if winning.is_none() && all_borne_off(&board, snapshot.player) {
+                    winning = Some(choice);
+                }
+            }
+            // A terminal NeonGammon play can stop before using all playable dice.
+            if let Some(choice) = winning
+                && all_borne_off(&chosen, snapshot.player)
+            {
+                return Ok(("move", Some(choice.notation.clone())));
+            }
+            anyhow::bail!("NeonGammon opponent selected an illegal checker board");
+        }
+        PlayPhase::Roll if !snapshot.can_double => "roll",
+        PlayPhase::Roll => {
+            let cube = bot
+                .opponent_cube(position, context, difficulty, seed)
+                .await?;
+            if cube.should_double { "double" } else { "roll" }
+        }
+        PlayPhase::DoubleResponse => {
+            let cube = bot
+                .opponent_cube(position, context, difficulty, seed)
+                .await?;
+            if cube.should_take { "take" } else { "drop" }
+        }
+        _ => anyhow::bail!("Unexpected NeonGammon turn phase"),
+    };
+    Ok((action, None))
+}
+
+fn decision_seed(session: &PlaySession, snapshot: &NativeSnapshot) -> u64 {
+    // The game checkpoint survives an engine restart or administrative revision.
+    let mut hash = Sha256::new();
+    hash.update(session.id.as_bytes());
+    hash.update(snapshot.game_no.to_le_bytes());
+    hash.update((snapshot.history.len() as u64).to_le_bytes());
+    hash.update(snapshot.native_id.as_bytes());
+    let mut seed = [0; 8];
+    seed.copy_from_slice(&hash.finalize()[..8]);
+    u64::from_le_bytes(seed)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn advance(
     session: &PlaySession,
@@ -233,9 +303,18 @@ pub(super) async fn advance(
                 process.finish().await?;
                 return Ok((snapshot, sgf));
             }
-            let ChosenAction {
-                action, notation, ..
-            } = choose(bot, &snapshot).await?;
+            let (action, notation) = if let Some(difficulty) = session.engine.difficulty {
+                choose_difficulty(
+                    bot,
+                    &snapshot,
+                    difficulty,
+                    decision_seed(session, &snapshot),
+                )
+                .await?
+            } else {
+                let choice = choose(bot, &snapshot).await?;
+                (choice.action, choice.notation)
+            };
             let request = NativeRequest {
                 new: false,
                 external_bot: true,

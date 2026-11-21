@@ -59,6 +59,7 @@ import {
   changePlayMode,
   type PlayAction,
   type PlaySession,
+  type SageDifficulty,
 } from './play-api';
 import { playSounds, stopPlaySounds, unlockPlayAudio } from './play-audio';
 import { isNewCubeOffer } from './play-sound-events';
@@ -72,6 +73,17 @@ import { actionFrames, checkerFrame, reverseFrame } from './play-animation';
 import { usePlayAnimation, useRollingFaces } from './usePlayAnimation';
 import './play.css';
 const storageKey = 'neondojo.play-session';
+// Rounded live 5-point benchmark values against Full Strength, re-scored at 3-ply.
+const sageDifficulties = [
+  { id: 'beginner', pr: 21, plies: 1 },
+  { id: 'casual', pr: 14.4, plies: 1 },
+  { id: 'intermediate', pr: 7.4, plies: 1 },
+  { id: 'full_strength', pr: 0.9, plies: 2 },
+] as const satisfies ReadonlyArray<{
+  id: SageDifficulty;
+  pr: number;
+  plies: number;
+}>;
 function storedSession() {
   try {
     return localStorage.getItem(storageKey);
@@ -234,6 +246,7 @@ export default function PlayWorkspace({
     name?: string;
     engine?: DepthEngine;
     plies?: number;
+    difficulty?: SageDifficulty;
   }>({});
   const confirmed = useConfirmedConfiguration();
   const defaults = defaultConfiguration.play;
@@ -268,6 +281,8 @@ export default function PlayWorkspace({
     settings?.play_engine ??
     defaults.engine;
   const botDepths = configurationOptions.engine_profiles[botEngine].play;
+  const botDifficulty =
+    botEngine === 'bgsage' ? setupOptions.difficulty : undefined;
   const requestedPlies =
     setupOptions.plies ??
     confirmed?.play.plies ??
@@ -278,6 +293,11 @@ export default function PlayWorkspace({
     : botDepths.includes(preferredDepth(botEngine))
       ? preferredDepth(botEngine)
       : botDepths[0];
+  const sessionStrength =
+    session &&
+    (session.engine.difficulty
+      ? t(session.engine.difficulty)
+      : `${session.engine.plies}-ply`);
   const setupOpen = visible && setup;
   const [idleFlipX, idleFlipY] = boardFlips(
     human,
@@ -286,6 +306,7 @@ export default function PlayWorkspace({
       'right',
   );
   const [engines, setEngines] = useState<EngineInfo[]>([]);
+  const sageInfo = engines.find((engine) => engine.id === 'bgsage');
   useEffect(() => {
     if (!setupOpen) return;
     const abort = new AbortController();
@@ -512,10 +533,12 @@ export default function PlayWorkspace({
         ...(setupOptions.name === undefined
           ? {}
           : { human_name: setupOptions.name }),
-        ...(setupOptions.engine === undefined &&
-        setupOptions.plies === undefined
-          ? {}
-          : { play_engine: botEngine, play_plies: botPlies }),
+        ...(botDifficulty
+          ? { play_engine: 'bgsage', play_difficulty: botDifficulty }
+          : setupOptions.engine === undefined &&
+              setupOptions.plies === undefined
+            ? {}
+            : { play_engine: botEngine, play_plies: botPlies }),
       }),
     );
   }
@@ -1319,7 +1342,11 @@ export default function PlayWorkspace({
                     onChange={(event) => {
                       const value = event.target.value;
                       if (value === 'gnubg' || value === 'bgsage')
-                        setSetupOptions({ ...setupOptions, engine: value });
+                        setSetupOptions({
+                          ...setupOptions,
+                          engine: value,
+                          difficulty: undefined,
+                        });
                     }}
                   >
                     {(['gnubg', 'bgsage'] as const).map((id) => {
@@ -1342,16 +1369,45 @@ export default function PlayWorkspace({
                 <label>
                   {t('strength')}
                   <select
-                    value={botPlies}
+                    value={botDifficulty ?? botPlies}
                     disabled={setupDisabled}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      const difficulty = sageDifficulties.find(
+                        ({ id }) => id === value,
+                      );
                       setSetupOptions({
                         ...setupOptions,
                         engine: botEngine,
-                        plies: Number(event.target.value),
-                      })
-                    }
+                        plies: difficulty ? undefined : Number(value),
+                        difficulty: difficulty?.id,
+                      });
+                    }}
                   >
+                    {botEngine === 'bgsage' && (
+                      <optgroup
+                        label={t(
+                          length === 5
+                            ? 'difficultyFivePoint'
+                            : 'difficultyPresets',
+                        )}
+                      >
+                        {sageDifficulties.map(({ id, pr, plies }) => (
+                          <option
+                            key={id}
+                            value={id}
+                            disabled={
+                              !!sageInfo &&
+                              (!sageInfo.available ||
+                                !sageInfo.plies.includes(plies))
+                            }
+                          >
+                            {t(id)}
+                            {length === 5 ? ` · ≈ ${formatNumber(pr)} PR` : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
                     {botDepths.map((ply) => (
                       <option key={ply} value={ply}>
                         {playStrengthLabel(settingsT, ply, botEngine)}
@@ -1527,13 +1583,13 @@ export default function PlayWorkspace({
                     details={session.engine.version}
                     tooltip={[
                       session.engine.version,
-                      `${session.engine.plies}-ply`,
+                      sessionStrength,
                       t(
                         session.bearoff_direction === 'left' ? 'left' : 'right',
                       ),
                     ].join(' · ')}
                   />{' '}
-                  {session.engine.plies}-ply
+                  <span>{sessionStrength}</span>
                 </span>
                 <span>
                   {settingsT('analysisEngine')} ·{' '}
