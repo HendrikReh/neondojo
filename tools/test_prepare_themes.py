@@ -3,9 +3,73 @@ from pathlib import Path
 import tempfile
 import unittest
 from zipfile import ZipFile
-from prepare_themes import prepare
+import struct
+import zlib
+from prepare_themes import png_luminance, prepare
 
 ROOT = Path(__file__).resolve().parents[1]
+ADAM7 = [(0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4), (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2)]
+
+
+def png(width, height, pixel=(0, 255, 0, 255), color=6, palette=None, interlace=False):
+    """Encode a single-colour 8-bit PNG; `pixel` holds the raw channel samples."""
+
+    def chunk(kind, data):
+        return (
+            struct.pack(">I", len(data))
+            + kind
+            + data
+            + struct.pack(">I", zlib.crc32(kind + data))
+        )
+
+    def scanlines(w, h):
+        return (b"\0" + bytes(pixel) * w) * h
+
+    if interlace:
+        raw = b"".join(
+            scanlines((width - x + dx - 1) // dx, (height - y + dy - 1) // dy)
+            for x, y, dx, dy in ADAM7
+            if width > x and height > y
+        )
+    else:
+        raw = scanlines(width, height)
+    extra = b""
+    if palette:
+        colors, alphas = palette
+        extra = chunk(b"PLTE", colors) + chunk(b"tRNS", alphas)
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, color, 0, 0, int(interlace)))
+        + extra
+        + chunk(b"IDAT", zlib.compress(raw))
+        + chunk(b"IEND", b"")
+    )
+
+
+def synthetic_archive(path, red_checker, green_checker):
+    """Write a minimal BGBlitz theme whose red/green artwork the caller chooses."""
+    xml = (
+        '<theme displayName="Synthetic"><background name="board.png" numbersType="twoImage">'
+        + "".join(
+            f'<numbers type="{direction}" name="{direction}?.png"/>'
+            for direction in ["RLD", "RLU", "LRD", "LRU"]
+        )
+        + '</background><checker red="red?.png" green="green?.png">'
+        + ",".join(str(i * 8) for i in range(15))
+        + '</checker><dice type="sixImage" red="redDie?.png" green="greenDie?.png"/>'
+        + '<cube type="sixImage" name="cube?.png"/></theme>'
+    )
+    with ZipFile(path, "w") as z:
+        z.writestr("themes/synthetic/theme.xml", xml)
+        z.writestr("themes/synthetic/board.png", png(128, 96))
+        z.writestr("themes/synthetic/red.png", red_checker)
+        z.writestr("themes/synthetic/green.png", green_checker)
+        for name in [
+            *[f"{side}Die{i}" for side in ["red", "green"] for i in range(1, 7)],
+            *[f"cube{i}" for i in [2, 4, 8, 16, 32, 64]],
+            *[f"{d}{i}" for d in ["RLD", "RLU", "LRD", "LRU"] for i in [1, 2]],
+        ]:
+            z.writestr(f"themes/synthetic/{name}.png", png(4, 4))
 
 
 class ThemePreparationTests(unittest.TestCase):
@@ -105,6 +169,13 @@ class ThemePreparationTests(unittest.TestCase):
                     ).read_bytes()
                     self.assertTrue(data)
                     self.assertGreater(image["width"], 0)
+                light, dark = (
+                    png_luminance(
+                        (target / "public" / theme["checkers"][side][0]["src"].removeprefix("/themes/")).read_bytes()
+                    )
+                    for side in ("white", "black")
+                )
+                self.assertGreater(light, dark, theme["id"])
             rain = next((t for t in catalog if t["name"] == "CL Green (Rain)"), None)
             if rain:
                 self.assertIn("cube64_L.png", rain["cubes"]["64_l"]["src"])
@@ -114,26 +185,6 @@ class ThemePreparationTests(unittest.TestCase):
             )
 
     def test_self_contained_theme_can_be_built_without_optional_local_archives(self):
-        import struct, zlib
-
-        def png(width, height):
-            def chunk(kind, data):
-                return (
-                    struct.pack(">I", len(data))
-                    + kind
-                    + data
-                    + struct.pack(">I", zlib.crc32(kind + data))
-                )
-
-            return (
-                b"\x89PNG\r\n\x1a\n"
-                + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
-                + chunk(
-                    b"IDAT", zlib.compress((b"\0" + b"\0\xff\0\xff" * width) * height)
-                )
-                + chunk(b"IEND", b"")
-            )
-
         xml = (
             '<theme displayName="Synthetic"><background name="board.png" numbersType="twoImage">'
             + "".join(
@@ -171,6 +222,54 @@ class ThemePreparationTests(unittest.TestCase):
             self.assertEqual(
                 (root / "out/synthetic/board.png").read_bytes(), png(128, 96)
             )
+
+    def test_light_checker_set_is_white_whatever_its_bgblitz_colour(self):
+        light = png(6, 6, (240, 240, 250, 255))
+        dark = png(6, 6, (30, 40, 90, 255))
+        # BG Moon and most BGBlitz themes name the dark set "red"; CL Green
+        # names its light set "red". White must be the light set in both.
+        for red, green, white, black in [
+            (dark, light, "green", "red"),
+            (light, dark, "red", "green"),
+        ]:
+            with self.subTest(white=white), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                source = root / "in"
+                source.mkdir()
+                synthetic_archive(source / "synthetic.zip", red, green)
+                [theme] = prepare(source, root / "out", root / "manifest.json")
+                self.assertEqual(
+                    [i["src"] for i in theme["checkers"]["white"]],
+                    [f"/themes/synthetic/{white}.png"],
+                )
+                self.assertEqual(
+                    [i["src"] for i in theme["checkers"]["black"]],
+                    [f"/themes/synthetic/{black}.png"],
+                )
+                self.assertEqual(
+                    theme["dice"]["white"][0]["src"], f"/themes/synthetic/{white}Die1.png"
+                )
+                self.assertEqual(
+                    theme["dice"]["black"][0]["src"], f"/themes/synthetic/{black}Die1.png"
+                )
+
+    def test_checker_luminance_ignores_transparency_and_png_encoding(self):
+        white = 255.0
+        self.assertAlmostEqual(png_luminance(png(9, 7, (255, 255, 255, 255))), white)
+        self.assertAlmostEqual(
+            png_luminance(png(9, 7, (255, 255, 255, 255), interlace=True)), white
+        )
+        self.assertAlmostEqual(png_luminance(png(9, 7, (255,), color=0)), white)
+        self.assertAlmostEqual(png_luminance(png(9, 7, (255, 255, 255), color=2)), white)
+        self.assertAlmostEqual(png_luminance(png(3, 3, (0, 0, 255, 255))), 0.0722 * 255)
+        self.assertAlmostEqual(
+            png_luminance(png(5, 5, (1,), color=3, palette=(b"\0\0\0\xff\xff\xff", b"\0\xff"))),
+            white,
+        )
+        with self.assertRaisesRegex(ValueError, "no opaque pixels"):
+            png_luminance(png(4, 4, (255, 255, 255, 0)))
+        with self.assertRaisesRegex(ValueError, "must be PNG"):
+            png_luminance(b"\xff\xd8\xff")
 
     @unittest.skipUnless(
         (ROOT / "themes/bg-earth.zip").exists(), "optional local BG Earth artwork"

@@ -13,6 +13,7 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 ### Fixed
 
 - **Builds without local theme archives stop.** `npm run build`, `npm run dev` and `npm test` in `web/` no longer drop BGBlitz themes from `shared/configuration-options.json` when their ZIPs are missing from `themes/`, for example in a fresh worktree. Such a build served no theme images and showed "The theme image could not be loaded" or "Invalid configuration: appearance". Theme preparation now names the missing archives and stops; `NEONDOJO_ALLOW_MISSING_THEMES=1` removes the themes on purpose. [Board themes](docs/reference/settings.md#board-artwork)
+- **White plays the light checkers on BGBlitz boards.** BGBlitz names its checker and dice sets after the players "red" and "green", and in most themes "red" is the dark set. Theme preparation assigned "red" to White, so with BG Moon and eleven other archives choosing **White** in **New match** gave you the dark checkers, and the board preview in **Settings → Board** labelled them the other way round. `npm run themes:prepare` now assigns the set whose opaque checker pixels are lighter to White, with its dice. Run it again (or restart `npm run dev`) to rebuild the local catalog. [Board theme formats](themes/README.md)
 
 ## [1.1.0] - 2026-11-20
 
