@@ -34,11 +34,12 @@ error badges, candidate previews and artwork/theme tiles retain their existing
 visual roles. This keeps navigation, actions and content selection recognizable.
 
 `web/e2e/text-navigation.spec.ts` verifies the active and hover states and the
-spacing between labels in all six light/dark theme variants. It also checks the
-header order with mouse and keyboard, keyboard focus in the analysis and notes
-tabs, and the absence of horizontal overflow at the desktop viewports
-1800×1169, 2560×1440 and 3840×2160. Related workflow tests cover settings,
-notes, sources and board views.
+spacing between labels in one light (`graphite` light) and one dark (`club`
+dark) palette, while `web/e2e/ui-themes.spec.ts` verifies all six light/dark
+theme palettes. It also checks the header order with mouse and keyboard,
+keyboard focus in the analysis and notes tabs, and the absence of horizontal
+overflow at the desktop viewports 1800×1169, 2560×1440 and 3840×2160. Related
+workflow tests cover settings, notes, sources and board views.
 
 ## Search results
 
@@ -53,6 +54,13 @@ The match database keeps its action icons visible above the results. They
 start disabled and become available for the current selection. Opening,
 editing, and resuming apply to one match. Resume requires a paused or unfinished
 play session. Batch actions are available when the selected matches support them.
+**Filters**, **Notes**, **Position ID** and **Duplicates** toggle the expandable
+search panels above the table. **Duplicates** groups matches with the same
+played record in the selected database (or across **All databases**), separates
+**Identical files** from **Same moves**, and offers **Select copies** to select
+every copy except the oldest match in each listed group (up to 100 matches) for
+the toolbar batch actions. A warning icon next to PR marks matches that carry
+saved import notes.
 
 The player database uses the Positions layout with a result table on the left
 and the selected profile on the right. Click a row or use the arrow keys to
@@ -98,8 +106,9 @@ the transfer outcome.
 
 **All analyzed decisions** uses the same filter card and keeps its filters,
 results and chosen row while the saved positions are open. A row is selected
-with a click or the arrow keys; Enter or a double-click opens a checker
-decision in Analysis. The **Loss** heading reverses the order.
+with a click or the arrow keys; Enter or a double-click opens the decision in
+Analysis (checker decisions in **Checker**, cube decisions in **Cube**). The
+**Loss** heading reverses the order.
 
 ## Keyboard shortcuts in practice and review
 
@@ -127,11 +136,16 @@ instead (`web/src/useBoardReviewShortcuts.ts`).
 ## Match analysis
 
 **Checker** places the position analysis beside the board. Its analysis views
-are **Candidate moves**, **Dice equity**, and **Game rolls**. Move history defaults to
+are **Candidate moves**, **Compare moves**, **Dice equity**, and **Game rolls**.
+**Game rolls** loads the selected game's recorded roll frequencies on demand
+when opened, so switching games paints the board without waiting for observed
+rolls; failed requests offer **Try again**. Move history defaults to
 **All moves**. Filter by **All errors** or by a specific grade without changing
 the board selection. Unrated moves remain visible under **All moves**.
 **Cube** reviews cube decisions on the board. Native match and
-game statistics are available in **Statistics**.
+game statistics are available in **Statistics**. Matches imported with
+irregularities show their **Import notes** count in the analysis header and
+list the read-only **Import notes** above the match or game comment in **Notes**.
 **Displayed analysis** in the header chooses one saved result for checker and
 cube review, move marks, statistics and new learning cards. The list starts
 with engine and evaluation depth, followed by scope and date. The selected
@@ -252,9 +266,17 @@ board like the other play dialogs. It makes the playing view behind it inert
 but leaves the app header usable. Opened from **New match** it takes the
 focus; opened automatically when Playing has no match, the focus stays in the
 header so keyboard navigation across the workspaces continues. Name, bot
-engine and strength come first, followed by color, match length and play mode. Color and play mode are
+engine and strength come first, followed by color, match length and play mode.
+When **NeonGammon** is selected as the bot engine, **Playing strength** groups
+**Difficulty presets** (**Beginner**, **Casual**, **Intermediate**, and
+**Full Strength · 3-ply checkers / 2-ply cube**, annotated with approximate
+5-point PR labels when **Match length** is 5 points) above the fixed depths
+(`1-ply`, `2-ply`) and **2-ply + Top-2 (10 mEq)**. Switching to NeonGammon for
+a match starts at `2-ply`. Color and play mode are
 radio choices, **Start match** is the primary button, and the gear beside the
-analysis and rules engine line opens **Settings → Playing**. **Close** and
+analysis and rules engine line opens **Settings → Playing**. When a match is
+already open, **Back to match** (or **Resume match** if paused) appears beside
+**Start match** and **Paused Matches**. **Close** and
 Escape dismiss the dialog; without a match, **New match** above the empty
 board reopens it.
 
@@ -392,9 +414,12 @@ availability of GNUbg and NeonGammon.
 Closing **Opening books** returns to **Analysis** in Settings and restores focus
 to **Manage opening books**.
 
-**Playing** puts the engine and strength for new matches side by side.
-The next group contains the default play mode and automatic training analysis.
-Game sounds and bear-off direction are grouped below them.
+**Playing** puts the engine and strength for new matches side by side. With
+NeonGammon selected, **Strength for future games** includes
+**2-ply + Top-2 (10 mEq)** in addition to fixed depths, saved in the active
+configuration profile. The next group contains the default play mode and
+automatic training analysis. Game sounds and bear-off direction are grouped
+below them.
 
 Closing Settings or opening Profiles, Opening books, or Benchmark with an
 unapplied draft asks whether to apply it, discard it, or keep editing. Escape
@@ -438,6 +463,10 @@ The comparison table lists the median and range of the three most recent
 matching runs for each engine and depth. History shows total times of one
 second or more in seconds, minutes, or hours, with the exact milliseconds in the
 tooltip, and shows progress counts only for runs that did not complete.
+History headings (**Date**, **Engine**, **Ply**, **Total analysis time**,
+**Ø analysis time / move** or **Ø play-turn latency**, and **Status**) sort the
+table and reverse on a second click. Finished runs (completed, failed, or
+cancelled) can be deleted permanently after an inline confirmation.
 Reference methodology and per-run technical data can be expanded on demand.
 
 Engine duels lists series beside the selected result on wide desktop windows.

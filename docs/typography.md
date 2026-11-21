@@ -37,9 +37,11 @@ serves as the favicon; the name beside it uses the shared stack. Table actions
 inherit the table size; compact metadata and icon controls can use smaller
 roles without changing ordinary form controls.
 
-The checker candidate table in Analysis is the one table that grows with its
-pane on desktop: headings scale from 12 to 14 px and cells from 13 to 16 px
-(`web/src/desktop-analysis.css`).
+The checker candidate table in Analysis grows continuously with its pane on
+desktop: headings scale from 12 to 14 px and cells from 13 to 16 px
+(`web/src/desktop-analysis.css`). On ultra-wide displays (`min-width: 3000px`),
+the same stylesheet also steps up the Statistics tables, the Notes comment
+editor, and the Study cards controls using the larger shared tokens.
 
 The November 2026 rendered audit found serif page titles ranging from 25–30 px,
 a 21 px sans-serif Study title, differing table weights/sizes and form controls
@@ -47,8 +49,11 @@ between 11–14 px. These were normalized to the shared roles. Note editors alre
 inherited the UI family; their size is now the shared 13 px field size.
 
 `web/e2e/typography.spec.ts` checks computed styles in populated Analysis,
-Match database, Positions and Study views, including all six light/dark theme
-variants, every UI language, dialogs, previews, notes, statistics, errors and
-the deliberate monospace and board exceptions. Desktop checks use the logical
-viewports 1800×1169, 2560×1440 and 3840×2160. Different text roles remain
-visually distinct to preserve the dense analysis hierarchy.
+Match database, Positions and Study views (using the `graphite` light theme,
+since interface themes only redefine color tokens; `web/e2e/ui-themes.spec.ts`
+verifies all six light/dark theme palettes). It covers every UI language (`en`,
+`de`, `es`, `fr`, `pl`, `it`), dialogs, previews, notes, statistics, cube
+review, and the deliberate monospace and board (`Arial, sans-serif`) exceptions.
+Desktop checks use the logical viewports 1800×1169, 2560×1440 and 3840×2160.
+Different text roles remain visually distinct to preserve the dense analysis
+hierarchy.

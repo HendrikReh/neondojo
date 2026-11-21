@@ -14,7 +14,7 @@ npm run test:themes --prefix web
 npm run build --prefix web
 ```
 
-After changing an API contract, run `npm run api:types --prefix web` before the frontend checks. It regenerates [OpenAPI](../openapi.json) and [the TypeScript types](../../web/src/generated-api.d.ts) from the Rust API. `typecheck:e2e` then checks the browser specs, their API mocks, and the components they mount against the regenerated types. Playwright itself only strips types, so a mock that has fallen behind the API would otherwise still run. The `test:themes` script discovers the Python tests under `tools/`, including tests for tools beyond theme preparation.
+After changing an API contract, run `npm run api:types --prefix web` before the frontend checks. It regenerates [OpenAPI](../openapi.json) and [the TypeScript types](../../web/src/generated-api.d.ts) from the Rust API. `typecheck:e2e` then checks the browser specs, their API mocks, and the components they mount against the regenerated types. Playwright itself only strips types, so a mock that has fallen behind the API would otherwise still run. The `test:themes` script discovers the Python tests under `tools/`, including tests for tools beyond theme preparation. Frontend `dev`, `build`, and `test` run `themes:prepare` automatically and abort if the untracked BGBlitz ZIP archives listed in `shared/configuration-options.json` are missing from `themes/` (such as in a fresh worktree); link or copy `themes/*.zip`, or set `NEONDOJO_ALLOW_MISSING_THEMES=1` only when intentionally running without them.
 
 All integration tests in [`backend/tests/`](../../backend/tests/) link into one test binary, `integration`. Each file is a module of [`backend/tests/integration.rs`](../../backend/tests/integration.rs), and Cargo's automatic test discovery is off, so add a `mod` line there for a new test file; the test `every_test_file_is_a_module` fails until you do. Select a file's tests by its module path:
 
@@ -54,9 +54,9 @@ The ignored tests need a native engine or other local resources in addition to t
 cargo test --workspace -- --ignored --nocapture --skip all_local_game_files_import_atomically_and_deduplicate
 ```
 
-Use `cargo test -p neondojo --test integration <module>:: -- --ignored --nocapture` for the tests of an affected file. Integration coverage includes import and deduplication, game catalogs and older matches, scope-bound cursors, SSE replay, worker claims and lease recovery, Dice Distribution, and native checker and cube analysis. The reference match exercises 10 games and 460 moves. Native depth tests check actual 3- and 4-ply engine output and game and match exports. Parser tests compare XG positions with the same match imported from MAT through GNUbg.
+Use `cargo test -p neondojo --test integration <module>:: -- --ignored --nocapture` for the tests of an affected file. Integration coverage includes import and deduplication, game catalogs and older matches, scope-bound cursors, SSE replay, worker claims and lease recovery, Dice Distribution, and native checker and cube analysis. The reference match exercises 10 games and 460 moves. Native depth tests check actual 4- and 5-ply GNUbg engine output (`settings::`) and 3- and 5-ply opening candidates (`match_analysis::`), plus game and match exports. Parser tests compare XG positions with the same match imported from MAT through GNUbg.
 
-The search performance test builds 50,000 synthetic matches and 250,000 positions in an isolated database. It uses `EXPLAIN (ANALYZE, BUFFERS)` to verify a GIN trigram index for a selective player-name search and a B-tree index for an exact Position ID search. Each query returns one row. On November 8, 2026, the warm test queries took 0.279 ms and 0.036 ms respectively in PostgreSQL. These measurements cover database execution only.
+The search performance test (`search_performance::`) builds 50,000 synthetic matches and 250,000 positions in an isolated database. It uses `EXPLAIN (ANALYZE, BUFFERS)` to verify a GIN trigram index for a selective player-name search and a B-tree index for an exact Position ID search. Each query returns one row. On November 8, 2026, the warm test queries took 0.279 ms and 0.036 ms respectively in PostgreSQL. These measurements cover database execution only. In the default PostgreSQL suite, `review_decisions::review_query_plans_use_the_current_page_parameters` also checks that paginated match review queries keep parameter-specific query plans rather than caching a generic prepared statement across filters and page modes.
 
 ### Optional local import corpus
 
@@ -126,12 +126,15 @@ These specs skip unless their environment variable is set. Each still uses the d
 | `e2e/analysis-time-estimate-native.spec.ts` | `NEONDOJO_NATIVE_ESTIMATE=1` | GNUbg; may run native benchmarks |
 | `e2e/benchmark-native.spec.ts` | `NEONDOJO_NATIVE_BENCHMARK=1` | GNUbg with embedded Python for play-turn latency |
 | `e2e/play-native.spec.ts` | `NEONDOJO_NATIVE_PLAY_TEST=1` | GNUbg with embedded Python |
-| `e2e/play-full-match.spec.ts` | `NEONDOJO_FULL_MATCH_TEST=1` | GNUbg with embedded Python, see [Native play tests](#native-play-tests) |
+| `e2e/play-full-match.spec.ts` | `NEONDOJO_FULL_MATCH_TEST=1` and `GNUBG_BIN=/absolute/path/to/gnubg` | GNUbg with embedded Python, see [Native play tests](#native-play-tests) |
 | `e2e/play-feedback-native.spec.ts` | `NEONDOJO_FEEDBACK_NATIVE_TEST=1` | GNUbg with embedded Python, see [Native feedback tests](#native-feedback-tests) |
 | `e2e/profile-native.spec.ts` | `NEONDOJO_PROFILE_NATIVE=1` | GNUbg with embedded Python for play sessions |
 | `e2e/open-sage-native.spec.ts` | `NEONDOJO_SAGE_PYTHON=/path/to/venv/bin/python` | NeonGammon and GNUbg, see [Local NeonGammon setup](../open-sage-local.md) |
+| `e2e/play-sage-difficulty.spec.ts` | `NEONDOJO_SAGE_PYTHON=/path/to/venv/bin/python` | NeonGammon 3.1.0 and GNUbg with embedded Python, see [Local NeonGammon setup](../open-sage-local.md) |
 | `e2e/anki-import.spec.ts` | `NEONDOJO_ANKI_PYTHON=/path/to/python` | Python with the Anki package |
 | `e2e/user-guide-screenshots.spec.ts` | `NEONDOJO_GUIDE_SCREENSHOTS=1` and `NEONDOJO_SAGE_PYTHON` | GNUbg with embedded Python, NeonGammon and `cwebp`, see [User guide screenshots](#user-guide-screenshots) |
+
+Individual archive-dependent checks in `e2e/themes-languages.spec.ts`, `e2e/ui-themes.spec.ts`, and `e2e/play-checker-colour.spec.ts` also skip automatically when the corresponding local BGBlitz board archives are not installed.
 
 ### User guide screenshots
 
@@ -174,7 +177,7 @@ GNUBG_BIN=/absolute/path/to/gnubg \
 cargo test -p neondojo --test integration play:: -- --ignored --skip open_sage_play::
 ```
 
-The opt-in browser suite uses Playwright's test backend, native GNUbg with seeded randomness, and browser clicks for play actions. Its two full three-point matches use white/bear off right and black/bear off left. They check the hover destination and move for each die, swap dice, use the roll and cube controls, and reload the saved match. Three additional scenarios verify opening rolls and ties across reloads. Three cube scenarios verify real bot offers, taking or passing, and starting the next game. Native SGF evaluations verify 0-, 1-, and 2-ply play after resuming and changing games.
+The opt-in browser suite uses Playwright's test backend, native GNUbg with seeded randomness, and browser clicks for play actions. Its two full three-point matches use white/bear off right and black/bear off left. They check the hover destination and move for each die, swap dice, use the roll and cube controls, and reload the saved match. Three additional scenarios verify opening rolls and ties across reloads. Three cube scenarios verify real bot offers, taking or passing, and starting the next game. Native SGF evaluations verify 1-, 2-, and 3-ply play (GNUbg's native `0C`, `1C`, and `2C` markers in SGF) after resuming and changing games.
 
 ```sh
 cd web

@@ -76,6 +76,13 @@ Strength matches use NeonDojo's verified 3-ply checker search and the wheel
 policy's 2-ply cube decisions. A saved named-preset match pinned to 3.0.0
 requires the earlier NeonDojo build with the bundled policy. [Opponent presets](reference/playing.md#neongammon-difficulty-presets)
 
+When **2-ply + Top-2 (10 mEq)** is enabled (`play_top_two` with NeonGammon at
+2-ply, without a named preset), the sidecar runs 2-ply first and, in contact
+positions where the two leading checker plays are at most 0.010 equity apart,
+re-evaluates both candidates at 3-ply (using a 2-worker pool with `n_threads=1`
+per candidate) and plays the better one. Races, wider equity gaps, and all cube
+decisions stay at 2-ply. [Playing against an engine](reference/playing.md#playing-against-an-engine)
+
 The application process stays fully local. The sidecar has no download path; installation and updates are explicitly separate steps. Unknown or modified models, a missing Python environment and engine crashes produce errors, not substitute evaluations. NeonDojo never falls back to another engine on its own.
 
 ### Five-point preset PR benchmark
@@ -121,10 +128,10 @@ NEONDOJO_SAGE_PYTHON=/path/to/venv/bin/python cargo test -p neondojo --test inte
 NEONDOJO_SAGE_PYTHON=/path/to/venv/bin/python cargo test -p neondojo sage_executes_reference_checker_turns_using_gnubg_rules --lib -- --ignored --test-threads=1
 OPEN_SAGE_TEST_PYTHON=/path/to/venv/bin/python cargo test -p neondojo --test integration open_sage_settings:: -- --ignored --test-threads=1
 OPEN_SAGE_TEST_PYTHON=/path/to/venv/bin/python cargo test -p neondojo --test integration open_sage_play:: -- --ignored --test-threads=1
-NEONDOJO_SAGE_PYTHON=/path/to/venv/bin/python npm run test:e2e --prefix web -- e2e/open-sage-native.spec.ts
+NEONDOJO_SAGE_PYTHON=/path/to/venv/bin/python npm run test:e2e --prefix web -- e2e/open-sage-native.spec.ts e2e/play-sage-difficulty.spec.ts
 ```
 
-Run these groups one at a time and with `--test-threads=1`. A combined run of `cargo test --workspace -- --include-ignored` with the Sage variables set makes the process tests in `engines::process` fail, because they share the global worker with the real engine tests. The browser test skips itself without `NEONDOJO_SAGE_PYTHON` and uses the Playwright harness's own database and backend ([Browser tests](development/testing.md#browser-tests)).
+Run these groups one at a time and with `--test-threads=1`. A combined run of `cargo test --workspace -- --include-ignored` with the Sage variables set makes the process tests in `engines::process` fail, because they share the global worker with the real engine tests. The browser specs skip themselves without `NEONDOJO_SAGE_PYTHON` and use the Playwright harness's own database and backend ([Browser tests](development/testing.md#browser-tests)); `e2e/play-sage-difficulty.spec.ts` checks the 3.1.0 opponent presets.
 
 The probe and the worker reject earlier `bgsage` builds already at the version check; no test needs the original wheel or an earlier fork.
 
@@ -176,7 +183,7 @@ The probe does not modify application tables, user games or engine sources.
 
 ### Application adapter and numerical limits
 
-The Rust adapter bundles a local JSON sidecar. One worker for playing and one for all other requests are reused per active, immutable profile. Each slot has its own lock: a bot move does not wait for a running analysis block, and while both compute, the playing and analysis threads share the CPU. Analysis blocks, other requests, installation checks and restarts stay serial on the general slot. All slots are additionally under the shared engine access guard, through which benchmarks exclude all other engine work. The deadline of a single request includes waiting for its worker. Package, RECORD and model identity are checked before and after each single request; complete game analyses use the atomic blocks described below. Profile changes and explicit benchmark restarts terminate and reap the previous process. Timeouts, cancellation, malformed protocol frames and invalid typed results discard the worker.
+The Rust adapter bundles a local JSON sidecar ([`worker.py`](../backend/src/engines/worker.py)). One worker for playing and one for all other requests are reused per active, immutable profile, each behind its own lock. Both workers reserve their configured threads for each evaluation from one shared host CPU budget (sized to logical CPUs): a game analysis retains the general worker for the whole game, but reserves threads per exchange rather than across the entire block, so when analysis and playing threads together exceed host capacity, a waiting play move can run between analysis evaluations. A profile saved on a larger host clamps its reservation to local capacity and runs alone. Analysis blocks, other requests, installation checks and restarts stay serial on the general slot. All slots are additionally under the shared engine access guard, through which benchmarks exclude all other engine work. The deadline of a single request includes waiting for its worker, its thread reservation, and shared engine access (such as an exclusive benchmark); a live NeonGammon play action also enforces a 180-second deadline across the turn, including waiting for engine access. Package, RECORD and model identity are checked before and after each single request; complete game analyses use the atomic blocks described below. Profile changes and explicit benchmark restarts terminate and reap the previous process. Timeouts, cancellation, malformed protocol frames and invalid typed results discard the worker.
 
 In the full WC2014 reference game 5, the float32 computation of a bear-off variation returned `1.0000000074505806` as the win probability and `-7.450580596923828e-09` as the probability of losing a gammon/backgammon. The adapter clamps only such finite deviations of up to `1e-7` (smaller than a float32 epsilon) from the endpoints 0/1 to the respective endpoint. Larger deviations, non-finite values and inconsistent nested probabilities remain errors. Equities are not changed by this. The independent diagnostic probe keeps its strict check by default.
 
@@ -202,7 +209,7 @@ An analysis or installation check does not displace the playing process. Changes
 
 ### 3- and 4-ply analysis and duels
 
-In the options of **Analyze game** (Analysis header) or **Analyze entire match**, choose NeonGammon as the **Analysis engine** and 3- or 4-ply as the **Analysis depth**. Each job checks and stores the engine, depth and model fingerprint. 3- and 4-ply are also allowed as a saved analysis default and for engine duels (formerly migration 0047, now part of the schema baseline). The sidecar controls the thread limit, the installation identity and the evaluation depth reported by NeonGammon. The results apply to the requested profile and the stored model fingerprint. The manual live playing depths are 1- and 2-ply. The Full Strength preset pins 3-ply for checker moves in new matches.
+In the options of **Analyze game** (Analysis header) or **Analyze entire match**, choose NeonGammon as the **Analysis engine** and 3- or 4-ply as the **Analysis depth**. Each job checks and stores the engine, depth and model fingerprint. 3- and 4-ply are also allowed as a saved analysis default and for engine duels (formerly migration 0047, now part of the schema baseline). The sidecar controls the thread limit, the installation identity and the evaluation depth reported by NeonGammon. The results apply to the requested profile and the stored model fingerprint. The manual live playing depths are 1- and 2-ply, plus **2-ply + Top-2 (10 mEq)** for selective 3-ply checker rescoring in close contact positions. The Full Strength preset pins 3-ply for checker moves and 2-ply for cube decisions in new matches.
 
 On November 13, 2026, the fork installed at the time, `5b146c7d86fa965f2185e3871f3c56df030fd76f`, was checked for both higher levels with a real checker and cube evaluation in a 5-point context. For 3.0.0, the browser test with 4-ply for one game and for the whole match passed on November 20, 2026.
 

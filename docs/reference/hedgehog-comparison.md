@@ -1,6 +1,6 @@
 # HedgeHog comparison
 
-This comparison records six observations from the HedgeHog review, written on November 13, 2026. The NeonDojo column was last checked against the implementation on November 20, 2026. It covers features and workflow. The quality of HedgeHog's written explanations was outside the review.
+This comparison records six observations from the HedgeHog review, written on November 13, 2026. The NeonDojo column was last checked against the implementation on November 21, 2026. It covers features and workflow. The quality of HedgeHog's written explanations was outside the review.
 
 | Area | NeonDojo | HedgeHog reference |
 | --- | --- | --- |

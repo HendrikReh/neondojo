@@ -8,9 +8,9 @@ The header lists **Playing**, **Analysis**, **Study**, **Positions**, **Match da
 
 Arrow keys and Home/End also navigate the detail tabs. The app restores the last match, game, and position locally. If that match or position no longer exists, the app forgets it and starts from the empty workspace without an error. Switching tabs preserves filters, note drafts, and SSE subscriptions. A submitted job continues to be tracked if you change the selected game or position while the request is pending.
 
-The detail tabs are **Checker**, **Statistics**, **Cube**, **Notes**, and **Study cards**. For a saved position whose source match was deleted, **Statistics** and **Cube** are hidden. The desktop **Checker** places move history on the left and position evaluation beside the board. Long lists scroll independently and keep the current move visible. The evaluation pane offers **Candidate moves**, **Compare moves**, **Dice equity**, and **Game rolls** (**Match rolls** when no game is selected). **Game rolls** loads the frequencies of recorded rolls when you open the tab. The board and move history are ready as soon as the game's positions load.
+The detail tabs are **Checker**, **Statistics**, **Cube**, **Notes**, and **Study cards**. For a saved position whose source match was deleted, **Statistics** and **Cube** are hidden. The desktop **Checker** places move history on the left and position evaluation beside the board. Long lists scroll independently and keep the current move visible. The evaluation pane offers **Candidate moves**, **Compare moves**, **Dice equity**, and **Game rolls** (**Match rolls** when no game is selected). **Game rolls** loads the frequencies of recorded rolls on demand (`GET /api/matches/{id}/dice?game_no=…`) when you open the tab — these are observed roll counts, not an equity analysis — refreshes if the match source revision changes, and offers a retry button if loading fails. The board and move history are ready as soon as the game's positions load.
 
-The header shows the players, match ID and length, result, date, event, and PR per player, plus the round and location when saved. Date and event come from saved metadata and show `n/a` when unavailable. PR comes from **Displayed analysis** when that is a complete native whole-match analysis and shows `n/a` otherwise. PR is shown with one decimal throughout the app.
+The header shows the players, match ID and length, result, date, event, and PR per player, plus the round, location, and saved **Import notes** count when present. Date and event come from saved metadata and show `n/a` when unavailable. PR comes from **Displayed analysis** when that is a complete native whole-match analysis and shows `n/a` otherwise. PR is shown with one decimal throughout the app.
 
 In **Checker → Dice equity**, NeonDojo checks the selected position for a saved
 result or a queued or running job from the active analysis engine. Results from
@@ -18,8 +18,10 @@ another engine are not reused. If none exists, it starts a calculation with
 the engine and search depth from the active analysis profile. Selecting another
 position does the same while **Dice equity** is visible. After a submission or
 engine failure, select **Dice equity** again to retry. GNUbg evaluates all 21
-distinct rolls in one run and reports progress roll by roll; NeonGammon evaluates
-them one at a time. A roll without a legal play is evaluated as a forced pass.
+distinct rolls in one run and reports progress roll by roll, confirming the
+final roll only after validating the full batch so unexpected output markers
+cannot mark the run finished early; NeonGammon evaluates rolls one at a time. A
+roll without a legal play is evaluated as a forced pass.
 
 The grid shows the best play's equity for each of the 36 rolls. Cells at or
 above the weighted mean **Ø** use the success color, cells below it the
@@ -31,11 +33,12 @@ returns to the recorded move. Selecting another position starts again on its
 roll.
 
 **Delete dice equity** beside **Ø** permanently deletes the displayed
-calculation after a confirmation. A queued or running calculation cannot be
-deleted. If an older calculation of the same engine remains, the grid shows it.
-Otherwise the tab stays empty instead of recalculating; select **Dice equity**
-again or use **Recalculate dice equity …** to calculate it. Checker analyses are
-deleted in **Displayed analysis** instead.
+calculation (`DELETE /api/positions/{id}/jobs/{job_id}`) after a confirmation.
+A queued or running calculation cannot be deleted. If an older calculation of
+the same engine remains, the grid shows it. Otherwise the tab stays empty
+instead of recalculating; select **Dice equity** again or use
+**Recalculate dice equity …** to calculate it. Checker analyses are deleted in
+**Displayed analysis** instead.
 
 The position pane shows each result with its source and recorded depth. To
 choose a depth and calculate again, use **Recalculate position …** or
@@ -43,7 +46,7 @@ choose a depth and calculate again, use **Recalculate position …** or
 
 **Analyze game** stays visible in the Analysis header and starts the selected
 game. Its options include the engine, depth and time estimate. Start a
-whole-match analysis with **Analyze selected matches** in the selection
+whole-match analysis with **Analyze selected matches …** in the selection
 toolbar of the **Match database**. For one match, the dialog shows the engine, depth and estimate before you
 confirm. In Analysis, **Displayed analysis** determines which saved results
 the decision reviews and **Statistics** show. Running jobs stay
@@ -191,7 +194,7 @@ Text tabs use the active theme's accent and a 2 px underline. The same pattern c
 
 **Displayed analysis** is one persistent choice per match, shared by checker/cube review, move colors, statistics and new learning cards. The catalog lists all retained GNUbg, NeonGammon and imported results, including source, scope, depth, time and coverage. **Automatic** prefers a complete current whole-match analysis, then meaningful imported results, then a completed scoped analysis; time and stable identity break ties, never cross-engine ply counts. An explicit choice remains selected across reloads and calculation-profile changes. Missing positions in that analysis remain unavailable; no other result fills the gap. **Load more analyses** exposes older history. If an import contains several records for one decision, the shared projection prefers real values over known placeholders and then the first record in original source order. Original records remain intact and accessible through the source-analysis endpoints and original-file export. New calculations use the configured engine and depth, independently of this result selection. The expandable **Opening book** section is a separate reference. Imported XG, native GNUbg SGF, and available BGBlitz analysis stay in their own records, with the original depth or profile label, method, candidates, cube responses, raw values, equity units, and engine version where known. Missing analysis and unknown engines or units stay unavailable. GNUbg match-winning chances retain their original units. Analysis jobs and independent match copies preserve source results. Older imports can reconstruct analysis once from the stored original file. Source evaluations for recorded double, take, and drop actions also appear in **Cube and move notes**. Imported cube evaluations show whose perspective the values use when the source identifies the player. This includes positions where the player on roll did not double.
 
-When you step through a game, the move colors and match statistics carry over while the board and candidates follow the current move. Changing games loads the new game's move colors. Changing the displayed analysis, replacing its source, or completing another analysis checkpoint refreshes the affected results.
+When you step through a game, the move colors and match statistics carry over while the board and candidates follow the current move. Changing games loads the new game's move colors. Changing the displayed analysis, replacing its source (a new source revision), or completing another analysis checkpoint refreshes the affected results; **Load more analyses** ignores stale pages if the source revision changes mid-request.
 
 Manage books under **Settings → Analysis → Opening books** with **Manage opening books**. Select **Automatic** to compare available books, choose a provider directly, or select **Off**. The book dialog saves the provider and paths with revision checks. Apply or discard any Settings draft before opening it. Book paths are on the backend computer. The analysis inspector shows the selected source, engine, and depth for the current position. Book results remain an optional reference alongside the displayed analysis and do not contribute to match PR.
 
@@ -216,7 +219,7 @@ NeonDojo reads the breakdown from stored decisions for fully checkpointed games,
 
 ## Tags and comments
 
-Open **Analysis → Notes** and select **Match**, **Game** or **Position** to edit its tags and comment. **Cube and move notes** also opens game notes and recorded actions such as doubles, takes, drops and accepted resignations, with the board immediately before each action. A pending double displays the offered cube value in the center. Games without checker moves can have notes too. Checker move notes use the same annotation as the corresponding position.
+Open **Analysis → Notes** and select **Match**, **Game** or **Position** to edit its tags and comment. **Cube and move notes** also opens game notes and recorded actions such as doubles, takes, drops and accepted resignations, with the board immediately before each action. A pending double displays the offered cube value in the center. Games without checker moves can have notes too. Checker move notes use the same annotation as the corresponding position. When a match has saved import warnings (such as a MAT game ended before an illegal move or a header score mismatch), they appear read-only as **Import notes** above the match or game comment; see [Import formats](library.md#import-formats).
 
 Press Enter or **Add tag** to add each tag. **Save notes** writes to PostgreSQL. Drafts survive navigation and dialog changes during the current session. If another edit has been saved, NeonDojo shows a version conflict and keeps the draft. Tags are normalized and limited to 30 per note and 64 characters each. Comments are displayed as text and can contain up to 20,000 characters.
 
@@ -246,13 +249,13 @@ If a game outlasts its estimate, the UI shows **Recalculating time remaining …
 
 ## Analysis jobs
 
-GNUbg supports 1–5 ply for position, game and match analysis. The default analysis depth is 3-ply. A job captures its engine configuration and depth. Identical active jobs are deduplicated by scope, depth and engine configuration. Each backend runs one worker, and PostgreSQL `FOR UPDATE SKIP LOCKED` keeps workers from claiming the same job.
+GNUbg supports 1–5 ply and NeonGammon supports 1–4 ply for position, game and match analysis. The default analysis depth is 3-ply. A job captures its engine configuration and depth. Identical active jobs are deduplicated by scope, depth and engine configuration. Each backend runs one worker, and PostgreSQL `FOR UPDATE SKIP LOCKED` keeps workers from claiming the same job.
 
-Jobs move through `queued → running → completed|failed`. The worker starts queued jobs in creation order up to the configured number of simultaneous analysis jobs and runs each in its own task. A queued benchmark takes the next free slot, and no new job starts until it finishes. GNUbg has a 90-second process limit for position analysis and MAT conversion, 90 seconds per roll for a dice equity run, and 600 seconds for a game analysis. The worker's 120-second lease renews every 20 seconds. After expiration, the job can be claimed again, up to three attempts in total. A regular engine error marks the job `failed` and the UI can submit a new job.
+Jobs move through `queued → running → completed|failed`. The worker starts queued jobs in creation order up to the configured number of simultaneous analysis jobs (`1–8`, default `1`) and runs each in its own task. NeonGammon analyses share one general sidecar process and run one at a time, while GNUbg jobs can use any remaining slots. NeonGammon's analysis and play workers also share a process-wide CPU thread budget equal to the host's available CPU threads, reserving threads per evaluation during a game analysis so a waiting play turn can run between evaluations. A queued benchmark takes the next free slot, and no new job starts until it finishes. GNUbg has a 90-second process limit for position analysis and MAT conversion, 90 seconds per roll for a dice equity run, and 600 seconds for a game analysis. NeonGammon has a 180-second limit per evaluation, 600 seconds per game analysis, and 120 seconds for batch initialization or final integrity verification. The worker's 120-second lease renews every 20 seconds by default. After expiration, the job can be claimed again, up to three attempts in total. A regular engine error marks the job `failed` and the UI can submit a new job.
 
 SSE event types are `queued`, `running`, `progress`, `completed` and `failed`. The `id:` field is a durable event number and `data:` contains `JobProgress` JSON. `Last-Event-ID` resumes after that event. With no header, the server replays the event history. A shared PostgreSQL listener wakes streams after a commit. The server also checks for missed events every ten seconds during inactivity and sends keepalives until the job ends. SIGINT and SIGTERM close streams and terminate running child processes. On restart, the worker can reclaim expired jobs. The browser discovers saved position jobs from PostgreSQL and reconciles SSE with polling. It also loads match and game jobs after a browser reload. Job monitoring does not choose the displayed analysis.
 
-Match analysis checkpoints decisions, partial statistics and SSE progress for each completed game in one transaction. `Job` and SSE report `completed_games` and `total_games`, so the percentage advances when a game finishes. After an expired lease, a replacement worker resumes at the next incomplete game. An expired worker cannot write checkpoints or results. Completed games and their reviewed decisions remain accessible after a later game fails. Submitting a new job analyzes the requested scope from the beginning.
+Match analysis validates and encodes a completed game's decisions before locking the job lease row, then checkpoints decisions in batches of 500 together with partial statistics and SSE progress in one transaction so lease heartbeats are not blocked by checkpoint preparation. `Job` and SSE report `completed_games` and `total_games`, so the percentage advances when a game finishes. After an expired lease, a replacement worker resumes at the next incomplete game. An expired worker cannot write checkpoints or results. Completed games and their reviewed decisions remain accessible after a later game fails. Submitting a new job analyzes the requested scope from the beginning.
 
 New GNUbg and NeonGammon game and match analyses save the ranked checker candidates returned by the engine, including the played move, equity, outcome probabilities, and actual evaluation depth. The **Candidate moves** table displays these details for the selected saved result. Recalculate an older game or match analysis to obtain candidates if it only saved the played and best moves. To remove a saved analysis, select it under **Displayed analysis**, choose **Delete analysis**, and confirm the identified result. This keeps the match and its source file available.
 

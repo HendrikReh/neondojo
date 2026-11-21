@@ -20,13 +20,13 @@ NeonDojo is a local backgammon application for importing matches, finding positi
 
 ## Features
 
-- **Match library.** Import MAT (also as plain-text `.txt` transcripts), XG, SGF, BGF and OGXM files one by one or as a whole folder. Search by player or file name, find duplicate matches, and export the original file, SGF or XG. [Match library](docs/reference/library.md#match-databases)
-- **Positions.** Find an exact GNUbg position ID in the library, save positions and searches, and practice similar positions. [Saved positions](docs/reference/library.md#saved-positions-and-searches)
+- **Match library.** Import MAT (also as plain-text `.txt` transcripts, preserving saved import notes for transcript irregularities), XG, SGF, BGF and OGXM files one by one or as a whole folder. Search by player, file name, metadata, notes or exact Position ID, find duplicate matches, and export the original file, SGF or XG. [Match library](docs/reference/library.md#match-databases)
+- **Positions.** Find an exact GNUbg position ID in the library, search all analyzed decisions, save positions and searches, and practice similar positions. [Saved positions](docs/reference/library.md#saved-positions-and-searches)
 - **Analysis.** Analyze positions, games and matches as persistent background jobs with GNUbg up to 5-ply or NeonGammon up to 4-ply. Imported analyses stay separate from local ones. Review candidates and cube decisions, dice equity, error statistics, game plans and opening books. [Analysis](docs/reference/analysis.md#analysis-workspace)
-- **Playing.** Play matches against GNUbg or NeonGammon in Competition, Training, Coach or Tutor feedback mode. [Playing](docs/reference/playing.md#playing-against-an-engine)
+- **Playing.** Play point matches and money games against GNUbg or NeonGammon — including NeonGammon difficulty presets and 2-ply + Top-2 (10 mEq) — in Competition, Training, Coach or Tutor feedback mode. [Playing](docs/reference/playing.md#playing-against-an-engine)
 - **Study.** Reports, optional AI assessment, recurring mistakes, and flashcards scheduled with FSRS that export to and import from Anki. [Study](docs/reference/study.md#study)
 - **Players.** A player database with profiles, merging and virtual player profiles. [Player database](docs/reference/library.md#player-database)
-- **Extras.** Engine benchmark, engine duels and database backup. [Extras](docs/reference/extras.md)
+- **Extras.** Version information, engine benchmark, engine duels and database backup. [Extras](docs/reference/extras.md)
 
 [User guide](docs/user-guide/README.md) · [Features](#features) · [Quick start](#quick-start) · [Restart on port 8787](#restart-neondojo-locally-on-port-8787) · [Analyze a match](#analyze-your-first-match) · [Documentation](#documentation) · [API](docs/development/api.md) · [Verification](docs/development/testing.md) · [Repository guidance](AGENTS.md) · [Changelog](CHANGELOG.md)
 
@@ -39,8 +39,8 @@ NeonDojo is a local backgammon application for importing matches, finding positi
 - Docker Compose for the bundled PostgreSQL 17 database, or an existing PostgreSQL server
 - Python 3.10 or later for the frontend build and development scripts
 - A local GNUbg installation with its neural network weights. Playing also requires GNUbg's embedded Python module. Analysis and playing were tested with GNUbg 1.08.003 on macOS. Earlier analysis checks used 1.05.002.
-- Optional: NeonGammon 3.1.0 as a second engine. See [Local NeonGammon setup](docs/open-sage-local.md).
-- The BGBlitz theme archives listed in `shared/configuration-options.json`, copied into `themes/`. They are local third-party files and not part of the repository. Without them, `npm run build` and `npm run dev` stop and name the missing ZIP files. See [Board artwork](docs/reference/settings.md#board-artwork) and [Board theme formats](themes/README.md).
+- Optional: NeonGammon 3.1.0 as a second engine, running in a locked native ARM64 Python 3.12 environment on macOS 14 or later (3.0.0 remains supported for analysis and ordinary play without named difficulty presets). See [Local NeonGammon setup](docs/open-sage-local.md).
+- The BGBlitz theme archives listed in `shared/configuration-options.json`, copied into `themes/`. They are local third-party files and not part of the repository. Without them, `npm run build`, `npm run dev` and `npm test` stop and name the missing ZIP files; set `NEONDOJO_ALLOW_MISSING_THEMES=1` only when intentionally removing those themes from the catalog. See [Board artwork](docs/reference/settings.md#board-artwork) and [Board theme formats](themes/README.md).
 
 ### Database and engine
 
@@ -69,6 +69,8 @@ The backend reads these settings from its environment or from `.env` in its work
 | `NEONDOJO_ANKI_PYTHON` | `python3` | Python with the Anki package for importing third-party Anki decks. See [Flashcards and Anki](docs/reference/study.md#flashcards-and-anki). |
 | `NEONDOJO_ANKI_CONNECT_KEY` | unset | API key for a local AnkiConnect add-on that requires one |
 | `OPENAI_API_KEY`, `NEONDOJO_ASSESSMENT_MODEL` | unset, `gpt-6.1-terra` | Optional AI assessment of saved reports. See [AI assessment](docs/reference/study.md#ai-assessment). |
+
+Docker Compose and the frontend tools also recognize three variables: `NEONDOJO_DB_PORT` (default `54329`, host port in [compose.yaml](compose.yaml)), `NEONDOJO_API_URL` (default `http://127.0.0.1:8787`, Vite `/api` proxy target), and `NEONDOJO_ALLOW_MISSING_THEMES` (default unset; set to `1` only to drop missing BGBlitz archives from `shared/configuration-options.json` during theme preparation).
 
 ### Local use with the built frontend
 
@@ -129,14 +131,14 @@ Open <http://127.0.0.1:5173>. Vite forwards `/api` to `http://127.0.0.1:8787` by
 
 ## Analyze your first match
 
-1. In **Match database**, choose **Import match** and open [tutorial.mat](backend/tests/fixtures/tutorial.mat) or the reference match [WC2014.xg](backend/tests/fixtures/WC2014.xg). **Import folder** imports every supported file of a folder and its subfolders. You can also drop files or a folder on the welcome screen. Search by player or file name to find an imported match. Use the numbered navigation to browse results or jump to the first or last page.
+1. In **Match database**, choose **Import match** and open [tutorial.mat](backend/tests/fixtures/tutorial.mat) or the reference match [WC2014.xg](backend/tests/fixtures/WC2014.xg). **Import folder** imports every supported file of a folder and its subfolders. You can also drop files or a folder on the welcome screen. MAT and XG transcripts with recorded irregularities still import with saved **Import notes**. Search by player or file name to find an imported match, or use **Duplicates** to group matches with the same played record. Use the numbered navigation to browse results or jump to the first or last page.
 2. In **Analysis**, use **Select game** or its adjacent arrows to choose a game. The selector shows the game number, starting score, move count, and Crawford status when applicable. The move history stays within the selected game and loads more moves as needed.
 3. Select a move. The board shows the decision position before the recorded play, together with the score and doubling cube. Point numbering and notation follow the player on roll. Pip counts include checkers on the bar.
-4. In the Analysis header, open **Analysis options → Recalculate position …**, choose a depth, then select **Analyze position** to queue a persistent job. The default is 3-ply. Depths follow [one ply convention](docs/reference/settings.md#ply-convention) for both engines. The result includes up to five candidate moves, cubeful equity, and win probabilities.
+4. In the Analysis header, open **Analysis options → Recalculate position …**, choose a depth, then select **Analyze position** to queue a persistent job. The default is 3-ply. Depths follow [one ply convention](docs/reference/settings.md#ply-convention) for both engines. The result includes ranked candidate moves, cubeful equity, and win probabilities.
 5. Use **Analyze game** in the Analysis header to evaluate the selected game. In the **Match database**, select one or more matches and use **Analyze selected matches …** above the list. Change the engine or depth in **Analysis options** for a game, or in the confirmation dialog for the selected matches. The engine starts with the profile's selection. Game and match analysis go up to 5-ply with GNUbg and 4-ply with NeonGammon. **Displayed analysis** selects a saved result from the shared catalog. Games with no checker moves, including cube-only games, can also be selected and analyzed.
-6. Open **Checker → Dice equity** to see saved values or calculate all 21 unordered dice pairs automatically if the position has no result. The matrix represents 36 equally likely ordered rolls, with weight 1 for doubles and 2 for other pairs. The weighted mean gives the expected equity. When a player has no legal play for a roll, GNUbg evaluates the forced pass. **Game rolls** shows the rolls recorded in the selected game.
+6. Open **Checker → Dice equity** to see saved values or calculate all 21 unordered dice pairs automatically if the position has no result. The matrix represents 36 equally likely ordered rolls, with weight 1 for doubles and 2 for other pairs. The weighted mean gives the expected equity. When a player has no legal play for a roll, the active engine evaluates it as a forced pass. **Game rolls** loads the recorded roll frequencies for the selected game on demand.
 
-**Match database → Find a position in the library** searches for an exact GNUbg position ID, which represents the checker arrangement from the perspective of the player on roll. Analysis also uses the GNUbg match ID for context such as the score, cube, and dice. Each occurrence in the library has its own row with the database, game, and move. Opening a row selects that exact occurrence, even when the same position appears more than once in a match. To find related positions, save the position and choose **Find similar positions** in its preview under **Positions**. The list of similar positions shows each occurrence's score as away values, the cube, the played move and, where the match has a displayed native analysis, the move's equity loss.
+**Match database → Position ID** (or **Search this position** above the board in **Analysis**) searches for an exact GNUbg position ID, which represents the checker arrangement from the perspective of the player on roll. Analysis also uses the GNUbg match ID for context such as the score, cube, and dice. Each occurrence in the library has its own row with the database, game, and move. Opening a row selects that exact occurrence, even when the same position appears more than once in a match. To find related positions, save the position and choose **Find similar positions** in its preview under **Positions**. The list of similar positions shows each occurrence's score as away values, the cube, the played move and, where the match has a displayed native analysis, the move's equity loss.
 
 ## Documentation
 
@@ -144,8 +146,8 @@ Open <http://127.0.0.1:5173>. Vite forwards `/api` to `http://127.0.0.1:8787` by
 | --- | --- | --- |
 | Players | [User guide](docs/user-guide/README.md) | Guided tour of every workspace, learning paths by level, keyboard reference, troubleshooting and glossary |
 | Detailed behavior | [Analysis](docs/reference/analysis.md) | Analysis workspace, candidate and cube review, displayed and imported analysis, opening books, game plans, error statistics, notes, time estimates and analysis jobs |
-| | [Match library, positions and players](docs/reference/library.md) | Match databases, import formats, saved positions and searches, similar positions and their practice, player database |
-| | [Playing](docs/reference/playing.md) | Matches against GNUbg or NeonGammon, resigning, game results, feedback modes and the play API |
+| | [Match library, positions and players](docs/reference/library.md) | Match databases, duplicate match finder, import formats and notes, saved positions, analyzed-decision search, similar positions and their practice, player database and virtual player profiles |
+| | [Playing](docs/reference/playing.md) | Matches against GNUbg or NeonGammon, NeonGammon difficulty presets and 2-ply + Top-2, resigning, game results, feedback modes and the play API |
 | | [Study](docs/reference/study.md) | Overview, reports, AI assessment, recurring mistakes, flashcards and Anki |
 | | [Settings, engines and profiles](docs/reference/settings.md) | Settings, engine installations and threads, configuration profiles, themes and languages |
 | | [Extras](docs/reference/extras.md) | Version information, engine benchmark, engine duels and database backup |
@@ -153,7 +155,7 @@ Open <http://127.0.0.1:5173>. Vite forwards `/api` to `http://127.0.0.1:8787` by
 | Developers | [API reference](docs/development/api.md) | Common REST endpoints, other endpoint groups and OpenAPI generation |
 | | [Verification and tests](docs/development/testing.md) | Quality checks, PostgreSQL and GNUbg integration tests, import corpus, browser tests and native play tests |
 | | [Architecture and data](docs/development/architecture.md) | Repository layout, schema baseline, storage of matches and positions, private demo data |
-| | [UI navigation](docs/ui-navigation.md) and [typography](docs/typography.md) | Text navigation, keyboard operation, type scale and tokens for interface changes |
+| | [UI navigation](docs/ui-navigation.md), [typography](docs/typography.md) and [action icons](docs/design/action-icons-proposal.md) | Text navigation, keyboard operation, type scale, tokens and Lucide action icons for interface changes |
 | | [Local NeonGammon setup](docs/open-sage-local.md) | Installing and checking NeonGammon 3.1.0, measurements and limits |
 | | [Engine duel CPU budget](docs/engine-duel-cpu-budget.md) | Concept for comparing engines with the same computing budget |
 | | [Import corpus results](docs/import-corpus-results.md) | Results of importing the local match corpus |

@@ -130,14 +130,17 @@ flowchart LR
 The **New match** dialog opens over the board. Your current match stays visible behind it.
 
 1. Check **Your name** and choose the **Bot engine** and its **Playing strength**. These start from your settings and apply only to this match.
+   - With **NeonGammon** (`3.1.0`), **Playing strength** offers four **Difficulty presets** — **Beginner**, **Casual**, **Intermediate**, and **Full Strength** (3-ply checker search / 2-ply cube decisions; for 5-point matches the menu shows their calibrated approximate PRs: ~22, ~16.2, ~8.1, and ~1.0 PR) — alongside fixed depths (`1-ply`, `2-ply`) and **2-ply + Top-2 (10 mEq)**. In **2-ply + Top-2**, NeonGammon re-evaluates the two leading checker plays at 3-ply in contact positions when they are within 0.010 equity at 2-ply, while other checker moves and all cube decisions stay at 2-ply. Switching **Bot engine** to NeonGammon for a match starts at `2-ply`.
 2. Choose **Your checkers**: **White** or **Black**. Your checkers are always shown at the bottom of the board.
 3. Choose the **Match length**: a **Money game** or a match of 1, 3, 5, 7, 9, 11, 15, 21 or 25 points.
 4. Choose a **Play mode**. The modes are described in the next section.
 5. Select **Start match**.
 
-The line above the button shows which engine analyzes your decisions. Select the gear button beside it to change the saved engine defaults in **Settings → Playing**. A match keeps the engine settings it was started with. Close the dialog with **Close** or Escape; without a match, **New match** above the board opens it again.
+The line above the button shows which engine analyzes your decisions and which rules engine runs the game. Select the gear button beside it to change the saved engine defaults in **Settings → Playing**. A match keeps the engine settings it was started with. Close the dialog with **Close** or Escape, or select **Back to match** (or **Resume match** if paused) when a match is open; without a match, **New match** above the board opens it again.
 
 **Paused Matches**, in the dialog or above the empty board, opens the paused sessions in the Match database. From there you can resume one.
+
+Details: [NeonGammon difficulty presets](../reference/playing.md#neongammon-difficulty-presets)
 
 ### Play modes
 
@@ -170,7 +173,7 @@ Details: [Playing feedback modes](../reference/playing.md#playing-feedback-modes
 
 ![A match in progress in Coach mode with the match bar, move history, board and action panel](images/playing-match.webp)
 
-- **Match bar** (top): score, match format, game number, the bot, analysis and rules engines, and whose turn it is. Hover over the bot engine to see its version, playing depth and bear-off direction. On the right are **Play mode**, **Resign game**, **Pause match** and the **⋯** menu with **Forfeit match**, **New match** and **Paused Matches**.
+- **Match bar** (top): score, match format, game number, the bot, analysis and rules engines, and whose turn it is. Hover over or focus the bot engine to see its version, playing strength (depth or preset) and bear-off direction. On the right are **Play mode**, **Resign game**, **Pause match** and the **⋯** menu with **Forfeit match**, **New match** and **Paused Matches**.
 - **Move history** (left): every move with notation, dice and severity colors. Select a past move to review it. An accent frame around the board and the **Return to game** button show that the board is not showing the live position. **Download SGF** exports the match at any time.
 - **Board** (center): your checkers are at the bottom. Player rows show names, points and pip counts. Pip counts are hidden in Competition mode.
 - **Action panel** (right): names the current step and shows its main button, which is **Roll dice**, **Confirm turn** or **Pass**, together with **Double**, **Hint** and **Undo step** where they apply. A disabled button explains why it is unavailable.
@@ -185,7 +188,7 @@ Details: [Playing feedback modes](../reference/playing.md#playing-feedback-modes
 **The doubling cube**
 
 - Click the cube, or select **Double** (**D**), to offer a double before you roll. When the cube lifts as you hover over it, you are allowed to double.
-- When the bot doubles, a dialog asks you to **Take** or **Pass**.
+- When the bot doubles, a dialog asks you to **Take double** or **Pass double**.
 
 **Hints:** **Hint** (**H**) opens a movable dialog with the engine's suggestions. It is not available in Competition mode. Use **Up**/**Down** to step through them, and **Initial**, **Arrows** and **Final** to preview each one on a separate board. Using a hint is recorded as a learning aid.
 
@@ -219,7 +222,7 @@ Select **Open match** to go to the Match database, select **Import match**, or d
 
 | # | Area | Purpose |
 | --- | --- | --- |
-| 1 | **Match header** | Players, match ID, length, result, date, event and PR per player, if a complete analysis exists. |
+| 1 | **Match header** | Players, match ID, length, result, date, event (plus round and venue when present), PR per player if a complete analysis exists, and the **Import notes** count if the import recorded irregularities. |
 | 2 | **Displayed analysis** | Chooses which saved analysis is shown everywhere in this match. The trash button deletes the selected analysis after confirmation. |
 | 3 | **Game selector** | Choose a game, or use the arrows for the previous and next game. Each entry shows the starting score, the number of moves and the Crawford status. |
 | 4 | **Analysis tabs** | **Checker**, **Statistics**, **Cube**, **Notes** and **Study cards**. |
@@ -282,7 +285,7 @@ If no saved result exists, NeonDojo starts the calculation automatically with th
 
 #### Game rolls
 
-**Game rolls** shows how often each roll came up in the selected game. Use it to check whether a game was decided by the dice.
+**Game rolls** shows how often each roll came up in the selected game (observed frequencies, not an equity analysis). It loads on demand when you open the tab so switching games paints the board without waiting for roll counts; if loading fails, choose **Try again**. Use it to check whether a game was decided by the dice.
 
 ![Game rolls shows the distribution of rolls in the selected game](images/analysis-rolls.webp)
 
@@ -376,7 +379,7 @@ Details: [Tags and comments](../reference/analysis.md#tags-and-comments)
 Use this tab to turn analyzed positions into flashcards.
 
 1. **Choose deck**, or create one with **Create deck**.
-2. Select **Add current position**, or set a **Minimum loss** and a **Player** and select **Add match errors** to import that player's errors from the selected game.
+2. Select **Add current position**, or set a **Minimum loss** and a **Player** and select **Add errors from game &lt;N&gt;** (or **Add match errors** when no game is selected) to import that player's errors from the selected game.
 3. **Suggest positions** proposes up to ten decisions from the whole match. Up to three of them come from mistake groups that recur for this player in other matches, and the rest are the largest losses. Choose the cards you want to keep.
 4. Optional **Topic tags** help you filter cards later. Use `::` for subtopics, for example `cube::take-point`.
 
@@ -517,9 +520,9 @@ This is your personal collection of decisions. You add positions with **Save pos
 
 This view searches **every** checker and cube decision of one player in the displayed analyses, whether or not you saved the position.
 
-1. Choose a **Player**. You can also set the database, decision type (checker or cube), error type and an equity-loss range.
+1. Choose a **Player** (**My player profile** is pre-selected automatically if configured). You can also set the database, decision type (checker or cube), error type and an equity-loss range.
 2. Select **Search decisions**. The results start with the largest loss. Select the **Loss** heading to reverse the order.
-3. Select a row, or move with the arrow keys, to preview the board and its cube context. **Open in Analysis** jumps to the decision.
+3. Select a row, or move with the arrow keys, to preview the board and its cube context. **Open in Analysis** — or **Enter** or a double-click — jumps to the decision (checker decisions in **Checker**, cube decisions in **Cube**).
 4. **Practice results** turns up to 20 errors on the current page into a practice round.
 
 > **Pro:** Use **More filters** to narrow the search to a score, for example *2-away / 4-away*, or to a cube value and owner. This lets you build a drill set for a specific match situation, such as double-match-point or post-Crawford positions.
@@ -562,7 +565,7 @@ Details: [Match databases](../reference/library.md#match-databases)
 
 Select **Import match**, or drop files or a folder on the Analysis welcome panel. Supported formats are **MAT** (Jellyfish/GNUbg, also as a `.txt` match transcript), **XG** (eXtreme Gammon), **SGF** (GNUbg), **BGF** (BGBlitz) and **OGXM** (HedgeHog). Each file may be up to 16 MiB. Each file is imported separately, and duplicates and errors are reported per file. **Import folder** in the Match database, or dropping a folder on the welcome panel, imports all supported files of the folder and its subfolders; other and hidden files are skipped, and **Stop import** ends the run after the current file. Analyses stored in the file are kept as *imported analysis* with their original depth and units.
 
-Unsupported content is rejected, for example XG1 files, edits later in an XG game, custom starting positions in BGF and OGXM files, beavers and other variants. An XG game that starts from a recorded mid-game position is imported from that position, and the import result lists it. In a MAT or `.txt` transcript, an illegal or unreadable move ends its game before that move, and a header score that contradicts the previous result is kept as recorded. The match is still imported; the import result lists each such case, and **Notes** shows them as **Import notes** above the match or game comment. A warning sign next to the PR in the match database marks these matches.
+Unsupported content is rejected, for example XG1 files, edits later in an XG game, custom starting positions in BGF and OGXM files, beavers and other variants. An XG game that starts from a recorded mid-game position is imported from that position, and the import result lists it. In a MAT or `.txt` transcript, an illegal or unreadable move ends its game before that move, and a header score that contradicts the previous result is kept as recorded. The match is still imported; the import result lists each such case, the Analysis header shows the **Import notes** count, and **Notes** shows them as **Import notes** above the match or game comment. A warning sign next to the PR in the match database marks these matches.
 
 Details: [Import formats](../reference/library.md#import-formats)
 
@@ -573,7 +576,7 @@ Details: [Import formats](../reference/library.md#import-formats)
 - **Filters** searches by player, match name, event, round, date range, tag, comment, match type, result and match points.
 - **Notes** searches tags and comments. Free text must be 3 to 200 characters. You can add an exact tag, a note type and a database.
 - **Position ID** finds every occurrence of an exact board in the library. Each occurrence gets its own row with its game and move. Click the move number to open exactly that occurrence.
-- **Duplicates** groups matches that were imported more than once, even in different formats or with different file names. **Select copies** selects all but the oldest match of each group; delete or move them with the actions above the list. Details: [Duplicate match finder](../reference/library.md#duplicate-match-finder)
+- **Duplicates** groups matches with the same played record in the selected database (or across **All databases**), even in different formats, with different file names, or with White and Black swapped. Byte-identical file groups are labeled **Identical files** (others **Same moves**). **Select copies** selects all but the oldest match (lowest ID) of each listed group, up to 100 matches; delete or move them with the actions above the list. Details: [Duplicate match finder](../reference/library.md#duplicate-match-finder)
 - Applied filters appear as chips below the search field.
 
 Click a column heading to sort ascending, and click it again to sort descending. **Columns** shows, hides and reorders columns. Drag a header edge to resize a column, and use **Reset column widths** to restore the defaults. Hover over a row to see a summary with PR, analysis profile and excerpts from the notes.
@@ -615,7 +618,7 @@ The Player database lists everyone who appears in your matches.
 
 > **Advanced:** Group your own online accounts in a virtual profile and choose it under **Settings → General → My player profile**. Your NeonDojo player (the name you play under in Playing) belongs in it too; if you start playing under a new name, add that player the same way. Your PR trend, Study, *My recurring mistakes* and *All analyzed decisions* then start with all your matches. Bot matches enter the PR only when they are finished and were played in Competition mode without learning aids.
 
-Details: [Player database](../reference/library.md#player-database)
+Details: [Player database](../reference/library.md#player-database) · [Virtual player profiles](../reference/library.md#virtual-player-profiles)
 
 ---
 
@@ -629,9 +632,9 @@ The benchmark measures how fast your computer runs the engines on a fixed refere
 
 1. Choose the **Benchmark engine**: GNUbg or NeonGammon.
 2. Choose **Match analysis** or **Play-turn latency**.
-3. Tick one or more depths and select **Start benchmark**. The depths run from lowest to highest in the background. **Cancel run** stops the run.
+3. Tick one or more depths and select **Start benchmark** (or **Measure play-turn latency**). The depths run from lowest to highest in the background. **Cancel run** stops the run.
 
-**Comparison** shows the median and range of the last three runs for each engine and depth. NeonDojo uses these results for the time estimates of analyses. While a benchmark runs, other engine work waits.
+**Comparison** shows the median and range of the last three runs for each engine and depth. NeonDojo uses these results for the time estimates of analyses. In **History**, click any column heading to sort (and click again to reverse), or use **Delete run** on finished runs (completed, failed, or cancelled) to remove them permanently after an inline confirmation; deleting a completed run removes it from time-estimate calibration. While a benchmark runs, other engine work waits.
 
 Details: [Engine benchmark](../reference/extras.md#engine-benchmark)
 
@@ -677,7 +680,7 @@ Details: [Database backup](../reference/extras.md#database-backup)
 
 ![Versions shows the NeonDojo build and the availability of GNUbg and NeonGammon](images/extras-versions.webp)
 
-**Versions** shows the NeonDojo build and the versions of GNU Backgammon and NeonGammon, and whether they are available. **Technical details** shows the full commit and the engine version output. **Copy version information** copies a report you can attach to a bug report.
+**Versions** shows the NeonDojo release version and build commit, the versions of GNU Backgammon and NeonGammon, and whether they are available. **Technical details** shows the full commit, the engine version output, and the **NeonGammon source** commit for recognized releases. **Copy version information** copies a report you can attach to a bug report.
 
 Details: [Version information](../reference/extras.md#version-information)
 
@@ -708,7 +711,7 @@ Select the gear in the header. Choose a category on the left. **Apply** saves yo
 </tr>
 <tr>
 <td><img src="images/settings-analysis.webp" alt="Settings: Analysis"><br><b>Analysis</b>: analysis engine and default depth, the four error thresholds, opening books, <i>Engines on this computer</i> (paths, installation check, threads) and a link to the benchmark.</td>
-<td><img src="images/settings-playing.webp" alt="Settings: Playing"><br><b>Playing</b>: bot engine and strength, default play mode, <i>Open training analysis automatically</i>, game sounds and bear-off direction.</td>
+<td><img src="images/settings-playing.webp" alt="Settings: Playing"><br><b>Playing</b>: bot engine and strength (including <b>2-ply + Top-2 (10 mEq)</b> for NeonGammon), default play mode, <i>Open training analysis automatically</i>, game sounds and bear-off direction.</td>
 </tr>
 <tr>
 <td><img src="images/settings-board.webp" alt="Settings: Board"><br><b>Board</b>: a gallery of board artwork (Forest, Walnut, Slate and local BGBlitz themes) next to a large preview.</td>
@@ -733,7 +736,7 @@ Each value is the lower bound of its grade. The four values must be greater than
 
 #### Engines on this computer
 
-Expand **Engines on this computer** to set the GNUbg executable and the NeonGammon Python environment, and the maximum number of threads per engine, separately for analysis (including engine duels) and for playing. **Simultaneous analysis jobs** lets several analyses run at the same time; NeonGammon still runs one analysis at a time. **Check installation** and **Verify and save** run a real position evaluation before a setting is accepted. NeonDojo never falls back to another engine on its own. A missing engine is reported as unavailable. See also [Local NeonGammon setup](../open-sage-local.md).
+Expand **Engines on this computer** to set the GNUbg executable and the NeonGammon Python environment, and the maximum number of threads per engine, separately for analysis (including engine duels) and for playing. By default GNUbg uses 1 thread for both, and NeonGammon uses 4 for analysis/duels and 2 for playing; NeonGammon workers share one CPU thread budget so playing moves can run between analysis evaluations without oversubscribing the machine. **Simultaneous analysis jobs** (1–8) lets several analyses run at the same time; NeonGammon still runs one analysis at a time. **Check installation** and **Verify and save** run a real position evaluation before a setting is accepted. NeonDojo never falls back to another engine on its own. A missing engine is reported as unavailable. See also [Local NeonGammon setup](../open-sage-local.md).
 
 ---
 
@@ -802,6 +805,7 @@ flowchart LR
 | | **D** | Double |
 | | **H** | Hint (not in Competition) |
 | | **Z** | Undo one checker step |
+| | **Left** / **Right** | Show *Initial* or *Final* while reviewing a move from history |
 | | **Escape** | Return from a reviewed move to the game |
 | Practice and flashcards | **N** / **D** / **T** / **P** | No double, Double, Take, Pass |
 | | **Enter** | Check the answer, then continue |
@@ -821,7 +825,7 @@ Shortcuts are ignored while you type in a text field. When a dialog is open, onl
 | --- | --- |
 | The footer shows *Backend / GNUbg unavailable* | Open <http://127.0.0.1:8787/api/health>. It reports whether the database responds and which GNUbg version was found. If the page does not load, the NeonDojo backend is not running; see the [project README](../../README.md). |
 | Analyses fail | **Settings → Analysis → Engines on this computer → Check installation**. GNUbg needs its neural-network weights. Playing also needs GNUbg's embedded Python. |
-| NeonGammon is unavailable | Enter the Python path of its environment and choose **Verify and save**. See [NeonGammon setup](../open-sage-local.md). |
+| NeonGammon is unavailable (or difficulty presets are disabled) | Enter the Python path of its environment and choose **Verify and save**. Named **Difficulty presets** require `neongammon==3.1.0` (`3.0.0` remains supported for analysis and fixed-depth play). See [NeonGammon setup](../open-sage-local.md). |
 | A move shows a dash instead of a loss | The displayed analysis does not cover this position. Run **Analyze game**, or choose another **Displayed analysis**. |
 | No PR is shown | PR needs a **complete** native GNUbg analysis of the match. Imported, NeonGammon and partial analyses don't supply PR. Bot matches played with learning aids show no PR. |
 | *My recurring mistakes* shows nothing | Choose a player, and check the database, minimum-loss and *Only matches played without learning aids* filters. The player's matches need an analysis; **Analyze in Player database** leads to **Analyze unrated matches …**. |
