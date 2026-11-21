@@ -588,7 +588,7 @@ Click a column heading to sort ascending, and click it again to sort descending.
 | **Edit match details** | 1 match | Display name, played date, event, round, venue and result. |
 | **Copy** / **Move** | up to 100 | Copies get new IDs and keep their notes and analyses. Moves keep their IDs. |
 | **Tags** | up to 100 | Edit the tags of the selected matches. |
-| **Export** | up to 50 | Original file or SGF. Several matches are exported as a ZIP. |
+| **Export** | up to 50 | Original file, SGF or XG. XG files contain the played moves without analysis, for example for BG Sage. Several matches are exported as a ZIP. |
 | **Delete** | up to 100 | Requires confirmation and skips matches that are being analyzed. Saved positions and flashcards survive. |
 
 > **Novice:** After importing your first match, select it and choose **Analyze selected matches …** at the default 3-ply. If you keep the dialog open until the analysis finishes, NeonDojo opens **Statistics** for the match. If you close it, the analysis continues in the background.

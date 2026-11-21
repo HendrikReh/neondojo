@@ -7,7 +7,16 @@ use chrono::{Days, NaiveDate};
 use flate2::read::ZlibDecoder;
 use std::io::Read;
 
-const RECORD_BYTES: usize = 2560;
+/// Size of one TSaveRec record in the `temp.xg` match stream.
+pub(super) const RECORD_BYTES: usize = 2560;
+/// Size of the fixed TRichGameHeader before the thumbnail and archive.
+pub(super) const RICH_HEADER_BYTES: usize = 8232;
+/// Size of one TZLBFileRec entry in the archive registry.
+pub(super) const REGISTRY_ENTRY_BYTES: usize = 532;
+/// Size of the TZLBArchiveRec footer that ends the archive.
+pub(super) const ARCHIVE_FOOTER_BYTES: usize = 36;
+/// TSaveRec match header magic (`MagicNumber`, the bytes `DMLI`).
+pub(super) const MATCH_MAGIC: u32 = 0x494c4d44;
 const MAX_FILE: usize = 32 * 1024 * 1024;
 const MAX_UNCOMPRESSED: usize = 64 * 1024 * 1024;
 
@@ -50,7 +59,7 @@ const fn crc_table() -> [u32; 256] {
     }
     table
 }
-fn crc32(bytes: &[u8]) -> u32 {
+pub(super) fn crc32(bytes: &[u8]) -> u32 {
     const TABLE: [u32; 256] = crc_table();
     !bytes.iter().fold(!0u32, |crc, b| {
         (crc >> 8) ^ TABLE[((crc ^ u32::from(*b)) & 255) as usize]
@@ -77,7 +86,7 @@ fn inflate(bytes: &[u8], expected: usize) -> Result<Vec<u8>> {
     );
     Ok(out)
 }
-fn main_records(input: &[u8]) -> Result<Vec<u8>> {
+pub(super) fn main_records(input: &[u8]) -> Result<Vec<u8>> {
     ensure!(input.len() <= MAX_FILE, "XG file exceeds 32 MiB limit");
     ensure!(
         input.get(..4) == Some(b"RGMH"),
@@ -88,18 +97,21 @@ fn main_records(input: &[u8]) -> Result<Vec<u8>> {
         "Unsupported XG RichGame header version"
     );
     ensure!(
-        u32_at(input, 8)? == 8232,
+        u32_at(input, 8)? as usize == RICH_HEADER_BYTES,
         "Unsupported XG RichGame header size"
     );
     // XG writes a zero thumbnail offset; the payload always follows the fixed
     // header and thumbnail, as specified by XG_format.pas.
     let thumbnail = u32_at(input, 20)? as usize;
-    let start = 8232usize
+    let start = RICH_HEADER_BYTES
         .checked_add(thumbnail)
         .context("XG: thumbnail size overflow")?;
     let archive = input.get(start..).context("XG: truncated thumbnail")?;
-    ensure!(archive.len() >= 36, "XG: missing archive footer");
-    let footer_at = archive.len() - 36;
+    ensure!(
+        archive.len() >= ARCHIVE_FOOTER_BYTES,
+        "XG: missing archive footer"
+    );
+    let footer_at = archive.len() - ARCHIVE_FOOTER_BYTES;
     let footer = &archive[footer_at..];
     ensure!(
         u32_at(footer, 0)? == crc32(&archive[..footer_at]),
@@ -118,17 +130,17 @@ fn main_records(input: &[u8]) -> Result<Vec<u8>> {
         .get(registry_at..footer_at)
         .context("XG: registry outside archive")?;
     let registry = if bool_at(footer, 20)? {
-        inflate(registry_bytes, count * 532)?
+        inflate(registry_bytes, count * REGISTRY_ENTRY_BYTES)?
     } else {
         ensure!(
-            registry_bytes.len() == count * 532,
+            registry_bytes.len() == count * REGISTRY_ENTRY_BYTES,
             "XG: invalid uncompressed registry length"
         );
         registry_bytes.to_vec()
     };
     let mut main = None;
     let mut ranges = Vec::new();
-    for entry in registry.chunks_exact(532) {
+    for entry in registry.chunks_exact(REGISTRY_ENTRY_BYTES) {
         let name = std::str::from_utf8(&entry[1..=usize::from(entry[0])])
             .context("XG: invalid archive entry name")?
             .to_ascii_lowercase();
@@ -210,7 +222,7 @@ pub(super) fn read_match_context(input: &[u8]) -> Result<MatchContext> {
         .context("XG: truncated match header")?;
     ensure!(header[8] == 0, "XG: match header must be the first record");
     ensure!(
-        u32_at(header, 556)? == 0x494c4d44,
+        u32_at(header, 556)? == MATCH_MAGIC,
         "XG: invalid match magic"
     );
     ensure!(
@@ -447,7 +459,7 @@ pub fn convert_xg(input: &[u8]) -> Result<XgImport> {
     let header = &bytes[..RECORD_BYTES];
     ensure!(header[8] == 0, "XG: match header must be the first record");
     ensure!(
-        u32_at(header, 556)? == 0x494c4d44,
+        u32_at(header, 556)? == MATCH_MAGIC,
         "XG: invalid match magic"
     );
     let version = i32_at(header, 552)?;

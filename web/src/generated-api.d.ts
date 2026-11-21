@@ -9678,7 +9678,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Original/SGF file or ZIP for multiple matches */
+            /** @description Original, SGF or XG file, or a ZIP for multiple matches */
             200: {
                 headers: {
                     [name: string]: unknown;
