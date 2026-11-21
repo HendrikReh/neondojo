@@ -18,7 +18,7 @@ use axum::{
 use futures_util::Stream;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
-use std::{convert::Infallible, sync::Arc, time::Duration};
+use std::{collections::BTreeSet, convert::Infallible, sync::Arc, time::Duration};
 use tokio::sync::{Notify, Semaphore};
 use tokio_util::sync::CancellationToken;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
@@ -152,6 +152,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/positions", get(positions))
         .route("/api/positions/{id}", get(get_position))
         .route("/api/jobs", post(create_job))
+        .route("/api/jobs/status", post(job_status_batch))
         .route("/api/jobs/{id}", get(job))
         .merge(crate::analysis_timing::routes())
         .route("/api/jobs/{id}/events", get(events))
@@ -937,6 +938,47 @@ async fn job(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResult<J
     Ok(Json(job))
 }
 
+#[derive(Deserialize, ToSchema)]
+struct JobStatusRequest {
+    #[schema(max_items = 100)]
+    ids: Vec<Uuid>,
+}
+
+#[derive(Serialize, ToSchema)]
+struct JobStatusBatch {
+    jobs: Vec<Job>,
+    missing: Vec<Uuid>,
+    restricted: Vec<Uuid>,
+}
+
+#[utoipa::path(post, path="/api/jobs/status", request_body=JobStatusRequest,
+    responses((status=200, body=JobStatusBatch, description="Each requested ID is represented once as an available job, a missing ID, or an ID restricted by competition play."), (status=422, body=ErrorBody)), tag="Analysis")]
+async fn job_status_batch(
+    State(state): State<AppState>,
+    payload: Result<Json<JobStatusRequest>, axum::extract::rejection::JsonRejection>,
+) -> ApiResult<Json<JobStatusBatch>> {
+    let Json(request) = payload.map_err(|error| ApiError::invalid(error.body_text()))?;
+    if request.ids.len() > 100 {
+        return Err(ApiError::invalid("At most 100 job IDs can be read at once"));
+    }
+    let mut missing: BTreeSet<Uuid> = request.ids.iter().copied().collect();
+    let mut jobs = Vec::new();
+    let mut restricted = Vec::new();
+    for row in store::jobs_with_review_status(&state.pool, &request.ids).await? {
+        missing.remove(&row.job.id);
+        if row.restricted {
+            restricted.push(row.job.id);
+        } else {
+            jobs.push(row.job);
+        }
+    }
+    Ok(Json(JobStatusBatch {
+        jobs,
+        missing: missing.into_iter().collect(),
+        restricted,
+    }))
+}
+
 #[utoipa::path(get, path="/api/jobs/{id}/events", params(("id"=Uuid, Path),("Last-Event-ID"=Option<i64>, Header, description="Resume after this persisted event ID")), responses((status=200, body=String, content_type="text/event-stream", description="SSE wire format: id: <persisted integer>\\nevent: <queued|running|progress|completed|failed>\\ndata: <JobProgress JSON>\\n\\n. Each data field conforms to components.schemas.JobProgress. Stream ends after terminal event or service shutdown; reconnect resumes via Last-Event-ID."),(status=404, body=ErrorBody),(status=422,body=ErrorBody)), tag="Analysis")]
 async fn events(
     State(state): State<AppState>,
@@ -1015,6 +1057,7 @@ async fn events(
         dice,
         create_job,
         job,
+        job_status_batch,
         events,
         create_match_analysis,
         latest_match_analysis,
@@ -1036,6 +1079,8 @@ async fn events(
         PositionPage,
         JobRequest,
         Job,
+        JobStatusRequest,
+        JobStatusBatch,
         JobEvent,
         JobProgress,
         DiceStats,

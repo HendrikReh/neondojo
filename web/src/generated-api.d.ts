@@ -979,6 +979,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/jobs/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["job_status_batch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs/{id}": {
         parameters: {
             query?: never;
@@ -4468,6 +4484,14 @@ export interface components {
         JobResult: components["schemas"]["Analysis"] | components["schemas"]["Distribution"] | components["schemas"]["MatchAnalysisSummary"];
         /** @enum {string} */
         JobStatus: "queued" | "running" | "completed" | "failed";
+        JobStatusBatch: {
+            jobs: components["schemas"]["Job"][];
+            missing: string[];
+            restricted: string[];
+        };
+        JobStatusRequest: {
+            ids: string[];
+        };
         KeyDecision: {
             evidence_ref: string;
             explanation: string;
@@ -9416,6 +9440,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    job_status_batch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description Each requested ID is represented once as an available job, a missing ID, or an ID restricted by competition play. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobStatusBatch"];
                 };
             };
             422: {

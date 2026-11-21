@@ -493,6 +493,31 @@ pub async fn get_job(pool: &PgPool, id: Uuid) -> Result<Option<Job>> {
         .await?)
 }
 
+#[derive(sqlx::FromRow)]
+pub(crate) struct JobReviewStatus {
+    #[sqlx(flatten)]
+    pub job: Job,
+    pub restricted: bool,
+}
+
+pub(crate) async fn jobs_with_review_status(
+    pool: &PgPool,
+    ids: &[Uuid],
+) -> Result<Vec<JobReviewStatus>> {
+    let active_competition = crate::play::ACTIVE_COMPETITION;
+    Ok(sqlx::query_as(&format!(
+        "SELECT j.*, EXISTS(
+            SELECT 1 FROM play_sessions
+            WHERE library_match_id=coalesce(j.match_uuid,p.match_uuid) AND {active_competition}
+         ) AS restricted
+         FROM jobs j LEFT JOIN positions p ON p.id=j.position_uuid
+         WHERE j.id=ANY($1) ORDER BY j.id"
+    ))
+    .bind(ids)
+    .fetch_all(pool)
+    .await?)
+}
+
 pub async fn create_job(pool: &PgPool, position_id: Uuid, kind: &str, plies: i32) -> Result<Job> {
     create_job_with_snapshot(pool, position_id, kind, plies, None).await
 }

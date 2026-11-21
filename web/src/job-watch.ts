@@ -1,6 +1,7 @@
 import { mergeJob, request, terminal, type Job } from './api';
 import type { components } from './generated-api';
 import { AppError } from './i18n-core';
+import { requestBackgroundJob } from './job-status-api';
 
 type JobProgress = components['schemas']['JobProgress'];
 
@@ -36,38 +37,65 @@ interface Watch {
 // only a few connections per server, so only visible views open a stream;
 // jobs that only the global display follows are read periodically instead.
 const watches = new Map<string, Watch>();
+const background = new Map<string, Watch>();
+let backgroundTimer: ReturnType<typeof setInterval> | undefined;
+
+function hasStreamSubscriber(watch: Watch) {
+  return [...watch.subscribers].some((subscriber) => subscriber.stream);
+}
+
+function pollInBackground(id: string, watch: Watch, enabled: boolean) {
+  if (enabled) background.set(id, watch);
+  else background.delete(id);
+  if (background.size && backgroundTimer === undefined) {
+    backgroundTimer = setInterval(() => {
+      for (const [jobId, current] of background) void read(jobId, current);
+    }, JOB_POLL_MS);
+  } else if (!background.size) {
+    clearInterval(backgroundTimer);
+    backgroundTimer = undefined;
+  }
+}
 
 function publish(watch: Watch, job: Job) {
   watch.job = mergeJob(watch.job, job);
   for (const subscriber of [...watch.subscribers]) subscriber.onJob(watch.job);
 }
 
-function stop(watch: Watch) {
+function stop(id: string, watch: Watch) {
   watch.stream?.close();
   watch.stream = undefined;
   clearInterval(watch.timer);
   watch.timer = undefined;
   watch.timerMs = undefined;
+  pollInBackground(id, watch, false);
 }
 
 /** Open or close the stream and pace full reads for the current subscribers. */
 function transport(id: string, watch: Watch) {
   if (watches.get(id) !== watch || !watch.subscribers.size) return;
   if (watch.missing || (watch.job && terminal(watch.job))) {
-    stop(watch);
+    stop(id, watch);
     return;
   }
-  const streaming =
-    !watch.streamBlocked && [...watch.subscribers].some((s) => s.stream);
+  const local = hasStreamSubscriber(watch);
+  const streaming = local && !watch.streamBlocked;
   if (streaming && !watch.stream) open(id, watch);
   if (!streaming && watch.stream) {
     watch.stream.close();
     watch.stream = undefined;
   }
-  const interval = streaming ? JOB_SAFETY_READ_MS : JOB_POLL_MS;
+  pollInBackground(id, watch, !local);
+  const interval = local
+    ? streaming
+      ? JOB_SAFETY_READ_MS
+      : JOB_POLL_MS
+    : undefined;
   if (watch.timerMs !== interval) {
     clearInterval(watch.timer);
-    watch.timer = setInterval(() => void read(id, watch), interval);
+    watch.timer = interval
+      ? setInterval(() => void read(id, watch), interval)
+      : undefined;
     watch.timerMs = interval;
   }
 }
@@ -82,9 +110,11 @@ async function read(id: string, watch: Watch): Promise<void> {
   watch.reading = abort;
   watch.readAgain = false;
   try {
-    const job = await request<Job>(`/jobs/${encodeURIComponent(id)}`, {
-      signal: abort.signal,
-    });
+    const job = await (hasStreamSubscriber(watch)
+      ? request<Job>(`/jobs/${encodeURIComponent(id)}`, {
+          signal: abort.signal,
+        })
+      : requestBackgroundJob(id, abort.signal));
     if (abort.signal.aborted || watches.get(id) !== watch) return;
     publish(watch, job);
     transport(id, watch);
@@ -205,7 +235,7 @@ export function watchJob(
       transport(id, watch);
       return;
     }
-    stop(watch);
+    stop(id, watch);
     watch.reading?.abort();
     watches.delete(id);
   };

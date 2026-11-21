@@ -2800,6 +2800,24 @@ async fn competition_position_analysis_and_existing_job_reads_are_blocked_until_
         let (status, result) = call(app.clone(), "GET", &path, Value::Null).await;
         assert_eq!(status, 422, "{result}");
     }
+    let match_job = neondojo::store::create_match_job(&pool, match_id, 1, 1)
+        .await
+        .unwrap();
+    let missing = uuid::Uuid::new_v4();
+    let (status, batch) = call(
+        app,
+        "POST",
+        "/api/jobs/status",
+        json!({"ids":[job.id,match_job.id,missing]}),
+    )
+    .await;
+    assert_eq!(status, 200, "{batch}");
+    let mut restricted = [job.id, match_job.id];
+    restricted.sort();
+    assert_eq!(
+        batch,
+        json!({"jobs":[],"missing":[missing],"restricted":restricted})
+    );
 }
 
 #[sqlx::test(migrations = "./migrations")]

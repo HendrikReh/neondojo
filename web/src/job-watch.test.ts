@@ -204,3 +204,141 @@ test('a finished job is read once and never streamed', async () => {
   expect(FakeEventSource.instances).toHaveLength(0);
   stop();
 });
+
+test('24 background jobs use one request per refresh', async () => {
+  const ids = Array.from({ length: 24 }, (_, index) => `bulk-${index}`);
+  const seen = new Map<string, number>();
+  const requested: number[] = [];
+  vi.stubGlobal('fetch', async (url: string, options?: RequestInit) => {
+    const batch = url === '/api/jobs/status';
+    const group = batch
+      ? (JSON.parse(String(options?.body)).ids as string[])
+      : [url.replace('/api/jobs/', '')];
+    requested.push(group.length);
+    const jobs = group.map((id) => job({ id }));
+    return Response.json(
+      batch ? { jobs, missing: [], restricted: [] } : jobs[0],
+    );
+  });
+  const stops = ids.map((id) =>
+    watchJob(id, () => seen.set(id, (seen.get(id) ?? 0) + 1), undefined, false),
+  );
+  try {
+    await flush();
+    await vi.advanceTimersByTimeAsync(JOB_POLL_MS * 5);
+    console.log(
+      `24 background jobs and 6 refreshes: ${requested.length} requests, ${requested.reduce((count, size) => count + size, 0)} job records requested`,
+    );
+    expect(FakeEventSource.instances).toHaveLength(0);
+    expect([...seen.values()]).toEqual(ids.map(() => 6));
+    expect(requested).toEqual([24, 24, 24, 24, 24, 24]);
+  } finally {
+    stops.forEach((stop) => stop());
+  }
+});
+
+test('background batches keep missing, restricted and completed jobs independent', async () => {
+  const requests: string[][] = [];
+  const errors = new Map<string, unknown>();
+  const seen = new Map<string, Job>();
+  vi.stubGlobal('fetch', async (url: string, options?: RequestInit) => {
+    expect(url).toBe('/api/jobs/status');
+    const { ids } = JSON.parse(String(options?.body)) as { ids: string[] };
+    requests.push(ids);
+    return requests.length === 1
+      ? Response.json({
+          jobs: [
+            job({ id: 'done', status: 'completed', progress: 100 }),
+            job({ id: 'open' }),
+          ],
+          missing: ['missing'],
+          restricted: ['restricted'],
+        })
+      : Response.json({
+          jobs: ids.map((id) => job({ id, progress: 60 })),
+          missing: [],
+          restricted: [],
+        });
+  });
+  const stops = ['done', 'open', 'missing', 'restricted'].map((id) =>
+    watchJob(
+      id,
+      (value) => seen.set(id, value),
+      (error) => errors.set(id, error),
+      false,
+    ),
+  );
+  try {
+    await flush();
+    expect(seen.get('done')).toMatchObject({
+      status: 'completed',
+      progress: 100,
+    });
+    expect(errors.get('missing')).toMatchObject({ params: { status: '404' } });
+    expect(errors.get('restricted')).toMatchObject({
+      params: { status: '422' },
+    });
+    await vi.advanceTimersByTimeAsync(JOB_POLL_MS);
+    expect(requests[1]).toEqual(['open', 'restricted']);
+    expect(seen.get('restricted')?.progress).toBe(60);
+    expect(seen.has('missing')).toBe(false);
+  } finally {
+    stops.forEach((stop) => stop());
+  }
+});
+
+test('a failed batch request does not remove its jobs from later refreshes', async () => {
+  const seen: string[] = [];
+  const ids = ['first', 'second'];
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(
+      Response.json({ error: 'Not found' }, { status: 404 }),
+    )
+    .mockResolvedValueOnce(
+      Response.json({
+        jobs: ids.map((id) => job({ id })),
+        missing: [],
+        restricted: [],
+      }),
+    );
+  vi.stubGlobal('fetch', fetch);
+  const stops = ids.map((id) =>
+    watchJob(id, () => seen.push(id), undefined, false),
+  );
+  try {
+    await flush();
+    expect(seen).toEqual([]);
+    await vi.advanceTimersByTimeAsync(JOB_POLL_MS);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(seen).toEqual(ids);
+  } finally {
+    stops.forEach((stop) => stop());
+  }
+});
+
+test('a batch accepts canonical responses for mixed-case UUIDs', async () => {
+  const id = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
+  const other = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  const seen: string[] = [];
+  const fetch = vi
+    .fn()
+    .mockResolvedValue(
+      Response.json({
+        jobs: [job({ id }), job({ id: other })],
+        missing: [],
+        restricted: [],
+      }),
+    );
+  vi.stubGlobal('fetch', fetch);
+  const stops = [id.toUpperCase(), other].map((watched) =>
+    watchJob(watched, (incoming) => seen.push(incoming.id), undefined, false),
+  );
+  try {
+    await flush();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(seen).toEqual([id, other]);
+  } finally {
+    stops.forEach((stop) => stop());
+  }
+});
