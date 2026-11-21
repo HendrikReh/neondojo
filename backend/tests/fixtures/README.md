@@ -62,6 +62,31 @@ cube setup (standard CO and GNUbg CP), scores, Crawford and Jacoby. Ambiguous
 SGF variation trees are rejected; export the played main line first.
 
 
+## XG export oracle
+
+The XG exporter is checked against the same official file. `WC2014.xg` is
+converted to SGF and written back to XG. All 950 records must match the
+original in every played-line field, including names, rules, date, scores,
+positions, checker moves, dice, cube states, cube actions and game and match
+footers. This also fixes conventions that the format description leaves
+open. Every turn starts with a cube record, with `double` -2 when the cube is
+unavailable: the opening roll, the Crawford game, an opponent-owned cube, or a
+cube whose value already covers the points the player needs. A drop or a
+resignation records the dice `77`, and a resignation adds a cube record with
+`double` -1 for the player on roll. A take carries the doubler's next roll and
+replaces that turn's cube record. Bear-offs store From minus the die. When the
+dice can be assigned either way, XG uses the larger die for a final checker,
+and the smaller die first for two checkers from one point. The comparison
+ignores the stale memory XG leaves after string terminators, the empty
+`PosInit` of its first game, and its save version 31.
+
+On 2026-11-21, every match in a local library of 147 matches (94 MAT, 52 XG,
+one SGF) was exported and imported again without adding the files to the
+repository. 139 kept identical position IDs, match IDs, dice and results. The
+eight others are XG transcripts with XG-accepted illegal moves. Their export
+marks the position set up after such a move as edited, which the importer
+rejects as a later edit.
+
 ## Native game-analysis oracle
 
 `analysis-game1.sgf` and `analysis-game1.txt` were generated from game 1 of

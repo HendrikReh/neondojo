@@ -1463,7 +1463,7 @@ async fn copy_children(
     }
     Ok(())
 }
-#[utoipa::path(post,path="/api/library/export",request_body=ExportRequest,responses((status=200,description="Original/SGF file or ZIP for multiple matches",content_type="application/octet-stream"),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Databases")]
+#[utoipa::path(post,path="/api/library/export",request_body=ExportRequest,responses((status=200,description="Original, SGF or XG file, or a ZIP for multiple matches",content_type="application/octet-stream"),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Databases")]
 async fn export(
     State(s): State<AppState>,
     body: Result<Json<ExportRequest>, JsonRejection>,
@@ -1472,8 +1472,8 @@ async fn export(
     if r.match_ids.is_empty() || r.match_ids.len() > MAX_EXPORTS {
         return Err(ApiError::invalid("Select between 1 and 50 matches"));
     }
-    if !["original", "sgf"].contains(&r.format.as_str()) {
-        return Err(ApiError::invalid("format must be original or sgf"));
+    if !["original", "sgf", "xg"].contains(&r.format.as_str()) {
+        return Err(ApiError::invalid("format must be original, sgf or xg"));
     }
     let mut seen = HashSet::new();
     if r.match_ids.iter().any(|id| !seen.insert(*id)) {
@@ -1487,16 +1487,61 @@ async fn export(
     if sizes.iter().map(|(_, n)| n).sum::<i64>() > MAX_EXPORT_BYTES {
         return Err(ApiError::invalid("Export exceeds 64 MiB"));
     }
-    let files: Vec<(Uuid, String, Vec<u8>)> = sqlx::query_as(if r.format == "original" {
-        "SELECT id,filename,original FROM matches WHERE id=ANY($1) ORDER BY id"
+    let files: Vec<(Uuid, String, Vec<u8>)> = if r.format == "xg" {
+        type XgSource = (
+            Uuid,
+            String,
+            String,
+            Option<NaiveDate>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        );
+        let sources: Vec<XgSource> = sqlx::query_as(
+            "SELECT id,filename,sgf,played_on,tournament,round,place FROM matches WHERE id=ANY($1) ORDER BY id",
+        )
+        .bind(&r.match_ids)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?;
+        tx.commit().await.map_err(anyhow::Error::from)?;
+        // The conversion replays every checker play, so it runs off the async
+        // workers after the shared row locks are released.
+        tokio::task::spawn_blocking(move || {
+            sources
+                .into_iter()
+                .map(|(id, name, sgf, played_on, event, round, place)| {
+                    let meta = crate::import::XgExportMetadata {
+                        match_id: id,
+                        played_on,
+                        event: event.as_deref(),
+                        round: round.as_deref(),
+                        place: place.as_deref(),
+                    };
+                    match crate::import::sgf_to_xg(&sgf, &meta) {
+                        Ok(bytes) => Ok((id, name, bytes)),
+                        Err(error) => Err(ApiError::invalid(format!(
+                            "{name} cannot be exported as XG: {error:#}"
+                        ))),
+                    }
+                })
+                .collect::<Result<Vec<_>, ApiError>>()
+        })
+        .await
+        .map_err(anyhow::Error::from)??
     } else {
-        "SELECT id,filename,convert_to(sgf,'UTF8') FROM matches WHERE id=ANY($1) ORDER BY id"
-    })
-    .bind(&r.match_ids)
-    .fetch_all(&mut *tx)
-    .await
-    .map_err(anyhow::Error::from)?;
-    tx.commit().await.map_err(anyhow::Error::from)?;
+        let files = sqlx::query_as(if r.format == "original" {
+            "SELECT id,filename,original FROM matches WHERE id=ANY($1) ORDER BY id"
+        } else {
+            "SELECT id,filename,convert_to(sgf,'UTF8') FROM matches WHERE id=ANY($1) ORDER BY id"
+        })
+        .bind(&r.match_ids)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?;
+        tx.commit().await.map_err(anyhow::Error::from)?;
+        files
+    };
     let safe_name = |id: Uuid, name: &str| {
         let name = name.rsplit(['/', '\\']).next().unwrap_or("match");
         let clean: String = name
@@ -1515,9 +1560,9 @@ async fn export(
         } else {
             clean
         };
-        if r.format == "sgf" {
+        if r.format != "original" {
             let stem = clean.rsplit_once('.').map(|(s, _)| s).unwrap_or(&clean);
-            format!("{stem}-{id}.sgf")
+            format!("{stem}-{id}.{}", r.format)
         } else {
             format!("{id}-{clean}")
         }

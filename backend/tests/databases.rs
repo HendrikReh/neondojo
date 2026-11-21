@@ -578,6 +578,73 @@ async fn exports_preserve_bytes_and_reject_missing_or_oversized_selection(pool: 
 }
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL"]
+async fn xg_export_writes_the_played_line_with_edited_library_details(pool: PgPool) {
+    let original = include_bytes!("fixtures/WC2014.xg");
+    let sgf = neondojo::import::xg_to_sgf(original).unwrap();
+    let imported = neondojo::import::parse_sgf(&sgf).unwrap();
+    let id = neondojo::store::import_match(&pool, "WC2014.xg", "xg", original, &sgf, &imported)
+        .await
+        .unwrap()
+        .r#match
+        .id;
+    sqlx::query("UPDATE matches SET tournament='Edited Open',round=NULL WHERE id=$1")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let app = api::router(AppState::new(pool.clone(), Engine::new("unused".into())));
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/library/export")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"match_ids":[id],"format":"xg"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    let disposition = response.headers()["content-disposition"]
+        .to_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(
+        disposition,
+        format!("attachment; filename=\"WC2014-{id}.xg\"")
+    );
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let exported = neondojo::import::xg_to_sgf(&bytes).unwrap();
+    let metadata = neondojo::databases::source_metadata(&exported);
+    assert_eq!(metadata.tournament.as_deref(), Some("Edited Open"));
+    assert_eq!(metadata.round, None);
+    assert_eq!(metadata.place.as_deref(), Some("Monte-Carlo"));
+    let reimported = neondojo::import::parse_sgf(&exported).unwrap();
+    assert_eq!(reimported.positions.len(), imported.positions.len());
+    for (a, b) in reimported.positions.iter().zip(&imported.positions) {
+        assert_eq!((&a.position_id, &a.match_id), (&b.position_id, &b.match_id));
+    }
+    // A stored source that does not replay is reported, not silently skipped.
+    let broken = target(&pool, "Broken").await;
+    let (status, error) = request(
+        &pool,
+        "POST",
+        "/api/library/export",
+        Some(json!({"match_ids":[id,broken],"format":"xg"})),
+    )
+    .await;
+    assert_eq!(status, 422, "{error}");
+    assert!(
+        error
+            .to_string()
+            .contains("Broken.sgf cannot be exported as XG"),
+        "{error}"
+    );
+}
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL"]
 async fn imports_deduplicate_within_each_database(pool: PgPool) {
     let source = include_str!("fixtures/analysis-game1.sgf");
     let imported = neondojo::import::parse_sgf(source).unwrap();
